@@ -238,3 +238,25 @@ def test_parallel_flow_start_burst_is_capped_with_retry_after(monkeypatch, event
 def test_flow_start_ceiling_configuration_falls_back_safely(raw, expected):
     environ = {} if raw is None else {'METIS_AUTH_FLOW_STARTS_PER_MINUTE': raw}
     assert flow_starts_per_minute(environ) == expected
+
+
+@pytest.mark.parametrize('code,status', [('workflow_identity_unavailable', 503), ('workflow_session_required', 401)])
+def test_explicit_session_renewal_records_its_cause(monkeypatch, events, code, status):
+    def renew_session(token):
+        raise ConsoleError(code)
+    client = _client(monkeypatch, SimpleNamespace(config=None, renew_session=renew_session))
+    assert client.post('/session/renew').status_code == status
+    [finished] = _finished(events)
+    assert finished['error'] == {'type': 'ConsoleError', 'code': code, 'handled': True}
+
+
+def test_retry_after_never_points_inside_the_window():
+    from src.product_security_v1 import SlidingWindowRateLimiter
+    ticks = [0.0]
+    limiter = SlidingWindowRateLimiter(now=lambda: ticks[0])
+    assert limiter.allow('k', 1) == (True, 0)
+    ticks[0] = 0.9
+    allowed, retry_after = limiter.allow('k', 1)
+    assert not allowed and retry_after == 60
+    ticks[0] = 0.9 + retry_after
+    assert limiter.allow('k', 1)[0]

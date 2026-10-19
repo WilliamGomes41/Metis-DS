@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import math
 import threading
 import time
 from collections import defaultdict, deque
@@ -126,7 +127,8 @@ class SlidingWindowRateLimiter:
             while q and q[0] <= cutoff:
                 q.popleft()
             if len(q) >= limit:
-                retry_after = max(1, int(60 - (now - q[0]))) if q else 60
+                # Round up: retrying after the advertised wait must find the window open.
+                retry_after = max(1, math.ceil(60 - (now - q[0]))) if q else 60
                 return False, retry_after
             q.append(now)
             return True, 0

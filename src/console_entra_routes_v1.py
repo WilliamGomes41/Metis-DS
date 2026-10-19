@@ -90,6 +90,7 @@ def install_entra_routes(app, console, identity, *, render_page):
             status = identity.session_status(request.cookies.get(SESSION_COOKIE))
             return JSONResponse(status, headers={"Cache-Control": "no-store"})
         except ConsoleError as exc:
+            note_handled_error(exc.code)
             if exc.code == "workflow_identity_unavailable":
                 return JSONResponse({"error": "temporarily_unavailable"}, status_code=503, headers={"Cache-Control": "no-store"})
             return JSONResponse({"error": "not_authenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
@@ -100,6 +101,7 @@ def install_entra_routes(app, console, identity, *, render_page):
             status = identity.renew_session(request.cookies.get(SESSION_COOKIE))
             return JSONResponse(status, headers={"Cache-Control": "no-store"})
         except ConsoleError as exc:
+            note_handled_error(exc.code)
             if exc.code == "workflow_identity_unavailable":
                 return JSONResponse({"error": "temporarily_unavailable"}, status_code=503, headers={"Cache-Control": "no-store"})
             return JSONResponse({"error": "not_authenticated"}, status_code=401, headers={"Cache-Control": "no-store"})
