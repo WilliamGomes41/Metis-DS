@@ -144,6 +144,47 @@ def _document_row(state, account, envelope: dict[str, Any], telemetry: dict[str,
     }
 
 
+def processing_margins_html(report: dict[str, Any]) -> str:
+    """Render only derived trace measurements, after existing processing auth."""
+    def seconds(value):
+        return "niet vastgelegd" if value is None else f"{value:g} s"
+    states = {"running": "als actief opgeslagen", "succeeded": "technisch geslaagd",
+              "failed": "mislukt", "interrupted": "onderbroken", "incomplete_budget": "gestopt op taakbudget"}
+    body = '<section id="verwerkingsmarges"><h3>Verwerkingsmarges · waargenomen gegevens</h3>'
+    body += '<p>Gemeten op ' + escape(str(report['observed_at'] or 'onbekend')) + '. Alleen de bewaarde pogingen van dit document.</p>'
+    counts = report['counts']
+    body += f'<p>Bewaard: {int(counts["retained"])} pogingen; {int(counts["retry_links_observed"])} retry-verwijzingen, waarvan {int(counts["retry_gaps_measured"])} met meetbare tussentijd.</p>'
+    if not report['attempts']:
+        body += '<p>Geen vastgelegde pogingen; geen uitspraak over gezondheid of herstelbaarheid mogelijk.</p>'
+    if report['omitted_attempts']:
+        body += f'<p>{int(report["omitted_attempts"])} oudere pogingen ontbreken in deze begrensde weergave.</p>'
+    for row in report['attempts']:
+        body += ('<details open>' if row['signals'] else '<details>') + '<summary>Poging ' + escape(str(row['attempt_id'] or 'zonder identiteit')) + ' · ' + escape(states.get(row['stored_state'], 'status onbekend')) + '</summary><dl>'
+        for label, key in (("Wachttijd vóór claim (bij open werk: tot meetmoment)", "queue_wait_seconds"),
+                           ("Uitvoertijd sinds claim", "execution_seconds"),
+                           ("Resterende opgeslagen pogingstijd", "deadline_remaining_seconds"),
+                           ("Tijd beschikbaar bij claim", "budget_at_claim_seconds"),
+                           ("Tijd sinds laatst bewaard checkpoint (bij afgerond werk: tot einde)", "checkpoint_age_seconds"),
+                           ("Tussen einde voorganger en deze retry", "retry_gap_seconds")):
+            body += '<dt>' + label + '</dt><dd>' + seconds(row[key]) + '</dd>'
+        body += '</dl><p>Laatst bewaarde fase: ' + escape(str(row['last_checkpoint_phase'] or 'niet vastgelegd')) + '</p>'
+        if row['reference']:
+            ref = row['reference']
+            body += f'<p>Vergelijking vóór deze claim: mediaan {seconds(ref["execution_p50_seconds"])} uitvoertijd in {int(ref["samples"])} technisch geslaagde pogingen met dezelfde bron, configuratie, uitvoerversie en pogingsoort.</p>'
+        elif row['stored_state'] == 'running':
+            body += '<p>Onvoldoende vergelijkbaar bewijs voor een historische uitvoertijd.</p>'
+        if 'claim_budget_below_observed_duration' in row['signals']:
+            body += '<p role="status">Bij de claim bleef minder pogingstijd over dan de eerder waargenomen mediane uitvoertijd. De verwerking kan daardoor haar opgeslagen deadline bereiken. Dit bewijst geen toekomstige storing.</p>'
+        if 'stored_deadline_elapsed' in row['signals']:
+            body += '<p role="status">De opgeslagen deadline is verstreken; de poging staat nog als actief opgeslagen. Alleen de bestaande verwerking bepaalt de actuele toestand en het toegestane herstel.</p>'
+        if row['signals']:
+            body += '<p>Controleer de actuele verwerkingsstatus, dispatcher en afhankelijkheden voordat u via Bronselectie een toegestane vervolgstap kiest.</p>'
+        if row['evidence_issues']:
+            body += '<p>Meetgegevens ontbreken, zijn onvolledig of spreken elkaar tegen; ontbrekende tijden tellen niet als nul.</p>'
+        body += '</details>'
+    return body + '<p>Een oud checkpoint bewijst geen stilstand. Pogingaantallen bepalen geen retryrechten. Een tijdsmarge garandeert geen veilige handeltijd; technisch succes bewijst geen volledige bronverwerking of publicatiegereedheid.</p></section>'
+
+
 def quality_projection(view: dict[str, Any]) -> dict[str, Any]:
     from collections import Counter
     from src.request_diagnostics_v1 import doc_ref
@@ -234,6 +275,10 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
               <input type="hidden" name="snapshot_id" value="{escape(document, quote=True)}">
               <label>Reden voor eenmalig herstel<input name="reason" required maxlength="1000"></label>
               <button type="submit">Een herstelpoging autoriseren</button></form>'''
+        margins_html = ""
+        if processing_access:
+            from src.processing_trace_v1 import processing_trace
+            margins_html = processing_margins_html(processing_trace(envelope)["processing_margins"])
         progress = processing.get("formation_progress") or {}
         progress_html = ""
         if progress.get("planned_task_count"):
@@ -271,7 +316,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
             <p>Code: <code>{escape(str(code))}</code></p>{pages_html}{progress_html}
             <p>Een technisch geslaagde poging bewijst niet dat bronverwerking, review of publicatievoorwaarden volledig zijn afgerond.</p>
             <p>Nieuwe poging vanaf: {escape(str(processing.get("retry_not_before") or "niet van toepassing"))}</p>
-            {controls}<details><summary>Laatste verwerkingspoging ({len(attempts)} opgeslagen)</summary><pre>{detail}</pre></details>
+            {margins_html}{controls}<details><summary>Laatste verwerkingspoging ({len(attempts)} opgeslagen)</summary><pre>{detail}</pre></details>
             <p><a href="/inzicht/document/blokkade?{query}">Blokkade en bewijs per verwerkingspoging onderzoeken</a></p>
           </section>''' if processing_access else '<section id="verwerking"><h2>Verwerking</h2><p>Verwerkingsdiagnostiek is beschikbaar voor onderzoekers en aangewezen reviewers.</p></section>'
         body = f'''{nav(account, "settings")}<section class="room">
