@@ -43,7 +43,6 @@ class FormationContext(TypedDict):
     source_sha256: str
     semantic_replay: dict | None
     resume_formation: bool
-    explicit_decision_graph: bool
     model_call_limits: dict | None
     attempt_deadline: float | None
     diagnostic_checkpoint: Callable | None
@@ -132,7 +131,6 @@ def build_formation_context(console, *, envelope, actor_id, expected_revision,
         'snapshot_id': source.snapshot_id, 'source_sha256': source.sha256,
         'semantic_replay': deepcopy(envelope.get('semantic_replay')),
         'resume_formation': resume,
-        'explicit_decision_graph': 'decision_graph' in envelope or bool(envelope.get('review_policy') and envelope['class'] == 'beslisboom'),
         'model_call_limits': {key: attempt['limits'][key] for key in ('connect', 'idle', 'total', 'attempt', 'max_attempts')}
                             if attempt and attempt.get('limits') else None,
         'attempt_deadline': deadline,

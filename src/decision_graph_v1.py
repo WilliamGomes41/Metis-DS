@@ -26,7 +26,6 @@ def pdf_fragments(path: Path, *, document_id: str, source_id: str, construct_uni
         row["boom_id"] = row["fragment_id"]
         row["boom_kind"] = "node"
     if construct_units:
-        from src.decision_unit_construction_v1 import add_layout, source_lines
         add_layout(path, fragments)
         fragments = source_lines(fragments)
     from src.decision_bundles_v1 import split_bundles
@@ -34,6 +33,82 @@ def pdf_fragments(path: Path, *, document_id: str, source_id: str, construct_uni
     if extraction_record is not None:
         from src.docling_contract_v1 import ExtractedFragments
         output = ExtractedFragments(output, extraction_record)
+    return output
+
+
+def add_layout(path, fragments):
+    """Retain enclosure and typography evidence without modifying source identity."""
+    import fitz
+    from collections import defaultdict
+    by_page = defaultdict(list)
+    for fragment in fragments:
+        by_page[fragment.get("source_page")].append(fragment)
+    with fitz.open(path) as doc:
+        for number, page in enumerate(doc, 1):
+            enclosures = []
+            for drawing in page.get_drawings():
+                # Only an explicit closed rectangle, not the bounding box of a line.
+                for item in drawing["items"]:
+                    if item[0] == "re":
+                        enclosures.append(list(item[1]))
+            # Docling already owns text extraction. Native drawings remain
+            # geometric evidence; missing Docling typography stays unresolved.
+            blocks = ({} if getattr(fragments, "extraction_record", None) is not None else
+                      {tuple(b["bbox"]): b for b in page.get_text("dict")["blocks"] if b["type"] == 0})
+            for f in by_page[number]:
+                box = f.get("bbox")
+                if not box:
+                    continue
+                containers = [r for r in enclosures if r[0] <= box[0] and r[1] <= box[1]
+                              and r[2] >= box[2] and r[3] >= box[3]]
+                containers.sort(key=lambda r: (r[2]-r[0])*(r[3]-r[1]))
+                block = blocks.get(tuple(box), {})
+                styles = sorted({(s["font"], round(s["size"], 2)) for line in block.get("lines", [])
+                                 for s in line.get("spans", []) if s["text"].strip()})
+                f["_decision_layout"] = {"container": containers[0] if containers else None,
+                                          "styles": styles}
+                f["_decision_lines"] = [{"text": "".join(s["text"] for s in line["spans"]),
+                                          "bbox": list(line["bbox"]),
+                                          "styles": sorted({(s["font"], round(s["size"], 2)) for s in line["spans"] if s["text"].strip()})}
+                                         for line in block.get("lines", [])]
+
+
+def source_lines(fragments):
+    """Undo PDF blocks that contain parallel boxes; retain exact parent spans.
+
+    Source representation for every PDF tree read (new and historical); fragment
+    identities depend on it, so it is not formation logic.
+    """
+    from src.extract_pdf_v2 import clean_text, page_bbox_locator
+    from src.decision_bundles_v1 import BULLET
+    output = []
+    for f in fragments:
+        lines = f.get("_decision_lines", [])
+        if len(lines) < 2 or len(list(BULLET.finditer(f["clean_text"]))) >= 2:
+            output.append(f)
+            continue
+        cursor = 0
+        for index, line in enumerate(lines):
+            raw = line["text"].strip()
+            if not raw:
+                continue
+            start = f["raw_text"].find(raw, cursor)
+            if start < 0:
+                raise ValueError("decision_unit_parent_span_invalid")
+            end = start + len(raw)
+            cursor = end
+            child = deepcopy(f)
+            child["fragment_id"] = child["boom_id"] = f'{f["fragment_id"]}-line-{index+1}'
+            child["raw_text"], child["clean_text"] = raw, clean_text(raw)
+            child["bbox"] = line["bbox"]
+            child["source_locator"] = page_bbox_locator(f["source_page"], line["bbox"])
+            child["_decision_layout"]["styles"] = line["styles"]
+            child["_decision_parent"] = {"fragment_id": f["fragment_id"], "raw_start": start, "raw_end": end,
+                                         "raw_span_text": raw, "raw_content_hash": stable_hash(f["raw_text"]),
+                                         "locator": deepcopy(f["source_locator"])}
+            child.pop("_decision_lines", None)
+            child["fragment_hash"] = stable_hash({k:v for k,v in child.items() if k != "fragment_hash"})
+            output.append(child)
     return output
 
 
@@ -62,63 +137,37 @@ def evidence_inventory(path: Path, fragments: list[dict[str, Any]], source_hash:
     return {"source_sha256": source_hash, "items": evidence}
 
 
-def prepare_graph(path: Path, data: bytes, kind: str, fragments: list[dict[str, Any]],
-                  objects: list[dict[str, Any]], source_hash: str) -> dict[str, Any]:
-    """Both adapters emit proposals; missing export routes remain missing."""
-    from src.integrity_kernel import stamp_canonical_hashes
-    from src.decision_bundles_v1 import bundle_evidence, stamp_bundles
+def source_evidence(path: Path, data: bytes, kind: str, fragments: list[dict[str, Any]],
+                    source_hash: str) -> dict[str, Any]:
+    """Reconstructable evidence only: text, drawings and explicit export relations.
+
+    This is read during ingest and during later source verification; it never
+    forms candidates or proposes routes.
+    """
+    from src.decision_bundles_v1 import bundle_evidence
     if kind == "pdf":
-        inventory = evidence_inventory(path, fragments, source_hash)
-    else:
-        inventory = {"source_sha256": source_hash, "items": {
-            f["fragment_id"]: {"kind": "text", "text": f["clean_text"], "locator": f["source_locator"], **bundle_evidence(f)}
-            for f in fragments}}
-    graph = {"contract": CONTRACT, "source_sha256": source_hash, "nodes": [], "edges": [],
-             "entrypoints": [], "unresolved": ["human_route_reconstruction_required"]}
-    stamp_bundles(fragments, objects)
-    for obj in objects:
-        obj.setdefault("metadata", {})["decision_graph_contract"] = CONTRACT
-        stamp_canonical_hashes(obj)
-        if obj["object_type"] != "document":
-            from src.decision_unit_construction_v1 import KEY, branch_label
-            graph["nodes"].append({"object_id": obj["object_id"], "object_version": obj["object_version"],
-                                   "mode": "context" if (obj.get("metadata") or {}).get(KEY) and branch_label(obj["content"]["clean_text"]) else "unresolved",
-                                   "evidence_ids": [r["raw_object_id"] for r in obj["provenance"]["source_fragments"]]})
+        return evidence_inventory(path, fragments, source_hash)
+    inventory = {"source_sha256": source_hash, "items": {
+        f["fragment_id"]: {"kind": "text", "text": f["clean_text"], "locator": f["source_locator"], **bundle_evidence(f)}
+        for f in fragments}}
     if kind == "boom":
-        payload = json.loads(data)
-        by_source_id = {str(f["boom_id"]): f'{f["document_id"]}-{f["boom_id"]}' for f in fragments}
-        for index, branch in enumerate(payload.get("branches", [])):
-            if not isinstance(branch, dict):
-                graph["unresolved"].append(f"invalid_export_branch:{index}")
-                continue
-            src, dest = by_source_id.get(branch.get("from")), by_source_id.get(branch.get("to"))
-            if not src or not dest or not isinstance(branch.get("label", ""), str):
-                graph["unresolved"].append(f"invalid_export_branch:{index}")
-                continue
-            eid = f"export-branch-{index}"
-            label = branch.get("label", "")
-            inventory["items"][eid] = {"kind": "export_edge", "text": label,
-                                       "record": deepcopy(branch), "locator": {"json_pointer": f"/branches/{index}"}}
-            graph["edges"].append({"id": eid, "from": src, "to": dest, "label": label,
-                                   "kind": "answer" if label else "continue", "evidence_ids": [eid]})
-    proposals = []
-    if kind == "pdf":
-        from src.pdf_route_proposals_v1 import propose_routes
-        proposals = propose_routes(fragments, objects, inventory)
-        from src.decision_unit_construction_v1 import KEY
-        constructed = any((o.get("metadata") or {}).get(KEY) for o in objects)
-        graph["edges"] = [{k: v for k, v in proposal.items() if k != "uncertainties"} for proposal in proposals
-                          if not constructed or set(proposal["uncertainties"]) <= {"human_route_confirmation_required"}]
-    from src.decision_unit_construction_v1 import apply_gate
-    from src.passage_register_v1 import apply_passage_register
-    apply_gate(objects, source_hash=source_hash, graph=graph, inventory=inventory)
-    objects[:] = apply_passage_register(objects)
-    for obj in objects:
-        stamp_canonical_hashes(obj)
-    from src.decision_unit_construction_v1 import KEY, CONTRACT as UNIT_CONTRACT
-    return {"decision_graph": graph, "decision_graph_evidence": inventory, "decision_graph_reviews": [],
-            "decision_graph_proposals": proposals,
-            **({"decision_unit_contract": UNIT_CONTRACT} if any((o.get("metadata") or {}).get(KEY) for o in objects) else {})}
+        for index, branch in export_branches(data, fragments):
+            inventory["items"][f"export-branch-{index}"] = {
+                "kind": "export_edge", "text": branch.get("label", ""), "record": deepcopy(branch),
+                "locator": {"json_pointer": f"/branches/{index}"}}
+    return inventory
+
+
+def export_branches(data: bytes, fragments: list[dict[str, Any]]) -> list[tuple[int, dict[str, Any]]]:
+    """Well-formed export branches whose endpoints exist in the frozen export."""
+    known = {str(f["boom_id"]) for f in fragments}
+    rows = []
+    for index, branch in enumerate(json.loads(data).get("branches", [])):
+        # Exact key match, as recorded in historical evidence (no type coercion).
+        if (isinstance(branch, dict) and branch.get("from") in known and branch.get("to") in known
+                and isinstance(branch.get("label", ""), str)):
+            rows.append((index, branch))
+    return rows
 
 
 def graph_hash(graph: dict[str, Any]) -> str:
@@ -279,7 +328,7 @@ def verify_source_evidence(
         fragments = console._read_source_fragments(envelope, path)
     from src.decision_bundles_v1 import split_bundles
     fragments = split_bundles(list(fragments))
-    inventory = prepare_graph(path, data, envelope["content_kind"], fragments, [], envelope["sha256"])["decision_graph_evidence"]
+    inventory = source_evidence(path, data, envelope["content_kind"], fragments, envelope["sha256"])
     if inventory != envelope["decision_graph_evidence"]:
         raise ValueError("decision_graph_source_evidence_mismatch")
 

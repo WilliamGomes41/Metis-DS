@@ -1,7 +1,7 @@
 # Metis — Roadmap v4
 
 **Status:** actief  
-**Peildatum:** 2026-10-17
+**Peildatum:** 2026-10-18
 
 **Gecontroleerde main:** [`8f0e2692216ad44afa13e2e357c05f32e66fb3db`](https://github.com/WilliamGomes41/Metis-DS/commit/8f0e2692216ad44afa13e2e357c05f32e66fb3db) (merge van #735).
 
@@ -92,16 +92,17 @@ Een proof-slice wordt pas een nieuwe repair bij een reproduceerbare invariantbre
 - Verifieer de gemergde beschikbaarheids-, bronhergebruik- en contextnavigatiereparaties via de oorspronkelijke gebruikershandeling op de werkelijk draaiende commit. Gesloten codeissues zijn geen productieacceptatie.
 - Leg resterende afwijkingen en niet-gevoelig voortgangsbewijs vast in de bestaande issues. Volledige diagnostiek blijft intern; geen tweede statusadministratie of algemene herbouw.
 
-## R4.6 Vormingskader per bron invoeren (Protocol v4.1 §5.4)
+## R4.6 Vormingskader per bron invoeren (Protocol v4.2 §5.4)
 
-**Status:** norm vastgelegd; implementatie open. De huidige code kiest de prozaroute nog deploymentbreed via `METIS_PASSAGE_FORMATION_MODE` en legt de gekozen route niet vast als documenttoestand. Beslisbomen gaan vast via de structurele route.
+**Status:** norm vastgelegd; implementatie open voor prozaroutes. De prozaroute wordt nog deploymentbreed gekozen via `METIS_PASSAGE_FORMATION_MODE` en niet als documenttoestand vastgelegd. Beslisbomen zijn omgezet naar hun enige route `decision-tree-source-bound-v1` (Protocol 4.2.0); de oude structurele vorming is verwijderd.
 
 - Class A, `Rewrite risk: high`: de routekeuze raakt persistente verwerkingsidentiteit, retry en herstel. Volg de lifecycle-VSA met black-box-bewijs voor ingest, retry na routewissel in de omgeving, herstart en opvolger.
 - Leg bronsoort en route vast bij de start in Bronselectie. De omgevingsvariabele wordt alleen standaardroute en uitsluitingsschakelaar.
 - Bestaande snapshots: geen backfill. Hun route blijft de afgeleide, vastgelegde verwerkingsidentiteit.
-- Leg vast hoe de beslisboomconstructie (`decision_unit_construction_v1`) en `materialise_knowledge_candidates` zich verhouden tot de invariant van één deterministische kandidaatmaker vóór review. Een conflict wordt eerst als domeinontwerpkwestie voorgelegd.
-- De standaardroutes van strategie B en C wijzigen niet in deze slice. Een semantische route voor beslisbomen vereist eerst een experiment (§10) met een uitbreiding van de routevergelijking naar besliseenheden én verbindingen, en daarna een protocolwijziging.
-- Besluit William 2026-10-18: nieuwe releases registreren `PUBLICATION_PROTOCOL_VERSION` 4.1.0. Bestaande releases behouden hun vastgelegde versie.
+- Besluit William 2026-10-18: geen dubbele vormingsroutes naast elkaar. Beslisbomen (PDF en JSON-export) zijn omgezet zonder voorafgaand §10-experiment; de oude route is in dezelfde wijziging verwijderd. Status, verwijderingsinventaris en bewijs: [vervangingsinventaris](docs/audit/decision-tree-route-replacement.md).
+- Open voor beslisbomen: inhoudelijke acceptatie van de route op een bevroren corpus met onafhankelijke menselijke referentie en vooraf vastgelegde grenswaarden ([preregistratie](data/audit/decision_tree_route_experiment_v1.json)); tot die tijd is menselijke graafreview per document de enige bevestiging. Gerichte validatoruitbreiding voor brongebonden paginaovergangen en reviewgebonden contextbindingen. Echte provider-uitvoer op productieachtige PDF's.
+- Beslisbomen die vóór de omschakeling zijn gevormd: leesbaar en verifieerbaar; herverwerking (`decision_tree_legacy_route_retired`) en eenheidcorrectie (`decision_unit_legacy_revision_retired`) falen gesloten en vereisen een expliciete opvolger. Inventaris: `scripts/decision_tree_route_inventory.py`.
+- Nieuwe releases registreren `PUBLICATION_PROTOCOL_VERSION` 4.2.0. Bestaande releases behouden hun vastgelegde versie.
 
 **Klaar wanneer:** een routewissel in de omgeving aantoonbaar geen invloed heeft op vastgelegde of lopende verwerking, retry en herstel de vastgelegde route gebruiken, en beide strategieën hun huidige standaardroute behouden.
 

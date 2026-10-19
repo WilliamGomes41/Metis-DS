@@ -29,7 +29,8 @@ def complete_console(root, config, console_cls=FastBadgePostgresCompleteWorkflow
         canonical_publication_store=PostgresCanonicalPublicationStore(config),
     )
     options.update(overrides)
-    return console_cls(**options)
+    from tests.decision_tree_test_support import install_fragment_proposer
+    return install_fragment_proposer(console_cls(**options))
 
 
 @pytest.fixture

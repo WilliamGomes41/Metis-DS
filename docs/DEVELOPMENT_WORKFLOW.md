@@ -59,7 +59,7 @@ Iedere materiële PR vermeldt minimaal:
 
 Een PR met code maar zonder vereiste tests en controleerbaar bewijs is procesmatig incompleet.
 
-De actuele product- en veiligheidsregels staan uitsluitend in `PROTOCOL.md` (v4.1.0). Historische V2-uitvoeringsgolven zijn bewaard in `docs/history/protocol-v2/DEVELOPMENT_WORKFLOW_PRE_V4_1_2026-10-18.md` en voegen geen actuele verplichtingen toe.
+De actuele product- en veiligheidsregels staan uitsluitend in `PROTOCOL.md` (v4.2.0). Historische V2-uitvoeringsgolven zijn bewaard in `docs/history/protocol-v2/DEVELOPMENT_WORKFLOW_PRE_V4_1_2026-10-18.md` en voegen geen actuele verplichtingen toe.
 
 ## 6. CI-governance-invarianten
 

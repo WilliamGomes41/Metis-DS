@@ -125,7 +125,7 @@ def seed(root, backend, route, patch):
             data = document.tobytes()
         filename, kind = "source.pdf", "application/pdf"
         if route == "decision-pdf":
-            from tests.test_decision_unit_construction import pdf_data
+            from tests.decision_tree_test_support import pdf_data
             data = pdf_data()
         if route.startswith("docling"):
             from src.docling_contract_v1 import translate

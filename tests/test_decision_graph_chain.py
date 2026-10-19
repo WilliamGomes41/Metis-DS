@@ -184,8 +184,10 @@ def test_durable_release_keeps_graph_out_of_prose_and_restarts(tmp_path):
 
     store, source = GraphStore(), MemorySourceStore()
     def state():
-        return DurablePublicationConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime",
-                                         canonical_publication_store=store, immutable_source_store=source)
+        from tests.decision_tree_test_support import install_fragment_proposer
+        return install_fragment_proposer(DurablePublicationConsole(
+            root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime",
+            canonical_publication_store=store, immutable_source_store=source))
     console = state()
     accounts = _accounts(console)
     sid = ingest(console, accounts)["snapshot_id"]

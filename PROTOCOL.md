@@ -1,9 +1,10 @@
-# V&VN Data Services — Protocol v4.1
+# V&VN Data Services — Protocol v4.2
 
 **Status:** Vigerend — enige actuele protocolnorm
 
-**Versie:** 4.1.0  
-**Datum:** 2026-10-18 (v4.0.0: 2026-09-27)  
+**Versie:** 4.2.0  
+**Datum:** 2026-10-18 (v4.1.0: 2026-10-18; v4.0.0: 2026-09-27)  
+**Wijziging 4.2.0:** één brongebonden vormingsroute voor beslisbomen (§5.2, §5.4 strategie C)  
 **Wijziging 4.1.0:** vormingskader en bronsoortstrategieën (§5.4)
 **Functie:** één actuele norm voor Metis. Historische besluiten, implementatiegolven en supersessies zijn auditbewijs en geen aanvullende stuurlaag.
 
@@ -91,7 +92,7 @@ Een nieuw taalgeval leidt niet automatisch tot een nieuwe lexicale uitzonderings
 
 ### 5.2 Verwerkingsroutes
 
-Voor nieuwe prozaverwerking is `semantic-source-bound-v2` (source-bound-fields v2) de standaardroute. `semantic-source-bound-v1`, `semantic-source-bound-v3` en `deterministic-v1` blijven expliciet te kiezen routes voor compatibiliteit of operationele rollback; de keuze verloopt volgens het vormingskader in §5.4. V3 is geen automatische opvolger van de standaardroute en geen nieuwe protocolversie. Beslisbomen behouden hun bestaande structurele route; kopstructuur blijft ook binnen semantische verwerking deterministisch.
+Voor nieuwe prozaverwerking is `semantic-source-bound-v2` (source-bound-fields v2) de standaardroute. `semantic-source-bound-v1`, `semantic-source-bound-v3` en `deterministic-v1` blijven expliciet te kiezen routes voor compatibiliteit of operationele rollback; de keuze verloopt volgens het vormingskader in §5.4. V3 is geen automatische opvolger van de standaardroute en geen nieuwe protocolversie. Beslisbomen hebben één eigen route, `decision-tree-source-bound-v1` (§5.4, strategie C); kopstructuur blijft ook binnen semantische verwerking deterministisch.
 
 De brongebonden semantische route mag vóór Review kandidaatobjecten voorstellen. Bij ontbrekende providerconfiguratie, fout, weigering, timeout, ongeldig schema of ongeldige bronspan faalt die route gesloten; er is geen stille terugval naar een andere verwerkingsroute. Metis reconstrueert kandidaattekst uit exacte bronspans. Een model schrijft niet rechtstreeks canonieke kennis. Activering via Audit of experimentbesluiten is uitgesloten volgens §10.
 
@@ -130,7 +131,9 @@ Een strategie mag eisen toevoegen, maar geen voorwaarde uit het kader of uit §�
 | Strategie | Inhoudelijke eenheid | Aanvullend | Reviewobject | Ontsluiting | Standaardroute |
 | --- | --- | --- | --- | --- | --- |
 | B. Richtlijn | Zelfstandig begrijpelijk kennisobject met de context die de betekenis begrenst | Objecttype, modaliteit en aanbevelingssterkte alleen op expliciete bronformulering; kopstructuur deterministisch | Ieder exact kennisobject | Afzonderlijk via retrieval | `semantic-source-bound-v2` |
-| C. Beslisboom | Besliseenheid met een functie in een pad: startpunt, vraag, actie, uitkomst of context | Beslisgraaf met brongebonden verbindingen; antwoordlabels zijn routebewijs, geen knooppunten; onopgeloste routes, onbekende doelen en onverklaarde cycli blokkeren publicatie | Exacte eenheden én de graaf | Uitsluitend met het volledige pad en de benodigde voorwaarden; niet als losse prozaobjecten | De bestaande structurele route |
+| C. Beslisboom | Besliseenheid met een functie in een pad: startpunt, vraag, actie, uitkomst of context | Voorstel met exacte bronselecties, rollen, verbindingen, letterlijke antwoordlabels, contextbindingen en onzekerheden (PDF: semantische verwerking; JSON-export: deterministisch uit de expliciete exportrecords); deterministische constructie van eenheden en beslisgraaf; per verbinding bewijs dat aan déze relatie gekoppeld is; antwoordlabels zijn routebewijs, geen knooppunten; onopgeloste routes, onbekende doelen en onverklaarde cycli blokkeren publicatie | Exacte eenheden én de graaf | Uitsluitend met het volledige pad en de benodigde voorwaarden; niet als losse prozaobjecten | `decision-tree-source-bound-v1` (enige toegelaten route) |
+
+Voor strategie C geldt: bronselectie en relatiebewijs maken een voorgestelde verbinding controleerbaar; alleen menselijke graafreview bevestigt de interpretatie. Een niet-uitvoerbaar voorstel faalt gesloten. Bronversies die vóór deze route zijn gevormd, blijven leesbaar en verifieerbaar volgens hun vastgelegde contract; hun eenheden worden niet opnieuw gevormd of met vervallen vormingslogica gecorrigeerd. Nieuw vormingswerk daarvoor vereist een expliciete opvolger.
 
 Een nieuwe bronsoortstrategie (D, E, …) of een nieuwe route binnen een bestaande strategie wordt eerst als experiment beoordeeld (§10). Zij wordt pas toegelaten na een protocolwijziging volgens §15 die de strategie aan deze tabel toevoegt of wijzigt.
 
@@ -305,4 +308,4 @@ De volledige pre-V3 rootstanden en de afzonderlijke V2-protocollen zijn bewaard 
 
 Om te bepalen wat Metis nu moet doen, hoeft de V2-deltaketen niet meer te worden gelezen.
 
-De ongewijzigde V3-stand vóór deze wijziging is bewaard onder `docs/history/protocol-v3/`. De stand van Protocol v4.0.0 vóór de wijziging naar 4.1.0 is bewaard onder `docs/history/protocol-v4.0/`. Versienummers in bestaande releases en historische fixtures worden nooit achteraf herschreven; nieuwe releases registreren de geldende publicatieprotocolversie.
+De ongewijzigde V3-stand vóór deze wijziging is bewaard onder `docs/history/protocol-v3/`. De stand van Protocol v4.0.0 vóór de wijziging naar 4.1.0 is bewaard onder `docs/history/protocol-v4.0/`. De stand van Protocol v4.1.0 vóór de wijziging naar 4.2.0 is bewaard onder `docs/history/protocol-v4.1/`. Versienummers in bestaande releases en historische fixtures worden nooit achteraf herschreven; nieuwe releases registreren de geldende publicatieprotocolversie.

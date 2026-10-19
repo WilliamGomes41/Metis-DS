@@ -25,9 +25,10 @@ def native_state(tmp_path):
         reviews = PostgresWorkflowReviewStore(config)
         remaining = PostgresWorkflowRemainingStore(config)
         bind_workflow_stores(identity, documents, reviews, remaining)
-        return FastBadgePostgresCompleteWorkflowDurablePublicationConsole(
+        from tests.decision_tree_test_support import install_fragment_proposer
+        return install_fragment_proposer(FastBadgePostgresCompleteWorkflowDurablePublicationConsole(
             root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / f"runtime-{node}",
             immutable_source_store=source, canonical_publication_store=store,
             workflow_identity_store=identity, workflow_document_store=documents,
-            workflow_review_store=reviews, workflow_remaining_store=remaining)
+            workflow_review_store=reviews, workflow_remaining_store=remaining))
     return state, store, source

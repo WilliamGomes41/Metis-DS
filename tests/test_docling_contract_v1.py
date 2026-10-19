@@ -466,3 +466,23 @@ def test_decision_tree_pdf_route_keeps_unverified_page_numbers(tmp_path, monkeyp
             source_id="src", title="Boom", family="test", class_="beslisboom")
     assert raised.value.code == "docling_page_text_unverified"
     assert raised.value.unverified_pages == [3]
+
+
+def test_decision_tree_pdf_route_keeps_unverified_page_numbers_on_the_semantic_binding(tmp_path, monkeypatch):
+    # The bound pre-review strategy calls the route directly; it converts identically.
+    import src.decision_graph_v1 as decision_graph
+    from src.operations_console_v1 import OperationsConsole, ConsoleError
+    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    def unverified(*args, **kwargs):
+        error = DoclingError("docling_page_text_unverified")
+        error.pages = [3]
+        raise error
+    monkeypatch.setattr(decision_graph, "pdf_fragments", unverified)
+    console = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    bind_pre_review_semantic_processing(console, environ={"METIS_LLM_API_KEY": "k", "METIS_LLM_MODEL": "m"},
+                                        post_json=lambda *a: pytest.fail("no model call before extraction"))
+    with pytest.raises(ConsoleError) as raised:
+        console._fragments_and_spec("pdf", tmp_path / "boom.pdf", data=b"%PDF", document_id="doc",
+            source_id="src", title="Boom", family="test", class_="beslisboom")
+    assert raised.value.code == "docling_page_text_unverified"
+    assert raised.value.unverified_pages == [3]

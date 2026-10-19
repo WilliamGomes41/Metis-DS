@@ -1040,7 +1040,7 @@ def test_source_authority_does_not_erase_selected_semantics_when_primary_is_cove
 
 
 
-def test_boom_route_is_deterministic_under_semantic_deployment_mode(tmp_path: Path) -> None:
+def test_boom_export_uses_deterministic_proposal_under_semantic_deployment_mode(tmp_path: Path) -> None:
     env = {
         PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
         LLM_API_KEY_ENV: "product-key",
@@ -1093,17 +1093,16 @@ def test_boom_route_is_deterministic_under_semantic_deployment_mode(tmp_path: Pa
         class_="beslisboom",
     )
 
+    # The explicit export is its own proposal: never a model call, always the
+    # single decision-tree route through the deterministic materialiser.
     assert calls == 0
     content = [obj for obj in spec["objects"] if obj.get("object_type") != "document"]
-    assert content
-    assert all(
-        obj["metadata"]["passage_formation"] == {
-            "policy_version": "passage-formation-policy-v1.0.0",
-            "strategy": "deterministic",
-            "reason": "authoritative_tree_structure",
-        }
-        for obj in content
-    )
+    assert [obj["clean_text"] for obj in content] == [
+        "Screening op valrisico", "Is er een verhoogd valrisico?", "Verwijs naar de valpoli."]
+    assert all(obj["semantic_passage"]["formation_mode"] == "decision-tree-source-bound-v1"
+               and obj["semantic_passage"]["model"] == "deterministic-export-v1"
+               and obj["object_id"].startswith("doc-boom-sem-") for obj in content)
+    assert spec["_decision_tree_formation"]["formation"]["route"] == "decision-tree-source-bound-v1"
 
 
 

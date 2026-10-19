@@ -1064,9 +1064,9 @@ def bind_pre_review_semantic_processing(
 ) -> None:
     """Bind passage formation to one console instance, never process-global state.
 
-    Normal mutations use an explicitly installed kernel strategy. Decision-tree
-    processing retains its dedicated deterministic path. Source catalogs use
-    their deterministic read boundary and never this formation strategy.
+    Normal mutations use an explicitly installed kernel strategy. Decision trees
+    use their single source-bound route (``decision_tree_route_v1``). Source
+    catalogs use their deterministic read boundary and never this strategy.
     """
 
     if getattr(console, "_pre_review_semantic_bound", False):
@@ -1082,6 +1082,8 @@ def bind_pre_review_semantic_processing(
     # and is deliberately the same reader used by the processing router below.
     console._passage_formation_mode_reader = active_passage_formation_mode
     console._processing_configuration_reader = lambda: {"mode": active_passage_formation_mode(), "model": env.get("METIS_LLM_MODEL")}
+    from src.decision_tree_route_v1 import llm_proposer
+    console._decision_tree_proposer = llm_proposer(env, post_json=post_json)
     original_fragments_and_spec = console._deterministic_fragments_and_spec
 
     def configured_fragments_and_spec(
@@ -1100,18 +1102,11 @@ def bind_pre_review_semantic_processing(
             from src.source_selection_v1 import assert_resume_configuration
             assert_resume_configuration(console, console._envelope(formation_context["snapshot_id"]))
 
-        if kind == "pdf" and class_ == "beslisboom":
-            return original_fragments_and_spec(
-                kind,
-                path,
-                data=data,
-                document_id=document_id,
-                source_id=source_id,
-                title=title,
-                family=family,
-                class_=class_,
-                formation_context=formation_context,
-            )
+        if class_ == "beslisboom" and kind in {"pdf", "boom"}:
+            from src.decision_tree_route_v1 import prepare
+            return prepare(kind, path, data=data, document_id=document_id, source_id=source_id,
+                           title=title, family=family, class_=class_,
+                           formation_context=formation_context, proposer=console._decision_tree_proposer)
 
         mode = active_passage_formation_mode()
         try:

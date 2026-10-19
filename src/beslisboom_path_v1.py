@@ -423,58 +423,6 @@ def extract_boom_fragments(
     return rows
 
 
-def boom_spec_from_fragments(
-    *,
-    document_id: str,
-    title: str,
-    family: str,
-    class_: str,
-    fragments: list[dict[str, Any]],
-) -> dict[str, Any]:
-    id_by_boom: dict[str, str] = {}
-    objects: list[dict[str, Any]] = [
-        {
-            "object_id": f"{document_id}-document",
-            "object_type": "document",
-            "text": title,
-            "review_track": "technical",
-        }
-    ]
-    for fragment in fragments:
-        boom_id = str(fragment.get("boom_id") or fragment["fragment_id"])
-        object_id = f"{document_id}-{boom_id}"
-        id_by_boom[boom_id] = object_id
-        kind = fragment.get("boom_kind")
-        relations = []
-        for target in fragment.get("applies_if") or []:
-            relations.append({"relation_type": "applies_if", "target_object_id": f"{document_id}-{target}"})
-        spec_item: dict[str, Any] = {
-            "object_id": object_id,
-            "object_type": "unclassified",
-            "proposed_object_type": kind,
-            "text": fragment["clean_text"],
-            "clean_text": fragment["clean_text"],
-            "source_fragment_ids": [fragment["fragment_id"]],
-            "relations": relations,
-            "review_track": "clinical",
-            "scorelist": bool(fragment.get("scorelist")),
-            "risk_fields": list(fragment.get("risk_fields") or []),
-        }
-        if fragment.get("proposed_recommendation_strength"):
-            spec_item["proposed_recommendation_strength"] = fragment["proposed_recommendation_strength"]
-        objects.append(spec_item)
-    _ = id_by_boom
-    return {
-        "spec_version": "console-ingest-1.0",
-        "document_id": document_id,
-        "object_version": "1.0",
-        "target_group": [],
-        "care_setting": [],
-        "topic": [family, f"class:{class_}", "source-kind:boom"],
-        "objects": objects,
-    }
-
-
 def stamp_boom_flags(objects: list[dict[str, Any]], fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     by_fragment = {row["fragment_id"]: row for row in fragments}
     for obj in objects:

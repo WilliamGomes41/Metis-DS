@@ -61,11 +61,12 @@ STORY_FIXTURE = ROOT / "data/fixtures/story_html_boom_player_fixture.html"
 
 
 def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+    from tests.decision_tree_test_support import install_fragment_proposer
+    return install_fragment_proposer(OperationsConsole(
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
-    )
+    ))
 
 
 def _accounts(console: OperationsConsole) -> dict[str, dict]:
