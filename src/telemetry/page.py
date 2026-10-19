@@ -145,6 +145,7 @@ _BODY = r"""
   <div class="tm-chips" id="tm-chips" aria-live="polite"></div>
 
   <div id="tm-body">
+    <div id="tm-quality" role="status" aria-live="polite"></div>
     <div class="tm-insights" id="tm-insights" aria-label="Inzichten"></div>
     <div class="tm-kpis" id="tm-kpis"></div>
     <div class="tm-grid">
@@ -354,6 +355,7 @@ function render() {
   fillSelect('#tm-route', data.options.routes, state.filters.route, 'Alle routes');
   fillSelect('#tm-commit', data.options.commits, state.filters.commit, 'Alle deploys');
   renderControls();
+  $('#tm-quality').replaceChildren(qualityNote(data.telemetry));
   renderInsights(data.insights);
   renderKpis(data);
   lineChart($('#chart-latency'), data.series, [{ key: 'p50', label: 'p50', color: 'var(--series-1)' }, { key: 'p95', label: 'p95', color: 'var(--series-2)' }], data.window.bucket_seconds);
@@ -367,8 +369,27 @@ function render() {
   renderProcess(data.process);
   $('#tm-about').textContent = `${nf.format(data.telemetry.events)} events in dit venster, opgeslagen ${data.telemetry.store === 'disk' ? 'op schijf (alle workers, 7 dagen, max. 64 MB)' : 'alleen in het geheugen van deze worker'}. ` +
     'Alleen vaste velden: route-sjablonen, statussen, tijden, fasenamen, begrensde id’s, commit, exceptietype, foutcode en Metis-codelocaties. Documenten alleen als pseudoniem (doc_ref). Nooit inhoud, gebruikers, SQL of foutteksten.' +
-    (data.telemetry.dropped ? ` ${data.telemetry.dropped} events konden niet worden vastgelegd.` : '') +
-    (data.telemetry.truncated ? ' Alleen de nieuwste 50.000 events zijn geanalyseerd; kies een korter venster voor het volledige beeld.' : '');
+    ' Bewaring is begrensd; zeven dagen is geen gegarandeerde dekking. De meetkwaliteit hierboven betreft deze leesoperatie; volledigheid over alle processen en externe meetpaden is niet vastgesteld.';
+}
+
+function qualityNote(telemetry) {
+  const q = (telemetry || {}).quality;
+  const parts = [];
+  if (!q) return el('p', { class: 'help', text: 'Meetdekking niet vastgesteld.' });
+  const a = q.analysis, r = q.read, p = q.process;
+  if (!a.window_used) parts.push('Geen meetgegevens in het gekozen venster. Stilte bewijst geen gezondheid.');
+  if (q.reasons.includes('memory_only')) parts.push('Alleen de buffer van deze worker is beschikbaar.');
+  if (q.reasons.includes('ring_evictions')) parts.push(`${nf.format(p.ring_evictions)} events zijn sinds processtart uit die buffer verdrongen; oudere historie kan ontbreken.`);
+  if (p.record_failures) parts.push(`${nf.format(p.record_failures)} vastleg- of opslagfouten sinds de start van deze worker; dit is geen exact aantal verloren events.`);
+  if (r.read_errors) parts.push(`${nf.format(r.read_errors)} bestanden of bestandslijsten konden bij deze scan niet volledig worden gelezen.`);
+  if (r.malformed_lines || r.invalid_events) parts.push(`${nf.format(r.malformed_lines)} onleesbare JSON-regels en ${nf.format(r.invalid_events)} ongeldige events overgeslagen bij deze scan.`);
+  if (a.window_omitted) parts.push(`${nf.format(a.window_omitted)} events uit het gekozen venster niet geanalyseerd door de analyselimiet.`);
+  if (a.lookback_omitted) parts.push(`${nf.format(a.lookback_omitted)} eerdere events voor reconstructie niet geanalyseerd; verzoekdetails kunnen onvolledig zijn.`);
+  if (a.used) parts.push(`Geanalyseerd: ${nf.format(a.used)} van ${nf.format(a.seen)} leesbare events, inclusief terugkijkperiode. Beschikbare observaties: ${time(a.oldest_used_at, true)} tot ${time(a.newest_used_at, true)}; dit bewijst geen aaneengesloten dekking.`);
+  parts.push('Niet-getelde verliezen en ontbrekende producenten zijn hiermee niet uitgesloten.');
+  return el('div', { class: 'tm-card', style: 'margin-bottom:14px' },
+    el('strong', { text: q.status === 'no_known_loss' ? 'Meetdekking niet vastgesteld' : 'Onvoldoende zicht voor een volledig beeld' }),
+    el('p', { class: 'help', text: parts.join(' ') }));
 }
 
 function renderInsights(items) {
@@ -391,9 +412,9 @@ function renderKpis(data) {
   const k = data.kpis, s = data.series;
   const tiles = [
     ['Verzoeken', compact(k.requests), `${k.running} lopend`, s.map((b) => b.count)],
-    ['Foutpercentage', pct(k.error_rate), `${nf.format(k.errors)} fout of afgebroken`, s.map((b) => b.count ? b.errors / b.count : 0)],
+    ['Foutpercentage', pct(k.error_rate), k.requests ? `${nf.format(k.errors)} fout of afgebroken in waargenomen verzoeken` : 'onvoldoende gegevens', s.map((b) => b.count ? b.errors / b.count : 0)],
     ['Responstijd p95', ms(k.p95_ms), `p50 ${ms(k.p50_ms)} · p99 ${ms(k.p99_ms)}`, s.map((b) => b.p95 || 0)],
-    ['Afgebroken', nf.format(k.aborted), k.aborted ? '⚠ crash, time-out of herstart' : 'geen', null],
+    ['Afgebroken', nf.format(k.aborted), k.aborted ? '⚠ afronding ontbreekt; oorzaak niet bewezen' : k.requests ? 'geen waargenomen' : 'onvoldoende gegevens', null],
     ['Wachten op store-lock (p95)', ms(k.lock_wait_p95_ms), 'tijd tot de Storeopdracht mag starten', null],
   ];
   $('#tm-kpis').replaceChildren(...tiles.map(([label, value, hint, trend]) => el('div', { class: 'tm-tile' },
@@ -586,12 +607,14 @@ async function openRequest(id) {
   inner.replaceChildren(el('p', { text: 'Laden…' }));
   if (!drawer.open) drawer.showModal();
   const response = await fetch('/telemetry/api/request/' + encodeURIComponent(id), { credentials: 'same-origin' });
-  if (!response.ok) { inner.replaceChildren(el('p', { text: 'Dit verzoek is niet (meer) beschikbaar.' }), closeButton()); return; }
-  const d = await response.json(), r = d.request;
+  const d = await response.json().catch(() => ({}));
+  if (!response.ok || !d.request) { inner.replaceChildren(el('p', { text: 'Dit verzoek is niet (meer) beschikbaar; de oorzaak is niet vastgesteld.' }), qualityNote(d.telemetry), closeButton()); return; }
+  const r = d.request;
   const copy = (value) => value ? el('button', { type: 'button', class: 'linkbtn mono', title: 'Kopieer', onclick: () => navigator.clipboard && navigator.clipboard.writeText(value) }, value) : '—';
   const nodes = d.tree || [], max = Math.max(1, ...nodes.map((n) => n.inclusive_ms || 0));
   const g = d.guidance;
   inner.replaceChildren(...[
+    qualityNote(d.telemetry),
     el('div', { class: 'drawer-top' }, el('div', {}, el('p', { class: 'eyebrow', text: 'Verzoek' }), el('h2', { style: 'margin:0' }, el('span', { class: 'mono', text: `${r.method} ${r.route}` })),
       el('p', { class: 'help', style: 'margin:6px 0 0' }, stateBadge(r.state), `  ${r.status === null ? '' : 'HTTP ' + r.status + ' · '}${ms(r.duration_ms)} · ${time(r.started, true)}`)), closeButton()),
     g ? el('div', { class: 'tm-card', style: 'padding:14px' }, el('div', { style: 'display:flex;gap:8px;align-items:center' }, sev(r.state === 'aborted' ? 'critical' : 'serious'), el('strong', { text: g.title })),

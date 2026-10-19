@@ -209,7 +209,7 @@ def summarize(events: list[dict], *, filters: dict[str, str] | None = None, now:
         "kpis": {
             "requests": len(requests),
             "errors": len(errored),
-            "error_rate": round(len(errored) / len(requests), 4) if requests else 0.0,
+            "error_rate": round(len(errored) / len(requests), 4) if requests else None,
             "p50_ms": percentile(durations, 50), "p95_ms": percentile(durations, 95),
             "p99_ms": percentile(durations, 99),
             "aborted": sum(r.state(now) == "aborted" for r in requests),

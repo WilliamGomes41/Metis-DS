@@ -101,6 +101,18 @@ Grafieken over dezelfde meting als de tabelpagina:
 
 ## Grenzen
 
+- **Meetkwaliteit:** summary en requestdetail tonen `telemetry.quality`: fouten per
+  leesoperatie, verdringing uit de procesbuffer en exact uitgesloten events door
+  de analyselimiet. Verliezen binnen het venster en in de extra terugkijkperiode
+  voor reconstructie staan apart. Een niet meer gevonden verzoek heeft deze
+  informatie ook in het 404-antwoord. Zonder requests is het foutpercentage `null`.
+- De procescounters gelden sinds het ontstaan van deze hub en noemen de runtime;
+  ze tellen geen productiebreed verlies. Bufferevents kunnen nog op schijf staan.
+  Leesfouten gelden voor gescande bestanden, ook als hun tijd niet vast te stellen
+  is. Oudste/nieuwste observaties bewijzen geen aaneengesloten dekking. Eerdere
+  retentieverwijdering, ontbrekende producenten en exportverlies blijven onbekend;
+  `coverage` blijft daarom `not_established`. Zeven dagen is geen garantie op
+  zeven dagen beschikbare gegevens.
 - Een 500-antwoord wordt buiten de diagnose-middleware opgebouwd en draagt daardoor geen `X-Metis-Request-Id`-header. Het event heeft het id wel.
 - De lokale opslag is per instance. Meerdere instances zie je samen alleen in Azure.
 - De Product API (`serve-api`) is nog niet aangesloten.

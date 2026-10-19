@@ -199,6 +199,7 @@ class TelemetryHub:
         self._ring: deque[dict[str, Any]] = deque(maxlen=RING_SIZE)
         self._sink: JsonlSink | None = None
         self.dropped = 0
+        self.ring_evictions = 0
 
     @property
     def directory(self) -> Path | None:
@@ -231,6 +232,8 @@ class TelemetryHub:
             event.setdefault("kind", "event")
             line = json.dumps(event, separators=(",", ":"), ensure_ascii=False)
             with self._lock:
+                if len(self._ring) == self._ring.maxlen:
+                    self.ring_evictions += 1
                 self._ring.append(event)
                 if self._sink is not None:
                     try:
@@ -246,27 +249,45 @@ class TelemetryHub:
             self.dropped += 1
             return None
 
-    def events(self, since_epoch: float | None = None) -> Iterator[dict[str, Any]]:
-        """Stored events (all workers) when configured, else this process's ring."""
+    def events(self, since_epoch: float | None = None, *,
+               quality: dict[str, Any] | None = None) -> Iterator[dict[str, Any]]:
+        """Stored events, with read failures counted for this scan only.
+
+        Read counts cover scanned files, including lines whose time cannot be
+        determined. They are not counts of lost events in the requested window.
+        """
+        counts = quality if quality is not None else {}
+        counts.update(read_errors=0, malformed_lines=0, invalid_events=0)
         sink = self._sink
+        counts["source"] = "process_ring" if sink is None else "instance_files"
         if sink is None:
             with self._lock:
                 snapshot = list(self._ring)
             yield from (event for event in snapshot if _after(event, since_epoch))
             return
-        for path in sorted(sink.files()):
+        try:
+            paths = sorted(sink.files())
+        except OSError:
+            counts["read_errors"] += 1
+            return
+        for path in paths:
             try:
                 if since_epoch is not None and path.stat().st_mtime < since_epoch:
                     continue
-                with open(path, encoding="utf-8") as handle:
+                with path.open(encoding="utf-8") as handle:
                     for line in handle:
                         try:
                             event = json.loads(line)
                         except ValueError:
+                            counts["malformed_lines"] += 1
                             continue
-                        if isinstance(event, dict) and _after(event, since_epoch):
+                        if not isinstance(event, dict) or parse_ts(event.get("ts") or event.get("timestamp")) is None:
+                            counts["invalid_events"] += 1
+                            continue
+                        if _after(event, since_epoch):
                             yield event
-            except OSError:
+            except (OSError, UnicodeError):
+                counts["read_errors"] += 1
                 continue
 
     def flush(self) -> None:
@@ -303,22 +324,55 @@ def record_event(event: str, *, kind: str = "event", **fields: Any) -> None:
 MAX_ANALYZED_EVENTS = 50_000
 
 
-def recent_events(since: float, *, window_start: float | None = None) -> tuple[list[dict[str, Any]], bool]:
+def recent_events(since: float, *, window_start: float | None = None,
+                  quality: dict[str, Any] | None = None) -> tuple[list[dict[str, Any]], bool]:
     """The newest MAX_ANALYZED_EVENTS events since ``since`` (streamed, bounded memory), oldest first.
 
     The flag says whether events at or after ``window_start`` (default ``since``) were left out;
     a reconstruction lookback before the window does not count.
     """
-    seen = 0
+    seen = window_seen = 0
+    window_start = since if window_start is None else window_start
+    read_quality: dict[str, Any] = {}
 
     def counted():
-        nonlocal seen
-        for event in HUB.events(since):
+        nonlocal seen, window_seen
+        for event in HUB.events(since, quality=read_quality):
             seen += 1
+            if _after(event, window_start):
+                window_seen += 1
             yield event
-    newest = heapq.nlargest(MAX_ANALYZED_EVENTS, counted(), key=lambda event: str(event.get("ts") or ""))
+    newest = heapq.nlargest(MAX_ANALYZED_EVENTS, counted(),
+                           key=lambda event: parse_ts(event.get("ts") or event.get("timestamp")) or 0)
     newest.reverse()
-    if seen <= len(newest):
-        return newest, False
-    oldest_kept = parse_ts(newest[0].get("ts")) if newest else None
-    return newest, oldest_kept is None or oldest_kept > (since if window_start is None else window_start)
+    window_used = sum(_after(event, window_start) for event in newest)
+    window_omitted = window_seen - window_used
+    lookback_omitted = seen - len(newest) - window_omitted
+    if quality is not None:
+        source = read_quality.pop("source")
+        reasons = [name for name, value in read_quality.items() if value]
+        if window_omitted:
+            reasons.append("analysis_window_omitted")
+        if lookback_omitted:
+            reasons.append("analysis_lookback_omitted")
+        # These are this process's lifetime counters, not a global event-loss total.
+        with HUB._lock:
+            process = {"pid": os.getpid(), "runtime_id": _RUNTIME_ID,
+                       "record_failures": HUB.dropped, "ring_evictions": HUB.ring_evictions}
+        memory_only = source == "process_ring"
+        if process["record_failures"]:
+            reasons.append("record_failures")
+        if memory_only:
+            reasons.append("memory_only")
+            if process["ring_evictions"]:
+                reasons.append("ring_evictions")
+        quality.update(
+            status="insufficient" if not window_used else "partial" if reasons else "no_known_loss",
+            coverage="not_established", source=source,
+            reasons=reasons, process=process, read=read_quality,
+            analysis={"seen": seen, "used": len(newest), "window_seen": window_seen,
+                      "window_used": window_used, "window_omitted": window_omitted,
+                      "lookback_omitted": lookback_omitted,
+                      "oldest_used_at": parse_ts(newest[0].get("ts") or newest[0].get("timestamp")) if newest else None,
+                      "newest_used_at": parse_ts(newest[-1].get("ts") or newest[-1].get("timestamp")) if newest else None})
+    return newest, bool(window_omitted)
