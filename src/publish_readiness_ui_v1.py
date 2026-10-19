@@ -254,7 +254,7 @@ def _render_publish_state(view: dict[str, Any]) -> str:
             '<section class="section" data-readiness-category="technical">'
             '<h3>Publicatie nog niet beschikbaar</h3>'
             + _blocker_list(review_blockers)
-            + ('<p>De vereiste publicatiecontroles zijn niet afgerond. Technisch beheer moet de blokkade onderzoeken.</p>'
+            + ('<p>De vereiste publicatiecontroles zijn niet afgerond. Onderzoek de blokkade in Inzicht.</p>'
                if len(review_blockers) < len(view["technical_blockers"]) or not review_blockers else '')
             + '</section>'
         )
@@ -321,7 +321,7 @@ def _card(envelope: dict[str, Any], view: dict[str, Any], display_status: str) -
                 <article class="doc-card" data-publish-document="{_esc(envelope['snapshot_id'])}">
                   {_document_card_heading({**envelope, "status": display_status, "meaningful_status": display_status})}
                   {_render_publish_state(view)}
-                  <p><a href="/source-selection/publication-evidence?document={quote(str(envelope['snapshot_id']), safe='')}">Publicatiebewijs downloaden</a></p>
+                  <p><a href="/inzicht/document?document={quote(str(envelope['snapshot_id']), safe='')}">Bekijk diagnose in Inzicht</a></p>
                 </article>
                 '''
 

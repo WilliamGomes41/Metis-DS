@@ -113,11 +113,13 @@ def test_exports_and_technical_repair_preserve_document_authorization(tmp_path):
     snapshot = first["snapshot_id"]
     landing = client.get("/settings/technical/exports")
     assert landing.status_code == 200
-    assert "Document A" in landing.text and "Document B" not in landing.text
+    assert landing.url.path == "/inzicht"
+    documents = client.get("/inzicht/api/documents").json()["documents"]
+    assert [row["title"] for row in documents] == ["Document A"]
     opened = client.get("/settings/technical/exports", params={"document": snapshot})
     downloads = [attrs["href"] for tag, attrs in Tags(opened.text).tags
                  if tag == "a" and attrs.get("href", "").startswith((
-                     "/review/passages-export?", "/review/processing-diagnostics"))]
+                     "/inzicht/document/passages?", "/inzicht/document/diagnostiek", "/inzicht/document/detaildiagnostiek"))]
     assert len(downloads) == 4
     for link in downloads:
         response = client.get(link)
@@ -128,14 +130,17 @@ def test_exports_and_technical_repair_preserve_document_authorization(tmp_path):
     assert client.get("/settings/technical/exports", params={"document": second["snapshot_id"]}).status_code == 400
     technical = client.get("/settings/technical", params={"document": snapshot})
     assert technical.status_code == 200
-    assert "Verwerkingsproblemen herstellen" in technical.text
+    assert "Documentdiagnose" in technical.text
     assert "Reviewinteracties" in technical.text
     redirect = client.get("/review", params={"document": snapshot, "task": "repair"}, follow_redirects=False)
     assert redirect.status_code == 200
     assert "Passages corrigeren" in redirect.text
     assert "Diagnostiek en brondekking" not in redirect.text
     _login(client, "publisher.carla")
-    assert client.get("/settings/technical/exports").status_code == 403
+    assert client.get("/settings/technical/exports").status_code == 200
+    publisher_diagnosis = client.get("/inzicht/document", params={"document": snapshot})
+    assert "/inzicht/document/publicatiebewijs?" in publisher_diagnosis.text
+    assert "/inzicht/document/passages?" not in publisher_diagnosis.text
 
 
 def test_task_back_link_keeps_selected_document_and_search(tmp_path):

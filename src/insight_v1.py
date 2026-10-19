@@ -10,8 +10,10 @@ quality report store.
 from __future__ import annotations
 
 import time
+import json
 from html import escape
 from typing import Any, Callable
+from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -45,11 +47,11 @@ _TAB_STYLE = """<style>
 
 
 def _authorized_documents(state, account) -> list[dict[str, Any]]:
-    """Same rule as Technisch beheer: researchers see all, reviewers their named documents."""
+    """Processing scope plus publishers' existing publication document list."""
     roles = set(account.get("roles") or [])
     rows = []
     for envelope in state.list_envelopes():
-        if "researcher" in roles or ("reviewer" in roles and account["account_id"] in (envelope.get("named_reviewers") or [])):
+        if roles & {"researcher", "publisher"} or ("reviewer" in roles and account["account_id"] in (envelope.get("named_reviewers") or [])):
             rows.append(envelope)
     return rows
 
@@ -111,12 +113,14 @@ def _document_row(state, account, envelope: dict[str, Any], telemetry: dict[str,
     from src.processing_diagnostics_v1 import processing_diagnostics
     from src.request_diagnostics_v1 import doc_ref
     sid = envelope["snapshot_id"]
+    roles = set(account.get("roles") or [])
+    processing_access = "researcher" in roles or ("reviewer" in roles and account["account_id"] in envelope.get("named_reviewers", []))
     try:
-        status = state.processing_status(sid, actor_id=account["account_id"], deep=False)
+        status = state.processing_status(sid, actor_id=account["account_id"], deep=False) if processing_access else {}
     except Exception:
         status = {}
     try:
-        diagnostics = processing_diagnostics(state.snapshot_objects(sid))
+        diagnostics = processing_diagnostics(state.snapshot_objects(sid)) if processing_access else {"blocked_candidate_count": None, "by_reason_code": {}}
     except Exception:
         diagnostics = {"blocked_candidate_count": None, "by_reason_code": {}}
     ref = doc_ref(sid)
@@ -182,8 +186,97 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
         account = require_account(request)
         tab = request.query_params.get("tab") or "systeem"
         tab = tab if tab in dict(TABS) else "systeem"
+        if tab == "kwaliteit" and request.query_params.get("view") == "table":
+            return app.state.insight_quality_table(request)
         html = render_page(nav(account, "settings") + insight_body(insight_tabs(tab), tab), title="Inzicht — Metis")
         return HTMLResponse(html, headers=_HEADERS)
+
+    @app.get("/inzicht/document", response_class=HTMLResponse)
+    @state.source_selection_read_scope()
+    def document_diagnosis(request: Request, document: str) -> HTMLResponse:
+        from src.operations_console_app import ERROR_COPY, _processing_diagnostics_html, _coverage_panel
+        from src.review_interaction_v1 import review_burden_projection
+        from src.review_ledger import read_events
+
+        account = require_account(request)
+        roles = set(account.get("roles") or [])
+        envelope = state._envelope(document)
+        reviewer = "reviewer" in roles and account["account_id"] in envelope.get("named_reviewers", [])
+        processing_access = "researcher" in roles or reviewer
+        # Publishers already have release-evidence access, not processing access.
+        # Every processing read still goes through the existing owner's guard.
+        if processing_access or "publisher" not in roles:
+            processing = state.processing_status(document, actor_id=account["account_id"])
+        else:
+            state._require_role(account["account_id"], "publisher", current=True)
+            processing = {}
+        query = escape(urlencode({"document": document}), quote=True)
+        code = ("source_formation_incomplete" if processing.get("formation_incomplete")
+                else processing.get("error_code") or processing.get("reason_code") or "")
+        controls = ""
+        if processing.get("resume_allowed") or processing.get("retry_allowed"):
+            controls += f'<p><a class="btn-primary" href="/source-selection?{query}">Naar Bronselectie voor Starten of Hervatten</a></p>'
+        if ("publisher" in roles
+                and (account["account_id"] in envelope.get("named_reviewers", [])
+                     or account["account_id"] == envelope.get("uploader_account_id"))
+                and processing.get("reason_code") == "processing_attempt_limit_reached"
+                and not envelope.get("processing_recovery")):
+            controls += f'''<form method="post" action="/tree/processing-recovery">
+              <input type="hidden" name="snapshot_id" value="{escape(document, quote=True)}">
+              <label>Reden voor eenmalig herstel<input name="reason" required maxlength="1000"></label>
+              <button type="submit">Een herstelpoging autoriseren</button></form>'''
+        progress = processing.get("formation_progress") or {}
+        progress_html = ""
+        if progress.get("planned_task_count"):
+            progress_html = (f'<p>Vormingstaken: {int(progress.get("terminal_task_count") or 0)} van '
+                             f'{int(progress["planned_task_count"])} afgehandeld; '
+                             f'{int(progress.get("pending_task_count") or 0)} nog open.</p>')
+        attempts = (envelope.get("processing_attempts") or []) if processing_access else []
+        diagnostic = (attempts[-1].get("diagnostic") or {}) if attempts else {}
+        pages = [str(page) for page in diagnostic.get("unverified_pages") or [] if type(page) is int]
+        pages_html = f'<p>Pagina’s zonder verwerkbare brontekst: {escape(", ".join(pages))}</p>' if pages else ""
+        detail = escape(json.dumps(diagnostic, ensure_ascii=False, indent=2))
+        passages = '<p>Passagediagnostiek en passage-exports zijn beschikbaar voor de aangewezen reviewer.</p>'
+        passage_exports = ""
+        source_exports = (f'<li><a href="/inzicht/document/verwerkingsspoor?{query}">Verwerkingsspoor (JSON)</a></li>'
+                          if processing_access else "")
+        publication_export = (f'<li><a href="/inzicht/document/publicatiebewijs?{query}">Publicatiebewijs (JSON)</a></li>'
+                              if "publisher" in roles else "")
+        if reviewer:
+            objects = state.snapshot_objects(document)
+            burden = review_burden_projection(read_events(state._ledger_path), snapshot_id=document)
+            passages = (_processing_diagnostics_html(objects) + _coverage_panel(objects)
+                + f'<details><summary>Reviewinteracties</summary><p>{int(burden["review_interactions"])} gemeten menselijke interacties voor '
+                  f'{int(burden["object_decisions"])} objectbesluiten. Historische besluiten zonder meting: '
+                  f'{int(burden["legacy_unmeasured_decisions"])}.</p></details>'
+                + f'<p><a href="/review?{query}&amp;task=repair">Passages corrigeren in Review</a></p>')
+            passage_exports = f'''<li>Bronpassages: <a href="/inzicht/document/passages?{query}&amp;format=csv">CSV</a> ·
+              <a href="/inzicht/document/passages?{query}&amp;format=json">JSON</a></li>
+              <li><a href="/inzicht/document/diagnostiek?{query}">Diagnostiek (JSON)</a></li>
+              <li><a href="/inzicht/document/detaildiagnostiek?{query}">Detaildiagnostiek (JSON)</a></li>
+              <li><a href="/inzicht/document/verwerkingsbewijs?{query}">Verwerkingsbewijs als CSV-pakket</a></li>'''
+        processing_html = f'''
+          <section id="verwerking"><h2>Verwerking</h2>
+            <p>{escape(ERROR_COPY.get(code, "Controleer de actuele verwerking."))}</p>
+            <p>Status: {escape(str(processing.get("state") or "niet vastgelegd"))}</p>
+            <p>Code: <code>{escape(str(code))}</code></p>{pages_html}{progress_html}
+            <p>Een technisch geslaagde poging bewijst niet dat bronverwerking, review of publicatievoorwaarden volledig zijn afgerond.</p>
+            <p>Nieuwe poging vanaf: {escape(str(processing.get("retry_not_before") or "niet van toepassing"))}</p>
+            {controls}<details><summary>Laatste verwerkingspoging ({len(attempts)} opgeslagen)</summary><pre>{detail}</pre></details>
+            <p><a href="/inzicht/document/blokkade?{query}">Blokkade en bewijs per verwerkingspoging onderzoeken</a></p>
+          </section>''' if processing_access else '<section id="verwerking"><h2>Verwerking</h2><p>Verwerkingsdiagnostiek is beschikbaar voor onderzoekers en aangewezen reviewers.</p></section>'
+        body = f'''{nav(account, "settings")}<section class="room">
+          {insight_tabs("documenten")}
+          <p><a href="/inzicht?tab=documenten">← Alle documentdiagnoses</a></p>
+          <h1>Documentdiagnose: {escape(str(envelope.get("title") or document))}</h1>
+          <p>Bronversie {escape(str(envelope.get("version") or ""))}</p>
+          <nav aria-label="Documentdiagnose"><a href="#verwerking">Verwerking</a> ·
+            <a href="#passages">Passages en brondekking</a> · <a href="#bewijs">Bewijs en downloads</a></nav>
+          {processing_html}
+          <section id="passages"><h2>Passages en brondekking</h2>{passages}</section>
+          <section id="bewijs"><h2>Bewijs en downloads</h2><ul class="export-options">
+            {source_exports}{publication_export}{passage_exports}</ul></section></section>'''
+        return HTMLResponse(render_page(body, title="Documentdiagnose — Inzicht — Metis"), headers=_HEADERS)
 
     @app.get("/telemetry")
     def telemetry_alias(request: Request) -> RedirectResponse:
@@ -212,3 +305,48 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
         page = documents_projection(state, account, query=(params.get("q") or "")[:120],
                                     state_filter=params.get("state") or "", offset=offset, limit=limit)
         return JSONResponse(page, headers=_HEADERS)
+
+
+def install_insight_legacy_routes(app: FastAPI, require_account: Callable[[Request], dict]) -> None:
+    """Old GET addresses navigate to the same authorized owner, preserving context."""
+    destinations = {
+        "/settings/technical/processing": "/inzicht/document",
+        "/source-selection/processing-trace": "/inzicht/document/verwerkingsspoor",
+        "/source-selection/publication-evidence": "/inzicht/document/publicatiebewijs",
+        "/source-selection/blockage": "/inzicht/document/blokkade",
+        "/review/passages-export": "/inzicht/document/passages",
+        "/review/processing-evidence-export": "/inzicht/document/verwerkingsbewijs",
+        "/review/processing-diagnostics": "/inzicht/document/diagnostiek",
+        "/review/processing-diagnostics-detail": "/inzicht/document/detaildiagnostiek",
+        "/review/processing-diagnostic-replay": "/inzicht/document/poging",
+        "/settings/quality": "/inzicht?tab=kwaliteit&view=table",
+        "/settings/quality/compare": "/inzicht/routevergelijking",
+    }
+
+    def redirect_to(target: str):
+        def legacy(request: Request) -> RedirectResponse:
+            require_account(request)
+            destination = urlsplit(target)
+            fixed = parse_qsl(destination.query)
+            reserved = {key for key, _ in fixed}
+            context = [(key, value) for key, value in request.query_params.multi_items() if key not in reserved]
+            query = urlencode(fixed + context)
+            return RedirectResponse(destination.path + ("?" + query if query else ""), status_code=303, headers=_HEADERS)
+        return legacy
+
+    for old, target in destinations.items():
+        app.add_api_route(old, redirect_to(target), methods=["GET"], include_in_schema=False)
+
+    @app.get("/settings/technical/exports", include_in_schema=False)
+    def legacy_exports(request: Request) -> RedirectResponse:
+        require_account(request)
+        query = request.url.query
+        if request.query_params.get("document"):
+            return RedirectResponse("/inzicht/document?" + query + "#bewijs", status_code=303, headers=_HEADERS)
+        return redirect_to("/inzicht?tab=documenten")(request)
+
+    @app.get("/settings/quality/compare/{comparison_id}", include_in_schema=False)
+    def legacy_comparison(request: Request, comparison_id: str) -> RedirectResponse:
+        from urllib.parse import quote
+        target = "/inzicht/routevergelijking/" + quote(comparison_id, safe="")
+        return redirect_to(target)(request)

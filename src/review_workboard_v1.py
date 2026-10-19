@@ -679,7 +679,10 @@ def _workboard_page(
                     knowledge_progress=item.get("knowledge_progress"),
                     count_scope=console_ui.count_scope_label(envelope.get("version"), observed_at=_observed_at()),
                 )
-        dashboard = roster(console, envelope, reviewer_names) + f'<a href="/review/trajectory?{_esc(urlencode({"document": chosen}))}">Traject en deelnemers</a>' + dashboard
+        dashboard = (roster(console, envelope, reviewer_names)
+                     + f'<a href="/review/trajectory?{_esc(urlencode({"document": chosen}))}">Traject en deelnemers</a>'
+                     + dashboard
+                     + f'<p><a href="/inzicht/document?{_esc(urlencode({"document": chosen}))}">Bekijk diagnose in Inzicht</a></p>')
         # IDs must remain unique when several workspaces share one page.
         for element_id in ("review-task-title", "review-next-title", "review-progress-title"):
             dashboard = dashboard.replace(element_id, element_id + "-" + _esc(chosen))

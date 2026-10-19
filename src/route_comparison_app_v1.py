@@ -1,4 +1,4 @@
-"""Route comparison pages inside Quality & workprocess, outside normal Review."""
+"""Route comparison under Inzicht controls, outside normal Review."""
 from __future__ import annotations
 
 from html import escape
@@ -75,7 +75,11 @@ def install_route_comparison_routes(app, state, require, page) -> None:
         return account, allowed, row
 
     def render(request: Request, body: str, *, status: int = 200) -> HTMLResponse:
-        return HTMLResponse(page('<section class="room"><p><a href="/settings/technical">← Technisch beheer</a></p>'
+        from src.insight_v1 import insight_tabs
+        from src.operations_console_app import _nav
+        account = require(request)
+        return HTMLResponse(page(_nav(account, "settings") + '<section class="room">' + insight_tabs("controles")
+                                 + '<p><a href="/inzicht?tab=controles">← Inzicht · Controles</a></p>'
                                  + body + '</section>', title="Routevergelijking — Metis"), status_code=status)
 
     def error(request: Request, exc: Exception) -> HTMLResponse:
@@ -90,7 +94,7 @@ def install_route_comparison_routes(app, state, require, page) -> None:
                       + escape(str(code)) + '</p>', status=status)
 
     def redirect(comparison_id: str) -> RedirectResponse:
-        return RedirectResponse("/settings/quality/compare/" + comparison_id, status_code=303)
+        return RedirectResponse("/inzicht/routevergelijking/" + comparison_id, status_code=303)
 
     def fragments_for(envelope: dict[str, Any]) -> list[dict[str, Any]]:
         if envelope.get("content_kind") not in {"html", "pdf"}:
@@ -100,22 +104,23 @@ def install_route_comparison_routes(app, state, require, page) -> None:
                               document_id=str(envelope["document_id"]),
                               source_id=str(envelope["source_id"]))
 
-    @app.get("/settings/quality/compare", response_class=HTMLResponse)
+    @app.get("/inzicht/routevergelijking", response_class=HTMLResponse)
     def home(request: Request):
         account = require(request)
         allowed = scope(account)
         rows = store.list(owner=account["account_id"], allowed_scope=set(allowed))
         options = ''.join(f'<option value="{escape(sid)}">{escape(str(e.get("title") or sid))}</option>'
                           for sid, e in allowed.items() if e.get("content_kind") in {"html", "pdf"})
-        listing = ''.join(f'<li><a href="/settings/quality/compare/{escape(r["comparison_id"])}">'
+        listing = ''.join(f'<li><a href="/inzicht/routevergelijking/{escape(r["comparison_id"])}">'
                           f'{escape(r["title"])} · {escape(r["state"])}</a></li>' for r in rows)
         return render(request, '<h1>Routevergelijking</h1><p>Experimentele meting op dezelfde bron; '
                       'gewone verwerking en Review blijven gescheiden.</p>'
-                      '<form method="post" action="/settings/quality/compare">'
+                      '<form method="post" action="/inzicht/routevergelijking">'
                       f'<select name="snapshot_id" required>{options}</select>'
                       '<button>Vergelijking voorbereiden</button></form><ul>' + listing + '</ul>')
 
-    @app.post("/settings/quality/compare")
+    @app.post("/settings/quality/compare", include_in_schema=False)
+    @app.post("/inzicht/routevergelijking")
     async def create(request: Request):
         try:
             account = require(request)
@@ -131,13 +136,13 @@ def install_route_comparison_routes(app, state, require, page) -> None:
         except Exception as exc:
             return error(request, exc)
 
-    @app.get("/settings/quality/compare/{comparison_id}", response_class=HTMLResponse)
+    @app.get("/inzicht/routevergelijking/{comparison_id}", response_class=HTMLResponse)
     def detail(request: Request, comparison_id: str):
         try:
             account, allowed, row = current(request, comparison_id)
             aid, version = account["account_id"], row["version"]
             owner_view = aid == row["owner_account_id"]
-            action = f'/settings/quality/compare/{comparison_id}'
+            action = f'/inzicht/routevergelijking/{comparison_id}'
             body = f'<h1>{escape(row["title"])}</h1><p>Status: {escape(row["state"])} · versie {version}</p>'
             if row["state"] == "draft" and owner_view:
                 env = allowed[row["snapshot_id"]]
@@ -212,7 +217,8 @@ def install_route_comparison_routes(app, state, require, page) -> None:
             comparison_id, owner=row["owner_account_id"], allowed_scope=set(allowed),
             expected_version=version, operation=lambda target: operation(target, account, form))
 
-    @app.post("/settings/quality/compare/{comparison_id}/freeze")
+    @app.post("/settings/quality/compare/{comparison_id}/freeze", include_in_schema=False)
+    @app.post("/inzicht/routevergelijking/{comparison_id}/freeze")
     async def freeze_route(request: Request, comparison_id: str):
         try:
             account, allowed, row = current(request, comparison_id)
@@ -239,7 +245,8 @@ def install_route_comparison_routes(app, state, require, page) -> None:
         except Exception as exc:
             return error(request, exc)
 
-    @app.post("/settings/quality/compare/{comparison_id}/run/{route}")
+    @app.post("/settings/quality/compare/{comparison_id}/run/{route}", include_in_schema=False)
+    @app.post("/inzicht/routevergelijking/{comparison_id}/run/{route}")
     async def run(request: Request, comparison_id: str, route: str):
         try:
             account, allowed, row, form, claimed = await mutate(
@@ -275,7 +282,8 @@ def install_route_comparison_routes(app, state, require, page) -> None:
         except Exception as exc:
             return error(request, exc)
 
-    @app.post("/settings/quality/compare/{comparison_id}/assess/{label}")
+    @app.post("/settings/quality/compare/{comparison_id}/assess/{label}", include_in_schema=False)
+    @app.post("/inzicht/routevergelijking/{comparison_id}/assess/{label}")
     async def assess_route(request: Request, comparison_id: str, label: str):
         try:
             def operation(target, actor, form):
@@ -295,7 +303,8 @@ def install_route_comparison_routes(app, state, require, page) -> None:
         except Exception as exc:
             return error(request, exc)
 
-    @app.post("/settings/quality/compare/{comparison_id}/analyze")
+    @app.post("/settings/quality/compare/{comparison_id}/analyze", include_in_schema=False)
+    @app.post("/inzicht/routevergelijking/{comparison_id}/analyze")
     async def analyze_route(request: Request, comparison_id: str):
         try:
             await mutate(request, comparison_id, lambda target, actor, form:
@@ -304,7 +313,8 @@ def install_route_comparison_routes(app, state, require, page) -> None:
         except Exception as exc:
             return error(request, exc)
 
-    @app.post("/settings/quality/compare/{comparison_id}/close")
+    @app.post("/settings/quality/compare/{comparison_id}/close", include_in_schema=False)
+    @app.post("/inzicht/routevergelijking/{comparison_id}/close")
     async def close_route(request: Request, comparison_id: str):
         try:
             await mutate(request, comparison_id, lambda target, actor, form:
@@ -313,7 +323,8 @@ def install_route_comparison_routes(app, state, require, page) -> None:
         except Exception as exc:
             return error(request, exc)
 
-    @app.post("/settings/quality/compare/{comparison_id}/cancel")
+    @app.post("/settings/quality/compare/{comparison_id}/cancel", include_in_schema=False)
+    @app.post("/inzicht/routevergelijking/{comparison_id}/cancel")
     async def cancel_route(request: Request, comparison_id: str):
         try:
             await mutate(request, comparison_id, lambda target, actor, form:

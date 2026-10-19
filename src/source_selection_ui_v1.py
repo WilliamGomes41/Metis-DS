@@ -107,7 +107,7 @@ def install(app, console, require, page, nav, esc):
                 action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Voortgang bekijken</a>'
                 running_selected = running_selected or sid == selected
             elif result['state'] == 'voltooid':
-                action = f'<a class="btn-secondary" href="/review?document={esc(sid)}">Resultaat bekijken</a>'
+                action = ''  # The primary Naar Review action below owns continuation.
             elif result['state'] == UNCHECKED:
                 action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Volledigheid controleren</a>'
             elif result['can_start']:
@@ -118,7 +118,7 @@ def install(app, console, require, page, nav, esc):
                           f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
                           f'<button class="btn-primary">{label}</button></form>')
             else:
-                action = '<p>Hervatten is nu niet beschikbaar. Controleer de bron- en reviewvoorwaarden bij technisch beheer.</p>'
+                action = '<p>Hervatten is nu niet beschikbaar. Bekijk de diagnose in Inzicht voor de bron- en reviewvoorwaarden.</p>'
             progress = ''
             if result['state'] == 'bezig':
                 elapsed = result['elapsed_seconds']
@@ -147,11 +147,8 @@ def install(app, console, require, page, nav, esc):
                             'dan telt deze poging mee voor de herstelgrens. De geschatte verwerkingstijd bevat ook wachttijd.</p>')
             summary = ''
             if result['state'] in {'voltooid', 'onderbroken', 'mislukt', UNCHECKED}:
-                summary = (f'<p>{result["candidates"]} gevormde kandidaten · {result["source_passages"]} overige bronpassages · {result["blocked"]} geblokkeerde kandidaten · {result["formation_blockers"]} verwerkingsblokkades.</p>'
-                           f'<p>Poging technisch geslaagd: {"ja" if result["attempt_succeeded"] else "nee"}. '
-                           f'Volledige bronverwerking: {"ja" if result["formation_complete"] else "nog niet bevestigd"}.</p>')
-            trace_link = f'<a class="btn-secondary" href="/source-selection/processing-trace?document={esc(sid)}">Verwerkingsspoor downloaden</a>'
-            trace_link += f'<a class="btn-secondary" href="/source-selection/blockage?document={esc(sid)}">Blokkade en bewijs bekijken</a>'
+                summary = f'<p>{result["candidates"]} gevormde kandidaten · {result["source_passages"]} overige bronpassages · {result["blocked"]} geblokkeerde kandidaten · {result["formation_blockers"]} verwerkingsblokkades.</p>'
+            diagnosis_link = f'<a class="btn-secondary" href="/inzicht/document?{esc(urlencode({"document": sid}))}">Bekijk diagnose in Inzicht</a>'
             review = f'<a class="btn-primary" href="/review?document={esc(sid)}">Naar Review</a>' if result['review_available'] else ''
             extent = f'{result["bytes"]:,} bytes' if result['bytes'] is not None else 'Bestandsgrootte onbekend'
             records = (envelope.get('quality_processing_runs') or [])
@@ -162,7 +159,7 @@ def install(app, console, require, page, nav, esc):
                          f'<p role="status">Status: {esc(result["state"])}</p>'
                          f'<p>Geschatte verwerkingstijd: {esc(_range(result["estimate"]["range_seconds"]))} '
                          f'{esc(result["estimate"]["basis"])} ({result["estimate"]["sample_count"]} metingen)</p>'
-                         f'{progress}{summary}{action}{review}{trace_link}</article>')
+                         f'{progress}{summary}{action}{review}{diagnosis_link}</article>')
         notice = '<div class="banner ok">Document veilig ontvangen. Start bronselectie wanneer je wilt.</div>' if request.query_params.get('received') == 'yes' else ''
         # Only a selected running document is polled. Every refresh reads the
         # durable authority; no browser state can start another attempt.
@@ -172,7 +169,7 @@ def install(app, console, require, page, nav, esc):
                     + '<form method="get"><label>Document<select name="document">' + options + '</select></label><button>Document selecteren</button></form>'
                     + ''.join(sorted(cards, key=lambda card: 'data-selected="true"' not in card)) + '</section>' + script)
 
-    @app.get('/source-selection/processing-trace')
+    @app.get('/inzicht/document/verwerkingsspoor')
     def processing_trace_export(request: Request, document: str = ''):
         from src.source_selection_v1 import authorize
         from src.processing_trace_v1 import processing_trace
@@ -182,7 +179,7 @@ def install(app, console, require, page, nav, esc):
         return JSONResponse(processing_trace(envelope), headers={'Cache-Control': 'no-store',
             'Content-Disposition': 'attachment; filename=processing-trace.json'})
 
-    @app.get('/source-selection/publication-evidence')
+    @app.get('/inzicht/document/publicatiebewijs')
     def publication_evidence_get(request: Request, document: str = ''):
         from src.publication_evidence_v1 import collect_publication
         actor = require(request)
@@ -190,10 +187,11 @@ def install(app, console, require, page, nav, esc):
             headers={'Cache-Control':'no-store',
                      'Content-Disposition':'attachment; filename=publication-evidence.json'})
 
-    @app.get('/source-selection/blockage')
+    @app.get('/inzicht/document/blokkade')
     def blockage_get(request: Request, document: str = '', checks: bool = False,
                      download: bool = False, attempt: str = Query('', pattern=r'^(?:pa_[0-9a-f]{32})?$')):
         from src.blockage_diagnostics_v1 import collect_blockage
+        from src.insight_v1 import insight_tabs
         actor = require(request)
         report = collect_blockage(console, actor_id=actor['account_id'], snapshot_id=document,
                                  current_checks=checks, selected_attempt=attempt or None)
@@ -210,8 +208,8 @@ def install(app, console, require, page, nav, esc):
         links = '<p><a href="?' + esc(urlencode({**query, 'checks':1})) + '">Actuele voorwaarden controleren</a></p>'
         links += '<p><a href="?' + esc(urlencode({**query, 'download':1})) + '">Opgeslagen bewijs downloaden</a></p>'
         links += '<p><a href="?' + esc(urlencode({**query, 'checks':1, 'download':1})) + '">Opnieuw controleren en rapport downloaden</a></p>'
-        return HTMLResponse(page(nav(actor, 'selection') + '<section class="room" id="blockage-report" style="overflow-wrap:anywhere">' +
-            _blockage_html(report, esc) + selector + links + '</section>'), headers={'Cache-Control':'no-store'})
+        return HTMLResponse(page(nav(actor, 'settings') + '<section class="room" id="blockage-report" style="overflow-wrap:anywhere">' + insight_tabs('documenten') +
+            '<p><a href="/inzicht/document?' + esc(urlencode({'document': document})) + '">← Documentdiagnose</a></p>' + _blockage_html(report, esc) + selector + links + '</section>'), headers={'Cache-Control':'no-store'})
 
     @app.post('/source-selection/start')
     async def selection_start(request: Request):

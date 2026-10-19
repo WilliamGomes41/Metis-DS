@@ -206,7 +206,7 @@ _BODY = r"""
       <label>Route <select name="route"><option value="">Alle routes</option><option value="deterministic">Deterministisch</option>
         <option value="semantic">Semantisch</option><option value="mixed">Gemengd</option><option value="remainder">Resterende bronpassages</option><option value="unknown">Onbekend</option></select></label>
       <button class="tm-btn" type="submit">Toon meting</button>
-      <a class="tm-btn" id="q-table" href="/settings/quality">Tabelweergave en rapporthistorie</a>
+      <a class="tm-btn" id="q-table" href="/inzicht?tab=kwaliteit&amp;view=table">Tabelweergave en rapporthistorie</a>
     </form>
     <p class="tm-sub" id="q-status">Nog niet geladen.</p>
     <div id="q-body">
@@ -238,9 +238,8 @@ _BODY = r"""
     <p class="tm-sub">Controles die je bewust start. Hun uitkomst is geen inhoudelijke beoordeling van documenten.</p>
     <div class="doc-list">
       <a class="doc-card" style="text-decoration:none;" href="/inzicht/veiligheidstests"><p class="doc-title">Semantische veiligheidstests</p><p>Vaste testgevallen voor weglatingen, voorwaarden, uitzonderingen en ontkenningen. De uitkomst zie je direct.</p></a>
-      <a class="doc-card" style="text-decoration:none;" href="/settings/quality/compare"><p class="doc-title">Routevergelijking</p><p>Vergelijk verwerkingsroutes op dezelfde bron.</p></a>
-      <a class="doc-card" style="text-decoration:none;" href="/audit/review-signals"><p class="doc-title">Reviewsignalen</p><p>Signalen uit review die op structurele problemen wijzen.</p></a>
-      <a class="doc-card" style="text-decoration:none;" href="/settings/technical/exports"><p class="doc-title">Exports</p><p>Passages, verwerkingsbewijs en diagnostiek als bestand.</p></a>
+      <a class="doc-card" style="text-decoration:none;" href="/inzicht/routevergelijking"><p class="doc-title">Routevergelijking</p><p>Vergelijk verwerkingsroutes op dezelfde bron.</p></a>
+      <a class="doc-card" style="text-decoration:none;" href="/inzicht/reviewsignalen"><p class="doc-title">Reviewsignalen</p><p>Signalen uit review die op structurele problemen wijzen.</p></a>
     </div>
   </div>
 
@@ -681,7 +680,7 @@ function hbars(box, rows, opts = {}) {
 function renderQuality(d) {
   const f = d.filters || {};
   for (const input of $('#q-form').elements) if (input.name) input.value = f[input.name] || '';
-  $('#q-table').href = '/settings/quality' + (state.qparams ? '?' + state.qparams : '');
+  $('#q-table').href = '/inzicht?tab=kwaliteit&view=table' + (state.qparams ? '&' + state.qparams : '');
   $('#q-status').textContent = `Gegevensgrens ${new Date(d.as_of).toLocaleString('nl-NL')} · definitie ${d.definition_version} · ${d.cohort_size} bronnen in het cohort`;
   const pub = d.publication || {};
   const days = (s) => s === null || s === undefined ? '—' : (s / 86400).toLocaleString('nl-NL', { maximumFractionDigits: 1 }) + ' dagen';
@@ -711,7 +710,7 @@ function renderQuality(d) {
       el('td', { class: 'num' }, el('div', { class: 'barcell', style: 'justify-content:flex-end' }, el('span', { class: 'bar', style: `width:${Math.max(2, (x.open_passages || 0) / maxOpen * 90)}px` }), nf.format(x.open_passages || 0))),
       el('td', { class: 'num', text: x.source_age_days === null || x.source_age_days === undefined ? '—' : x.source_age_days.toLocaleString('nl-NL', { maximumFractionDigits: 1 }) + ' d' }),
       el('td', { class: 'mono', text: x.processing_blocker || '—' }),
-      el('td', {}, el('button', { type: 'button', class: 'linkbtn', onclick: () => openDocuments(x.snapshot_id) }, 'Diagnose'), ' · ',
+      el('td', {}, el('a', { href: '/inzicht/document?document=' + encodeURIComponent(x.snapshot_id) }, 'Diagnose'), ' · ',
         el('button', { type: 'button', class: 'linkbtn', onclick: () => openSystem(x.doc_ref) }, 'Verzoeken'))))))
     : el('p', { class: 'tm-empty', text: 'Geen bronnen in dit cohort.' }));
   qualityTrend($('#q-trend'), d.trend || []);
@@ -780,9 +779,7 @@ function renderDocuments() {
         el('span', { class: d.telemetry.errors ? 'st-error' : '' }, d.telemetry.errors ? icon('critical') : null, ` ${d.telemetry.errors} / ${d.telemetry.requests}`),
         el('div', { style: 'display:flex;flex-direction:column;gap:2px' },
           el('button', { type: 'button', class: 'linkbtn', onclick: () => openSystem(d.doc_ref) }, 'Verzoeken en fouten'),
-          el('a', { href: '/settings/technical/processing?document=' + encodeURIComponent(d.snapshot_id) }, 'Verwerkingsbeheer'),
-          d.named_reviewer ? el('a', { href: '/settings/technical?document=' + encodeURIComponent(d.snapshot_id) }, 'Diagnostiek en brondekking') : null,
-          d.named_reviewer ? el('a', { href: '/review?document=' + encodeURIComponent(d.snapshot_id) + '&task=repair' }, 'Passages corrigeren') : null)] })),
+          el('a', { href: '/inzicht/document?document=' + encodeURIComponent(d.snapshot_id) }, 'Documentdiagnose'))] })),
     'documents', null, renderDocuments);
 }
 let docTyping; $('#d-q').addEventListener('input', () => { clearTimeout(docTyping); docTyping = setTimeout(() => loadDocuments(false), 250); });
