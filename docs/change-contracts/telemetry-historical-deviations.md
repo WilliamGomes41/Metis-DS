@@ -24,8 +24,9 @@ There is no new instrumentation in the request/worker execution path.
 ## Statistical contract (research defaults)
 
 - Always compare the latest 15 minutes with the preceding hour, even when the
-  page selects a longer window. The existing 1h reconstruction lookback supplies
-  the reference for the 15m selector. Retention and the 50,000-event cap stay.
+  page selects a longer window. The existing reader starts one hour before the
+  earlier of the visible-window start and the historical-reference start, so
+  both receive a reconstruction margin. Retention and the 50,000-event cap stay.
 - Fifteen adjacent five-minute bins end at evaluation time (sliding windows,
   half-open boundaries). The first twelve form the reference, the final three
   form the evaluation. A request is assigned by its recorded finish timestamp;
@@ -153,3 +154,46 @@ reader rather than its old-file optimization. Both filesystem and HTTP fixtures
 now set that time explicitly; the executable filesystem regression covers it.
 Remaining evidence gaps (HTTP execution, full pytest, operational calibration)
 stay HOLD and are not relabeled as passed checks.
+
+
+### Review corrections R1 and R2
+
+R1: the original reader began exactly at the historical-reference boundary for
+`window=15m`. A request crossing that boundary lost its start, and the detector's
+missing-start guard correctly refused the entire cohort. The same data was
+therefore detected under `1h` but not `15m`. The reader now applies its existing
+one-hour reconstruction margin before the earlier of the visible window and the
+75-minute historical window. `HISTORY_SECONDS` is shared with the detector.
+
+The regression traverses actual hub files, `recent_events`, the registered summary
+handler and JSON serialization. Two requests start before the reference (one by
+one second, the other by thirty minutes) and finish inside it. `15m`, `1h` and
+`6h` must return identical historical evidence: 122 reference and 30 evaluation
+samples, one supported cohort, no excluded observations. A genuinely absent start
+inside the reference still prevents comparison; known-loss quality still abstains.
+No start is inferred from duration and no quality/persistence guard is weakened.
+The regression failed on the prior revision and passed after the reader repair.
+
+This is one scan over a longer interval, not a second scan or retention change.
+For `15m` it reads at most one extra hour of available history; for `1h` it reads
+15 extra minutes; longer supported windows keep their original read interval.
+Reads still retain at most 50,000 events and report window/lookback omissions.
+Starts older than the bounded margin can still be unavailable; that remains
+insufficient evidence, not health. Additional scan cost has not been established
+under production load; the rollout HOLD and cost-budget requirement remain.
+
+R2: the added slow-traffic batch in the route-mix control reused 30 request IDs
+from its reference batch. Request reconstruction merged those observations and
+left one cohort unsupported, so the old empty-findings assertion could pass
+without checking both routes. The fixture now gives the added batch a distinct
+request-ID prefix and asserts all 375 finishes have distinct IDs, both cohorts
+are supported, neither is excluded, and no sustained finding is emitted.
+The strengthened test failed first (375 finishes versus 345 unique IDs), then
+passed with distinct identities. Abstention no longer satisfies this control.
+
+After these corrections, twelve focused non-HTTP tests pass locally. The two
+red/green regressions, the original boundary replay, eight PR 1 non-HTTP quality
+regressions and the existing pure analysis regression are the repair evidence.
+The pre-repair performance figures above describe the helper/old scan; the helper
+algorithm is unchanged, and no claim is made about the longer reader interval.
+HTTP/full pytest proof for this revision remains required in CI.

@@ -14,6 +14,7 @@ from src.telemetry.hub import parse_ts
 BIN_SECONDS = 300
 REFERENCE_BINS = 12
 EVALUATION_BINS = 3
+HISTORY_SECONDS = (REFERENCE_BINS + EVALUATION_BINS) * BIN_SECONDS
 MIN_SAMPLES = 5
 MAX_COHORTS = 30
 MAX_FINDINGS = 20
@@ -25,7 +26,7 @@ def _number(value):
 
 
 def historical_deviations(requests, *, now, filters, quality):
-    start = now - (REFERENCE_BINS + EVALUATION_BINS) * BIN_SECONDS
+    start = now - HISTORY_SECONDS
     split = now - EVALUATION_BINS * BIN_SECONDS
     result = {
         "version": "median_mad_v1", "mode": "experimental_observation",

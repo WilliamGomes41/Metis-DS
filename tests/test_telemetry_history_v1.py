@@ -29,13 +29,13 @@ def timestamp(value):
 
 
 def history(values, *, start=NOW - 4500, route="/review", commit="abc123", phase=0.2,
-            samples=10):
+            samples=10, request_prefix=""):
     events = []
     for index, value in enumerate(values):
         for sample in range(samples):
             elapsed = value[sample % len(value)] if isinstance(value, list) else value
             at = start + index * 300 + 30 + sample
-            rid = f"{route}-{commit}-{index}-{sample}"
+            rid = f"{request_prefix}{route}-{commit}-{index}-{sample}"
             share = phase[index] if isinstance(phase, list) else phase
             common = {"request_id": rid, "route": route, "method": "GET", "commit": commit}
             events.extend([
@@ -79,8 +79,13 @@ class HistoricalTelemetryTests(unittest.TestCase):
         fast = history([100] * 15, route="/fast", samples=5)
         slow = history([900] * 15, route="/slow", samples=10)
         # Additional slow traffic changes the aggregate, not either cohort.
-        mix = fast + slow + history([900] * 3, start=NOW - 900, route="/slow", samples=50)
-        self.assertEqual(analyze(mix)["historical"]["findings"], [])
+        mix = fast + slow + history([900] * 3, start=NOW - 900, route="/slow", samples=50, request_prefix="extra-")
+        finishes = [e for e in mix if e["event"] == "request_finished"]
+        self.assertEqual(len(finishes), len({e["request_id"] for e in finishes}))
+        h = analyze(mix)["historical"]
+        self.assertEqual(h["eligible_cohorts"], 2)
+        self.assertEqual(h["unsupported_cohorts"], 0)
+        self.assertEqual(h["findings"], [])
 
     def test_new_commit_and_unknown_commit_cannot_borrow_a_baseline(self):
         events = history([100] * 12) + history([800] * 3, start=NOW - 900, commit="new123")
@@ -215,6 +220,59 @@ assert.ok(rendered.map(text).join(' ').includes('Dit bewijst geen gezondheid'));
                     self.assertEqual(analyze(events, quality=quality)["historical"]["reason"], "measurement_quality")
             finally:
                 hub.configure(None)
+
+    def test_reference_boundary_uses_its_own_reconstruction_margin(self):
+        import os
+        import tempfile
+        from pathlib import Path
+        from src.telemetry.hub import TelemetryHub
+        app = FastAPI()
+        install_telemetry_routes(app, require_account=lambda request: {"id": "fixture"})
+        handler = next(r.endpoint for r in app.routes if r.path == "/telemetry/api/summary")
+        reference_start = NOW - 4500
+        events = history([100] * 12 + [180] * 3)
+        # Both requests finish one second into the reference. Their starts are
+        # outside it; the longer case prevents a one-second special-case fix.
+        for index, elapsed in enumerate((2000, 1_801_000)):
+            carry = history([elapsed], start=reference_start - 29, samples=1)
+            for event in carry:
+                event["request_id"] = f"carry-{index}"
+            events.extend(carry)
+        hub = TelemetryHub()
+        with tempfile.TemporaryDirectory() as directory:
+            hub.configure(Path(directory))
+            try:
+                for event in events:
+                    hub.record(event)
+                hub.flush()
+                for path in Path(directory).glob("events-*.jsonl"):
+                    os.utime(path, (NOW, NOW))
+                with patch("src.telemetry.routes.HUB", hub), patch("src.telemetry.hub.HUB", hub), patch("src.telemetry.routes.time.time", return_value=NOW):
+                    results = []
+                    for window in ("15m", "1h", "6h"):
+                        request = Request({"type": "http", "headers": [],
+                                           "query_string": f"window={window}".encode()})
+                        body = json.loads(handler(request).body)
+                        self.assertEqual(body["telemetry"]["quality"]["status"], "no_known_loss")
+                        h = body["historical"]
+                        self.assertEqual(h["status"], "observed_deviation")
+                        self.assertEqual(h["excluded_requests"], 0)
+                        finding = next(f for f in h["findings"] if f["metric"] == "latency_p50_ms")
+                        self.assertEqual(finding["reference_samples"], 122)
+                        self.assertEqual(finding["evaluation_samples"], 30)
+                        results.append(h)
+                    self.assertEqual(results[0], results[1])
+                    self.assertEqual(results[0], results[2])
+            finally:
+                hub.configure(None)
+        # A genuinely missing start inside the reference is still insufficient,
+        # and known loss still takes precedence over any available samples.
+        events = history([100] * 12 + [180] * 3)[1:]
+        h = analyze(events)["historical"]
+        self.assertEqual(h["status"], "insufficient")
+        self.assertEqual(h["excluded_requests"], 1)
+        h = analyze(events, quality={"status": "partial"})["historical"]
+        self.assertEqual(h["reason"], "measurement_quality")
 
     def test_summary_route_passes_quality_and_authorizes_before_reading(self):
         app = FastAPI()
