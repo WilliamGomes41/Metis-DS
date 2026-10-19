@@ -72,6 +72,8 @@ def test_diagnosis_roles_keep_processing_passages_and_publication_evidence_separ
     assert TestClient(app).get('/inzicht/document', params={'document': sid}).status_code == 401
     other = login(app, outsider['username'])
     assert other.get('/inzicht/document', params={'document': sid}).status_code == 400
+    missing = other.get('/inzicht/document')
+    assert missing.status_code == 400 and 'text/html' in missing.headers['content-type']
     assert not any(parse_qs(urlsplit(url).query).get('document') == [sid]
                    for url in Links(other.get('/tree').text).hrefs
                    if urlsplit(url).path == '/inzicht/document')

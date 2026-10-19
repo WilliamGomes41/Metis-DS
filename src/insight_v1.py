@@ -49,6 +49,12 @@ _TAB_STYLE = """<style>
 def _authorized_documents(state, account) -> list[dict[str, Any]]:
     """Processing scope plus publishers' existing publication document list."""
     roles = set(account.get("roles") or [])
+    if "publisher" in roles:
+        from src.operations_console_v1 import ConsoleError
+        try:
+            state._require_role(account["account_id"], "publisher", current=True)
+        except ConsoleError:
+            roles.discard("publisher")
     rows = []
     for envelope in state.list_envelopes():
         if roles & {"researcher", "publisher"} or ("reviewer" in roles and account["account_id"] in (envelope.get("named_reviewers") or [])):
@@ -193,12 +199,15 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
 
     @app.get("/inzicht/document", response_class=HTMLResponse)
     @state.source_selection_read_scope()
-    def document_diagnosis(request: Request, document: str) -> HTMLResponse:
+    def document_diagnosis(request: Request, document: str = "") -> HTMLResponse:
         from src.operations_console_app import ERROR_COPY, _processing_diagnostics_html, _coverage_panel
         from src.review_interaction_v1 import review_burden_projection
         from src.review_ledger import read_events
 
         account = require_account(request)
+        if not document:
+            from src.operations_console_v1 import ConsoleError
+            raise ConsoleError("unknown_document")
         roles = set(account.get("roles") or [])
         envelope = state._envelope(document)
         reviewer = "reviewer" in roles and account["account_id"] in envelope.get("named_reviewers", [])

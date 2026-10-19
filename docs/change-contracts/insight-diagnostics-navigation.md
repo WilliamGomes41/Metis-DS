@@ -39,4 +39,6 @@ Rollback is a code revert; no data migration is required. Do not remove source c
 - The HTTP run used the temporary asyncio timer described above. There is no production deployment or live browser acceptance claim.
 - Publication is through a dedicated review branch and pull request. No merge or deployment is part of this change.
 
+Review follow-up: Bronselectie keeps "Poging technisch geslaagd / Volledige bronverwerking" as task status, because a technically successful partial attempt is the reason to resume. The diagnosis link is shown only to accounts that can open the diagnosis. The publisher document list requires a current publisher role. Characterization goldens were re-recorded for the intended navigation changes only.
+
 The PR is based on the current GitHub main tree. The upstream incomplete-formation guidance is retained, and its new unverified-PDF-page message is moved into the central Inzicht diagnosis instead of being discarded with the retired page.

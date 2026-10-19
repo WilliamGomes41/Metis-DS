@@ -821,6 +821,13 @@ def _nav(account: dict[str, Any] | None, current: str = "") -> str:
     """
 
 
+def _diagnosis_access(account: dict[str, Any], envelope: dict[str, Any]) -> bool:
+    """Who may open /inzicht/document: processing readers or publishers."""
+    roles = set(account.get("roles") or [])
+    return bool(roles & {"researcher", "publisher"}) or (
+        "reviewer" in roles and account.get("account_id") in (envelope.get("named_reviewers") or []))
+
+
 def _task_links(topic: str) -> str:
     """Separate destinations, never embedded instructional or diagnostic UI."""
     return (
@@ -3817,7 +3824,7 @@ def _render_review_room(
               {conflict_html if not chosen_object_id else ""}
               {"".join(cards) if not chosen else ""}
               {objects_html or empty}
-              {f'<p><a href="/inzicht/document?{_esc(urlencode({"document": chosen}))}">Bekijk diagnose in Inzicht</a></p>' if chosen_row else ''}
+              {f'<p><a href="/inzicht/document?{_esc(urlencode({"document": chosen}))}">Bekijk diagnose in Inzicht</a></p>' if chosen_row and _diagnosis_access(account, chosen_row) else ''}
             </section>
             """
     )
@@ -5100,6 +5107,9 @@ def create_console_app(
         can_move = "researcher" in account["roles"] or "publisher" in account["roles"]
         can_promote = "reviewer" in account["roles"]
         payload = state.family_tree()
+        named_on = ({row["snapshot_id"] for row in state.list_envelopes()
+                     if account["account_id"] in (row.get("named_reviewers") or [])}
+                    if can_promote and not can_move else set())
         move_family_options = "".join(
             f'<option value="{_esc(family)}"></option>'
             for family in sorted(payload["families"], key=str.casefold)
@@ -5171,7 +5181,7 @@ def create_console_app(
                       <summary>{_document_summary(child)}</summary>
                       {pre_review_notice}
                       <div class="doc-actions">{"".join(actions)}</div>
-                      {f'<p><a href="/inzicht/document?{_esc(urlencode({"document": child["snapshot_id"]}))}">Bekijk diagnose in Inzicht</a></p>' if can_move or (can_promote and account['account_id'] in state._envelope(child['snapshot_id']).get('named_reviewers', [])) else ''}
+                      {f'<p><a href="/inzicht/document?{_esc(urlencode({"document": child["snapshot_id"]}))}">Bekijk diagnose in Inzicht</a></p>' if can_move or child['snapshot_id'] in named_on else ''}
                       {_unpublished_delete_control(child, account=account, console=state, next_path="/tree", mutable=mutable)}
                     </details>
                     """
