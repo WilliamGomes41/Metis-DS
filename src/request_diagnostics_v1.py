@@ -113,6 +113,18 @@ def note_handled_error(code):
         evidence.error = {'type': 'ConsoleError', 'code': code, 'handled': True}
 
 
+def note_handled_exception(exc):
+    """Attach safe evidence for an exception a route converted into a response."""
+    evidence = _CURRENT.get()
+    if evidence is None:
+        return
+    try:
+        from src.telemetry.errors import exception_evidence
+        evidence.error = {**exception_evidence(exc), 'handled': True}
+    except Exception:
+        pass
+
+
 def note_request_metrics(**values):
     """Attach bounded numeric request metrics (database counts and times)."""
     evidence = _CURRENT.get()

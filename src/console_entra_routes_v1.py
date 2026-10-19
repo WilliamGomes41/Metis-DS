@@ -6,9 +6,13 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from src.console_entra_v1 import FLOW_COOKIE, SESSION_SECONDS, MicrosoftLogin
 from src.operations_console_v1 import ConsoleError
+from src.request_diagnostics_v1 import note_handled_error, note_handled_exception
 
 
 SESSION_COOKIE = "console_session"
+# Secret-bearing dotfile paths no Metis route serves; answered before any session
+# or Entra work so scanners cannot start authentication flows through them.
+_DENIED_PREFIXES = ("/.env", "/.git", "/.aws", "/.kube", "/.ssh", "/.svn", "/.docker", "/.npmrc")
 
 
 def identity_unavailable_response(render_page):
@@ -39,12 +43,16 @@ def install_entra_routes(app, console, identity, *, render_page):
 
     @app.middleware("http")
     async def renew_on_navigation(request: Request, call_next):
+        if request.url.path.startswith(_DENIED_PREFIXES):
+            note_handled_error("route_denied")
+            return HTMLResponse("Not Found", status_code=404, headers={"Cache-Control": "no-store"})
         public = request.url.path in {"/", "/login", "/health", "/auth/microsoft", "/auth/microsoft/callback", "/session/status", "/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} or request.url.path.startswith("/brand/")
         if request.method == "GET" and not public:
             from starlette.concurrency import run_in_threadpool
             try:
                 await run_in_threadpool(identity.renew_session, request.cookies.get(SESSION_COOKIE))
             except ConsoleError as exc:
+                note_handled_error(exc.code)
                 if exc.code == "workflow_identity_unavailable":
                     return failure(503)
                 return RedirectResponse("/auth/microsoft?" + urlencode({"next": request.url.path + ("?" + request.url.query if request.url.query else "")}), status_code=303)
@@ -95,7 +103,9 @@ def install_entra_routes(app, console, identity, *, render_page):
             response.headers["Cache-Control"] = "no-store"
             response.headers["Referrer-Policy"] = "no-referrer"
             return response
-        except Exception:
+        except Exception as exc:
+            # Fail closed, but keep the cause: this 503 must be explainable afterwards.
+            note_handled_exception(exc)
             return failure(503)
 
     @app.get("/auth/microsoft/callback")
@@ -117,9 +127,11 @@ def install_entra_routes(app, console, identity, *, render_page):
             response.headers["Cache-Control"] = "no-store"
             response.headers["Referrer-Policy"] = "no-referrer"
             return response
-        except (ConsoleError, ValueError):
+        except (ConsoleError, ValueError) as exc:
+            note_handled_exception(exc)
             return failure()
-        except Exception:
+        except Exception as exc:
+            note_handled_exception(exc)
             return failure(503)
 
     @app.post("/accounts/access")
