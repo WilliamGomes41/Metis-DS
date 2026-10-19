@@ -218,7 +218,6 @@ def test_detail_export_preserves_candidate_combinations_and_does_not_mutate_stat
 def test_export_requires_authentication_reviewer_role_and_assignment(tmp_path) -> None:
     console, _reviewer, _other, _publisher, snapshot_id = _system(tmp_path)
     paths = (
-        "/settings/technical",
         "/review/passages-export",
         "/review/processing-evidence-export",
         "/review/processing-diagnostics",
@@ -263,12 +262,12 @@ def test_export_unknown_snapshot_fails_and_control_page_links_to_export(tmp_path
     control = client.get(f"/settings/technical/exports?document={snapshot_id}")
     assert control.status_code == 200
     assert (
-        f'href="/review/processing-diagnostics?document={snapshot_id}"'
+        f'href="/inzicht/document/diagnostiek?document={snapshot_id}"'
         in control.text
     )
     assert "Diagnostiek (JSON)" in control.text
     assert (
-        f'href="/review/processing-diagnostics-detail?document={snapshot_id}"'
+        f'href="/inzicht/document/detaildiagnostiek?document={snapshot_id}"'
         in control.text
     )
     assert "Detaildiagnostiek (JSON)" in control.text
@@ -433,7 +432,7 @@ def test_processing_evidence_download_preserves_recorded_and_missing_evidence(tm
     assert (console.snapshot_objects(snapshot_id), console._envelope(snapshot_id), console.object_review_bindings(snapshot_id)) == before
     monkeypatch.undo()  # The no-reextract guard applies to the export endpoint.
     page = client.get(f"/settings/technical/exports?document={snapshot_id}")
-    assert f'/review/processing-evidence-export?document={snapshot_id}' in page.text
+    assert f'/inzicht/document/verwerkingsbewijs?document={snapshot_id}' in page.text
 
 
 def test_processing_evidence_empty_history_has_headers_and_honest_availability():
@@ -483,7 +482,7 @@ def test_long_revision_is_stored_once_and_resolvable_for_every_dataset():
         assert all(r['schema_version'] == VERSION for r in manifest)
 
 
-def test_technical_management_collects_tools_and_keeps_repair_actionable(tmp_path):
+def test_configuration_excludes_diagnostics_and_review_links_to_insight(tmp_path):
     console, _, _, _, snapshot_id = _system(tmp_path)
     client = _client(console)
     _login(client, "reviewer.d2a1")
@@ -493,13 +492,16 @@ def test_technical_management_collects_tools_and_keeps_repair_actionable(tmp_pat
     assert 'href="/settings/llm"' not in settings.text
     hub = client.get("/settings/technical")
     assert hub.status_code == 200
-    for target in ["/settings/llm", "/settings/api-access", "/inzicht/veiligheidstests", "/settings/quality/compare"]:
+    for target in ["/settings/llm", "/settings/api-access"]:
         assert f'href="{target}"' in hub.text
-    assert snapshot_id in hub.text
+    for target in ["/inzicht/veiligheidstests", "/settings/quality/compare", "/settings/technical/exports"]:
+        assert f'href="{target}"' not in hub.text
+    assert snapshot_id not in hub.text
     repair = client.get(f"/review?document={snapshot_id}&task=repair")
     assert "Bekijk bronpassage" in repair.text
     assert "Technische diagnose en exports" not in repair.text
-    assert 'href="/settings/technical"' in repair.text
+    assert f'href="/inzicht/document?document={snapshot_id}"' in repair.text
+    assert 'href="/settings/technical"' not in repair.text
     assert "Signalen per diagnostische familie" not in repair.text
     assert "Exporteer detaildiagnostiek" not in repair.text
     other = _client(console)

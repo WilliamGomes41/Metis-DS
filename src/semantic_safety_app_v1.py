@@ -23,7 +23,7 @@ CONTROLS_PATH = "/inzicht?tab=controles"
 DEPLOY_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 DEFAULT_DEPLOY_COMMIT_MARKER = Path(__file__).resolve().parents[1] / "config" / "deployed_commit.txt"
 SUITE_PATH = Path(__file__).resolve().parents[1] / "data" / "audit" / "semantic_passage_safety_v1.json"
-# Retired Audit room addresses; explicit so /audit/review-signals stays its own route.
+# Retired Audit addresses; review-signals has its own Inzicht compatibility redirect.
 RETIRED_AUDIT_PATHS = {"/audit": CONTROLS_PATH, "/audit/new": CONTROLS_PATH,
                        "/audit/archive": CONTROLS_PATH, "/audit/semantic-safety": SAFETY_PATH}
 

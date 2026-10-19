@@ -83,10 +83,13 @@ def test_task_help_and_management_are_separate_readonly_destinations(tmp_path):
     management = client.get('/settings/technical')
     assert management.status_code == 200
     assert 'Actieve verwerkingsmodus' in management.text
-    assert '/settings/technical/processing?document=' in management.text
+    assert '/settings/technical/processing?document=' not in management.text
+    documents = client.get('/inzicht/api/documents').json()['documents']
+    assert sid in [row['snapshot_id'] for row in documents]
     diagnostics = client.get('/settings/technical', params={'document': sid})
     assert diagnostics.status_code == 200
-    assert 'Diagnostiek en brondekking' in diagnostics.text
+    assert diagnostics.url.path == '/inzicht/document'
+    assert 'Passages en brondekking' in diagnostics.text
     assert not any(a.get('method') == 'post' and a.get('action') == '/review' for _, a in Surface(diagnostics.text).tags)
     assert (console.snapshot_objects(sid), console._envelope(sid)) == before
     stranger = console.create_account(username='stranger', password=TEST_PASSWORD, roles=('reviewer',))

@@ -33,12 +33,14 @@ const fs = require('fs');
   await page.getByRole('button',{name:'Starten',exact:true}).waitFor();
   if (!(await page.locator('[role=status]').allTextContents()).some(t=>t.includes('nog niet gestart'))) throw Error('receipt auto-started');
   await page.screenshot({path:output+'/received.png',fullPage:true});
-  await page.getByRole('link',{name:'Blokkade en bewijs bekijken',exact:true}).click();
+  await page.getByRole('link',{name:'Bekijk diagnose in Inzicht',exact:true}).click();
+  await page.getByRole('heading',{name:'Verwerking',exact:true}).waitFor();
+  await page.getByRole('link',{name:'Blokkade en bewijs per verwerkingspoging onderzoeken',exact:true}).click();
   await page.getByRole('heading',{name:'Blokkade en bewijs',exact:true}).waitFor();
   // Use the browser's authenticated fetch: its localhost Secure-cookie handling
   // differs from Playwright's standalone APIRequestContext over plain HTTP.
   const diagnostic = await page.evaluate(async sid => {
-    const response = await fetch('/source-selection/blockage?document='+encodeURIComponent(sid)+'&download=1');
+    const response = await fetch('/inzicht/document/blokkade?document='+encodeURIComponent(sid)+'&download=1');
     if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
       throw Error('diagnostic download did not return authenticated JSON: '+response.status+' '+new URL(response.url).pathname);
     }
