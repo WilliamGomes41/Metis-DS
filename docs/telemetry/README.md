@@ -116,3 +116,20 @@ Grafieken over dezelfde meting als de tabelpagina:
 - Een 500-antwoord wordt buiten de diagnose-middleware opgebouwd en draagt daardoor geen `X-Metis-Request-Id`-header. Het event heeft het id wel.
 - De lokale opslag is per instance. Meerdere instances zie je samen alleen in Azure.
 - De Product API (`serve-api`) is nog niet aangesloten.
+
+## Experimentele historische afwijkingen (PR 2)
+
+Systeem vergelijkt de laatste 15 minuten met het voorafgaande uur, ook bij een
+langer gekozen tijdvenster. Vergelijkingen blijven binnen route, methode en
+commit. De bestaande lezer neemt ook vóór de historische referentie een
+begrensde reconstructiemarge van één uur mee; ontbrekende starts of meetverlies
+blijven zichtbaar als onvoldoende bewijs. Drie opeenvolgende afwijkende
+vijfminutenvakken zijn nodig, met minstens
+vijf afgeronde verzoeken per vak. Mediane responstijd, spreiding (p90 minus p50)
+en voldoende complete faseaandelen gebruiken een robuuste mediaan/MAD-referentie.
+
+Bij bekende meetverliezen, ontbrekende historie of uitkomst-/verzoekfilters volgt
+geen vergelijking. Geen bevinding bewijst geen gezondheid. De weergave noemt
+onzekerheid, uitgesloten metingen en limieten, geeft onderzoeksadvies en voert
+geen maatregelen uit. Dit levert geen voorspelde storingstijd op. Zie het
+[ontwerp en de bewijsgrenzen](../change-contracts/telemetry-historical-deviations.md).

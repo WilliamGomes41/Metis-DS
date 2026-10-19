@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from src.telemetry.analysis import request_detail, summarize
 from src.telemetry.hub import HUB, recent_events
+from src.telemetry.history import HISTORY_SECONDS
 
 WINDOWS = {"15m": 900, "1h": 3600, "6h": 21600, "24h": 86400, "7d": 604800}
 _FILTER_RE = {"route": r"[\x20-\x7e]{1,120}", "method": r"[A-Z]{3,7}", "status": r"[1-5]xx",
@@ -44,8 +45,11 @@ def install_telemetry_routes(app: FastAPI, *, require_account: Callable[[Request
         key, seconds = _window(request)
         now = time.time()
         quality: dict[str, Any] = {}
-        events, truncated = recent_events(now - seconds - 3600, window_start=now - seconds, quality=quality)
-        body = summarize(events, filters=_filters(request), now=now, since=now - seconds)
+        # Reconstruct requests before both the visible window and the historical
+        # reference, including work that straddles the reference's left boundary.
+        scan_since = min(now - seconds, now - HISTORY_SECONDS) - 3600
+        events, truncated = recent_events(scan_since, window_start=now - seconds, quality=quality)
+        body = summarize(events, filters=_filters(request), now=now, since=now - seconds, quality=quality)
         body["window"]["key"] = key
         body["telemetry"].update({"store": "disk" if HUB.directory else "memory", "dropped": HUB.dropped,
                                   "truncated": truncated, "quality": quality})

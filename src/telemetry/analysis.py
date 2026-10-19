@@ -164,7 +164,7 @@ def group_key(request: Request, now: float) -> str | None:
 
 
 def summarize(events: list[dict], *, filters: dict[str, str] | None = None, now: float,
-              since: float) -> dict[str, Any]:
+              since: float, quality: dict | None = None) -> dict[str, Any]:
     from src.telemetry.playbook import guidance_for_group, insights
     filters = filters or {}
     requests_by_id, other = build_requests(events)
@@ -234,6 +234,9 @@ def summarize(events: list[dict], *, filters: dict[str, str] | None = None, now:
         "process": _process_events(other, since),
         "telemetry": {"events": sum(1 for event in events if event.get("_t", 0) >= since)},
     }
+    from src.telemetry.history import historical_deviations
+    summary["historical"] = historical_deviations(
+        requests_by_id.values(), now=now, filters=filters, quality=quality)
     summary["insights"] = insights(summary)
     return summary
 
