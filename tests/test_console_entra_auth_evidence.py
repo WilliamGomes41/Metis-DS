@@ -5,15 +5,19 @@ swallowed before diagnostics could record it, and dotfile probes started
 Entra authentication flows.
 """
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from src.console_entra_routes_v1 import install_entra_routes
+from src.console_entra_routes_v1 import _denied_path, install_entra_routes
+from src.operations_console_app import _page, create_console_app
 from src.operations_console_v1 import ConsoleError
 from src.request_diagnostics_v1 import RequestDiagnostics, _LOGGER
+from tests.test_console_duty_first_home import _console
 
 
 @pytest.fixture
@@ -70,7 +74,11 @@ def test_callback_denial_records_console_error_code(monkeypatch, events):
     assert 'SECRET-CODE' not in json.dumps(events)
 
 
-@pytest.mark.parametrize('path', ['/.env', '/.git/config', '/.aws/credentials', '/.kube/config'])
+_PROBES = ['/.env', '/.git/config', '/.aws/credentials', '/.kube/config',
+           '/%2eenv', '/.ENV', '/.Git/HEAD', '/app/.env', '/api/.env.local', '/static%2f.ssh/id_rsa']
+
+
+@pytest.mark.parametrize('path', _PROBES)
 def test_secret_dotfile_probe_is_404_before_session_or_entra(monkeypatch, events, path):
     def renew_session(token):
         raise AssertionError('a dotfile probe must not reach session renewal')
@@ -83,6 +91,69 @@ def test_secret_dotfile_probe_is_404_before_session_or_entra(monkeypatch, events
     assert finished['error']['code'] == 'route_denied'
 
 
+def test_denial_matches_raw_unnormalised_segments_only():
+    # Raw clients may send dot segments unresolved; httpx would normalise them away.
+    assert _denied_path('/x/../.ENV') and _denied_path('/a/b/.git')
+    for path in ('/', '/.well-known/oauth-protected-resource', '/environment', '/review/envelope',
+                 '/brand/metis.svg', '/docs/report.env'):
+        assert not _denied_path(path), path
+
+
+def test_parallel_scan_starts_no_session_or_entra_work(monkeypatch, events):
+    calls = []
+    lock = threading.Lock()
+    def renew_session(token):
+        with lock:
+            calls.append('renew')
+        raise ConsoleError('workflow_session_required')
+    def begin():
+        with lock:
+            calls.append('begin')
+        return {'auth_uri': 'https://login.microsoftonline.com/x', 'state': 's'}
+    client = _client(monkeypatch, SimpleNamespace(config=None, renew_session=renew_session, save_flow=lambda f: 'h'),
+                     login=SimpleNamespace(begin=begin))
+    probes = [_PROBES[i % len(_PROBES)] for i in range(42)]
+    with client, ThreadPoolExecutor(max_workers=42) as pool:
+        statuses = list(pool.map(lambda p: client.get(p).status_code, probes))  # follows redirects
+    assert statuses == [404] * 42
+    assert calls == []
+    finished = _finished(events)
+    assert len(finished) == 42 and all(r['error']['code'] == 'route_denied' for r in finished)
+
+
+def test_save_flow_failure_is_explainable_503(monkeypatch, events):
+    def save_flow(flow):
+        raise OSError('SECRET-DSN identity store down')
+    login = SimpleNamespace(begin=lambda: {'auth_uri': 'https://login.microsoftonline.com/x', 'state': 's'})
+    client = _client(monkeypatch, SimpleNamespace(config=None, save_flow=save_flow), login=login)
+    response = client.get('/auth/microsoft', follow_redirects=False)
+    assert response.status_code == 503
+    assert 'location' not in response.headers
+    [finished] = _finished(events)
+    assert finished['error']['type'] == 'OSError' and finished['error']['handled'] is True
+    assert any(':begin:' in frame for frame in finished['error']['frames'])
+    assert 'SECRET-DSN' not in json.dumps(events)
+
+
+@pytest.mark.parametrize('target,kept', [
+    ('/review?doc=1', '/review?doc=1'), ('https://evil.example/', '/'), ('//evil.example', '/'),
+    ('/\\evil.example', '/'), ('/auth/microsoft', '/'), ('/logout', '/'), ('javascript:alert(1)', '/'),
+])
+def test_begin_redirects_only_to_entra_and_keeps_internal_return(monkeypatch, events, target, kept):
+    auth_uri = 'https://login.microsoftonline.com/tenant/oauth2/v2.0/authorize?state=SECRET-STATE'
+    saved = []
+    def save_flow(flow):
+        saved.append(flow)
+        return 'handle'
+    login = SimpleNamespace(begin=lambda: {'auth_uri': auth_uri, 'state': 'SECRET-STATE'})
+    client = _client(monkeypatch, SimpleNamespace(config=None, save_flow=save_flow), login=login)
+    response = client.get('/auth/microsoft', params={'next': target}, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers['location'] == auth_uri
+    assert saved[0]['metis_return_to'] == kept
+    assert 'SECRET-STATE' not in json.dumps(events)
+
+
 def test_protected_routes_still_redirect_to_sign_in(monkeypatch, events):
     def renew_session(token):
         raise ConsoleError('workflow_session_required')
@@ -91,3 +162,15 @@ def test_protected_routes_still_redirect_to_sign_in(monkeypatch, events):
         response = client.get(path, follow_redirects=False)
         assert response.status_code == 303
         assert response.headers['location'].startswith('/auth/microsoft?next=')
+
+
+@pytest.mark.parametrize('path', ['/settings', '/review', '/accounts'])
+def test_registered_metis_routes_still_require_sign_in(tmp_path, monkeypatch, path):
+    def renew_session(token):
+        raise ConsoleError('workflow_session_required')
+    monkeypatch.setattr('src.console_entra_routes_v1.MicrosoftLogin', lambda config: None)
+    app = create_console_app(_console(tmp_path))
+    install_entra_routes(app, None, SimpleNamespace(config=None, renew_session=renew_session), render_page=_page)
+    response = TestClient(app, base_url='https://testserver').get(path, follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers['location'] == '/auth/microsoft?next=' + path.replace('/', '%2F')

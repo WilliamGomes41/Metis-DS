@@ -10,9 +10,15 @@ from src.request_diagnostics_v1 import note_handled_error, note_handled_exceptio
 
 
 SESSION_COOKIE = "console_session"
-# Secret-bearing dotfile paths no Metis route serves; answered before any session
+# Secret-bearing dotfile names no Metis route serves; answered before any session
 # or Entra work so scanners cannot start authentication flows through them.
-_DENIED_PREFIXES = ("/.env", "/.git", "/.aws", "/.kube", "/.ssh", "/.svn", "/.docker", "/.npmrc")
+_DENIED_SEGMENTS = (".env", ".git", ".aws", ".kube", ".ssh", ".svn", ".docker", ".npmrc")
+
+
+def _denied_path(path):
+    # The ASGI path is already percent-decoded; ".." is not resolved, so every
+    # segment counts (/app/.env, /x/../.ENV, /.env.local).
+    return any(segment.lower().startswith(_DENIED_SEGMENTS) for segment in path.split("/"))
 
 
 def identity_unavailable_response(render_page):
@@ -43,7 +49,7 @@ def install_entra_routes(app, console, identity, *, render_page):
 
     @app.middleware("http")
     async def renew_on_navigation(request: Request, call_next):
-        if request.url.path.startswith(_DENIED_PREFIXES):
+        if _denied_path(request.url.path):
             note_handled_error("route_denied")
             return HTMLResponse("Not Found", status_code=404, headers={"Cache-Control": "no-store"})
         public = request.url.path in {"/", "/login", "/health", "/auth/microsoft", "/auth/microsoft/callback", "/session/status", "/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} or request.url.path.startswith("/brand/")
