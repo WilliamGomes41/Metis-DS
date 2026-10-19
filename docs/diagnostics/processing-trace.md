@@ -118,3 +118,19 @@ Dit is geen voorspelde storingstijd of garantie op voldoende interventietijd.
 De grens blijft 64 pogingen en 128 checkpoints; afgekapt of tegenstrijdig bewijs
 blijft zichtbaar. Pogingaantallen zijn geen retrybudget. Zie
 [het ontwerp en de bewijsgrenzen](../change-contracts/processing-recovery-margins.md).
+
+## Deadline-schaduwprognose (PR 4)
+
+Een expliciet gekozen document op `/source-selection?document=…` toont een
+experimentele vergelijking van de bestaande grove tijdschatting met de opgeslagen
+verwerkingsdeadline. Alleen voor die gebruiker zichtbare documenten leveren
+historie. Een chronologische toets gebruikt per eerdere aanvraag uitsluitend
+uitkomsten die toen al bekend waren; de weergave noemt ook gemiste en onterechte
+grenssignalen binnen de toetsbare, technisch geslaagde pogingen.
+
+Ontbrekende configuratie/timing, mislukte of destijds nog onvoltooide vergelijkbare
+pogingen, onvoldoende toetsbare historie of een analyselimiet geven HOLD. Er zijn
+geen automatische ingrepen en geen bewezen voorspellende nauwkeurigheid of
+gegarandeerde handelingsruimte. Deze schaduwberekening wijzigt de bestaande
+verwerkingsspoor-export niet. Zie het
+[meet- en acceptatiecontract](../change-contracts/processing-deadline-forecast.md).
