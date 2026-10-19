@@ -50,7 +50,7 @@ Document-id's, gebruikers-id's, querystrings, SQL, broninhoud en foutteksten wor
 | Proces | `process_started`, `process_stopped`, `unhandled_exception` | python-versie, origin (thread/process) |
 | Crash | faulthandler op stderr | stack (bestand, functie, regel) bij fatale signalen, ook bij SIGABRT van een time-out |
 
-Een verzoek zonder `request_finished` waarvan de heartbeats zijn gestopt, telt als **afgebroken**: crash, time-out of herstart. Dat is de enige fout die geen enkel los event kan laten zien.
+Een verzoek zonder `request_finished` waarvan de heartbeats zijn gestopt, krijgt voor API-compatibiliteit de status `aborted`. De pagina toont **Afronding ontbreekt** als waarschuwing: telemetrieverlies en onderbroken verwerking zijn beide mogelijk. Deze observatie alleen bewijst geen crash, time-out of herstart.
 
 ## Inzicht: één ruimte, vier tabbladen (`/inzicht`)
 
@@ -69,8 +69,8 @@ Instellingen kanaliseert informatie in drie groepen: **Inzicht** (wat er gebeurt
 ### Systeem
 
 - **Filterrij** (geldt voor alles eronder): tijdvenster, route, uitkomst, status, deploy en vrij zoeken op request-, trace-, poging- of document-id. Filters staan in de URL, dus een link deelt precies jouw beeld.
-- **Inzichten**: gerangschikte bevindingen in gewone taal (afgebroken verzoeken, nieuwe foutgroepen, regressie na een deploy, dominante fase, lock-wachttijd, samenhang). Klik erop en de filter wordt gezet.
-- **Tegels en grafieken**: verzoeken, foutpercentage, p95, afgebroken verzoeken en lock-wachttijd; responstijd p50/p95 en volume met fouten. Bij hover zie je de waarden. De knop "Tabel" toont dezelfde data als tabel.
+- **Inzichten**: gerangschikte bevindingen in gewone taal (ontbrekende afrondingen, nieuwe foutgroepen, regressie na een deploy, dominante fase, lock-wachttijd, samenhang). Klik erop en de filter wordt gezet.
+- **Tegels en grafieken**: verzoeken, foutpercentage, p95, ontbrekende afrondingen en lock-wachttijd; responstijd p50/p95 en volume met fouten. Bij hover zie je de waarden. De knop "Tabel" toont dezelfde data als tabel.
 - **Foutgroepen**: gegroepeerd per vingerafdruk (type, code en diepste Metis-functies, zonder middleware-wrappers). Per groep zie je eerst/laatst gezien, routes, deploys, codelocaties en de volgende stap uit `playbook.py`.
 - **Routes, fasen, samenhang, deploys**: waar de tijd heen gaat en wat oververtegenwoordigd is bij fouten en trage verzoeken (lift ≥ 1,5×).
 - **Verzoekdetail**: fasenboom (totale en eigen tijd), correlatie-id's, DB-metingen, tijdlijn, logregels van hetzelfde verzoek en andere verzoeken op hetzelfde document.
@@ -87,10 +87,10 @@ Grafieken over dezelfde meting als de tabelpagina:
 
 ## Van signaal naar oplossing
 
-1. Start bij **Inzichten**. Is er een kritiek item (afgebroken), open dan de groep en lees de laatste heartbeat-fase.
+1. Start bij **Inzichten**. Ontbreekt een afronding, controleer dan eerst de meetdekking en open de groep voor de laatst vastgelegde heartbeat-fase.
 2. Bij een **exceptie**: het diepste frame in de foutgroep is waar het misging. "Komt alleen voor in commit X" wijst op een regressie: vergelijk met de vorige deploy.
 3. Bij **traagheid**: kijk welke fase domineert. `db_execute` met veel aanroepen wijst op N+1. `store_lock_wait` wijst op contentie: zoek de opdracht met een lange `store_lock_hold`.
-4. Bij **afgebroken** verzoeken: zoek in de App Service-logs (stderr) rond hetzelfde tijdstip naar de faulthandler-stack.
+4. Bij een **ontbrekende afronding**: onderzoek na de meetdekking ook de App Service-logs (stderr) rond hetzelfde tijdstip op een faulthandler-stack of herstart. Ontbrekende logs bewijzen geen oorzaak.
 5. Neem `request_id`/`trace_id` mee in issues. Daarmee vind je hetzelfde verzoek in Azure (`docs/telemetry/errors.kql`).
 
 ## Uitbreiden
@@ -101,6 +101,18 @@ Grafieken over dezelfde meting als de tabelpagina:
 
 ## Grenzen
 
+- **Meetkwaliteit:** summary en requestdetail tonen `telemetry.quality`: fouten per
+  leesoperatie, verdringing uit de procesbuffer en exact uitgesloten events door
+  de analyselimiet. Verliezen binnen het venster en in de extra terugkijkperiode
+  voor reconstructie staan apart. Een niet meer gevonden verzoek heeft deze
+  informatie ook in het 404-antwoord. Zonder requests is het foutpercentage `null`.
+- De procescounters gelden sinds het ontstaan van deze hub en noemen de runtime;
+  ze tellen geen productiebreed verlies. Bufferevents kunnen nog op schijf staan.
+  Leesfouten gelden voor gescande bestanden, ook als hun tijd niet vast te stellen
+  is. Een bestand dat een andere worker tijdens de scan opruimt, telt niet als leesfout. Oudste/nieuwste observaties bewijzen geen aaneengesloten dekking. Eerdere
+  retentieverwijdering, ontbrekende producenten en exportverlies blijven onbekend;
+  `coverage` blijft daarom `not_established`. Zeven dagen is geen garantie op
+  zeven dagen beschikbare gegevens.
 - Een 500-antwoord wordt buiten de diagnose-middleware opgebouwd en draagt daardoor geen `X-Metis-Request-Id`-header. Het event heeft het id wel.
 - De lokale opslag is per instance. Meerdere instances zie je samen alleen in Azure.
 - De Product API (`serve-api`) is nog niet aangesloten.

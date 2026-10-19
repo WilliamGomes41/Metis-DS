@@ -2,8 +2,8 @@
 
 Pure functions over event dicts; no I/O. Requests are rebuilt from their
 ``request_started`` / ``request_running`` / ``request_finished`` events. A request
-without a finish whose heartbeats stopped is reported as aborted (worker crash,
-timeout kill or restart), the one failure no single event can show.
+without a finish whose heartbeats stopped retains the API label ``aborted``.
+That observation alone cannot distinguish interruption from missing telemetry.
 """
 from __future__ import annotations
 
@@ -209,7 +209,7 @@ def summarize(events: list[dict], *, filters: dict[str, str] | None = None, now:
         "kpis": {
             "requests": len(requests),
             "errors": len(errored),
-            "error_rate": round(len(errored) / len(requests), 4) if requests else 0.0,
+            "error_rate": round(len(errored) / len(requests), 4) if requests else None,
             "p50_ms": percentile(durations, 50), "p95_ms": percentile(durations, 95),
             "p99_ms": percentile(durations, 99),
             "aborted": sum(r.state(now) == "aborted" for r in requests),
@@ -341,7 +341,7 @@ def _error_groups(requests: list[Request], other: list[dict], now: float, size: 
         error = request.error
         state = request.state(now)
         if state == "aborted":
-            label, kind = f"Afgebroken: {request.route}", "aborted"
+            label, kind = f"Afronding ontbreekt: {request.route}", "aborted"
         elif error and error.get("handled"):
             label, kind = f"Afgehandeld: {error.get('code')}", "handled"
         elif error:
@@ -371,7 +371,7 @@ def _error_groups(requests: list[Request], other: list[dict], now: float, size: 
         commits = item["commits"]
         item["commits"] = [commit for commit, _ in commits.most_common(5)]
         rows.append(item)
-    severity = {"aborted": 0, "unhandled": 0, "exception": 1, "status": 1, "log": 2, "handled": 3}
+    severity = {"unhandled": 0, "exception": 1, "status": 1, "aborted": 2, "log": 2, "handled": 3}
     return sorted(rows, key=lambda row: (severity.get(row["kind"], 4), -row["count"]))
 
 

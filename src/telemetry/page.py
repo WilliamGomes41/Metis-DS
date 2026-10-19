@@ -135,7 +135,7 @@ _BODY = r"""
     <label class="sr" for="tm-route">Route</label><select id="tm-route" data-f="route"><option value="">Alle routes</option></select>
     <label class="sr" for="tm-state">Uitkomst</label>
     <select id="tm-state" data-f="state"><option value="">Alle uitkomsten</option><option value="ok">Gelukt</option><option value="error">Fout</option>
-      <option value="aborted">Afgebroken</option><option value="running">Lopend</option><option value="cancelled">Geannuleerd</option></select>
+      <option value="aborted">Afronding ontbreekt</option><option value="running">Lopend</option><option value="cancelled">Geannuleerd</option></select>
     <label class="sr" for="tm-status">Status</label>
     <select id="tm-status" data-f="status"><option value="">Alle statussen</option><option value="2xx">2xx</option><option value="3xx">3xx</option><option value="4xx">4xx</option><option value="5xx">5xx</option></select>
     <label class="sr" for="tm-commit">Deploy</label><select id="tm-commit" data-f="commit"><option value="">Alle deploys</option></select>
@@ -145,6 +145,7 @@ _BODY = r"""
   <div class="tm-chips" id="tm-chips" aria-live="polite"></div>
 
   <div id="tm-body">
+    <div id="tm-quality" role="status" aria-live="polite"></div>
     <div class="tm-insights" id="tm-insights" aria-label="Inzichten"></div>
     <div class="tm-kpis" id="tm-kpis"></div>
     <div class="tm-grid">
@@ -155,9 +156,9 @@ _BODY = r"""
         <div class="tm-chart" id="chart-latency"></div>
       </div>
       <div class="tm-card half">
-        <div class="tm-cardhead"><div><h2>Verzoeken en fouten</h2><p class="tm-sub">Aantal verzoeken per tijdvak; fouten en afgebroken verzoeken apart</p></div>
+        <div class="tm-cardhead"><div><h2>Verzoeken en fouten</h2><p class="tm-sub">Aantal verzoeken per tijdvak; fouten en ontbrekende afrondingen apart</p></div>
           <button class="tm-btn" type="button" data-table="volume">Tabel</button></div>
-        <div class="tm-legend"><span><i class="box" style="background:var(--series-1)"></i>Gelukt</span><span><i class="box" style="background:var(--critical)"></i>⚠ Fout of afgebroken</span></div>
+        <div class="tm-legend"><span><i class="box" style="background:var(--series-1)"></i>Gelukt</span><span><i class="box" style="background:var(--critical)"></i>⚠ Fout of afronding ontbreekt</span></div>
         <div class="tm-chart" id="chart-volume"></div>
       </div>
       <div class="tm-card">
@@ -266,7 +267,7 @@ if (state.tab === 'kwaliteit') {
 }
 
 const LABELS = { route: 'Route', state: 'Uitkomst', status: 'Status', commit: 'Deploy', q: 'Zoek', error: 'Foutgroep' };
-const STATE_NL = { ok: 'Gelukt', error: 'Fout', aborted: 'Afgebroken', running: 'Lopend', cancelled: 'Geannuleerd', incomplete: 'Onvolledig' };
+const STATE_NL = { ok: 'Gelukt', error: 'Fout', aborted: 'Afronding ontbreekt', running: 'Lopend', cancelled: 'Geannuleerd', incomplete: 'Onvolledig' };
 const SEV_NL = { critical: 'Kritiek', serious: 'Ernstig', warning: 'Let op', info: 'Inzicht', good: 'Goed' };
 const ICON = {
   critical: '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M6 1 11 10H1z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 4.5v2.5M6 8.6v.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
@@ -297,8 +298,8 @@ const compact = (value) => value >= 1000 ? (value / 1000).toLocaleString('nl-NL'
 const time = (t, long) => new Date(t * 1000).toLocaleString('nl-NL', long ? { dateStyle: 'short', timeStyle: 'medium' } : { hour: '2-digit', minute: '2-digit' });
 const shortId = (value) => value ? String(value).slice(0, 8) : '—';
 function stateBadge(value) {
-  const cls = value === 'ok' ? 'st-ok' : value === 'error' || value === 'aborted' ? 'st-error' : value === 'running' ? 'st-running' : 'st-other';
-  const kind = value === 'ok' ? 'good' : value === 'error' || value === 'aborted' ? 'critical' : 'info';
+  const cls = value === 'ok' ? 'st-ok' : value === 'error' ? 'st-error' : value === 'running' ? 'st-running' : 'st-other';
+  const kind = value === 'ok' ? 'good' : value === 'error' ? 'critical' : value === 'aborted' ? 'warning' : 'info';
   return el('span', { class: 'tm-badge ' + cls }, icon(kind), STATE_NL[value] || value);
 }
 
@@ -353,6 +354,7 @@ function render() {
   fillSelect('#tm-route', data.options.routes, state.filters.route, 'Alle routes');
   fillSelect('#tm-commit', data.options.commits, state.filters.commit, 'Alle deploys');
   renderControls();
+  $('#tm-quality').replaceChildren(qualityNote(data.telemetry));
   renderInsights(data.insights);
   renderKpis(data);
   lineChart($('#chart-latency'), data.series, [{ key: 'p50', label: 'p50', color: 'var(--series-1)' }, { key: 'p95', label: 'p95', color: 'var(--series-2)' }], data.window.bucket_seconds);
@@ -366,8 +368,27 @@ function render() {
   renderProcess(data.process);
   $('#tm-about').textContent = `${nf.format(data.telemetry.events)} events in dit venster, opgeslagen ${data.telemetry.store === 'disk' ? 'op schijf (alle workers, 7 dagen, max. 64 MB)' : 'alleen in het geheugen van deze worker'}. ` +
     'Alleen vaste velden: route-sjablonen, statussen, tijden, fasenamen, begrensde id’s, commit, exceptietype, foutcode en Metis-codelocaties. Documenten alleen als pseudoniem (doc_ref). Nooit inhoud, gebruikers, SQL of foutteksten.' +
-    (data.telemetry.dropped ? ` ${data.telemetry.dropped} events konden niet worden vastgelegd.` : '') +
-    (data.telemetry.truncated ? ' Alleen de nieuwste 50.000 events zijn geanalyseerd; kies een korter venster voor het volledige beeld.' : '');
+    ' Bewaring is begrensd; zeven dagen is geen gegarandeerde dekking. De meetkwaliteit hierboven betreft deze leesoperatie; volledigheid over alle processen en externe meetpaden is niet vastgesteld.';
+}
+
+function qualityNote(telemetry) {
+  const q = (telemetry || {}).quality;
+  const parts = [];
+  if (!q) return el('p', { class: 'help', text: 'Meetdekking niet vastgesteld.' });
+  const a = q.analysis, r = q.read, p = q.process;
+  if (!a.window_used) parts.push('Geen meetgegevens in het gekozen venster. Stilte bewijst geen gezondheid.');
+  if (q.reasons.includes('memory_only')) parts.push('Alleen de buffer van deze worker is beschikbaar.');
+  if (q.reasons.includes('ring_evictions')) parts.push(`${nf.format(p.ring_evictions)} events zijn sinds processtart uit die buffer verdrongen; oudere historie kan ontbreken.`);
+  if (p.record_failures) parts.push(`${nf.format(p.record_failures)} vastleg- of opslagfouten sinds de start van deze worker; dit is geen exact aantal verloren events.`);
+  if (r.read_errors) parts.push(`${nf.format(r.read_errors)} bestanden of bestandslijsten konden bij deze scan niet volledig worden gelezen.`);
+  if (r.malformed_lines || r.invalid_events) parts.push(`${nf.format(r.malformed_lines)} onleesbare JSON-regels en ${nf.format(r.invalid_events)} ongeldige events overgeslagen bij deze scan.`);
+  if (a.window_omitted) parts.push(`${nf.format(a.window_omitted)} events uit het gekozen venster niet geanalyseerd door de analyselimiet.`);
+  if (a.lookback_omitted) parts.push(`${nf.format(a.lookback_omitted)} eerdere events voor reconstructie niet geanalyseerd; verzoekdetails kunnen onvolledig zijn.`);
+  if (a.used) parts.push(`Geanalyseerd: ${nf.format(a.used)} van ${nf.format(a.seen)} leesbare events, inclusief terugkijkperiode. Beschikbare observaties: ${time(a.oldest_used_at, true)} tot ${time(a.newest_used_at, true)}; dit bewijst geen aaneengesloten dekking.`);
+  parts.push('Niet-getelde verliezen en ontbrekende producenten zijn hiermee niet uitgesloten.');
+  return el('div', { class: 'tm-card', style: 'margin-bottom:14px' },
+    el('strong', { text: q.status === 'no_known_loss' ? 'Meetdekking niet vastgesteld' : 'Onvoldoende zicht voor een volledig beeld' }),
+    el('p', { class: 'help', text: parts.join(' ') }));
 }
 
 function renderInsights(items) {
@@ -390,9 +411,9 @@ function renderKpis(data) {
   const k = data.kpis, s = data.series;
   const tiles = [
     ['Verzoeken', compact(k.requests), `${k.running} lopend`, s.map((b) => b.count)],
-    ['Foutpercentage', pct(k.error_rate), `${nf.format(k.errors)} fout of afgebroken`, s.map((b) => b.count ? b.errors / b.count : 0)],
+    ['Foutpercentage', pct(k.error_rate), k.requests ? `${nf.format(k.errors)} fout of zonder afronding in waargenomen verzoeken` : 'onvoldoende gegevens', s.map((b) => b.count ? b.errors / b.count : 0)],
     ['Responstijd p95', ms(k.p95_ms), `p50 ${ms(k.p50_ms)} · p99 ${ms(k.p99_ms)}`, s.map((b) => b.p95 || 0)],
-    ['Afgebroken', nf.format(k.aborted), k.aborted ? '⚠ crash, time-out of herstart' : 'geen', null],
+    ['Afronding ontbreekt', nf.format(k.aborted), k.aborted ? '⚠ oorzaak niet bewezen' : k.requests ? 'geen waargenomen' : 'onvoldoende gegevens', null],
     ['Wachten op store-lock (p95)', ms(k.lock_wait_p95_ms), 'tijd tot de Storeopdracht mag starten', null],
   ];
   $('#tm-kpis').replaceChildren(...tiles.map(([label, value, hint, trend]) => el('div', { class: 'tm-tile' },
@@ -473,14 +494,14 @@ function stackChart(box, series, bucket) {
     if (b.errors) svg.append(svgEl('path', { d: roundedTop(left, H - hErr, bw, hErr, ok ? 0 : r), fill: 'var(--critical)' }));
     if (ok) svg.append(svgEl('path', { d: roundedTop(left, H - hErr - hOk - (b.errors ? 2 : 0), bw, hOk, r), fill: 'var(--series-1)' }));
     const hit = svgEl('rect', { x: L + slot * i, y: 0, width: slot, height: H, fill: 'transparent', tabindex: 0 });
-    const show = (event) => showTip(event, time(b.t, true), [['gelukt', nf.format(ok), 'var(--series-1)'], ['fout of afgebroken', nf.format(b.errors), 'var(--critical)']]);
+    const show = (event) => showTip(event, time(b.t, true), [['gelukt', nf.format(ok), 'var(--series-1)'], ['fout of afronding ontbreekt', nf.format(b.errors), 'var(--critical)']]);
     hit.addEventListener('pointermove', show); hit.addEventListener('pointerleave', hideTip);
     hit.addEventListener('focus', (event) => { const r2 = hit.getBoundingClientRect(); show({ clientX: r2.left + r2.width / 2, clientY: r2.top + 20 }); });
     hit.addEventListener('blur', hideTip);
     svg.append(hit);
   });
   box.append(svg);
-  box.append(tableFor(box, 'volume', ['Tijdvak', 'Gelukt', 'Fout of afgebroken'], series.map((b) => [time(b.t, true), nf.format(b.count - b.errors), nf.format(b.errors)])));
+  box.append(tableFor(box, 'volume', ['Tijdvak', 'Gelukt', 'Fout of afronding ontbreekt'], series.map((b) => [time(b.t, true), nf.format(b.count - b.errors), nf.format(b.errors)])));
 }
 function roundedTop(x, y, w, h, r) { if (h <= 0) return ''; r = Math.min(r, h); return `M${x} ${y + h}V${y + r}Q${x} ${y} ${x + r} ${y}H${x + w - r}Q${x + w} ${y} ${x + w} ${y + r}V${y + h}Z`; }
 function tableFor(box, key, head, rows) {
@@ -493,8 +514,8 @@ function tableFor(box, key, head, rows) {
 function renderErrors(groups) {
   const box = $('#tm-errors');
   if (!groups.length) { box.replaceChildren(el('p', { class: 'tm-empty' }, icon('good'), ' Geen fouten in dit venster.')); return; }
-  const kindNl = { aborted: 'Afgebroken', unhandled: 'Onafgevangen', exception: 'Exceptie', status: 'Serverfout', log: 'Log', handled: 'Afgehandeld' };
-  const kindSev = { aborted: 'critical', unhandled: 'critical', exception: 'serious', status: 'serious', log: 'warning', handled: 'info' };
+  const kindNl = { aborted: 'Afronding ontbreekt', unhandled: 'Onafgevangen', exception: 'Exceptie', status: 'Serverfout', log: 'Log', handled: 'Afgehandeld' };
+  const kindSev = { aborted: 'warning', unhandled: 'critical', exception: 'serious', status: 'serious', log: 'warning', handled: 'info' };
   box.replaceChildren(...groups.slice(0, 25).map((g) => {
     const guidance = g.guidance || {};
     const frames = (guidance.frames || g.frames || []);
@@ -585,15 +606,17 @@ async function openRequest(id) {
   inner.replaceChildren(el('p', { text: 'Laden…' }));
   if (!drawer.open) drawer.showModal();
   const response = await fetch('/telemetry/api/request/' + encodeURIComponent(id), { credentials: 'same-origin' });
-  if (!response.ok) { inner.replaceChildren(el('p', { text: 'Dit verzoek is niet (meer) beschikbaar.' }), closeButton()); return; }
-  const d = await response.json(), r = d.request;
+  const d = await response.json().catch(() => ({}));
+  if (!response.ok || !d.request) { inner.replaceChildren(el('p', { text: 'Dit verzoek is niet (meer) beschikbaar; de oorzaak is niet vastgesteld.' }), qualityNote(d.telemetry), closeButton()); return; }
+  const r = d.request;
   const copy = (value) => value ? el('button', { type: 'button', class: 'linkbtn mono', title: 'Kopieer', onclick: () => navigator.clipboard && navigator.clipboard.writeText(value) }, value) : '—';
   const nodes = d.tree || [], max = Math.max(1, ...nodes.map((n) => n.inclusive_ms || 0));
   const g = d.guidance;
   inner.replaceChildren(...[
+    qualityNote(d.telemetry),
     el('div', { class: 'drawer-top' }, el('div', {}, el('p', { class: 'eyebrow', text: 'Verzoek' }), el('h2', { style: 'margin:0' }, el('span', { class: 'mono', text: `${r.method} ${r.route}` })),
       el('p', { class: 'help', style: 'margin:6px 0 0' }, stateBadge(r.state), `  ${r.status === null ? '' : 'HTTP ' + r.status + ' · '}${ms(r.duration_ms)} · ${time(r.started, true)}`)), closeButton()),
-    g ? el('div', { class: 'tm-card', style: 'padding:14px' }, el('div', { style: 'display:flex;gap:8px;align-items:center' }, sev(r.state === 'aborted' ? 'critical' : 'serious'), el('strong', { text: g.title })),
+    g ? el('div', { class: 'tm-card', style: 'padding:14px' }, el('div', { style: 'display:flex;gap:8px;align-items:center' }, sev(r.state === 'aborted' ? 'warning' : 'serious'), el('strong', { text: g.title })),
       el('p', { class: 'help', text: g.explanation }), g.frames && g.frames.length ? el('ol', { class: 'frames' }, g.frames.map((f) => el('li', { text: f }))) : null,
       g.steps && g.steps.length ? el('ol', { class: 'steps' }, g.steps.map((s) => el('li', { text: s }))) : null) : null,
     el('div', { class: 'tm-card', style: 'padding:14px' }, el('h2', { text: 'Fasenboom' }), el('p', { class: 'tm-sub', text: 'Lichte balk: totale tijd van de fase (incl. onderliggende); donkere balk: eigen tijd. Inspringing = nesting.' }),

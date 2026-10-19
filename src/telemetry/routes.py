@@ -43,11 +43,12 @@ def install_telemetry_routes(app: FastAPI, *, require_account: Callable[[Request
         require_account(request)
         key, seconds = _window(request)
         now = time.time()
-        events, truncated = recent_events(now - seconds - 3600, window_start=now - seconds)
+        quality: dict[str, Any] = {}
+        events, truncated = recent_events(now - seconds - 3600, window_start=now - seconds, quality=quality)
         body = summarize(events, filters=_filters(request), now=now, since=now - seconds)
         body["window"]["key"] = key
         body["telemetry"].update({"store": "disk" if HUB.directory else "memory", "dropped": HUB.dropped,
-                                  "truncated": truncated})
+                                  "truncated": truncated, "quality": quality})
         return JSONResponse(body, headers=_HEADERS)
 
     @app.get("/telemetry/api/request/{request_id}")
@@ -56,9 +57,14 @@ def install_telemetry_routes(app: FastAPI, *, require_account: Callable[[Request
         if not _REQUEST_ID.fullmatch(request_id):
             return JSONResponse({"error": "unknown_request"}, status_code=404, headers=_HEADERS)
         now = time.time()
-        detail = request_detail(recent_events(now - WINDOWS["7d"])[0], request_id, now=now)
+        quality: dict[str, Any] = {}
+        events, truncated = recent_events(now - WINDOWS["7d"], quality=quality)
+        telemetry = {"quality": quality, "truncated": truncated,
+                     "store": "disk" if HUB.directory else "memory", "dropped": HUB.dropped}
+        detail = request_detail(events, request_id, now=now)
         if detail is None:
-            return JSONResponse({"error": "unknown_request"}, status_code=404, headers=_HEADERS)
+            return JSONResponse({"error": "unknown_request", "telemetry": telemetry}, status_code=404, headers=_HEADERS)
+        detail["telemetry"] = telemetry
         return JSONResponse(detail, headers=_HEADERS)
 
     @app.get("/telemetry/api/export")

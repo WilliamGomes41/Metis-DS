@@ -486,12 +486,12 @@ def test_analysis_finds_aborts_groups_regressions_and_correlations():
     assert kpis['aborted'] == 1 and kpis['running'] == 1 and kpis['errors'] == 5
     groups = {g['key']: g for g in summary['errors']}
     assert groups['abc123abc123']['count'] == 4 and groups['abc123abc123']['guidance']['where'] == 'src/x.py:f:1'
-    assert 'aborted:/publish' in groups and groups['aborted:/publish']['guidance']['category'] == 'crash'
+    assert 'aborted:/publish' in groups and groups['aborted:/publish']['guidance']['category'] == 'missing_completion'
     new = next(c for c in summary['commits'] if c['commit'] == 'new')
     assert new['delta_p95_ratio'] >= 1.5
     assert any(row['value'] == 'db_queries' for row in summary['correlations'])
     titles = [item['title'] for item in summary['insights']]
-    assert titles[0].startswith('1 verzoek(en) afgebroken') and any('Trager na deploy' in t for t in titles)
+    assert any(t == 'Bij 1 verzoek(en) ontbreekt de afronding' for t in titles) and any('Trager na deploy' in t for t in titles)
     only_errors = analysis.summarize(_history(now), filters={'error': 'abc123abc123'}, now=now, since=now - 3600)
     assert only_errors['kpis']['requests'] == 4
     detail = analysis.request_detail(_history(now), 'aborted', now=now)

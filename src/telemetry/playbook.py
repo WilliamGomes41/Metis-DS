@@ -53,12 +53,13 @@ def guidance_for_group(group: dict[str, Any] | None) -> dict[str, Any] | None:
     where = _frames_hint(frames)
     steps: list[str] = []
     if kind == "aborted":
-        title, category = "Verzoek afgebroken zonder afronding", "crash"
-        explanation = ("Het verzoek begon, maar er kwam nooit een afronding: de worker is waarschijnlijk gecrasht, "
-                       "door een time-out gestopt of herstart.")
-        steps = ["Zoek in de App Service-logs (stderr) rond dit tijdstip naar een faulthandler-stackdump "
+        title, category = "Afronding van verzoek ontbreekt", "missing_completion"
+        explanation = ("Er is geen afronding vastgelegd. De oorzaak is niet vastgesteld: "
+                       "telemetrie kan ontbreken, of de verwerking kan zijn onderbroken door een crash, time-out of herstart.")
+        steps = ["Controleer eerst de meetdekking, leesfouten en ontbrekende events; logs alleen bewijzen geen afbreking.",
+                 "Zoek in de App Service-logs (stderr) rond dit tijdstip naar een faulthandler-stackdump "
                  "('Fatal Python error' of 'Current thread').",
-                 "Kijk welke fase de laatste heartbeat noemde; daar zat het verzoek vast.",
+                 "Bekijk de laatst vastgelegde heartbeat en fase; latere meetgegevens kunnen ontbreken.",
                  "Controleer of er rond hetzelfde moment een process_started was (herstart)."]
     elif code in CODE_ADVICE:
         title, explanation = CODE_ADVICE[code]
@@ -93,8 +94,8 @@ def insights(summary: dict[str, Any]) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     kpis = summary.get("kpis") or {}
     if kpis.get("aborted"):
-        found.append({"severity": "critical", "title": f"{kpis['aborted']} verzoek(en) afgebroken",
-                      "detail": "Verzoeken zonder afronding wijzen op crashes, time-outs of herstarts van workers.",
+        found.append({"severity": "warning", "title": f"Bij {kpis['aborted']} verzoek(en) ontbreekt de afronding",
+                      "detail": "Controleer de meetdekking: ontbrekende telemetrie en onderbroken verwerking zijn beide mogelijk. De oorzaak is niet vastgesteld.",
                       "filter": {"state": "aborted"}})
     for group in (summary.get("errors") or [])[:3]:
         if group["kind"] in ("exception", "unhandled", "status") and group["count"]:
