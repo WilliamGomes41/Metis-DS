@@ -828,6 +828,13 @@ def _diagnosis_access(account: dict[str, Any], envelope: dict[str, Any]) -> bool
         "reviewer" in roles and account.get("account_id") in (envelope.get("named_reviewers") or []))
 
 
+def _diagnosis_link(account: dict[str, Any], envelope: dict[str, Any] | None) -> str:
+    if not envelope or not _diagnosis_access(account, envelope):
+        return ""
+    query = _esc(urlencode({"document": envelope["snapshot_id"]}))
+    return f'<p><a href="/inzicht/document?{query}">Bekijk diagnose in Inzicht</a></p>'
+
+
 def _task_links(topic: str) -> str:
     """Separate destinations, never embedded instructional or diagnostic UI."""
     return (
@@ -3824,7 +3831,7 @@ def _render_review_room(
               {conflict_html if not chosen_object_id else ""}
               {"".join(cards) if not chosen else ""}
               {objects_html or empty}
-              {f'<p><a href="/inzicht/document?{_esc(urlencode({"document": chosen}))}">Bekijk diagnose in Inzicht</a></p>' if chosen_row and _diagnosis_access(account, chosen_row) else ''}
+              {_diagnosis_link(account, chosen_row)}
             </section>
             """
     )
