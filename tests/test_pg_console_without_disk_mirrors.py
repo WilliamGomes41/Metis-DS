@@ -31,6 +31,7 @@ from src.integrity_kernel import stamp_canonical_hashes
 from src.operations_console_v1 import ConsoleError
 from src.review_duty_v1 import exact_current_approver_ids
 from src.review_ledger import unregister_backend
+from src import quality_evidence_v1
 from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter
 from tests.complete_workflow_support import complete_console, complete_postgres  # noqa: F401
 from tests.semantic_fixture_support import bind_fixture_selections, install_fixture_history
@@ -72,7 +73,7 @@ class MirrorAccess:
         if isinstance(file, int):
             return None
         try:
-            path = Path(os.fsdecode(file)).absolute()
+            path = Path(os.fsdecode(file)).resolve()
             relative = path.relative_to(self.runtime)
         except (ValueError, TypeError):
             return None
@@ -180,6 +181,7 @@ def _run(config, root, guard, monkeypatch, checkpoints, completed, expected=None
     with monkeypatch.context() as patch, guard.installed(monkeypatch):
         # Stable UUID identities across the two isolated runs, not a mocked store.
         patch.setattr(uuid, "uuid4", lambda: uuid.UUID(hex=f"{next(counter):012x}" + "0" * 20))
+        patch.setattr(quality_evidence_v1, "uuid4", uuid.uuid4)
         console = step("startup", construct)
         def accounts_and_session():
             accounts = {name: console.create_account(name, "D4-test-password", roles=roles)
