@@ -68,8 +68,8 @@ CURRENT_HEADING = "2 Aanbevelingen"
 ANCESTOR_HEADING = "Richtlijn Fractuurpreventie"
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -635,8 +635,8 @@ def test_source_text_exact_stays_freeze_fragment() -> None:
     assert objects == before
 
 
-def test_phase1_ingest_still_keeps_adviseert_and_leaves_djg_as_coverage(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_phase1_ingest_still_keeps_adviseert_and_leaves_djg_as_coverage(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, PHASE1_FIXTURE, title="Phase 1 admission regression")
     objects = [
@@ -660,8 +660,8 @@ def test_phase1_ingest_still_keeps_adviseert_and_leaves_djg_as_coverage(tmp_path
     assert all(_admission(obj).get("gate_result") == GATE_ALLOWED for obj in ordinary)
     assert not any(obj in ordinary for obj in blocked_audit_lane(objects))
 
-def test_phase2_ingest_records_deep_window_and_wires_scan(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_phase2_ingest_records_deep_window_and_wires_scan(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, PHASE2_FIXTURE)
     objects = [
@@ -720,8 +720,8 @@ def test_phase2_ingest_records_deep_window_and_wires_scan(tmp_path: Path) -> Non
     assert merged.get("performed") is True
     assert "hypercalciëmie" in str(merged.get("merged_text") or _text_of(calcium))
 
-    client = TestClient(create_console_app(console))
-    client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
+    client = TestClient(production_app(console))
+    client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     review = client.get(f"/review?document={receipt['snapshot_id']}").text
     slow = review.split('class="review-lane-slow"', 1)[-1].split("review-blocked-audit", 1)[0]
     assert DJG not in slow
@@ -732,8 +732,8 @@ def test_phase2_ingest_records_deep_window_and_wires_scan(tmp_path: Path) -> Non
     assert "Gevonden onder" in card
     assert "Review opslaan en volgende" in card
 
-def test_boom_ingest_still_skips_richtlijn_phase2(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_boom_ingest_still_skips_richtlijn_phase2(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = console.ingest(
         actor_id=accounts["researcher"]["account_id"],
@@ -763,8 +763,8 @@ def test_boom_ingest_still_skips_richtlijn_phase2(tmp_path: Path) -> None:
     assert slow_review_duty(objects, review_path="boom")
 
 
-def test_ineligible_source_passage_is_not_a_processing_issue(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_ineligible_source_passage_is_not_a_processing_issue(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, PHASE1_FIXTURE, title="Phase 1 admission regression")
     djg = _find_by_text(console.snapshot_objects(receipt["snapshot_id"]), DJG)

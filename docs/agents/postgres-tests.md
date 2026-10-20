@@ -348,3 +348,35 @@ dezelfde accountnaam in beide databases en herstart bewijzen de isolatie.
 De ontbrekende factorydoorgifte van de replay-reserveringsafnemer is teruggelegd
 in portie 9 (`fe3b288`) en daar groen uitgevoerd; porties 10–16 zijn daarop
 gebaseerd. Hun oorspronkelijke loghashes blijven het historische gerichte bewijs.
+
+Portie 18 migreert de oudere admission-/cockpit-/coveragepagina's, de oorspronkelijke
+consoleproeven en reviewreparatie. Alle 167 bestaande cases blijven aanwezig;
+één pure proef bewaart het compatibility-hashcontract. 168 unieke cases zijn
+groen, zonder skips. De telling vergelijkt de oorspronkelijke node-ID's met de
+nieuwe namen en herstelt de onbedoeld weggevallen sectiecoverageproef.
+
+De productiepagina heeft één brondeur en een kopkeuze zonder navigatielinks;
+de proef volgt die bestaande route-installaties. Uitstel bewaart geen nieuw
+reviewbesluit of kopkeuze. De registermapping wordt bij haar bestaande pure owner
+gecontroleerd, naast het bewijs dat een uitgestelde review geen objecten schrijft.
+Daadwerkelijke correcties gebruiken de bestaande brongebonden repair-operatie.
+
+De raceproeven gebruiken twee echte PG-instanties: de concurrent wacht op de
+atomaire batch en verliest met de verouderde revision. De hele batch is dan
+opgeslagen; een expliciete nieuwe poging op de actuele revision slaagt en
+invalideert uitsluitend het betrokken bindingsbewijs. Er wordt geen gedeeltelijke
+bestandsschrijfuitkomst als PG-gedrag aangenomen.
+
+Vijf proeven op atomische JSON-writers blijven `file_topology`. De lege-rollen-
+fixture is vervangen door de bestaande PG-weigering van zo'n account; een engineer
+krijgt daarmee nog steeds geen alternatieve ingestroute. De URL-transportstub wordt
+vóór de productiecompositie geplaatst, zodat de echte downloadlimiet actief blijft.
+
+Deze Class C-portie bouwt op de afzonderlijke Class A-reparatie `a7516ef`, beschreven
+in `docs/change-contracts/pg-command-review-evidence.md`: een gestructureerde
+onderbouwingsreparatie moet haar eigen voorbereide PG-auditbewijs kunnen lezen.
+De publieke audit blijft gecommitteerde toestand lezen. De dedicated HTTP-,
+rollback-, herstart- en D5-gifproeven van die reparatie zijn afzonderlijk vastgelegd.
+
+Volledige lokale metingen van de herstelde porties 5 en 6 zijn groen: respectievelijk
+1.169,733 en 1.268,878 seconden, nul PG-skips, 1,1206× en 1,2156× de schone baseline.
