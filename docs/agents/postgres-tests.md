@@ -435,9 +435,17 @@ de bron nogmaals. Spies observeren beide, zonder de reviewoperatie of toestand
 te vervangen. De pin tussen batchleden is de echte PG-revision.
 
 
-De afsluitende inventaris telt 5.698 verzamelde cases, waarvan 2.016 een PG-
+De afsluitende inventaris telt 5.698 verzamelde cases, waarvan 2.031 een PG-
 afhankelijkheid hebben (inclusief adapterproeven). De 130 `file_topology`-cases
 in 21 bestanden staan volledig in `evidence/d6a/file-topology-inventory.json`.
 Daaronder vallen expliciet de oude lokale bestandsstart en de bijbehorende
 Azure-weigering; de productieklasseguard mag deze uitdovende opstelling niet
 als ongemigreerde runtime behandelen. De 50 topologieproeven zijn groen.
+
+
+Ook de afnemers van de karakterisering buiten die map zijn meegenomen: zeven
+lane-total-proeven en acht review-overview-proeven zijn groen op PG. De controle
+van alle geneste testhelperimports vindt geen ontbrekende factoryargumenten.
+De meetrunner maakt zelf per suite een lege, eigen database; dat gold lokaal al
+via de wrapper en geldt nu ook rechtstreeks in CI. Een echte voor/na-probe toont
+dat de opgegeven database, inclusief een sentinelrij, ongewijzigd blijft.
