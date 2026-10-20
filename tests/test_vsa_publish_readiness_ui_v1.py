@@ -16,14 +16,10 @@ from fastapi.testclient import TestClient
 
 from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import review_lane
 from src.passage_register_v1 import passage_register_of
 from src.publication_readiness_v1 import source_passage_closure
-from src.publish_readiness_ui_v1 import (
-    install_publish_readiness_ui,
-    publish_readiness_view,
-)
+from src.publish_readiness_ui_v1 import publish_readiness_view
 from src.review_disposition_v1 import definitive_review_disposition
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -54,11 +50,9 @@ class MemorySourceStore:
             raise G2SourceStoreError("canonical_source_missing") from exc
 
 
-def _console_with_document(
-    tmp_path: Path,
-) -> tuple[DurablePublicationConsole, dict[str, dict[str, Any]], dict[str, Any], MemorySourceStore]:
+def _console_with_document(tmp_path: Path, *, production_console) -> tuple[DurablePublicationConsole, dict[str, dict[str, Any]], dict[str, Any], MemorySourceStore]:
     source = MemorySourceStore()
-    console = DurablePublicationConsole(
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime",
@@ -157,9 +151,8 @@ def _complete_review(
         )
 
 
-def _client(console: DurablePublicationConsole) -> TestClient:
-    app = create_console_app(console)
-    install_publish_readiness_ui(app, console)
+def _client(console: DurablePublicationConsole, *, production_app) -> TestClient:
+    app = production_app(console)
     return TestClient(
         app,
         base_url="https://testserver",
@@ -223,11 +216,8 @@ def test_view_model_preserves_codes_order_categories_and_recovery() -> None:
     assert view["technical_blockers"][1]["recovery_href"] is None
 
 
-def test_publish_page_separates_curation_and_technical_blockers(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    console, _accounts, receipt, _source = _console_with_document(tmp_path)
+def test_publish_page_separates_curation_and_technical_blockers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, production_app, production_console) -> None:
+    console, _accounts, receipt, _source = _console_with_document(tmp_path, production_console=production_console)
     considered = {
         "state": "captured_not_published",
         "publication_ready": False,
@@ -246,7 +236,7 @@ def test_publish_page_separates_curation_and_technical_blockers(
         "consider_publish",
         lambda *, actor_id, snapshot_id: dict(considered),
     )
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     _login(client, "publisher.carla")
 
     page = client.get("/publish", params={"document": _only_snapshot(console)})
@@ -263,11 +253,8 @@ def test_publish_page_separates_curation_and_technical_blockers(
     assert str(receipt["snapshot_id"]) in page.text
 
 
-def test_publish_form_is_only_rendered_for_publication_ready(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    console, _accounts, _receipt, _source = _console_with_document(tmp_path)
+def test_publish_form_is_only_rendered_for_publication_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, production_app, production_console) -> None:
+    console, _accounts, _receipt, _source = _console_with_document(tmp_path, production_console=production_console)
     monkeypatch.setattr(
         console,
         "consider_publish",
@@ -283,7 +270,7 @@ def test_publish_form_is_only_rendered_for_publication_ready(
             "blockers": [],
         },
     )
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     _login(client, "publisher.carla")
 
     page = client.get("/publish", params={"document": _only_snapshot(console)})
@@ -295,11 +282,8 @@ def test_publish_form_is_only_rendered_for_publication_ready(
     assert 'name="publish_confirmed"' in page.text
 
 
-def test_published_document_has_no_publish_form(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    console, _accounts, _receipt, _source = _console_with_document(tmp_path)
+def test_published_document_has_no_publish_form(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, production_app, production_console) -> None:
+    console, _accounts, _receipt, _source = _console_with_document(tmp_path, production_console=production_console)
     monkeypatch.setattr(
         console,
         "consider_publish",
@@ -315,7 +299,7 @@ def test_published_document_has_no_publish_form(
             "blockers": ["already_published"],
         },
     )
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     _login(client, "publisher.carla")
 
     page = client.get("/publish", params={"document": _only_snapshot(console)})
@@ -326,9 +310,9 @@ def test_published_document_has_no_publish_form(
     assert 'data-publish-form' not in page.text
 
 
-def test_publish_room_requires_publisher_role(tmp_path: Path) -> None:
-    console, _accounts, _receipt, _source = _console_with_document(tmp_path)
-    client = _client(console)
+def test_publish_room_requires_publisher_role(tmp_path: Path, *, production_app, production_console) -> None:
+    console, _accounts, _receipt, _source = _console_with_document(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
     _login(client, "researcher.anne")
 
     page = client.get("/publish")
@@ -338,9 +322,9 @@ def test_publish_room_requires_publisher_role(tmp_path: Path) -> None:
     assert "Je account heeft geen rechten om te publiceren." in page.text
 
 
-def test_direct_post_cannot_bypass_backend_readiness(tmp_path: Path) -> None:
-    console, _accounts, receipt, _source = _console_with_document(tmp_path)
-    client = _client(console)
+def test_direct_post_cannot_bypass_backend_readiness(tmp_path: Path, *, production_app, production_console) -> None:
+    console, _accounts, receipt, _source = _console_with_document(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
     _login(client, "publisher.carla")
 
     blocked = client.post(
@@ -352,10 +336,10 @@ def test_direct_post_cannot_bypass_backend_readiness(tmp_path: Path) -> None:
     assert console.snapshot_is_published(receipt["snapshot_id"]) is False
 
 
-def test_stale_ready_page_is_rechecked_on_publish_post(tmp_path: Path) -> None:
-    console, accounts, receipt, source = _console_with_document(tmp_path)
+def test_stale_ready_page_is_rechecked_on_publish_post(tmp_path: Path, *, production_app, production_console) -> None:
+    console, accounts, receipt, source = _console_with_document(tmp_path, production_console=production_console)
     _complete_review(console, accounts, receipt)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     _login(client, "publisher.carla")
 
     ready = client.get("/publish", params={"document": receipt["snapshot_id"]})
