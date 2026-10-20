@@ -9,7 +9,7 @@
 #
 # A reachable METIS_TEST_POSTGRES_DSN is reused unchanged (CI, devcontainer).
 # Otherwise a throwaway cluster is created under METIS_TEST_PG_DIR with trust
-# auth on 127.0.0.1 only. Test data only: never point this at real data.
+# auth on 127.0.0.1 only, in UTC like CI. Test data only: never point this at real data.
 # initdb refuses to run as root, so as root the cluster runs as an unprivileged
 # user (METIS_TEST_PG_USER, default "metis-pg", created when missing).
 set -euo pipefail
@@ -104,7 +104,7 @@ fi
 
 if ! as_owner "$BIN/pg_ctl" -D "$DATA" status >/dev/null 2>&1; then
   as_owner "$BIN/pg_ctl" -D "$DATA" -l "$LOG" -w -t 30 \
-    -o "-p $PG_PORT -c listen_addresses=127.0.0.1 -k $PG_DIR -c fsync=off -c synchronous_commit=off -c full_page_writes=off" \
+    -o "-p $PG_PORT -c listen_addresses=127.0.0.1 -c timezone=UTC -c log_timezone=UTC -k $PG_DIR -c fsync=off -c synchronous_commit=off -c full_page_writes=off" \
     start >/dev/null || die "server did not start; see $LOG"
 fi
 
