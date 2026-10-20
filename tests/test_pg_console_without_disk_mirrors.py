@@ -15,12 +15,13 @@ from contextlib import contextmanager
 from copy import deepcopy
 import builtins
 import errno
+import hashlib
 import io
-import itertools
 import json
 import os
 from pathlib import Path
 import re
+import sys
 import traceback
 import uuid
 
@@ -83,7 +84,8 @@ class MirrorAccess:
             return f"{relative.parts[0]}/*"
         if len(relative.parts) == 1:
             for name in MIRROR_NAMES:
-                if relative.name == name or relative.name.startswith(f".{name}."):
+                if (relative.name == name or relative.name.startswith(f".{name}.")
+                        or relative.name.startswith(f"{name}.")):
                     return name  # Includes atomic-write mkstemp files.
         return None
 
@@ -132,12 +134,14 @@ def test_mirror_guard_rejects_real_io_even_as_root(tmp_path, monkeypatch):
     with guard.installed(monkeypatch):
         for action in (lambda: open(path, "w"), lambda: io.open(path, "r"),
                        lambda: path.read_bytes(), lambda: os.open(path, os.O_CREAT | os.O_WRONLY),
-                       lambda: os.open(path, os.O_RDONLY)):
+                       lambda: os.open(path, os.O_RDONLY),
+                       lambda: (tmp_path / "published_projection.jsonl.tmp").write_text("forbidden")):
             with pytest.raises(MirrorDenied):
                 action()
         (tmp_path / "store.lock").touch()
     assert not path.exists()
-    assert sum(row["count"] for row in guard.rows.values()) == 5
+    assert not (tmp_path / "published_projection.jsonl.tmp").exists()
+    assert sum(row["count"] for row in guard.rows.values()) == 6
     assert (builtins.open, io.open, os.open) == original
 
 
@@ -165,7 +169,14 @@ def _run(config, root, guard, monkeypatch, checkpoints, completed, expected=None
     source = MemorySourceStore()
     canonical = PostgresCanonicalPublicationStore(config)
     adapter = PostgresWorkflowRecoveryAdapter(canonical)
-    counter = itertools.count(1)
+    counters = {}
+    def fixture_uuid():
+        # Mirror/diagnostic UUID consumption may differ in the denied run.
+        # Separate call-site sequences keep unrelated durable IDs comparable.
+        caller = sys._getframe(1)
+        key = (caller.f_code.co_filename, caller.f_code.co_name, caller.f_lineno)
+        counters[key] = counters.get(key, 0) + 1
+        return uuid.UUID(hex=hashlib.sha256(repr((key, counters[key])).encode()).hexdigest()[:32])
     def step(phase, action):
         guard.phase = phase
         result = action()
@@ -180,8 +191,8 @@ def _run(config, root, guard, monkeypatch, checkpoints, completed, expected=None
         return console
     with monkeypatch.context() as patch, guard.installed(monkeypatch):
         # Stable UUID identities across the two isolated runs, not a mocked store.
-        patch.setattr(uuid, "uuid4", lambda: uuid.UUID(hex=f"{next(counter):012x}" + "0" * 20))
-        patch.setattr(quality_evidence_v1, "uuid4", uuid.uuid4)
+        patch.setattr(uuid, "uuid4", fixture_uuid)
+        patch.setattr(quality_evidence_v1, "uuid4", fixture_uuid)
         console = step("startup", construct)
         def accounts_and_session():
             accounts = {name: console.create_account(name, "D4-test-password", roles=roles)
