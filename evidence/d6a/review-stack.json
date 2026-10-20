@@ -32,7 +32,9 @@
         "tests/postgres_support.py"
       ],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a01: gedeelde PostgreSQL-opstelling en productiegetrouwe testfactories",
+      "body_file": "evidence/d6a/prs/01.md"
     },
     {
       "portion": "02",
@@ -64,7 +66,9 @@
         "tests/production_support.py"
       ],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 02: native fixtures",
+      "body_file": "evidence/d6a/prs/02.md"
     },
     {
       "portion": "03",
@@ -78,7 +82,9 @@
       "changed_test_files": 1,
       "support_files": [],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 03: reader authority",
+      "body_file": "evidence/d6a/prs/03.md"
     },
     {
       "portion": "04",
@@ -102,7 +108,9 @@
       "changed_test_files": 11,
       "support_files": [],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 04: console pages",
+      "body_file": "evidence/d6a/prs/04.md"
     },
     {
       "portion": "05",
@@ -128,7 +136,9 @@
       "changed_test_files": 13,
       "support_files": [],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 05: console workflows",
+      "body_file": "evidence/d6a/prs/05.md"
     },
     {
       "portion": "06",
@@ -156,7 +166,9 @@
         "tests/production_support.py"
       ],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 06: native graphs",
+      "body_file": "evidence/d6a/prs/06.md"
     },
     {
       "portion": "07",
@@ -191,7 +203,9 @@
         "tests/conftest.py"
       ],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 07: production review",
+      "body_file": "evidence/d6a/prs/07.md"
     },
     {
       "portion": "08",
@@ -205,12 +219,14 @@
       "changed_test_files": 1,
       "support_files": [],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 08: key list",
+      "body_file": "evidence/d6a/prs/08.md"
     },
     {
       "portion": "09",
       "head": "codex/d6a-09-source-formation",
-      "head_commit": "b2ac4c43727bfbea6c47a5ad23a2e0ba7450dc5a",
+      "head_commit": "9e6bfa75791297e559979ccb741ff6afe0d80e6b",
       "base": "codex/d6a-08-key-list",
       "base_commit": "936cc62bbb401b8920408c244814001d9deef5ac",
       "test_files": [
@@ -218,7 +234,6 @@
         "tests/test_admission_language_variation.py",
         "tests/test_blockage_diagnostics_v1.py",
         "tests/test_context_preservation.py",
-        "tests/test_docling_contract_v1.py",
         "tests/test_estimate_linear_golden.py",
         "tests/test_form_bound_revision.py",
         "tests/test_protocol_v2_13_kernel.py",
@@ -236,28 +251,31 @@
         "tests/test_stale_write_ux.py",
         "tests/test_t8_materialisation_admission_integrity.py"
       ],
-      "changed_test_files": 21,
+      "changed_test_files": 20,
       "support_files": [],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 09: source formation",
+      "body_file": "evidence/d6a/prs/09.md"
     },
     {
       "portion": "10",
       "head": "codex/d6a-10-processing-routes",
-      "head_commit": "ae8a09d3e65e4d6bf124c58e8be1a78766be5018",
+      "head_commit": "41b5fcb2d1a491f473147e60ef3b00405d7aa106",
       "base": "codex/d6a-09-source-formation",
-      "base_commit": "b2ac4c43727bfbea6c47a5ad23a2e0ba7450dc5a",
+      "base_commit": "9e6bfa75791297e559979ccb741ff6afe0d80e6b",
       "test_files": [
         "tests/test_a04_session_availability.py",
         "tests/test_availability_repair.py",
         "tests/test_azure_source_processing.py",
         "tests/test_context_preservation.py",
+        "tests/test_docling_contract_v1.py",
         "tests/test_processing_authorization.py",
         "tests/test_processing_trace_v1.py",
         "tests/test_source_dispatch_hardening.py",
         "tests/test_source_resume_acceptance.py"
       ],
-      "changed_test_files": 8,
+      "changed_test_files": 9,
       "support_files": [
         "tests/browser_postgres_support.py",
         "tests/browser_source_selection_fixture.py",
@@ -265,14 +283,16 @@
         "tests/production_support.py"
       ],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 10: processing routes",
+      "body_file": "evidence/d6a/prs/10.md"
     },
     {
       "portion": "review-evidence-prerequisite",
       "head": "codex/fix-pg-command-review-evidence",
-      "head_commit": "8b4fe9211324eeccfadeca52baa3950e0c0389d7",
+      "head_commit": "0fd189ce150775d61b0fb29fa57ad7238079c7ea",
       "base": "codex/d6a-10-processing-routes",
-      "base_commit": "ae8a09d3e65e4d6bf124c58e8be1a78766be5018",
+      "base_commit": "41b5fcb2d1a491f473147e60ef3b00405d7aa106",
       "test_files": [
         "tests/test_pg_command_review_evidence.py"
       ],
@@ -280,14 +300,16 @@
       "change_class": "A",
       "rewrite_risk": "none",
       "contract": "docs/change-contracts/pg-command-review-evidence.md",
-      "ci_status": "pending; local9-case proof and lifecycle regressions recorded separately"
+      "ci_status": "pending; local9-case proof and lifecycle regressions recorded separately",
+      "title": "Fix: lees voorbereid reviewbewijs binnen het huidige PG-commando",
+      "body_file": "evidence/d6a/prs/review-evidence-prerequisite.md"
     },
     {
       "portion": "11",
       "head": "codex/d6a-11-native-composition",
-      "head_commit": "e80509acdf74e3a1448f870d76f45eee4b5b4d65",
+      "head_commit": "3d9613be74b4e6898dcb189fcf69e0cc7d970e62",
       "base": "codex/fix-pg-command-review-evidence",
-      "base_commit": "8b4fe9211324eeccfadeca52baa3950e0c0389d7",
+      "base_commit": "0fd189ce150775d61b0fb29fa57ad7238079c7ea",
       "test_files": [
         "tests/test_678_store_command_postgres.py",
         "tests/test_a03_formation_coverage.py",
@@ -305,14 +327,16 @@
         "tests/d5_rollback_support.py"
       ],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 11: native composition",
+      "body_file": "evidence/d6a/prs/11.md"
     },
     {
       "portion": "12",
       "head": "codex/d6a-12-source-context",
-      "head_commit": "4b07415e76952e49b32bbdee1f0cbb3ac00f37fc",
+      "head_commit": "f9e7dc353650c93f2885b7afb0a9b68f36808a89",
       "base": "codex/d6a-11-native-composition",
-      "base_commit": "e80509acdf74e3a1448f870d76f45eee4b5b4d65",
+      "base_commit": "3d9613be74b4e6898dcb189fcf69e0cc7d970e62",
       "test_files": [
         "tests/test_a06_selected_occurrence_relations.py",
         "tests/test_a07_strength_binding.py",
@@ -328,14 +352,16 @@
         "tests/browser_source_context_fixture.py"
       ],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 12: source context",
+      "body_file": "evidence/d6a/prs/12.md"
     },
     {
       "portion": "13",
       "head": "codex/d6a-13-navigation-auth",
-      "head_commit": "21a201ff459861df16bc7dc52b3688cf2ba2f33b",
+      "head_commit": "6e0e380868d1463813c3951cacc59c4dcf3c5311",
       "base": "codex/d6a-12-source-context",
-      "base_commit": "4b07415e76952e49b32bbdee1f0cbb3ac00f37fc",
+      "base_commit": "f9e7dc353650c93f2885b7afb0a9b68f36808a89",
       "test_files": [
         "tests/test_account_retirement_v1.py",
         "tests/test_console_access_availability.py",
@@ -355,14 +381,16 @@
         "tests/production_support.py"
       ],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 13: navigation auth",
+      "body_file": "evidence/d6a/prs/13.md"
     },
     {
       "portion": "14",
       "head": "codex/d6a-14-workboards",
-      "head_commit": "f5dfa0f6006a7982d0cd969f37e0e07ef290c520",
+      "head_commit": "d6cde67a6d9c457aa87c8f0894ed3854cf648f89",
       "base": "codex/d6a-13-navigation-auth",
-      "base_commit": "21a201ff459861df16bc7dc52b3688cf2ba2f33b",
+      "base_commit": "6e0e380868d1463813c3951cacc59c4dcf3c5311",
       "test_files": [
         "tests/test_console_cleanup_v1.py",
         "tests/test_console_feedback_v1.py",
@@ -380,14 +408,16 @@
       "changed_test_files": 12,
       "support_files": [],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 14: workboards",
+      "body_file": "evidence/d6a/prs/14.md"
     },
     {
       "portion": "15",
       "head": "codex/d6a-15-decision-console",
-      "head_commit": "78fe3561a42ac6ed16e8d0b23fa0975b95072706",
+      "head_commit": "3b3f920c4bd0b6da00c6953a82e28dbab0f9d783",
       "base": "codex/d6a-14-workboards",
-      "base_commit": "f5dfa0f6006a7982d0cd969f37e0e07ef290c520",
+      "base_commit": "d6cde67a6d9c457aa87c8f0894ed3854cf648f89",
       "test_files": [
         "tests/test_665_tier_d_refused_postgres.py",
         "tests/test_a08_heading_batch_atomic.py",
@@ -412,14 +442,16 @@
         "tests/browser_knowledge_context_fixture.py"
       ],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 15: decision console",
+      "body_file": "evidence/d6a/prs/15.md"
     },
     {
       "portion": "16",
       "head": "codex/d6a-16-semantics-reservations",
-      "head_commit": "370323277a1064bf8ba2d9be02f36e5295b14c9e",
+      "head_commit": "d08b68ff8f2a0e4ed818fa062428f4612f8f5030",
       "base": "codex/d6a-15-decision-console",
-      "base_commit": "78fe3561a42ac6ed16e8d0b23fa0975b95072706",
+      "base_commit": "3b3f920c4bd0b6da00c6953a82e28dbab0f9d783",
       "test_files": [
         "tests/test_attempt_diagnostics_v1.py",
         "tests/test_c2_pinned_configuration_fence.py",
@@ -441,14 +473,16 @@
       "changed_test_files": 16,
       "support_files": [],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 16: semantics reservations",
+      "body_file": "evidence/d6a/prs/16.md"
     },
     {
       "portion": "17",
       "head": "codex/d6a-17-publication-authority",
-      "head_commit": "3fb14a7620e7e3cd2a06c739e9674bf76734c372",
+      "head_commit": "9b58582f8d2c033c1df608a4808c496631625a95",
       "base": "codex/d6a-16-semantics-reservations",
-      "base_commit": "370323277a1064bf8ba2d9be02f36e5295b14c9e",
+      "base_commit": "d08b68ff8f2a0e4ed818fa062428f4612f8f5030",
       "test_files": [
         "tests/test_azure_blob_publication_authority_v1.py",
         "tests/test_console_publication_c5.py",
@@ -464,14 +498,16 @@
         "tests/conftest.py"
       ],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 17: publication authority",
+      "body_file": "evidence/d6a/prs/17.md"
     },
     {
       "portion": "18",
       "head": "codex/d6a-18-review-surfaces",
-      "head_commit": "e0d49e7a4906dce842daeedb96feb71dabf60720",
+      "head_commit": "973fdf938f0017c3ef192cf982c8c3e80336dfdc",
       "base": "codex/d6a-17-publication-authority",
-      "base_commit": "3fb14a7620e7e3cd2a06c739e9674bf76734c372",
+      "base_commit": "9b58582f8d2c033c1df608a4808c496631625a95",
       "test_files": [
         "tests/test_deterministic_review_repair_v1.py",
         "tests/test_ingest_beschikbaarheid.py",
@@ -487,14 +523,16 @@
       "changed_test_files": 10,
       "support_files": [],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 18: review surfaces",
+      "body_file": "evidence/d6a/prs/18.md"
     },
     {
       "portion": "19",
       "head": "codex/d6a-19-runtime-boundaries",
-      "head_commit": "22bee0410b1d97015f59f99e059d086522ba74b7",
+      "head_commit": "78d25ae8e72793f3c05a0618f99565fdaa7ffdfd",
       "base": "codex/d6a-18-review-surfaces",
-      "base_commit": "e0d49e7a4906dce842daeedb96feb71dabf60720",
+      "base_commit": "973fdf938f0017c3ef192cf982c8c3e80336dfdc",
       "test_files": [
         "tests/test_665_tier_d_refused_postgres.py",
         "tests/test_718_workflow_topology.py",
@@ -521,14 +559,16 @@
         "tests/postgres_collection.py"
       ],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 19: runtime boundaries",
+      "body_file": "evidence/d6a/prs/19.md"
     },
     {
       "portion": "21",
       "head": "codex/d6a-21-characterization",
-      "head_commit": "99ccb39a518c0d85f57707e1abe9945e12b4bd85",
+      "head_commit": "554f4b92f0e708654b61f39ccc2f9e2c3b712360",
       "base": "codex/d6a-19-runtime-boundaries",
-      "base_commit": "22bee0410b1d97015f59f99e059d086522ba74b7",
+      "base_commit": "78d25ae8e72793f3c05a0618f99565fdaa7ffdfd",
       "test_files": [
         "tests/characterization/test_ingest.py",
         "tests/characterization/test_ingest_boundaries.py",
@@ -543,21 +583,25 @@
         "tests/characterization/support.py"
       ],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 21: characterization",
+      "body_file": "evidence/d6a/prs/21.md"
     },
     {
       "portion": "22",
       "head": "codex/d6a-22-batch-authority",
-      "head_commit": "5481dfb06c46011cbafb8de5585162274e79044d",
+      "head_commit": "bbdcced3c6d770bb45d1109546fa323becc687c6",
       "base": "codex/d6a-21-characterization",
-      "base_commit": "99ccb39a518c0d85f57707e1abe9945e12b4bd85",
+      "base_commit": "554f4b92f0e708654b61f39ccc2f9e2c3b712360",
       "test_files": [
         "tests/test_v233_product_proportionate_review.py"
       ],
       "changed_test_files": 1,
       "support_files": [],
       "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "delivery": "local reviewable branch",
+      "title": "D6a 22: batch authority",
+      "body_file": "evidence/d6a/prs/22.md"
     }
   ]
 }
