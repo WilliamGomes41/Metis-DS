@@ -1,4 +1,7 @@
 """Protocol v2.24 code wave: console vs retrieval package boundary."""
+# release-control-evidence: beschikbaarheid
+# The process-start and dependency tests below preserve the lightweight console
+# boundary while retaining the active retrieval stack after PR-D3 retirement.
 from __future__ import annotations
 
 import ast
@@ -26,10 +29,8 @@ SRC = ROOT / "src"
 
 RETRIEVAL_RUNTIME_MODULES = frozenset(
     {
-        "embedding_provider_v1.py",
         "semantic_vector_retrieval_v1.py",
         "hybrid_retrieval_v1.py",
-        "provider_vector_retrieval_v1.py",
         "product_api_v1.py",
         "service_app.py",
         "safe_retrieval_v1.py",
@@ -45,10 +46,8 @@ CONSOLE_ENTRYPOINTS = (
 )
 FORBIDDEN_RETRIEVAL_MODULES = frozenset(
     {
-        "embedding_provider_v1",
         "semantic_vector_retrieval_v1",
         "hybrid_retrieval_v1",
-        "provider_vector_retrieval_v1",
         "product_api_v1",
         "safe_retrieval_v1",
     }
@@ -154,10 +153,8 @@ def test_v224_keeps_two_products_and_retrieval_modules_in_repo() -> None:
     for name in (
         "service_app.py",
         "product_api_v1.py",
-        "retrieval/embedding_provider_v1.py",
         "retrieval/semantic_vector_retrieval_v1.py",
         "retrieval/hybrid_retrieval_v1.py",
-        "retrieval/provider_vector_retrieval_v1.py",
         "console_asgi.py",
         "operations_console_v1.py",
         "operations_console_app.py",
@@ -207,8 +204,8 @@ def test_v224_console_process_start_does_not_load_sklearn_or_retrieval(tmp_path:
                 "loaded = set(sys.modules)",
                 "forbidden = {",
                 "    'numpy', 'sklearn', 'scipy', 'scikit-learn',",
-                "    'src.retrieval.embedding_provider_v1', 'src.retrieval.semantic_vector_retrieval_v1',",
-                "    'src.retrieval.hybrid_retrieval_v1', 'src.retrieval.provider_vector_retrieval_v1',",
+                "    'src.retrieval.semantic_vector_retrieval_v1',",
+                "    'src.retrieval.hybrid_retrieval_v1',",
                 "    'src.product_api_v1', 'src.retrieval.safe_retrieval_v1', 'src.service_app',",
                 "}",
                 "hits = sorted(name for name in loaded if name in forbidden or name.split('.')[0] in forbidden)",

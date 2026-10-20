@@ -14,10 +14,8 @@ APPROVAL = ROOT / "data" / "assurance" / "protocol_v2_24_approval.json"
 FORBIDDEN_PACKAGES = frozenset({"numpy", "sklearn", "scipy", "scikit-learn"})
 FORBIDDEN_RETRIEVAL_MODULES = frozenset(
     {
-        "embedding_provider_v1",
         "semantic_vector_retrieval_v1",
         "hybrid_retrieval_v1",
-        "provider_vector_retrieval_v1",
         "product_api_v1",
         "safe_retrieval_v1",
     }

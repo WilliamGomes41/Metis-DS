@@ -68,7 +68,11 @@ unchanged. No account, secret, hosted model, or additional managed service is
 required; normal Codespaces/Actions compute quotas still apply. The default
 upstream version-check telemetry is disabled in the configured workspace and CI.
 The example verifies only its own Bend law, not the existing Python application.
-See `experiments/bend/README.md` for setup and the optional Lean kernel check.
+PR-D2 (#775) adds a checksum-pinned Lean 4.34.0 download (about 580 MB) to the
+dedicated CI job for the independent BendTT kernel check and bounded console
+conformance tests. Lean is proof tooling only, with no runtime service or
+production dependency. See `experiments/bend/README.md` and
+`experiments/bend/pr_d2/README.md` for setup and proof limits.
 
 ## 3. Most likely budget surprises if left implicit
 
@@ -136,7 +140,7 @@ This inventory is derived from the current repository, especially:
 - `src/canonical_store.py` and `db/schema_v2.sql` — SQLite pilot versus PostgreSQL production reference;
 - `src/product_api_v1.py` and `src/usage_ledger_v1.py` — local file/SQLite runtime state;
 - `src/product_security_v1.py` — in-process rate limiting and APIM/Redis replacement boundary;
-- `src/retrieval/embedding_provider_v1.py` and `config/embedding_provider_local_v1.json` — local deterministic embedding provider and managed-identity/env secret boundary;
+- `src/retrieval/semantic_vector_retrieval_v1.py` and `config/vector_retrieval_v1.json` — active local deterministic character TF-IDF retrieval; no hosted embedding provider or credentials are used;
 - `CONTRIBUTING.md` and `docs/REPOSITORY_CONVENTIONS.md` — controlled source binaries outside Git and Azure Blob target;
 - `docs/history/PRODUCT_API_V1_REPORT.md` and `docs/history/FULL_TECHNICAL_AUDIT_2026-08-19.md` — Azure/multi-replica and production adapter gaps.
 

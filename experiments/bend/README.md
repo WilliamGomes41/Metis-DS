@@ -58,8 +58,9 @@ Use parallel calls for suitable independent work. This identity smoke test has
 no workload worth parallelizing and makes no performance claim.
 
 For the additional independent BendTT kernel check, install **Lean v4.34.0**
-separately and run `bend PROOF.bend --verdict`. That check is not part of this
-minimal setup; the standard checker is the CI check. Neither result proves
-the correctness of Metis behavior outside the specified Bend law. Native
+separately and run `bend PROOF.bend --verdict`. The identity smoke test uses
+the standard checker. The PR-D2 workflow also installs pinned Lean and runs
+the independent kernel for its bounded model; see `pr_d2/README.md`. Neither
+result proves the correctness of Metis behavior outside the specified Bend law. Native
 compilation and GPU execution need additional compiler/CUDA tooling and have
 not been exercised by this setup.

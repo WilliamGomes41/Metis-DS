@@ -5,7 +5,14 @@ permissions:
 
 on:
   push:
+    branches: [main]
   pull_request:
+
+# Replace obsolete runs of this workflow for the same PR. Each main push keeps
+# its own group so its verification can finish independently.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   change-contract:
@@ -36,6 +43,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.lock
+            requirements.lock
+            requirements-console.txt
+            requirements-retrieval.txt
+            pyproject.toml
       - run: python -m pip install --upgrade pip
       - run: pip install -r requirements-dev.lock
       - run: pip install --no-deps --no-build-isolation -e .
@@ -103,6 +117,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.lock
+            requirements.lock
+            requirements-console.txt
+            requirements-retrieval.txt
+            pyproject.toml
       - run: python -m pip install --upgrade pip
       - run: pip install -r requirements-dev.lock
       - run: pip install --no-deps --no-build-isolation -e .

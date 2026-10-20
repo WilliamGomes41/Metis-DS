@@ -8,6 +8,16 @@ For bug repairs, normally select `diagnosing-bugs` and `risk-proportional-verifi
 
 The dispatcher selects working methods; it grants no execution, deployment, messaging, or merge permission and does not replace this repository's development or lifecycle contracts. If a required skill is unavailable, report the limitation and continue independent work without claiming that skill was applied.
 
+### Shared plugin skills
+
+The reviewed, pinned shared workflows and agent entry points are listed in
+[shared-skills](docs/agents/shared-skills.md). The canonical files are in
+`.agents/skills/`; Claude adapters reference those same procedures. Use the
+selection triggers in that index and reuse existing verification evidence.
+Shared skills add working methods, not execution, merge, deployment, or
+publication authority. Existing Metis contracts remain authoritative within
+this repository; user and host-level instructions still apply.
+
 ### Issue tracker
 
 Issues live in this repo’s GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md`.
