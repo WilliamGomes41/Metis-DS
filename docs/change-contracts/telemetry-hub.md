@@ -17,7 +17,7 @@ Telemetry is operational evidence, not durable domain state: the stateful overla
 - `src/telemetry/`: hub (event model, redaction, bounded store), errors (fingerprint), logging bridge (correlation filter, hub handler), analysis, playbook, routes and page, install (faulthandler, exception hooks, process lifecycle).
 - `src/request_diagnostics_v1.py`: observes every route except polling/static/telemetry API; trace id (W3C traceparent or OTel span); `doc_ref`; exception evidence; handled codes; DB metrics; store phases; `diagnostic_record`/`diagnostic_since`/`diagnostic_clock`.
 - `src/operations_console_v1.py::_store_write_lock`: wait and hold phases (timing via `diagnostic_clock`, no behavior change).
-- `src/workflows/workflow_review_cutover_v1.py::_store_command`: `store_transaction` and `store_remirror` phases.
+- `src/workflows/workflow_review_cutover_v1.py::_store_command`: `store_transaction` phase. The former `store_remirror` phase was removed by D5 (#785) when PG disk mirrors were retired.
 - `src/console_performance_v1.py`: DB metrics attached to the request; `src/structured_logging_v1.py`: `trace_id` extra field.
 - Characterization: route golden adds the four `/telemetry` routes; coverage baseline re-measured (operations_console_v1 range +3 lines; operations_console_app range −47 lines, already shifted on main by #735), coverage identical.
 

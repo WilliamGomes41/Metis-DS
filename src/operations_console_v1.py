@@ -743,7 +743,8 @@ class OperationsConsole:
         self._sessions_path = self.runtime / "sessions.json"
         self._envelopes_path = self.runtime / "envelopes.json"
         self._objects_dir = self.runtime / "objects"
-        self._objects_dir.mkdir(parents=True, exist_ok=True)
+        if self._startup_local_mirror_is_authority(self._envelopes_path):
+            self._objects_dir.mkdir(parents=True, exist_ok=True)
         self._ledger_path = self.runtime / "review_ledger.jsonl"
         self._bindings_path = self.runtime / "publish_authorizations.json"
         self._accounts: dict[str, dict[str, Any]] = self._load_map(self._accounts_path)
@@ -2800,9 +2801,10 @@ class OperationsConsole:
             raise ConsoleError("delete_title_confirmation_required")
         digest = str(envelope["sha256"])
         self._delete_unpublished_snapshot_authority(token)
-        objects_path = self._objects_path(token)
-        if objects_path.is_file():
-            objects_path.unlink()
+        if self._startup_local_mirror_is_authority(self._envelopes_path):
+            objects_path = self._objects_path(token)
+            if objects_path.is_file():
+                objects_path.unlink()
         self._envelopes.pop(token, None)
         self._bindings.pop(token, None)
         self._save_envelopes()
@@ -4541,9 +4543,9 @@ class OperationsConsole:
         """Restore in-process maps after a failed correction; NOOIT replace the original error."""
         try:
             self._reload_store_locked()
-            remirror = getattr(self, "_remirror_review_runtime", None)
-            if remirror is not None:
-                remirror()
+            refresh = getattr(self, "_refresh_review_runtime", None)
+            if refresh is not None:
+                refresh()
         except Exception as recovery_exc:
             import logging
             logging.getLogger(__name__).warning(

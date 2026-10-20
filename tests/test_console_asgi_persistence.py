@@ -33,7 +33,7 @@ def test_azure_build_defaults_to_persistent_data_outside_wwwroot(
 
     assert kernel.source_store == azure_data / "sources" / "private"
     assert kernel.runtime == azure_data / "output" / "runtime" / "operations-console"
-    assert (kernel.runtime / "objects").is_dir()
+    assert not (kernel.runtime / "objects").exists()
     assert not (wwwroot / "output" / "runtime").exists()
     assert not (wwwroot / "sources").exists()
 

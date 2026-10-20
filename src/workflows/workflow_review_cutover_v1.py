@@ -1,17 +1,15 @@
-"""Opt-in PostgreSQL authority with rebuildable review-state disk mirrors."""
+"""PostgreSQL review authority with disposable in-process views."""
 from __future__ import annotations
 
-import json
 import logging
 import threading
 from collections import deque
-from contextlib import contextmanager, nullcontext, suppress
+from contextlib import contextmanager, nullcontext
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Iterator
 
-from src.integrity_kernel import stable_hash
-from src.operations_console_v1 import ConsoleError, _atomic_replace_bytes, _atomic_write
+from src.operations_console_v1 import ConsoleError
 from src.request_diagnostics_v1 import diagnostic_phase
 from src.review_ledger import buffer_events, register_backend
 from src.workflows.workflow_documents_cutover_v1 import (
@@ -32,15 +30,15 @@ from src.workflows.store_command_v1 import (
 from src.workflows.workflow_transaction_v1 import workflow_transaction, workflow_transaction_active
 
 
-_REMIRROR_WARNED_ATTR = "_metis_review_remirror_warned"
+_REFRESH_WARNED_ATTR = "_metis_review_refresh_warned"
 # Fallback for exceptions that reject attributes: identity match against the
 # most recent ones; holding the objects keeps their id() from being reused.
-_remirror_warned_fallback: deque[BaseException] = deque(maxlen=32)
-_remirror_warned_fallback_lock = threading.Lock()
+_refresh_warned_fallback: deque[BaseException] = deque(maxlen=32)
+_refresh_warned_fallback_lock = threading.Lock()
 
 
-def _remirror_warning_already_logged(original: BaseException) -> bool:
-    """Return True when a remirror warning was already logged for this fault.
+def _refresh_warning_already_logged(original: BaseException) -> bool:
+    """Return True when a refresh warning was already logged for this fault.
 
     Follows explicit wrapping (``raise ... from``) so a wrapped original counts
     as the same fault. Marks ``original`` otherwise; NOOIT raises.
@@ -49,54 +47,18 @@ def _remirror_warning_already_logged(original: BaseException) -> bool:
     current: BaseException | None = original
     while current is not None and id(current) not in seen:
         seen.add(id(current))
-        if getattr(current, _REMIRROR_WARNED_ATTR, False):
+        if getattr(current, _REFRESH_WARNED_ATTR, False):
             return True
-        with _remirror_warned_fallback_lock:
-            if any(item is current for item in _remirror_warned_fallback):
+        with _refresh_warned_fallback_lock:
+            if any(item is current for item in _refresh_warned_fallback):
                 return True
         current = current.__cause__
     try:
-        setattr(original, _REMIRROR_WARNED_ATTR, True)
+        setattr(original, _REFRESH_WARNED_ATTR, True)
     except Exception:
-        with _remirror_warned_fallback_lock:
-            _remirror_warned_fallback.append(original)
+        with _refresh_warned_fallback_lock:
+            _refresh_warned_fallback.append(original)
     return False
-
-
-_UNREADABLE_TAIL = object()
-
-
-def _ledger_mirror_tail_hash(path: Path) -> Any:
-    """``event_hash`` of the mirror's last line, read backwards from the end.
-
-    None for an empty or missing mirror; ``_UNREADABLE_TAIL`` when the last
-    line cannot be read or parsed or does not match its own hash, which
-    never matches an anchor.
-    """
-    try:
-        with path.open("rb") as handle:
-            position = handle.seek(0, 2)
-            data = b""
-            while position > 0:
-                step = min(65536, position)
-                position -= step
-                handle.seek(position)
-                data = handle.read(step) + data
-                if b"\n" in data.rstrip(b"\n"):
-                    break
-    except FileNotFoundError:
-        return None
-    except OSError:
-        return _UNREADABLE_TAIL
-    line = data.rstrip(b"\n").rsplit(b"\n", 1)[-1]
-    if not line:
-        return None
-    try:
-        body = json.loads(line)
-        got = body.pop("event_hash")
-    except (ValueError, KeyError, TypeError, AttributeError):
-        return _UNREADABLE_TAIL
-    return got if stable_hash(body) == got else _UNREADABLE_TAIL
 
 
 class _PostgresWorkflowReviewMixin:
@@ -113,8 +75,7 @@ class _PostgresWorkflowReviewMixin:
         super().__init__(*args, **kwargs)
         self.workflow_review_store = workflow_review_store
         self.workflow_review_store.verify_review_schema()
-        self.workflow_review_store.bind_ledger_mirror(self._ledger_path)
-        self._bindings = self._remirror_review_runtime()
+        self._bindings = self._refresh_review_runtime()
         self._bindings_baseline = deepcopy(self._bindings)
         register_backend(self._ledger_path, self.workflow_review_store)
 
@@ -123,27 +84,11 @@ class _PostgresWorkflowReviewMixin:
             return False
         return super()._startup_local_mirror_is_authority(path)
 
-    def _remirror_review_runtime(self) -> dict[str, list[dict[str, Any]]]:
-        """Rebuild disk mirrors from the authoritative PostgreSQL review state."""
-        events = self.workflow_review_store.read_events()
-        bindings = self.workflow_review_store.read_bindings()
-        ledger_text = "".join(
-            json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n" for event in events
-        )
-        with suppress(OSError):
-            _atomic_replace_bytes(self._ledger_path, ledger_text.encode("utf-8"))
-        self._bindings = bindings
-        self._mirror_bindings()
-        return bindings
-
-    def _mirror_bindings(self) -> None:
-        command = owned_store_command(self)
-        if command is not None:
-            # #678 U3: rebuilt from PostgreSQL after the commit.
-            command.bindings = True
-            return
-        with suppress(OSError):
-            _atomic_write(self._bindings_path, self._bindings)
+    def _refresh_review_runtime(self) -> dict[str, list[dict[str, Any]]]:
+        """Refresh disposable bindings from the PostgreSQL authority."""
+        self._bindings = self.workflow_review_store.read_bindings()
+        self._bindings_baseline = deepcopy(self._bindings)
+        return self._bindings
 
     @staticmethod
     def _changed_binding_snapshots(
@@ -172,7 +117,6 @@ class _PostgresWorkflowReviewMixin:
             raise ConsoleError("workflow_review_write_failed") from exc
         self._bindings = current
         self._bindings_baseline = deepcopy(current)
-        self._mirror_bindings()
 
     def _reload_store_locked(self) -> None:
         command = owned_store_command(self)
@@ -186,7 +130,6 @@ class _PostgresWorkflowReviewMixin:
         except WorkflowReviewStoreError as exc:
             raise ConsoleError("workflow_review_unavailable", str(exc)) from exc
         self._bindings_baseline = deepcopy(self._bindings)
-        self._mirror_bindings()
         if command is not None:
             command.fresh = True
 
@@ -200,31 +143,30 @@ class _PostgresWorkflowReviewMixin:
         self._bindings_baseline = deepcopy(current)
         return super().object_review_bindings(snapshot_id, objects=objects)
 
-    def _remirror_after_rollback(self, snapshot_id: str | None, original: BaseException) -> None:
-        """Rebuild disposable mirrors from PostgreSQL after a native rollback.
+    def _refresh_after_rollback(self, snapshot_id: str | None, original: BaseException) -> None:
+        """Refresh disposable process views from PostgreSQL after a native rollback.
 
-        Reads only PostgreSQL, writes only disk mirrors and process state, and
+        Reads only PostgreSQL, updates only process state, and
         runs under the re-entrant store lock so a stale read never replaces a
-        concurrent writer's mirror. NOOIT write workflow.* here.
+        concurrent writer's process view. NOOIT write workflow.* here.
         """
         try:
             with self._store_write_lock():
-                self._remirror_review_runtime()
+                self._refresh_review_runtime()
                 self._bindings_baseline = deepcopy(self._bindings)
+                self.refresh_workflow_documents()
                 if snapshot_id:
-                    self.refresh_workflow_documents()
                     self.refresh_objects_expected_revision(snapshot_id)
-        except Exception as remirror_exc:
-            # Option C: every nesting level remirrors, but the warning MOET
-            # appear exactly once per original exception.
-            if _remirror_warning_already_logged(original):
+        except Exception as refresh_exc:
+            # Log once per original exception, even through nested boundaries.
+            if _refresh_warning_already_logged(original):
                 return
             # Codes, ids and error types only: no text, corrections or actors.
             logging.getLogger(__name__).warning(
-                "review_rollback_remirror_failed snapshot_id=%s error_code=%s remirror_error_type=%s",
+                "review_rollback_refresh_failed snapshot_id=%s error_code=%s refresh_error_type=%s",
                 snapshot_id or "",
                 getattr(original, "code", None) or type(original).__name__,
-                type(remirror_exc).__name__,
+                type(refresh_exc).__name__,
             )
 
     def _store_command_applies(self) -> bool:
@@ -256,9 +198,9 @@ class _PostgresWorkflowReviewMixin:
     ) -> Iterator[StoreCommand]:
         """Own or join the Storeopdracht for one durable command.
 
-        Owner: store lock, one transaction, one reload, then after the commit
-        one mirror rebuild from PostgreSQL; after a rollback the existing full
-        remirror. Participant: a savepoint and an event-buffer level only.
+        Owner: store lock, one transaction, one reload; after rollback refresh
+        the disposable process view from PostgreSQL. Participants own a savepoint
+        and an event-buffer level only.
         """
         command = owned_store_command(self)
         if command is not None:
@@ -267,8 +209,6 @@ class _PostgresWorkflowReviewMixin:
             return
         with self._store_write_lock():
             command, token = open_store_command(self)
-            if snapshot_id:
-                command.snapshot_ids.add(snapshot_id)
             try:
                 with diagnostic_phase("store_transaction"), \
                         workflow_transaction(self.workflow_review_store) as connection:
@@ -282,20 +222,14 @@ class _PostgresWorkflowReviewMixin:
                         raise ConsoleError("store_command_participant_refresh_failed")
             except BaseException as exc:
                 close_store_command(token)
-                with diagnostic_phase("store_remirror"):
-                    self._remirror_after_rollback(snapshot_id, exc)
+                self._refresh_after_rollback(snapshot_id, exc)
                 raise
             close_store_command(token)
-            with diagnostic_phase("store_remirror"):
-                self._remirror_from_pg(command)
 
     @contextmanager
     def _join_store_command(
         self, command: StoreCommand, snapshot_id: str | None, *, lock_row: bool, buffered: bool,
     ) -> Iterator[None]:
-        if snapshot_id:
-            command.snapshot_ids.add(snapshot_id)
-        mark = len(command.events)
         try:
             with workflow_transaction(self.workflow_review_store) as connection:
                 if lock_row and snapshot_id:
@@ -305,7 +239,6 @@ class _PostgresWorkflowReviewMixin:
         except BaseException:
             # The savepoint rolled this level back: drop its ledger lines and
             # refresh process state from the transaction's own view (reads only).
-            del command.events[mark:]
             if not self._refresh_runtime_in_command(snapshot_id):
                 command.poisoned = True
             raise
@@ -329,65 +262,20 @@ class _PostgresWorkflowReviewMixin:
             return False
         return True
 
-    def _remirror_from_pg(self, command: StoreCommand) -> None:
-        """B1: the single mirror writer, after a successful commit, under the store lock.
 
-        Writes only what the command deferred, read back from PostgreSQL. A
-        failure here MAG NIET fail the committed command; startup and the next
-        command rebuild the disposable mirrors.
-        """
-        try:
-            if command.events:
-                self._project_committed_events(command.events)
-            if command.bindings:
-                self._bindings = self.workflow_review_store.read_bindings()
-                self._bindings_baseline = deepcopy(self._bindings)
-                self._mirror_bindings()
-            for snapshot_id in sorted(command.objects):
-                self._mirror_objects(snapshot_id, self.workflow_document_store.list_document_objects(snapshot_id))
-            if command.envelopes:
-                for snapshot_id in sorted(command.snapshot_ids):
-                    envelope = self.workflow_document_store.get_envelope(snapshot_id)
-                    if envelope is None:
-                        self._envelopes.pop(snapshot_id, None)
-                    else:
-                        self._envelopes[snapshot_id] = envelope
-                self._mirror_envelopes()
-        except Exception as remirror_exc:
-            logging.getLogger(__name__).warning(
-                "store_command_remirror_failed snapshot_ids=%s error_type=%s",
-                ",".join(sorted(command.snapshot_ids)), type(remirror_exc).__name__,
-            )
-
-    def _project_committed_events(self, deferred: list[dict[str, Any]]) -> None:
-        """B1 (#708): append the command's committed events as read from PostgreSQL.
-
-        One bounded read anchored on the hash the command chained onto. The
-        deferred copies only name which rows to read. A mirror tail or rows that
-        do not match that chain mean the mirror is stale: rebuild it in full.
-        Rows that fail the chain check raise: NOOIT copy them into the mirror.
-        """
-        anchor = deferred[0].get("previous_event_hash")
-        committed = self.workflow_review_store.read_events_after(anchor, len(deferred))
-        if (_ledger_mirror_tail_hash(self._ledger_path) == anchor
-                and [event["event_hash"] for event in committed] == [event["event_hash"] for event in deferred]):
-            self.workflow_review_store._mirror_events(committed)
-            return
-        logging.getLogger(__name__).warning("store_command_ledger_divergence events=%d", len(deferred))
-        self._remirror_review_runtime()
 
     @contextmanager
     def _reprocessing_transaction(self, snapshot_id: str) -> Iterator[None]:
         """Own or join the command with the document row lock, without an event buffer."""
         self._require_review_store_configured()
         if not self._store_command_applies():
-            # A raw owner cannot defer mirrors or recover reprocessing safely.
+            # A raw transaction has no command owner to recover reprocessing safely.
             raise ConsoleError("reprocessing_store_command_required")
         with self._store_command(snapshot_id, lock_row=True, buffered=False):
             yield
 
     def _recover_after_failed_correction(self) -> None:
-        # The Storeopdracht owner already rolled back and remirrored (#678 U4).
+        # The Storeopdracht owner already rolled back and refreshed (#678 U4).
         # NOOIT raise here: this runs while the original error propagates.
         if active_store_command() is not None or not workflow_transaction_active():
             return
@@ -424,7 +312,6 @@ class _PostgresWorkflowReviewMixin:
                         current = self.workflow_review_store.read_bindings()
                         self._bindings = current
                         self._bindings_baseline = deepcopy(current)
-                        self._mirror_bindings()
             except WorkflowReviewStoreError as exc:
                 # #665 V-b: codes only, NOOIT store text.
                 raise ConsoleError("workflow_review_write_failed") from exc
@@ -446,16 +333,15 @@ class _PostgresWorkflowReviewMixin:
                             current = self.workflow_review_store.read_bindings()
                             self._bindings = current
                             self._bindings_baseline = deepcopy(current)
-                            self._mirror_bindings()
             except WorkflowReviewStoreError as exc:
-                self._remirror_after_rollback(sid, exc)
+                self._refresh_after_rollback(sid, exc)
                 raise ConsoleError("workflow_review_write_failed") from exc
             except Exception as exc:
                 if isinstance(exc, ConsoleError) and exc.code == "snapshot_object_write_conflict":
-                    self._remirror_review_runtime()
+                    self._refresh_review_runtime()
                     self._bindings_baseline = deepcopy(self._bindings)
                     raise
-                self._remirror_after_rollback(sid, exc)
+                self._refresh_after_rollback(sid, exc)
                 raise
 
     @contextmanager
@@ -467,10 +353,10 @@ class _PostgresWorkflowReviewMixin:
                         yield
             finally:
                 try:
-                    self._remirror_review_runtime()
+                    self._refresh_review_runtime()
                     self._bindings_baseline = deepcopy(self._bindings)
                 except Exception:
-                    logging.getLogger(__name__).warning("heading_batch_review_mirror_refresh_failed")
+                    logging.getLogger(__name__).warning("heading_batch_review_refresh_failed")
 
     @contextmanager
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
@@ -488,7 +374,7 @@ class _PostgresWorkflowReviewMixin:
             # NOOIT via the inherited documents context, whose except branch
             # compensates with a blind write_bundle and a ledger truncation
             # (#665 keeps that for non-review paths). The native transaction
-            # is the only rollback; afterwards only PostgreSQL-backed remirror.
+            # is the only rollback; afterwards only PostgreSQL-backed process refresh.
             with self._store_write_lock():
                 self._reload_store_locked()
                 with workflow_transaction(self.workflow_review_store):
@@ -499,10 +385,10 @@ class _PostgresWorkflowReviewMixin:
                 with self._store_write_lock():
                     self.refresh_workflow_documents()
                     self.refresh_objects_expected_revision(snapshot_id)
-                    self._remirror_review_runtime()
+                    self._refresh_review_runtime()
                     self._bindings_baseline = deepcopy(self._bindings)
                 raise
-            self._remirror_after_rollback(snapshot_id, exc)
+            self._refresh_after_rollback(snapshot_id, exc)
             raise
 
 

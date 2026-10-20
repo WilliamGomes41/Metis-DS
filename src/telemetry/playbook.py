@@ -16,7 +16,6 @@ PHASE_ADVICE = {
     "store_lock_wait": ("Wachten op de store-lock", "Opdrachten wachten op elkaar. Kijk welke opdracht de lock lang vasthoudt (store_lock_hold) en of zware stappen buiten de lock kunnen."),
     "store_lock_hold": ("Store-lock vastgehouden", "De lock wordt lang vastgehouden. Verplaats lezen en rekenwerk naar vóór de Storeopdracht."),
     "store_transaction": ("Storeopdracht-transactie", "De transactie duurt lang. Controleer het aantal schrijfacties en write_bundle (#729)."),
-    "store_remirror": ("Spiegels herbouwen", "Het herbouwen van spiegels na de commit kost tijd. Bij een volledige remirror wordt het hele ledger gelezen (#709)."),
     "source_reconstruction": ("Bron reconstrueren", "Bronreconstructie is duur. Controleer of hergebruik binnen het verzoek werkt (source_reconstruction_reused)."),
     "review_render": ("Reviewpagina renderen", "Het opbouwen van de pagina is traag. Kijk naar het aantal objecten en of de werkitems gecachet worden."),
     "document_list": ("Documentenlijst", "De documentenlijst schaalt met het aantal documenten (#686)."),

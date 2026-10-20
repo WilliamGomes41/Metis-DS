@@ -194,7 +194,7 @@ def test_legacy_review_chain_is_verified_without_rewriting(tmp_path: Path) -> No
         PostgresWorkflowReviewStore._read_legacy_events(path)
 
 
-def test_boot_remirror_replaces_stale_subset_mirrors_from_postgres(tmp_path: Path) -> None:
+def test_boot_refresh_keeps_stale_files_unused(tmp_path: Path) -> None:
     events = _event_chain(3)
     bindings = {"snap-1": [{"decision": "approve", "valid": True}]}
     subject = _remirror_subject(tmp_path, events=events, bindings=bindings)
@@ -204,23 +204,23 @@ def test_boot_remirror_replaces_stale_subset_mirrors_from_postgres(tmp_path: Pat
     )
     subject._bindings_path.write_text(json.dumps({"stale": []}) + "\n", encoding="utf-8")
 
-    current = subject._remirror_review_runtime()
+    current = subject._refresh_review_runtime()
 
     assert current == bindings
-    assert PostgresWorkflowReviewStore._read_legacy_events(subject._ledger_path) == events
-    assert json.loads(subject._bindings_path.read_text(encoding="utf-8")) == bindings
+    assert PostgresWorkflowReviewStore._read_legacy_events(subject._ledger_path) == events[:1]
+    assert json.loads(subject._bindings_path.read_text(encoding="utf-8")) == {"stale": []}
 
 
-def test_boot_remirror_creates_missing_mirrors_from_postgres(tmp_path: Path) -> None:
+def test_boot_refresh_does_not_create_disk_mirrors(tmp_path: Path) -> None:
     events = _event_chain(3)
     bindings = {"snap-1": [{"decision": "approve", "valid": True}]}
     subject = _remirror_subject(tmp_path, events=events, bindings=bindings)
 
-    current = subject._remirror_review_runtime()
+    current = subject._refresh_review_runtime()
 
     assert current == bindings
-    assert PostgresWorkflowReviewStore._read_legacy_events(subject._ledger_path) == events
-    assert json.loads(subject._bindings_path.read_text(encoding="utf-8")) == bindings
+    assert not subject._ledger_path.exists()
+    assert not subject._bindings_path.exists()
 
 
 def test_postgres_event_payload_missing_still_fails_closed() -> None:
@@ -279,18 +279,18 @@ def test_review_cutover_is_explicit_and_prerequisite_bound(monkeypatch) -> None:
     assert "migrate_legacy_runtime" not in asgi
 
 
-def test_review_runtime_buffers_events_and_keeps_local_files_as_mirrors() -> None:
+def test_review_runtime_buffers_events_without_disk_mirrors() -> None:
     source = (ROOT / "src" / "workflows" / "workflow_review_cutover_v1.py").read_text(encoding="utf-8")
     assert "buffer_events(self._ledger_path)" in source
     assert "workflow_review_store.replace_snapshot_bindings" in source
     assert "workflow_review_store.replace_bindings" not in source
-    assert "_remirror_review_runtime" in source
-    assert "_atomic_replace_bytes(self._ledger_path" in source
+    assert "_refresh_review_runtime" in source
+    assert "_atomic_replace_bytes(self._ledger_path" not in source
     assert "_assert_review_cutover_prepared" not in source
-    assert "_mirror_bindings" in source
+    assert "_mirror_bindings" not in source
 
 
-def test_postgres_review_startup_ignores_corrupt_binding_mirror_and_repairs_it(
+def test_postgres_review_startup_leaves_corrupt_binding_mirror_unused(
     tmp_path: Path,
 ) -> None:
     runtime = tmp_path / "review-runtime"
@@ -308,9 +308,5 @@ def test_postgres_review_startup_ignores_corrupt_binding_mirror_and_repairs_it(
     )
 
     assert console._bindings == bindings
-    assert json.loads(
-        (runtime / "publish_authorizations.json").read_text(encoding="utf-8")
-    ) == bindings
-    assert PostgresWorkflowReviewStore._read_legacy_events(
-        runtime / "review_ledger.jsonl"
-    ) == events
+    assert (runtime / "publish_authorizations.json").read_text(encoding="utf-8") == '{"broken":'
+    assert not (runtime / "review_ledger.jsonl").exists()

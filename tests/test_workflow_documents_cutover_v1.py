@@ -202,9 +202,9 @@ def test_cutover_runtime_reads_objects_by_migrated_position() -> None:
     assert SNAPSHOT_OBJECT_WRITE_CONFLICT == "snapshot_object_write_conflict"
 
 
-def test_local_files_are_declared_compatibility_mirrors_not_authority() -> None:
+def test_local_files_are_unused_in_postgres() -> None:
     source = (ROOT / "src" / "workflows" / "workflow_documents_cutover_v1.py").read_text(encoding="utf-8")
-    assert "compatibility mirror" in source
+    assert "workflow files are unused in this topology" in source
     assert "authoritative in PostgreSQL" in source
 
 
@@ -304,7 +304,7 @@ def test_separate_authoritative_snapshot_reads_detect_intervening_change(tmp_pat
     assert first_revision != second_revision
 
 
-def test_postgres_document_startup_ignores_corrupt_envelope_mirror_and_repairs_it(
+def test_postgres_document_startup_leaves_corrupt_envelope_mirror_untouched(
     tmp_path: Path,
 ) -> None:
     runtime = tmp_path / "runtime"
@@ -315,8 +315,7 @@ def test_postgres_document_startup_ignores_corrupt_envelope_mirror_and_repairs_i
     console = _document_console(tmp_path, store)
 
     assert {row["snapshot_id"] for row in console.list_envelopes()} == {"snap-a", "snap-b"}
-    repaired = json.loads((runtime / "envelopes.json").read_text(encoding="utf-8"))
-    assert set(repaired) == {"snap-a", "snap-b"}
+    assert (runtime / "envelopes.json").read_text(encoding="utf-8") == '{"broken":'
 
 
 def test_local_only_startup_still_fails_closed_on_corrupt_envelope_json(

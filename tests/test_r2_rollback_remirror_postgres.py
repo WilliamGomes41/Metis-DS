@@ -73,20 +73,21 @@ def _state(console, sid):
     )
 
 
-def _ledger_bytes(console):
-    path = console._ledger_path
-    return path.read_bytes() if path.exists() else b""
+def _ledger_state_bytes(console):
+    from src.review_ledger import read_events
+    return _serialise(read_events(console._ledger_path))
 
 
 def _serialise(events):
     return "".join(json.dumps(e, ensure_ascii=False, sort_keys=True) + "\n" for e in events).encode("utf-8")
 
 
-def _assert_disk_mirrors_equal_pg(console):
-    """R1/R3: ledger and bindings files on disk MOET equal PostgreSQL."""
-    assert _ledger_bytes(console) == _serialise(console.workflow_review_store.read_events())
-    on_disk = json.loads(console._bindings_path.read_text(encoding="utf-8")) if console._bindings_path.exists() else {}
-    assert on_disk == console.workflow_review_store.read_bindings()
+def _assert_review_authority_without_mirrors(console):
+    """The ledger API and process view agree with PG without creating copies."""
+    assert _ledger_state_bytes(console) == _serialise(console.workflow_review_store.read_events())
+    assert console._bindings == console.workflow_review_store.read_bindings()
+    assert not console._ledger_path.exists()
+    assert not console._bindings_path.exists()
 
 
 def _inject_fault(monkeypatch, flag):
@@ -118,20 +119,20 @@ def _spy_writes(monkeypatch, console, flag, writes):
 
 
 def _spy_mirror_depth(monkeypatch, console, flag, depths):
-    original = console._mirror_bindings
+    original = console._refresh_review_runtime
 
     def spy():
         if flag.is_set():
             depths.append(console._store_lock_depth)
         return original()
 
-    monkeypatch.setattr(console, "_mirror_bindings", spy)
+    monkeypatch.setattr(console, "_refresh_review_runtime", spy)
 
 
 def test_t3_failed_review_without_concurrency_leaves_state_unchanged(workflow_postgres, tmp_path, monkeypatch):
     console, rid, sid, (obj_a, _obj_b) = _setup(tmp_path, workflow_postgres)
     before = _state(console, sid)
-    before_ledger = _ledger_bytes(console)
+    before_ledger = _ledger_state_bytes(console)
     assert before_ledger == _serialise(console.workflow_review_store.read_events())
     flag = threading.Event()
     _inject_fault(monkeypatch, flag)
@@ -140,9 +141,9 @@ def test_t3_failed_review_without_concurrency_leaves_state_unchanged(workflow_po
     assert flag.is_set()
     assert _state(console, sid) == before
     # R1: ledger size and bytes unchanged; R3: bindings file equals PostgreSQL.
-    assert len(_ledger_bytes(console)) == len(before_ledger)
-    assert _ledger_bytes(console) == before_ledger
-    _assert_disk_mirrors_equal_pg(console)
+    assert len(_ledger_state_bytes(console)) == len(before_ledger)
+    assert _ledger_state_bytes(console) == before_ledger
+    _assert_review_authority_without_mirrors(console)
     assert _state(_console(tmp_path, workflow_postgres), sid) == before
 
 
@@ -183,7 +184,7 @@ def test_t4_commit_prepared_store_path_no_workflow_write_after_rollback(workflow
 
 def _inject_forbidden_remirror_write(monkeypatch, console):
     """Negative control: a workflow.* write from the remirror MOET trip the spy."""
-    original = console._remirror_review_runtime
+    original = console._refresh_review_runtime
 
     def remirror_with_forbidden_write():
         result = original()
@@ -195,7 +196,7 @@ def _inject_forbidden_remirror_write(monkeypatch, console):
             pass
         return result
 
-    monkeypatch.setattr(console, "_remirror_review_runtime", remirror_with_forbidden_write)
+    monkeypatch.setattr(console, "_refresh_review_runtime", remirror_with_forbidden_write)
 
 
 def test_t4_negative_review_path_spy_catches_forbidden_remirror_write(workflow_postgres, tmp_path, monkeypatch):
@@ -229,7 +230,7 @@ def test_t5_two_threads_same_console_concurrent_approve_survives(workflow_postgr
     _inject_fault(monkeypatch, flag)
     a_thread, order = {}, []
     before_events = console.workflow_review_store.read_events()
-    before_ledger = _ledger_bytes(console)
+    before_ledger = _ledger_state_bytes(console)
     assert before_ledger == _serialise(before_events)
 
     def hook(name):
@@ -253,7 +254,7 @@ def test_t5_two_threads_same_console_concurrent_approve_survives(workflow_postgr
 
         monkeypatch.setattr(console, name, wrapped)
 
-    for name in ("_restore_review_state", "_remirror_after_rollback"):
+    for name in ("_restore_review_state", "_refresh_after_rollback"):
         hook(name)
 
     def run_a():
@@ -302,8 +303,8 @@ def test_t5_two_threads_same_console_concurrent_approve_survives(workflow_postgr
     assert any(e.get("object_id") == obj_b["object_id"] for e in events), "B's audit event lost"
     # R1: ledger = bytes before A + exactly B's events; R3: bindings file = PostgreSQL.
     assert events[: len(before_events)] == before_events
-    assert _ledger_bytes(console) == before_ledger + _serialise(events[len(before_events):])
-    _assert_disk_mirrors_equal_pg(console)
+    assert _ledger_state_bytes(console) == before_ledger + _serialise(events[len(before_events):])
+    _assert_review_authority_without_mirrors(console)
 
 
 def test_t6_remirror_failure_warning_carries_only_allowed_fields(workflow_postgres, tmp_path, monkeypatch, caplog):
@@ -317,7 +318,7 @@ def test_t6_remirror_failure_warning_carries_only_allowed_fields(workflow_postgr
     def failing_remirror():
         raise RuntimeError(f"{secret_text} {username} {rid}")
 
-    monkeypatch.setattr(console, "_remirror_review_runtime", failing_remirror)
+    monkeypatch.setattr(console, "_refresh_review_runtime", failing_remirror)
     caplog.set_level(logging.WARNING, logger="src.workflows.workflow_review_cutover_v1")
     with pytest.raises(RuntimeError, match="r2_injected_fault"):
         _approve(console, rid, sid, obj_a)
@@ -326,8 +327,8 @@ def test_t6_remirror_failure_warning_carries_only_allowed_fields(workflow_postgr
     for record in records:
         message = record.getMessage()
         assert message == (
-            f"review_rollback_remirror_failed snapshot_id={sid} "
-            "error_code=RuntimeError remirror_error_type=RuntimeError"
+            f"review_rollback_refresh_failed snapshot_id={sid} "
+            "error_code=RuntimeError refresh_error_type=RuntimeError"
         )
         for forbidden in (secret_text, username, rid, "r2_injected_fault"):
             assert forbidden not in message
@@ -408,15 +409,15 @@ def _arm_inner_fault(monkeypatch):
 
 def test_r4_inner_nested_fault_restores_state_and_original_error(workflow_postgres, tmp_path, monkeypatch):
     console, rid, sid, (obj_a, _obj_b) = _setup(tmp_path, workflow_postgres)
-    before, before_ledger = _state(console, sid), _ledger_bytes(console)
+    before, before_ledger = _state(console, sid), _ledger_state_bytes(console)
     fired = _arm_inner_fault(monkeypatch)
     with pytest.raises(RuntimeError, match="^r2_inner_fault$"):
         _approve(console, rid, sid, obj_a)
     assert fired == [2], "fault MOET fire in the inner nested mutation"
     assert _state(console, sid) == before
     assert _state(_console(tmp_path, workflow_postgres), sid) == before
-    assert _ledger_bytes(console) == before_ledger
-    _assert_disk_mirrors_equal_pg(console)
+    assert _ledger_state_bytes(console) == before_ledger
+    _assert_review_authority_without_mirrors(console)
 
 
 def test_r4_inner_nested_fault_with_remirror_failure_logs_one_warning(workflow_postgres, tmp_path, monkeypatch, caplog):
@@ -428,7 +429,7 @@ def test_r4_inner_nested_fault_with_remirror_failure_logs_one_warning(workflow_p
     def failing_remirror():
         raise RuntimeError("remirror_down")
 
-    monkeypatch.setattr(console, "_remirror_review_runtime", failing_remirror)
+    monkeypatch.setattr(console, "_refresh_review_runtime", failing_remirror)
     caplog.set_level(logging.WARNING, logger="src.workflows.workflow_review_cutover_v1")
     with pytest.raises(RuntimeError, match="^r2_inner_fault$"):
         _approve(console, rid, sid, obj_a)
@@ -446,7 +447,7 @@ def test_r6_heading_batch_route_does_not_enter_inherited_compensation(workflow_p
                 if r.get("object_type") != "document" and review_lane(r, review_path="richtlijn") == "fast"
                 and (r.get("governance") or {}).get("validation_status") not in {"approved", "rejected", "superseded"}]
     assert headings
-    before, before_ledger = _state(console, sid), _ledger_bytes(console)
+    before, before_ledger = _state(console, sid), _ledger_state_bytes(console)
     entered = []
     inherited = documents_cutover._PostgresWorkflowDocumentsMixin._atomic_snapshot_mutation
 
@@ -469,7 +470,7 @@ def test_r6_heading_batch_route_does_not_enter_inherited_compensation(workflow_p
     assert entered == []
     assert writes == []
     assert _state(_console(tmp_path, workflow_postgres), sid) == before
-    assert _ledger_bytes(console) == before_ledger
+    assert _ledger_state_bytes(console) == before_ledger
 
 
 def _failing_remirror_warnings(monkeypatch, console, caplog):
@@ -478,13 +479,13 @@ def _failing_remirror_warnings(monkeypatch, console, caplog):
     def failing_remirror():
         raise RuntimeError("remirror_down")
 
-    monkeypatch.setattr(console, "_remirror_review_runtime", failing_remirror)
+    monkeypatch.setattr(console, "_refresh_review_runtime", failing_remirror)
     caplog.set_level(logging.WARNING, logger="src.workflows.workflow_review_cutover_v1")
 
     def collected():
         return [r.getMessage() for r in caplog.records
                 if r.name == "src.workflows.workflow_review_cutover_v1"
-                and r.getMessage().startswith("review_rollback_remirror_failed")]
+                and r.getMessage().startswith("review_rollback_refresh_failed")]
 
     return collected
 
@@ -498,13 +499,13 @@ def test_optc_ordinary_fault_through_commit_prepared_store_logs_one_warning(work
     _inject_fault(monkeypatch, flag)
     remirror_calls = []
     collected = _failing_remirror_warnings(monkeypatch, console, caplog)
-    original = rc._PostgresWorkflowReviewMixin._remirror_after_rollback
+    original = rc._PostgresWorkflowReviewMixin._refresh_after_rollback
 
     def counting(self, snapshot_id, exc):
         remirror_calls.append(type(exc).__name__)
         return original(self, snapshot_id, exc)
 
-    monkeypatch.setattr(rc._PostgresWorkflowReviewMixin, "_remirror_after_rollback", counting)
+    monkeypatch.setattr(rc._PostgresWorkflowReviewMixin, "_refresh_after_rollback", counting)
     with pytest.raises(RuntimeError, match="^r2_injected_fault$"):
         _approve(console, rid, sid, obj_a)
     records = collected()
@@ -544,20 +545,20 @@ def test_optc_caught_nested_fault_mirrors_equal_pg(workflow_postgres, tmp_path, 
     B1 (#678): the participant MAG NIET remirror; the owner commits and rebuilds."""
     console, rid, sid, (obj_a, _obj_b) = _setup(tmp_path, workflow_postgres)
     calls = []
-    original = rc._PostgresWorkflowReviewMixin._remirror_after_rollback
+    original = rc._PostgresWorkflowReviewMixin._refresh_after_rollback
 
     def counting(self, snapshot_id, exc):
         calls.append(str(exc))
         return original(self, snapshot_id, exc)
 
-    monkeypatch.setattr(rc._PostgresWorkflowReviewMixin, "_remirror_after_rollback", counting)
+    monkeypatch.setattr(rc._PostgresWorkflowReviewMixin, "_refresh_after_rollback", counting)
     events_before = console.workflow_review_store.read_events()
     bindings_before = console.workflow_review_store.read_bindings()
     _caught_nested(console, rid, sid, obj_a)
     print("OPTC_CAUGHT_REMIRRORS", calls)
     _assert_i2_events_match_bindings(console, events_before, bindings_before)
     assert calls == [], f"a participant MAG NIET remirror inside the open command: {calls}"
-    _assert_disk_mirrors_equal_pg(console)
+    _assert_review_authority_without_mirrors(console)
     fresh = _console(tmp_path, workflow_postgres)
     assert _state(fresh, sid) == _state(console, sid)
 
@@ -586,8 +587,8 @@ def test_optc_dedupe_survives_exception_rejecting_attributes(workflow_postgres, 
             raise AttributeError(name)
 
     exc = Slotted("x")
-    console._remirror_after_rollback(sid, exc)
-    console._remirror_after_rollback(sid, exc)
+    console._refresh_after_rollback(sid, exc)
+    console._refresh_after_rollback(sid, exc)
     records = collected()
     print("OPTC_SLOTTED_WARNINGS", records)
     assert len(records) == 1, f"exactly one remirror warning MOET be logged: {records}"
@@ -618,4 +619,4 @@ def test_i2_successful_nested_approve_merges_event_into_parent_buffer(workflow_p
     print("I2_NESTED_OK", [e.get("event_type") for e in events])
     assert [e.get("event_type") for e in events].count("clinical_review_approve") == 1
     _assert_i2_events_match_bindings(console, events_before, bindings_before)
-    _assert_disk_mirrors_equal_pg(console)
+    _assert_review_authority_without_mirrors(console)

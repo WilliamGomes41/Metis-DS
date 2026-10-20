@@ -44,7 +44,7 @@ Document-id's, gebruikers-id's, querystrings, SQL, broninhoud en foutteksten wor
 | Afgehandelde fout | `request_finished.error.handled` | ConsoleError-code, zonder tekst |
 | Database | `request_finished.db` en fasen `db_connect`/`db_execute`/`db_fetch` | aantal verbindingen en queries, tijden |
 | Store-lock | fasen `store_lock_wait`, `store_lock_hold` | wachttijd tot de lock; hoe lang de lock vastzat |
-| Storeopdracht (#678) | fasen `store_transaction`, `store_remirror` | transactie- en spiegeltijd van de eigenaar |
+| Storeopdracht (#678) | fase `store_transaction` | transactietijd van de eigenaar; PG gebruikt geen schijfspiegels |
 | Logs ≥ WARNING | `log_record` | logger, geredigeerd bericht (max. 240 tekens), vingerafdruk bij een exceptie |
 | Verwerking en publicatie | bestaande `processing_*`, `publication_*`, `publish_*` | zoals gedocumenteerd in `docs/diagnostics/` |
 | Proces | `process_started`, `process_stopped`, `unhandled_exception` | python-versie, origin (thread/process) |

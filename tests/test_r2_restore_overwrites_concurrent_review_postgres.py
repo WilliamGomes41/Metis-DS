@@ -63,7 +63,7 @@ def test_r2_restore_after_lock_release_overwrites_concurrent_review(workflow_pos
 
     # Hook the post-rollback step: _restore_review_state on main, the remirror
     # after the fix. B interleaves where A's step runs without the lock.
-    hook_name = "_restore_review_state" if hasattr(a, "_restore_review_state") else "_remirror_after_rollback"
+    hook_name = "_restore_review_state" if hasattr(a, "_restore_review_state") else "_refresh_after_rollback"
     original_restore = getattr(a, hook_name)
 
     def run_b():
