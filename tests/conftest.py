@@ -106,6 +106,46 @@ def _migrate_legacy_product_api_regression_to_canonical_authority(request, monke
     )
 
 
+_POSTGRES_SCRIPT = ROOT / "scripts" / "test_postgres.sh"
+
+
+def _autostart_test_postgres() -> str:
+    """Give agent and laptop runs a local PostgreSQL instead of skipping PG evidence.
+
+    Skipped when a DSN is already configured, inside GitHub Actions (CI jobs own
+    their database setup), or when METIS_TEST_POSTGRES_AUTOSTART=0. Returns a
+    warning for a failed start; missing PostgreSQL binaries stay silent so the
+    existing skip behaviour is unchanged where no server can exist.
+    """
+    import os
+    import subprocess
+
+    if os.environ.get("METIS_TEST_POSTGRES_DSN", "").strip():
+        return ""
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        return ""
+    if os.environ.get("METIS_TEST_POSTGRES_AUTOSTART", "1").strip() == "0":
+        return ""
+    try:
+        result = subprocess.run(["bash", str(_POSTGRES_SCRIPT)], capture_output=True,
+                                text=True, timeout=120, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"test PostgreSQL autostart failed: {type(exc).__name__}"
+    if result.returncode == 3:
+        return ""
+    dsn = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
+    if result.returncode != 0 or not dsn.startswith("postgresql://"):
+        return "test PostgreSQL autostart failed: " + (result.stderr.strip() or f"exit {result.returncode}")
+    os.environ["METIS_TEST_POSTGRES_DSN"] = dsn
+    return ""
+
+
+def pytest_configure(config):  # type: ignore[no-untyped-def]
+    warning = _autostart_test_postgres()
+    if warning:
+        config.issue_config_time_warning(pytest.PytestConfigWarning(warning), stacklevel=2)
+
+
 _orig_init = TestClient.__init__
 
 
