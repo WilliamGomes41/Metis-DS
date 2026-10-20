@@ -144,7 +144,8 @@ def test_beschikbaarheid_ingest_and_heavy_paths() -> None:
         "src/extract_html_v1.py",
         "src/extract_pdf_v2.py",
         "src/semantic_transform_generic_v1.py",
-        "src/retrieval/embedding_provider_v1.py",
+        "src/retrieval/semantic_vector_retrieval_v1.py",
+        "src/retrieval/hybrid_retrieval_v1.py",
     ):
         item = preflight.classify_paths([path])["beschikbaarheid"]
         assert item["status"] == "required", path

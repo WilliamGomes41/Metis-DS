@@ -53,6 +53,17 @@ jobs:
         run: |
           sh experiments/bend/install.sh
           echo "$HOME/.bend/bin" >> "$GITHUB_PATH"
+      - name: Install checksum-pinned Lean 4.34.0 for the independent kernel
+        run: |
+          archive="$RUNNER_TEMP/lean-4.34.0.tar.zst"
+          curl --proto '=https' --tlsv1.2 -fsSL --connect-timeout 20 --max-time 240 \
+            https://github.com/leanprover/lean4/releases/download/v4.34.0/lean-4.34.0-linux.tar.zst \
+            -o "$archive"
+          echo 'caaa98356098c85dc0fcbbd28e1ec66f39eb6551829972b752ff20e1286b646b  '"$archive" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/metis-lean"
+          tar --no-same-owner --zstd -xf "$archive" -C "$RUNNER_TEMP/metis-lean" --strip-components=1
+          "$RUNNER_TEMP/metis-lean/bin/lean" --version
+          echo "$RUNNER_TEMP/metis-lean/bin" >> "$GITHUB_PATH"
       - name: Verify proof and reject an incorrect implementation
         run: |
           command -v bend
