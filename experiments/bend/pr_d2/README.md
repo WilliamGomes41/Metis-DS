@@ -84,3 +84,18 @@ requires the tool explicitly and sets `METIS_BEND_VERDICT=1`.
 Review the deletion, unchanged runtime rules and evidence together. A passing
 Bend proof does not replace the console/Python tests or establish production
 correctness. The PR is not merged automatically; no deployment is included.
+
+## Executed evidence (2026-10-20)
+
+- Standard Bend proof: passed. Both semantic mutations were rejected.
+- [Independent BendTT and console job](https://github.com/WilliamGomes41/Metis-DS/actions/runs/39387754742): passed; Lean 4.34.0, Bend 2.0.37, 19 tests passed with no skips. This job also rechecked the proof with `--verdict`.
+- Local focused regression run: 92 passed, 1 skipped. Architecture invariants: 6 passed. Repository, release-control, dependency-boundary, JSON/YAML and shell syntax checks passed.
+- Local full suite: **5 failed, 5048 passed, 586 skipped, 6 xfailed**, with 3 subtests passed. All five failing tests were also reproduced on unchanged main `08afdb0`; one requires the unavailable `psql` executable, and four are existing transport/SSRF test failures. They were not weakened or fixed in this deletion PR. A successful full suite is not claimed.
+- The historical T11 reader map is byte-for-byte unchanged. The only `src/` change is deleting the legacy module.
+- The retirement guard was also run against unchanged main: it correctly failed because the old CLI was still importable.
+
+The local Lean executable cannot locate its application in this restricted
+execution environment; the independent kernel result above was obtained on
+the GitHub runner. The normal Python/PostgreSQL CI is separate and its result
+must be assessed before merge. The proof/implementation/test files checked by
+that successful Bend job are unchanged by this evidence/documentation update.
