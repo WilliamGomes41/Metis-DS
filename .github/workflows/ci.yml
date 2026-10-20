@@ -121,6 +121,25 @@ jobs:
       - name: Product API v1 backward compatibility
         run: python scripts/product_api_contract.py --check --base-ref origin/main
       - run: python -m compileall -q src tests
+      - name: D4 PostgreSQL lifecycle without disk mirrors
+        run: |
+          pytest -q -rx tests/test_pg_console_without_disk_mirrors.py --junitxml=output/pg-without-mirrors.xml
+          python - <<'PYCODE'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('output/pg-without-mirrors.xml').getroot()
+          cases = [case for case in root.iter('testcase') if case.get('name') == 'test_pg_console_without_disk_mirrors']
+          assert len(cases) == 1, 'Missing native D4 evidence'
+          assert not list(root.iter('failure')) and not list(root.iter('error'))
+          for skipped in root.iter('skipped'):
+              assert skipped.get('type') == 'pytest.xfail', 'Native D4 proof skipped rather than executed'
+          PYCODE
+      - name: Upload D4 mirror readers and writers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pg-without-mirrors-${{ matrix.python-version }}
+          path: output/pg-without-mirrors.xml
+          if-no-files-found: error
       - name: Verify architecture invariants
         run: pytest -q tests/test_architecture_invariants.py
       - name: Verify reprocessing owner guard and mirrors against native PostgreSQL (#708)
