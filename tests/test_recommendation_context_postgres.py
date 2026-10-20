@@ -12,5 +12,5 @@ from tests.test_review_batch_atomic_postgres import _console
 from tests.test_recommendation_coverage_v1 import console_v3_story
 
 
-def test_native_postgres_v3_restart_replay_export_and_failed_replacement(workflow_postgres, tmp_path):
-    console_v3_story(tmp_path, lambda: _console(tmp_path, workflow_postgres))
+def test_native_postgres_v3_restart_replay_export_and_failed_replacement(workflow_postgres, tmp_path, *, production_app):
+    console_v3_story(tmp_path, lambda: _console(tmp_path, workflow_postgres), production_app=production_app)
