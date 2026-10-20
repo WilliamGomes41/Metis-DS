@@ -200,10 +200,8 @@ def test_server_handlers_added_after_build_are_redacted_after_startup(name):
     assert sum(1 for h in logging.getLogger().handlers if getattr(h, 'name', None) == 'metis-structured-json') == 1
 
 
-def test_build_app_registers_the_startup_reinstall():
-    import inspect
-    import src.console_asgi as asgi
-    assert 'install_startup_reinstall(app)' in inspect.getsource(asgi.build_app)
+def test_build_app_registers_the_startup_reinstall(production_app):
+    assert install_structured_logging in production_app().router.on_startup
 
 
 # --- Sherlock 02:10 #638 F1: record.args stays a redacted tuple (NEVER None); real uvicorn AccessFormatter ---

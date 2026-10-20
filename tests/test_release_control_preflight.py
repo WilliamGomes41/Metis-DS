@@ -11,6 +11,7 @@ the diff. PROTOCOL.md / PROTOCOL_V2_* are not edited here.
 from __future__ import annotations
 
 import importlib.util
+import ast
 import json
 import subprocess
 import sys
@@ -354,9 +355,20 @@ def test_ci_retains_required_matrix_and_full_verification() -> None:
         "python scripts/product_api_contract.py --check --base-ref origin/main",
         "python -m compileall -q src tests",
         "pytest -q tests/test_architecture_invariants.py",
-        "- run: pytest -q\n",
+        "python scripts/measure_test_suite.py --output output/d6a-after.json",
     ):
         assert command in test_job, f"Required CI verification removed: {command}"
+    # The timed runner must execute the whole suite, without paths or filters.
+    runner = ast.parse((ROOT / "scripts/measure_test_suite.py").read_text())
+    commands = [node.args[0].elts for node in ast.walk(runner)
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "run" and node.args and isinstance(node.args[0], ast.List)
+                and any(isinstance(arg, ast.Constant) and arg.value == "pytest" for arg in node.args[0].elts)]
+    assert len(commands) == 1
+    command, = commands
+    assert len(command) == 5
+    assert [ast.literal_eval(arg) for arg in command[1:4]] == ["-m", "pytest", "-q"]
+    assert isinstance(command[4], ast.JoinedStr) and command[4].values[0].value == "--junitxml="
 
 
 def test_contributing_names_skill_checks_and_ci_must_not_forget_them() -> None:
