@@ -33,6 +33,20 @@ def test_build_app_serves_login(tmp_path: Path, monkeypatch) -> None:
     assert "Aanmelden" in response.text
 
 
+def test_build_app_exposes_no_writable_review_repair_route(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("CONSOLE_DATA_ROOT", str(tmp_path))
+    monkeypatch.delenv("CONSOLE_BOOTSTRAP_USERNAME", raising=False)
+    monkeypatch.delenv("CONSOLE_BOOTSTRAP_PASSWORD", raising=False)
+
+    repair_methods = [
+        set(getattr(route, "methods", None) or ())
+        for route in build_app().router.routes
+        if str(getattr(route, "path", "")).startswith("/review/repair")
+    ]
+    assert repair_methods, "read-only /review/repair recovery page must stay installed"
+    assert all(methods <= {"GET", "HEAD"} for methods in repair_methods)
+
+
 
 def test_azure_console_requires_explicit_https_public_origin(monkeypatch) -> None:
     monkeypatch.delenv("CONSOLE_PUBLIC_ORIGIN", raising=False)
