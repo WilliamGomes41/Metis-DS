@@ -562,9 +562,9 @@
       "environment": "local_development",
       "requirement_status": "optional",
       "implementation_status": "implemented",
-      "current_implementation": "Bend 2.0.37 with SHA-256-pinned upstream release installer; installed by the Codespace workspace postCreate hook and the path-filtered Bend GitHub Actions workflow",
+      "current_implementation": "Bend 2.0.37 with SHA-256-pinned upstream release installer; workspace setup and dedicated GitHub Actions checks. PR-D2 adds checksum-pinned Lean 4.34.0 for the independent BendTT kernel in CI only",
       "target_implementation": "Isolated experiments/bend toolchain; existing Metis Python application is unchanged",
-      "provider": "bendlang/bend GitHub releases",
+      "provider": "bendlang/bend and leanprover/lean4 GitHub releases",
       "data_classification": "source_code_and_synthetic_proof_examples",
       "region": "developer_or_github_runner",
       "persistence": "repository_stores_installer_and_proofs_binaries_are_recreated",
@@ -577,6 +577,7 @@
       "evidence": [
         "experiments/bend/README.md",
         "experiments/bend/install.sh",
+        "experiments/bend/pr_d2/install-lean.sh",
         ".devcontainer/devcontainer.json",
         ".github/workflows/bend-proof.yml"
       ]
