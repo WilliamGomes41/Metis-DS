@@ -87,9 +87,13 @@ def main():
         if state_file:
             Path(state_file).write_text(json.dumps(state))
         else:
-            print(f"Disposable server state: {directory}/state.json; stop with "
-                  f"scripts/test_postgres.sh --stop {directory}/state.json", file=sys.stderr)
-            Path(directory, "state.json").write_text(json.dumps(state))
+            # Keep control metadata owned by the caller, outside the directory
+            # owned by the unprivileged PostgreSQL process (especially as root).
+            descriptor, state_file = tempfile.mkstemp(prefix="metis-test-postgres-state-", suffix=".json")
+            with os.fdopen(descriptor, "w") as stream:
+                json.dump(state, stream)
+            print(f"Disposable server state: {state_file}; stop with "
+                  f"scripts/test_postgres.sh --stop {state_file}", file=sys.stderr)
         print(dsn)
     except BaseException:
         if started:
