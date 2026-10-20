@@ -11,13 +11,12 @@ import fitz
 import pytest
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
 from tests.test_decision_graph_chain import _accounts, _console, _ingest_boom, policy
 
 
 @pytest.mark.parametrize("source", ["pdf", "bundle", "export"])
-def test_decision_review_moves_type_explanations_to_help_without_mutating_evidence(tmp_path, source):
-    console = _console(tmp_path)
+def test_decision_review_moves_type_explanations_to_help_without_mutating_evidence(tmp_path, source, *, production_app, production_console):
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     kwargs = {}
     if source != "export":
@@ -29,7 +28,7 @@ def test_decision_review_moves_type_explanations_to_help_without_mutating_eviden
     sid = _ingest_boom(console, accounts, named_reviewers=[], review_policy=policy(accounts), **kwargs)["snapshot_id"]
     before = deepcopy(console.snapshot_objects(sid))
     envelope = deepcopy(console._envelope(sid))
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     assert client.get(f"/review?document={sid}", follow_redirects=False).status_code == 401
     client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
     for obj in before:

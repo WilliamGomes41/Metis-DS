@@ -28,7 +28,6 @@ from src.operations_console_v1 import ConsoleError
 from src.review_ledger import read_events
 from src.review_policy_v1 import CONTRACT as REVIEW_POLICY_CONTRACT
 from src.source_preparation_context_v1 import KEY
-from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
 from tests.semantic_fixture_support import bind_fixture_selections, install_fixture_history
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
@@ -58,46 +57,19 @@ class DiskBlobTransport:
 
 
 def installed(root, cache, backend, patch):
-    """Use the real composition root; only inject isolated infrastructure factories."""
-    from src import console_asgi as composition
-    patch.delenv("WEBSITE_SITE_NAME", raising=False)
-    patch.setenv("CONSOLE_DATA_ROOT", str(root))
-    patch.setenv("CONSOLE_RUNTIME", str(root / "runtime"))
-    patch.setenv("CONSOLE_SOURCE_STORE", str(cache))
-    patch.setattr(composition, "_postgres_credential", lambda: None)
-    patch.setattr(composition, "_canonical_store", lambda **kw: None)
-    patch.setattr(composition, "bootstrap_accounts", lambda console: None)
-    patch.setattr(composition, "bind_pre_review_semantic_processing", bind_fixture_selections)
-    source = AzureBlobSourceStore(blob_service_client=DiskBlobTransport(root / "immutable"))
-    patch.setattr(composition, "_immutable_source_store", lambda: source)
-    stores = [None] * 4
-    for name in POSTGRES_STORE_SETTINGS:
-        patch.delenv(name, raising=False)
-    if backend == "postgres":
-        from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig, PostgresCanonicalPublicationStore
-        from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
-        from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-        from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-        from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
-        config = PostgresCanonicalConfig(dsn=os.environ["METIS_TEST_POSTGRES_DSN"])
-        stores = [PostgresWorkflowIdentityStore(config), PostgresConcurrentWorkflowDocumentStore(config),
-                  PostgresWorkflowReviewStore(config), PostgresWorkflowRemainingStore(config)]
-        # #718: only a complete PostgreSQL configuration selects native authority.
-        for name in POSTGRES_STORE_SETTINGS:
-            patch.setenv(name, "postgres")
-        canonical = PostgresCanonicalPublicationStore(config)
-        patch.setattr(composition, "_canonical_store", lambda canonical=canonical, **kw: canonical)
-    for name, store in zip(("_workflow_identity_store", "_workflow_document_store",
-                            "_workflow_review_store", "_workflow_remaining_store"), stores):
-        patch.setattr(composition, name, lambda store=store, **kw: store)
-    app = composition.build_app()
+    """Actual ASGI composition; only immutable Blob transport is synthetic."""
+    from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+    from tests.production_support import production_application
+    source = AzureBlobSourceStore(blob_service_client=DiskBlobTransport(root / 'immutable'))
+    app = production_application(root, PostgresCanonicalConfig(dsn=os.environ['METIS_TEST_POSTGRES_DSN']),
+                                 source_store=cache, runtime=root / 'runtime',
+                                 processing_binder=bind_fixture_selections, immutable_source_store=source,
+                                 azure=True, environment={'CONSOLE_PUBLIC_ORIGIN': 'https://testserver'})
     return app, app.state.operations_kernel
 
 
 @pytest.fixture(params=["local", "postgres"])
-def backend(request):
-    if request.param == "postgres":
-        request.getfixturevalue("workflow_postgres")
+def backend(request, complete_postgres):
     return request.param
 
 
@@ -186,7 +158,7 @@ def replace_envelope(console, sid, envelope):
 
 
 def client_for(app):
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app, base_url="https://testserver", headers={"Origin": "https://testserver"}, raise_server_exceptions=False)
     assert client.post("/login", data={"username": "reviewer", "password": "fixture-only"},
                        follow_redirects=False).status_code == 303
     return client
@@ -431,7 +403,7 @@ def test_repair_reuses_authorization_without_domain_write(backend, tmp_path, mon
     before = state(initial, sid)
     shutil.rmtree(tmp_path / "cache-old")
     app, console = installed(tmp_path, tmp_path / "cache-new", backend, monkeypatch)
-    client = TestClient(app, raise_server_exceptions=False)
+    client = TestClient(app, base_url="https://testserver", headers={"Origin": "https://testserver"}, raise_server_exceptions=False)
     assert client.post("/login", data={"username": actor, "password": "fixture-only"},
                        follow_redirects=False).status_code == 303
     with monkeypatch.context() as patch:

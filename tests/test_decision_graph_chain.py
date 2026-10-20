@@ -57,13 +57,14 @@ def command(console, accounts, sid, command_id, **extra):
 
 @pytest.mark.parametrize("participation", [None, "optional", "required"])
 @pytest.mark.parametrize("backend", ["local", "postgres"])
-def test_pdf_requires_passage_and_graph_review_after_restart(tmp_path, participation, backend, *, complete_postgres):
+def test_pdf_requires_passage_and_graph_review_after_restart(tmp_path, participation, backend, *, complete_postgres, production_console):
     if backend == "postgres":
         from tests.decision_graph_native_support import native_state
         state, _, _ = native_state(tmp_path, config=complete_postgres)
     else:
-        state = lambda: _console(tmp_path)
+        state = lambda: _console(tmp_path, production_console=production_console)
     console = state()
+    store = console.canonical_publication_store
     accounts = _accounts(console)
     receipt = ingest(console, accounts, participation)
     sid = receipt["snapshot_id"]
@@ -103,10 +104,10 @@ def test_pdf_requires_passage_and_graph_review_after_restart(tmp_path, participa
         assert "decision_graph_review_incomplete" not in result["blockers"]
 
 
-def test_policy_change_is_versioned_and_replay_safe(tmp_path):
+def test_policy_change_is_versioned_and_replay_safe(tmp_path, *, production_console):
     from tests.test_review_participation_management import change
     from src.review_policy_v1 import object_policy
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     sid = ingest(console, accounts)["snapshot_id"]
     rev = console.objects_revision(sid)
@@ -117,14 +118,14 @@ def test_policy_change_is_versioned_and_replay_safe(tmp_path):
         change(console, accounts, sid, "add_optional", accounts["reviewer"]["account_id"], **extra)
     with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
         change(console, accounts, sid, "archive", accounts["reviewer"]["account_id"], expected_revision=rev)
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     p = console._envelope(sid)["review_policy"]
     assert p["revision"] == 2
     assert all(object_policy(o) == p for o in console.snapshot_objects(sid))
 
 
-def test_text_cannot_replace_graphic_evidence(tmp_path):
-    console = _console(tmp_path)
+def test_text_cannot_replace_graphic_evidence(tmp_path, *, production_console):
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     sid = ingest(console, accounts)["snapshot_id"]
     graph = complete_graph(console, sid)
@@ -133,13 +134,12 @@ def test_text_cannot_replace_graphic_evidence(tmp_path):
         console.update_decision_graph(**command(console, accounts, sid, "bad-graph", graph=graph))
 
 
-def test_graph_review_form_and_class_conversion_cannot_drop_routes(tmp_path):
+def test_graph_review_form_and_class_conversion_cannot_drop_routes(tmp_path, *, production_app, production_console):
     from fastapi.testclient import TestClient
-    from src.operations_console_app import create_console_app
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     sid = ingest(console, accounts)["snapshot_id"]
-    with TestClient(create_console_app(console), base_url="https://testserver") as client:
+    with TestClient(production_app(console), base_url="https://testserver") as client:
         client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
         response = client.get("/review/decision-graph", params={"document": sid})
         assert response.status_code == 200, response.text
@@ -165,30 +165,19 @@ def finish(console, accounts, sid):
     console.confirm_decision_graph(**command(console, accounts, sid, "confirmed"))
 
 
-def test_durable_release_keeps_graph_out_of_prose_and_restarts(tmp_path):
-    from src.durable_publication_console_v1 import DurablePublicationConsole
+def test_durable_release_keeps_graph_out_of_prose_and_restarts(tmp_path, *, production_console):
     from src.decision_graph_v1 import read_active_graph
-    from tests.test_durable_publication_console_v1 import MemoryCanonicalStore, MemorySourceStore
+    from tests.test_durable_publication_console_v1 import MemorySourceStore
 
-    class GraphStore(MemoryCanonicalStore):
-        withdrawn = False
+    source = MemorySourceStore()
 
-        def release_for_snapshot(self, sid):
-            release = super().release_for_snapshot(sid)
-            if release:
-                release["decision_graph_release"] = deepcopy(self.releases[release["release_id"]]["decision_graph_release"])
-            return release
-
-        def active_publication_rows(self):
-            return [] if self.withdrawn else super().active_publication_rows()
-
-    store, source = GraphStore(), MemorySourceStore()
     def state():
         from tests.decision_tree_test_support import install_fragment_proposer
-        return install_fragment_proposer(DurablePublicationConsole(
+        return install_fragment_proposer(production_console(processing_binder=lambda console: None,
             root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime",
-            canonical_publication_store=store, immutable_source_store=source))
+            immutable_source_store=source))
     console = state()
+    store = console.canonical_publication_store
     accounts = _accounts(console)
     sid = ingest(console, accounts)["snapshot_id"]
     finish(console, accounts, sid)
@@ -222,14 +211,15 @@ def test_durable_release_keeps_graph_out_of_prose_and_restarts(tmp_path):
     with pytest.raises(ConsoleError, match="published_working_revision_immutable"):
         restarted.change_review_policy(**command(restarted, accounts, sid, "new-policy", policy=policy(accounts, "required")))
     # Registry withdrawal removes the graph immediately; immutable evidence survives.
-    store.withdrawn = True
+    restarted.withdraw_document(actor_id=accounts['publisher']['account_id'], snapshot_id=sid,
+                                expected_release_id=result['release_id'], reason='Graph withdrawal proof')
     assert read_active_graph(store, source, sid) is None
     assert client.get(endpoint, headers=headers).status_code == 404
     assert store.release_for_snapshot(sid)["decision_graph_release"]["graph"] == graph["graph"]
 
 
-def test_route_change_invalidates_passages_and_reextract_preserves_policy(tmp_path):
-    console = _console(tmp_path)
+def test_route_change_invalidates_passages_and_reextract_preserves_policy(tmp_path, *, production_console):
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     sid = ingest(console, accounts)["snapshot_id"]
     finish(console, accounts, sid)
@@ -253,13 +243,13 @@ def test_route_change_invalidates_passages_and_reextract_preserves_policy(tmp_pa
     assert console._envelope(sid)["decision_graph"] == retained_graph
 
 
-def test_ingest_command_deduplicates_and_rejects_changed_payload(tmp_path):
-    console = _console(tmp_path)
+def test_ingest_command_deduplicates_and_rejects_changed_payload(tmp_path, *, production_console):
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     kwargs = dict(data=source_pdf(), filename="source.pdf", content_type="application/pdf",
                   named_reviewers=[], review_policy=policy(accounts), command_id="one-upload")
     receipt = _ingest_boom(console, accounts, **kwargs)
-    restarted = _console(tmp_path)
+    restarted = _console(tmp_path, production_console=production_console)
     assert _ingest_boom(restarted, accounts, **kwargs)["snapshot_id"] == receipt["snapshot_id"]
     assert len(restarted.list_envelopes()) == 1
     with pytest.raises(ConsoleError, match="ingest_command_conflict"):

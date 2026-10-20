@@ -288,4 +288,34 @@ gedeeld. Geen runtime-statusregel is aangepast.
 
 De geïntegreerde MCP-proef leest accountrollen en blokkades nu eveneens uit
 PostgreSQL; alleen de ondertekende JWT/JWKS-transportfixture blijft gecontroleerd.
-Gehad-codeerd lege canonical stores en extra route-installaties zijn verwijderd.
+Gehardcodeerd lege canonical stores en extra route-installaties zijn verwijderd.
+
+
+Portie 15 zet de beslisboom-, participatie-, heading-batch- en bronreparatieproeven
+over op dezelfde productiecompositie. Ook de zelfstandige kenniscontext-browserfixture
+gebruikt PostgreSQL; een aangemelde HTTP-proef opent de kenniskaart en beslisboompaden.
+De oude fixturevarianten blijven als afzonderlijke cases bestaan, maar delen nu
+dezelfde PG-authority. De Azure-bronreparatieproeven houden alleen het Blob-transport
+synthetisch en gebruiken de echte AzureBlobSourceStore en Azure-consoleklasse.
+
+Grafpublicatie, herstart en intrekking gebruiken de echte canonical adapter. De
+vervalsingsproef wijzigt uitsluitend de eigen PG-auditfixture en controleert nog
+steeds tekst, span, grafmodus en reviewbewijs. Accountmutaties gebruiken de
+identity store en de bestaande retirement-operatie. Pure controles op de drie
+onbeschikbaarheidsvlaggen blijven afzonderlijke functieproeven. De familie/klasse-
+projectie wordt expliciet bij haar bestaande owner geïsoleerd; de productiepoort
+blijft daarnaast ongereviewde objecten weren.
+
+Een geweigerd heading-commando moet vóór herstart alle zes statecomponenten exact
+behouden. Alleen de reeds bestaande startup-reconciliatie van een expliciet
+voorbereide historische publicatie mag daarna de opslagrevision één verhogen;
+de objecten, envelope, bindings, objectrevision en events blijven exact gelijk.
+
+De volledige lokale herhaalmeting van portie 3 op de vastgepinde commit is groen:
+5.647 passed, 27 niet-PG skips, 6 xfails, nul PG-skips, 1.061,821 seconden. Dat
+blijft binnen tweemaal beide vastgelegde baselines. De JSON behoudt de oorspronkelijke
+vergelijking met de eerste lokale baseline. CI blijft afzonderlijk vereist.
+
+Portie 15: 296 unieke cases groen (220 + 76), inclusief drie aanvullende pure
+vlagproeven; geen skips. De T12-proef toetst zowel de productie-dispatch als de
+bestaande basisowner op dezelfde PG-console.

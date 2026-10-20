@@ -69,9 +69,10 @@
     "failures": 0,
     "skipped": 0,
     "targeted_junit": "d6a-reader.xml",
-    "full_suite_status": "batch 02 running; subsequent full measurements pending",
+    "full_suite_status": "local green: 5647 passed, 27 non-PG skips, 6 xfailed; zero PG skips; 1061.821 seconds",
     "ci_status": "not run: push approval pending",
-    "historical_commit": "4c087e2"
+    "historical_commit": "4c087e2",
+    "full_suite_evidence": "local-batch03-full.json"
   },
   {
     "batch": "04",
@@ -535,6 +536,54 @@
       {
         "file": "d6a14-superseded-final.xml",
         "sha256": "f1550862d64a810a38936ba40e48170047b6053fc64fa4b8558488c72d6894a2"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending"
+  },
+  {
+    "batch": "15",
+    "base": "d2d4cdf",
+    "commit": "codex/d6a-15-decision-console",
+    "test_files": [
+      "tests/test_v225_beslisboom_path.py",
+      "tests/test_v219_review_duty_queue.py",
+      "tests/test_a08_heading_batch_atomic.py",
+      "tests/test_explicit_review_policy.py",
+      "tests/test_decision_graph_chain.py",
+      "tests/test_decision_graph_structure.py",
+      "tests/test_ordered_decision_paths.py",
+      "tests/test_decision_bundles.py",
+      "tests/test_decision_review_copy.py",
+      "tests/test_decision_successors.py",
+      "tests/test_review_participation_management.py",
+      "tests/test_decision_ingest_recovery.py",
+      "tests/test_decision_tree_route_lifecycle_v1.py",
+      "tests/test_a09_source_repair.py",
+      "tests/test_a10_source_cache_repair.py",
+      "tests/test_t12_publication_readiness_authority.py",
+      "tests/browser_knowledge_context_fixture.py"
+    ],
+    "executed_unique_cases": 296,
+    "failures": 0,
+    "skipped": 0,
+    "added_cases": 3,
+    "renamed_cases": {
+      "test_stale_local_account_roles_are_rechecked": "test_stale_account_roles_are_rechecked"
+    },
+    "verification": "Full selected portion: 220 production console/decision/heading/repair cases plus 76 Azure source-cache repair cases; T12 base owner and production dispatch both checked. Standalone knowledge browser authenticated PostgreSQL HTTP probe passed. No runtime changes.",
+    "junit": [
+      {
+        "file": "d6a15-final.xml",
+        "sha256": "a0682f999bcdd0c21b1ee716c30b75b75aff3c23f4aed2cfc245fa4fe84999fe"
+      },
+      {
+        "file": "d6a15-cache.xml",
+        "sha256": "0f4ebe2caae46d1f47b23f409924381b7d8672cde3f54a7584102f144bb197d4"
+      },
+      {
+        "file": "d6a15-t12.xml",
+        "sha256": "94773cbe147597400a570dd47b48d3620d2ed5da7c56de4fb06de610273a344f"
       }
     ],
     "full_suite_status": "pending",

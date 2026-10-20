@@ -13,20 +13,18 @@ from pathlib import Path
 from src.integrity_kernel import stamp_canonical_hashes
 from src.knowledge_path_v1 import content_reviewable
 from src import publication_readiness_v1 as readiness_module
-from src.operations_console_v1 import OperationsConsole
 from src.publication_readiness_v1 import (
     READINESS_AUTHORITY_UNAVAILABLE,
     REVIEW_REPAIR_INCOMPLETE,
     REVIEW_WORK_INCOMPLETE,
 )
-from src.review_closure_v1 import ReviewClosureConsole
 from tests.semantic_fixture_support import bind_fixture_selections, install_fixture_history
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _console(tmp_path, console_cls=ReviewClosureConsole):
-    console = console_cls(
+def _console(tmp_path, *, production_console):
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",
@@ -67,8 +65,8 @@ def _console(tmp_path, console_cls=ReviewClosureConsole):
     assert "code.startswith(" not in source
 
 
-def test_governance_approved_without_exact_t9_binding_stays_in_review(tmp_path) -> None:
-    console, snapshot_id = _console(tmp_path)
+def test_governance_approved_without_exact_t9_binding_stays_in_review(tmp_path, *, production_console) -> None:
+    console, snapshot_id = _console(tmp_path, production_console=production_console)
     rows = console.snapshot_objects(snapshot_id)
     candidate = next(row for row in rows if content_reviewable(row))
     candidate["object_type"] = candidate["confirmed_object_type"] = "definition"
@@ -90,8 +88,8 @@ def test_governance_approved_without_exact_t9_binding_stays_in_review(tmp_path) 
     assert console._envelope(snapshot_id) == before_envelope
 
 
-def test_one_readiness_request_reads_each_current_input_once(monkeypatch, tmp_path) -> None:
-    console, snapshot_id = _console(tmp_path)
+def test_one_readiness_request_reads_each_current_input_once(monkeypatch, tmp_path, *, production_console) -> None:
+    console, snapshot_id = _console(tmp_path, production_console=production_console)
     counts = {"objects": 0, "bindings": 0, "fragments": 0, "source": 0}
     original_objects = console.snapshot_objects
     original_bindings = console.object_review_bindings
@@ -123,8 +121,8 @@ def test_one_readiness_request_reads_each_current_input_once(monkeypatch, tmp_pa
 
     assert counts == {"objects": 1, "bindings": 1, "fragments": 1, "source": 1}
 
-def test_direct_operations_publish_boundary_uses_total_t12_authority(tmp_path) -> None:
-    console, snapshot_id = _console(tmp_path, console_cls=OperationsConsole)
+def test_direct_operations_publish_boundary_uses_total_t12_authority(tmp_path, *, production_console) -> None:
+    console, snapshot_id = _console(tmp_path, production_console=production_console)
     publisher = console.create_account(
         username="piet", password="piet-secret", roles=("publisher",)
     )
@@ -135,20 +133,19 @@ def test_direct_operations_publish_boundary_uses_total_t12_authority(tmp_path) -
     stamp_canonical_hashes(candidate)
     install_fixture_history(console, snapshot_id, rows)
 
-    considered = console.consider_publish(
-        actor_id=publisher["account_id"],
-        snapshot_id=snapshot_id,
-    )
+    from src.operations_console_v1 import OperationsConsole
+    # Keep the original base-boundary regression on the actual PG console,
+    # alongside its production dispatch through the complete class hierarchy.
+    for consider in (console.consider_publish,
+                     lambda **command: OperationsConsole.consider_publish(console, **command)):
+        considered = consider(actor_id=publisher["account_id"], snapshot_id=snapshot_id)
+        assert considered["curation_ready"] is False
+        assert considered["publication_ready"] is False
+        assert REVIEW_WORK_INCOMPLETE in considered["curation_blockers"]
 
-    assert considered["curation_ready"] is False
-    assert considered["publication_ready"] is False
-    assert REVIEW_WORK_INCOMPLETE in considered["curation_blockers"]
 
-
-def test_authority_read_failure_is_unknown_curation_and_fails_closed(
-    monkeypatch, tmp_path
-) -> None:
-    console, snapshot_id = _console(tmp_path)
+def test_authority_read_failure_is_unknown_curation_and_fails_closed(monkeypatch, tmp_path, *, production_console) -> None:
+    console, snapshot_id = _console(tmp_path, production_console=production_console)
     reads = 0
 
     def fail_once(*_args, **_kwargs):
@@ -168,8 +165,8 @@ def test_authority_read_failure_is_unknown_curation_and_fails_closed(
     assert readiness["curation_blockers"] == []
     assert readiness["technical_blockers"] == [READINESS_AUTHORITY_UNAVAILABLE]
 
-def test_open_t9_repair_followup_is_curation_incomplete(tmp_path) -> None:
-    console, snapshot_id = _console(tmp_path)
+def test_open_t9_repair_followup_is_curation_incomplete(tmp_path, *, production_console) -> None:
+    console, snapshot_id = _console(tmp_path, production_console=production_console)
     rows = console.snapshot_objects(snapshot_id)
     candidate = next(row for row in rows if content_reviewable(row))
     candidate["governance"]["validation_status"] = "revise"
@@ -184,16 +181,14 @@ def test_open_t9_repair_followup_is_curation_incomplete(tmp_path) -> None:
     assert readiness["review_repair_duty_count"] == 1
 
 
-def test_decision_tree_readiness_reuses_one_fragment_read(
-    monkeypatch, tmp_path
-) -> None:
+def test_decision_tree_readiness_reuses_one_fragment_read(monkeypatch, tmp_path, *, production_console) -> None:
     from tests.test_decision_graph_chain import ingest
     from tests.test_v225_beslisboom_path import (
         _accounts as boom_accounts,
         _console as boom_console,
     )
 
-    console = boom_console(tmp_path)
+    console = boom_console(tmp_path, production_console=production_console)
     accounts = boom_accounts(console)
     snapshot_id = ingest(console, accounts)["snapshot_id"]
     reads = 0

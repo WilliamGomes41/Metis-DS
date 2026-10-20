@@ -28,8 +28,8 @@ def _objects(console, sid):
     return [o for o in console.snapshot_objects(sid) if o["object_type"] != "document"]
 
 
-def test_pdf_and_export_trees_are_formed_by_the_sole_materialiser_and_record_the_route(tmp_path):
-    console = _console(tmp_path)
+def test_pdf_and_export_trees_are_formed_by_the_sole_materialiser_and_record_the_route(tmp_path, *, production_console):
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     pdf = ingest(console, accounts)["snapshot_id"]
     export = _ingest_boom(console, accounts, review_policy=policy(accounts), named_reviewers=[])["snapshot_id"]
@@ -53,8 +53,8 @@ def test_pdf_and_export_trees_are_formed_by_the_sole_materialiser_and_record_the
         ("applies_if", question["object_id"], False)]
 
 
-def test_unbound_or_failing_proposer_blocks_without_objects_or_fallback(tmp_path, monkeypatch):
-    console = _console(tmp_path)
+def test_unbound_or_failing_proposer_blocks_without_objects_or_fallback(tmp_path, monkeypatch, *, production_console):
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     del console._decision_tree_proposer
     sid = ingest(console, accounts)["snapshot_id"]
@@ -74,25 +74,18 @@ def test_unbound_or_failing_proposer_blocks_without_objects_or_fallback(tmp_path
     assert console.snapshot_objects(sid) == []
 
 
-def test_released_route_graph_is_read_whole_and_tampering_is_rejected(tmp_path):
-    from src.durable_publication_console_v1 import DurablePublicationConsole
+def test_released_route_graph_is_read_whole_and_tampering_is_rejected(tmp_path, *, production_console):
     from tests.decision_tree_test_support import install_fragment_proposer
-    from tests.test_durable_publication_console_v1 import MemoryCanonicalStore, MemorySourceStore
+    from tests.test_durable_publication_console_v1 import MemorySourceStore
 
-    class GraphStore(MemoryCanonicalStore):
-        def release_for_snapshot(self, sid):
-            release = super().release_for_snapshot(sid)
-            if release:
-                release["decision_graph_release"] = deepcopy(self.releases[release["release_id"]]["decision_graph_release"])
-            return release
-
-    store, source = GraphStore(), MemorySourceStore()
+    source = MemorySourceStore()
 
     def state():
-        return install_fragment_proposer(DurablePublicationConsole(
+        return install_fragment_proposer(production_console(processing_binder=lambda console: None,
             root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime",
-            canonical_publication_store=store, immutable_source_store=source))
+            immutable_source_store=source))
     console = state()
+    store = console.canonical_publication_store
     accounts = _accounts(console)
     sid = ingest(console, accounts)["snapshot_id"]
     console.update_decision_graph(**command(console, accounts, sid, "graph", graph=complete_graph(console, sid)))
@@ -107,7 +100,7 @@ def test_released_route_graph_is_read_whole_and_tampering_is_rejected(tmp_path):
     restarted = state()
     restarted.reconcile_durable_publications()
     assert read_active_graph(store, source, sid) == payload
-    released = store.releases[result["release_id"]]["decision_graph_release"]
+    released = deepcopy(store.release_for_snapshot(sid)["decision_graph_release"])
     original = deepcopy(released)
     for tamper in ("text", "span", "mode", "review"):
         target = next(o for o in released["objects"] if o["object_type"] != "document")
@@ -119,9 +112,17 @@ def test_released_route_graph_is_read_whole_and_tampering_is_rejected(tmp_path):
             released["graph"]["nodes"][0]["mode"] = "context"
         else:
             released["reviews"] = []
+        def persist_fixture(value):
+            from psycopg.types.json import Jsonb
+            with store._connect() as connection:
+                connection.execute("UPDATE audit_events SET details=jsonb_set(details,'{decision_graph_release}',%s::jsonb) "
+                                   "WHERE entity_id=%s AND event_type='release_published'",
+                                   (Jsonb(value), result['release_id']))
+        persist_fixture(released)
         with pytest.raises(ValueError, match="decision_graph_release_invalid|decision_graph_release_mismatch"):
             read_active_graph(store, source, sid)
-        store.releases[result["release_id"]]["decision_graph_release"] = released = deepcopy(original)
+        persist_fixture(original)
+        released = deepcopy(original)
 
 
 def _legacy_fixture(console, sid):
@@ -157,8 +158,8 @@ def _legacy_fixture(console, sid):
     return legacy
 
 
-def test_retired_route_work_stays_readable_but_is_never_re_formed(tmp_path, monkeypatch):
-    console = _console(tmp_path)
+def test_retired_route_work_stays_readable_but_is_never_re_formed(tmp_path, monkeypatch, *, production_console):
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     sid = ingest(console, accounts)["snapshot_id"]
     legacy = _legacy_fixture(console, sid)
