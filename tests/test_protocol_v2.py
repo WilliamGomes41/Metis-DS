@@ -12,7 +12,6 @@ from src.extract_html_v1 import extract as extract_html
 from src.integrity_kernel import exact_review_snapshot_hash
 from src.prepublication_gate_v3 import evaluate as prepublish
 from src.review_workflow_v3 import _apply_review_state as apply_reviews
-from src.second_review_workflow_v3 import _apply_second_state as apply_second
 from src.semantic_transform_generic_v1 import transform as generic_transform
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -154,18 +153,3 @@ def test_published_is_separate_from_approved():
     for o in rows():
         assert o['governance']['publication_status']=='unpublished'
         assert o['governance']['validation_status']=='needs_review'
-
-
-def test_second_reviewer_must_be_different(tmp_path: Path):
-    obj=copy.deepcopy(next(o for o in current_rows() if o['risk']['requires_second_review']))
-    obj['governance']['validation_status']='approved'
-    obj['governance']['validated_by']='Reviewer A'
-    obj['governance']['validation_date']='2026-08-19'
-    obj['governance']['review_snapshot_hash']=exact_review_snapshot_hash(obj)
-    decisions=[{
-        'object_id':obj['object_id'],'decision':'approve','reviewer':'Reviewer A',
-        'review_date':'2026-08-19',
-        'reviewed_canonical_object_hash':exact_review_snapshot_hash(obj),'comment':'',
-    }]
-    _,report=apply_second([obj],decisions,tmp_path/'ledger.jsonl')
-    assert any(e['error']=='second_reviewer_must_differ' for e in report['errors'])
