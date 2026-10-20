@@ -66,16 +66,16 @@ pytestmark = [
 ]
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
     )
 
 
-def _restart(tmp_path: Path) -> OperationsConsole:
-    return _console(tmp_path)
+def _restart(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return _console(tmp_path, production_console=production_console)
 
 
 def _accounts(console: OperationsConsole) -> dict[str, dict]:
@@ -136,12 +136,12 @@ def _content_rows(console: OperationsConsole, snapshot_id: str) -> list[dict]:
     return rows
 
 
-def _disk_envelopes(console: OperationsConsole) -> dict:
-    return json.loads(console._envelopes_path.read_text(encoding="utf-8"))
+def _disk_envelopes(console):
+    return {row['snapshot_id']:row for row in console.workflow_document_store.list_envelopes()}
 
 
-def _client(console: OperationsConsole, username: str) -> TestClient:
-    client = TestClient(create_console_app(console))
+def _client(console: OperationsConsole, username: str, *, production_app) -> TestClient:
+    client = TestClient(production_app(console))
     passwords = {
         "researcher.anne": "anne-secret",
         "reviewer.bert": "bert-secret",
@@ -232,9 +232,10 @@ async def _login(client: httpx.AsyncClient, username: str, password: str) -> Non
     assert response.status_code in {200, 303}
 
 
+@pytest.mark.file_topology
 def test_overlapping_store_commits_keep_both_envelope_mutations(tmp_path: Path) -> None:
     """Promise 1: two full store transactions MUST NOT half-overlap envelopes."""
-    console = _console(tmp_path)
+    console = _file_console(tmp_path)
     accounts = _accounts(console)
     snap_a = _ingest(console, accounts, title="Snapshot Alpha", version="1.0")["snapshot_id"]
     snap_b = _ingest(console, accounts, title="Snapshot Beta", version="1.1")["snapshot_id"]
@@ -294,8 +295,8 @@ def test_overlapping_store_commits_keep_both_envelope_mutations(tmp_path: Path) 
     ]
     assert unexpected == []
 
-    disk = _disk_envelopes(console)
-    restarted = _restart(tmp_path)
+    disk = _file_disk_envelopes(console)
+    restarted = _file_restart(tmp_path)
     assert restarted._envelopes[snap_a]["class"] == "handreiking"
     assert restarted._envelopes[snap_b]["class"] == "handreiking"
     assert disk[snap_a]["class"] == "handreiking"
@@ -309,9 +310,10 @@ def test_overlapping_store_commits_keep_both_envelope_mutations(tmp_path: Path) 
         ), f"half-overlapping multi-file writes: {write_trace}"
 
 
-def test_conflict_does_not_rollback_winner_already_committed_work(tmp_path: Path) -> None:
+
+def test_conflict_does_not_rollback_winner_already_committed_work(tmp_path: Path, *, production_console) -> None:
     """Promise 2: loser/stale path MUST NOT undo the winner on disk."""
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snap_a = _ingest(console, accounts, title="Winner snapshot", version="1.0")["snapshot_id"]
     snap_b = _ingest(console, accounts, title="Loser snapshot", version="1.1")["snapshot_id"]
@@ -341,18 +343,18 @@ def test_conflict_does_not_rollback_winner_already_committed_work(tmp_path: Path
     disk = _disk_envelopes(console)
     assert disk[snap_a]["class"] == "handreiking"
     assert snap_b in disk
-    restarted = _restart(tmp_path)
+    restarted = _restart(tmp_path, production_console=production_console)
     assert restarted._envelopes[snap_a]["class"] == "handreiking"
     assert _disk_envelopes(restarted)[snap_a]["class"] == "handreiking"
 
 
-def test_review_form_content_and_revision_are_read_together(tmp_path: Path) -> None:
+def test_review_form_content_and_revision_are_read_together(tmp_path: Path, *, production_app, production_console) -> None:
     """Promise 3: GET form content and snapshot_revision MUST be one co-read."""
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snapshot_id = _ingest(console, accounts)["snapshot_id"]
     target = _content_rows(console, snapshot_id)[0]
-    original_revision = _file_revision(console._objects_path(snapshot_id))
+    original_revision = console.objects_revision(snapshot_id)
     real_snapshot_objects = console.snapshot_objects_and_revision
 
     def raced_snapshot_objects(
@@ -362,7 +364,7 @@ def test_review_form_content_and_revision_are_read_together(tmp_path: Path) -> N
         for_update: bool = False,
     ) -> list[dict]:
         rows, revision = real_snapshot_objects(snapshot_id_arg, include_blocked)
-        other = _console(tmp_path)
+        other = _console(tmp_path, production_console=production_console)
         loaded = other._load_objects(snapshot_id_arg)
         for row in loaded:
             if row["object_id"] == target["object_id"]:
@@ -374,9 +376,9 @@ def test_review_form_content_and_revision_are_read_together(tmp_path: Path) -> N
         return rows, revision
 
     console.snapshot_objects_and_revision = raced_snapshot_objects  # type: ignore[method-assign]
-    client = _client(console, "researcher.anne")
+    client = _client(console, "researcher.anne", production_app=production_app)
     body, revision = _open_review_form(client, snapshot_id, target["object_id"])
-    live_revision = _file_revision(console._objects_path(snapshot_id))
+    live_revision = console.objects_revision(snapshot_id)
     assert live_revision != original_revision
     shown_raced = RACED_MARKER in body or _radio_checked(body, "suitability", BERT_SUIT)
     if shown_raced:
@@ -386,28 +388,28 @@ def test_review_form_content_and_revision_are_read_together(tmp_path: Path) -> N
         assert revision != live_revision
 
 
-def test_get_form_revision_is_not_taken_from_threading_local(tmp_path: Path) -> None:
+def test_get_form_revision_is_not_taken_from_threading_local(tmp_path: Path, *, production_app, production_console) -> None:
     """Promise 3: form pin is file-bound, not TLS / worker reuse."""
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snapshot_id = _ingest(console, accounts)["snapshot_id"]
     target = _content_rows(console, snapshot_id)[0]
-    expected = _file_revision(console._objects_path(snapshot_id))
+    expected = console.objects_revision(snapshot_id)
     console._objects_tls.expected = {snapshot_id: "0" * 64}
-    client = _client(console, "researcher.anne")
+    client = _client(console, "researcher.anne", production_app=production_app)
     _body, revision = _open_review_form(client, snapshot_id, target["object_id"])
     assert revision == expected
     assert revision != "0" * 64
 
 
-def test_review_post_progresses_while_ingest_extract_is_heavy(tmp_path: Path) -> None:
+def test_review_post_progresses_while_ingest_extract_is_heavy(tmp_path: Path, *, production_app, production_console) -> None:
     """Promise 4: review POST MUST progress while ingest extract is still running."""
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Al aanwezig", version="1.0")
     snapshot_id = receipt["snapshot_id"]
     target = _content_rows(console, snapshot_id)[0]
-    anne = _client(console, "researcher.anne")
+    anne = _client(console, "researcher.anne", production_app=production_app)
     body, revision = _open_review_form(anne, snapshot_id, target["object_id"])
     assert revision
     extract_started = threading.Event()
@@ -423,7 +425,7 @@ def test_review_post_progresses_while_ingest_extract_is_heavy(tmp_path: Path) ->
         return original_fragments(*args, **kwargs)
 
     console._fragments_and_spec = slow_extract.__get__(console, OperationsConsole)  # type: ignore[method-assign]
-    app = create_console_app(console)
+    app = production_app(console)
 
     async def _run() -> None:
         transport = ASGITransport(app=app)
@@ -451,13 +453,13 @@ def test_review_post_progresses_while_ingest_extract_is_heavy(tmp_path: Path) ->
                 t0 = time.perf_counter()
                 posted = await reviewer.post(
                     "/review",
-                    data=_review_payload(
+                    data={**_review_payload(
                         snapshot_id,
                         target["object_id"],
                         snapshot_revision=revision,
-                        suitability=BERT_SUIT,
+                        suitability="ja",
                         comment=BERT_COMMENT,
-                    ),
+                    ), "eindoordeel": "afwijzen"},
                     follow_redirects=False,
                 )
                 elapsed = time.perf_counter() - t0
@@ -473,11 +475,30 @@ def test_review_post_progresses_while_ingest_extract_is_heavy(tmp_path: Path) ->
     asyncio.run(_run())
     live = next(
         row
-        for row in _restart(tmp_path).snapshot_objects(snapshot_id)
+        for row in _restart(tmp_path, production_console=production_console).snapshot_objects(snapshot_id)
         if row["object_id"] == target["object_id"]
     )
     passage = ((live.get("metadata") or {}).get("review_passage") or {})
-    assert passage.get("suitability") == BERT_SUIT
+    assert passage.get("suitability") == "ja"
+    assert live["governance"]["validation_status"] == "rejected"
     _ = body
     _ = ANNE_COMMENT
     _ = ANNE_SUIT
+
+
+def _file_console(tmp_path: Path) -> OperationsConsole:
+    return OperationsConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "output" / "runtime" / "operations-console",
+    )
+
+
+
+def _file_restart(tmp_path: Path) -> OperationsConsole:
+    return _file_console(tmp_path)
+
+
+
+def _file_disk_envelopes(console: OperationsConsole) -> dict:
+    return json.loads(console._envelopes_path.read_text(encoding="utf-8"))

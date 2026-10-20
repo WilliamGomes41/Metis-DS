@@ -36,125 +36,34 @@ from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStor
 ROOT = Path(__file__).resolve().parents[1]
 
 
-class _SharedDocumentStore:
-    config = SimpleNamespace(dsn="test-double")
-
-    def __init__(self) -> None:
-        self.envelopes = {
-            "snap-a": {"snapshot_id": "snap-a", "family": "old-a"},
-            "snap-b": {"snapshot_id": "snap-b", "family": "old-b"},
-        }
-        self.objects = {
-            "snap-a": [{"object_id": "a", "object_version": "1.0"}],
-            "snap-b": [{"object_id": "b", "object_version": "1.0"}],
-        }
-        self.object_reads = 0
-        self.lock = threading.Lock()
-
-    def verify_cutover_schema(self) -> None:
-        return None
-
-    def list_envelopes(self) -> list[dict[str, Any]]:
-        with self.lock:
-            return deepcopy(list(self.envelopes.values()))
-
-    def get_envelope(self, snapshot_id: str) -> dict[str, Any] | None:
-        with self.lock:
-            row = self.envelopes.get(snapshot_id)
-            return deepcopy(row) if row is not None else None
-
-    def list_document_objects(self, snapshot_id: str) -> list[dict[str, Any]]:
-        with self.lock:
-            self.object_reads += 1
-            return deepcopy(self.objects[snapshot_id])
-
-    @staticmethod
-    def _revision(rows: list[dict[str, Any]]) -> str:
-        return PostgresWorkflowDocumentRuntimeStore._revision(rows)
-
-    def revision_for_rows(self, rows: list[dict[str, Any]]) -> str:
-        return self._revision(rows)
-
-    def objects_revision(self, snapshot_id: str) -> str:
-        with self.lock:
-            return self._revision(self.objects[snapshot_id])
-
-    def write_bundle(
-        self,
-        *,
-        envelope: dict[str, Any],
-        objects: list[dict[str, Any]] | None = None,
-        expected_revision: str | None = None,
-    ) -> str:
-        snapshot_id = str(envelope["snapshot_id"])
-        with self.lock:
-            current_revision = self._revision(self.objects[snapshot_id])
-            if expected_revision is not None and expected_revision != current_revision:
-                raise AssertionError("unexpected stale revision")
-            self.envelopes[snapshot_id] = deepcopy(envelope)
-            if objects is not None:
-                self.objects[snapshot_id] = deepcopy(objects)
-            return self._revision(self.objects[snapshot_id])
-
-    @contextmanager
-    def _connect(self) -> Iterator["_SharedDocumentStore"]:
-        yield self
-
-    @contextmanager
-    def transaction(self) -> Iterator[None]:
-        yield
+def _seed_documents(production_console, *, paragraphs=1, documents=2):
+    from types import SimpleNamespace
+    from tests.test_live_v1_working_v2_v1 import MemorySourceStore
+    console = production_console(processing_binder=lambda console:None, immutable_source_store=MemorySourceStore())
+    author = console.create_account(username='author',password='fixture-password',roles=['researcher'])
+    reviewer = console.create_account(username='reviewer',password='fixture-password',roles=['reviewer'])
+    snapshots = []
+    for index in range(documents):
+        data = ('<html><h1>Bron '+str(index)+'</h1>'+''.join(
+            '<p>Een observatie '+str(index)+'-'+str(j)+' is een systematische waarneming.</p>' for j in range(paragraphs))+'</html>').encode()
+        snapshots.append(console.ingest(actor_id=author['account_id'],filename=f'source-{index}.html',data=data,
+            content_type='text/html',ingest_kind='new',title=f'Bron {index}',version='1',date='2026-10-20',live_url='',
+            class_='richtlijn',family=f'fixture-{index}',named_reviewers=[reviewer['account_id']])['snapshot_id'])
+    return SimpleNamespace(console=console,author=author,reviewer=reviewer,snapshots=snapshots)
 
 
-class _ReviewStoreDouble(PostgresWorkflowReviewStore):
-    """#665 (besluit 10c): a real PostgresWorkflowReviewStore on the document
-    double's config, with in-memory review state; it shares the document
-    double's connection, so one workflow transaction spans both."""
-
-    def __init__(self, documents: _SharedDocumentStore) -> None:
-        super().__init__(PostgresCanonicalConfig(dsn="test-double"))
-        self.config = documents.config
-        self.documents = documents
-        self.events: list[dict[str, Any]] = []
-        self.bindings: dict[str, list[dict[str, Any]]] = {}
-
-    def _connect(self) -> Any:
-        return self.documents._connect()
-
-    def verify_review_schema(self) -> None:
-        return None
-
-    def read_events(self) -> list[dict[str, Any]]:
-        return deepcopy(self.events)
-
-    def append_event(self, **event: Any) -> dict[str, Any]:
-        self.events.append(deepcopy(event))
-        return deepcopy(event)
-
-    @contextmanager
-    def buffered(self) -> Iterator[None]:
-        yield
-
-    def read_bindings(self, snapshot_ids: list[str] | None = None) -> dict[str, list[dict[str, Any]]]:
-        return deepcopy(self.bindings)
-
-    def replace_snapshot_bindings(self, snapshot_id: str, rows: list[dict[str, Any]]) -> None:
-        self.bindings[snapshot_id] = deepcopy(rows)
+@pytest.fixture
+def documents(production_console):
+    return _seed_documents(production_console)
 
 
-class _DocumentConsole(_PostgresWorkflowReviewMixin, _PostgresWorkflowDocumentsMixin, OperationsConsole):
-    pass
-
-
-def _document_console(
-    tmp_path: Path, store: _SharedDocumentStore
-) -> _DocumentConsole:
-    return _DocumentConsole(
-        root=tmp_path,
-        runtime=tmp_path / "runtime",
-        source_store=tmp_path / "sources",
-        workflow_document_store=store,  # type: ignore[arg-type]
-        workflow_review_store=_ReviewStoreDouble(store),
-    )
+def _change_type(subject, console=None):
+    console = console or subject.console
+    sid = subject.snapshots[0]
+    obj = next(o for o in console.snapshot_objects(sid) if o['object_type'] not in {'document','heading'}
+               and o.get('proposed_object_type')!='heading')
+    console.confirm_object_type(actor_id=subject.reviewer['account_id'],snapshot_id=sid,
+        object_id=obj['object_id'],confirmed_object_type='explanation',expected_revision=console.objects_revision(sid))
 
 
 def test_cutover_revision_preserves_object_order() -> None:
@@ -208,116 +117,107 @@ def test_local_files_are_unused_in_postgres() -> None:
     assert "authoritative in PostgreSQL" in source
 
 
-def test_two_console_process_models_rebase_distinct_envelope_commits(tmp_path: Path) -> None:
-    """Independent worker caches cannot erase another worker's committed key."""
-    store = _SharedDocumentStore()
-    first = _document_console(tmp_path, store)
-    second = _document_console(tmp_path, store)
-    prepared_a = deepcopy(first._envelopes)
-    prepared_b = deepcopy(second._envelopes)
-    prepared_a["snap-a"]["family"] = "new-a"
-    prepared_b["snap-b"]["family"] = "new-b"
-    barrier = threading.Barrier(2)
-    errors: list[BaseException] = []
-
-    def commit(console: _DocumentConsole, snapshot_id: str, prepared: dict[str, Any]) -> None:
+def test_two_console_process_models_rebase_distinct_envelope_commits(documents):
+    from tests.production_support import restart_production
+    first = documents.console
+    second = restart_production(first)
+    first.refresh_workflow_documents(); second.refresh_workflow_documents()
+    a,b = documents.snapshots
+    prepared_a,prepared_b = deepcopy(first._envelopes),deepcopy(second._envelopes)
+    prepared_a[a]['family']='new-a'; prepared_b[b]['family']='new-b'
+    barrier,errors = threading.Barrier(2),[]
+    def commit(console,sid,prepared):
         try:
             barrier.wait(timeout=5)
-            console._commit_prepared_store(
-                envelopes=prepared,
-                snapshot_id=snapshot_id,
-            )
-        except BaseException as exc:  # pragma: no cover - asserted below
+            console._commit_prepared_store(envelopes=prepared,snapshot_id=sid)
+        except BaseException as exc:
             errors.append(exc)
-
-    threads = [
-        threading.Thread(target=commit, args=(first, "snap-a", prepared_a)),
-        threading.Thread(target=commit, args=(second, "snap-b", prepared_b)),
-    ]
-    for thread in threads:
-        thread.start()
+    threads=[threading.Thread(target=commit,args=(first,a,prepared_a)),threading.Thread(target=commit,args=(second,b,prepared_b))]
+    for thread in threads:thread.start()
     for thread in threads:
         thread.join(timeout=10)
         assert not thread.is_alive()
-
-    assert errors == []
-    assert store.envelopes["snap-a"]["family"] == "new-a"
-    assert store.envelopes["snap-b"]["family"] == "new-b"
-
-
-def test_snapshot_objects_and_revision_uses_one_authoritative_object_fetch(tmp_path: Path) -> None:
-    store = _SharedDocumentStore()
-    store.objects["snap-a"] = [
-        {"object_id": f"a-{index:03d}", "object_version": "1.0", "text": f"row-{index}"}
-        for index in range(250)
-    ]
-    expected_objects = deepcopy(store.objects["snap-a"])
-    expected_revision = PostgresWorkflowDocumentRuntimeStore._revision(expected_objects)
-    console = _document_console(tmp_path, store)
-    store.object_reads = 0
-
-    objects, revision = console.snapshot_objects_and_revision("snap-a", include_blocked=True)
-
-    assert store.object_reads == 1
-    assert objects == expected_objects
-    assert revision == expected_revision
+    assert errors==[]
+    assert first.workflow_document_store.get_envelope(a)['family']=='new-a'
+    assert second.workflow_document_store.get_envelope(b)['family']=='new-b'
 
 
-def test_snapshot_objects_and_revision_uses_store_concurrency_token(tmp_path: Path) -> None:
-    store = _SharedDocumentStore()
-    store.revision_for_rows = lambda _rows: "m2.object-aware"  # type: ignore[method-assign]
-    console = _document_console(tmp_path, store)
-    store.object_reads = 0
 
-    _objects, revision = console.snapshot_objects_and_revision("snap-a", include_blocked=True)
-
-    assert store.object_reads == 1
-    assert revision == "m2.object-aware"
-
-
-def test_authoritative_object_read_replaces_stale_worker_revision(tmp_path: Path) -> None:
-    store = _SharedDocumentStore()
-    console = _document_console(tmp_path, store)
-    console._load_objects("snap-a", remember=True)
-    first_revision = PostgresWorkflowDocumentRuntimeStore._revision(store.objects["snap-a"])
-    assert console._objects_expected_revs()["snap-a"] == first_revision
-
-    store.objects["snap-a"][0]["object_version"] = "2.0"
-    console._load_objects("snap-a", remember=True)
-    next_revision = PostgresWorkflowDocumentRuntimeStore._revision(store.objects["snap-a"])
-
-    assert next_revision != first_revision
-    assert console._objects_expected_revs()["snap-a"] == next_revision
+def test_snapshot_objects_and_revision_uses_one_authoritative_object_fetch(production_console,monkeypatch):
+    subject = _seed_documents(production_console,paragraphs=250,documents=1)
+    console,sid = subject.console,subject.snapshots[0]
+    store = console.workflow_document_store
+    expected = store.list_document_objects(sid)
+    assert len(expected)>=250
+    calls=[]
+    real=store.list_document_objects
+    def observe(snapshot_id):
+        calls.append(snapshot_id)
+        return real(snapshot_id)
+    monkeypatch.setattr(store,'list_document_objects',observe)
+    objects,revision=console.snapshot_objects_and_revision(sid,include_blocked=True)
+    assert calls==[sid]
+    assert objects==expected and revision==store.revision_for_rows(expected)
 
 
-def test_separate_authoritative_snapshot_reads_detect_intervening_change(tmp_path: Path) -> None:
-    store = _SharedDocumentStore()
-    console = _document_console(tmp_path, store)
-    store.object_reads = 0
 
-    first_objects, first_revision = console.snapshot_objects_and_revision("snap-a", include_blocked=True)
-    store.objects["snap-a"][0] = {"object_id": "a", "object_version": "2.0"}
-    second_objects, second_revision = console.snapshot_objects_and_revision("snap-a", include_blocked=True)
-
-    assert store.object_reads == 2
-    assert first_objects != second_objects
-    assert first_revision != second_revision
-
-
-def test_postgres_document_startup_leaves_corrupt_envelope_mirror_untouched(
-    tmp_path: Path,
-) -> None:
-    runtime = tmp_path / "runtime"
-    runtime.mkdir(parents=True)
-    (runtime / "envelopes.json").write_text('{"broken":', encoding="utf-8")
-    store = _SharedDocumentStore()
-
-    console = _document_console(tmp_path, store)
-
-    assert {row["snapshot_id"] for row in console.list_envelopes()} == {"snap-a", "snap-b"}
-    assert (runtime / "envelopes.json").read_text(encoding="utf-8") == '{"broken":'
+def test_snapshot_objects_and_revision_uses_store_concurrency_token(documents,monkeypatch):
+    console,sid=documents.console,documents.snapshots[0]
+    store=console.workflow_document_store
+    calls=[]
+    real=store.list_document_objects
+    def observe(snapshot_id):
+        calls.append(snapshot_id)
+        return real(snapshot_id)
+    monkeypatch.setattr(store,'list_document_objects',observe)
+    monkeypatch.setattr(store,'revision_for_rows',lambda rows:'m2.object-aware')
+    _,revision=console.snapshot_objects_and_revision(sid,include_blocked=True)
+    assert calls==[sid] and revision=='m2.object-aware'
 
 
+
+def test_authoritative_object_read_replaces_stale_worker_revision(documents):
+    from tests.production_support import restart_production
+    console,sid=documents.console,documents.snapshots[0]
+    console._load_objects(sid,remember=True)
+    first=console._objects_expected_revs()[sid]
+    _change_type(documents,restart_production(console))
+    console._load_objects(sid,remember=True)
+    fresh=console.workflow_document_store.objects_revision(sid)
+    assert fresh!=first and console._objects_expected_revs()[sid]==fresh
+
+
+
+def test_separate_authoritative_snapshot_reads_detect_intervening_change(documents,monkeypatch):
+    from tests.production_support import restart_production
+    console,sid=documents.console,documents.snapshots[0]
+    other=restart_production(console)
+    calls=[]
+    real=console.workflow_document_store.list_document_objects
+    def observe(snapshot_id):
+        calls.append(snapshot_id)
+        return real(snapshot_id)
+    monkeypatch.setattr(console.workflow_document_store,'list_document_objects',observe)
+    first_objects,first_revision=console.snapshot_objects_and_revision(sid,include_blocked=True)
+    _change_type(documents,other)
+    second_objects,second_revision=console.snapshot_objects_and_revision(sid,include_blocked=True)
+    assert calls==[sid,sid]
+    assert first_objects!=second_objects and first_revision!=second_revision
+
+
+
+def test_postgres_document_startup_leaves_corrupt_envelope_mirror_untouched(documents):
+    from tests.production_support import restart_production
+    console=documents.console
+    path=console.runtime/'envelopes.json'
+    path.write_text('{"broken":',encoding='utf-8')
+    fresh=restart_production(console)
+    assert {r['snapshot_id'] for r in fresh.list_envelopes()}==set(documents.snapshots)
+    assert path.read_text()=='{"broken":'
+
+
+
+@pytest.mark.file_topology
 def test_local_only_startup_still_fails_closed_on_corrupt_envelope_json(
     tmp_path: Path,
 ) -> None:
@@ -333,99 +233,57 @@ def test_local_only_startup_still_fails_closed_on_corrupt_envelope_json(
         )
 
 
+
 @pytest.mark.parametrize('fail_commit', [True, False])
-def test_delete_source_cleanup_follows_transaction_commit_and_restart(tmp_path, fail_commit):
-    """Real console/mixin/transaction code with a rollback-capable store double."""
-    from contextlib import contextmanager
-    from types import SimpleNamespace
-    from src.g2_source_store import build_g2_locator
+def test_delete_source_cleanup_follows_transaction_commit_and_restart(documents,fail_commit):
+    import psycopg,traceback
     from src.operations_console_v1 import ConsoleError
-    from src.workflows.workflow_transaction_v1 import workflow_transaction, workflow_transaction_active
-
-    class Source:
-        def __init__(self):
-            self.blobs = {}
-            self.deletes = 0
-
-        def store_verified(self, *, data, sha256, filename):
-            locator = build_g2_locator(sha256=sha256, filename=filename)
-            self.blobs[locator] = data
-            return locator
-
-        def load_verified(self, locator):
-            return self.blobs[locator]
-
-        def delete_verified(self, locator):
-            assert not workflow_transaction_active(), 'source deletion before outer commit'
-            self.deletes += 1
-            return self.blobs.pop(locator, None) is not None
-
-    class Store(_SharedDocumentStore):
-        config = SimpleNamespace(dsn='test-double')
-
-        def delete_document(self, snapshot_id):
-            del self.envelopes[snapshot_id]
-            del self.objects[snapshot_id]
-
-        @contextmanager
-        def _connect(self):
-            yield self
-
-        @contextmanager
-        def transaction(self):
-            before = deepcopy(self.envelopes), deepcopy(self.objects)
-            try:
-                yield
-                if fail_commit:
-                    raise RuntimeError('injected_commit_failure')
-            except Exception:
-                self.envelopes, self.objects = before
-                raise
-
-    source = Source()
-    local = OperationsConsole(root=tmp_path, runtime=tmp_path/'runtime', source_store=tmp_path/'sources', immutable_source_store=source)
-    actor = local.create_account('delete-author', 'test-password', ('researcher', 'reviewer'))
-    reviewer = local.create_account('delete-reviewer', 'test-password', ('reviewer',))
-    receipt = local.ingest(actor_id=actor['account_id'], filename='source.html',
-                           data=b'<html><h1>Bron</h1><p>Bespreek passende ondersteuning met de client.</p></html>',
-                           content_type='text/html', ingest_kind='new', title='Bron', version='1.0',
-                           date='2026-09-30', live_url='', class_='richtlijn', family='test',
-                           named_reviewers=[reviewer['account_id']])
-    sid = receipt['snapshot_id']
-    store = Store()
-    store.envelopes = deepcopy(local._envelopes)
-    store.objects = {sid: deepcopy(local._load_objects(sid))}
-    def restart():
-        return _DocumentConsole(root=tmp_path, runtime=tmp_path/'runtime', source_store=tmp_path/'sources',
-                                immutable_source_store=source, workflow_document_store=store,
-                                workflow_review_store=_ReviewStoreDouble(store))
-    console = restart()
-    locator = console._envelope(sid)['immutable_storage_locator']
-    original = source.load_verified(locator)
-    command = dict(actor_id=actor['account_id'], snapshot_id=sid, confirmed=True, confirm_title='Bron')
+    from src.workflows.workflow_transaction_v1 import workflow_transaction,workflow_transaction_active
+    from tests.production_support import restart_production
+    console,sid=documents.console,documents.snapshots[0]
+    source=console.immutable_source_store
+    config=console.workflow_document_store.config
+    envelope=console._envelope(sid)
+    locator=envelope['immutable_storage_locator']
+    before=deepcopy(console._load_objects(sid,remember=False))
+    original=source.load_verified(locator)
+    deletes=[]
+    real=source.delete_verified
+    def delete_after_commit(value):
+        assert not workflow_transaction_active()
+        with psycopg.connect(config.dsn) as other:
+            assert other.execute('SELECT count(*) FROM workflow.documents WHERE snapshot_id=%s',(sid,)).fetchone()[0]==0
+        deletes.append(value)
+        return real(value)
+    source.delete_verified=delete_after_commit
+    command=dict(actor_id=documents.author['account_id'],snapshot_id=sid,confirmed=True,confirm_title=envelope['title'])
+    with workflow_transaction(console.workflow_document_store):
+        with pytest.raises(ConsoleError,match='unpublished_delete_requires_independent_transaction'):
+            console.delete_unpublished_snapshot(**command)
+    assert deletes==[] and source.load_verified(locator)==original
     if fail_commit:
-        with pytest.raises(RuntimeError, match='injected_commit_failure'):
-            console.delete_unpublished_snapshot(**command)
-        assert source.deletes == 0
-        console = restart()
-        assert console._envelope(sid)['snapshot_id'] == sid
-        assert source.load_verified(locator) == original
-        assert console.snapshot_objects(sid)
-    else:
-        # A nested transaction is rejected before it can mutate domain state.
-        with workflow_transaction(store):
-            with pytest.raises(ConsoleError, match='unpublished_delete_requires_independent_transaction'):
+        with psycopg.connect(config.dsn) as connection:
+            connection.execute("CREATE FUNCTION workflow.fail_fixture_delete() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture_commit_failure'; END; $$")
+            connection.execute('CREATE CONSTRAINT TRIGGER fail_fixture_delete AFTER DELETE ON workflow.documents DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION workflow.fail_fixture_delete()')
+        try:
+            with pytest.raises(Exception) as caught:
                 console.delete_unpublished_snapshot(**command)
-            assert store.get_envelope(sid) is not None
-            assert source.deletes == 0
-        result = console.delete_unpublished_snapshot(**command)
-        assert result['deleted'] and result['freeze_bytes_removed']
-        assert source.deletes == 1 and locator not in source.blobs
-        console = restart()
-        assert console.list_envelopes() == []
-        with pytest.raises(ConsoleError, match='unknown_snapshot'):
-            console.delete_unpublished_snapshot(**command)
-        assert source.deletes == 1
+            assert 'fixture_commit_failure' in ''.join(traceback.format_exception(caught.value))
+            assert deletes==[] and source.load_verified(locator)==original
+            assert restart_production(console)._load_objects(sid,remember=False)==before
+        finally:
+            with psycopg.connect(config.dsn) as connection:
+                connection.execute('DROP TRIGGER fail_fixture_delete ON workflow.documents')
+                connection.execute('DROP FUNCTION workflow.fail_fixture_delete()')
+    result=console.delete_unpublished_snapshot(**command)
+    assert result['deleted'] and result['freeze_bytes_removed']
+    assert deletes==[locator]
+    fresh=restart_production(console)
+    assert sid not in fresh.list_snapshot_ids()
+    with pytest.raises(ConsoleError,match='unknown_snapshot'):
+        fresh.delete_unpublished_snapshot(**command)
+    assert deletes==[locator]
+
 
 
 # Native PostgreSQL proof for #467. Only immutable blob storage is in-memory;

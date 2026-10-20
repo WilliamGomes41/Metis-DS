@@ -380,3 +380,24 @@ rollback-, herstart- en D5-gifproeven van die reparatie zijn afzonderlijk vastge
 
 Volledige lokale metingen van de herstelde porties 5 en 6 zijn groen: respectievelijk
 1.169,733 en 1.268,878 seconden, nul PG-skips, 1,1206× en 1,2156× de schone baseline.
+
+
+Portie 19 migreert runtimegrenzen: accounts/sessies, document- en reviewstartup,
+API-access, concurrency, herstel en de hotpath. De leesproef gebruikt meer dan
+410 echte PG-objecten; lijsten lezen geen losse snapshots en detail leest er één.
+De oude positieve constructorproeven bouwen de productieklasse en controleren
+ieder historisch ancestor-type. Een autouse guard weigert andere runtimeklassen
+buiten `file_topology`; pure ownerproeven zonder runtime-initialisatie blijven
+kleine algoritmeproeven. De aanvullende constructorguard verandert productie niet.
+
+Collection volgt geselecteerde functies, fixtures en helperaanroepen. Daardoor
+blijft een pure functie in een gemengde module zonder database uitvoerbaar,
+terwijl een inline native PG-proef zonder server tijdens collection stopt.
+De security-DNS-proef zet zelf de proxy-uitzonderingen voor haar synthetische
+hosts; de productie-SSRF-beveiliging verandert niet. Drie oude runtime-inventaris-
+proeven blijven ongewijzigd als `file_topology`, naast de PG-publicatieweigering.
+
+De bronreparatie-rollbackproef gebruikt nu het bestaande gestructureerde commando:
+het foutbewijs en de exacte raw-PG/herstartvergelijking blijven behouden. Een
+legacy vrije revise zou bij productie-start juist terecht worden heropend.
+De aanroepers van gemigreerde helpers worden aansluitend afzonderlijk gecontroleerd.

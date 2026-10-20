@@ -717,5 +717,55 @@
     ],
     "full_suite_status": "pending",
     "ci_status": "not run: push approval pending"
+  },
+  {
+    "batch": "19",
+    "base": "f544418",
+    "commit": "codex/d6a-19-runtime-boundaries",
+    "test_files": [
+      "tests/test_api_access_console_v1.py",
+      "tests/test_security_harden_wave3.py",
+      "tests/test_wave_d_runtime_inventory.py",
+      "tests/test_workflow_documents_cutover_v1.py",
+      "tests/test_workflow_identity_postgres_v1.py",
+      "tests/test_lifecycle_withdrawal_recovery_v1.py",
+      "tests/test_console_hotpath_v1.py",
+      "tests/test_pilot_review_write_serialization.py",
+      "tests/test_workflow_review_postgres_v1.py",
+      "tests/test_a09_source_repair.py",
+      "tests/test_logical_document_withdrawal_v1.py",
+      "tests/test_successor_release_cutover_v1.py",
+      "tests/test_lifecycle_status_dimensions_v1.py",
+      "tests/test_docling_contract_v1.py",
+      "tests/test_withdrawal_reconciliation_v1.py",
+      "tests/test_d6a_postgres_support.py",
+      "tests/test_665_tier_d_refused_postgres.py",
+      "tests/test_678_store_command_postgres.py"
+    ],
+    "full_suite_status": "pending final verification",
+    "ci_status": "not run: push approval pending",
+    "verification": "Runtime identity/documents/review/API access/hotpath and recovery use production PG. Constructor ancestor guards construct production leaves. Pure selected functions do not require PG; inline native cases fail during collection if unavailable. Retiring inventory/session/serialization file cases remain file_topology. All existing test functions retained.",
+    "junit": [
+      {
+        "file": "d6a19-final.xml",
+        "sha256": "ff5c94a3f396af602d2c4b2b2afa7e3e40a13d8c8177e8b760d31268c7871c5b"
+      },
+      {
+        "file": "d6a19-restored.xml",
+        "sha256": "db5e0ab66e3914a141ce52cef34d9f987125afede229296d00b2dc180da29e38"
+      },
+      {
+        "file": "d6a19-construction.xml",
+        "sha256": "372abc37675bad5a0b359d545b33b0284362f7b9a46a772b53798c7344215c61"
+      },
+      {
+        "file": "d6a19-consumers-fixed.xml",
+        "sha256": "a1ca3ecb1cd90787f1db2efbc418c8addacda41ed3a594df6d0c220e73ac254e"
+      },
+      {
+        "file": "d6a19-correct-final.xml",
+        "sha256": "9ea571cc0eca8e631fe6ead0bd66930b465e16f0a7f36ed52dd8f770b3daa984"
+      }
+    ]
   }
 ]
