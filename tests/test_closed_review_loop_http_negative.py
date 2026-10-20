@@ -15,7 +15,7 @@ from src.review_cockpit_v1 import broncontext_parts, confirmable_proposed_type
 from src.review_ledger import read_events
 
 
-def test_wrong_role_repair_post_fails_closed_without_writes(tmp_path):
+def test_legacy_free_text_repair_post_is_not_routed_and_writes_nothing(tmp_path):
     console = ClosedLoopReviewConsole(
         root=tmp_path,
         source_store=tmp_path / "sources",
@@ -86,13 +86,13 @@ def test_wrong_role_repair_post_fails_closed_without_writes(tmp_path):
             "snapshot_id": sid,
             "object_id": oid,
             "corrected_text": exact,
-            "reason": "Wrong-role repair must not write.",
+            "reason": "Legacy free-text repair must not write.",
             "snapshot_revision": console.objects_revision(sid),
         },
         follow_redirects=False,
     )
 
-    assert response.status_code == 403
+    assert response.status_code in {404, 405}
     after = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
     assert after == before
     assert read_events(console._ledger_path) == ledger_before

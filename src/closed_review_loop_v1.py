@@ -9,9 +9,8 @@ import html
 from contextlib import contextmanager
 from copy import deepcopy
 from typing import Any, Iterator
-from urllib.parse import quote
 
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from src.integrity_kernel import compute_canonical_object_hash, stamp_canonical_hashes
@@ -62,13 +61,6 @@ def _source_locator(obj: dict[str, Any], fallback: str = "") -> Any:
         if locator:
             return deepcopy(locator)
     return fallback
-
-
-def _review_url(snapshot_id: str, object_id: str = "") -> str:
-    target = f"/review?document={quote(snapshot_id, safe='')}"
-    if object_id:
-        target += f"&object={quote(object_id, safe='')}"
-    return target
 
 
 class ClosedLoopReviewConsole(ProportionateReviewConsole):
@@ -355,23 +347,6 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
         # fragments, including explicit merge refs unavailable in this text view.
         return super().correct_object(**kwargs)
 
-    def _require_repair_access(
-        self, *, actor_id: str, snapshot_id: str
-    ) -> dict[str, Any]:
-        account = self._account(actor_id)
-        roles = set(account.get("roles") or [])
-        envelope = self._envelope(snapshot_id)
-        allowed = (
-            "researcher" in roles
-            and envelope.get("uploader_account_id") == actor_id
-        ) or (
-            "reviewer" in roles
-            and actor_id in (envelope.get("named_reviewers") or [])
-        )
-        if not allowed:
-            raise ConsoleError("correction_role_required")
-        return account
-
     def _clear_pending_review_metadata(
         self, *, snapshot_id: str, object_id: str
     ) -> dict[str, Any]:
@@ -399,59 +374,6 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             raise ConsoleError("unknown_object")
         return self._commit_knowledge_change(snapshot_id, live, updated,
             reason="clear repair context", actor="repair-command")
-
-    def repair_source(
-        self,
-        *,
-        actor_id: str,
-        snapshot_id: str,
-        object_id: str,
-        corrected_text: str,
-        reason: str,
-        expected_revision: str,
-    ) -> dict[str, Any]:
-        self._require_repair_access(actor_id=actor_id, snapshot_id=snapshot_id)
-        if not expected_revision:
-            raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
-        patch = {
-            "reason": reason.strip(),
-            "operations": [
-                {"op": "set", "path": "content.clean_text", "value": corrected_text}
-            ],
-        }
-        with self._atomic_snapshot_mutation(snapshot_id):
-            if self.objects_revision(snapshot_id) != expected_revision:
-                raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
-            current, _ = self._validate_source_bound_patch(
-                snapshot_id=snapshot_id, object_id=object_id, patch=patch
-            )
-            if (current.get("governance") or {}).get("validation_status") != "revise":
-                raise ConsoleError("repair_object_not_in_revise")
-            revised = super().correct_object(
-                actor_id=actor_id,
-                snapshot_id=snapshot_id,
-                object_id=object_id,
-                patch=patch,
-            )
-            revised = self._clear_pending_review_metadata(
-                snapshot_id=snapshot_id, object_id=object_id
-            )
-            signal = self._latest_review_signal(object_id, decision="revise")
-            original = str(
-                ((signal or {}).get("details") or {}).get("original_suitability")
-                or ""
-            )
-            self._append_audit_evidence(
-                actor_id=actor_id,
-                snapshot_id=snapshot_id,
-                target=revised,
-                decision="repair",
-                original_suitability=original,
-                final_disposition="needs_review",
-                comment=reason.strip(),
-                proposed_correction="",
-            )
-            return deepcopy(revised)
 
     def _reopen_for_review(self, snapshot_id: str, object_ids: set[str]) -> None:
         if not object_ids:
@@ -705,7 +627,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
 
 
 def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole) -> None:
-    """Revision-pinned repair routes plus read-only Review evidence in Inzicht."""
+    """Read-only Review evidence in Inzicht."""
 
     def account_for(request: Request) -> dict[str, Any]:
         return console.session_account(request.cookies.get("console_session"))
@@ -719,143 +641,6 @@ def install_closed_review_routes(app: FastAPI, console: ClosedLoopReviewConsole)
             f"<section class='room'>{body}</section>",
             title=title,
         )
-
-    @app.get("/review/repair", response_class=HTMLResponse)
-    def repair_home(request: Request, document: str = "", object: str = "") -> str:
-        account = account_for(request)
-        roles = set(account.get("roles") or [])
-        if not ({"researcher", "reviewer"} & roles):
-            raise ConsoleError("researcher_role_required")
-        cards: list[str] = []
-        for envelope in console.list_envelopes():
-            sid = str(envelope["snapshot_id"])
-            if document and sid != document:
-                continue
-            allowed = (
-                "researcher" in roles
-                and envelope.get("uploader_account_id") == account["account_id"]
-            ) or (
-                "reviewer" in roles
-                and account["account_id"] in (envelope.get("named_reviewers") or [])
-            )
-            if not allowed:
-                continue
-            current, revision = console.snapshot_objects_and_revision(sid)
-            for obj in current:
-                oid = str(obj.get("object_id") or "")
-                if object and oid != object:
-                    continue
-                if (obj.get("governance") or {}).get("validation_status") != "revise":
-                    continue
-                text = str((obj.get("content") or {}).get("clean_text") or "")
-                signal = console._latest_review_signal(oid, decision="revise")
-                details = (signal or {}).get("details") or {}
-                suitability = str(
-                    details.get("original_suitability")
-                    or details.get("suitability")
-                    or ""
-                )
-                proposed = str(details.get("proposed_correction") or "")
-                comment = str(details.get("comment") or "")
-                if suitability == "alleen_onderbouwing":
-                    options = []
-                    for claim in current:
-                        claim_id = str(claim.get("object_id") or "")
-                        if (
-                            not claim_id
-                            or claim_id == oid
-                            or claim.get("object_type") == "document"
-                            or (claim.get("governance") or {}).get("validation_status")
-                            == "rejected"
-                        ):
-                            continue
-                        claim_text = str(
-                            (claim.get("content") or {}).get("clean_text") or claim_id
-                        )
-                        options.append(
-                            f'<option value="{_esc(claim_id)}">'
-                            f'{_esc(claim_text[:180])}</option>'
-                        )
-                    action = (
-                        '<form method="post" action="/review/repair/support">'
-                        f'<input type="hidden" name="snapshot_id" value="{_esc(sid)}">'
-                        f'<input type="hidden" name="support_object_id" value="{_esc(oid)}">'
-                        f'<input type="hidden" name="snapshot_revision" value="{_esc(revision)}">'
-                        '<label>Koppel als onderbouwing aan kennisobject'
-                        f'<select name="claim_object_id" required>{"".join(options)}</select></label>'
-                        '<button class="btn-primary" type="submit">Onderbouwing koppelen</button>'
-                        '</form>'
-                    ) if options else (
-                        '<p class="muted">Geen geschikt kennisobject beschikbaar om aan te koppelen.</p>'
-                    )
-                else:
-                    action = (
-                        '<form method="post" action="/review/repair/source">'
-                        f'<input type="hidden" name="snapshot_id" value="{_esc(sid)}">'
-                        f'<input type="hidden" name="object_id" value="{_esc(oid)}">'
-                        f'<input type="hidden" name="snapshot_revision" value="{_esc(revision)}">'
-                        '<label>Herstelde, brongebonden passage'
-                        f'<textarea name="corrected_text" required>{_esc(proposed)}</textarea></label>'
-                        '<label>Reden voor herstel'
-                        f'<textarea name="reason" required>{_esc(comment)}</textarea></label>'
-                        '<button class="btn-primary" type="submit">Herstel uitvoeren</button>'
-                        '</form>'
-                    )
-                cards.append(
-                    "<article class='doc-card'>"
-                    f"<p class='doc-title'>{_esc(text)}</p>"
-                    f"<p>Status: herstel nodig · {_esc(suitability or 'geen categorie')}</p>"
-                    f"{action}"
-                    f"<p><a href='{_esc(_review_url(sid, oid))}'>Terug naar Review</a></p>"
-                    "</article>"
-                )
-        return chrome(
-            request,
-            "<h1>Review — herstel nodig</h1>"
-            "<p class='lead'>Voorgestelde correcties worden hier pas expliciet uitgevoerd. "
-            "Elk formulier is gebonden aan de getoonde snapshot-revisie.</p>"
-            + ("".join(cards) or "<p class='muted'>Geen herstelwerk.</p>")
-            + "<p><a href='/inzicht/reviewsignalen'>Bekijk signalen uit Review</a></p>",
-            "review",
-        )
-
-    @app.post("/review/repair/source")
-    def repair_source_route(
-        request: Request,
-        snapshot_id: str = Form(...),
-        object_id: str = Form(...),
-        corrected_text: str = Form(...),
-        reason: str = Form(...),
-        snapshot_revision: str = Form(...),
-    ) -> RedirectResponse:
-        account = account_for(request)
-        console.repair_source(
-            actor_id=account["account_id"],
-            snapshot_id=snapshot_id,
-            object_id=object_id,
-            corrected_text=corrected_text,
-            reason=reason,
-            expected_revision=snapshot_revision.strip(),
-        )
-        return RedirectResponse("/review/repair", status_code=303)
-
-    @app.post("/review/repair/support")
-    def repair_support_route(
-        request: Request,
-        snapshot_id: str = Form(...),
-        support_object_id: str = Form(...),
-        claim_object_id: str = Form(...),
-        snapshot_revision: str = Form(...),
-    ) -> RedirectResponse:
-        account = account_for(request)
-        console.resolve_support_relation(
-            actor_id=account["account_id"],
-            snapshot_id=snapshot_id,
-            support_object_id=support_object_id,
-            claim_object_id=claim_object_id,
-            expected_revision=snapshot_revision.strip(),
-        )
-        return RedirectResponse("/review/repair", status_code=303)
 
     @app.get("/audit/review-signals", include_in_schema=False)
     def legacy_review_signals(request: Request) -> RedirectResponse:
