@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "repository": "https://github.com/WilliamGomes41/plugins.git",
+  "commit": "5108b719a7aa484ef1a9781f587c7bbeac793f92",
+  "files": [
+    {
+      "source": "cursor-team-kit/skills/verify-this/SKILL.md",
+      "destination": ".agents/skills/verify-this/SKILL.md",
+      "sha256": "c1c7b27c1133085bd3409c601ea12b6e6f61b4b23debcd52bc248fc01907e7de"
+    },
+    {
+      "source": "cursor-team-kit/skills/make-pr-easy-to-review/SKILL.md",
+      "destination": ".agents/skills/make-pr-easy-to-review/SKILL.md",
+      "sha256": "e8da0d4a85b7c04823698f539251617389f827fd9137100ef7eaea5dcc992fe7"
+    },
+    {
+      "source": "cursor-team-kit/LICENSE",
+      "destination": ".agents/licenses/cursor-team-kit.txt",
+      "sha256": "702f5f331b56aff0e33d8c7826df5202559f894145eb70355c6477b55b5bb8a0"
+    }
+  ]
+}
