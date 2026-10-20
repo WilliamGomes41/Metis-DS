@@ -433,3 +433,11 @@ reviewproef. Alle 22 bestaande cases zijn groen op echte PG-commando's. De eerst
 bronpreflight is voltooid vóór de eerste review; de individuele reviews valideren
 de bron nogmaals. Spies observeren beide, zonder de reviewoperatie of toestand
 te vervangen. De pin tussen batchleden is de echte PG-revision.
+
+
+De afsluitende inventaris telt 5.698 verzamelde cases, waarvan 2.016 een PG-
+afhankelijkheid hebben (inclusief adapterproeven). De 130 `file_topology`-cases
+in 21 bestanden staan volledig in `evidence/d6a/file-topology-inventory.json`.
+Daaronder vallen expliciet de oude lokale bestandsstart en de bijbehorende
+Azure-weigering; de productieklasseguard mag deze uitdovende opstelling niet
+als ongemigreerde runtime behandelen. De 50 topologieproeven zijn groen.
