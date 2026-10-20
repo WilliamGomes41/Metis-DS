@@ -10,7 +10,10 @@
 """
 import pytest
 
-from .support import choice, command, console_at, observe, policy
+from .support import choice, command, _file_console_at as console_at, observe, policy
+
+# These goldens assert the complete retiring JSON file tree, including writers.
+pytestmark = pytest.mark.file_topology
 
 CASES = {
     "html": {},

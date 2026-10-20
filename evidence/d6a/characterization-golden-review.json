@@ -1,0 +1,15 @@
+{
+  "scope": "D6a production PG characterization",
+  "baseline": "ad45ce5",
+  "cases": 120,
+  "pg_view_cases": 36,
+  "file_tree_golden_cases": 84,
+  "golden_changes": {
+    "revision": "Exact native PG m2 revision tokens replace local SHA tokens; no normalization added",
+    "batch": "Production ProportionateReviewConsole exposes its existing batch task in index/provided-snapshot",
+    "status": "Production PG receipt is in review; old base console said in verwerking",
+    "routes": "Actual ASGI composition retains all108 previous routes and adds11 existing production audit/repair/withdrawal routes"
+  },
+  "runtime_changes": false,
+  "coverage_limit": "Historical source SHA no longer matches current product modules; historical numeric range coverage is not claimed"
+}

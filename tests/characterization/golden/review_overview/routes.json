@@ -37,6 +37,36 @@
       ]
     ],
     [
+      "/audit",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/audit/archive",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/audit/new",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/audit/review-signals",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/audit/semantic-safety",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/brand",
       []
     ],
@@ -157,6 +187,12 @@
       ]
     ],
     [
+      "/inzicht/reviewsignalen",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/inzicht/routevergelijking",
       [
         "GET"
@@ -211,6 +247,18 @@
       ]
     ],
     [
+      "/inzicht/veiligheidstests",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/inzicht/veiligheidstests/run",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/login",
       [
         "GET"
@@ -257,6 +305,12 @@
     ],
     [
       "/publish",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/publish/withdraw",
       [
         "POST"
       ]
@@ -384,6 +438,18 @@
     ],
     [
       "/review/relations",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/review/repair",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/review/resolve",
       [
         "POST"
       ]

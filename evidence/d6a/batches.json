@@ -794,5 +794,36 @@
     ],
     "full_suite_status": "pending",
     "ci_status": "not run: push approval pending"
+  },
+  {
+    "batch": "21",
+    "base": "ad45ce5",
+    "commit": "codex/d6a-21-characterization",
+    "test_files": [
+      "tests/characterization/test_ingest.py",
+      "tests/characterization/test_ingest_boundaries.py",
+      "tests/characterization/test_review_room.py",
+      "tests/characterization/test_review_overview.py"
+    ],
+    "executed_unique_cases": 120,
+    "failures": 0,
+    "skipped": 0,
+    "verification": "36 exact PG view/route goldens;84 complete JSON-file-tree goldens explicitly file_topology. Historical identities seeded as real SQL rows; production classes and all119 routes. Reviewed22 changed golden outputs: native revision token, batch task, production lifecycle display and11 existing ASGI routes. Both mutation counts preserved;120 cases green after restore. Historical source-range SHA mismatch remains explicitly not verified.",
+    "junit": [
+      {
+        "file": "d6a21-final.xml",
+        "sha256": "638770daa70503ed209a60c28076c1bef936f25d7c143070c165137c06b9d350"
+      },
+      {
+        "file": "d6a21-review-mutation.xml",
+        "sha256": "f9a555c53f5295c3f895b49cdee48752c6ee27318b1d38b5f3ae78e72669f6a9"
+      },
+      {
+        "file": "d6a21-ingest-mutation.xml",
+        "sha256": "6fc0b36b661fef82878c6f9a8dca4886d7360a7756adb147ddffb21c1ccb94ce"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending"
   }
 ]

@@ -410,3 +410,19 @@ testfuncties blijven aanwezig. Retirement gebruikt de echte PG-operatie en de
 accounts-pagina van productie. Een test die onvolledige formatie simuleert schrijft
 haar gewijzigde envelope naar PostgreSQL; een gewijzigde losse kopie is geen
 workflowtoestand. Ook de diagnostiekproef gebruikt alle productie-routes.
+
+
+Portie 21 omvat de eerder via een `cls`-argument gebouwde karakterisering:
+36 exacte pagina-/routegoldens gebruiken nu de echte PG-productieklasse en
+synthetische SQL-identiteiten. De 84 overige goldens controleren het volledige
+JSON-bestandsbeeld; zij blijven expliciet `file_topology` en verdwijnen in D6b.
+Alle 120 bestaande cases blijven groen, zonder skips. De geactualiseerde
+HTML-goldens zijn beoordeeld op de bestaande PG-revision, batchdeur en
+productiestatus; de routegolden behoudt alle 108 routes en neemt de elf ontbrekende
+productieroutes op. Geen productiegedrag is gewijzigd.
+
+De bestaande mutaties blijven 46/84 ingestgevallen en 24/27 reviewgevallen rood
+maken; na herstel zijn alle 120 groen. De historische bronregel-dekking wordt
+niet geclaimd omdat beide productiebestanden inmiddels van de oude SHA afwijken.
+De aparte characterization-CI-job krijgt dezelfde PostgreSQL16-service als de
+suitejob; deze configuratie is lokaal voorbereid, CI is nog niet uitgevoerd.
