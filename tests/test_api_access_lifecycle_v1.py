@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def _dsn() -> str:
     value = os.environ.get("METIS_TEST_POSTGRES_DSN", "").strip()
     if not value:
-        pytest.skip("METIS_TEST_POSTGRES_DSN is required for API access lifecycle evidence")
+        pytest.fail("PostgreSQL was not bootstrapped during collection")
     return value
 
 
@@ -614,3 +614,9 @@ def test_tenant_policy_stale_version_is_rejected_without_overwrite():
         assert row["tenant_document_ids"] == ["doc-a", "doc-b", "doc-c"]
     finally:
         _cleanup(issued)
+
+
+@pytest.fixture(autouse=True)
+def isolated_postgres(complete_postgres):
+    """All store connections in this test target its own cloned database."""
+    return complete_postgres

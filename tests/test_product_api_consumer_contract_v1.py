@@ -33,7 +33,7 @@ DOC = "vvn-osteoporose-fractuurpreventie-2024"
 def _dsn() -> str:
     value = os.environ.get("METIS_TEST_POSTGRES_DSN", "").strip()
     if not value:
-        pytest.skip("METIS_TEST_POSTGRES_DSN is required for Product API N+1 conformance")
+        pytest.fail("PostgreSQL was not bootstrapped during collection")
     return value
 
 
@@ -259,3 +259,9 @@ def test_fresh_n_plus_one_consumer_uses_same_contract_without_metis_specific_cod
         _assert_matches_openapi(spec, "/v1/documents", wrong.json(), status="401")
     finally:
         _cleanup(dsn, issued.tenant_id, issued.application_id)
+
+
+@pytest.fixture(autouse=True)
+def isolated_postgres(complete_postgres):
+    """All store connections in this test target its own cloned database."""
+    return complete_postgres
