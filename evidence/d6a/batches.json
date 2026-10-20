@@ -2,29 +2,36 @@
   {
     "batch": "02",
     "base": "2617c48",
-    "commit": "40ad364",
+    "commit": "40ad364d57f6d83e04fb6ac69c5dc02900258468",
     "test_files": [
       "tests.test_api_access_lifecycle_v1",
       "tests.test_api_access_postgres_v1",
       "tests.test_console_badge_counts_postgres_v1",
       "tests.test_console_list_reads_postgres_v1",
+      "tests.test_d6a_postgres_support",
       "tests.test_lifecycle_identity_v1",
+      "tests.test_live_v1_working_v2_v1",
+      "tests.test_logical_document_withdrawal_v1",
       "tests.test_product_api_consumer_contract_v1",
       "tests.test_published_working_revision_immutable_2b_postgres",
       "tests.test_review_queue_sql_parity_v1",
+      "tests.test_successor_release_cutover_v1",
       "tests.test_vsa_publish_document_v1",
       "tests.test_workflow_chain_recovery_v1",
       "tests.test_workflow_postgres_concurrency",
       "tests.test_workflow_topic_identity_v1",
       "tests.test_workflow_transaction_v1"
     ],
-    "existing_count": 72,
-    "executed_count": 72,
+    "existing_count": 87,
+    "executed_count": 87,
     "missing_existing": [],
     "new_cases": [],
     "failures": 0,
     "skipped": 0,
-    "targeted_junit": "d6a02-native.xml",
+    "targeted_junit": [
+      "d6a02-native.xml",
+      "d6a02-isolation.xml"
+    ],
     "full_suite_status": "passed locally; CI pending",
     "ci_status": "not run: push approval pending",
     "full_suite": {
@@ -43,12 +50,13 @@
       "ratio": 0.9482,
       "within_twice_baseline": true
     },
-    "measurement_limits": "Local runner, not CI. NO_PROXY/no_proxy include rebind.example.test and hop.example.test to allow the existing SSRF tests to exercise their own DNS transport. The initial baseline had three proxy-related failures; timing is informative, not controlled CI evidence."
+    "measurement_limits": "Local runner, not CI. NO_PROXY/no_proxy include rebind.example.test and hop.example.test to allow the existing SSRF tests to exercise their own DNS transport. The initial baseline had three proxy-related failures; timing is informative, not controlled CI evidence.",
+    "historical_commit": "40ad364"
   },
   {
     "batch": "03",
     "base": "40ad364",
-    "commit": "4c087e2",
+    "commit": "4c087e20ee707b5b2513c27d6750d6e47eda8f24",
     "test_files": [
       "tests.test_review_configuration_upload_v1"
     ],
@@ -62,12 +70,13 @@
     "skipped": 0,
     "targeted_junit": "d6a-reader.xml",
     "full_suite_status": "batch 02 running; subsequent full measurements pending",
-    "ci_status": "not run: push approval pending"
+    "ci_status": "not run: push approval pending",
+    "historical_commit": "4c087e2"
   },
   {
     "batch": "04",
     "base": "4c087e2",
-    "commit": "cd9e42c",
+    "commit": "cd9e42c58563455b8a2b300f09df64c1f83fe2f6",
     "test_files": [
       "tests.test_console_metis_dictionary",
       "tests.test_console_review_card_two_column",
@@ -106,12 +115,13 @@
       "ratio": 0.9847,
       "within_twice_baseline": true
     },
-    "measurement_limits": "Local runner, not CI. NO_PROXY/no_proxy include rebind.example.test and hop.example.test to allow the existing SSRF tests to exercise their own DNS transport. The initial baseline had three proxy-related failures; timing is informative, not controlled CI evidence."
+    "measurement_limits": "Local runner, not CI. NO_PROXY/no_proxy include rebind.example.test and hop.example.test to allow the existing SSRF tests to exercise their own DNS transport. The initial baseline had three proxy-related failures; timing is informative, not controlled CI evidence.",
+    "historical_commit": "cd9e42c"
   },
   {
     "batch": "05",
     "base": "cd9e42c",
-    "commit": "57c6bb4",
+    "commit": "74adc7a3439c6fc84a29faa04c5ccc8747e8be44",
     "test_files": [
       "tests/test_a1_instrumentation.py",
       "tests/test_bounded_processing_lifecycle.py",
@@ -146,12 +156,20 @@
       }
     ],
     "ci_status": "not run: push approval pending",
-    "full_suite_status": "pending"
+    "full_suite_status": "Initial full run found four helper-call errors; fixed, pinned full rerun queued",
+    "historical_commit": "57c6bb4",
+    "followup": "Four imported deletion-proof callers were found in the full run and fixed on this batch branch; later local branches were rebased to include the repair.",
+    "followup_junit": {
+      "file": "d6a05-consumer-fix.xml",
+      "sha256": "d54aad108483adf68225948e4377d49d5914015edc637cfb4d77288a237cdf10",
+      "tests": 30,
+      "failures": 0
+    }
   },
   {
     "batch": "06",
     "base": "57c6bb4",
-    "commit": "80d68c3",
+    "commit": "bb1345aff403fe3e8410fa31daf3c5b4d17842b5",
     "test_files": [
       "tests/decision_graph_native_support.py",
       "tests/production_support.py",
@@ -196,12 +214,13 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending"
+    "ci_status": "not run: push approval pending",
+    "historical_commit": "80d68c3"
   },
   {
     "batch": "07",
     "base": "80d68c3",
-    "commit": "pending",
+    "commit": "bfc3b062bac89ac48970590d3c11c171851b1060",
     "test_files": [
       "docs/agents/postgres-tests.md",
       "tests/complete_workflow_support.py",
@@ -264,12 +283,13 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending"
+    "ci_status": "not run: push approval pending",
+    "historical_commit": "pending"
   },
   {
     "batch": "08",
     "base": "0c3a90d",
-    "commit": "2fb109f",
+    "commit": "0ac449dd96642b5d9f62bcd694cbdfd749629fcc",
     "change_class": "B",
     "scope": "Bounded PostgreSQL key-list read repair; no lifecycle writes",
     "executed_count": 13,
@@ -282,12 +302,13 @@
       }
     ],
     "full_suite_status": "queued",
-    "ci_status": "not run: push approval pending"
+    "ci_status": "not run: push approval pending",
+    "historical_commit": "2fb109f"
   },
   {
     "batch": "09",
     "base": "2fb109f",
-    "commit": "pending",
+    "commit": "df33d35b4ef76ed70e1c2a99ed8573471d6b9455",
     "test_files": [
       "tests/test_a3_attempt_correctness.py",
       "tests/test_admission_language_variation.py",
@@ -327,12 +348,13 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending"
+    "ci_status": "not run: push approval pending",
+    "historical_commit": "pending"
   },
   {
     "batch": "10",
     "base": "4b25004",
-    "commit": "pending",
+    "commit": "fb19bd3d9fcf0af5dc330d59a23c5500197c87c6",
     "test_files": [
       "tests/browser_source_selection_fixture.py",
       "tests/conftest.py",
@@ -359,6 +381,41 @@
       {
         "file": "d6a10-fixed.xml",
         "sha256": "714ee90c6dc95e551c09789de53514d5ebf3fb723b7a9507a0cc789a4ba88fd0"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending",
+    "historical_commit": "pending"
+  },
+  {
+    "batch": "11",
+    "base": "fb19bd3d9fcf0af5dc330d59a23c5500197c87c6",
+    "commit": "codex/d6a-11-native-composition",
+    "test_files": [
+      "tests/complete_workflow_support.py",
+      "tests/conftest.py",
+      "tests/d5_rollback_support.py",
+      "tests/test_a03_formation_coverage.py",
+      "tests/test_d5_pg_recovery_and_source_v1.py",
+      "tests/test_publish_refusal_audit_postgres_v1.py",
+      "tests/test_vsa_publish_document_v1.py"
+    ],
+    "executed_unique_cases": 149,
+    "failures": 0,
+    "skipped": 0,
+    "verification": "Native PostgreSQL composition, real canonical publication, D4/D5 poison, independent worker processes and exact crash rollback; targeted run plus four repaired recovery-case reruns.",
+    "junit": [
+      {
+        "file": "d6a11.xml",
+        "sha256": "37ba38db57c0602d438294a77ab764b6fc6d0aa51c354ca893e5a0f037e1c637"
+      },
+      {
+        "file": "d6a11-recovery-fixed.xml",
+        "sha256": "f99db93642681455c37e339dd8c69f003eaeef8c51b741fb2096a36292318b47"
+      },
+      {
+        "file": "d6a11-crash-final.xml",
+        "sha256": "3d0f80d98b9f034118717bb26094ee91c433bd9382f8a0b1b4d585ce27c11840"
       }
     ],
     "full_suite_status": "pending",

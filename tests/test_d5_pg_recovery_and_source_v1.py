@@ -9,6 +9,8 @@
 # release-control-evidence: releasebewijs
 """
 from pathlib import Path
+from copy import deepcopy
+import json
 
 import pytest
 
@@ -146,10 +148,12 @@ def test_process_exit_mid_command_rolls_back_before_restart(complete_postgres, t
     from tests.test_pg_console_without_disk_mirrors import ROOT
     try:
         context, guard = _scenario(complete_postgres, tmp_path, monkeypatch, kind)
-        before = context['adapter'].export_state()
+        before_startup = context['adapter'].export_state()
+        checkpoint = tmp_path / 'before-crash-command.json'
         sid = context['successor']['snapshot_id']
         child = r'''
 import os
+import json
 from pathlib import Path
 import sys
 import pytest
@@ -158,10 +162,13 @@ from src.review_ledger import append_event
 from tests.complete_workflow_support import complete_console
 from tests.test_pg_console_without_disk_mirrors import CONSOLES, MirrorAccess
 root, sid, kind = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+checkpoint = Path(sys.argv[4])
 patch = pytest.MonkeyPatch()
 guard = MirrorAccess(root / 'runtime', deny=True)
 with guard.installed(patch):
     console = complete_console(root, PostgresCanonicalConfig(dsn=os.environ['METIS_TEST_POSTGRES_DSN']), console_cls=CONSOLES[kind])
+    from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter
+    checkpoint.write_text(json.dumps(PostgresWorkflowRecoveryAdapter(console.canonical_publication_store).export_state()))
     with console._store_command(sid, buffered=False):
         envelope = dict(console._envelope(sid))
         envelope['title'] = 'half command must roll back'
@@ -172,11 +179,22 @@ with guard.installed(patch):
         assert not guard.rows
         os._exit(73)
 '''
-        result = subprocess.run([sys.executable, '-c', child, str(tmp_path), sid, kind],
+        result = subprocess.run([sys.executable, '-c', child, str(tmp_path), sid, kind, str(checkpoint)],
             cwd=ROOT, env={**os.environ, 'PYTHONPATH': str(ROOT)}, capture_output=True, text=True, timeout=45)
         assert result.returncode == 73, result.stderr[-4000:]
-        # Exact durable equality before startup separates PG rollback from the
-        # existing reconciliation writes (which advance published row revisions).
+        # Pin the exact durable state AFTER the child's real ASGI startup and
+        # BEFORE its command. Startup's existing published-row reconciliation
+        # may advance row bookkeeping, but must not change any domain payload.
+        before = json.loads(checkpoint.read_text())
+        for group in ('tables', 'workflow_tables', 'api_access_tables'):
+            earlier, started = deepcopy(before_startup[group]), deepcopy(before[group])
+            if group == 'workflow_tables':
+                for rows in (earlier['documents'], started['documents']):
+                    for row in rows:
+                        row.pop('revision')
+                        row.pop('updated_at')
+            assert started == earlier
+        # No bookkeeping fields are excluded from the actual rollback proof.
         rolled_back = context['adapter'].export_state()
         for group in ('tables', 'workflow_tables', 'api_access_tables'):
             assert rolled_back[group] == before[group]

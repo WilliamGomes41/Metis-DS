@@ -57,18 +57,16 @@ def test_selection_never_resolves_unknown_or_review_required(failure):
     assert pending_rejections(evidence, {"objects": [{"spans": [span(0, 100)]}]}) == [failure]
 
 
-def split_system(tmp_path, *, recovery=False, postgres=None):
+def split_system(tmp_path, *, recovery=False, postgres=None, production_console):
     """Real HTML pipeline and review, fixture provider/source/canonical adapters."""
-    from src.durable_publication_console_v1 import DurablePublicationConsole
-    from tests.test_durable_publication_console_v1 import MemoryCanonicalStore, MemorySourceStore
-    canonical, immutable = MemoryCanonicalStore(), MemorySourceStore()
+    from tests.test_durable_publication_console_v1 import MemorySourceStore
+    immutable = MemorySourceStore()
     def make():
-        kwargs = dict(root=tmp_path, source_store=tmp_path/"sources", runtime=tmp_path/"runtime",
-                      immutable_source_store=immutable, canonical_publication_store=canonical)
-        if postgres is None:
-            return DurablePublicationConsole(**kwargs)
-        from tests.complete_workflow_support import complete_console
-        return complete_console(tmp_path, postgres, **{k: v for k, v in kwargs.items() if k != "root"})
+        console = production_console(root=tmp_path, processing_binder=lambda console: None,
+                                     immutable_source_store=immutable)
+        if postgres is not None:
+            assert console.workflow_document_store.config == postgres
+        return console
     calls, mode = [], {"broken": recovery}
     extra = "Bespreek de voorkeuren."
     combined = FIRST + " " + SECOND
@@ -132,8 +130,8 @@ def candidates(state, sid):
     return [o for o in state.snapshot_objects(sid) if o.get("proposed_object_type") == "recommendation"]
 
 
-def test_reviewed_split_closes_formation_blocker(tmp_path):
-    state, sid, _, reviewer, _, _, _, _ = split_system(tmp_path)
+def test_reviewed_split_closes_formation_blocker(tmp_path, *, production_console):
+    state, sid, _, reviewer, _, _, _, _ = split_system(tmp_path, production_console=production_console)
     history = inject_failure(state, sid)
     objects = candidates(state, sid)
     assert len(objects) == 2
@@ -146,11 +144,11 @@ def test_reviewed_split_closes_formation_blocker(tmp_path):
 
 @pytest.mark.parametrize("status", ["linked_as_support", "used_as_context"])
 @pytest.mark.parametrize("origin", ["extract", "review"])
-def test_automatic_disposition_cannot_resolve_review_required_failure(tmp_path, status, origin):
+def test_automatic_disposition_cannot_resolve_review_required_failure(tmp_path, status, origin, *, production_console):
     from src.recoverable_formation_v1 import incomplete
     from src.passage_register_v1 import passage_register_record
     from src.source_containers_v1 import source_accountability
-    state, sid, _, _, _, _, _, _ = split_system(tmp_path)
+    state, sid, _, _, _, _, _, _ = split_system(tmp_path, production_console=production_console)
     history = inject_failure(state, sid)
     objects = deepcopy(state.snapshot_objects(sid))
     # Synthetic read input isolates an extract-generated disposition. No review
@@ -173,9 +171,9 @@ def test_automatic_disposition_cannot_resolve_review_required_failure(tmp_path, 
     assert state._envelope(sid)["semantic_replay"]["provider_evidence"] == history
 
 
-def test_explicit_source_exclusions_close_formation_after_restart(tmp_path):
+def test_explicit_source_exclusions_close_formation_after_restart(tmp_path, *, production_console):
     from src.source_context_review_v1 import confirm_source_context
-    state, sid, _, reviewer, _, _, make, _ = split_system(tmp_path)
+    state, sid, _, reviewer, _, _, make, _ = split_system(tmp_path, production_console=production_console)
     history = inject_failure(state, sid)
     for index, obj in enumerate(candidates(state, sid)):
         confirm_source_context(state, actor_id=reviewer, snapshot_id=sid,
@@ -193,8 +191,8 @@ def test_explicit_source_exclusions_close_formation_after_restart(tmp_path):
     "snapshot_id", "document_id", "replay_hash", "proposal_hash",
     "binding", "object_version", "spans", "text", "context",
 ])
-def test_stale_or_invalid_context_cannot_close(tmp_path, invalid):
-    state, sid, _, reviewer, _, _, _, _ = split_system(tmp_path)
+def test_stale_or_invalid_context_cannot_close(tmp_path, invalid, *, production_console):
+    state, sid, _, reviewer, _, _, _, _ = split_system(tmp_path, production_console=production_console)
     inject_failure(state, sid)
     for obj in candidates(state, sid):
         approve(state, sid, reviewer, obj)
@@ -233,9 +231,9 @@ def test_stale_or_invalid_context_cannot_close(tmp_path, invalid):
 
 
 @pytest.mark.parametrize("invalid", [None, "reviewer", "review_hash", "review_date"])
-def test_current_human_rejections_close_but_stale_evidence_does_not(tmp_path, invalid):
+def test_current_human_rejections_close_but_stale_evidence_does_not(tmp_path, invalid, *, production_console):
     from src.recoverable_formation_v1 import incomplete
-    state, sid, _, reviewer, _, _, make, _ = split_system(tmp_path)
+    state, sid, _, reviewer, _, _, make, _ = split_system(tmp_path, production_console=production_console)
     history = inject_failure(state, sid)
     for obj in candidates(state, sid):
         state.review_object(actor_id=reviewer, snapshot_id=sid, object_id=obj["object_id"],
@@ -256,8 +254,8 @@ def test_current_human_rejections_close_but_stale_evidence_does_not(tmp_path, in
 
 
 @pytest.mark.parametrize("location", [[], [span(0, 0)], [span(0, 1, "unknown")], [span(0, 1), {"block_id": "b"}]])
-def test_invalid_failure_location_remains_open(tmp_path, location):
-    state, sid, _, reviewer, _, _, _, _ = split_system(tmp_path)
+def test_invalid_failure_location_remains_open(tmp_path, location, *, production_console):
+    state, sid, _, reviewer, _, _, _, _ = split_system(tmp_path, production_console=production_console)
     inject_failure(state, sid, spans=location)
     for obj in candidates(state, sid):
         approve(state, sid, reviewer, obj)
@@ -265,10 +263,10 @@ def test_invalid_failure_location_remains_open(tmp_path, location):
 
 
 @pytest.mark.parametrize("field", ["snapshot_id", "source_sha256", "document_id", "source_blocks_hash"])
-def test_new_selections_cannot_recover_stale_replay(tmp_path, field):
+def test_new_selections_cannot_recover_stale_replay(tmp_path, field, *, production_console):
     from src.operations_console_v1 import ConsoleError
     from src.semantic_replay_v1 import stable_json_hash
-    state, sid, author, _, calls, mode, _, _ = split_system(tmp_path, recovery=True)
+    state, sid, author, _, calls, mode, _, _ = split_system(tmp_path, recovery=True, production_console=production_console)
     before = state.snapshot_objects(sid)
     envelope = deepcopy(state._envelope(sid))
     identity = envelope["semantic_replay"]["identity"]
@@ -285,8 +283,8 @@ def test_new_selections_cannot_recover_stale_replay(tmp_path, field):
     assert state.processing_status(sid)["formation_incomplete"]
 
 
-def test_formation_closure_does_not_authorize_other_publication_gates(tmp_path):
-    state, sid, _, reviewer, _, _, _, _ = split_system(tmp_path)
+def test_formation_closure_does_not_authorize_other_publication_gates(tmp_path, *, production_console):
+    state, sid, _, reviewer, _, _, _, _ = split_system(tmp_path, production_console=production_console)
     inject_failure(state, sid)
     for obj in candidates(state, sid):
         approve(state, sid, reviewer, obj)
@@ -300,9 +298,9 @@ def test_formation_closure_does_not_authorize_other_publication_gates(tmp_path):
     assert "blocked_pending_immutable_locator" in result["blockers"]
 
 
-def test_status_without_retained_source_fails_closed_without_extraction(tmp_path, monkeypatch):
+def test_status_without_retained_source_fails_closed_without_extraction(tmp_path, monkeypatch, *, production_console):
     from src.source_preparation_context_v1 import KEY
-    state, sid, _, reviewer, _, _, _, _ = split_system(tmp_path)
+    state, sid, _, reviewer, _, _, _, _ = split_system(tmp_path, production_console=production_console)
     inject_failure(state, sid)
     for obj in candidates(state, sid):
         approve(state, sid, reviewer, obj)
@@ -315,10 +313,10 @@ def test_status_without_retained_source_fails_closed_without_extraction(tmp_path
     assert state.processing_status(sid)["formation_incomplete"]
 
 
-def publication_story(tmp_path, monkeypatch, *, recovery=False, postgres=None):
+def publication_story(tmp_path, monkeypatch, *, recovery=False, postgres=None, production_app, production_console):
     from fastapi.testclient import TestClient
     from src.operations_console_app import create_console_app, COOKIE
-    state, sid, author, reviewer, calls, mode, make, bind = split_system(tmp_path, recovery=recovery, postgres=postgres)
+    state, sid, author, reviewer, calls, mode, make, bind = split_system(tmp_path, recovery=recovery, postgres=postgres, production_console=production_console)
     if recovery == "source_disposition":
         from src.source_accountability_v1 import is_source_record
         from src.source_context_review_v1 import confirm_source_context
@@ -364,7 +362,7 @@ def publication_story(tmp_path, monkeypatch, *, recovery=False, postgres=None):
         raise AssertionError("closure must not invoke model or extraction")
     monkeypatch.setattr(restarted, "_fragments_and_spec", forbidden)
     monkeypatch.setattr(restarted, "_extract", forbidden)
-    client = TestClient(create_console_app(restarted))
+    client = TestClient(production_app(restarted))
     data = {"snapshot_id": sid, "publish_confirmed": "yes"}
     assert client.post("/publish", data=data, follow_redirects=False).status_code in {302, 303, 401, 403}
     client.cookies.set(COOKIE, restarted.authenticate("author", "test-password")["token"])
@@ -385,10 +383,10 @@ def publication_story(tmp_path, monkeypatch, *, recovery=False, postgres=None):
 
 
 @pytest.mark.parametrize("recovery", [False, True, "source_disposition"])
-def test_authorized_http_publication_restart(tmp_path, monkeypatch, recovery):
-    publication_story(tmp_path, monkeypatch, recovery=recovery)
+def test_authorized_http_publication_restart(tmp_path, monkeypatch, recovery, *, production_app, production_console):
+    publication_story(tmp_path, monkeypatch, recovery=recovery, production_app=production_app, production_console=production_console)
 
 
 @pytest.mark.parametrize("recovery", [False, True, "source_disposition"])
-def test_postgres_authorized_http_publication_restart(workflow_postgres, tmp_path, monkeypatch, recovery):
-    publication_story(tmp_path, monkeypatch, recovery=recovery, postgres=workflow_postgres)
+def test_postgres_authorized_http_publication_restart(workflow_postgres, tmp_path, monkeypatch, recovery, *, production_app, production_console):
+    publication_story(tmp_path, monkeypatch, recovery=recovery, postgres=workflow_postgres, production_app=production_app, production_console=production_console)
