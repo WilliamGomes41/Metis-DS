@@ -62,12 +62,14 @@ def test_unknown_store_kind_refused_before_credentials(key, monkeypatch):
         asgi.build_app()
 
 
+@pytest.mark.file_topology
 def test_local_file_harness_still_starts():
     from fastapi.testclient import TestClient
     with TestClient(asgi.build_app()) as client:
         assert client.get("/login").status_code == 200
 
 
+@pytest.mark.file_topology
 def test_azure_file_harness_refused_before_storage(monkeypatch):
     monkeypatch.setenv("WEBSITE_SITE_NAME", "test-app")
     monkeypatch.setattr(asgi, "_immutable_source_store", lambda: pytest.fail("storage opened"))
