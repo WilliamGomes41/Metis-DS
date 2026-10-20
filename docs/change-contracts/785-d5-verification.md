@@ -29,7 +29,9 @@ byte-for-byte unchanged.
 The rollback subprocess imports the actual `git archive` of `629d63c`, restores
 the same PG snapshot, seeds obsolete copies, and continues review → publish →
 withdraw. It compares the complete normalized PG export and decoded Product API
-JSON with the same continuation on D5. Normalization excludes per-run clocks,
+JSON with the same continuation on D5. It also asserts that startup replaced poisoned
+envelopes, bindings, ledger, projection and manifests with the PG-derived copies.
+Normalization excludes per-run clocks,
 review chain hashes and credential salts/hashes; each exported chain is checked
 independently. It does **not** claim byte-identical HTTP responses.
 
@@ -54,9 +56,20 @@ three SSRF failures came from host proxy injection; all 21 security cases pass
 with proxy variables cleared. Missing optional telemetry test dependencies were
 installed in the execution venv, without changing runtime dependency files.
 
-The final whole-suite result and final-revision check results are recorded below
-when the current run completes. Earlier red artifacts are retained in the task
-workspace for traceability, not presented as product regressions or waived tests.
+Final whole-suite run: **5,637 passed, 27 skipped, 6 expected xfails,
+2 failures, 0 errors**, plus three passed subtests (5,675 JUnit cases, including the expected xfails as skipped).
+Both failures were Azure-package dependency downloads with host proxies cleared.
+The exact two packaging cases were rerun with the normal proxy and passed:
+**2 passed, 0 skipped/failed/errors**. Thus there is no unresolved test failure;
+this is a completed full run plus a focused environment-corrected rerun, not a
+claim of one zero-failure invocation. The D5-native cases have no skip/xfail.
+
+Mandatory checks: repository preflight PASS; release-control PASS against
+`origin/main`; change-contract PASS; compileall PASS; architecture boundaries
+PASS; architecture invariants **6 passed**. Main remains the pinned `629d63c`.
+The last rollback-startup assertion addition was separately rerun on both Python
+versions. Earlier red artifacts are retained in the task workspace for
+traceability, not presented as product regressions or waived tests.
 
 ## Bend and LAWS.bend
 
@@ -98,9 +111,18 @@ wire responses. No merge-GO was issued from these bounded findings alone.
 | --- | --- | --- |
 | Continue implementation | GO | D4b and supplied scope decisions are present |
 | Content reviewable | GO | No new proven product blocker |
-| Merge | Pending final checks and human review | Current full suite and final revision must be closed; old-code delete-read limitation must stay explicit |
+| Merge | Normal CI and human review remain | Local full-run failures resolved by exact packaging rerun; old-code delete-read limitation stays explicit |
 | Deploy | NO-GO | #695 restore proof on the final D5 code with real Azure authorities |
 
 Argos inspected the native JUnit artifacts, source changes, rollback/crash
 setup, Bend output and architecture check. No new broad review is required;
-only the final suite/revision closes this bounded gate report.
+the final suite/revision closes this bounded gate report. The final local
+results above are explicit about the two environment-dependent reruns. Normal
+GitHub CI and William’s merge decision remain; no merge or deployment was run.
+
+
+Final Argos closure: **GO for completion and PR review; no remaining proven
+local product blocker**. The strengthened rollback startup assertions passed on
+both Python versions. The full-run/download-rerun distinction above remains
+explicit. Merge requires normal green GitHub CI and human review; deployment
+requires #695 on the final code with real Azure PG/Blob authorities.

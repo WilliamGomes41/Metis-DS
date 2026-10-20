@@ -66,6 +66,9 @@ def test_code_rollback_rebuilds_copies_and_preserves_pg_and_product_api(complete
                     (runtime / 'objects' / (row['snapshot_id'] + '.jsonl')).write_text('{"stale":true}\n')
                 for row in before['tables']['publication_releases']:
                     (runtime / 'release_manifests' / (row['release_id'] + '.json')).write_text('{"stale":true}\n')
+            data = json.loads(payload.read_text())
+            data['legacy'] = name == 'rollback'
+            payload.write_text(json.dumps(data))
             output = tmp_path / f'{name}.json'
             env = {**os.environ, 'PYTHONPATH': str(code)}
             result = subprocess.run([sys.executable, str(ROOT / 'tests/d5_rollback_support.py'), str(payload), str(output)],

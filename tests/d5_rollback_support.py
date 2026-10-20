@@ -51,6 +51,27 @@ def main():
                                immutable_source_store=source)
     bind_fixture_selections(console)
     console.reconcile_durable_publications()
+    if payload['legacy']:
+        # Prove startup actually replaced the poisoned copies from PG, rather
+        # than inferring that rebuilding happens from constructor source alone.
+        runtime = root / 'runtime'
+        envelopes = {row['snapshot_id']: row for row in console.workflow_document_store.list_envelopes()}
+        copied = json.loads((runtime / 'envelopes.json').read_text())
+        assert copied == envelopes, {sid: sorted(key for key in set(copied.get(sid, {})) | set(row)
+            if copied.get(sid, {}).get(key) != row.get(key)) for sid, row in envelopes.items()}
+        assert json.loads((runtime / 'publish_authorizations.json').read_text()) == console.workflow_review_store.read_bindings()
+        ledger = [json.loads(line) for line in (runtime / 'review_ledger.jsonl').read_text().splitlines() if line.strip()]
+        assert ledger == console.workflow_review_store.read_events()
+        projection = [json.loads(line) for line in (runtime / 'published_projection.jsonl').read_text().splitlines() if line.strip()]
+        assert projection == console._projection_from_authority()
+        releases = 0
+        for sid in envelopes:
+            release = console._durable_release_for_snapshot(sid)
+            if release is not None:
+                manifest = runtime / 'release_manifests' / (release['release_id'] + '.json')
+                assert json.loads(manifest.read_text()) == console._manifest_from_release(release)
+                releases += 1
+        assert releases == 2
     accounts, sid = payload['accounts'], payload['snapshot_id']
     _complete_review(console, reviewer_id=accounts['reviewer']['account_id'], snapshot_id=sid)
     result = console.publish(actor_id=accounts['publisher']['account_id'], snapshot_id=sid)

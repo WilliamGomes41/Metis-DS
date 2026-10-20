@@ -199,10 +199,10 @@ Voor gepubliceerde kennis blijft de kern dezelfde:
 
 - PostgreSQL publicatiegegevens worden transactioneel vastgelegd;
 - Azure Blob bevat de exacte immutable bronbytes;
-- release manifests en Product API projecties zijn afgeleide lokale kopieën en kunnen uit de authority worden opgebouwd;
-- lokale kopieën mogen nooit een nieuwere of afwijkende PostgreSQL-publicatie terugdraaien.
+- de volledige PG-topologie maakt of leest geen lokale release manifests of publicatieprojectie;
+- de Product API leest de canonical publication registry; oude lokale kopieën kunnen PG-publicaties niet terugdraaien.
 
-`DurablePublicationConsole` reconcilieert release manifests en de Product API-projectie vanuit PostgreSQL. In de volledige workflowmodus wordt ook de gepubliceerde envelope-status teruggeschreven naar de PostgreSQL workflow-authority. De lokale `envelopes.json` blijft daarbij alleen mirror.
+In de volledige PG-workflowmodus herstelt startup de gepubliceerde envelope-status en het auditevent vanuit PostgreSQL, met expliciete Blob-verificatie in Azure. Daarbij worden geen workflowspiegels, projectiebestanden of manifests gelezen of geschreven. De lokale bestandsopstelling behoudt haar bestaande bestanden tot D6.
 
 ## Publicatie intrekken via de Console
 
@@ -215,9 +215,9 @@ registry inactief en legt release-status, actor, reden en tijd atomair vast;
 historische objecten en open opvolgerwerk blijven ongewijzigd.
 
 Na een verloren antwoord is dezelfde opdracht veilig herhaalbaar. Bij een
-mislukte projectieverversing meldt de Console dat de intrekking is vastgelegd
+mislukte verversing van de publicatiestatus meldt de Console dat de intrekking is vastgelegd
 maar de weergave nog moet worden ververst; dezelfde opdracht probeert alleen
-het bestaande resultaat opnieuw te projecteren. Bij een onbekende database-
+de bestaande publicatiestatus opnieuw bij te werken. Bij een onbekende database-
 uitkomst meldt de route dit expliciet. Lees de actuele publicatiestatus of
 herhaal dezelfde opdracht. Maak geen nieuwe publicatie om de UI te herstellen.
 

@@ -2,7 +2,7 @@
 
 Part of #730.
 
-**Status: implementatie in uitvoering op expliciete opdracht van William. D4b voltooid in commit `8f3d1fa`; merge en deploy volgen de bestaande gates.**
+**Status: geïmplementeerd en lokaal geverifieerd op expliciete opdracht van William. D4b voltooid in `8f3d1fa`; Argos geeft GO voor PR-review. Merge en deploy volgen de bestaande gates.**
 
 Basis: `main` op `629d63c` (D2, D3 en D4 gemergd). De lezerskaart hieronder komt uit een lokale run van `tests/test_pg_console_without_disk_mirrors.py` op PostgreSQL 16, aangevuld met statische analyse voor alles wat buiten het D4-scenario valt. De ruwe lokale D4-uitvoer is niet in deze sessie ontvangen; de aangeleverde lokale samenvatting is vergeleken met de definitieve D4-CI. Zie de bronprecisering onderaan.
 
