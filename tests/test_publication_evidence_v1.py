@@ -15,7 +15,7 @@ import sys
 import pytest
 from src.publication_evidence_v1 import collect_publication, publication_report
 from src.operations_console_v1 import ConsoleError
-from tests.test_durable_publication_console_v1 import MemoryCanonicalStore, _ready_console
+from tests.test_durable_publication_console_v1 import MemoryCanonicalStore, _ready_console, _file_ready_console
 
 pytestmark = [pytest.mark.release_control_scope_belofte, pytest.mark.release_control_opslag,
               pytest.mark.release_control_toegang, pytest.mark.release_control_releasebewijs,
@@ -61,27 +61,28 @@ def test_identity_and_withdrawal_do_not_become_serving_success(change, conflict)
     assert conflict in result['identity_conflicts']
 
 
-def test_authorized_collection_after_real_publish_does_not_mutate_domain(tmp_path):
-    authority = MemoryCanonicalStore()
-    console, accounts, receipt = _ready_console(tmp_path, authority)
+def test_authorized_collection_after_real_publish_does_not_mutate_domain(tmp_path, *, production_console):
+    console, accounts, receipt = _ready_console(tmp_path, production_console=production_console)
+    authority = console.canonical_publication_store
     publisher = accounts['publisher']['account_id']
     sid = receipt['snapshot_id']
     initial = collect_publication(console, actor_id=publisher, snapshot_id=sid)
     assert initial['release'] is None
     console.publish(actor_id=publisher, snapshot_id=sid)
-    files = {p: p.read_bytes() for p in console.runtime.rglob('*') if p.is_file()}
-    releases = deepcopy(authority.releases)
+    persisted = _domain_state(console)
+    releases = deepcopy(authority.release_for_snapshot(sid))
     read = collect_publication(console, actor_id=publisher, snapshot_id=sid)
     assert publication_report(read)['exact_release_active'] is True
-    assert authority.releases == releases
-    assert {p: p.read_bytes() for p in console.runtime.rglob('*') if p.is_file()} == files
+    assert authority.release_for_snapshot(sid) == releases
+    assert _domain_state(console) == persisted
     with pytest.raises(ConsoleError, match='publisher_role_required'):
         collect_publication(console, actor_id=accounts['reviewer']['account_id'], snapshot_id=sid)
 
 
+@pytest.mark.file_topology
 def test_failed_publication_cannot_be_mistaken_for_absent_commit(tmp_path, monkeypatch):
     authority = MemoryCanonicalStore()
-    console, accounts, receipt = _ready_console(tmp_path, authority)
+    console, accounts, receipt = _file_ready_console(tmp_path, authority)
     import src.durable_publication_console_v1 as module
     real_replace = module.atomic_replace_projection
     monkeypatch.setattr(module, 'atomic_replace_projection', lambda *args: (_ for _ in ()).throw(OSError('private')))
@@ -132,9 +133,9 @@ def test_only_complete_exact_route_evidence_proves_end_to_end():
     assert 'product_http_readback_not_proven' in report['missing_evidence']
 
 
-def test_unavailable_store_has_safe_error_and_no_private_data(tmp_path):
-    authority = MemoryCanonicalStore()
-    console, accounts, receipt = _ready_console(tmp_path, authority)
+def test_unavailable_store_has_safe_error_and_no_private_data(tmp_path, *, production_console):
+    console, accounts, receipt = _ready_console(tmp_path, production_console=production_console)
+    authority = console.canonical_publication_store
     authority.release_for_snapshot = lambda sid: (_ for _ in ()).throw(RuntimeError('private source text'))
     result = collect_publication(console, actor_id=accounts['publisher']['account_id'], snapshot_id=receipt['snapshot_id'])
     assert result['errors']['release'] == 'publication_authority_read_unavailable'
@@ -142,17 +143,17 @@ def test_unavailable_store_has_safe_error_and_no_private_data(tmp_path):
     assert publication_report(result)['canonical_release_observed'] is False
 
 
-def test_http_export_and_product_readback_after_new_instances(tmp_path):
+def test_http_export_and_product_readback_after_new_instances(tmp_path, *, production_app, production_console):
     from fastapi.testclient import TestClient
     from src.operations_console_app import create_console_app
     from src.product_api_v1 import create_product_app
     from tests.test_product_api_v1 import registry, paths, headers
     from tests.test_durable_publication_console_v1 import TEST_PASSWORD
     from src.durable_publication_console_v1 import DurablePublicationConsole
-    authority = MemoryCanonicalStore()
-    console, accounts, receipt = _ready_console(tmp_path, authority)
+    console, accounts, receipt = _ready_console(tmp_path, production_console=production_console)
+    authority = console.canonical_publication_store
     sid = receipt['snapshot_id']
-    client = TestClient(create_console_app(console), base_url='https://testserver')
+    client = TestClient(production_app(console), base_url='https://testserver')
     assert client.get('/source-selection/publication-evidence', params={'document':sid}, follow_redirects=False).status_code == 401
     assert client.post('/login', data={'username':'reviewer.bert','password':TEST_PASSWORD}, follow_redirects=False).status_code == 303
     assert client.get('/source-selection/publication-evidence', params={'document':sid}).status_code == 403
@@ -176,24 +177,24 @@ def test_http_export_and_product_readback_after_new_instances(tmp_path):
         assert payload['object_version'] == read['release']['items'][0][1]
         assert payload['content_hash'] == read['release']['items'][0][2]
         product.close()
-    fresh = DurablePublicationConsole(root=tmp_path, source_store=console.source_store, runtime=console.runtime,
-        immutable_source_store=console.immutable_source_store, canonical_publication_store=authority)
+    from tests.production_support import restart_production
+    fresh = restart_production(console)
     assert json.loads(json.dumps(collect_publication(fresh,actor_id=accounts['publisher']['account_id'],snapshot_id=sid)['release'])) == read['release']
-    assert len(authority.releases) == 1
+    assert _release_count(authority) == 1
     client.close()
 
 
-def test_invalid_publication_is_refused_without_release(tmp_path):
-    authority = MemoryCanonicalStore()
-    console, accounts, receipt = _ready_console(tmp_path, authority)
+def test_invalid_publication_is_refused_without_release(tmp_path, *, production_console):
+    console, accounts, receipt = _ready_console(tmp_path, production_console=production_console)
+    authority = console.canonical_publication_store
     with pytest.raises(ConsoleError) as denied:
         console.publish(actor_id=accounts['reviewer']['account_id'], snapshot_id=receipt['snapshot_id'])
     assert denied.value.code == 'publisher_role_required'
-    assert authority.releases == {}
+    assert _release_count(authority) == 0
     console.immutable_source_store.blobs.clear()
     result = console.publish(actor_id=accounts['publisher']['account_id'], snapshot_id=receipt['snapshot_id'])
     assert result['status'] == 'BLOCKED'
-    assert authority.releases == {}
+    assert _release_count(authority) == 0
     assert console._envelope(receipt['snapshot_id'])['state'] == 'captured_not_published'
 
 
@@ -219,11 +220,11 @@ def test_registry_query_is_bounded_parameterized_and_read_only():
     assert 'canonical_json' not in sql
 
 
-def test_registry_outage_preserves_already_observed_commit(tmp_path):
-    authority = MemoryCanonicalStore()
-    console, accounts, receipt = _ready_console(tmp_path, authority)
+def test_registry_outage_preserves_already_observed_commit(tmp_path, *, production_console):
+    console, accounts, receipt = _ready_console(tmp_path, production_console=production_console)
+    authority = console.canonical_publication_store
     console.publish(actor_id=accounts['publisher']['account_id'], snapshot_id=receipt['snapshot_id'])
-    authority.active_publication_rows = lambda: (_ for _ in ()).throw(OSError('private database message'))
+    authority.active_release_items = lambda release_id: (_ for _ in ()).throw(OSError('private database message'))
     read = collect_publication(console, actor_id=accounts['publisher']['account_id'],snapshot_id=receipt['snapshot_id'])
     report = publication_report(read)
     assert report['canonical_release_observed'] is True
@@ -232,17 +233,17 @@ def test_registry_outage_preserves_already_observed_commit(tmp_path):
     assert 'private database message' not in json.dumps(read)
 
 
-def test_actual_publication_boundaries_correlate_without_rerunning_readiness(tmp_path, monkeypatch):
+def test_actual_publication_boundaries_correlate_without_rerunning_readiness(tmp_path, monkeypatch, *, production_app, production_console):
     from fastapi.testclient import TestClient
     from src.operations_console_app import create_console_app
     from src.request_diagnostics_v1 import RequestDiagnostics, _LOGGER
     from src.publication_evidence_v1 import publication_route_from_events
     from tests.test_durable_publication_console_v1 import TEST_PASSWORD
-    authority = MemoryCanonicalStore()
-    console, accounts, receipt = _ready_console(tmp_path, authority)
+    console, accounts, receipt = _ready_console(tmp_path, production_console=production_console)
+    authority = console.canonical_publication_store
     events = []
     monkeypatch.setattr(_LOGGER, 'info', lambda fmt, payload: events.append(json.loads(payload)))
-    client = TestClient(RequestDiagnostics(create_console_app(console)), base_url='https://testserver')
+    client = TestClient(production_app(console), base_url='https://testserver')
     client.post('/login', data={'username':'publisher.carla','password':TEST_PASSWORD})
     response = client.post('/publish', data={'snapshot_id':receipt['snapshot_id'],'publish_confirmed':'yes'}, follow_redirects=False)
     assert response.status_code == 303
@@ -258,19 +259,19 @@ def test_actual_publication_boundaries_correlate_without_rerunning_readiness(tmp
     client.close()
 
 
-def test_ordinary_telemetry_failure_does_not_undo_publication(tmp_path,monkeypatch):
+def test_ordinary_telemetry_failure_does_not_undo_publication(tmp_path, monkeypatch, *, production_console):
     from src.request_diagnostics_v1 import _LOGGER
-    authority = MemoryCanonicalStore()
-    console, accounts, receipt = _ready_console(tmp_path, authority)
+    console, accounts, receipt = _ready_console(tmp_path, production_console=production_console)
+    authority = console.canonical_publication_store
     monkeypatch.setattr(_LOGGER,'info',lambda *args: (_ for _ in ()).throw(OSError('offline')))
     result = console.publish(actor_id=accounts['publisher']['account_id'],snapshot_id=receipt['snapshot_id'])
     assert result['status'] == 'PASS'
-    assert len(authority.releases) == 1
+    assert _release_count(authority) == 1
 
 
-def test_revision_read_failure_remains_an_explicit_evidence_gap(tmp_path,monkeypatch):
-    authority = MemoryCanonicalStore()
-    console, accounts, receipt = _ready_console(tmp_path, authority)
+def test_revision_read_failure_remains_an_explicit_evidence_gap(tmp_path, monkeypatch, *, production_console):
+    console, accounts, receipt = _ready_console(tmp_path, production_console=production_console)
+    authority = console.canonical_publication_store
     console.publish(actor_id=accounts['publisher']['account_id'],snapshot_id=receipt['snapshot_id'])
     monkeypatch.setattr(console,'objects_revision',lambda sid: (_ for _ in ()).throw(OSError('private DB error')))
     read = collect_publication(console,actor_id=accounts['publisher']['account_id'],snapshot_id=receipt['snapshot_id'])
@@ -279,3 +280,14 @@ def test_revision_read_failure_remains_an_explicit_evidence_gap(tmp_path,monkeyp
     report = publication_report(read)
     assert report['end_to_end_proven'] is False
     assert 'document_identity_missing' in report['missing_evidence']
+
+
+def _release_count(authority):
+    with authority._connect() as connection:
+        return connection.execute("SELECT count(*) AS n FROM publication_releases").fetchone()['n']
+
+
+def _domain_state(console):
+    from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter
+    state = PostgresWorkflowRecoveryAdapter(console.canonical_publication_store).export_state()
+    return {key: value for key, value in state.items() if key.endswith('tables') or key == 'entra_identities'}

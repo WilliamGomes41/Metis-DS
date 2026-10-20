@@ -66,8 +66,8 @@ class _FailingStore:
         raise AssertionError("not reached")
 
 
-def _console(tmp_path: Path, store: object) -> tuple[OperationsConsole, dict[str, str]]:
-    console = OperationsConsole(
+def _console(tmp_path: Path, store: object, *, production_console) -> tuple[OperationsConsole, dict[str, str]]:
+    console = production_console(azure=True, processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "source-cache",
         runtime=tmp_path / "runtime",
@@ -136,9 +136,9 @@ def test_azure_adapter_rejects_noncanonical_filename() -> None:
         store.store_verified(data=data, sha256=digest, filename="../source.pdf")
 
 
-def test_console_binds_azure_locator_and_recovers_missing_local_cache(tmp_path: Path) -> None:
+def test_console_binds_azure_locator_and_recovers_missing_local_cache(tmp_path: Path, *, production_console) -> None:
     store = AzureBlobSourceStore(blob_service_client=_BlobService())
-    console, accounts = _console(tmp_path, store)
+    console, accounts = _console(tmp_path, store, production_console=production_console)
     receipt = _ingest(console, accounts)
 
     assert str(receipt["immutable_storage_locator"]).startswith(
@@ -162,18 +162,18 @@ def test_console_binds_azure_locator_and_recovers_missing_local_cache(tmp_path: 
     assert freeze_path.read_bytes() == HTML_FIXTURE.read_bytes()
 
 
-def test_console_fails_closed_before_creating_snapshot_when_upload_fails(tmp_path: Path) -> None:
-    console, accounts = _console(tmp_path, _FailingStore())
+def test_console_fails_closed_before_creating_snapshot_when_upload_fails(tmp_path: Path, *, production_console) -> None:
+    console, accounts = _console(tmp_path, _FailingStore(), production_console=production_console)
 
     with pytest.raises(ConsoleError, match="immutable_source_storage_failed"):
         _ingest(console, accounts)
     assert console._envelopes == {}
 
 
-def test_unpublished_delete_removes_unshared_azure_blob_source(tmp_path: Path) -> None:
+def test_unpublished_delete_removes_unshared_azure_blob_source(tmp_path: Path, *, production_console) -> None:
     service = _BlobService()
     store = AzureBlobSourceStore(blob_service_client=service)
-    console, accounts = _console(tmp_path, store)
+    console, accounts = _console(tmp_path, store, production_console=production_console)
     receipt = _ingest(console, accounts)
     snapshot_id = str(receipt["snapshot_id"])
     locator = str(receipt["immutable_storage_locator"])
@@ -192,10 +192,10 @@ def test_unpublished_delete_removes_unshared_azure_blob_source(tmp_path: Path) -
     assert blob_name not in service.data
 
 
-def test_unpublished_delete_keeps_blob_when_same_digest_is_still_referenced(tmp_path: Path) -> None:
+def test_unpublished_delete_keeps_blob_when_same_digest_is_still_referenced(tmp_path: Path, *, production_console) -> None:
     service = _BlobService()
     store = AzureBlobSourceStore(blob_service_client=service)
-    console, accounts = _console(tmp_path, store)
+    console, accounts = _console(tmp_path, store, production_console=production_console)
     first = _ingest(console, accounts)
     second = console.ingest(
         actor_id=accounts["researcher"],
@@ -227,10 +227,10 @@ def test_unpublished_delete_keeps_blob_when_same_digest_is_still_referenced(tmp_
     assert blob_name in service.data
 
 
-def test_cleanup_io_failure_does_not_undo_committed_deletion(tmp_path, monkeypatch):
+def test_cleanup_io_failure_does_not_undo_committed_deletion(tmp_path, monkeypatch, *, production_console):
     service = _BlobService()
     store = AzureBlobSourceStore(blob_service_client=service)
-    console, accounts = _console(tmp_path, store)
+    console, accounts = _console(tmp_path, store, production_console=production_console)
     receipt = _ingest(console, accounts)
     sid = str(receipt['snapshot_id'])
     locator = str(receipt['immutable_storage_locator'])
@@ -244,6 +244,6 @@ def test_cleanup_io_failure_does_not_undo_committed_deletion(tmp_path, monkeypat
     assert result['deleted'] is True
     assert result['freeze_bytes_removed'] is False
     assert store.load_verified(locator) == HTML_FIXTURE.read_bytes()
-    restarted = OperationsConsole(root=tmp_path, source_store=tmp_path/'source-cache',
+    restarted = production_console(azure=True, processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path/'source-cache',
                                   runtime=tmp_path/'runtime', immutable_source_store=store)
     assert restarted.list_envelopes() == []
