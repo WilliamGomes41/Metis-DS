@@ -23,7 +23,7 @@ from test_t4_single_knowledge_path_invariants import (
     _allowed_candidate, _allowed_source, _binding, _stamp_hash,
     _console, _append, _project_policy, _row,
 )
-from test_v225_beslisboom_path import _console as boom_console, _accounts, _ingest_boom
+from test_v225_beslisboom_path import _accounts, _ingest_boom
 
 
 def _contract(obj, *, bindings=None, fragments=None, review_path="richtlijn"):
@@ -125,8 +125,8 @@ def test_source_input_is_required_even_with_a_valid_approval():
     assert _contract(obj)["tuple_authorization"] is False
 
 
-def test_consider_publish_passes_explicit_boom_path(tmp_path):
-    console = boom_console(tmp_path)
+def test_consider_publish_passes_explicit_boom_path(tmp_path, *, production_console):
+    console = production_console(root=tmp_path, processing_binder=lambda console: None)
     accounts = _accounts(console)
     receipt = _ingest_boom(console, accounts)
     snapshot = receipt["snapshot_id"]
@@ -144,7 +144,7 @@ def test_consider_publish_passes_explicit_boom_path(tmp_path):
     assert "not_knowledge_candidate" not in considered["blockers"]
 
 
-def test_historical_heading_does_not_enter_publish_set_or_change_knowledge_gate(tmp_path, production_console):
+def test_historical_heading_does_not_enter_publish_set_or_change_knowledge_gate(tmp_path, *, production_console):
     console, reviewer, snapshot = _console(tmp_path, production_console=production_console)
     publisher = console.create_account(username="carla", password="carla-secret", roles=("publisher",))
     envelope = console._envelope(snapshot)
@@ -166,7 +166,8 @@ def test_historical_heading_does_not_enter_publish_set_or_change_knowledge_gate(
     _project_policy(console, snapshot, obj)
     _stamp_hash(obj)
     _append(console, snapshot, obj)
-    console._bindings[snapshot] = [{**_binding(obj, reviewer["account_id"]), "reviewer": reviewer["display_name"]}]
+    console._bindings[snapshot] = [{**_binding(obj, reviewer["account_id"]),
+                                    "reviewer": reviewer["display_name"]}]
     console._save_bindings()
     before = console.consider_publish(actor_id=publisher["account_id"], snapshot_id=snapshot)
     heading = _row("historical-heading", "heading", confirmed="heading", validation="approved",
@@ -185,7 +186,7 @@ def test_historical_heading_does_not_enter_publish_set_or_change_knowledge_gate(
 
 
 @pytest.mark.parametrize("command", ["first", "second"])
-def test_corrupt_persisted_source_cannot_acquire_review_binding(tmp_path, command, production_console):
+def test_corrupt_persisted_source_cannot_acquire_review_binding(tmp_path, command, *, production_console):
     from src.operations_console_v1 import ConsoleError
     console, reviewer, snapshot = _console(tmp_path, production_console=production_console)
     obj = _allowed_candidate()
@@ -214,10 +215,10 @@ def test_corrupt_persisted_source_cannot_acquire_review_binding(tmp_path, comman
 
 
 
-def test_reviewed_selected_candidate_repeat_is_safe_but_cannot_reclassify(tmp_path):
-    from src.operations_console_v1 import OperationsConsole, ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
+def test_reviewed_selected_candidate_repeat_is_safe_but_cannot_reclassify(tmp_path, *, production_console):
+    from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
     from tests.semantic_fixture_support import bind_fixture_selections
-    console = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     author = console.create_account(username="anne", password="anne-secret", roles=("researcher",))
     reviewer = console.create_account(username="bert", password="bert-secret", roles=("reviewer",))
     bind_fixture_selections(console, [("Oedeem is een ophoping van vocht.", "definition")])

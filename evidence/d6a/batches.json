@@ -420,5 +420,38 @@
     ],
     "full_suite_status": "pending",
     "ci_status": "not run: push approval pending"
+  },
+  {
+    "batch": "12",
+    "base": "d7d97b3",
+    "commit": "codex/d6a-12-source-context",
+    "test_files": [
+      "tests/browser_source_context_fixture.py",
+      "tests/production_support.py",
+      "tests/test_a06_selected_occurrence_relations.py",
+      "tests/test_a07_strength_binding.py",
+      "tests/test_docling_real_pdf.py",
+      "tests/test_pre_review_semantic_v1.py",
+      "tests/test_review_context_navigation_asgi_v1.py",
+      "tests/test_source_context_review_v1.py",
+      "tests/test_t5_t7_audit_repairs.py",
+      "tests/test_t7_duplicate_candidate_integrity.py"
+    ],
+    "executed_unique_cases": 294,
+    "failures": 0,
+    "skipped": 12,
+    "verification": "Targeted source-context, formation, occurrence, strength and imported consumer run plus two repaired cases. Twelve real Docling acceptance cases remain explicitly skipped; not PostgreSQL skips and not acceptance evidence. Standalone context browser fixture authenticated HTTP passed.",
+    "junit": [
+      {
+        "file": "d6a12.xml",
+        "sha256": "e6aa337f3d9558af5090db460264791154e3910addaff9be081ea836a788b8b3"
+      },
+      {
+        "file": "d6a12-fixed.xml",
+        "sha256": "30d6cfcae7a95960f153d23d6433ceed4826b2b29e1f4bdb506e63870ba9c95b"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending"
   }
 ]

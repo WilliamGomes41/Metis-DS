@@ -231,3 +231,18 @@ domeinpayloads blijven exact gelijk. Voor de afgebroken opdracht worden vervolge
 alle tabellen inclusief die tellers exact vergeleken. De rollback-child voert
 startupreconciliatie eenmaal uit: via de huidige factory of expliciet bij de
 gepinde oude code die die factory nog niet kende.
+
+Portie 12 migreert de broncontext-commandoproef, volledige A15-navigatie,
+occurrence-relaties, strength-binding en de consolegevallen in de
+pre-review-semantic-module. De geïsoleerde catalogusprobe instrumenteert de
+echte productieklasse in plaats van een tweede consoleklasse te construeren.
+A06 leest ook in zijn onafhankelijke subprocess uit dezelfde PG-database.
+Een synthetic binding voor de heading-regressie bevat nu de verplichte
+reviewer-displaynaam van de bestaande PG-store.
+
+De broncontext-browserfixture gebruikt de gedeelde procesfixture en
+productie-ASGI-app; geauthenticeerde HTTP-navigatie is lokaal getoetst.
+De echte Docling-acceptancemodule is eveneens omgezet, maar de twaalf bestaande
+acceptancegevallen blijven zichtbaar overgeslagen zolang de officiële
+ML-omgeving niet is ingeschakeld. Dat is geen uitgevoerd Docling-bewijs en geen
+PG-skip; normale consoletests blijven zonder PostgreSQL falen.

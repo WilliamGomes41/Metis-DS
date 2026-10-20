@@ -56,8 +56,7 @@ def test_true_pipeline_preserves_text_hash_and_original_geometry(tmp_path):
     assert TEXT in " ".join(r["clean_text"] for r in legacy(source, document_id="doc", source_id="src"))
 
 
-def test_real_mixed_digital_and_scanned_pdf_blocks_before_activation(tmp_path, monkeypatch):
-    from src.operations_console_v1 import OperationsConsole
+def test_real_mixed_digital_and_scanned_pdf_blocks_before_activation(tmp_path, monkeypatch, *, production_console):
     source = tmp_path / "mixed.pdf"
     with fitz.open() as scan:
         scan.new_page().insert_text((72, 140), "Deze tekst bestaat alleen als afbeelding.")
@@ -69,7 +68,7 @@ def test_real_mixed_digital_and_scanned_pdf_blocks_before_activation(tmp_path, m
         document.save(source)
     monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
     def create():
-        return OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+        return production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     console = create()
     author = console.create_account(username="author", password="test-secret-long", roles=("researcher",))
     reviewer = console.create_account(username="reviewer", password="test-secret-long", roles=("reviewer",))
@@ -201,10 +200,9 @@ def chain(root, create_console):
     return sid
 
 
-def test_real_upload_semantic_source_review_restart_existing_publication_gate(tmp_path, monkeypatch):
-    from src.operations_console_v1 import OperationsConsole
+def test_real_upload_semantic_source_review_restart_existing_publication_gate(tmp_path, monkeypatch, *, production_console):
     monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
-    chain(tmp_path, lambda: OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime"))
+    chain(tmp_path, lambda: production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime"))
 
 
 def test_real_pdf_postgres_chain(tmp_path, workflow_postgres, monkeypatch):
@@ -217,19 +215,12 @@ from tests.complete_workflow_support import complete_postgres as workflow_postgr
 
 
 @pytest.mark.parametrize("field_contract", ["v2", "v3"])
-def test_real_pdf_postgres_successful_publication_and_restart(tmp_path, recovery_postgres, monkeypatch, field_contract):
+def test_real_pdf_postgres_successful_publication_and_restart(tmp_path, recovery_postgres, monkeypatch, field_contract, *, production_console):
     """Actual models + native PostgreSQL + unchanged review/publication commands.
 
     The test source-store double avoids an Azure subscription; it does not prove
     Azure Blob immutability or production deployment packaging.
     """
-    from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
-    from src.workflows.workflow_badge_counts_postgres_v1 import FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole
-    from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-    from src.workflows.workflow_identity_cutover_v1 import CutoverPostgresWorkflowIdentityStore
-    from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
-    from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-    from src.workflows.workflow_transaction_v1 import bind_workflow_stores
     from tests.test_vsa_publish_readiness_ui_v1 import MemorySourceStore
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
     from src.source_bound_fields_v2 import KEY, MODE
@@ -240,16 +231,8 @@ def test_real_pdf_postgres_successful_publication_and_restart(tmp_path, recovery
     monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
     source_store = MemorySourceStore()
     def create():
-        identity = CutoverPostgresWorkflowIdentityStore(recovery_postgres)
-        documents = PostgresConcurrentWorkflowDocumentStore(recovery_postgres)
-        reviews = PostgresWorkflowReviewStore(recovery_postgres)
-        remaining = PostgresWorkflowRemainingStore(recovery_postgres)
-        bind_workflow_stores(identity, documents, reviews, remaining)
-        return FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole(
-            root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime",
-            immutable_source_store=source_store, canonical_publication_store=PostgresCanonicalPublicationStore(recovery_postgres),
-            workflow_identity_store=identity, workflow_document_store=documents,
-            workflow_review_store=reviews, workflow_remaining_store=remaining)
+        return production_console(root=tmp_path, processing_binder=lambda console: None,
+                                  azure=True, immutable_source_store=source_store)
     console = create()
     core, heading = ("Mobiliseer dagelijks", "Als de klachten toenemen") if field_contract == "v3" else (TEXT, "Screening")
     def post(url, headers, payload, timeout):
@@ -316,8 +299,7 @@ def test_acceptance_requires_native_postgres():
 
 
 @pytest.mark.parametrize("backend", ["local", "postgres"])
-def test_real_converter_timeout_restart_retry_no_partial_activation(tmp_path, monkeypatch, request, backend):
-    from src.operations_console_v1 import OperationsConsole
+def test_real_converter_timeout_restart_retry_no_partial_activation(tmp_path, monkeypatch, request, backend, *, production_console):
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
     from src.source_bound_fields_v2 import MODE
     if backend == "postgres":
@@ -325,7 +307,7 @@ def test_real_converter_timeout_restart_retry_no_partial_activation(tmp_path, mo
         config = request.getfixturevalue("workflow_postgres")
         create = lambda: _console(tmp_path, config)
     else:
-        create = lambda: OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+        create = lambda: production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     def bind(console):
         def post(url, headers, payload, timeout):
             return {"output": [{"type": "message", "content": [{"type": "output_text", "text": json.dumps(proposal(payload))}]}]}
