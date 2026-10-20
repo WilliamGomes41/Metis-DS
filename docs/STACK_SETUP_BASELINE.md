@@ -68,7 +68,11 @@ unchanged. No account, secret, hosted model, or additional managed service is
 required; normal Codespaces/Actions compute quotas still apply. The default
 upstream version-check telemetry is disabled in the configured workspace and CI.
 The example verifies only its own Bend law, not the existing Python application.
-See `experiments/bend/README.md` for setup and the optional Lean kernel check.
+PR-D2 (#775) adds a checksum-pinned Lean 4.34.0 download (about 580 MB) to the
+dedicated CI job for the independent BendTT kernel check and bounded console
+conformance tests. Lean is proof tooling only, with no runtime service or
+production dependency. See `experiments/bend/README.md` and
+`experiments/bend/pr_d2/README.md` for setup and proof limits.
 
 ## 3. Most likely budget surprises if left implicit
 

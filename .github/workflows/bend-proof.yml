@@ -8,12 +8,30 @@ on:
       - '.devcontainer/devcontainer.json'
       - '.github/workflows/bend-proof.yml'
       - 'tests/test_bend_experiment.py'
+      - 'tests/test_pr_d2_second_review_retirement.py'
+      - 'tests/test_d5_3a_binding_aware_review_duty.py'
+      - 'tests/characterization/**'
+      - 'src/**'
+      - 'scripts/**'
+      - 'pyproject.toml'
+      - 'requirements*.txt'
+      - 'requirements*.lock'
+      - 'Dockerfile*'
   push:
     paths:
       - 'experiments/bend/**'
       - '.devcontainer/devcontainer.json'
       - '.github/workflows/bend-proof.yml'
       - 'tests/test_bend_experiment.py'
+      - 'tests/test_pr_d2_second_review_retirement.py'
+      - 'tests/test_d5_3a_binding_aware_review_duty.py'
+      - 'tests/characterization/**'
+      - 'src/**'
+      - 'scripts/**'
+      - 'pyproject.toml'
+      - 'requirements*.txt'
+      - 'requirements*.lock'
+      - 'Dockerfile*'
 
 permissions:
   contents: read
@@ -21,13 +39,16 @@ permissions:
 jobs:
   proof:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     env:
       BEND_NO_TELEMETRY: '1'
       TAR_OPTIONS: '--no-same-owner --warning=no-unknown-keyword'
       METIS_BEND_VERDICT: '1'
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Install checksum-pinned Bend 2.0.37
         run: |
           sh experiments/bend/install.sh
@@ -48,3 +69,31 @@ jobs:
           command -v bend
           bend guide > /dev/null
           python3 tests/test_bend_experiment.py
+      - name: Install checksum-pinned Lean 4.34.0 for the independent kernel
+        run: |
+          sh experiments/bend/pr_d2/install-lean.sh
+          echo "$HOME/.local/share/metis-lean-4.34.0/bin" >> "$GITHUB_PATH"
+      - name: Install existing Metis test dependencies
+        run: python -m pip install -r requirements-dev.lock
+      - name: Verify PR-D2 laws with BendTT and compare with the console
+        run: |
+          command -v lean
+          bend experiments/bend/pr_d2/PROOF.bend
+          bend experiments/bend/pr_d2/PROOF.bend --verdict
+          python -m pytest -q tests/test_pr_d2_second_review_retirement.py 'tests/characterization/test_review_room.py::test_review_room_golden[second_same_reviewer]' tests/test_d5_3a_binding_aware_review_duty.py --junitxml=output/bend-pr-d2.xml
+      - name: Require executed PR-D2 evidence without skipped cases
+        run: |
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('output/bend-pr-d2.xml').getroot()
+          assert list(root.iter('testcase')), 'Missing acceptance evidence'
+          assert not list(root.iter('skipped')), 'A required Bend/console check skipped'
+          assert not list(root.iter('failure')) and not list(root.iter('error'))
+          PY
+      - name: Save Bend and console evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bend-pr-d2-proof
+          path: output/bend-pr-d2.xml
+          if-no-files-found: warn
