@@ -213,7 +213,7 @@ def test_not_configured_is_explicit_and_never_legacy_fallback(tmp_path, monkeypa
         extract(source, document_id="doc", source_id="src")
 
 
-def test_missing_true_pipeline_persists_failed_attempt_and_duplicate_restarts_safely(tmp_path, monkeypatch, *, production_console):
+def test_missing_true_pipeline_persists_failed_attempt_and_duplicate_restarts_safely(tmp_path, monkeypatch):
     import fitz
     from src.operations_console_v1 import OperationsConsole
     monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
@@ -222,7 +222,7 @@ def test_missing_true_pipeline_persists_failed_attempt_and_duplicate_restarts_sa
         doc.new_page().insert_text((72, 72), "Broninhoud blijft behouden.")
         data = doc.tobytes()
     def create():
-        return production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+        return OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     console = create()
     author = console.create_account(username="author", password="long-test-secret", roles=("researcher",))
     reviewer = console.create_account(username="reviewer", password="long-test-secret", roles=("reviewer",))
@@ -382,7 +382,7 @@ def test_table_of_contents_page_is_accounted_navigation_not_source_text():
     (False, "docling_page_text_unverified"),
     (True, "docling_no_source_text"),
 ])
-def test_unverified_page_failure_is_durable_and_visible_without_partial_activation(tmp_path, monkeypatch, all_text_missing, expected_code, *, production_app, production_console):
+def test_unverified_page_failure_is_durable_and_visible_without_partial_activation(tmp_path, monkeypatch, all_text_missing, expected_code):
     import hashlib
     import fitz
     from fastapi.testclient import TestClient
@@ -405,7 +405,7 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
     monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
     monkeypatch.setattr(adapter, "extract", controlled_extract)
     def create():
-        return production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+        return OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     console = create()
     author = console.create_account(username="author", password="test-secret-long", roles=("researcher",))
     reviewer = console.create_account(username="reviewer", password="test-secret-long", roles=("reviewer",))
@@ -423,7 +423,7 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
     assert restarted._verified_source_bytes(restarted._envelope(sid))[1] == data
     assert restarted.ingest(**command)["snapshot_id"] == sid
     assert len(restarted._envelope(sid)["processing_attempts"]) == 1
-    with TestClient(production_app(restarted), base_url="https://testserver") as client:
+    with TestClient(create_console_app(restarted), base_url="https://testserver") as client:
         assert client.post("/login", data={"username": "reviewer", "password": "test-secret-long"},
                            follow_redirects=False).status_code == 303
         response = client.get("/review/processing-diagnostics", params={"document": sid})
@@ -450,7 +450,9 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
     assert attempt["diagnostic"]["unverified_pages"] == list(range(1, 1001))
 
 
-def test_decision_tree_pdf_route_keeps_unverified_page_numbers(tmp_path, monkeypatch, *, production_console):
+def test_decision_tree_pdf_route_keeps_unverified_page_numbers(tmp_path, monkeypatch):
+    # The beslisboom route converts Docling errors separately; it must carry
+    # the same page diagnostics as the guideline route.
     import src.decision_graph_v1 as decision_graph
     from src.operations_console_v1 import OperationsConsole, ConsoleError
     def unverified(*args, **kwargs):
@@ -458,7 +460,7 @@ def test_decision_tree_pdf_route_keeps_unverified_page_numbers(tmp_path, monkeyp
         error.pages = [3]
         raise error
     monkeypatch.setattr(decision_graph, "pdf_fragments", unverified)
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    console = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     with pytest.raises(ConsoleError) as raised:
         console._deterministic_fragments_and_spec("pdf", tmp_path / "boom.pdf", data=b"%PDF", document_id="doc",
             source_id="src", title="Boom", family="test", class_="beslisboom")
@@ -466,7 +468,8 @@ def test_decision_tree_pdf_route_keeps_unverified_page_numbers(tmp_path, monkeyp
     assert raised.value.unverified_pages == [3]
 
 
-def test_decision_tree_pdf_route_keeps_unverified_page_numbers_on_the_semantic_binding(tmp_path, monkeypatch, *, production_console):
+def test_decision_tree_pdf_route_keeps_unverified_page_numbers_on_the_semantic_binding(tmp_path, monkeypatch):
+    # The bound pre-review strategy calls the route directly; it converts identically.
     import src.decision_graph_v1 as decision_graph
     from src.operations_console_v1 import OperationsConsole, ConsoleError
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
@@ -475,7 +478,7 @@ def test_decision_tree_pdf_route_keeps_unverified_page_numbers_on_the_semantic_b
         error.pages = [3]
         raise error
     monkeypatch.setattr(decision_graph, "pdf_fragments", unverified)
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    console = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     bind_pre_review_semantic_processing(console, environ={"METIS_LLM_API_KEY": "k", "METIS_LLM_MODEL": "m"},
                                         post_json=lambda *a: pytest.fail("no model call before extraction"))
     with pytest.raises(ConsoleError) as raised:
