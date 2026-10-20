@@ -16,7 +16,10 @@
   "otherPortsAttributes": {
     "onAutoForward": "ignore"
   },
-  "postCreateCommand": "python -c \"import pytest, psycopg; print('Preinstalled test dependencies available; run tests via scripts/sandbox_test.sh (isolated runner)')\"",
+  "postCreateCommand": {
+    "verifyPython": "python -c \"import pytest, psycopg; print('Preinstalled test dependencies available; run tests via scripts/sandbox_test.sh (isolated runner)')\"",
+    "installBend": "TAR_OPTIONS='--no-same-owner --warning=no-unknown-keyword' sh experiments/bend/install.sh"
+  },
   "customizations": {
     "vscode": {
       "settings": {
@@ -27,5 +30,9 @@
         "ms-python.python"
       ]
     }
+  },
+  "remoteEnv": {
+    "PATH": "/home/vscode/.bend/bin:${containerEnv:PATH}",
+    "BEND_NO_TELEMETRY": "1"
   }
 }
