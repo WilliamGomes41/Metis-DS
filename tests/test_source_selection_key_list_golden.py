@@ -15,7 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import src.source_selection_ui_v1 as ui
-from src.operations_console_app import COOKIE, create_console_app
+from src.operations_console_app import COOKIE
 from tests.test_recoverable_formation_v1 import system
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
@@ -33,8 +33,8 @@ def _freeze(monkeypatch):
     monkeypatch.setattr(selection, 'now', lambda: datetime(2026, 10, 15, 6, tzinfo=timezone.utc))
 
 
-def _client(console, user):
-    client = TestClient(create_console_app(console))
+def _client(console, user, *, production_app):
+    client = TestClient(production_app(console))
     client.cookies.set(COOKIE, console.authenticate(user, 'strong-test-password')['token'])
     return client
 
@@ -48,9 +48,9 @@ def _norm(html):
 
 
 @pytest.mark.parametrize('user', ['author', 'reviewer'])
-def test_source_selection_html_identical_to_legacy_list(tmp_path, monkeypatch, user):
-    console, sid, *_ = system(tmp_path)
-    client = _client(console, user)
+def test_source_selection_html_identical_to_legacy_list(tmp_path, monkeypatch, user, *, production_app, production_console):
+    console, sid, *_ = system(tmp_path, production_console=production_console)
+    client = _client(console, user, production_app=production_app)
     _freeze(monkeypatch)
     new = [_norm(p) for p in _pages(client, sid)]
     _freeze(monkeypatch)
@@ -60,10 +60,10 @@ def test_source_selection_html_identical_to_legacy_list(tmp_path, monkeypatch, u
     assert sid in new[0] and sid in new[1]
 
 
-def test_source_selection_list_makes_no_receipt_copies(tmp_path, monkeypatch):
+def test_source_selection_list_makes_no_receipt_copies(tmp_path, monkeypatch, *, production_app, production_console):
     """Fail-first: the old route deep-copied one receipt per document."""
-    console, sid, *_ = system(tmp_path)
-    client = _client(console, 'author')
+    console, sid, *_ = system(tmp_path, production_console=production_console)
+    client = _client(console, 'author', production_app=production_app)
     calls = []
     real = type(console)._receipt
     monkeypatch.setattr(type(console), '_receipt', lambda self, env: calls.append(env['snapshot_id']) or real(self, env))
@@ -71,8 +71,8 @@ def test_source_selection_list_makes_no_receipt_copies(tmp_path, monkeypatch):
     assert calls == []
 
 
-def test_key_order_matches_list_envelopes(tmp_path):
-    console, *_ = system(tmp_path)
+def test_key_order_matches_list_envelopes(tmp_path, *, production_console):
+    console, *_ = system(tmp_path, production_console=production_console)
     assert ui.document_keys(console) == _legacy_keys(console)
 
 

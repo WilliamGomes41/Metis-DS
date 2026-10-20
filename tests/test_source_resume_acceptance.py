@@ -18,12 +18,12 @@ from tests.complete_workflow_support import complete_postgres as workflow_postgr
 
 
 @pytest.fixture(params=["file", "postgres"])
-def partial(request, tmp_path):
+def partial(request, tmp_path, *, production_console):
     make = None
     if request.param == "postgres":
         config = request.getfixturevalue("workflow_postgres")
         make = lambda: _console(tmp_path, config)
-    return system(tmp_path, make_console=make)
+    return system(tmp_path, make_console=make, production_console=production_console)
 
 
 @pytest.mark.parametrize("changed_mode,changed_model", [

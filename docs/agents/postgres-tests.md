@@ -163,3 +163,34 @@ gebruikt na het klaarzetten van zo'n historisch record de echte productieroutes.
 Twee T11-proeven van dubbele exacte tupleversies in een JSON-bestand blijven
 `file_topology`; PostgreSQL weigert die representatie via zijn primary key.
 De semantische publicatie-sealproef controleert nu canonical PG-rijen.
+
+De aanvullende portievergelijking is reproduceerbaar met
+`python scripts/benchmark_console_fixture.py --ref <commit> --output <pad>`.
+Zij draait dezelfde zeven modules (37 gevallen) in een tijdelijke worktree.
+Een buitenste rollbacktransactie gebruikt de bestaande workflow-binding;
+onafhankelijke verbindingen en canonical commits worden niet vervalst.
+De resultaten staan in `evidence/d6a/fixture-portion-benchmark.json`: template
+37/37 in 15,171 s; rollback 31/37 in 9,139 s. Onder andere de echte
+reprocessing-owner- en HTTP-proeven falen bij rollback. Een kortere looptijd
+van een falende strategie telt niet als versnelling; databasekopieën blijven
+het gekozen mechanisme. Een eerdere proef met een verkeerde psycopg-row-factory
+is verworpen en niet als bewijs opgenomen.
+
+Portie 8 repareert de bij de migratie gevonden volledige receiptconstructie
+binnen de PG-sleutellijst. De Class B-scope staat in
+[het leescontract](../change-contracts/d6a-key-list.md); het pad schrijft niets.
+
+Portie 9 migreert bronbewijs, broncacheherstel, formulierconflicten en
+formatieproeven. Formulierconflicten gebruiken een echte definitieve afwijzing
+als concurrerende write: `later` bewaart in de productieklasse bewust geen
+suitability. De incomplete-formatie-banner wordt in de daadwerkelijke
+reviewkamer gelezen (`task=individual`), naast de gewone workboardroute.
+De semantische safety-proef injecteert provider/commitbewijs vóór de echte
+route-installatie. Canonical publicatie bij herstel gebruikt PostgreSQL.
+
+Afnemers van de formatiehelper krijgen expliciet dezelfde factory mee. Oudere
+parametrische helpers die nog niet in deze portie worden gemigreerd, blijven
+zichtbaar in de inventaris; dit is geen afronding van D6a. De afzonderlijke
+publication-refusal-module bewaart tijdelijk expliciet haar bestaande
+bestandsconstructor, zodat een helperwijziging haar oude bewijs niet stilzwijgend
+naar een andere opstelling omzet.

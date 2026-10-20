@@ -120,7 +120,7 @@ def test_correction_cannot_reuse_stale_or_missing_v2_evidence(change):
         assert any(code.startswith('source_bound_') for code in result[1]['metadata']['admission']['reason_codes'])
 
 
-def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path):
+def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path, *, production_app, production_console):
     from src.operations_console_v1 import OperationsConsole
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV
     from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
@@ -131,7 +131,7 @@ def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path)
         return {"id": "response-origin", "status": response_status[0], "usage": {"input_tokens": 123, "output_tokens": 45},
                 "private_provider_metadata": "must-not-persist",
                 "output": [{"type": "message", "content": [{"type": "output_text", "text": ' '+json.dumps(proposal(payload))+'\n'}]}]}
-    console=OperationsConsole(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
+    console=production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
     env={PASSAGE_FORMATION_MODE_ENV: MODE, LLM_API_KEY_ENV: 'test', LLM_MODEL_ENV: 'test-model'}
     bind_pre_review_semantic_processing(console, environ=env, post_json=post)
     author=console.create_account(username='author', password='strong-test-password', roles=('researcher',))
@@ -153,7 +153,7 @@ def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path)
     assert evidence['response']['output_text'] == ' '+json.dumps(proposal(calls[0]))+'\n'
     assert 'Authorization' not in json.dumps(evidence)
     assert 'must-not-persist' not in json.dumps(evidence)
-    restarted=OperationsConsole(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
+    restarted=production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
     bind_pre_review_semantic_processing(restarted, environ=env, post_json=post)
     assert restarted._envelope(sid)['semantic_replay']['provider_evidence'] == evidence
     assert any(KEY in (o.get('metadata') or {}) for o in restarted.snapshot_objects(sid, include_blocked=True))
@@ -168,7 +168,7 @@ def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path)
     from zipfile import ZipFile
     from fastapi.testclient import TestClient
     from src.operations_console_app import create_console_app, COOKIE
-    client = TestClient(create_console_app(restarted))
+    client = TestClient(production_app(restarted))
     session = restarted.authenticate('reviewer', 'strong-test-password')
     client.cookies.set(COOKIE, session['token'])
     before = deepcopy(restarted._envelope(sid)), restarted.objects_revision(sid)

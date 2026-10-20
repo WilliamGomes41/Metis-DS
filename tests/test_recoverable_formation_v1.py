@@ -12,19 +12,19 @@ import pytest
 from src.operations_console_v1 import ConsoleError
 from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 from src.recoverable_formation_v1 import prepare, incomplete
-from src.review_closure_v1 import ReviewClosureConsole
 from src.source_accountability_v1 import evidence_of
 from tests.test_recommendation_context_v3 import response_for, source
 from tests.test_recommendation_coverage_v1 import FIRST, SECOND
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
-def system(tmp_path, *, broken=True, make_console=None, containers=False, broken_first=False):
-    make_console = make_console or (lambda: ReviewClosureConsole(
+def system(tmp_path, *, broken=True, make_console=None, containers=False, broken_first=False, production_console):
+    make_console = make_console or (lambda: production_console(processing_binder=lambda console: None,
         root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime'))
     state = make_console()
-    author = state.create_account(username='author', password='strong-test-password', roles=('researcher',))
-    reviewer = state.create_account(username='reviewer', password='strong-test-password', roles=('reviewer', 'publisher'))
+    accounts = {row['username']: row for row in state.list_accounts()}
+    author = accounts.get('author') or state.create_account(username='author', password='strong-test-password', roles=('researcher',))
+    reviewer = accounts.get('reviewer') or state.create_account(username='reviewer', password='strong-test-password', roles=('reviewer', 'publisher'))
     calls = []
     mode = {'broken': broken, 'dependency_failure': False}
     def provider(_url, _headers, payload, _timeout):
@@ -53,13 +53,13 @@ def system(tmp_path, *, broken=True, make_console=None, containers=False, broken
     extra = '<p>Versie: 1</p><p>Bij volwassenen.</p>' if containers else ''
     receipt = state.ingest(actor_id=author['account_id'], filename='test.html',
         data=f'<html><body><h1>Aanbevelingen</h1>{extra}<p>{FIRST}</p><p>{SECOND}</p></body></html>'.encode(),
-        content_type='text/html', ingest_kind='new', title='Test', version='1.0', date='2026-10-05',
+        content_type='text/html', ingest_kind='new', title='Test ' + tmp_path.name, version='1.0', date='2026-10-05',
         live_url='', class_='richtlijn', family='test', named_reviewers=[reviewer['account_id']])
     return state, receipt['snapshot_id'], author['account_id'], reviewer['account_id'], calls, mode, make_console, bind
 
 
-def partial_story(tmp_path, make_console=None):
-    state, sid, actor, reviewer, calls, mode, make, bind = system(tmp_path, make_console=make_console)
+def partial_story(tmp_path, make_console=None, *, production_console):
+    state, sid, actor, reviewer, calls, mode, make, bind = system(tmp_path, make_console=make_console, production_console=production_console)
     before = state.snapshot_objects(sid)
     first = next(o for o in before if o['content']['clean_text'] == FIRST)
     assert first['metadata']['admission']['gate_result'] == 'allowed'
@@ -111,37 +111,35 @@ def partial_story(tmp_path, make_console=None):
 
 
 
-def test_review_points_to_resume_when_formation_left_no_candidate(tmp_path):
-    # Smetten: every proposal was rejected. The preserved work is correct (#516),
-    # but Review offered hundreds of source dispositions instead of recovery.
+def test_review_points_to_resume_when_formation_left_no_candidate(tmp_path, *, production_app, production_console):
     from fastapi.testclient import TestClient
     from src.operations_console_app import create_console_app, COOKIE
     from src.source_accountability_v1 import is_source_record
-    state, sid, *_ = system(tmp_path, broken_first=True)
+    state, sid, *_ = system(tmp_path, broken_first=True, production_console=production_console)
     objects = state.snapshot_objects(sid)
     assert objects and all(is_source_record(o) or o.get('object_type') in {'document', 'heading'} for o in objects)
     assert incomplete(state._envelope(sid))
-    client = TestClient(create_console_app(state))
+    client = TestClient(production_app(state))
     client.cookies.set(COOKIE, state.authenticate('reviewer', 'strong-test-password')['token'])
-    page = client.get('/review', params={'document': sid}).text
+    page = client.get('/review', params={'document': sid, 'task': 'individual'}).text
     assert 'data-formation-incomplete' in page and 'Kennisvorming onvolledig' in page
     assert f'/source-selection?document={sid}' in page
     # The current-state projection decides, not the stored flag alone.
     real_status = state.processing_status
     for change in ({'formation_incomplete': False}, {'resume_allowed': False}):
         state.processing_status = lambda snapshot_id, change=change, **kwargs: {**real_status(snapshot_id, **kwargs), **change}
-        assert 'data-formation-incomplete' not in client.get('/review', params={'document': sid}).text
+        assert 'data-formation-incomplete' not in client.get('/review', params={'document': sid, 'task': 'individual'}).text
     state.processing_status = real_status
 
     # A partial run with a validated candidate keeps its normal Review page.
-    partial, partial_sid, *_ = system(tmp_path / 'partial')
-    partial_client = TestClient(create_console_app(partial))
+    partial, partial_sid, *_ = system(tmp_path / 'partial', production_console=production_console)
+    partial_client = TestClient(production_app(partial))
     partial_client.cookies.set(COOKIE, partial.authenticate('reviewer', 'strong-test-password')['token'])
-    assert 'data-formation-incomplete' not in partial_client.get('/review', params={'document': partial_sid}).text
+    assert 'data-formation-incomplete' not in partial_client.get('/review', params={'document': partial_sid, 'task': 'individual'}).text
 
 
-def test_processing_status_projects_progress_for_pre_v10_bounded_evidence(tmp_path):
-    state, sid, _, _, _, _, make, bind = system(tmp_path)
+def test_processing_status_projects_progress_for_pre_v10_bounded_evidence(tmp_path, *, production_console):
+    state, sid, _, _, _, _, make, bind = system(tmp_path, production_console=production_console)
     envelope = deepcopy(state._envelope(sid))
     provider = envelope['semantic_replay']['provider_evidence']
     provider.pop('formation_progress', None)
@@ -156,8 +154,8 @@ def test_processing_status_projects_progress_for_pre_v10_bounded_evidence(tmp_pa
     assert processing['formation_progress']['pending_task_count'] > 0
 
 
-def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path):
-    state, sid, actor, reviewer, calls, mode, _, _ = system(tmp_path)
+def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path, *, production_app, production_console):
+    state, sid, actor, reviewer, calls, mode, _, _ = system(tmp_path, production_console=production_console)
     from fastapi.testclient import TestClient
     from src.operations_console_app import create_console_app, COOKIE
     from src.processing_evidence_export_v1 import processing_evidence_tables
@@ -168,7 +166,7 @@ def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path):
     assert len(tables['formation_progress']) == 1
     assert tables['formation_progress'][0]['formation_state'] == 'pending'
     assert tables['formation_progress'][0]['pending_task_count'] > 0
-    client = TestClient(create_console_app(state))
+    client = TestClient(production_app(state))
     command = {'snapshot_id': sid, 'command_id': 'http-resume', 'expected_revision': state.objects_revision(sid)}
     assert client.post('/tree/resume-formation', data=command, follow_redirects=False).status_code in {302, 303, 401, 403}
     assert len(calls) == 2
@@ -188,18 +186,19 @@ def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path):
     assert len(calls) == 3
 
 
-def test_recover_review_publish_restart_and_published_projection(tmp_path):
+def test_recover_review_publish_restart_and_published_projection(tmp_path, complete_postgres, *, production_console):
     from src.durable_publication_console_v1 import DurablePublicationConsole
     from src.product_api_v1 import create_product_app
     from src.usage_ledger_v1 import UsageLedger
     from fastapi.testclient import TestClient
     from tests.test_product_api_v1 import paths, registry, headers
-    from tests.test_durable_publication_console_v1 import MemoryCanonicalStore, MemorySourceStore
-    durable, source_store = MemoryCanonicalStore(), MemorySourceStore()
+    from tests.test_durable_publication_console_v1 import MemorySourceStore
+    from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+    durable, source_store = PostgresCanonicalPublicationStore(complete_postgres), MemorySourceStore()
     def make():
-        return DurablePublicationConsole(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime',
+        return production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime',
             immutable_source_store=source_store, canonical_publication_store=durable)
-    state, sid, actor, reviewer, calls, mode, _, bind = system(tmp_path, make_console=make, containers=True)
+    state, sid, actor, reviewer, calls, mode, _, bind = system(tmp_path, make_console=make, containers=True, production_console=production_console)
     def product_client():
         ps = paths(tmp_path)
         return TestClient(create_product_app('real', paths=ps, tenant_registry=registry(docs=('*',)),
@@ -242,17 +241,17 @@ def test_recover_review_publish_restart_and_published_projection(tmp_path):
                                    expected_revision=restarted.objects_revision(sid))
 
 
-def test_partial_restart_targeted_recovery_duplicate_and_review_guard(tmp_path):
-    partial_story(tmp_path)
+def test_partial_restart_targeted_recovery_duplicate_and_review_guard(tmp_path, *, production_console):
+    partial_story(tmp_path, production_console=production_console)
 
 
-def test_postgres_partial_restart_targeted_recovery(workflow_postgres, tmp_path):
+def test_postgres_partial_restart_targeted_recovery(workflow_postgres, tmp_path, *, production_console):
     from tests.test_review_batch_atomic_postgres import _console
-    partial_story(tmp_path, lambda: _console(tmp_path, workflow_postgres))
+    partial_story(tmp_path, lambda: production_console(root=tmp_path, processing_binder=lambda console: None), production_console=production_console)
 
 
-def test_recovery_stale_permission_failure_and_no_silent_completion(tmp_path):
-    state, sid, actor, reviewer, calls, mode, _, _ = system(tmp_path)
+def test_recovery_stale_permission_failure_and_no_silent_completion(tmp_path, *, production_console):
+    state, sid, actor, reviewer, calls, mode, _, _ = system(tmp_path, production_console=production_console)
     before = state.snapshot_objects(sid)
     revision = state.objects_revision(sid)
     with pytest.raises(ConsoleError, match='snapshot_object_write_conflict'):
@@ -268,8 +267,8 @@ def test_recovery_stale_permission_failure_and_no_silent_completion(tmp_path):
     assert not state.publication_readiness(sid)['publish_allowed']
 
 
-def test_failed_activation_retains_previous_bundle_and_can_restart(tmp_path, monkeypatch):
-    state, sid, actor, _, calls, mode, make, bind = system(tmp_path)
+def test_failed_activation_retains_previous_bundle_and_can_restart(tmp_path, monkeypatch, *, production_console):
+    state, sid, actor, _, calls, mode, make, bind = system(tmp_path, production_console=production_console)
     before = state.snapshot_objects(sid)
     revision = state.objects_revision(sid)
     original = state._commit_prepared_store
@@ -288,9 +287,9 @@ def test_failed_activation_retains_previous_bundle_and_can_restart(tmp_path, mon
     assert incomplete(restarted._envelope(sid))
 
 
-def test_concurrent_resume_cannot_overwrite_active_attempt(tmp_path):
+def test_concurrent_resume_cannot_overwrite_active_attempt(tmp_path, *, production_console):
     from threading import Event, Thread
-    state, sid, actor, _, calls, mode, _, _ = system(tmp_path)
+    state, sid, actor, _, calls, mode, _, _ = system(tmp_path, production_console=production_console)
     revision = state.objects_revision(sid)
     entered, release = Event(), Event()
     mode.update(broken=False, pause=(entered, release))
@@ -388,8 +387,8 @@ def test_producer_cannot_supply_approval_or_omit_unknown_failures():
 
 
 
-def test_manual_source_reset_blocks_resume_and_reextract(tmp_path):
-    state, sid, actor, reviewer, calls, mode, make, bind = system(tmp_path, containers=True)
+def test_manual_source_reset_blocks_resume_and_reextract(tmp_path, *, production_console):
+    state, sid, actor, reviewer, calls, mode, make, bind = system(tmp_path, containers=True, production_console=production_console)
     assert state.processing_status(sid)['resume_allowed']
     from src.source_context_review_v1 import confirm_source_context
     metadata = next(o for o in state.snapshot_objects(sid) if evidence_of(o).get('text') == 'Versie: 1')
