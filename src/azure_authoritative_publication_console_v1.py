@@ -65,10 +65,7 @@ class AzureAuthoritativePublicationConsole(DurablePublicationConsole):
             verified.add(snapshot_id)
         return len(verified)
 
-    def _projection_from_authority(self) -> list[dict[str, Any]]:
-        # This hook is reached both immediately after durable publication and
-        # during startup reconciliation. Local published state is therefore
-        # never rebuilt from PostgreSQL unless the referenced source bytes are
-        # present in Blob and survive a fresh SHA-256 read-back.
+    def _verify_publication_sources(self) -> None:
+        # Explicit lifecycle validation, independent of writing/building a file.
+        # Called for publish, withdrawal and startup reconciliation.
         self._verify_active_authority_sources()
-        return super()._projection_from_authority()

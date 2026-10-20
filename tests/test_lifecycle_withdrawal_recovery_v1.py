@@ -254,7 +254,7 @@ def test_http_withdrawal_complete_recovery_and_open_work_resume(recovery_postgre
 
     payload = {**stale, "snapshot_id": v2["snapshot_id"], "expected_release_id": r2["release_id"]}
     with monkeypatch.context() as patch:
-        patch.setattr(console, "_apply_local_release_copy", lambda *a: (_ for _ in ()).throw(OSError("projection unavailable")))
+        patch.setattr(console, "_apply_release_state", lambda *a: (_ for _ in ()).throw(OSError("publication state update unavailable")))
         response = client.post("/publish/withdraw", data=payload)
     assert response.status_code == 200
     assert 'data-withdrawal-result="pending"' in response.text

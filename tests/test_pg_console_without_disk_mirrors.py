@@ -358,6 +358,9 @@ def _run(config, root, guard, monkeypatch, checkpoints, completed, expected=None
             actor_id=accounts["publisher"]["account_id"], snapshot_id=disposable["snapshot_id"],
             confirmed=True, confirm_title="D4 mirror lifecycle"))
         assert disposable["snapshot_id"] not in console.list_snapshot_ids()
+        return {"console": console, "accounts": accounts, "source": source,
+                "canonical": canonical, "adapter": adapter, "successor": v3,
+                "build": build}
 
 
 def _mirror_cause(error):
@@ -377,7 +380,7 @@ def test_pg_console_without_disk_mirrors(complete_postgres, tmp_path, monkeypatc
     # supplied DSN (which could point at an existing development database).
     from psycopg.conninfo import conninfo_to_dict
     assert conninfo_to_dict(config.dsn)["dbname"].startswith("metis_718_")
-    roots = {mode: tmp_path / mode for mode in ("control", "guarded")}
+    roots = {mode: tmp_path / mode for mode in ("control", "guarded", "poisoned")}
     reports, baseline = {}, {}
     try:
         control = MirrorAccess(roots["control"] / "runtime", deny=False)
@@ -385,39 +388,54 @@ def test_pg_console_without_disk_mirrors(complete_postgres, tmp_path, monkeypatc
         _run(config, roots["control"], control, monkeypatch, baseline, completed, console_kind=console_kind)
         assert completed == list(PHASES), "Writable control must complete the lifecycle"
         reports["control"] = dict(completed=completed, accesses=list(control.rows.values()))
-        _assert_access_baseline(reports["control"]["accesses"], console_kind)
-        _install_schema(config.dsn)  # Only the fixture-owned disposable database.
-        runtime = roots["guarded"] / "runtime"
-        runtime.mkdir(parents=True)
-        # Empty child directories allow lock creation, not JSON data: all mirror
-        # opens (including atomic temp files) are denied independently of UID.
-        for name in ("objects", "release_manifests"):
-            (runtime / name).mkdir()
-        for name in ("store.lock", "sessions.json.lock"):
-            (runtime / name).touch()
-        assert not any(path.is_file() and not path.name.endswith(".lock") for path in runtime.rglob("*"))
-        runtime.chmod(0o555)
-        assert runtime.stat().st_mode & 0o222 == 0
-        guard = MirrorAccess(runtime, deny=True)
-        completed, checkpoints, fault = [], {}, None
-        try:
-            _run(config, roots["guarded"], guard, monkeypatch, checkpoints, completed, expected=baseline, console_kind=console_kind)
-        except Exception as error:
-            if not _mirror_cause(error):
-                raise  # Connection, harness, assertion and unrelated faults are never xfailed.
-            fault = dict(phase=guard.phase, type=type(error).__name__, code=getattr(error, "code", None))
-        finally:
-            reports["guarded"] = dict(completed=completed, blocked=fault,
-                not_reached=[phase for phase in PHASES if phase not in completed],
-                pg_equivalence="complete" if completed == list(PHASES) else "completed-prefix-only",
-                accesses=list(guard.rows.values()))
-            runtime.chmod(0o755)
-            assert not any(path.is_file() and not path.name.endswith(".lock") for path in runtime.rglob("*")), "Mirror guard leaked a data write"
-        unknown = [row for report in reports.values() for row in report["accesses"] if row["owner"] is None]
-        assert not unknown, f"New mirror owner needs explicit D4 review: {unknown}"
-        if guard.rows:
-            pytest.xfail("D4 known mirror accesses; see PG_MIRROR_MAP for stacks and blocked/unreached phases. D5 must remove the conditional xfail.")
-        assert completed == list(PHASES)
+        assert not control.rows, "D5 control still accesses a disk mirror"
+        for mode in ("guarded", "poisoned"):
+            _install_schema(config.dsn)  # Only the fixture-owned disposable database.
+            runtime = roots[mode] / "runtime"
+            runtime.mkdir(parents=True)
+            for name in ("objects", "release_manifests"):
+                (runtime / name).mkdir()
+            for name in ("store.lock", "sessions.json.lock"):
+                (runtime / name).touch()
+            if mode == "poisoned":
+                # Existing files exercise reads hidden behind exists/is_file.
+                for name in MIRROR_NAMES:
+                    (runtime / name).write_text('{"poison": "must never be read"}\n')
+                snapshots, releases = set(), set()
+                for state in baseline.values():
+                    snapshots.update(row["snapshot_id"] for row in state["workflow_tables"]["documents"])
+                    releases.update(row["release_id"] for row in state["tables"]["publication_releases"])
+                for sid in snapshots:
+                    (runtime / "objects" / f"{sid}.jsonl").write_text('{"poison": true}\n')
+                for rid in releases:
+                    (runtime / "release_manifests" / f"{rid}.json").write_text('{"poison": true}\n')
+            guard = MirrorAccess(runtime, deny=True)
+            before = {str(path.relative_to(runtime)): path.read_bytes() for path in runtime.rglob("*")
+                      if path.is_file() and guard.mirror(path) is not None}
+            if mode == "guarded":
+                assert not before
+                runtime.chmod(0o555)
+            completed, checkpoints, fault = [], {}, None
+            try:
+                _run(config, roots[mode], guard, monkeypatch, checkpoints, completed,
+                     expected=baseline, console_kind=console_kind)
+            except Exception as error:
+                if not _mirror_cause(error):
+                    raise
+                fault = dict(phase=guard.phase, type=type(error).__name__, code=getattr(error, "code", None))
+            finally:
+                reports[mode] = dict(completed=completed, blocked=fault,
+                    not_reached=[phase for phase in PHASES if phase not in completed],
+                    pg_equivalence="complete" if completed == list(PHASES) else "completed-prefix-only",
+                    accesses=list(guard.rows.values()))
+                runtime.chmod(0o755)
+                after = {str(path.relative_to(runtime)): path.read_bytes() for path in runtime.rglob("*")
+                         if path.is_file() and guard.mirror(path) is not None}
+                assert after == before, "D5 changed legacy mirrors"
+            assert not guard.rows, f"D5 {mode} accessed a mirror: {[(r['owner'], r['mirror'], r['access'], r['phase']) for r in guard.rows.values()]}"
+            assert fault is None
+            assert completed == list(PHASES)
+
     finally:
         for root in roots.values():
             unregister_backend(root / "runtime" / "review_ledger.jsonl")

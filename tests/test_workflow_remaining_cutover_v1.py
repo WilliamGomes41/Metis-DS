@@ -80,8 +80,9 @@ def test_class_history_and_publication_state_no_longer_depend_on_local_files() -
     assert "read_events(self._ledger_path)" in remaining_source
 
 
-def test_release_files_are_declared_rebuildable_not_authority() -> None:
+def test_pg_release_files_are_unused_and_not_recovery_sources() -> None:
     docs = (ROOT / "docs" / "RUNTIME_DATA_RECOVERY.md").read_text(encoding="utf-8")
     assert "release manifests" in docs.lower()
-    assert "rebuildable" in docs.lower()
+    assert "zonder runtime-bestanden" in docs.lower()
+    assert "ongebruikt" in docs.lower()
     assert "geen workflow-authority" in docs.lower()

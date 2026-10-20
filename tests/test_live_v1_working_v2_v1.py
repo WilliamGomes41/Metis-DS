@@ -464,8 +464,8 @@ def test_failed_unpublished_delete_rolls_back_postgres_and_local_state(
         objects_path = console._objects_path(snapshot_id)
 
         before = {
-            "envelopes": console._envelopes_path.read_bytes(),
-            "objects": objects_path.read_bytes(),
+            "envelope": console.workflow_document_store.get_envelope(snapshot_id),
+            "objects": console.workflow_document_store.list_document_objects(snapshot_id),
             "bindings": console._bindings_path.read_bytes()
             if console._bindings_path.exists()
             else None,
@@ -489,8 +489,9 @@ def test_failed_unpublished_delete_rolls_back_postgres_and_local_state(
 
         assert console.workflow_document_store.get_envelope(snapshot_id) is not None
         assert console.workflow_document_store.list_document_objects(snapshot_id)
-        assert console._envelopes_path.read_bytes() == before["envelopes"]
-        assert objects_path.read_bytes() == before["objects"]
+        assert console.workflow_document_store.get_envelope(snapshot_id) == before["envelope"]
+        assert console.workflow_document_store.list_document_objects(snapshot_id) == before["objects"]
+        assert not console._envelopes_path.exists() and not objects_path.exists()
         assert (
             console._bindings_path.read_bytes() if console._bindings_path.exists() else None
         ) == before["bindings"]

@@ -65,6 +65,35 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         for projected_row, authority_row in zip(projected, authority_rows, strict=True): projected_row.setdefault("metadata", {})["snapshot_id"] = str(authority_row["snapshot_id"])
         return projected
 
+    def _verify_publication_sources(self) -> None:
+        """Source-authority validation hook; Azure requires fresh Blob readback."""
+
+    def _validate_publication_state(self) -> list[dict[str, Any]]:
+        self._verify_publication_sources()
+        return self._projection_from_authority()
+
+    def _release_envelope(self, release: dict[str, Any]) -> dict[str, Any]:
+        current = deepcopy(self._envelope(str(release["snapshot_id"])))
+        current_state = str(current.get("state") or "")
+        authority_state = str(release.get("release_status") or "")
+        release_state = authority_state if authority_state in _HISTORICAL_RELEASE_STATES else current_state if current_state in _HISTORICAL_RELEASE_STATES else "published"
+        current.update({"state": release_state, "published": True,
+            "release_id": str(release["release_id"]), "release_version": str(release["release_version"]),
+            "published_at": str(release["published_at"]), "published_by": str(release["release_owner"])})
+        return current
+
+    def _record_release_publication(self, release: dict[str, Any], current: dict[str, Any]) -> None:
+        if not self._local_ledger_has_release(str(release["release_id"])):
+            append_event(self._ledger_path, event_type="release_published", object_id=str(release["snapshot_id"]),
+                object_version=str(current.get("version") or ""), actor=str(release["release_owner"]),
+                details={"release_id": str(release["release_id"]), "release_version": str(release["release_version"]),
+                    "published_object_ids": sorted(str(row["object_id"]) for row in release["objects"]),
+                    "source_sha256": str(release["source_sha256"]), "authority": "postgres"})
+
+    def _apply_release_state(self, release: dict[str, Any], projection: list[dict[str, Any]]) -> None:
+        """File-topology compatibility; the full PG mixin owns its durable view."""
+        self._apply_local_release_copy(release, projection)
+
     def _local_ledger_has_release(self, release_id: str) -> bool:
         if not self._ledger_path.is_file(): return False
         for line in self._ledger_path.read_text(encoding="utf-8").splitlines():
@@ -75,18 +104,17 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         return False
 
     def _apply_local_release_copy(self, release: dict[str, Any], projection: list[dict[str, Any]]) -> None:
+        if not self._startup_local_mirror_is_authority(self._envelopes_path):
+            # Legacy private callers must use the PG authority path as well.
+            return self._apply_release_state(release, projection)
         snapshot_id, release_id = str(release["snapshot_id"]), str(release["release_id"])
         projection_path = self._published_projection_path(); manifest_path = self.runtime / RELEASE_MANIFEST_DIRNAME / f"{release_id}.json"
         prior_projection = self._read_optional(projection_path); prior_manifest = self._read_optional(manifest_path); prior_envelopes = self._read_optional(self._envelopes_path); prior_ledger = self._read_optional(self._ledger_path); prior_envelope_map = deepcopy(self._envelopes)
         try:
             _atomic_write(manifest_path, self._manifest_from_release(release)); atomic_replace_projection(projection_path, projection)
-            current = deepcopy(self._envelope(snapshot_id))
-            current_state = str(current.get("state") or "")
-            authority_state = str(release.get("release_status") or "")
-            release_state = authority_state if authority_state in _HISTORICAL_RELEASE_STATES else current_state if current_state in _HISTORICAL_RELEASE_STATES else "published"
-            current.update({"state":release_state,"published":True,"release_id":release_id,"release_version":str(release["release_version"]),"published_at":str(release["published_at"]),"published_by":str(release["release_owner"])})
+            current = self._release_envelope(release)
             self._envelopes[snapshot_id] = current; _atomic_write(self._envelopes_path, self._envelopes)
-            if not self._local_ledger_has_release(release_id): append_event(self._ledger_path,event_type="release_published",object_id=snapshot_id,object_version=str(current.get("version") or ""),actor=str(release["release_owner"]),details={"release_id":release_id,"release_version":str(release["release_version"]),"published_object_ids":sorted(str(row["object_id"]) for row in release["objects"]),"source_sha256":str(release["source_sha256"]),"authority":"postgres"})
+            self._record_release_publication(release, current)
         except Exception:
             self._restore_optional(projection_path, prior_projection); self._restore_optional(manifest_path, prior_manifest); self._restore_optional(self._envelopes_path, prior_envelopes); self._restore_optional(self._ledger_path, prior_ledger); self._envelopes = prior_envelope_map; raise
 
@@ -208,7 +236,7 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
     def _sync_snapshot_from_authority(self, snapshot_id: str) -> dict[str, Any] | None:
         release = self._durable_release_for_snapshot(snapshot_id)
         if release is None: return None
-        self._apply_local_release_copy(release, self._projection_from_authority()); return release
+        self._apply_release_state(release, self._validate_publication_state()); return release
 
     def withdraw_document(
         self, *, actor_id: str, snapshot_id: str, expected_release_id: str, reason: str,
@@ -289,7 +317,7 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         if release is None or str(release.get("release_id") or "") != release_id: raise ConsoleError("durable_publication_commit_not_readable")
         observe_publication('publication_committed', snapshot_id=snapshot_id, envelope=envelope,
                             revision=evidence_revision, release_id=release_id)
-        try: projection = self._projection_from_authority(); self._apply_local_release_copy(release, projection)
+        try: projection = self._validate_publication_state(); self._apply_release_state(release, projection)
         except Exception as exc: raise ConsoleError("durable_publication_local_copy_failed", str(exc)) from exc
         observe_publication('publication_completed', snapshot_id=snapshot_id, envelope=envelope,
                             revision=evidence_revision, release_id=release_id)
@@ -302,8 +330,11 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         for envelope in self.list_envelopes():
             checked += 1; release = self._durable_release_for_snapshot(str(envelope["snapshot_id"]));
             if release is not None: releases.append(release)
+        projection = self._validate_publication_state()
         if not releases:
-            atomic_replace_projection(self._published_projection_path(), self._projection_from_authority()); return {"checked":checked,"reconciled":0}
-        projection = self._projection_from_authority(); releases.sort(key=lambda row: str(row.get("published_at") or ""))
-        for release in releases: self._apply_local_release_copy(release, projection)
+            if self._startup_local_mirror_is_authority(self._envelopes_path):
+                atomic_replace_projection(self._published_projection_path(), projection)
+            return {"checked": checked, "reconciled": 0}
+        releases.sort(key=lambda row: str(row.get("published_at") or ""))
+        for release in releases: self._apply_release_state(release, projection)
         return {"checked":checked,"reconciled":len(releases)}

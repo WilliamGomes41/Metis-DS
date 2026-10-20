@@ -29,7 +29,7 @@ from src.workflows import workflow_review_cutover_v1 as rc
 from src.workflows.workflow_transaction_v1 import workflow_transaction_active
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 from tests.test_r2_rollback_remirror_postgres import (
-    _approve, _assert_disk_mirrors_equal_pg, _console, _inject_fault, _setup, _state,
+    _approve, _assert_review_authority_without_mirrors, _console, _inject_fault, _setup, _state,
 )
 
 
@@ -55,20 +55,20 @@ def _spy_mirror_writes_inside_transaction(monkeypatch, console):
         path = pathlib.Path(path).resolve()
         return path in mirror_paths or path.parent == console._objects_dir.resolve()
 
-    for module in (rc, documents_cutover):
-        for name in ("_atomic_write", "_atomic_replace_bytes"):
-            original = getattr(module, name)
+    import os
+    original_os_open = os.open
 
-            def spy(path, *args, __original=original, __name=name, **kwargs):
-                if workflow_transaction_active() and is_mirror(path):
-                    inside.append((__name, pathlib.Path(path).name))
-                return __original(path, *args, **kwargs)
+    def os_open_spy(path, flags, *args, **kwargs):
+        if not isinstance(path, int) and workflow_transaction_active() and is_mirror(path):
+            if flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND):
+                inside.append(("os.open", pathlib.Path(path).name))
+        return original_os_open(path, flags, *args, **kwargs)
 
-            monkeypatch.setattr(module, name, spy)
+    monkeypatch.setattr(os, "open", os_open_spy)
     original_open = pathlib.Path.open
 
     def open_spy(self, mode="r", *args, **kwargs):
-        if "a" in mode and workflow_transaction_active() and is_mirror(self):
+        if any(flag in mode for flag in "awx+") and workflow_transaction_active() and is_mirror(self):
             inside.append(("append", self.name))
         return original_open(self, mode, *args, **kwargs)
 
@@ -76,12 +76,11 @@ def _spy_mirror_writes_inside_transaction(monkeypatch, console):
     return inside
 
 
-def _assert_document_mirrors_equal_pg(console, sid):
-    objects_path = console._objects_path(sid)
-    on_disk = [json.loads(line) for line in objects_path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    assert on_disk == console.workflow_document_store.list_document_objects(sid)
-    envelopes = json.loads(console._envelopes_path.read_text(encoding="utf-8"))
-    assert envelopes[sid] == console.workflow_document_store.get_envelope(sid)
+def _assert_document_authority_without_mirrors(console, sid):
+    assert not console._objects_path(sid).exists()
+    assert not console._envelopes_path.exists()
+    assert console._load_objects(sid) == console.workflow_document_store.list_document_objects(sid)
+    assert console._envelope(sid) == console.workflow_document_store.get_envelope(sid)
 
 
 def test_u1_one_reload_per_approve(workflow_postgres, tmp_path, monkeypatch):
@@ -101,8 +100,8 @@ def test_u1_batch_reloads_constant_in_k(workflow_postgres, tmp_path, monkeypatch
     )
     print("U1_BATCH_RELOADS", len(reloads), "k", len(queue))
     assert len(reloads) == 1, f"a batch of {len(queue)} MOET reload once: {len(reloads)} reloads"
-    _assert_disk_mirrors_equal_pg(console)
-    _assert_document_mirrors_equal_pg(console, sid)
+    _assert_review_authority_without_mirrors(console)
+    _assert_document_authority_without_mirrors(console, sid)
 
 
 def test_u3_no_mirror_write_inside_open_transaction_on_approve(workflow_postgres, tmp_path, monkeypatch):
@@ -111,8 +110,8 @@ def test_u3_no_mirror_write_inside_open_transaction_on_approve(workflow_postgres
     _approve(console, rid, sid, obj_a)
     print("U3_APPROVE_INSIDE", inside)
     assert inside == [], f"mirror written inside the open transaction: {inside}"
-    _assert_disk_mirrors_equal_pg(console)
-    _assert_document_mirrors_equal_pg(console, sid)
+    _assert_review_authority_without_mirrors(console)
+    _assert_document_authority_without_mirrors(console, sid)
 
 
 def test_u2_caught_nested_fault_writes_no_mirror_inside_transaction(workflow_postgres, tmp_path, monkeypatch):
@@ -130,8 +129,8 @@ def test_u2_caught_nested_fault_writes_no_mirror_inside_transaction(workflow_pos
     assert inside == [], f"mirror written inside the open transaction: {inside}"
     approved = {b["object_id"] for rows in console.workflow_review_store.read_bindings().values() for b in rows}
     assert obj_b["object_id"] in approved and obj_a["object_id"] not in approved
-    _assert_disk_mirrors_equal_pg(console)
-    _assert_document_mirrors_equal_pg(console, sid)
+    _assert_review_authority_without_mirrors(console)
+    _assert_document_authority_without_mirrors(console, sid)
 
 
 def test_u2_unbuffered_event_in_failed_participant_leaves_no_phantom_ledger_line(workflow_postgres, tmp_path):
@@ -146,7 +145,7 @@ def test_u2_unbuffered_event_in_failed_participant_leaves_no_phantom_ledger_line
             pass
     events = console.workflow_review_store.read_events()
     assert not [e for e in events if e.get("event_type") == "u2_phantom_probe"]
-    _assert_disk_mirrors_equal_pg(console)
+    _assert_review_authority_without_mirrors(console)
 
 
 def test_u3_reprocessing_rollback_leaves_no_uncommitted_envelope_mirror(workflow_postgres, tmp_path):
@@ -161,9 +160,9 @@ def test_u3_reprocessing_rollback_leaves_no_uncommitted_envelope_mirror(workflow
             console._commit_prepared_store(envelopes={sid: changed}, snapshot_id=sid)
             raise RuntimeError("u3_outer_fault")
     assert console.workflow_document_store.get_envelope(sid) == before
-    envelopes = json.loads(console._envelopes_path.read_text(encoding="utf-8"))
-    assert envelopes[sid]["title"] == before["title"], "uncommitted envelope reached the disk mirror"
-    _assert_disk_mirrors_equal_pg(console)
+    assert console._envelope(sid) == before
+    assert not console._envelopes_path.exists()
+    _assert_review_authority_without_mirrors(console)
 
 
 def test_u4_correct_object_original_error_survives_failing_recovery(workflow_postgres, tmp_path, monkeypatch):
@@ -179,7 +178,7 @@ def test_u4_correct_object_original_error_survives_failing_recovery(workflow_pos
     def failing_remirror():
         raise RuntimeError("remirror_down")
 
-    monkeypatch.setattr(console, "_remirror_review_runtime", failing_remirror)
+    monkeypatch.setattr(console, "_refresh_review_runtime", failing_remirror)
     with pytest.raises(RuntimeError, match="^r2_injected_fault$"):
         console.correct_object(actor_id=rid, snapshot_id=sid, object_id=obj_b["object_id"],
                                patch={"reason": "u4", "operations": [
@@ -188,9 +187,10 @@ def test_u4_correct_object_original_error_survives_failing_recovery(workflow_pos
     assert _state(_console(tmp_path, workflow_postgres), sid) == before
 
 
-def test_u4_mirror_rebuild_failure_after_commit_keeps_command_committed(workflow_postgres, tmp_path, monkeypatch, caplog):
+def test_u4_inaccessible_mirror_does_not_affect_committed_command(workflow_postgres, tmp_path, monkeypatch, caplog):
     console, rid, sid, (obj_a, _obj_b) = _setup(tmp_path, workflow_postgres)
-    original = rc._atomic_write
+    from src import operations_console_v1 as operations
+    original = operations._atomic_write
     bindings_path = console._bindings_path.resolve()
 
     def failing_write(path, *args, **kwargs):
@@ -198,7 +198,7 @@ def test_u4_mirror_rebuild_failure_after_commit_keeps_command_committed(workflow
             raise RuntimeError("mirror_disk_down")
         return original(path, *args, **kwargs)
 
-    monkeypatch.setattr(rc, "_atomic_write", failing_write)
+    monkeypatch.setattr(operations, "_atomic_write", failing_write)
     caplog.set_level(logging.WARNING, logger="src.workflows.workflow_review_cutover_v1")
     rows = _approve(console, rid, sid, obj_a)
     assert any(row["object_id"] == obj_a["object_id"] for row in rows)
@@ -206,7 +206,7 @@ def test_u4_mirror_rebuild_failure_after_commit_keeps_command_committed(workflow
     assert obj_a["object_id"] in approved
     messages = [r.getMessage() for r in caplog.records]
     print("U4_AFTER_COMMIT", messages)
-    assert any(m.startswith("store_command_remirror_failed") for m in messages)
+    assert not any("remirror" in m for m in messages)
     assert not any("mirror_disk_down" in m for m in messages), "warning MAG NIET carry exception text"
 
 
@@ -239,7 +239,7 @@ def test_foreign_console_cannot_join_open_command(workflow_postgres, tmp_path):
                 entered.append(sid)
     assert entered == [], "the foreign console MAG NIET enter the open command"
     assert _state(console, sid) == before
-    _assert_disk_mirrors_equal_pg(console)
+    _assert_review_authority_without_mirrors(console)
 
 
 def test_successful_nested_approve_commits_once_and_mirrors_after(workflow_postgres, tmp_path, monkeypatch):
@@ -250,8 +250,8 @@ def test_successful_nested_approve_commits_once_and_mirrors_after(workflow_postg
             _approve(console, rid, sid, obj_a)
     events = console.workflow_review_store.read_events()[len(events_before):]
     assert [e.get("event_type") for e in events].count("clinical_review_approve") == 1
-    _assert_disk_mirrors_equal_pg(console)
-    _assert_document_mirrors_equal_pg(console, sid)
+    _assert_review_authority_without_mirrors(console)
+    _assert_document_authority_without_mirrors(console, sid)
     assert _batch_type(obj_a)
 
 

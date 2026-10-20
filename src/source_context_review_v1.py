@@ -131,9 +131,9 @@ def confirm_source_exclusions(console: Any, *, actor_id: str, snapshot_id: str,
             return result
         except Exception:
             console._reload_store_locked()
-            remirror = getattr(console, "_remirror_review_runtime", None)
-            if remirror is not None:
-                remirror()
+            refresh = getattr(console, "_refresh_review_runtime", None)
+            if refresh is not None:
+                refresh()
             raise
 
 
@@ -246,10 +246,9 @@ def confirm_source_context(console: Any, **command: Any) -> dict[str, Any]:
                 result = _confirm_source_context(console, **command)
             return result
         except Exception:
-            # Mirrors may have been written before the outer commit failed.
-            # Rebuild from rolled-back authority; never restore it with writes.
+            # Refresh the process view from rolled-back PG authority.
             console._reload_store_locked()
-            console._remirror_review_runtime()
+            console._refresh_review_runtime()
             raise
 
 

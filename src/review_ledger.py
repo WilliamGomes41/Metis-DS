@@ -29,7 +29,8 @@ _BACKENDS: dict[str, ReviewLedgerBackend] = {}
 
 
 def _key(path: Path) -> str:
-    return str(Path(path).resolve())
+    # Resolve directory aliases without touching the unused PG ledger file.
+    return str(Path(path).parent.resolve() / Path(path).name)
 
 
 def register_backend(path: Path, backend: ReviewLedgerBackend) -> None:

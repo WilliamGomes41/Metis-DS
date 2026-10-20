@@ -15,7 +15,7 @@ T9  guard: tier R batch fault leaves state unchanged (D4[review]).
 T10 guard: snapshot_object_write_conflict reaches the caller with current_revision.
 T13 detection SQL db/checks/tier_d_damage_counts_v1.sql (read-only, aggregate default).
 
-T8 (I6 spy on _remirror_after_rollback) is guarded by tests/test_r2_rollback_remirror_postgres.py.
+T8 (I6 spy on _refresh_after_rollback) is guarded by tests/test_r2_rollback_remirror_postgres.py.
 
 _config_identity values (dsn) are compared only; NOOIT printed or used in assert text.
 
@@ -229,7 +229,7 @@ def _writer_calls(sid, actor_id, envelope, rows):
     return {
         "_save_objects": call("_save_objects", sid, deepcopy(rows)),
         "_save_envelopes": call("_save_envelopes"),
-        "_apply_local_release_copy": call("_apply_local_release_copy", {"snapshot_id": sid}, []),
+        "_apply_release_state": call("_apply_release_state", {"snapshot_id": sid}, []),
         "_delete_unpublished_snapshot_authority": call("_delete_unpublished_snapshot_authority", sid),
         "_delete_unpublished_snapshot_locked": call(
             "_delete_unpublished_snapshot_locked", actor_id=actor_id, token=sid, account={}, confirm_title="t4"),
@@ -297,8 +297,9 @@ def test_t4_every_documents_writer_refuses_without_matching_review_store(
 
     monkeypatch.setattr(documents, "write_bundle", spy("write_bundle", documents.write_bundle))
     monkeypatch.setattr(documents, "delete_document", spy("delete_document", documents.delete_document))
-    monkeypatch.setattr(docs_mod, "_atomic_write", spy("_atomic_write", docs_mod._atomic_write))
-    monkeypatch.setattr(docs_mod, "_atomic_replace_bytes", spy("_atomic_replace_bytes", docs_mod._atomic_replace_bytes))
+    from src import operations_console_v1 as operations_mod
+    monkeypatch.setattr(operations_mod, "_atomic_write", spy("_atomic_write", operations_mod._atomic_write))
+    monkeypatch.setattr(operations_mod, "_atomic_replace_bytes", spy("_atomic_replace_bytes", operations_mod._atomic_replace_bytes))
     monkeypatch.setattr(docs_mod, "workflow_transaction", spy("workflow_transaction", docs_mod.workflow_transaction))
 
     with pytest.raises(BaseException) as info:
@@ -394,7 +395,7 @@ def test_t4b_all_review_classes_construct_with_zero_seam_c_refusals(
         monkeypatch.setattr(_PostgresWorkflowDocumentsMixin, "_require_review_store_configured", spy_helper)
     else:
         for name in ("_save_objects", "_delete_unpublished_snapshot_authority", "_delete_unpublished_snapshot_locked",
-                     "_save_envelopes", "_apply_local_release_copy", "_commit_prepared_store",
+                     "_save_envelopes", "_apply_release_state", "_commit_prepared_store",
                      "_reprocessing_transaction", "_heading_batch_mutation", "_atomic_snapshot_mutation"):
             original = getattr(_PostgresWorkflowDocumentsMixin, name)
 
@@ -448,13 +449,14 @@ def test_t5_documents_mixin_writes_no_mirror_copy_after_failed_commit(
     console = _review_tier(tmp_path, workflow_postgres)
     sid, rid, queue = _ingest(console)
     copy_writes: list[str] = []
-    original_aw = docs_mod._atomic_write
+    from src import operations_console_v1 as operations_mod
+    original_aw = operations_mod._atomic_write
 
     def spy_aw(path, payload):
         if Path(path).name == console._bindings_path.name:
             copy_writes.append("bindings")
         return original_aw(path, payload)
-    monkeypatch.setattr(docs_mod, "_atomic_write", spy_aw)
+    monkeypatch.setattr(operations_mod, "_atomic_write", spy_aw)
     truncations = _ledger_truncations(monkeypatch, console._ledger_path)
     original_wb = console.workflow_document_store.write_bundle
 
@@ -466,7 +468,7 @@ def test_t5_documents_mixin_writes_no_mirror_copy_after_failed_commit(
     if remirror_fails:
         def broken_remirror():
             raise OSError("t5_remirror_injected")
-        monkeypatch.setattr(console, "_remirror_review_runtime", broken_remirror)
+        monkeypatch.setattr(console, "_refresh_review_runtime", broken_remirror)
     with pytest.raises(OSError):
         _approve(console, rid, sid, queue[0])
     assert copy_writes == []

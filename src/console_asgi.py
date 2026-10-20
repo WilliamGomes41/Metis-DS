@@ -7,7 +7,7 @@ Supported console topology is one worker by default or two workers on one
 instance with serialized writes. Multi-instance remains fail-closed. Azure runtime
 requires both the durable PostgreSQL canonical publication store and Azure Blob
 as the authoritative immutable source store; local development may continue
-without either. Azure requires the full PostgreSQL workflow authority; filesystem mirrors are reconstructable.
+without either. Azure requires the full PostgreSQL workflow authority; workflow disk mirrors are unused.
 """
 from __future__ import annotations
 

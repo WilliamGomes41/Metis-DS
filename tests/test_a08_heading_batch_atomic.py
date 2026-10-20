@@ -444,7 +444,7 @@ def test_native_post_commit_refresh_failure_without_review_authority_is_refused(
 
 
 @pytest.mark.parametrize("refresh", [
-    "_reload_store_locked", "refresh_objects_expected_revision", "_remirror_review_runtime",
+    "_reload_store_locked", "refresh_objects_expected_revision", "_refresh_review_runtime",
 ])
 @pytest.mark.parametrize("entry", ["http", "direct"])
 def test_native_post_commit_refresh_failure_preserves_success(

@@ -8,24 +8,24 @@ Na de volledige workflow-cut-over bestaat de authority uit:
 2. PostgreSQL publicatieschema voor canonical object versions, bronlineage, releases, release-items, publication registry en publication audit-events;
 3. PostgreSQL `workflow`-schema voor accounts, sessies, documenten/envelopes, work objects, review-events, publish authorizations, Audit-records en versleutelde Audit-secretpayloads.
 
-`/home/data/metis-console` bevat daarna alleen rebuildable compatibility mirrors, caches, lokale bronkopieën en afgeleide artefacten. Het is dan **geen workflow-authority** en geen authority voor gepubliceerde kennis.
+Na D5 leest, schrijft of verwijdert de volledige PG-console geen workflowspiegels, publicatieprojectie of releasemanifests. Bestaande bestanden blijven ongebruikt staan. `/home/data/metis-console` bevat daarnaast locks, caches, lokale bronkopieën en overige artefacten; het is **geen workflow-authority** en geen authority voor gepubliceerde kennis.
 
 ## Authority-matrix
 
 | Gegeven | Authority na volledige cut-over | Lokale `/home/data`-kopie |
 | --- | --- | --- |
-| accounts / rollen / sessies | PostgreSQL `workflow` | compatibility mirror waar nog aanwezig |
-| documenten / envelopes | PostgreSQL `workflow` | `envelopes.json` is mirror |
-| work objects | PostgreSQL `workflow` | `objects/*.jsonl` is mirror |
-| review ledger | PostgreSQL `workflow` | `review_ledger.jsonl` is mirror |
-| publish authorizations | PostgreSQL `workflow` | `publish_authorizations.json` is mirror |
+| accounts / rollen / sessies | PostgreSQL `workflow` | oude bestanden ongebruikt; geen herstelbron voor PG |
+| documenten / envelopes | PostgreSQL `workflow` | oude bestanden ongebruikt; geen herstelbron voor PG |
+| work objects | PostgreSQL `workflow` | oude bestanden ongebruikt; geen herstelbron voor PG |
+| review ledger | PostgreSQL `workflow` | oude bestanden ongebruikt; geen herstelbron voor PG |
+| publish authorizations | PostgreSQL `workflow` | oude bestanden ongebruikt; geen herstelbron voor PG |
 | klassewijzigingshistorie | document-envelope in PostgreSQL `workflow` | oude `class_change_history/*.jsonl` alleen migratiebron |
 | Audit-records | PostgreSQL `workflow` | oude `audits/*.json` alleen migratiebron |
 | legacy versleutelde Audit LLM-payload | inert rollback-/recoverydata in PostgreSQL `workflow` | oude `audit_secrets/llm_api_key.json` alleen migratiebron; geen actieve providerauthority |
 | canonical kennis + releases + registry | PostgreSQL publicatieschema | geen authority-kopie |
 | immutable bronbytes | Azure Blob | lokale freeze is cache/werkexemplaar |
-| release manifests | PostgreSQL releasegegevens zijn authority | lokale manifests zijn rebuildable release mirrors |
-| Product API projectie | canonical/publication PostgreSQL | `published_projection.jsonl` is rebuildable derived output |
+| release manifests | PostgreSQL releasegegevens zijn authority | oude bestanden ongebruikt; geen herstelbron voor PG |
+| Product API projectie | canonical/publication PostgreSQL | oude bestanden ongebruikt; geen herstelbron voor PG |
 
 De actieve LLM-providerconfig (`METIS_LLM_API_KEY` en `METIS_LLM_MODEL`) blijft deployment-owned en buiten de database. Bestaande versleutelde Audit-secretpayloads kunnen voor rollback/recovery bewaard blijven, maar worden niet meer als runtime-providerauthority gelezen.
 
@@ -97,7 +97,7 @@ De migratie verplaatst workflow-authority naar een **managed database**. Dit is 
 
 ## Lokale runtime-inventaris
 
-`inventory_runtime_data()` in `src/runtime_data_inventory_v1.py` blijft beschikbaar voor bestaande lokale bestanden. Die inventaris is na de volledige cut-over nadrukkelijk geen authority-map. De bestanden zijn bruikbaar voor diagnostiek, rollback tijdens migratie en het reconstrueren/controleren van rebuildable lokale kopieën.
+`inventory_runtime_data()` in `src/runtime_data_inventory_v1.py` blijft beschikbaar voor de lokale bestandsopstelling. De volledige PG-topologie roept deze inventaris niet aan voor backup of herstel. Oude workflowspiegels, projectie en manifests zijn ook tijdens code-rollback geen herstelbron; code-rollback moet zijn PG-compatibiliteit afzonderlijk bewijzen.
 
 Historisch rapporteert de inventaris onder meer:
 
@@ -113,7 +113,9 @@ Na volledige cut-over mogen deze bestanden niet worden gebruikt als fallback wan
 
 ## Volledige recoveryketen
 
-De operator-CLI `scripts/publication_chain_recovery.py` gebruikt de bestaande publication-chain archive en Blob restore-guard, uitgebreid met de volledige `workflow`-authority.
+De operator-CLI `scripts/publication_chain_recovery.py` gebruikt de bestaande publication-chain archive en Blob restore-guard, uitgebreid met de volledige `workflow`-authority. `backup_workflow_chain` en `restore_workflow_chain` gebruiken alleen PostgreSQL en vereiste Blob-data, zonder runtime-bestanden. Legacy `runtime_root`/`runtime_dest`-argumenten worden in de PG-workflowwrapper niet meer gebruikt; oude runtimebijlagen worden niet uitgepakt. De generieke lokale bestandsbackup blijft beschikbaar.
+
+D5 verandert de PG-backupinhoud. Voer het herstelbewijs van #695 daarom op de uiteindelijke D5-code uit vóór de eerste deploy. `processing_evidence_export_v1` is diagnostiek, geen volledige backup; het exporteert het reviewledger niet.
 
 De database-export bevat drie delen in dezelfde `database.json`:
 

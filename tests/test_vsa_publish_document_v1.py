@@ -439,10 +439,10 @@ def test_postcanonical_workflow_failure_retries_same_release_and_converges(
 def test_all_postgres_document_workflow_modes_share_one_publication_followup() -> None:
     # #665 (besluit 10b): the tier D console is refused at construction and
     # is no longer a workflow mode; the shared implementation is the mixin's.
-    document_impl = _PostgresWorkflowDocumentsMixin._apply_local_release_copy
-    assert FastBadgePostgresCompleteWorkflowDurablePublicationConsole._apply_local_release_copy is document_impl
-    assert PostgresCompleteWorkflowDurablePublicationConsole._apply_local_release_copy is document_impl
-    assert "_apply_local_release_copy" not in _PostgresRemainingWorkflowMixin.__dict__
+    document_impl = _PostgresWorkflowDocumentsMixin._apply_release_state
+    assert FastBadgePostgresCompleteWorkflowDurablePublicationConsole._apply_release_state is document_impl
+    assert PostgresCompleteWorkflowDurablePublicationConsole._apply_release_state is document_impl
+    assert "_apply_release_state" not in _PostgresRemainingWorkflowMixin.__dict__
 
 
 def test_reviewer_cannot_reconcile_existing_release_via_publish_route(
@@ -467,16 +467,14 @@ def test_reviewer_cannot_reconcile_existing_release_via_publish_route(
     ledger_path = console.runtime / "review_ledger.jsonl"
     before = {
         "envelope": deepcopy(console.workflow_document_store.get_envelope(snapshot_id)),
-        "projection": projection_path.read_bytes(),
-        "manifest": manifest_path.read_bytes(),
-        "ledger": ledger_path.read_bytes(),
+        "events": deepcopy(console.workflow_review_store.read_events()),
         "persist_calls": durable.persist_calls,
         "release_count": len(durable.releases),
     }
 
     calls = {"sync": 0, "apply": 0}
     real_sync = console._sync_snapshot_from_authority
-    real_apply = console._apply_local_release_copy
+    real_apply = console._apply_release_state
 
     def count_sync(target_snapshot_id: str) -> dict[str, Any] | None:
         calls["sync"] += 1
@@ -487,7 +485,7 @@ def test_reviewer_cannot_reconcile_existing_release_via_publish_route(
         real_apply(release, projection)
 
     monkeypatch.setattr(console, "_sync_snapshot_from_authority", count_sync)
-    monkeypatch.setattr(console, "_apply_local_release_copy", count_apply)
+    monkeypatch.setattr(console, "_apply_release_state", count_apply)
 
     app = create_console_app(console)
     client = TestClient(app, base_url="https://testserver", raise_server_exceptions=False)
@@ -510,6 +508,5 @@ def test_reviewer_cannot_reconcile_existing_release_via_publish_route(
     assert durable.persist_calls == before["persist_calls"]
     assert len(durable.releases) == before["release_count"]
     assert console.workflow_document_store.get_envelope(snapshot_id) == before["envelope"]
-    assert projection_path.read_bytes() == before["projection"]
-    assert manifest_path.read_bytes() == before["manifest"]
-    assert ledger_path.read_bytes() == before["ledger"]
+    assert not projection_path.exists() and not manifest_path.exists() and not ledger_path.exists()
+    assert console.workflow_review_store.read_events() == before["events"]

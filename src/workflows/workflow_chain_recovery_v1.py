@@ -736,13 +736,14 @@ def verify_workflow_chain_backup(archive: Any) -> dict[str, Any]:
 
 
 def backup_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAdapter, source_store: Any, runtime_root: Any = None, audit_archive_store: Any = None) -> dict[str, Any]:
+    """Back up PG/Blob authorities; legacy runtime_root is no longer a source."""
     from src.workflows.workflow_remaining_postgres_v1 import audit_retention_lock
 
     # Keep archived bytes stable from the database snapshot through Blob read.
     with audit_retention_lock(database.store._connect):
         manifest = _backup_chain(
             archive, database=database, source_store=source_store,
-            runtime_root=runtime_root, audit_archive_store=audit_archive_store,
+            runtime_root=None, audit_archive_store=audit_archive_store,
         )
     verification = verify_workflow_chain_backup(archive)
     if not verification["ok"]:
@@ -751,6 +752,7 @@ def backup_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAda
 
 
 def restore_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAdapter, source_store: Any, runtime_dest: Any = None, audit_archive_store: Any = None) -> dict[str, Any]:
+    """Restore PG/Blob authorities without extracting legacy runtime copies."""
     verification = verify_workflow_chain_backup(archive)
     if not verification["ok"]:
         raise PublicationChainRecoveryError("workflow_chain_restore_backup_invalid:" + ";".join(verification["errors"]))
@@ -758,7 +760,7 @@ def restore_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAd
         archive,
         database=database,
         source_store=source_store,
-        runtime_dest=runtime_dest,
+        runtime_dest=None,
         audit_archive_store=audit_archive_store,
     )
     restored = database.export_state()
@@ -771,7 +773,7 @@ def restore_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAd
         if stable_hash(restored[group]) != stable_hash(expected[group]):
             raise PublicationChainRecoveryError(f"{group}_restore_roundtrip_mismatch")
     workflow = check_workflow_integrity(restored)
-    canonical = check_chain_integrity(restored, source_store=source_store, runtime_root=runtime_dest)
+    canonical = check_chain_integrity(restored, source_store=source_store)
     if not workflow["ok"] or not canonical["ok"]:
         raise PublicationChainRecoveryError(
             "workflow_chain_restore_integrity_failed:" + ";".join(workflow["errors"] + canonical["errors"])
@@ -791,7 +793,7 @@ def live_workflow_chain_integrity(*, database: PostgresWorkflowRecoveryAdapter, 
             _verify_audit_data(state, entry, audit_archive_store.load_verified(
                 entry["locator"], expected_sha256=entry["sha256"],
             ))
-    canonical = check_chain_integrity(state, source_store=source_store, runtime_root=runtime_root)
+    canonical = check_chain_integrity(state, source_store=source_store)
     workflow = check_workflow_integrity(state)
     return {
         "ok": bool(canonical["ok"] and workflow["ok"]),

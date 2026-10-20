@@ -23,9 +23,9 @@ from src.workflows.workflow_badge_counts_postgres_v1 import (
 from src.workflows.workflow_transaction_v1 import workflow_transaction
 from tests.complete_workflow_support import complete_console, complete_postgres  # noqa: F401
 from tests.test_678_store_command_postgres import (
-    _assert_document_mirrors_equal_pg, _spy_mirror_writes_inside_transaction,
+    _assert_document_authority_without_mirrors, _spy_mirror_writes_inside_transaction,
 )
-from tests.test_r2_rollback_remirror_postgres import _approve, _assert_disk_mirrors_equal_pg, _state
+from tests.test_r2_rollback_remirror_postgres import _approve, _assert_review_authority_without_mirrors, _state
 from tests.test_durable_publication_console_v1 import MemorySourceStore
 
 
@@ -57,8 +57,8 @@ def prepared(request, tmp_path, complete_postgres):
 
 
 def _assert_mirrors(console, sid):
-    _assert_disk_mirrors_equal_pg(console)
-    _assert_document_mirrors_equal_pg(console, sid)
+    _assert_review_authority_without_mirrors(console)
+    _assert_document_authority_without_mirrors(console, sid)
 
 
 def test_ownerless_raw_transaction_refused_before_reload_or_writes(prepared, monkeypatch):

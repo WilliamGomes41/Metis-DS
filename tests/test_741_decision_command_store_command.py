@@ -20,12 +20,12 @@ from src.workflows.workflow_badge_counts_postgres_v1 import (
 from src.workflows.workflow_transaction_v1 import workflow_transaction
 from tests.complete_workflow_support import complete_console, complete_postgres  # noqa: F401
 from tests.test_678_store_command_postgres import (
-    _assert_document_mirrors_equal_pg, _count_reloads,
+    _assert_document_authority_without_mirrors, _count_reloads,
     _spy_mirror_writes_inside_transaction,
 )
 from tests.test_decision_graph_chain import _accounts, command, complete_graph, ingest
 from tests.test_durable_publication_console_v1 import MemorySourceStore
-from tests.test_r2_rollback_remirror_postgres import _assert_disk_mirrors_equal_pg
+from tests.test_r2_rollback_remirror_postgres import _assert_review_authority_without_mirrors
 
 
 @pytest.fixture(params=[
@@ -48,8 +48,8 @@ def _state(console, sid):
 
 
 def _mirrors(console, sid):
-    _assert_disk_mirrors_equal_pg(console)
-    _assert_document_mirrors_equal_pg(console, sid)
+    _assert_review_authority_without_mirrors(console)
+    _assert_document_authority_without_mirrors(console, sid)
 
 
 def _update(console, accounts, sid, command_id="graph-1"):
@@ -107,7 +107,7 @@ def test_fault_keeps_original_error_and_rolled_back_state(prepared, monkeypatch,
     if fault == "recovery":
         def broken_recovery():
             raise OSError("decision_recovery_fault")
-        monkeypatch.setattr(console, "_remirror_review_runtime", broken_recovery)
+        monkeypatch.setattr(console, "_refresh_review_runtime", broken_recovery)
     error = psycopg.errors.ForeignKeyViolation if fault == "commit" else ConsoleError
     with pytest.raises(error, match=None if fault == "commit" else "^decision_command_fault$"):
         _update(console, accounts, sid)
@@ -129,10 +129,10 @@ def test_decision_command_remains_an_independent_command(prepared, boundary):
     _mirrors(console, sid)
 
 
-def test_committed_decision_command_survives_failed_mirror_rebuild(prepared, monkeypatch, caplog):
+def test_decision_command_ignores_inaccessible_mirrors(prepared, monkeypatch, caplog):
     console, accounts, sid = prepared
-    from src.workflows import workflow_review_cutover_v1 as review
-    original = review._atomic_write
+    from src import operations_console_v1 as operations
+    original = operations._atomic_write
 
     def broken(path, *args, **kwargs):
         if path == console._envelopes_path:
@@ -141,13 +141,11 @@ def test_committed_decision_command_survives_failed_mirror_rebuild(prepared, mon
 
     graph_command = command(console, accounts, sid, "graph-1", graph=complete_graph(console, sid))
     with monkeypatch.context() as patch:
-        patch.setattr(review, "_atomic_write", broken)
-        from src.workflows import workflow_documents_cutover_v1 as documents
-        patch.setattr(documents, "_atomic_write", broken)
+        patch.setattr(operations, "_atomic_write", broken)
         result = console.update_decision_graph(**graph_command)
     assert result.get("idempotent") is not True
     events = console.workflow_review_store.read_events()
     assert any(event["event_type"] == "decision_review_command"
                and event["details"].get("command_id") == "graph-1" for event in events)
-    assert any(record.message.startswith("store_command_remirror_failed") for record in caplog.records)
+    assert not any("remirror" in record.message for record in caplog.records)
     assert console.update_decision_graph(**graph_command)["idempotent"]

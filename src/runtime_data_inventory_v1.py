@@ -1,4 +1,7 @@
-"""Inventory, export, restore and --clean true proof for console runtime data.
+"""Inventory/export/restore for the local file topology and clean-deploy proof.
+
+Full PostgreSQL workflow backup/recovery does not call this file inventory;
+legacy mirrors are not a PG recovery source (#785).
 
 Protocol v2.22 wave D. Runtime data lives under ``/home/data/metis-console``.
 A clean deploy of wwwroot MUST NOT delete that tree. No large database

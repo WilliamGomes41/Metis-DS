@@ -2,9 +2,8 @@
 
 PostgreSQL owns Audit records and class-change history embedded in document
 envelopes. Legacy encrypted Audit secret payloads may remain recoverable for
-rollback, but they are not an active LLM provider authority. Local release
-manifests, projections, source freezes and JSON mirrors remain rebuildable
-compatibility/derived copies.
+rollback, but they are not an active LLM provider authority. Workflow state and publication views are read only from PostgreSQL; source
+freezes remain caches of verified Blob bytes. Legacy JSON mirrors are unused.
 """
 from __future__ import annotations
 

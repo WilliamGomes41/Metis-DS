@@ -7,7 +7,7 @@ authorizations preserve the existing per-snapshot tuple records.
 from __future__ import annotations
 
 import json
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -16,7 +16,6 @@ from typing import Any, Iterator, Mapping
 
 from src.integrity_kernel import stable_hash
 from src.review_ledger import verify_ledger
-from src.workflows.store_command_v1 import defer_mirror_events
 from src.workflows.workflow_documents_postgres_v1 import (
     PostgresWorkflowDocumentStore,
     WorkflowDocumentStoreError,
@@ -56,10 +55,7 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
         self._buffer: ContextVar[_EventBuffer | None] = ContextVar(
             "workflow_review_event_buffer", default=None
         )
-        self._mirror_path: Path | None = None
 
-    def bind_ledger_mirror(self, path: Path) -> None:
-        self._mirror_path = Path(path)
 
     def verify_review_schema(self) -> None:
         self.verify_schema()
@@ -221,7 +217,6 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                         previous_event_hash=previous,
                     )
                     self._insert_event(con, event)
-            self._mirror_events([event])
             return deepcopy(event)
         except WorkflowReviewStoreError:
             raise
@@ -307,23 +302,11 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                             raise WorkflowReviewStoreError("workflow_review_event_hash_invalid")
                         self._insert_event(con, event)
                         previous = str(got)
-            self._mirror_events(events)
         except WorkflowReviewStoreError:
             raise
         except Exception as exc:
             raise WorkflowReviewStoreError("workflow_review_event_write_failed") from exc
 
-    def _mirror_events(self, events: list[dict[str, Any]]) -> None:
-        if self._mirror_path is None or not events:
-            return
-        # #678 U3: inside an open Storeopdracht the line waits for the commit.
-        if defer_mirror_events(self, events):
-            return
-        with suppress(OSError):
-            self._mirror_path.parent.mkdir(parents=True, exist_ok=True)
-            with self._mirror_path.open("a", encoding="utf-8") as handle:
-                for event in events:
-                    handle.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
 
     def read_bindings(self, snapshot_ids: list[str] | None = None) -> dict[str, list[dict[str, Any]]]:
         if snapshot_ids == []:
