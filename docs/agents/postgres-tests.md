@@ -401,3 +401,12 @@ De bronreparatie-rollbackproef gebruikt nu het bestaande gestructureerde command
 het foutbewijs en de exacte raw-PG/herstartvergelijking blijven behouden. Een
 legacy vrije revise zou bij productie-start juist terecht worden heropend.
 De aanroepers van gemigreerde helpers worden aansluitend afzonderlijk gecontroleerd.
+
+
+Portie 20 herstelt acht afnemers van de gedeelde factories: retirement, compacte
+lijsten, reviewconfiguratie, aanbevelingsreplay, materialisatie, verwerkingstijd
+in de UI en foutdiagnostiek. 138 cases zijn groen, zonder skips; alle bestaande
+testfuncties blijven aanwezig. Retirement gebruikt de echte PG-operatie en de
+accounts-pagina van productie. Een test die onvolledige formatie simuleert schrijft
+haar gewijzigde envelope naar PostgreSQL; een gewijzigde losse kopie is geen
+workflowtoestand. Ook de diagnostiekproef gebruikt alle productie-routes.

@@ -767,5 +767,32 @@
         "sha256": "9ea571cc0eca8e631fe6ead0bd66930b465e16f0a7f36ed52dd8f770b3daa984"
       }
     ]
+  },
+  {
+    "batch": "20",
+    "base": "eb25e2f",
+    "commit": "codex/d6a-20-helper-consumers",
+    "test_files": [
+      "tests/test_account_retirement_v1.py",
+      "tests/test_estimate_linear_golden.py",
+      "tests/test_h2a_approvals_independent_v1.py",
+      "tests/test_overview_compact_state_v1.py",
+      "tests/test_recommendation_context_postgres.py",
+      "tests/test_review_configuration_gate_v1.py",
+      "tests/test_t8_materialisation_admission_integrity.py",
+      "tests/test_pre_review_failure_diagnostics_v1.py"
+    ],
+    "executed_unique_cases": 138,
+    "failures": 0,
+    "skipped": 0,
+    "verification": "All original test functions retained. Actual PG retirement/UI, shared UI/model helper consumers and diagnostics use production apps. Formation-incomplete test setup commits its envelope to PG rather than mutating a detached copy.",
+    "junit": [
+      {
+        "file": "d6a20-final.xml",
+        "sha256": "f98e7adc81889a2a61fa6c059e2a489d8af6b78b98ae2d79b334285a0863b5f4"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending"
   }
 ]
