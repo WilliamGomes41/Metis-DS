@@ -45,7 +45,8 @@ blijft draaien. Als root start het script de server als `postgres`, of als
 Gebruik tijdens setup op Ubuntu 24.04 `bash scripts/setup_test_environment.sh`.
 Dit installeert PostgreSQL 16, de client en de Python-afhankelijkheden. Het
 blokkeert het starten van services door pakketinstallatie; de testserver start
-pas in de agentfase. Setup heeft rootrechten nodig als PostgreSQL ontbreekt.
+pas in de agentfase. Als PostgreSQL ontbreekt, gebruikt setup rootrechten of
+wachtwoordloze `sudo` voor APT; Python-pakketten blijven onder de aanroeper.
 
 - Codex: stel het setupcommando in en zet `PGBIN=/usr/lib/postgresql/16/bin`
   als blijvende omgevingsvariabele in de omgevingsconfiguratie. Een `export`
