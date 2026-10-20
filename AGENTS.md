@@ -20,6 +20,10 @@ Shared skills add working methods, not execution, merge, deployment, or
 publication authority. Existing Metis contracts remain authoritative within
 this repository; user and host-level instructions still apply.
 
+### Test PostgreSQL
+
+PostgreSQL tests need a server; never treat their skip as a pass. `pytest` starts a disposable one through `scripts/test_postgres.sh` when `METIS_TEST_POSTGRES_DSN` is unset and PostgreSQL 16 is installed. Cloud agents (Codex, Cursor) install it with `scripts/agent_env_setup.sh`. See the test-PostgreSQL section of `docs/STACK_SETUP_BASELINE.md`.
+
 ### Issue tracker
 
 Issues live in this repo’s GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md`.

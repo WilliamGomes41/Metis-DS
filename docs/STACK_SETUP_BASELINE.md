@@ -74,6 +74,26 @@ conformance tests. Lean is proof tooling only, with no runtime service or
 production dependency. See `experiments/bend/README.md` and
 `experiments/bend/pr_d2/README.md` for setup and proof limits.
 
+### Test PostgreSQL for laptops and cloud coding agents
+
+PostgreSQL tests use `scripts/test_postgres.sh`: a reachable
+`METIS_TEST_POSTGRES_DSN` is reused; otherwise it starts PostgreSQL 16 on a free
+loopback port in a unique temporary directory, with UTC timezone. Root uses
+`postgres` or `nobody` as server owner. The script prints only the DSN.
+Pytest invokes it during collection and fails once if console/PG tests cannot
+obtain a database. Pure-function selections can run without PostgreSQL.
+
+`scripts/agent_env_setup.sh` remains a compatibility entry point for
+`scripts/setup_test_environment.sh`. Setup installs the binaries and Python
+dependencies; the server starts in the agent phase. Set persistent
+`PGBIN=/usr/lib/postgresql/16/bin` in Codex environment settings. Cursor cloud
+uses `.cursor/environment.json`; local Cursor uses installed PostgreSQL 16 or
+an explicitly configured Docker DSN.
+
+See [the shared PostgreSQL test instructions](agents/postgres-tests.md) for
+startup, cleanup, environment verification and the remaining D6a/D6b gates.
+No managed service, account or secret is involved.
+
 ## 3. Most likely budget surprises if left implicit
 
 ### 3.1 Production hosting is not yet selected

@@ -78,7 +78,7 @@ def main():
         command([str(pgbin / "initdb"), "-D", directory + "/data", "-U", "postgres",
                  "--encoding=UTF8", "--no-locale", "--auth-local=trust", "--auth-host=trust"], owner)
         command([str(pgbin / "pg_ctl"), "-D", directory + "/data", "-l", directory + "/server.log",
-                 "-o", f"-h 127.0.0.1 -p {port} -k {directory}", "-w", "start"], owner)
+                 "-o", f"-h 127.0.0.1 -p {port} -k {directory} -c timezone=UTC", "-w", "start"], owner)
         started = True
         dsn = f"postgresql://postgres@127.0.0.1:{port}/postgres"
         with psycopg.connect(dsn, connect_timeout=3) as con:
