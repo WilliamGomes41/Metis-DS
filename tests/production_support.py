@@ -55,7 +55,7 @@ def production_application(root, config, *, azure=False,
         patch.setattr(console_asgi, "bind_pre_review_semantic_processing", processing_binder)
         if azure:
             patch.setenv("WEBSITE_SITE_NAME", "d6a-test")
-            patch.setenv("CONSOLE_PUBLIC_ORIGIN", "https://console.example.test")
+            patch.setenv("CONSOLE_PUBLIC_ORIGIN", (environment or {}).get("CONSOLE_PUBLIC_ORIGIN", "https://console.example.test"))
         app = console_asgi.build_app()
         app.state.operations_kernel._metis_test_application = app
         return app
