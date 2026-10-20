@@ -69,6 +69,8 @@ jobs:
           command -v bend
           bend guide > /dev/null
           python3 tests/test_bend_experiment.py
+      - name: Verify retained D5 native evidence classification
+        run: python3 experiments/bend/pr-d5/check.py
       - name: Install checksum-pinned Lean 4.34.0 for the independent kernel
         run: |
           sh experiments/bend/pr_d2/install-lean.sh
