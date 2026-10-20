@@ -2,7 +2,7 @@
   "manifest_version": "1.0",
   "status": "approved",
   "protocol_target": "2.3.0",
-  "updated_at": "2026-08-31",
+  "updated_at": "2026-10-20",
   "repository": "WilliamGomes41/VENVN-DS",
   "environments": [
     "local_development",
@@ -54,6 +54,31 @@
       "evidence": [
         ".github/workflows/ci.yml",
         "docs/history/REPOSITORY_BASELINE_REPORT.md"
+      ]
+    },
+    {
+      "capability_id": "test-postgres-local",
+      "capability": "PostgreSQL16 for console workflow tests",
+      "environment": "local_development",
+      "requirement_status": "required",
+      "implementation_status": "implemented",
+      "current_implementation": "Shared disposable PostgreSQL16 startup and per-test template databases; production FastBadge console classes and ASGI routes. Codex ordinary-user/root startup proven; Cursor runtime proof remains separately required.",
+      "target_implementation": "The same repository-owned test setup in Codex and Cursor under B-D6-1. Local console runtime cutover remains gated by D6b.",
+      "provider": "PostgreSQL project / operating-system packages; existing postgres:16 CI service",
+      "data_classification": "synthetic_workflow_identity_publication_and_audit_test_state",
+      "region": "local_machine_or_ephemeral_ci_runner",
+      "persistence": "disposable_owned_databases_with_real_commits_and_session_cleanup",
+      "identity_secret_boundary": "Disposable local test role or explicit METIS_TEST_POSTGRES_DSN; credentials are not committed",
+      "cost_model": "local_compute_storage_and_existing_ci_runner_quota",
+      "expected_cost_range": "No new paid database service. Existing CPU/disk and hosted-runner minutes only; record full-suite cost per portion and keep #695 ahead of D6a runs.",
+      "budget_owner": "project_owner",
+      "operational_owner": "project_owner",
+      "decision_deadline_gate": "B-D6-1 approved 2026-10-20; environment proofs and <=2x suite timing before D6b",
+      "evidence": [
+        "scripts/test_postgres.sh",
+        "scripts/setup_test_environment.sh",
+        "docs/agents/postgres-tests.md",
+        "evidence/d6a/README.md"
       ]
     },
     {
@@ -464,7 +489,7 @@
       "environment": "local_development",
       "requirement_status": "required",
       "implementation_status": "implemented",
-      "current_implementation": "Local FastAPI HTML console in this repository (ingest mailbox, family × class tree, named reviewers, review return-loop; small publish room fail-closed without G2). Not a care-app frontend, chatbot, EPD/ECD UI or public website. Chat is not a room. G0 local sources/private/ stand-in only; explicitly not production",
+      "current_implementation": "Local FastAPI HTML console in this repository (ingest mailbox, family \u00d7 class tree, named reviewers, review return-loop; small publish room fail-closed without G2). Not a care-app frontend, chatbot, EPD/ECD UI or public website. Chat is not a room. G0 local sources/private/ stand-in only; explicitly not production",
       "target_implementation": "Keep the in-repo HTML console for G0 Local. Azure hosting remains TBD when G0 Azure DEV PASSes. Vercel is not required",
       "provider": "local",
       "data_classification": "internal_operations_ui_over_knowledge_kernel",

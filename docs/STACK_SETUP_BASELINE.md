@@ -92,7 +92,10 @@ an explicitly configured Docker DSN.
 
 See [the shared PostgreSQL test instructions](agents/postgres-tests.md) for
 startup, cleanup, environment verification and the remaining D6a/D6b gates.
-No managed service, account or secret is involved.
+No managed service, account or secret is involved. The existing CI quota covers
+these measurements; run the portions sequentially and give #695 priority. The
+local/test dependency is declared as `test-postgres-local` in the infrastructure
+manifest; the local runtime cutover remains gated by D6b.
 
 ## 3. Most likely budget surprises if left implicit
 
