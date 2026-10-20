@@ -342,6 +342,22 @@ def test_ci_runs_release_control_after_repository_preflight() -> None:
     assert workflow.index("repository_preflight") < workflow.index("release_control_preflight")
 
 
+def test_ci_retains_required_matrix_and_full_verification() -> None:
+    """Scheduling/cache optimizations must preserve both required test checks."""
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    test_job = workflow.split("\n  test:\n", 1)[1]
+    assert "python-version: ['3.12', '3.13']" in test_job
+    for command in (
+        "python scripts/repository_preflight.py",
+        "python scripts/release_control_preflight.py --base origin/main",
+        "python scripts/product_api_contract.py --check --base-ref origin/main",
+        "python -m compileall -q src tests",
+        "pytest -q tests/test_architecture_invariants.py",
+        "- run: pytest -q\n",
+    ):
+        assert command in test_job, f"Required CI verification removed: {command}"
+
+
 def test_contributing_names_skill_checks_and_ci_must_not_forget_them() -> None:
     text = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
     for category in SKILL_CATEGORIES:
