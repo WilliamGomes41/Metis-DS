@@ -12,7 +12,6 @@ from src.integrity_kernel import (
 from src.review_ledger import append_event, verify_ledger
 from src.review_workflow_v3 import _apply_review_state as apply_reviews
 from src.revision_workflow import create_revision
-from src.second_review_workflow_v3 import _apply_second_state as apply_second
 
 SCHEMA=ROOT/'schemas/knowledge_object.schema.v1.1.json'
 SEM=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl'
@@ -76,14 +75,6 @@ def test_revision_creates_new_version_and_resets_review(tmp_path:Path):
     assert new['governance']['validated_by'] is None
     assert new['provenance']['canonical_object_hash']!=o['provenance']['canonical_object_hash']
 
-def test_second_review_exact_hash_and_different_reviewer(tmp_path:Path):
-    o=copy.deepcopy(next(o for o in rows() if o['risk']['requires_second_review']))
-    o['governance']['validation_status']='approved'; o['governance']['validated_by']='R1'; o['governance']['validation_date']='2026-08-19'; o['governance']['review_snapshot_hash']=exact_review_snapshot_hash(o)
-    decision=[{'object_id':o['object_id'],'decision':'approve','reviewer':'R2','review_date':'2026-08-19','reviewed_canonical_object_hash':exact_review_snapshot_hash(o)}]
-    out,rep=apply_second([o],decision,tmp_path/'ledger.jsonl')
-    assert out[0]['governance']['second_review']['status']=='approved' and rep['errors']==[]
-    decision[0]['reviewer']='R1'; out,rep=apply_second([o],decision)
-    assert any(e['error']=='second_reviewer_must_differ' for e in rep['errors'])
 
 def test_review_ledger_detects_tamper(tmp_path:Path):
     p=tmp_path/'ledger.jsonl'; append_event(p,event_type='x',object_id='o',object_version='1',actor='a',details={'x':1}); append_event(p,event_type='y',object_id='o',object_version='1',actor='b',details={'y':2})

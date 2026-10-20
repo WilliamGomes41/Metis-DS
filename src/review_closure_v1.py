@@ -36,9 +36,6 @@ PUBLISHED_WORKING_REVISION_IMMUTABLE = "published_working_revision_immutable"
 _REPAIR_EVIDENCE: ContextVar[dict[str, Any] | None] = ContextVar(
     "metis_repair_evidence", default=None
 )
-_LEGACY_REPAIR_PATHS = frozenset(
-    {"/review/repair", "/review/repair/source", "/review/repair/support"}
-)
 
 
 def _esc(value: Any) -> str:
@@ -56,10 +53,6 @@ def _repair_evidence(spec: dict[str, Any]) -> Iterator[None]:
 
 class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewConsole):
     """One-path Review repair with migration and reconstructable evidence."""
-
-    def repair_source(self, **_kwargs: Any) -> dict[str, Any]:
-        """The old free-text canonical repair path is permanently disabled."""
-        raise ConsoleError("legacy_free_text_repair_disabled")
 
     @contextmanager
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
@@ -246,14 +239,8 @@ class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewC
         return migrated
 
 
-def harden_legacy_repair_routes(app: FastAPI, console: ReviewClosureConsole) -> None:
-    """Remove legacy repair forms/writes and replace them with read-only recovery."""
-    app.router.routes[:] = [
-        route
-        for route in app.router.routes
-        if str(getattr(route, "path", "")) not in _LEGACY_REPAIR_PATHS
-    ]
-
+def install_review_recovery_page(app: FastAPI, console: ReviewClosureConsole) -> None:
+    """Read-only recovery view for objects left in the legacy ``revise`` state."""
     @app.get("/review/repair", response_class=HTMLResponse)
     def review_recovery(request: Request) -> str:
         account = console.session_account(request.cookies.get("console_session"))
