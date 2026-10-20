@@ -12,8 +12,11 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
+import shlex
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -343,8 +346,40 @@ def test_ci_runs_release_control_after_repository_preflight() -> None:
     assert workflow.index("repository_preflight") < workflow.index("release_control_preflight")
 
 
+def _assert_prior_runs_cover_exclusions(workflow: str) -> None:
+    # Inspect executable commands rather than maintain a second module list.
+    workflow = re.sub(
+        r"(?m)^        run: >-\n((?:          [^\n]*\n)+)",
+        lambda match: "        run: " + " ".join(line.strip() for line in match[1].splitlines()) + "\n",
+        workflow,
+    )
+    test_job = workflow.split("\n  test:\n", 1)[1]
+    prior_runs: Counter[str] = Counter()
+    checked = False
+    for step in re.split(r"(?m)^      - ", test_job)[1:]:
+        condition = re.search(r"(?m)^        if: (.+)$", step)
+        if condition and condition[1] != "${{ !cancelled() }}":
+            continue  # Branch-specific reproductions do not cover every PR.
+        for command in re.findall(r"(?m)^(?:        run: |          )(?:python -m )?pytest ([^\n]+)", step):
+            args = shlex.split(command)
+            filtered = any(arg.startswith(("-k", "-m", "--deselect", "--collect-only", "--co", "--lf", "--last-failed")) for arg in args)
+            ignored = [arg.split("=", 1)[1] for arg in args if arg.startswith("--ignore=")]
+            if ignored:
+                assert not filtered, "Remaining suite must not filter tests"
+                assert all(arg.startswith("-") for arg in args), "Remaining suite must discover all tests from the repository root"
+                assert len(ignored) == len(set(ignored)), "Repeated CI exclusion"
+                for module in ignored:
+                    assert (ROOT / module).is_file(), f"Missing excluded module: {module}"
+                    assert prior_runs[module] == 1, f"Excluded module lacks exactly one prior full run: {module}"
+                checked = True
+                continue
+            if not filtered and not any(arg.startswith("--ignore") for arg in args):
+                prior_runs.update(arg for arg in args if arg.startswith("tests/") and arg.endswith(".py"))
+    assert checked, "Missing CI partition"
+
+
 def test_ci_retains_required_matrix_and_full_verification() -> None:
-    """Scheduling/cache optimizations must preserve both required test checks."""
+    """Retain both versions and all tests, allowing non-overlapping proof runs."""
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     test_job = workflow.split("\n  test:\n", 1)[1]
     assert "python-version: ['3.12', '3.13']" in test_job
@@ -353,10 +388,9 @@ def test_ci_retains_required_matrix_and_full_verification() -> None:
         "python scripts/release_control_preflight.py --base origin/main",
         "python scripts/product_api_contract.py --check --base-ref origin/main",
         "python -m compileall -q src tests",
-        "pytest -q tests/test_architecture_invariants.py",
-        "- run: pytest -q\n",
     ):
         assert command in test_job, f"Required CI verification removed: {command}"
+    _assert_prior_runs_cover_exclusions(workflow)
 
 
 def test_contributing_names_skill_checks_and_ci_must_not_forget_them() -> None:
