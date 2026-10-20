@@ -63,20 +63,7 @@ class MemorySourceStore:
 
 
 def _config() -> PostgresCanonicalConfig:
-    dsn = os.environ.get("METIS_TEST_POSTGRES_DSN", "").strip()
-    if not dsn:
-        pytest.skip("METIS_TEST_POSTGRES_DSN is required for Repair 5 PostgreSQL evidence")
-    config = PostgresCanonicalConfig(dsn=dsn)
-    with PostgresConcurrentWorkflowDocumentStore(config)._connect() as con:
-        paths = migration_paths(ROOT)
-        apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))
-        con.execute((ROOT / "db" / "schema_v2.sql").read_text(encoding="utf-8"))
-        con.execute(
-            (ROOT / "db" / "migrations" / "001_canonical_source_lineage.sql").read_text(
-                encoding="utf-8"
-            )
-        )
-    return config
+    return PostgresCanonicalConfig(dsn=os.environ["METIS_TEST_POSTGRES_DSN"])
 
 
 def _console(
@@ -508,3 +495,9 @@ def test_failed_unpublished_delete_rolls_back_postgres_and_local_state(
             account_ids=accounts,
             release_ids=[],
         )
+
+
+@pytest.fixture(autouse=True)
+def isolated_postgres(complete_postgres):
+    """Do not inherit releases from another module or reset the supplied database."""
+    return complete_postgres
