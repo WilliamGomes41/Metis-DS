@@ -23,8 +23,8 @@ HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
 SNAPSHOT_WRITE_CONFLICT = "snapshot_object_write_conflict"
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -87,8 +87,8 @@ def _passage_suitability(row: dict) -> str:
     return str(((row.get("metadata") or {}).get("review_passage") or {}).get("suitability") or "")
 
 
-def test_sequential_save_objects_keeps_both_updates(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_sequential_save_objects_keeps_both_updates(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -109,11 +109,12 @@ def test_sequential_save_objects_keeps_both_updates(tmp_path: Path) -> None:
     stored = {row["object_id"]: row for row in console._load_objects(snapshot_id)}
     assert stored[first["object_id"]]["reliability_marker"] == "alpha"
     assert stored[second["object_id"]]["reliability_marker"] == "beta"
-    _parse_objects_jsonl(console._objects_path(snapshot_id))
+    assert console._load_objects(snapshot_id)
 
 
+@pytest.mark.file_topology
 def test_save_objects_interrupt_does_not_leave_torn_or_empty_jsonl(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+    console = _file_console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -189,10 +190,12 @@ def test_save_objects_interrupt_does_not_leave_torn_or_empty_jsonl(tmp_path: Pat
     assert "must-not-land-on-torn-write" not in after
 
 
+
+@pytest.mark.file_topology
 def test_object_save_uses_unique_temp_not_shared_fixed_tmp_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    console = _console(tmp_path)
+    console = _file_console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -221,8 +224,9 @@ def test_object_save_uses_unique_temp_not_shared_fixed_tmp_name(
     assert stored[0]["reliability_marker"] == "unique-tmp"
 
 
-def test_overlapping_save_objects_does_not_silently_drop_a_marker(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+
+def test_overlapping_save_objects_does_not_silently_drop_a_marker(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -245,7 +249,7 @@ def test_overlapping_save_objects_does_not_silently_drop_a_marker(tmp_path: Path
 
     threads = [
         threading.Thread(target=writer, args=(first["object_id"], "alpha")),
-        threading.Thread(target=writer, args=(second["object_id"], "beta")),
+        threading.Thread(target=writer, args=(first["object_id"], "beta")),
     ]
     for thread in threads:
         thread.start()
@@ -253,8 +257,7 @@ def test_overlapping_save_objects_does_not_silently_drop_a_marker(tmp_path: Path
         thread.join(timeout=10)
         assert not thread.is_alive()
 
-    path = console._objects_path(snapshot_id)
-    stored = _parse_objects_jsonl(path)
+    stored = console._load_objects(snapshot_id)
     markers = {
         row.get("reliability_marker")
         for row in stored
@@ -272,8 +275,9 @@ def test_overlapping_save_objects_does_not_silently_drop_a_marker(tmp_path: Path
     assert markers <= {"alpha", "beta"}
 
 
+@pytest.mark.file_topology
 def test_overlapping_review_object_does_not_silently_lose_a_decision(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+    console = _file_console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -337,13 +341,14 @@ def test_overlapping_review_object_does_not_silently_lose_a_decision(tmp_path: P
     assert landed <= {"geen_kenniseenheid", "samenvoegen"}
 
 
-def test_stale_revision_save_fails_closed_with_console_error(tmp_path: Path) -> None:
+
+def test_stale_revision_save_fails_closed_with_console_error(tmp_path: Path, *, production_console) -> None:
     """Two reviewers / two console instances: loser MUST raise, winner MUST remain."""
-    first = _console(tmp_path)
+    first = _console(tmp_path, production_console=production_console)
     accounts = _accounts(first)
     receipt = _ingest(first, accounts)
     snapshot_id = receipt["snapshot_id"]
-    second = OperationsConsole(
+    second = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -355,13 +360,21 @@ def test_stale_revision_save_fails_closed_with_console_error(tmp_path: Path) -> 
         if row["object_id"] == content[0]["object_id"]:
             row["reliability_marker"] = "anne"
     for row in rows_b:
-        if row["object_id"] == content[1]["object_id"]:
+        if row["object_id"] == content[0]["object_id"]:
             row["reliability_marker"] = "bert"
     first._save_objects(snapshot_id, rows_a)
     with pytest.raises(ConsoleError) as caught:
         second._save_objects(snapshot_id, rows_b)
     assert caught.value.code == SNAPSHOT_WRITE_CONFLICT
-    stored = _parse_objects_jsonl(first._objects_path(snapshot_id))
+    stored = first._load_objects(snapshot_id)
     markers = {row.get("reliability_marker") for row in stored if row.get("reliability_marker")}
     assert markers == {"anne"}
     assert "bert" not in json.dumps(stored, ensure_ascii=False)
+
+
+def _file_console(tmp_path: Path) -> OperationsConsole:
+    return OperationsConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "output" / "runtime" / "operations-console",
+    )

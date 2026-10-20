@@ -11,7 +11,6 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
 from src.passage_formation_policy_v1 import DETERMINISTIC_MODE, SEMANTIC_MODE
 from src.pre_review_semantic_v1 import (
@@ -20,8 +19,8 @@ from src.pre_review_semantic_v1 import (
 )
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    console = OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -35,8 +34,8 @@ def _console(tmp_path: Path) -> OperationsConsole:
     return console
 
 
-def _management_page(console: OperationsConsole) -> str:
-    client = TestClient(create_console_app(console))
+def _management_page(console: OperationsConsole, *, production_app) -> str:
+    client = TestClient(production_app(console))
     login = client.post(
         "/login",
         data={"username": "researcher.mode", "password": "mode-secret"},
@@ -49,11 +48,11 @@ def _management_page(console: OperationsConsole) -> str:
     return page.text
 
 
-def test_management_shows_default_source_bound_v2_runtime_mode_read_only(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_management_shows_default_source_bound_v2_runtime_mode_read_only(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     bind_pre_review_semantic_processing(console, environ={})
 
-    html = _management_page(console)
+    html = _management_page(console, production_app=production_app)
 
     assert "Actieve verwerkingsmodus: Semantisch met bronbewijs" in html
     assert (
@@ -66,14 +65,12 @@ def test_management_shows_default_source_bound_v2_runtime_mode_read_only(tmp_pat
     assert "Wijzig modus" not in html
 
 
-def test_management_shows_same_injected_semantic_mode_used_by_processing_router(
-    tmp_path: Path,
-) -> None:
-    console = _console(tmp_path)
+def test_management_shows_same_injected_semantic_mode_used_by_processing_router(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     env = {PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE}
     bind_pre_review_semantic_processing(console, environ=env)
 
-    html = _management_page(console)
+    html = _management_page(console, production_app=production_app)
 
     assert "Actieve verwerkingsmodus: Semantisch" in html
     assert (
@@ -84,16 +81,14 @@ def test_management_shows_same_injected_semantic_mode_used_by_processing_router(
     assert 'name="passage_formation_mode"' not in html
 
 
-def test_management_runtime_status_tracks_same_bound_configuration_mapping(
-    tmp_path: Path,
-) -> None:
-    console = _console(tmp_path)
+def test_management_runtime_status_tracks_same_bound_configuration_mapping(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     env = {PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE}
     bind_pre_review_semantic_processing(console, environ=env)
 
-    assert "Actieve verwerkingsmodus: Semantisch" in _management_page(console)
+    assert "Actieve verwerkingsmodus: Semantisch" in _management_page(console, production_app=production_app)
 
     env[PASSAGE_FORMATION_MODE_ENV] = DETERMINISTIC_MODE
 
     assert console._passage_formation_mode_reader() == DETERMINISTIC_MODE
-    assert "Actieve verwerkingsmodus: Deterministisch" in _management_page(console)
+    assert "Actieve verwerkingsmodus: Deterministisch" in _management_page(console, production_app=production_app)

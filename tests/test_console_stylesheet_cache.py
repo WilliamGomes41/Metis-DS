@@ -15,7 +15,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src import operations_console_app as console_app
-from src.operations_console_v1 import OperationsConsole
 
 
 pytestmark = [
@@ -49,13 +48,13 @@ def test_content_changes_url_with_identical_mtime_and_size(tmp_path, monkeypatch
 
 
 @pytest.mark.parametrize("path", ["/", "/login"])
-def test_rendered_css_url_serves_current_tile_styles(tmp_path, path):
-    console = OperationsConsole(
+def test_rendered_css_url_serves_current_tile_styles(tmp_path, path, *, production_app, production_console):
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
     )
-    with TestClient(console_app.create_console_app(console)) as client:
+    with TestClient(production_app(console)) as client:
         page = client.get(path)
         assert page.status_code == 200
         url = _stylesheet_url(page.text)
