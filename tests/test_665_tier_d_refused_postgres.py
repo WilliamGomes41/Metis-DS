@@ -688,7 +688,7 @@ def _scenario_heading_batch(request, tmp_path, monkeypatch):
 def _scenario_source_repair(request, tmp_path, monkeypatch):
     from tests import test_a09_source_repair as a09
     from tests.decision_graph_native_support import native_state
-    state, _canonical, _source = native_state(tmp_path, config=request.getfixturevalue("complete_postgres"))
+    state, _canonical, _source = native_state(tmp_path)
     counter = iter(range(100))
     a09.test_old_approval_is_retained_and_invalidated(
         lambda **kwargs: a09.setup_repair(tmp_path, factory=lambda: state(f"t13-{next(counter)}"), **kwargs))
