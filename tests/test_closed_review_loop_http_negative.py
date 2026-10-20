@@ -8,15 +8,14 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from src.closed_review_loop_v1 import ClosedLoopReviewConsole, install_closed_review_routes
-from src.operations_console_app import create_console_app
+from src.closed_review_loop_v1 import ClosedLoopReviewConsole
 from src.proportionate_review_v1 import normal_risk_batch_queue
 from src.review_cockpit_v1 import broncontext_parts, confirmable_proposed_type
 from src.review_ledger import read_events
 
 
-def test_legacy_free_text_repair_post_is_not_routed_and_writes_nothing(tmp_path):
-    console = ClosedLoopReviewConsole(
+def test_legacy_free_text_repair_post_is_not_routed_and_writes_nothing(tmp_path, *, production_app, production_console):
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",
@@ -56,7 +55,8 @@ def test_legacy_free_text_repair_post_is_not_routed_and_writes_nothing(tmp_path)
         bindings=console.object_review_bindings(sid), fragments=console.review_source_fragments(sid)
     )[0]["object_id"]
     obj = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
-    console.review_object(
+    # Seed the historical owner record; the actual HTTP entrypoint stays closed.
+    ClosedLoopReviewConsole.review_object(console,
         actor_id=reviewer["account_id"],
         snapshot_id=sid,
         object_id=oid,
@@ -72,8 +72,7 @@ def test_legacy_free_text_repair_post_is_not_routed_and_writes_nothing(tmp_path)
     ledger_before = list(read_events(console._ledger_path))
     exact = broncontext_parts(before)["source_text_exact"]
 
-    app = create_console_app(console)
-    install_closed_review_routes(app, console)
+    app = production_app(console)
     client = TestClient(app, base_url="https://testserver")
     login = client.post(
         "/login", data={"username": "piet", "password": "piet-secret"}

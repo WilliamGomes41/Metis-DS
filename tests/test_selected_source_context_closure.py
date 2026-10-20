@@ -13,7 +13,6 @@ import pytest
 
 from src.knowledge_path_v1 import content_reviewable
 from src.publication_readiness_v1 import review_followup_queues, source_passage_closure
-from src.review_closure_v1 import ReviewClosureConsole
 from src.source_accountability_v1 import is_source_record
 from src.source_containers_v1 import source_accountability
 from src.source_context_review_v1 import context_issues
@@ -22,8 +21,8 @@ from tests.test_vsa_publish_document_v1 import MemorySourceStore
 from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: F401
 
 
-def _system(root, console=None, role="context", multiple=False):
-    console = console or ReviewClosureConsole(
+def _system(root, console=None, role='context', multiple=False, *, production_console):
+    console = console or production_console(processing_binder=lambda console: None,
         root=root, source_store=root / "sources", runtime=root / "runtime",
         immutable_source_store=MemorySourceStore(),
     )
@@ -78,30 +77,39 @@ def _projection(console, sid):
     ("revise", "open", "source_disposition"),
     ("approved", "accounted", "none"),
 ])
-def test_selected_context_follows_current_target_and_survives_restart(tmp_path, role, status, closure, action):
-    console, reviewer, _, sid, source, target, command = _system(tmp_path, role=role, multiple=True)
+def test_selected_context_follows_current_target_and_survives_restart(tmp_path, role, status, closure, action, *, production_console):
+    console, reviewer, _, sid, source, target, command = _system(tmp_path, role=role, multiple=True, production_console=production_console)
     _review(console, reviewer, sid, target, status)
     before = deepcopy(console.snapshot_objects(sid))
     assert not context_issues(before)
     assert not is_source_record(next(o for o in before if o["object_id"] == source["object_id"]))
-    for state in (console, ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")):
+    starts = (lambda: console, lambda: production_console(processing_binder=lambda console: None,
+              root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime"))
+    for index, start in enumerate(starts):
+        state = start()
+        # Production startup reopens legacy revise work for review.
+        expected_closure = "waiting_on_target" if status == "revise" and index else closure
+        expected_action = "none" if status == "revise" and index else action
         projection = _projection(state, sid)
         row = projection[source["object_id"]]
-        assert row["closure"] == closure
-        assert row["human_action"] == action
+        assert row["closure"] == expected_closure
+        assert row["human_action"] == expected_action
         assert len(row["target_ids"]) == 2
         assert row["accounted"] == (status == "approved")
         summary = source_passage_closure(state.snapshot_objects(sid), projection=projection)
         assert (source["object_id"] in summary["unresolved_source_passage_ids"]) == (status != "approved")
         queues = review_followup_queues(state.snapshot_objects(sid), review_path="richtlijn", projection=projection)
-        assert (source["object_id"] in {o["object_id"] for o in queues["disposition"]}) == (action == "source_disposition")
-        assert state.snapshot_objects(sid) == before
+        assert (source["object_id"] in {o["object_id"] for o in queues["disposition"]}) == (expected_action == "source_disposition")
+        if status != "revise" or not index:
+            assert state.snapshot_objects(sid) == before
+        else:
+            assert state._current_object(sid, target["object_id"])["governance"]["validation_status"] == "needs_review"
     assert console.confirm_source_context(**command)["idempotent"] is True
 
 
 @pytest.mark.parametrize("status", ["pending", "rejected", "approved"])
-def test_selected_context_controls_authorized_publication(tmp_path, status):
-    console, reviewer, publisher, sid, source, target, _ = _system(tmp_path)
+def test_selected_context_controls_authorized_publication(tmp_path, status, *, production_console):
+    console, reviewer, publisher, sid, source, target, _ = _system(tmp_path, production_console=production_console)
     _review(console, reviewer, sid, target, status)
     readiness = console.publication_readiness(sid)
     assert readiness["publication_ready"] == (status == "approved")
@@ -110,8 +118,8 @@ def test_selected_context_controls_authorized_publication(tmp_path, status):
 
 
 @pytest.mark.parametrize("damage", ["missing_target", "changed_text", "superseded", "stale_approval"])
-def test_selected_context_cannot_hide_stale_evidence(tmp_path, damage):
-    console, reviewer, _, sid, source, target, _ = _system(tmp_path)
+def test_selected_context_cannot_hide_stale_evidence(tmp_path, damage, *, production_console):
+    console, reviewer, _, sid, source, target, _ = _system(tmp_path, production_console=production_console)
     _review(console, reviewer, sid, target, "approved")
     rows = deepcopy(console.snapshot_objects(sid))
     bindings = deepcopy(console.object_review_bindings(sid))
@@ -131,21 +139,21 @@ def test_selected_context_cannot_hide_stale_evidence(tmp_path, damage):
 
 
 @pytest.mark.parametrize("role, closure", [("excluded", "accounted"), ("reset", "waiting_on_target")])
-def test_selected_context_can_be_explicitly_excluded_or_reset(tmp_path, role, closure):
-    console, _, _, sid, source, _, command = _system(tmp_path)
+def test_selected_context_can_be_explicitly_excluded_or_reset(tmp_path, role, closure, *, production_console):
+    console, _, _, sid, source, _, command = _system(tmp_path, production_console=production_console)
     console.confirm_source_context(**{**command, "role": role, "target_object_ids": [],
         "reason": "Nieuw expliciet bronbesluit.", "command_id": role,
         "expected_revision": console.objects_revision(sid)})
     assert _projection(console, sid)[source["object_id"]]["closure"] == closure
 
 
-def test_native_selected_context_rejection_blocks_publication_after_restart(recovery_postgres, tmp_path):
+def test_native_selected_context_rejection_blocks_publication_after_restart(recovery_postgres, tmp_path, *, production_console):
     from tests.test_lifecycle_withdrawal_recovery_v1 import _console
     from tests.test_publication_chain_recovery_v1 import FakeBlobStore
 
     blobs = FakeBlobStore()
     console = _console(tmp_path, recovery_postgres, blobs)
-    console, reviewer, publisher, sid, source, target, _ = _system(tmp_path, console)
+    console, reviewer, publisher, sid, source, target, _ = _system(tmp_path, console, production_console=production_console)
     _review(console, reviewer, sid, target, "rejected")
     root = tmp_path / "restarted"
     root.mkdir()

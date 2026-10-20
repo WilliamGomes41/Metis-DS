@@ -30,7 +30,7 @@ def complete_console(root, config, console_cls=FastBadgePostgresCompleteWorkflow
 
 
 @pytest.fixture
-def complete_postgres(monkeypatch, postgres_template):
+def _isolated_console_postgres(monkeypatch, postgres_template):
     """Full schema in an owned disposable database; never reset the supplied DB.
 
     METIS_TEST_POSTGRES_DSN must identify a test server with CREATEDB rights.
@@ -42,6 +42,12 @@ def complete_postgres(monkeypatch, postgres_template):
         # Child-process proofs must connect to this same isolated authority.
         monkeypatch.setenv("METIS_TEST_POSTGRES_DSN", config.dsn)
         yield config
+
+
+@pytest.fixture
+def complete_postgres(_isolated_console_postgres):
+    """Aliases share the same function-scoped database, including the factories."""
+    return _isolated_console_postgres
 
 
 def seed_canonical_release(store, *, snapshot_id, token):

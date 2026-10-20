@@ -11,29 +11,34 @@ from copy import deepcopy
 import pytest
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, PRE_REVIEW_BLOCKED
-from src.review_closure_v1 import ReviewClosureConsole
 from tests.test_v226_klasse_wijzigen import _accounts, _ingest_richtlijn
 
 
-def _system(tmp_path):
-    console = ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+def _system(tmp_path, *, production_app, production_console):
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     assert client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"}, follow_redirects=False).status_code == 303
     return console, receipt["snapshot_id"], client
 
 
 @pytest.mark.parametrize("status", ["published", "superseded", "withdrawn"])
-def test_closed_document_has_no_mutation_forms_and_stale_posts_fail(tmp_path, status):
-    console, sid, client = _system(tmp_path)
+def test_closed_document_has_no_mutation_forms_and_stale_posts_fail(tmp_path, status, *, production_app, production_console):
+    console, sid, client = _system(tmp_path, production_app=production_app, production_console=production_console)
     assert 'action="/tree/move"' in client.get("/tree").text
     console._envelopes[sid]["state"] = status
     # Even a stale blocker projection must not offer reprocessing closed work.
     console._envelopes[sid]["publication_eligibility"] = PRE_REVIEW_BLOCKED
     console._save_envelopes()
+    # A stale closed projection cannot reopen a canonical PG release.
+    from tests.complete_workflow_support import seed_canonical_release
+    seed_canonical_release(console.canonical_publication_store, snapshot_id=sid, token=sid)
+    if status == "withdrawn":
+        with console.canonical_publication_store._connect() as connection:
+            connection.execute("UPDATE publication_releases SET status='withdrawn', withdrawn_at=now() "
+                               "WHERE release_id=%s", ("release-" + sid,))
     before = (deepcopy(console._envelope(sid)), console.snapshot_objects(sid, include_blocked=True))
     page = client.get("/tree")
     assert page.status_code == 200 and "wijzigacties niet beschikbaar" in page.text
@@ -48,12 +53,13 @@ def test_closed_document_has_no_mutation_forms_and_stale_posts_fail(tmp_path, st
         response = client.post(path, data={"snapshot_id": sid, **fields}, follow_redirects=False)
         assert response.status_code in {400, 409}
     assert (console._envelope(sid), console.snapshot_objects(sid, include_blocked=True)) == before
-    restarted = ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
-    assert restarted._envelope(sid) == before[0]
+    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    assert restarted.snapshot_is_published(sid)
+    assert restarted.snapshot_objects(sid, include_blocked=True) == before[1]
 
 
-def test_unknown_publication_authority_hides_all_mutation_forms(tmp_path, monkeypatch):
-    console, sid, client = _system(tmp_path)
+def test_unknown_publication_authority_hides_all_mutation_forms(tmp_path, monkeypatch, *, production_app, production_console):
+    console, sid, client = _system(tmp_path, production_app=production_app, production_console=production_console)
     def unavailable(snapshot_id):
         raise ConsoleError("durable_publication_lookup_failed")
     monkeypatch.setattr(console, "snapshot_is_published", unavailable)
@@ -63,8 +69,8 @@ def test_unknown_publication_authority_hides_all_mutation_forms(tmp_path, monkey
         assert f'action="{path}"' not in page.text
 
 
-def test_open_actions_share_one_history_read_and_do_not_mutate_state(tmp_path, monkeypatch):
-    console, sid, client = _system(tmp_path)
+def test_open_actions_share_one_history_read_and_do_not_mutate_state(tmp_path, monkeypatch, *, production_app, production_console):
+    console, sid, client = _system(tmp_path, production_app=production_app, production_console=production_console)
     calls = []
     original = console.snapshot_is_published
     def counted(snapshot_id):

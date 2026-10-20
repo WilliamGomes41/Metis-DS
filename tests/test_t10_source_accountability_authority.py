@@ -184,13 +184,13 @@ def test_explicit_dispositions_remain_evidence_without_knowledge_authority(statu
     assert review_duty_for(source, review_path="richtlijn", bindings=[]) is None
 
 
-def test_confirm_reset_duplicate_conflict_restart_and_projection(tmp_path):
+def test_confirm_reset_duplicate_conflict_restart_and_projection(tmp_path, *, production_console):
     from tests.test_source_context_review_v1 import _system
     from src.review_closure_v1 import ReviewClosureConsole
     from src.source_containers_v1 import source_accountability
     from src.operations_console_v1 import ConsoleError
     from src.review_ledger import read_events
-    state, _, reviewer, source, target, command = _system(tmp_path)
+    state, _, reviewer, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
     sid = command["snapshot_id"]
     state.confirm_source_context(**command)
     def project(console):
@@ -210,7 +210,7 @@ def test_confirm_reset_duplicate_conflict_restart_and_projection(tmp_path):
     state.review_object(actor_id=reviewer["account_id"], snapshot_id=sid, object_id=target["object_id"],
                         decision="approve", confirmed_object_type="definition", relation_review_ack=True)
     assert project(state)[source["object_id"]]["closure"] == "accounted"
-    restarted = ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert project(restarted) == project(state)
     restarted.confirm_source_context(**{**command, "role": "reset", "target_object_ids": [],
         "command_id": "reset", "expected_revision": restarted.objects_revision(sid)})
@@ -299,10 +299,10 @@ def test_machine_context_target_repair_has_inventory_priority_over_review_duty()
 
 
 @pytest.mark.parametrize("status", ["rejected", "superseded", "revise"])
-def test_legacy_explicit_context_follows_current_target(status, tmp_path):
+def test_legacy_explicit_context_follows_current_target(status, tmp_path, *, production_console):
     from tests.test_source_context_review_v1 import _system
     from src.source_containers_v1 import source_accountability
-    state, _, _, source, target, command = _system(tmp_path)
+    state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
     state.confirm_source_context(**command)
     rows = state.snapshot_objects(command["snapshot_id"])
     current = next(o for o in rows if o["object_id"] == target["object_id"])
@@ -312,11 +312,11 @@ def test_legacy_explicit_context_follows_current_target(status, tmp_path):
     assert projected[source["object_id"]]["human_action"] == "source_disposition"
 
 
-def test_admission_blocked_keeps_existing_correction_card(tmp_path):
+def test_admission_blocked_keeps_existing_correction_card(tmp_path, *, production_console):
     from tests.test_t9_review_knowledge_authority import _console
     from src.operations_console_app import _source_context_panel, _source_context_card, _render_review_card
     from src.source_containers_v1 import source_accountability
-    console, reviewer, sid, target = _console(tmp_path)
+    console, reviewer, sid, target = _console(tmp_path, production_console=production_console)
     rows = console.snapshot_objects(sid)
     current = next(o for o in rows if o["object_id"] == target["object_id"])
     current["metadata"]["admission"]["gate_result"] = "blocked"

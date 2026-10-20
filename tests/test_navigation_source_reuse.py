@@ -9,14 +9,13 @@ from copy import deepcopy
 
 import pytest
 
-from src.review_closure_v1 import ReviewClosureConsole
 from tests.semantic_fixture_support import bind_fixture_selections
 from tests.test_console_navigation_performance import NavigationProbe
 
 
 @pytest.fixture
-def source_navigation(tmp_path):
-    console = ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "source",
+def source_navigation(tmp_path, *, production_console):
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "source",
                                    runtime=tmp_path / "runtime")
     author = console.create_account(username="author", password="fixture-only", roles=("researcher",))
     reviewer = console.create_account(username="reviewer", password="fixture-only", roles=("reviewer",))
@@ -242,13 +241,12 @@ def test_full_source_keeps_headings_and_input_changes_invalidate_both_views(sour
     assert len(calls) == 6
 
 
-def test_source_accountability_reads_source_once_with_unchanged_outcome(tmp_path, monkeypatch):
-    # Smetten review: every source record re-compared the full source input.
+def test_source_accountability_reads_source_once_with_unchanged_outcome(tmp_path, monkeypatch, *, production_console):
     import src.knowledge_materialisation_v1 as materialisation
     import src.source_context_review_v1 as context_review
     from src.source_accountability_v1 import is_source_record
     from src.source_containers_v1 import source_accountability
-    console = ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "source",
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "source",
                                    runtime=tmp_path / "runtime")
     author = console.create_account(username="author", password="fixture-only", roles=("researcher",))
     reviewer = console.create_account(username="reviewer", password="fixture-only", roles=("reviewer",))

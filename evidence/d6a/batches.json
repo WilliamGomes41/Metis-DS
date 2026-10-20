@@ -2,7 +2,7 @@
   {
     "batch": "02",
     "base": "2617c48",
-    "commit": "6c9d7ca",
+    "commit": "40ad364",
     "test_files": [
       "tests.test_api_access_lifecycle_v1",
       "tests.test_api_access_postgres_v1",
@@ -25,13 +25,30 @@
     "failures": 0,
     "skipped": 0,
     "targeted_junit": "d6a02-native.xml",
-    "full_suite_status": "batch 02 running; subsequent full measurements pending",
-    "ci_status": "not run: push approval pending"
+    "full_suite_status": "passed locally; CI pending",
+    "ci_status": "not run: push approval pending",
+    "full_suite": {
+      "commit": "40ad364d57f6d83e04fb6ac69c5dc02900258468",
+      "python": "3.13.5",
+      "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+      "seconds": 1039.487,
+      "exit_code": 0,
+      "postgres_version": 160015,
+      "tests": 5679,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 33,
+      "postgres_skips": [],
+      "baseline_seconds": 1096.328,
+      "ratio": 0.9482,
+      "within_twice_baseline": true
+    },
+    "measurement_limits": "Local runner, not CI. NO_PROXY/no_proxy include rebind.example.test and hop.example.test to allow the existing SSRF tests to exercise their own DNS transport. The initial baseline had three proxy-related failures; timing is informative, not controlled CI evidence."
   },
   {
     "batch": "03",
-    "base": "6c9d7ca",
-    "commit": "7bdc9bd",
+    "base": "40ad364",
+    "commit": "4c087e2",
     "test_files": [
       "tests.test_review_configuration_upload_v1"
     ],
@@ -49,8 +66,8 @@
   },
   {
     "batch": "04",
-    "base": "7bdc9bd",
-    "commit": "working-tree",
+    "base": "4c087e2",
+    "commit": "cd9e42c",
     "test_files": [
       "tests.test_console_metis_dictionary",
       "tests.test_console_review_card_two_column",
@@ -71,13 +88,30 @@
     "failures": 0,
     "skipped": 0,
     "targeted_junit": "d6a04.xml",
-    "full_suite_status": "batch 02 running; subsequent full measurements pending",
-    "ci_status": "not run: push approval pending"
+    "full_suite_status": "passed locally; CI pending",
+    "ci_status": "not run: push approval pending",
+    "full_suite": {
+      "commit": "cd9e42c58563455b8a2b300f09df64c1f83fe2f6",
+      "python": "3.13.5",
+      "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+      "seconds": 1079.574,
+      "exit_code": 0,
+      "postgres_version": 160015,
+      "tests": 5680,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 33,
+      "postgres_skips": [],
+      "baseline_seconds": 1096.328,
+      "ratio": 0.9847,
+      "within_twice_baseline": true
+    },
+    "measurement_limits": "Local runner, not CI. NO_PROXY/no_proxy include rebind.example.test and hop.example.test to allow the existing SSRF tests to exercise their own DNS transport. The initial baseline had three proxy-related failures; timing is informative, not controlled CI evidence."
   },
   {
     "batch": "05",
     "base": "cd9e42c",
-    "commit": "pending",
+    "commit": "57c6bb4",
     "test_files": [
       "tests/test_a1_instrumentation.py",
       "tests/test_bounded_processing_lifecycle.py",
@@ -117,7 +151,7 @@
   {
     "batch": "06",
     "base": "57c6bb4",
-    "commit": "pending",
+    "commit": "80d68c3",
     "test_files": [
       "tests/decision_graph_native_support.py",
       "tests/production_support.py",
@@ -159,6 +193,74 @@
       {
         "file": "d6a06-a09-fixed.xml",
         "sha256": "a2fa60f44a94c3a75e0950def7e6f13891c053c3f50998f2f6ad43631c971612"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending"
+  },
+  {
+    "batch": "07",
+    "base": "80d68c3",
+    "commit": "pending",
+    "test_files": [
+      "docs/agents/postgres-tests.md",
+      "tests/complete_workflow_support.py",
+      "tests/conftest.py",
+      "tests/test_closed_review_loop_http_negative.py",
+      "tests/test_closed_review_loop_v1.py",
+      "tests/test_context_realization.py",
+      "tests/test_d6a_postgres_support.py",
+      "tests/test_navigation_source_reuse.py",
+      "tests/test_request_diagnostics.py",
+      "tests/test_review_render_source_reuse.py",
+      "tests/test_selected_source_context_closure.py",
+      "tests/test_source_accountability_v1.py",
+      "tests/test_source_containers_v1.py",
+      "tests/test_source_context_review_ui_v1.py",
+      "tests/test_source_selection_read_cost.py",
+      "tests/test_t10_source_accountability_authority.py",
+      "tests/test_t11_knowledge_revision_lineage.py",
+      "tests/test_t4_single_knowledge_path_invariants.py",
+      "tests/test_t9_review_knowledge_authority.py",
+      "tests/test_tree_mutability_v1.py",
+      "tests/test_vsa_closed_review_loop_e2e_v1.py"
+    ],
+    "executed_unique_cases": 322,
+    "failures": 0,
+    "skipped": 1,
+    "verification": "Targeted runs plus repaired-case reruns and imported fixture consumers. T11 publication-seal test renamed to canonical authority; parameter count unchanged. One optional SDK skip is unrelated to PostgreSQL.",
+    "junit": [
+      {
+        "file": "d6a07.xml",
+        "sha256": "7c3da89dac216bcd4f078712871e59a55d955c6e0940678ed4fe5cd8f44dad26"
+      },
+      {
+        "file": "d6a07-authority.xml",
+        "sha256": "53a7ed6c31ef040394cfe2815d8351db9b1b04969b92bcff99c2edbcb7a0e0b2"
+      },
+      {
+        "file": "d6a07-fixed.xml",
+        "sha256": "d1176ec35ec6787f60d9ddc32546c6ebf9c683650c8cdc019eb0da2c0ec855ec"
+      },
+      {
+        "file": "d6a07-tree.xml",
+        "sha256": "9904df951a074ac2485cd0767a21c4f8a637b0880f08ceaae9e3f4ea0a02e3e4"
+      },
+      {
+        "file": "d6a07-fixtures.xml",
+        "sha256": "1aef033c789d336907a88e715f421293b4fd6210bda35666cee42ba7d19fb009"
+      },
+      {
+        "file": "d6a07-consumers.xml",
+        "sha256": "68f88ca1fe1b4967848d444972192ed34e2afab87f3b0cc24fbf9cfb018e8e52"
+      },
+      {
+        "file": "d6a07-consumers-fixed.xml",
+        "sha256": "2f0e982c4bfe698cb7205b6f36c331b631d2938934c2cb536cf2a36f3b4d58fb"
+      },
+      {
+        "file": "d6a07-cost-final.xml",
+        "sha256": "e92b3521b3c8a0aa72c0e6c7eb010d5b3378a19e2bd9ed370adfc4b39a2cab70"
       }
     ],
     "full_suite_status": "pending",

@@ -8,81 +8,53 @@
 # release-control-evidence: releasebewijs
 """
 from collections import Counter
-from contextlib import contextmanager
 from copy import deepcopy
-from types import SimpleNamespace
 import cProfile
 import io
-import json
 import pstats
 import time
 
 import pytest
 from tests.test_review_render_source_reuse import review_client
 from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
-from src.workflows.workflow_documents_cutover_v1 import (
-    _PostgresWorkflowDocumentsMixin, PostgresWorkflowDocumentRuntimeStore,
-)
-from src.workflows.workflow_review_cutover_v1 import _PostgresWorkflowReviewMixin
-from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+
+
+def _durable(console, sid):
+    store = console.workflow_document_store
+    return {"envelope": store.get_envelope(sid), "objects": store.list_document_objects(sid)}
+
+
+def _persist(console, durable, *, independent=False):
+    store = console.workflow_document_store
+    if independent:
+        store = PostgresConcurrentWorkflowDocumentStore(store.config)
+    store.write_bundle(envelope=durable['envelope'], objects=durable['objects'])
 
 
 @pytest.fixture
-def postgres_selection(review_client, request):
+def postgres_selection(review_client, request, monkeypatch):
     console, client, sid = review_client
     # Exclude background discovery from the single-request measurement.
     for handler in client.app.router.on_shutdown:
         if getattr(handler, "__name__", "") == "stop" and handler.__self__.__class__.__name__ == "SourceProcessingDispatcher":
             client.portal.call(handler)
-    envelope = deepcopy(console._envelope(sid))
-    # Synthetic nested replay evidence: exercises copying/JSON costs, not model
-    # execution. It does not claim to replicate the production payload size.
-    envelope.setdefault('semantic_replay', {}).setdefault('provider_evidence', {})['diagnostic_fixture'] = [
+    durable = _durable(console, sid)
+    # Synthetic nested replay evidence exercises copying/JSON costs; the rows
+    # and every subsequent read/write remain in the actual PostgreSQL store.
+    durable['envelope'].setdefault('semantic_replay', {}).setdefault('provider_evidence', {})['diagnostic_fixture'] = [
         {'index': i, 'spans': [{'start': i, 'end': i+20}], 'text': 'source evidence'}
         for i in range(4000)
     ]
-    rows = deepcopy(console._load_objects(sid, remember=False))
-    durable = {'envelope': envelope, 'objects': rows}
+    _persist(console, durable)
+    durable = _durable(console, sid)
     calls = Counter()
-    @contextmanager
-    def connect():
-        calls['connections'] += 1
-        def execute(sql, params=None):
-            if 'workflow.documents d' in sql:
-                kind = 'get_envelope' if 'WHERE d.snapshot_id' in sql else 'list_envelopes'
-                calls[kind] += 1
-                # Simulate fresh JSON data from psycopg, retaining actual store
-                # validation and its deep-copy boundary.
-                item = {'snapshot_id': sid, 'topic_id': 'fixture-topic', 'display_name': envelope['family'],
-                        'envelope_payload': json.loads(json.dumps(durable['envelope']))}
-                return SimpleNamespace(fetchone=lambda:item, fetchall=lambda:[item])
-            if 'workflow.document_reviewers' in sql:
-                return SimpleNamespace(fetchall=lambda:[{'account_id': a} for a in sorted(durable['envelope']['named_reviewers'])])
-            if 'workflow.document_objects' in sql:
-                calls['objects'] += 1
-                return SimpleNamespace(fetchall=lambda:[{'position': i, 'payload': deepcopy(r)}
-                                                        for i,r in enumerate(durable['objects'])])
-            raise AssertionError(sql)
-        yield SimpleNamespace(execute=execute)
-    store_type = (PostgresWorkflowDocumentRuntimeStore if getattr(request, "param", None) == "runtime"
-                  else PostgresConcurrentWorkflowDocumentStore)
-    store = store_type.__new__(store_type)
-    store._connect = connect
-    # #665 (besluit 10d): documents only under PG review authority, a real
-    # PostgresWorkflowReviewStore on the same config. Review reads return the
-    # fixture's bindings, so the counted SQL transport stays documents-only.
-    review = PostgresWorkflowReviewStore.__new__(PostgresWorkflowReviewStore)
-    store.config = review.config = PostgresCanonicalConfig(dsn='host=read-cost-double')
-    bindings = deepcopy(console._bindings)
-    review.read_bindings = lambda snapshot_ids=None: deepcopy(bindings)
-    # Same PostgreSQL mixin methods and actual HTTP application as production;
-    # only the SQL transport and already-created account store are local.
-    console.__class__ = type('SelectionPostgresConsole', (
-        _PostgresWorkflowReviewMixin, _PostgresWorkflowDocumentsMixin, console.__class__), {})
-    console.workflow_document_store = store
-    console.workflow_review_store = review
-    console._bindings_baseline = deepcopy(bindings)
+    for method, counter in [('get_envelope', 'get_envelope'), ('list_envelopes', 'list_envelopes'),
+                            ('list_document_objects', 'objects')]:
+        original = getattr(console.workflow_document_store, method)
+        def counted(*args, _original=original, _counter=counter, **kwargs):
+            calls[_counter] += 1
+            return _original(*args, **kwargs)
+        monkeypatch.setattr(console.workflow_document_store, method, counted)
     return console, client, sid, durable, calls
 
 
@@ -109,6 +81,7 @@ def test_http_source_selection_has_bounded_document_reads(postgres_selection, mo
     print(stream.getvalue())
     assert calls['get_envelope'] <= 1, 'Repeated full document loads within one overview'
     assert calls['objects'] <= 1, 'Repeated object loads within one overview'
+    assert _durable(console, sid) == before
 
 
 @pytest.mark.parametrize('review_client', [None, 'retained'], indirect=True)
@@ -117,6 +90,7 @@ def test_http_output_matches_unscoped_read_and_next_request_is_fresh(postgres_se
     import src.source_selection_ui_v1 as ui
     console, client, sid, durable, calls = postgres_selection
     durable['envelope']['semantic_replay']['provider_evidence']['diagnostic_fixture'] = []
+    _persist(console, durable)
     monkeypatch.setattr(ui.uuid, 'uuid4', lambda: UUID(int=1))
     before = deepcopy(durable)
     endpoint = next(r for r in client.app.routes if getattr(r,'path',None)=='/source-selection')
@@ -133,10 +107,13 @@ def test_http_output_matches_unscoped_read_and_next_request_is_fresh(postgres_se
     assert durable == before
     assert calls['list_envelopes'] == calls['objects'] == 1
     assert calls['get_envelope'] == 0
+    assert _durable(console, sid) == before
     durable['envelope']['title'] = 'Updated authoritative title'
+    _persist(console, durable)
     fresh = client.get('/source-selection', params={'document':sid})
     assert fresh.status_code == 200 and 'Updated authoritative title' in fresh.text
     durable['envelope']['named_reviewers'] = []
+    _persist(console, durable)
     denied = client.get('/source-selection', params={'document':sid})
     # The existing HTML error handler returns 400 for this denial.
     assert denied.status_code == 400
@@ -151,6 +128,7 @@ def test_overlapping_http_reads_are_isolated_and_exceptions_clear_scope(postgres
     from src.operations_console_v1 import ConsoleError
     console, client, sid, durable, calls = postgres_selection
     durable['envelope']['semantic_replay']['provider_evidence']['diagnostic_fixture'] = []
+    _persist(console, durable)
     original_title = durable['envelope']['title']
     entered, release = Event(), Event()
     original = ui.projection
@@ -165,6 +143,7 @@ def test_overlapping_http_reads_are_isolated_and_exceptions_clear_scope(postgres
         try:
             assert entered.wait(3)
             durable['envelope']['title'] = 'Concurrent new title'
+            _persist(console, durable, independent=True)
             second = client.get('/source-selection', params={'document':sid})
             assert second.status_code == 200 and 'Concurrent new title' in second.text
         finally:
@@ -195,15 +174,16 @@ def test_overlapping_http_reads_are_isolated_and_exceptions_clear_scope(postgres
 
 
 @pytest.mark.parametrize("postgres_selection", ["runtime", "concurrent"], indirect=True)
-def test_render_revision_stays_with_rows_and_stale_post_is_rejected(postgres_selection, monkeypatch):
-    from contextlib import nullcontext
+def test_render_revision_stays_with_rows_and_stale_post_is_rejected(postgres_selection, monkeypatch, request):
     console, client, sid, durable, calls = postgres_selection
     durable['envelope']['semantic_replay']['provider_evidence']['diagnostic_fixture'] = []
+    _persist(console, durable)
     expected_revision = console.objects_revision(sid)
     original_revision = console.objects_revision
     captured = []
     def changed_during_read(snapshot_id):
         durable['objects'][0]['text'] = 'A concurrent edit'
+        _persist(console, durable, independent=request.node.callspec.params['postgres_selection'] == 'concurrent')
         value = original_revision(snapshot_id)
         captured.append(value)
         return value
@@ -212,9 +192,6 @@ def test_render_revision_stays_with_rows_and_stale_post_is_rejected(postgres_sel
     assert captured == [expected_revision]
     monkeypatch.setattr(console,'objects_revision',original_revision)
     assert console.objects_revision(sid) != expected_revision
-    # The disposable store has no SQL locking backend. Keep the real HTTP
-    # command/revision check; native transaction correctness has separate tests.
-    monkeypatch.setattr(console,'_reprocessing_transaction',lambda sid:nullcontext())
     before = deepcopy(durable)
     from src.operations_console_v1 import ConsoleError
     command = console.reserve_source_selection
@@ -233,6 +210,7 @@ def test_render_revision_stays_with_rows_and_stale_post_is_rejected(postgres_sel
     assert response.status_code == 400
     assert errors == ["snapshot_object_write_conflict"], errors
     assert durable == before
+    assert _durable(console, sid) == before
 
 
 def test_receipt_remains_detached_and_write_reads_do_not_use_render_data(postgres_selection):
@@ -250,6 +228,7 @@ def test_receipt_remains_detached_and_write_reads_do_not_use_render_data(postgre
         assert console.snapshot_objects(sid)[0].get('text') != 'Changing caller copy'
         assert console._objects_expected_revs() == before_pin
         durable['objects'][0]['text'] = 'Fresh write-side value'
+        _persist(console, durable, independent=True)
         write_rows = console._load_objects(sid, remember=True)
         assert write_rows[0]['text'] == 'Fresh write-side value'
         assert console._objects_expected_revs()[sid] != original_revision
