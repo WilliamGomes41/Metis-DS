@@ -34,8 +34,8 @@ UNCHECKED = "volledigheid nog niet gecontroleerd"
 N_DOCUMENTS = 3
 
 
-def _documents(tmp_path: Path, count: int = N_DOCUMENTS):
-    console, accounts, receipt, source = publish_fixture._console_with_document(tmp_path)
+def _documents(tmp_path: Path, count: int=N_DOCUMENTS, *, production_console):
+    console, accounts, receipt, source = publish_fixture._console_with_document(tmp_path, production_console=production_console)
     receipts = [receipt]
     for index in range(1, count):
         receipts.append(console.ingest(
@@ -86,13 +86,14 @@ def _mark_formation_incomplete(console, snapshot_ids):
     for sid in snapshot_ids:
         envelope = console._envelope(sid)
         envelope.setdefault("semantic_replay", {}).setdefault("provider_evidence", {})["formation_incomplete"] = True
+        console._commit_prepared_store(envelopes={sid: envelope}, snapshot_id=sid)
 
 
 # --- /publish -----------------------------------------------------------------
 
-def test_publish_overview_makes_zero_helper_calls_for_n_documents(tmp_path, helper_calls):
-    console, _accounts, receipts, _source = _documents(tmp_path)
-    client = publish_fixture._client(console)
+def test_publish_overview_makes_zero_helper_calls_for_n_documents(tmp_path, helper_calls, *, production_app, production_console):
+    console, _accounts, receipts, _source = _documents(tmp_path, production_console=production_console)
+    client = publish_fixture._client(console, production_app=production_app)
     publish_fixture._login(client, "publisher.carla")
     helper_calls.clear()
 
@@ -106,10 +107,10 @@ def test_publish_overview_makes_zero_helper_calls_for_n_documents(tmp_path, help
     assert helper_calls["incomplete_deep"] == 0
 
 
-def test_publish_overview_never_shows_unchecked_document_as_ready(tmp_path, helper_calls):
-    console, accounts, receipts, _source = _documents(tmp_path, count=1)
+def test_publish_overview_never_shows_unchecked_document_as_ready(tmp_path, helper_calls, *, production_app, production_console):
+    console, accounts, receipts, _source = _documents(tmp_path, count=1, production_console=production_console)
     publish_fixture._complete_review(console, accounts, receipts[0])
-    client = publish_fixture._client(console)
+    client = publish_fixture._client(console, production_app=production_app)
     publish_fixture._login(client, "publisher.carla")
 
     page = client.get("/publish")
@@ -125,10 +126,10 @@ def test_publish_overview_never_shows_unchecked_document_as_ready(tmp_path, help
     assert f'/publish?document={receipts[0]["snapshot_id"]}' in page.text
 
 
-def test_publish_selected_document_runs_full_check_for_that_document_only(tmp_path, helper_calls):
-    console, accounts, receipts, _source = _documents(tmp_path)
+def test_publish_selected_document_runs_full_check_for_that_document_only(tmp_path, helper_calls, *, production_app, production_console):
+    console, accounts, receipts, _source = _documents(tmp_path, production_console=production_console)
     publish_fixture._complete_review(console, accounts, receipts[0])
-    client = publish_fixture._client(console)
+    client = publish_fixture._client(console, production_app=production_app)
     publish_fixture._login(client, "publisher.carla")
     helper_calls.clear()
 
@@ -141,10 +142,10 @@ def test_publish_selected_document_runs_full_check_for_that_document_only(tmp_pa
     assert page.text.count('data-publication-state="unchecked"') == N_DOCUMENTS - 1
 
 
-def test_invalid_publish_is_still_refused_at_post(tmp_path, helper_calls):
-    console, accounts, receipts, source = _documents(tmp_path, count=1)
+def test_invalid_publish_is_still_refused_at_post(tmp_path, helper_calls, *, production_app, production_console):
+    console, accounts, receipts, source = _documents(tmp_path, count=1, production_console=production_console)
     publish_fixture._complete_review(console, accounts, receipts[0])
-    client = publish_fixture._client(console)
+    client = publish_fixture._client(console, production_app=production_app)
     publish_fixture._login(client, "publisher.carla")
     source.blobs[str(receipts[0]["immutable_storage_locator"])] = b"gewijzigd na overzicht"
     helper_calls.clear()
@@ -160,10 +161,10 @@ def test_invalid_publish_is_still_refused_at_post(tmp_path, helper_calls):
 
 # --- Bronselectie ----------------------------------------------------------------
 
-def test_source_selection_overview_makes_zero_helper_calls_for_n_documents(tmp_path, helper_calls):
-    console, _accounts, receipts, _source = _documents(tmp_path)
+def test_source_selection_overview_makes_zero_helper_calls_for_n_documents(tmp_path, helper_calls, *, production_app, production_console):
+    console, _accounts, receipts, _source = _documents(tmp_path, production_console=production_console)
     _mark_formation_incomplete(console, [r["snapshot_id"] for r in receipts])
-    client = publish_fixture._client(console)
+    client = publish_fixture._client(console, production_app=production_app)
     publish_fixture._login(client, "researcher.anne")
     helper_calls.clear()
 
@@ -177,10 +178,10 @@ def test_source_selection_overview_makes_zero_helper_calls_for_n_documents(tmp_p
     assert helper_calls["snapshot_objects_deepcopy"] == 0
 
 
-def test_source_selection_never_shows_unchecked_formation_as_complete(tmp_path, helper_calls):
-    console, _accounts, receipts, _source = _documents(tmp_path)
+def test_source_selection_never_shows_unchecked_formation_as_complete(tmp_path, helper_calls, *, production_app, production_console):
+    console, _accounts, receipts, _source = _documents(tmp_path, production_console=production_console)
     _mark_formation_incomplete(console, [r["snapshot_id"] for r in receipts])
-    client = publish_fixture._client(console)
+    client = publish_fixture._client(console, production_app=production_app)
     publish_fixture._login(client, "researcher.anne")
 
     page = client.get("/source-selection")
@@ -190,10 +191,10 @@ def test_source_selection_never_shows_unchecked_formation_as_complete(tmp_path, 
     assert page.text.count(f"Status: {UNCHECKED}") == N_DOCUMENTS
 
 
-def test_source_selection_selected_document_runs_full_check_only_for_it(tmp_path, helper_calls):
-    console, _accounts, receipts, _source = _documents(tmp_path)
+def test_source_selection_selected_document_runs_full_check_only_for_it(tmp_path, helper_calls, *, production_app, production_console):
+    console, _accounts, receipts, _source = _documents(tmp_path, production_console=production_console)
     _mark_formation_incomplete(console, [r["snapshot_id"] for r in receipts])
-    client = publish_fixture._client(console)
+    client = publish_fixture._client(console, production_app=production_app)
     publish_fixture._login(client, "researcher.anne")
     helper_calls.clear()
 
@@ -208,12 +209,12 @@ def test_source_selection_selected_document_runs_full_check_only_for_it(tmp_path
 
 # --- timing/telling op representatieve fixture ------------------------------------
 
-def test_overview_cost_is_independent_of_document_count(tmp_path, helper_calls):
-    console, _accounts, receipts, _source = _documents(tmp_path, count=6)
+def test_overview_cost_is_independent_of_document_count(tmp_path, helper_calls, *, production_app, production_console):
+    console, _accounts, receipts, _source = _documents(tmp_path, count=6, production_console=production_console)
     _mark_formation_incomplete(console, [r["snapshot_id"] for r in receipts[::2]])
-    publisher = publish_fixture._client(console)
+    publisher = publish_fixture._client(console, production_app=production_app)
     publish_fixture._login(publisher, "publisher.carla")
-    researcher = publish_fixture._client(console)
+    researcher = publish_fixture._client(console, production_app=production_app)
     publish_fixture._login(researcher, "researcher.anne")
     helper_calls.clear()
 
@@ -231,11 +232,11 @@ def test_overview_cost_is_independent_of_document_count(tmp_path, helper_calls):
     assert elapsed < 10
 
 
-def test_stale_selected_check_is_recomputed_on_every_request(tmp_path, helper_calls):
+def test_stale_selected_check_is_recomputed_on_every_request(tmp_path, helper_calls, *, production_app, production_console):
     """Opslag stale/concurrent: een eerder gereed resultaat MAG NIET blijven hangen."""
-    console, accounts, receipts, source = _documents(tmp_path, count=1)
+    console, accounts, receipts, source = _documents(tmp_path, count=1, production_console=production_console)
     publish_fixture._complete_review(console, accounts, receipts[0])
-    client = publish_fixture._client(console)
+    client = publish_fixture._client(console, production_app=production_app)
     publish_fixture._login(client, "publisher.carla")
     sid = receipts[0]["snapshot_id"]
     assert 'data-publication-state="ready"' in client.get("/publish", params={"document": sid}).text
