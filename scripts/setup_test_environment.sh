@@ -5,13 +5,14 @@ if [ ! -x "${PGBIN:-/usr/lib/postgresql/16/bin}/initdb" ]; then
   # Debian package post-install hooks must not start a service during setup.
   policy=/usr/sbin/policy-rc.d
   saved_policy=$(mktemp -d)
-  if [ -e "$policy" ]; then cp -a "$policy" "$saved_policy/original"; fi
+  if [ -e "$policy" ] || [ -L "$policy" ]; then cp -a "$policy" "$saved_policy/original"; fi
   restore_policy() {
     rm -f "$policy"
-    if [ -e "$saved_policy/original" ]; then mv "$saved_policy/original" "$policy"; fi
+    if [ -e "$saved_policy/original" ] || [ -L "$saved_policy/original" ]; then mv "$saved_policy/original" "$policy"; fi
     rmdir "$saved_policy"
   }
   trap restore_policy EXIT
+  rm -f "$policy"
   printf '#!/bin/sh\nexit 101\n' > "$policy"
   chmod +x "$policy"
   apt-get update
