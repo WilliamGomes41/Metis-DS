@@ -25,6 +25,50 @@ def _range(values):
     return f"ongeveer {_minutes(values[0])}–{_minutes(values[1])} (onzeker)"
 
 
+def deadline_forecast_html(report, esc):
+    """No alert or action button: this is an explicitly unvalidated shadow view."""
+    text = '<section id="deadline-schaduwprognose"><h3>Deadline: schaduwprognose</h3>'
+    if report['status'] == 'shadow_only':
+        text += '<p>Bandbreedte vanaf aanvraag: ' + esc(_range(report['range_seconds']))
+        text += ' op basis van ' + str(report['sample_count']) + ' eerdere vergelijkbare pogingen.</p>'
+        text += ('<p>De bandbreedte raakt de opgeslagen tijdslimiet. De poging kan de tijdslimiet bereiken.</p>'
+                 if report['pressure'] else '<p>De bandbreedte ligt binnen de opgeslagen tijdslimiet; dit bewijst geen veiligheid.</p>')
+        text += '<p>Resterend tot de opgeslagen grens: ' + esc(_minutes(report['deadline_remaining_seconds'])) + '.</p>'
+    else:
+        reasons = {'no_running_ingest': 'Geen actieve eerste bronverwerking.',
+                   'insufficient_comparable_history': 'Te weinig vergelijkbare metingen.',
+                   'insufficient_chronological_evaluation': 'Te weinig chronologisch toetsbare eerdere schattingen.',
+                   'noncompletion_bias': 'Eerdere mislukte of toen nog onvoltooide pogingen maken de schatting onbetrouwbaar.',
+                   'observed_range_exhausted': 'De verwerking duurt al langer dan de eerdere bandbreedte.',
+                   'stored_deadline_elapsed': 'De opgeslagen tijdslimiet is verstreken; controleer de actuele verwerkingsstatus.'}
+        text += '<p>HOLD — ' + esc(reasons.get(report['reason'], 'Onvoldoende betrouwbaar of begrensd meetbewijs.')) + '</p>'
+    evidence = report['evidence']
+    text += (f'<p>Meetbasis: {evidence["retained"]} bruikbare pogingrecords onderzocht, '
+             f'{evidence["invalid"]} ongeldige records; voor de huidige schatting '
+             f'{evidence["censored"]} toen nog onvoltooid en {evidence["failed"]} niet geslaagd. '
+             f'Buiten beschouwing: {evidence["other_route_or_size"]} met andere route of grootte, '
+             f'{evidence["other_configuration"]} met andere configuratie, '
+             f'{evidence["outside_lookback"]} ouder dan 30 dagen. '
+             'Ontbrekende historie is niet vast te stellen.</p>')
+    if evidence['over_document_limit'] or evidence['over_attempt_limit'] or evidence['unexamined_at_least']:
+        text += (f'<p>Analyse gestopt op een limiet: {evidence["over_document_limit"]} documenten of '
+                 f'{evidence["over_attempt_limit"]} pogingen boven de grens; '
+                 f'minstens {evidence["unexamined_at_least"]} verdere ingestrecords niet onderzocht. Geen prognose.</p>')
+    counts = report['evaluation']
+    if counts is not None:
+        text += (f'<p>Chronologische toets van technisch geslaagde pogingen: {counts["scored"]} getoetst, '
+                 f'{counts["abstained"]} zonder schatting; {counts["above_range"]} boven en {counts["below_range"]} onder de bandbreedte. '
+                 f'Van {counts["deadline_compared"]} grensvergelijkingen: {counts["false_pressure"]} onterechte grenssignalen, '
+                 f'{counts["missed_boundary"]} gemiste grensoverschrijdingen.</p>')
+    text += ('<p>Grove tijdschatting inclusief wachten, geen kansberekening of bewijs van volledige bronverwerking. '
+             'Historie kan ontbreken; uitval en herstel zijn hiermee niet gevalideerd. Voorspellende nauwkeurigheid '
+             'voor 5 minuten, 15 minuten, 1 uur, 6 uur en 24 uur is niet aangetoond.</p>'
+             '<p>Onderzoek bij druk de actuele status, dispatcher en afhankelijkheden via de bestaande diagnose. '
+             'Besluit- en interventietijd zijn onbekend; voldoende handelingsruimte is niet aangetoond. '
+             'Deze weergave voert geen ingreep uit.</p></section>')
+    return text
+
+
 def _blockage_html(report, esc):
     stages = {'source_formation':'Bronverwerking', 'publication_conditions':'Publicatievoorwaarden',
               'identity_verification':'Eerst controleren of het bewijs bij hetzelfde document hoort',
@@ -102,6 +146,11 @@ def install(app, console, require, page, nav, esc):
             # Volledige controle alleen voor het expliciet gekozen document (D-PERF-2).
             result = projection(console, actor_id=actor['account_id'], snapshot_id=sid, documents=documents,
                                 deep=bool(document) and sid == document, observations=observations)
+            shadow = ''
+            if document and sid == document:
+                from src.processing_forecast_v1 import deadline_forecast
+                # Reuse this request's loaded envelopes, scoped to this actor.
+                shadow = deadline_forecast_html(deadline_forecast(envelope, visible), esc)
             action = ''
             if result['state'] in {'bezig', 'wacht op uitvoering'}:
                 action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Voortgang bekijken</a>'
@@ -161,15 +210,17 @@ def install(app, console, require, page, nav, esc):
                          f'<p role="status">Status: {esc(result["state"])}</p>'
                          f'<p>Geschatte verwerkingstijd: {esc(_range(result["estimate"]["range_seconds"]))} '
                          f'{esc(result["estimate"]["basis"])} ({result["estimate"]["sample_count"]} metingen)</p>'
-                         f'{progress}{summary}{action}{review}{diagnosis_link}</article>')
+                         f'{progress}{summary}{shadow}{action}{review}{diagnosis_link}</article>')
         notice = '<div class="banner ok">Document veilig ontvangen. Start bronselectie wanneer je wilt.</div>' if request.query_params.get('received') == 'yes' else ''
         # Only a selected running document is polled. Every refresh reads the
         # durable authority; no browser state can start another attempt.
         script = '<script>setTimeout(function(){ window.location.reload(); }, 5000);</script>' if running_selected else ''
         script += '<script>document.querySelectorAll("form[action=\\"/source-selection/start\\"]").forEach(function(form){form.addEventListener("submit",function(event){if(form.dataset.submitting){event.preventDefault();return;}form.dataset.submitting="yes";form.querySelector("button").disabled=true;});});</script>'
-        return page(nav(actor, 'selection') + '<section class="room" id="source-selection"><h1>Bronselectie</h1>' + notice
+        # Per-actor progress and shadow timing: never cache.
+        return HTMLResponse(page(nav(actor, 'selection') + '<section class="room" id="source-selection"><h1>Bronselectie</h1>' + notice
                     + '<form method="get"><label>Document<select name="document">' + options + '</select></label><button>Document selecteren</button></form>'
-                    + ''.join(sorted(cards, key=lambda card: 'data-selected="true"' not in card)) + '</section>' + script)
+                    + ''.join(sorted(cards, key=lambda card: 'data-selected="true"' not in card)) + '</section>' + script),
+                    headers={'Cache-Control': 'no-store'})
 
     @app.get('/inzicht/document/verwerkingsspoor')
     def processing_trace_export(request: Request, document: str = ''):
