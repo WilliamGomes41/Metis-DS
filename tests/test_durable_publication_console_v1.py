@@ -130,7 +130,14 @@ class MemoryCanonicalStore:
         return rows
 
 
-def _ready_console(tmp_path: Path, durable: MemoryCanonicalStore) -> tuple[DurablePublicationConsole, dict[str, dict], dict]:
+def _ready_console(tmp_path: Path, *, production_console, isolated=False):
+    console = production_console(root=tmp_path, source_store=tmp_path / "sources" / "private",
+                                 runtime=tmp_path / "runtime", immutable_source_store=MemorySourceStore(),
+                                 processing_binder=lambda console: None, isolated=isolated)
+    return _prepare_console(console)
+
+
+def _file_ready_console(tmp_path: Path, durable: MemoryCanonicalStore) -> tuple[DurablePublicationConsole, dict[str, dict], dict]:
     source = MemorySourceStore()
     console = DurablePublicationConsole(
         root=tmp_path,
@@ -139,6 +146,10 @@ def _ready_console(tmp_path: Path, durable: MemoryCanonicalStore) -> tuple[Durab
         immutable_source_store=source,
         canonical_publication_store=durable,  # type: ignore[arg-type]
     )
+    return _prepare_console(console)
+
+
+def _prepare_console(console):
     accounts = {
         "researcher": console.create_account(
             username="researcher.anne", password=TEST_PASSWORD, roles=("researcher", "reviewer")
@@ -206,10 +217,11 @@ def _ready_console(tmp_path: Path, durable: MemoryCanonicalStore) -> tuple[Durab
     return console, accounts, receipt
 
 
+@pytest.mark.file_topology
 def test_durable_commit_precedes_every_local_publication_artifact(tmp_path: Path) -> None:
     observed: dict[str, Any] = {}
     durable = MemoryCanonicalStore()
-    console, accounts, receipt = _ready_console(tmp_path, durable)
+    console, accounts, receipt = _file_ready_console(tmp_path, durable)
     snapshot_id = receipt["snapshot_id"]
 
     def observe(_payload: dict[str, Any]) -> None:
@@ -234,9 +246,11 @@ def test_durable_commit_precedes_every_local_publication_artifact(tmp_path: Path
     }
 
 
+
+@pytest.mark.file_topology
 def test_successful_publication_is_persisted_then_projected_from_authority(tmp_path: Path) -> None:
     durable = MemoryCanonicalStore()
-    console, accounts, receipt = _ready_console(tmp_path, durable)
+    console, accounts, receipt = _file_ready_console(tmp_path, durable)
 
     result = console.publish(
         actor_id=accounts["publisher"]["account_id"], snapshot_id=receipt["snapshot_id"]
@@ -259,9 +273,11 @@ def test_successful_publication_is_persisted_then_projected_from_authority(tmp_p
     assert projection[0]["metadata"]["snapshot_id"] == receipt["snapshot_id"]
 
 
+
+@pytest.mark.file_topology
 def test_durable_failure_creates_no_local_publication_state(tmp_path: Path) -> None:
     durable = MemoryCanonicalStore(fail=True)
-    console, accounts, receipt = _ready_console(tmp_path, durable)
+    console, accounts, receipt = _file_ready_console(tmp_path, durable)
     snapshot_id = receipt["snapshot_id"]
 
     with pytest.raises(Exception, match="simulated_durable_failure"):
@@ -275,11 +291,13 @@ def test_durable_failure_creates_no_local_publication_state(tmp_path: Path) -> N
     assert durable.releases == {}
 
 
+
+@pytest.mark.file_topology
 def test_local_copy_failure_does_not_undo_durable_release_and_retry_reconciles(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     durable = MemoryCanonicalStore()
-    console, accounts, receipt = _ready_console(tmp_path, durable)
+    console, accounts, receipt = _file_ready_console(tmp_path, durable)
     snapshot_id = receipt["snapshot_id"]
 
     import src.durable_publication_console_v1 as module
@@ -310,9 +328,11 @@ def test_local_copy_failure_does_not_undo_durable_release_and_retry_reconciles(
     assert (console.runtime / "published_projection.jsonl").is_file()
 
 
+
+@pytest.mark.file_topology
 def test_startup_reconciliation_flows_from_authority_to_local_copy(tmp_path: Path) -> None:
     durable = MemoryCanonicalStore()
-    console, accounts, receipt = _ready_console(tmp_path, durable)
+    console, accounts, receipt = _file_ready_console(tmp_path, durable)
     result = console.publish(
         actor_id=accounts["publisher"]["account_id"], snapshot_id=receipt["snapshot_id"]
     )
@@ -345,6 +365,7 @@ def test_startup_reconciliation_flows_from_authority_to_local_copy(tmp_path: Pat
     assert again == {"checked": 1, "reconciled": 1}
     ledger = (restarted.runtime / "review_ledger.jsonl").read_text(encoding="utf-8")
     assert ledger.count(result["release_id"]) == 1
+
 
 
 def test_registry_replay_never_moves_newer_pointer_backwards() -> None:

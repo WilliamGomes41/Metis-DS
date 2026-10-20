@@ -133,18 +133,24 @@ def postgres_template(pytestconfig):
 
 
 @pytest.fixture
-def production_console(tmp_path, complete_postgres):
-    """The same composition root as production, backed by this test's database."""
+def production_console(tmp_path, complete_postgres, postgres_template):
+    """The production composition, with explicit independent authorities for comparisons."""
+    from contextlib import ExitStack
+    from tests.postgres_support import database
     from tests.production_support import production_application
     apps = {}
-
-    def factory(root=None, **options):
-        app = production_application(root or tmp_path, complete_postgres, **options)
-        console = app.state.operations_kernel
-        apps[console] = app
-        return console
-    factory.apps = apps
-    return factory
+    with ExitStack() as resources:
+        def factory(root=None, *, isolated=False, **options):
+            config = complete_postgres
+            if isolated:
+                dsn, template = postgres_template
+                config = resources.enter_context(database(dsn, template=template))
+            app = production_application(root or tmp_path, config, **options)
+            console = app.state.operations_kernel
+            apps[console] = app
+            return console
+        factory.apps = apps
+        yield factory
 
 
 @pytest.fixture

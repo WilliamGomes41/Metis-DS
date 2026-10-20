@@ -632,5 +632,45 @@
     "full_suite_status": "pending",
     "ci_status": "not run: push approval pending",
     "local_preparation": "portion16-local-preparation.json"
+  },
+  {
+    "batch": "17",
+    "base": "4da1b83",
+    "commit": "codex/d6a-17-publication-authority",
+    "test_files": [
+      "tests/test_durable_publication_console_v1.py",
+      "tests/test_publication_evidence_v1.py",
+      "tests/test_publish_refusal_audit_v1.py",
+      "tests/test_console_publication_c5.py",
+      "tests/test_published_working_revision_immutable_2b_local.py",
+      "tests/test_azure_blob_publication_authority_v1.py",
+      "tests/test_g2_azure_blob_adapter.py",
+      "tests/test_d6a_postgres_support.py"
+    ],
+    "executed_unique_cases": 101,
+    "failures": 0,
+    "skipped": 0,
+    "added_cases": 1,
+    "verification": "Publication evidence/refusal/Blob/review-seal cases use real PG. Exact recovery-table comparison proves observation does not mutate workflow/canonical/identity/API state. File-copy and refusal-file behavior explicitly file_topology. Independent production-factory copy proves account/session isolation and restart.",
+    "junit": [
+      {
+        "file": "d6a17-pub.xml",
+        "sha256": "22eae62ff452e3573c79cc1d33f639453aa04bc0ee62c8b2492d680633d1711d"
+      },
+      {
+        "file": "d6a17-other.xml",
+        "sha256": "5409da621fd34fc5f445b6542d4affded901228a2cc9cba864897051dedf3d63"
+      },
+      {
+        "file": "d6a17-fixed.xml",
+        "sha256": "fee0eae641e42acbc374b9967895dfd0081f91d7b05b49ad8bb70d6285ccbc0b"
+      },
+      {
+        "file": "d6a17-final.xml",
+        "sha256": "520a316cb0f00577e44aa893cecc59f1d8ffdcaa326fe30bc7265e0674efaf28"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending"
   }
 ]
