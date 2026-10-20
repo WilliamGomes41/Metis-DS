@@ -52,8 +52,8 @@ def _load_preflight():
     return module
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -123,8 +123,8 @@ def test_ingest_limits_module_maps_to_beschikbaarheid() -> None:
     assert "src/ingest_limits_v1.py" in item["paths"]
 
 
-def test_ingest_work_does_not_block_event_loop(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_ingest_work_does_not_block_event_loop(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     started = threading.Event()
     original = console.ingest
@@ -135,7 +135,7 @@ def test_ingest_work_does_not_block_event_loop(tmp_path: Path) -> None:
         return original(**kwargs)
 
     console.ingest = slow_ingest  # type: ignore[method-assign]
-    app = create_console_app(console)
+    app = production_app(console)
 
     async def _run() -> None:
         transport = ASGITransport(app=app)
@@ -169,15 +169,16 @@ def test_ingest_work_does_not_block_event_loop(tmp_path: Path) -> None:
     asyncio.run(_run())
 
 
-def test_oversize_upload_and_download_fail_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_oversize_upload_and_download_fail_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, production_app, production_console) -> None:
     monkeypatch.setenv(ENV_INGEST_MAX_BYTES, "64")
-    console = _console(tmp_path)
+    pdf_payload = _tiny_pdf(tmp_path)
+    monkeypatch.setattr("src.operations_console_v1.default_url_fetcher",
+                        lambda _url: (pdf_payload, "application/pdf", "payload.bin"))
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     oversize = b"<html><body>" + (b"x" * 200) + b"</body></html>"
-    pdf_payload = _tiny_pdf(tmp_path)
     assert len(pdf_payload) > 64
-    console.url_fetcher = lambda _url: (pdf_payload, "application/pdf", "payload.bin")
-    app = create_console_app(console)
+    app = production_app(console)
     url = "https://example.test/payload.bin"
 
     async def _run() -> None:
@@ -208,8 +209,8 @@ def test_oversize_upload_and_download_fail_closed(tmp_path: Path, monkeypatch: p
     assert console.list_envelopes() == []
 
 
-def test_two_users_overlap_ingest_and_other_request(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_two_users_overlap_ingest_and_other_request(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     started = threading.Event()
     original = console.ingest
@@ -220,7 +221,7 @@ def test_two_users_overlap_ingest_and_other_request(tmp_path: Path) -> None:
         return original(**kwargs)
 
     console.ingest = slow_ingest  # type: ignore[method-assign]
-    app = create_console_app(console)
+    app = production_app(console)
 
     async def _run() -> None:
         transport = ASGITransport(app=app)

@@ -59,8 +59,8 @@ class Page(HTMLParser):
 
 
 @pytest.fixture
-def review_system(tmp_path):
-    console = ProportionateReviewConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+def review_system(tmp_path, *, production_app, production_console):
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     researcher = console.create_account(username="anne", password="anne-secret", roles=("researcher",))
     reviewer = console.create_account(username="bert", password="bert-secret", roles=("reviewer",))
     from tests.semantic_fixture_support import bind_fixture_selections
@@ -76,8 +76,7 @@ def review_system(tmp_path):
     sid = receipt["snapshot_id"]
     ids = [obj["object_id"] for obj in normal_risk_batch_queue(console.snapshot_objects(sid), review_path="richtlijn", bindings=console.object_review_bindings(sid), fragments=console.review_source_fragments(sid))]
     assert len(ids) == 2
-    app = create_console_app(console)
-    install_proportionate_review_routes(app, console)
+    app = production_app(console)
     client = TestClient(app)
     client.post("/login", data={"username": "bert", "password": "bert-secret"})
     return console, client, sid, reviewer["account_id"], ids
@@ -92,7 +91,9 @@ def test_real_page_links_to_cards_sources_and_writes_exact_object_bindings(revie
     for oid in ids:
         card = f"/review?document={sid}&object={oid}&task=batch"
         source = f"/review/bronpassage?document={sid}&object={oid}"
-        assert f"{card}#classification-{oid}" in page.links and source in page.links
+        assert f"{card}#classification-{oid}" in page.links
+        assert source not in page.links  # Production removes this duplicate door.
+        assert source in client.get(card).text.replace("&amp;", "&")
         assert client.get(card).status_code == 200
         assert client.get(source).status_code == 200
     response = client.post(form["action"], data={**form["fields"], "object_ids": ids}, follow_redirects=False)
@@ -101,11 +102,11 @@ def test_real_page_links_to_cards_sources_and_writes_exact_object_bindings(revie
     for oid in ids:
         obj = objects[oid]
         assert obj["governance"]["validation_status"] == "approved"
-        binding = next(row for row in console._bindings[sid] if row["object_id"] == oid)
+        binding = next(row for row in console.object_review_bindings(sid) if row["object_id"] == oid)
         assert binding["object_version"] == obj["object_version"]
         assert binding["canonical_object_hash"] == compute_canonical_object_hash(obj)
         assert binding["reviewer_id"] == actor
-    assert len(console._bindings[sid]) == 2
+    assert len(console.object_review_bindings(sid)) == 2
 
 
 def test_real_human_reclassification_cannot_be_batch_overwritten(review_system):
@@ -115,7 +116,7 @@ def test_real_human_reclassification_cannot_be_batch_overwritten(review_system):
         console.batch_review_normal_risk(actor_id=actor, snapshot_id=sid, object_ids=ids, expected_revision=console.objects_revision(sid))
     current = next(obj for obj in console.snapshot_objects(sid) if obj["object_id"] == ids[0])
     assert current["confirmed_object_type"] == "recommendation"
-    assert not console._bindings.get(sid)
+    assert not console.object_review_bindings(sid)
 
 
 def test_real_get_pins_text_and_revision_together_and_preserves_conflict_selection(review_system, monkeypatch):
@@ -127,15 +128,23 @@ def test_real_get_pins_text_and_revision_together_and_preserves_conflict_selecti
     spans = (deepcopy(source_objects[ids[0]]["metadata"]["semantic_passage"]["spans"])
              + deepcopy(source_objects[ids[1]]["metadata"]["semantic_passage"]["spans"]))
 
+    from tests.production_support import restart_production
+    writer = restart_production(console)
     def concurrent_edit(snapshot_id):
         snapshot = original_read(snapshot_id)
         monkeypatch.setattr(console, "snapshot_objects_and_revision", original_read)
-        console.review_object(actor_id=actor, snapshot_id=sid, object_id=ids[0], decision="revise", comment="Correctie")
-        console.correct_object(actor_id=actor, snapshot_id=sid, object_id=ids[0],
-            materialisation_decision={"decision_kind":"semantic_selection", "selection_origin":"proposal_selected",
-                                     "spans":spans, "source_text":new_text}, patch={
-            "reason": "Correctie", "operations": [{"op": "set", "path": "content.clean_text", "value": new_text}],
-        })
+        errors = []
+        def edit():
+            try:
+                writer.submit_review_resolution(actor_id=actor, snapshot_id=sid, object_id=ids[0],
+                    expected_revision=writer.objects_revision(sid), suitability='samenvoegen',
+                    comment='Concurrent source-bound merge.', repair_kind='merge_objects', merge_object_ids=[ids[1]])
+            except BaseException as exc:
+                errors.append(exc)
+        thread = threading.Thread(target=edit)
+        thread.start()
+        thread.join(timeout=10)
+        assert not thread.is_alive() and not errors
         return snapshot
 
     monkeypatch.setattr(console, "snapshot_objects_and_revision", concurrent_edit)
@@ -151,44 +160,63 @@ def test_real_get_pins_text_and_revision_together_and_preserves_conflict_selecti
     corrected = next(o for o in console.snapshot_objects(sid) if o['object_id'] == ids[0])
     assert admission_of(corrected)["gate_result"] in {"allowed", "blocked"}
     assert new_text in client.get('/review', params={'document':sid, 'object':ids[0]}).text
-    assert not console._bindings.get(sid)
+    assert not console.object_review_bindings(sid)
     assert console.snapshot_objects_and_revision(sid)[1] == console.objects_revision(sid)
 
 
-def test_concurrent_writer_between_members_is_not_adopted_as_batch_revision(review_system, monkeypatch):
+def test_concurrent_writer_between_members_waits_for_atomic_pg_batch(review_system, monkeypatch):
     console, client, sid, actor, ids = review_system
     original_review = console.review_object
-    errors = []
-
+    from tests.production_support import restart_production
+    writer = restart_production(console)
+    errors, threads = [], []
+    started, finished = threading.Event(), threading.Event()
     def review_then_other_writer(**kwargs):
         rows = original_review(**kwargs)
-        if kwargs["object_id"] == ids[0]:
+        if kwargs['object_id'] == ids[0]:
             def other_writer():
+                started.set()
                 try:
-                    console.confirm_object_type(actor_id=actor, snapshot_id=sid, object_id=ids[1], confirmed_object_type="recommendation")
-                except Exception as exc:
+                    writer.confirm_object_type(actor_id=actor, snapshot_id=sid, object_id=ids[1],
+                                               confirmed_object_type='recommendation')
+                except BaseException as exc:
                     errors.append(exc)
+                finally:
+                    finished.set()
             thread = threading.Thread(target=other_writer)
+            threads.append(thread)
             thread.start()
+            assert started.wait(2)
+            assert not finished.wait(0.05), 'The independent writer must wait for the batch transaction'
+        return rows
+    monkeypatch.setattr(console, 'review_object', review_then_other_writer)
+    revision = console.objects_revision(sid)
+    try:
+        console.batch_review_normal_risk(actor_id=actor, snapshot_id=sid, object_ids=ids, expected_revision=revision)
+    finally:
+        for thread in threads:
             thread.join(timeout=10)
             assert not thread.is_alive()
-            assert not errors
-        return rows
-
-    monkeypatch.setattr(console, "review_object", review_then_other_writer)
-    with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
-        console.batch_review_normal_risk(actor_id=actor, snapshot_id=sid, object_ids=ids, expected_revision=console.objects_revision(sid))
-    current = {obj["object_id"]: obj for obj in console.snapshot_objects(sid)}
-    assert current[ids[1]]["confirmed_object_type"] == "recommendation"
-    assert current[ids[1]]["governance"]["validation_status"] == "needs_review"
-    assert {row["object_id"] for row in console._bindings[sid]} == {ids[0]}
+    assert finished.is_set() and len(errors) == 1
+    assert isinstance(errors[0], ConsoleError) and errors[0].code == 'snapshot_object_write_conflict'
+    committed = {obj['object_id']: obj for obj in console.snapshot_objects(sid)}
+    assert all(committed[oid]['governance']['validation_status'] == 'approved' for oid in ids)
+    assert {row['object_id'] for row in console.object_review_bindings(sid) if row.get('valid')} == set(ids)
+    writer = restart_production(console)
+    writer.confirm_object_type(actor_id=actor, snapshot_id=sid, object_id=ids[1],
+                               confirmed_object_type='recommendation', expected_revision=writer.objects_revision(sid))
+    current = {obj['object_id']: obj for obj in writer.snapshot_objects(sid)}
+    assert current[ids[0]]['governance']['validation_status'] == 'approved'
+    assert current[ids[1]]['confirmed_object_type'] == 'recommendation'
+    assert current[ids[1]]['governance']['validation_status'] == 'needs_review'
+    assert {row['object_id'] for row in writer.object_review_bindings(sid) if row.get('valid')} == {ids[0]}
 
 
 def test_http_batch_requires_the_displayed_revision(review_system):
     console, client, sid, actor, ids = review_system
     response = client.post("/review/normal-risk/batch-confirm", data={"snapshot_id": sid, "object_ids": ids})
     assert response.status_code == 400
-    assert not console._bindings.get(sid)
+    assert not console.object_review_bindings(sid)
 
 
 def test_two_thousand_objects_need_one_selection_and_confirmation_per_twenty(review_system, monkeypatch):
@@ -227,55 +255,56 @@ def test_real_uncertain_content_keeps_an_individual_review_route(review_system):
         assert f'value="{action}"' in response.text
 
 
-def test_http_partial_batch_conflict_reports_committed_work_truthfully(
+def test_http_atomic_batch_and_serialized_writer_report_current_work_truthfully(
     review_system, monkeypatch
 ):
     console, client, sid, actor, ids = review_system
     original_review = console.review_object
-    errors = []
-
+    from tests.production_support import restart_production
+    writer = restart_production(console)
+    errors, threads = [], []
+    started, finished = threading.Event(), threading.Event()
     def review_then_other_writer(**kwargs):
         rows = original_review(**kwargs)
-        if kwargs["object_id"] == ids[0]:
+        if kwargs['object_id'] == ids[0]:
             def other_writer():
+                started.set()
                 try:
-                    console.confirm_object_type(
-                        actor_id=actor,
-                        snapshot_id=sid,
-                        object_id=ids[1],
-                        confirmed_object_type="recommendation",
-                    )
-                except Exception as exc:
+                    writer.confirm_object_type(actor_id=actor, snapshot_id=sid, object_id=ids[1],
+                                               confirmed_object_type='recommendation')
+                except BaseException as exc:
                     errors.append(exc)
-
+                finally:
+                    finished.set()
             thread = threading.Thread(target=other_writer)
+            threads.append(thread)
             thread.start()
+            assert started.wait(2)
+            assert not finished.wait(0.05), 'The independent writer must wait for the batch transaction'
+        return rows
+    monkeypatch.setattr(console, 'review_object', review_then_other_writer)
+    revision = console.objects_revision(sid)
+    try:
+        response = client.post('/review/normal-risk/batch-confirm', data={
+            'snapshot_id': sid, 'snapshot_revision': revision, 'object_ids': ids}, follow_redirects=False)
+        assert response.status_code == 303
+        assert 'data-partial-batch-conflict' not in response.text
+    finally:
+        for thread in threads:
             thread.join(timeout=10)
             assert not thread.is_alive()
-            assert not errors
-        return rows
-
-    monkeypatch.setattr(console, "review_object", review_then_other_writer)
-    revision = console.objects_revision(sid)
-    response = client.post(
-        "/review/normal-risk/batch-confirm",
-        data={
-            "snapshot_id": sid,
-            "snapshot_revision": revision,
-            "object_ids": ids,
-        },
-    )
-
-    assert response.status_code == 409
-    assert "data-partial-batch-conflict" in response.text
-    assert "1 geselecteerde passage is al opgeslagen" in response.text
-    assert "Deze beoordeling is niet opgeslagen" not in response.text
-
-    current = {obj["object_id"]: obj for obj in console.snapshot_objects(sid)}
-    assert current[ids[0]]["governance"]["validation_status"] == "approved"
-    assert current[ids[1]]["confirmed_object_type"] == "recommendation"
-    assert {row["object_id"] for row in console._bindings[sid]} == {ids[0]}
-
-    retry = Page(response.text)
-    assert all(ids[0] not in form["checked"] for form in retry.batches)
-    assert all(ids[1] not in form["checked"] for form in retry.batches)
+    assert finished.is_set() and len(errors) == 1
+    assert isinstance(errors[0], ConsoleError) and errors[0].code == 'snapshot_object_write_conflict'
+    committed = {obj['object_id']: obj for obj in console.snapshot_objects(sid)}
+    assert all(committed[oid]['governance']['validation_status'] == 'approved' for oid in ids)
+    assert {row['object_id'] for row in console.object_review_bindings(sid) if row.get('valid')} == set(ids)
+    writer = restart_production(console)
+    writer.confirm_object_type(actor_id=actor, snapshot_id=sid, object_id=ids[1],
+                               confirmed_object_type='recommendation', expected_revision=writer.objects_revision(sid))
+    current = {obj['object_id']: obj for obj in writer.snapshot_objects(sid)}
+    assert current[ids[0]]['governance']['validation_status'] == 'approved'
+    assert current[ids[1]]['confirmed_object_type'] == 'recommendation'
+    assert current[ids[1]]['governance']['validation_status'] == 'needs_review'
+    assert {row['object_id'] for row in writer.object_review_bindings(sid) if row.get('valid')} == {ids[0]}
+    retry = Page(client.get('/review', params={'document':sid, 'task':'batch'}).text)
+    assert all(not form['checked'] for form in retry.batches)

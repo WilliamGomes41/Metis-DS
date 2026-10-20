@@ -51,8 +51,8 @@ INCOMPLETE_COMPARISON = "Deze methode is vaker effectief."
 FALSE_RECOMMENDATION = "Urine-incontinentie komt bij ouderen vaak voor in Nederland."
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -590,8 +590,8 @@ def test_legacy_objects_without_selection_do_not_gain_content_duty() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_ingest_fixture_gates_named_regressions_and_keeps_adviseert(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_ingest_fixture_gates_named_regressions_and_keeps_adviseert(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
     objects = [
@@ -658,8 +658,8 @@ def test_ingest_fixture_gates_named_regressions_and_keeps_adviseert(tmp_path: Pa
     assert any("recente fractuur" in text for text in blocked_texts)
     assert not any(obj in ordinary for obj in blocked)
 
-    client = TestClient(create_console_app(console))
-    client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
+    client = TestClient(production_app(console))
+    client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     review = client.get(
         f"/review?document={receipt['snapshot_id']}&task=individual"
     ).text
@@ -672,8 +672,8 @@ def test_ingest_fixture_gates_named_regressions_and_keeps_adviseert(tmp_path: Pa
     assert "review-blocked-audit" in control
     assert DJG not in control.split("review-blocked-audit", 1)[-1]
 
-def test_boom_ingest_does_not_apply_richtlijn_contracts(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_boom_ingest_does_not_apply_richtlijn_contracts(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_boom(console, accounts)
     objects = [
@@ -766,8 +766,8 @@ def test_source_text_exact_comes_from_raw_fragment_not_only_clean_text() -> None
     assert objects == before
 
 
-def test_blocked_candidate_cannot_be_confirmed_or_approved(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_blocked_candidate_cannot_be_confirmed_or_approved(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
     blocked = _find_by_text(
@@ -802,8 +802,8 @@ def test_blocked_candidate_cannot_be_confirmed_or_approved(tmp_path: Path) -> No
     assert row.get("confirmed_object_type") != "exception"
     assert _admission(row).get("gate_result") == GATE_BLOCKED
 
-def test_correct_object_reruns_admission_gate(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_correct_object_reruns_admission_gate(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
     adviseert = _find_by_text(
@@ -820,7 +820,7 @@ def test_correct_object_reruns_admission_gate(tmp_path: Path) -> None:
         proposed_correction=ONE_WORD,
     )
     before = console._load_objects(receipt["snapshot_id"], remember=False)
-    with pytest.raises(ConsoleError, match="materialisation_text_mismatch"):
+    with pytest.raises(ConsoleError, match="correction_not_source_bound"):
         revised = console.correct_object(
             actor_id=accounts["researcher"]["account_id"],
             snapshot_id=receipt["snapshot_id"],
@@ -836,8 +836,8 @@ def test_correct_object_reruns_admission_gate(tmp_path: Path) -> None:
     assert console._load_objects(receipt["snapshot_id"], remember=False) == before
 
 
-def test_correct_object_can_readmit_a_source_invalid_revision(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_correct_object_can_readmit_a_source_invalid_revision(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
     adviseert = _find_by_text(
@@ -846,56 +846,36 @@ def test_correct_object_can_readmit_a_source_invalid_revision(tmp_path: Path) ->
     )
     assert _admission(adviseert)["gate_result"] == GATE_ALLOWED
 
-    console.review_object(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=adviseert["object_id"],
-        decision="revise",
-        comment="Maak deze kandidaat tijdelijk ongeldig.",
-        proposed_correction=ONE_WORD,
-    )
     # Explicit historical corruption fixture: the production command must no
     # longer create this inconsistent predecessor.
     from copy import deepcopy
     from src.integrity_kernel import stamp_canonical_hashes
     from tests.semantic_fixture_support import install_fixture_history
     rows = console._load_objects(receipt["snapshot_id"])
-    blocked = next(row for row in rows if row["object_id"] == adviseert["object_id"])
+    current = console._current_object(receipt["snapshot_id"], adviseert["object_id"])
+    blocked = next(row for row in rows if row["object_id"] == current["object_id"] and row["object_version"] == current["object_version"])
     original_selection = deepcopy(blocked["metadata"]["semantic_passage"]["spans"])
     blocked["content"].update(clean_text=ONE_WORD, raw_text=ONE_WORD)
     blocked["metadata"].pop("admission", None)
     stamp_canonical_hashes(blocked)
     install_fixture_history(console, receipt["snapshot_id"], rows)
 
-    console.review_object(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=blocked["object_id"],
-        decision="revise",
-        comment="Herstel de bronletterlijke aanbeveling.",
-        proposed_correction=ADVISEERT,
-    )
-    revised = console.correct_object(
-        actor_id=accounts["researcher"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=blocked["object_id"],
-        materialisation_decision={"decision_kind": "semantic_selection", "selection_origin": "proposal_selected",
-                                  "spans": original_selection, "source_text": ADVISEERT},
-        patch={
-            "reason": "restore source-bound recommendation",
-            "operations": [
-                {"op": "set", "path": "content.clean_text", "value": ADVISEERT},
-                {"op": "set", "path": "content.raw_text", "value": ADVISEERT},
-            ],
-        },
-    )
+    from src.deterministic_review_repair_v1 import REPAIR_SOURCE_UNITS
+    fragment_ids = {ref['raw_object_id'] for ref in blocked['provenance']['source_fragments']}
+    units = console.source_units(snapshot_id=receipt['snapshot_id'], object_id=blocked['object_id'])
+    selected = [u['unit_id'] for u in units if u['fragment_id'] in fragment_ids]
+    assert selected
+    revised = console.submit_review_resolution(actor_id=accounts['reviewer']['account_id'],
+        snapshot_id=receipt['snapshot_id'], object_id=blocked['object_id'],
+        expected_revision=console.objects_revision(receipt['snapshot_id']), suitability='mist_context',
+        comment='Herstel de geverifieerde bronselectie.', repair_kind=REPAIR_SOURCE_UNITS, source_unit_ids=selected)
     assert _admission(revised)["gate_result"] == GATE_BLOCKED
     assert "source_bound_fields_stale" not in _admission(revised)["reason_codes"]
     from src.knowledge_materialisation_v1 import validate_materialised_candidate
     validate_materialised_candidate(revised, fragments=console.review_source_fragments(receipt["snapshot_id"]))
     assert is_slow_review_duty(revised, bindings=console.object_review_bindings(receipt["snapshot_id"]), fragments=console.review_source_fragments(receipt["snapshot_id"])) is False
 
-def test_admission_carries_section_role_from_existing_section_path(tmp_path: Path) -> None:
+def test_admission_carries_section_role_from_existing_section_path(tmp_path: Path, *, production_console) -> None:
     html = (
         "<!doctype html><html lang=\"nl\"><body>"
         "<h1>Richtlijn</h1>"
@@ -903,7 +883,7 @@ def test_admission_carries_section_role_from_existing_section_path(tmp_path: Pat
         "<p>Continentie is een klinisch onderwerp in de ouderenzorg.</p>"
         "</body></html>"
     ).encode("utf-8")
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(
         console,
@@ -919,14 +899,14 @@ def test_admission_carries_section_role_from_existing_section_path(tmp_path: Pat
     assert _admission(definition)["section_role"] == "context"
 
 
-def test_extracted_definition_carries_literal_type_evidence(tmp_path: Path) -> None:
+def test_extracted_definition_carries_literal_type_evidence(tmp_path: Path, *, production_console) -> None:
     html = (
         "<!doctype html><html lang=\"nl\"><body>"
         "<h1>Richtlijn</h1>"
         "<p>Continentie is een klinisch onderwerp in de ouderenzorg.</p>"
         "</body></html>"
     ).encode("utf-8")
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts, data=html, filename="definitie.html", title="Definitie")
     definition = _find_by_text(
@@ -940,8 +920,8 @@ def test_extracted_definition_carries_literal_type_evidence(tmp_path: Path) -> N
     assert admission["gate_result"] == GATE_ALLOWED
 
 
-def test_confirm_must_not_write_factual_finding_serving_type(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_confirm_must_not_write_factual_finding_serving_type(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
     objects = console.snapshot_objects(receipt["snapshot_id"])

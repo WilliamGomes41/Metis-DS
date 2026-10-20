@@ -84,8 +84,8 @@ PROTOCOL_REGISTER_JARGON = (
 )
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -187,8 +187,8 @@ def _passages(objects: list[dict]) -> list[dict]:
     return [obj for obj in objects if obj.get("object_type") != "document"]
 
 
-def _client(console: OperationsConsole) -> TestClient:
-    client = TestClient(create_console_app(console))
+def _client(console: OperationsConsole, *, production_app) -> TestClient:
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     return client
 
@@ -276,8 +276,8 @@ def test_suitability_maps_onto_closed_register_statuses() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_ingest_stamps_every_passage_and_does_not_silently_drop(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_ingest_stamps_every_passage_and_does_not_silently_drop(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = console.snapshot_objects(receipt["snapshot_id"])
@@ -289,8 +289,8 @@ def test_ingest_stamps_every_passage_and_does_not_silently_drop(tmp_path: Path) 
     assert all(passage_register_of(obj).get("status") != "dropped_silently" for obj in passages)
 
 
-def test_allowed_candidate_is_selected_and_djg_remains_unassessed_coverage(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_allowed_candidate_is_selected_and_djg_remains_unassessed_coverage(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = console.snapshot_objects(receipt["snapshot_id"])
@@ -311,8 +311,8 @@ def test_allowed_candidate_is_selected_and_djg_remains_unassessed_coverage(tmp_p
     assert djg not in blocked_audit_lane(objects)
     assert djg not in blocked_audit_lane(_passages(objects))
 
-def test_context_and_heading_passages_are_registered_not_dropped(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_context_and_heading_passages_are_registered_not_dropped(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = _passages(console.snapshot_objects(receipt["snapshot_id"]))
@@ -327,67 +327,26 @@ def test_context_and_heading_passages_are_registered_not_dropped(tmp_path: Path)
 # ---------------------------------------------------------------------------
 
 
-def test_review_save_maps_suitability_onto_register(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_register_projection_maps_suitability_without_deferred_review_writes(tmp_path: Path, *, production_console) -> None:
+    from src.passage_register_v1 import apply_register_from_review
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
-    objects = console.snapshot_objects(receipt["snapshot_id"])
-    adviseert = _find_by_text(objects, ADVISEERT)
-    calcium = _find_by_text(objects, CALCIUM)
-    djg = _find_by_text(objects, DJG)
-    condition = _find_by_text(objects, PREV_CONDITION)
-    console.review_object(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=adviseert["object_id"],
-        decision="later",
-        suitability="ja",
-        eindoordeel="later_beoordelen",
-    )
-    console.review_object(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=condition["object_id"],
-        decision="later",
-        suitability="mist_context",
-        eindoordeel="later_beoordelen",
-    )
-    console.review_object(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=calcium["object_id"],
-        decision="later",
-        suitability="alleen_onderbouwing",
-        eindoordeel="later_beoordelen",
-    )
-    console.review_object(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=djg["object_id"],
-        decision="later",
-        suitability="geen_kenniseenheid",
-        eindoordeel="later_beoordelen",
-    )
-    live = {obj["object_id"]: obj for obj in console.snapshot_objects(receipt["snapshot_id"])}
-    assert passage_register_of(live[adviseert["object_id"]]).get("status") == "selected_as_candidate"
-    assert passage_register_of(live[condition["object_id"]]).get("status") == "used_as_context"
-    assert passage_register_of(live[calcium["object_id"]]).get("status") == "linked_as_support"
-    assert passage_register_of(live[djg["object_id"]]).get("status") == "excluded_with_reason"
-    samenvoegen_target = live[adviseert["object_id"]]
-    console.review_object(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=samenvoegen_target["object_id"],
-        decision="later",
-        suitability="samenvoegen",
-        eindoordeel="later_beoordelen",
-    )
-    refreshed = next(
-        obj
-        for obj in console.snapshot_objects(receipt["snapshot_id"])
-        if obj["object_id"] == adviseert["object_id"]
-    )
-    assert passage_register_of(refreshed).get("status") == "used_as_context"
+    sid = receipt['snapshot_id']
+    before = console._load_objects(sid, remember=False)
+    cases = [(ADVISEERT, 'ja', 'selected_as_candidate'),
+             (PREV_CONDITION, 'mist_context', 'used_as_context'),
+             (CALCIUM, 'alleen_onderbouwing', 'linked_as_support'),
+             (DJG, 'geen_kenniseenheid', 'excluded_with_reason'),
+             (ADVISEERT, 'samenvoegen', 'used_as_context')]
+    for text, suitability, expected in cases:
+        obj = _find_by_text(console.snapshot_objects(sid), text)
+        projected = apply_register_from_review(obj, suitability=suitability)
+        assert passage_register_of(projected)['status'] == expected
+        console.review_object(actor_id=accounts['reviewer']['account_id'], snapshot_id=sid,
+                              object_id=obj['object_id'], decision='later', suitability=suitability,
+                              eindoordeel='later_beoordelen')
+    assert console._load_objects(sid, remember=False) == before
 
 
 # ---------------------------------------------------------------------------
@@ -395,11 +354,11 @@ def test_review_save_maps_suitability_onto_register(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_missing_register_does_not_block_phase1_admission(tmp_path: Path) -> None:
+def test_missing_register_does_not_block_phase1_admission(tmp_path: Path, *, production_console) -> None:
     admitted = admit_candidate(_complete_adviseert_candidate())
     assert admitted["gate_result"] == GATE_ALLOWED
     assert "passage_register" not in admitted
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     adviseert = _find_by_text(console.snapshot_objects(receipt["snapshot_id"]), ADVISEERT)
@@ -408,33 +367,29 @@ def test_missing_register_does_not_block_phase1_admission(tmp_path: Path) -> Non
     assert passage_register_of(adviseert).get("status") == "selected_as_candidate"
 
 
-def test_register_human_disposition_does_not_create_machine_admission(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_register_human_disposition_does_not_create_machine_admission(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     djg = _find_by_text(console.snapshot_objects(receipt["snapshot_id"]), DJG)
     assert _admission(djg) == {}
     assert passage_register_of(djg).get("status") == "not_yet_assessed"
 
-    console.review_object(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=djg["object_id"],
-        decision="later",
-        suitability="geen_kenniseenheid",
-        eindoordeel="later_beoordelen",
-    )
-    live = next(
-        obj
-        for obj in console.snapshot_objects(receipt["snapshot_id"])
-        if obj["object_id"] == djg["object_id"]
-    )
+    from src.passage_register_v1 import apply_register_from_review
+    live = apply_register_from_review(djg, suitability='geen_kenniseenheid')
     assert _admission(live) == {}
     assert passage_register_of(live).get("status") == "excluded_with_reason"
     assert passage_register_of(live).get("source") == "review"
+    assert console._current_object(receipt['snapshot_id'], djg['object_id']) == djg
 
-def test_coverage_is_reported_per_section_without_objectifying_every_sentence(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+
+# ---------------------------------------------------------------------------
+# Gold + metrics (fail-closed)
+# ---------------------------------------------------------------------------
+
+
+def test_coverage_is_reported_per_section_without_objectifying_every_sentence(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = _passages(console.snapshot_objects(receipt["snapshot_id"]))
@@ -454,10 +409,6 @@ def test_coverage_is_reported_per_section_without_objectifying_every_sentence(tm
     total = sum(int(counts.get(status) or 0) for status in PASSAGE_REGISTER_STATUSES)
     assert total >= 1
 
-
-# ---------------------------------------------------------------------------
-# Gold + metrics (fail-closed)
-# ---------------------------------------------------------------------------
 
 
 def test_extract_gold_fixture_is_structurally_valid() -> None:
@@ -480,8 +431,8 @@ def test_existing_retrieval_golden_still_validates() -> None:
     assert report["questions"] == 24
 
 
-def test_missing_gold_cannot_claim_extract_quality(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_missing_gold_cannot_claim_extract_quality(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = _passages(console.snapshot_objects(receipt["snapshot_id"]))
@@ -493,8 +444,8 @@ def test_missing_gold_cannot_claim_extract_quality(tmp_path: Path) -> None:
         assert soft.get(name) is None
 
 
-def test_metrics_with_gold_record_the_required_hooks(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_metrics_with_gold_record_the_required_hooks(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = _passages(console.snapshot_objects(receipt["snapshot_id"]))
@@ -519,9 +470,7 @@ def test_metrics_with_gold_record_the_required_hooks(tmp_path: Path) -> None:
     assert metrics["precision"] > 0
 
 
-def test_section_role_distribution_exposes_summary_bias_without_opening_quality_claim(
-    tmp_path: Path,
-) -> None:
+def test_section_role_distribution_exposes_summary_bias_without_opening_quality_claim(tmp_path: Path, *, production_console) -> None:
     html = (
         "<!doctype html><html lang=\"nl\"><body>"
         "<h1>Richtlijn</h1>"
@@ -534,7 +483,7 @@ def test_section_role_distribution_exposes_summary_bias_without_opening_quality_
         "<p>Overweeg behandeling X bij ouderen.</p>"
         "</body></html>"
     ).encode("utf-8")
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console,
@@ -567,8 +516,8 @@ def test_section_role_distribution_exposes_summary_bias_without_opening_quality_
     assert len({o["object_id"] for o in repeated}) == 2
 
 
-def test_soft_scores_or_single_guideline_without_gold_are_not_quality(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_soft_scores_or_single_guideline_without_gold_are_not_quality(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = _passages(console.snapshot_objects(receipt["snapshot_id"]))
@@ -587,12 +536,12 @@ def test_soft_scores_or_single_guideline_without_gold_are_not_quality(tmp_path: 
 # ---------------------------------------------------------------------------
 
 
-def test_primary_review_card_has_no_register_or_metrics_jargon(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_primary_review_card_has_no_register_or_metrics_jargon(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     adviseert = _find_by_text(console.snapshot_objects(receipt["snapshot_id"]), ADVISEERT)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     html = client.get(
         f"/review?document={receipt['snapshot_id']}&object={adviseert['object_id']}"
     ).text
@@ -604,12 +553,12 @@ def test_primary_review_card_has_no_register_or_metrics_jargon(tmp_path: Path) -
     assert "Review opslaan en volgende" in card
 
 
-def test_researcher_ops_surface_may_show_coverage_without_touching_the_card(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_researcher_ops_surface_may_show_coverage_without_touching_the_card(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     adviseert = _find_by_text(console.snapshot_objects(receipt["snapshot_id"]), ADVISEERT)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     index = client.get(
         f"/settings/technical?document={receipt['snapshot_id']}"
     ).text
@@ -627,8 +576,8 @@ def test_researcher_ops_surface_may_show_coverage_without_touching_the_card(tmp_
 # ---------------------------------------------------------------------------
 
 
-def test_boom_path_stays_v225_and_is_not_a_richtlijn_admission_gate(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_boom_path_stays_v225_and_is_not_a_richtlijn_admission_gate(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = console.ingest(
         actor_id=accounts["researcher"]["account_id"],
@@ -655,12 +604,12 @@ def test_boom_path_stays_v225_and_is_not_a_richtlijn_admission_gate(tmp_path: Pa
             assert register.get("status") in PASSAGE_REGISTER_STATUSES
 
 
-def test_phase3_cockpit_and_sterkte_still_present(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_phase3_cockpit_and_sterkte_still_present(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     adviseert = _find_by_text(console.snapshot_objects(receipt["snapshot_id"]), ADVISEERT)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     html = client.get(
         f"/review?document={receipt['snapshot_id']}&object={adviseert['object_id']}"
     ).text
@@ -736,8 +685,8 @@ def test_initial_register_disposition_uses_section_role_without_new_statuses() -
     } <= set(PASSAGE_REGISTER_STATUSES)
 
 
-def test_djg_source_passage_does_not_enter_ordinary_queue_as_aanbeveling(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_djg_source_passage_does_not_enter_ordinary_queue_as_aanbeveling(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = _passages(console.snapshot_objects(receipt["snapshot_id"]))
