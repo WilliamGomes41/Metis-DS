@@ -173,10 +173,10 @@ def test_transform_refuses_forged_candidate_before_returning_a_bundle():
         transform(spec, _manifest(), fragments)
 
 
-def test_failed_preparation_keeps_previous_bundle_across_restart(tmp_path, monkeypatch):
+def test_failed_preparation_keeps_previous_bundle_across_restart(tmp_path, monkeypatch, *, production_console):
     from src import knowledge_materialisation_v1 as materialisation
     from tests.test_recoverable_formation_v1 import system
-    state, sid, actor, reviewer, _calls, _mode, make, bind = system(tmp_path, broken=False)
+    state, sid, actor, reviewer, _calls, _mode, make, bind = system(tmp_path, broken=False, production_console=production_console)
     before = deepcopy(state.snapshot_objects(sid))
     revision = state.objects_revision(sid)
     bindings = deepcopy(state._bindings.get(sid))
@@ -250,11 +250,11 @@ def test_producer_exposes_materialisation_reason_as_controlled_processing_eviden
     assert caught.value.pre_review_diagnostics["reason_code"] == "materialisation_text_mismatch"
 
 
-def test_revision_materialisation_discards_unselected_additional_refs(tmp_path):
+def test_revision_materialisation_discards_unselected_additional_refs(tmp_path, *, production_console):
     from tests.test_recoverable_formation_v1 import system
     from tests.test_recommendation_coverage_v1 import FIRST, SECOND
     from src.knowledge_materialisation_v1 import validate_materialised_candidate
-    state, sid, actor, reviewer, _calls, _mode, _make, _bind = system(tmp_path, broken=False)
+    state, sid, actor, reviewer, _calls, _mode, _make, _bind = system(tmp_path, broken=False, production_console=production_console)
     rows = state.snapshot_objects(sid)
     first = next(row for row in rows if row["content"]["clean_text"] == FIRST)
     second = next(row for row in rows if row["content"]["clean_text"] == SECOND)
