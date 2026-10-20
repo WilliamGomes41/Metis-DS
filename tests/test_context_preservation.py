@@ -21,12 +21,12 @@ from tests.complete_workflow_support import complete_postgres as workflow_postgr
 
 
 @pytest.fixture(params=['local', 'postgres'])
-def factory(request, tmp_path):
+def factory(request, tmp_path, *, production_console):
     if request.param == 'postgres':
         from tests.test_review_batch_atomic_postgres import _console
         config = request.getfixturevalue('workflow_postgres')
-        return lambda: _console(tmp_path, config)
-    return lambda: state(tmp_path)
+        return lambda: production_console(root=tmp_path, processing_binder=lambda console: None)
+    return lambda: state(tmp_path, production_console=production_console)
 
 
 def test_resume_after_restart_reuses_extraction_and_preserves_completed_object(tmp_path, monkeypatch, factory, *, production_console):
@@ -50,7 +50,7 @@ def test_resume_after_restart_reuses_extraction_and_preserves_completed_object(t
     assert final.review_source_fragments(sid)
 
 
-def test_http_extraction_checkpoint_survives_provider_failure_and_restart(factory, monkeypatch):
+def test_http_extraction_checkpoint_survives_provider_failure_and_restart(factory, monkeypatch, *, production_console):
     first = factory(); actor, reviewer = accounts(first)
     extracted = []
     original = first._extract
@@ -115,7 +115,7 @@ def test_corrupt_or_incompatible_extraction_cannot_fallback_or_replace_work(fact
     assert restarted.snapshot_objects(sid) == before
 
 
-def test_checkpoint_commit_failure_does_not_create_durable_extraction(factory, monkeypatch):
+def test_checkpoint_commit_failure_does_not_create_durable_extraction(factory, monkeypatch, *, production_console):
     console = factory(); actor, reviewer = accounts(console); bind(console, provider)
     receipt = console.receive_source(actor_id=actor, filename='test.html',
         data=b'<html><body><p>Gebruik geen zalf.</p></body></html>', content_type='text/html',
@@ -136,7 +136,7 @@ def test_checkpoint_commit_failure_does_not_create_durable_extraction(factory, m
     assert factory().snapshot_objects(sid) == []
 
 
-def test_revision_changed_during_extraction_rejects_checkpoint(factory, monkeypatch):
+def test_revision_changed_during_extraction_rejects_checkpoint(factory, monkeypatch, *, production_console):
     console = factory(); actor, reviewer = accounts(console); bind(console, provider)
     receipt = console.receive_source(actor_id=actor, filename='test.html',
         data=b'<html><body><p>Gebruik geen zalf.</p></body></html>', content_type='text/html',

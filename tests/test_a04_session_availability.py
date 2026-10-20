@@ -16,23 +16,21 @@ from threading import Event, Thread
 import pytest
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
 from src.workflows.workflow_identity_postgres_v1 import _token_hash
 from tests.test_availability_repair import bind, drain, login, provider, state
 from tests.test_console_entra_v1 import (
     ADMIN, USER, CLIENT, TENANT, FakeMicrosoft, claims, login as entra_login,
 )
-from tests.test_review_batch_atomic_postgres import _console
 from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: F401
 
 ORIGIN = "https://testserver"
 
 
 @pytest.fixture(params=["local", "entra-postgres"])
-def runtime(request, tmp_path, monkeypatch):
+def runtime(request, tmp_path, monkeypatch, *, production_app, production_console):
     native = request.param == "entra-postgres"
-    console = (_console(tmp_path, request.getfixturevalue("recovery_postgres"))
-               if native else state(tmp_path))
+    console = (production_console(root=tmp_path, processing_binder=lambda console: None)
+               if native else state(tmp_path, production_console=production_console))
     author = console.create_account(username="author", password="fixture-only",
                                     roles=("researcher", "reviewer", "publisher"))["account_id"]
     other = console.create_account(username="other", password="fixture-only",
@@ -54,7 +52,13 @@ def runtime(request, tmp_path, monkeypatch):
         monkeypatch.setenv("METIS_ENTRA_ACCOUNT_BINDINGS_JSON", json.dumps({ADMIN: author, USER: other}))
     else:
         monkeypatch.setenv("METIS_CONSOLE_AUTH", "local")
-    app = create_console_app(console, trusted_origin=ORIGIN)
+    import os
+    environment = {name: value for name, value in os.environ.items()
+                   if name.startswith('METIS_ENTRA_') or name == 'METIS_CONSOLE_AUTH'}
+    environment['CONSOLE_PUBLIC_ORIGIN'] = ORIGIN
+    console = production_console(root=tmp_path, processing_binder=lambda console: None, environment=environment)
+    bind(console, lambda *args: inference_boundary["call"](*args))
+    app = production_app(console)
     microsoft = FakeMicrosoft()
     if native:
         app.state.microsoft_login = microsoft  # Only the external identity exchange is synthetic.
@@ -91,8 +95,8 @@ def _preparation_context(console):
     return on_loop, console._store_thread_lock._is_owned(), workflow_transaction_active()
 
 
-def test_preparation_context_distinguishes_concurrent_lock_owner(tmp_path):
-    console = state(tmp_path)
+def test_preparation_context_distinguishes_concurrent_lock_owner(tmp_path, *, production_console):
+    console = state(tmp_path, production_console=production_console)
     entered, release = Event(), Event()
 
     def concurrent_write():

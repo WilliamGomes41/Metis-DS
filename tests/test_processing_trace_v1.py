@@ -9,21 +9,18 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
-from src.request_diagnostics_v1 import RequestDiagnostics
 from src.source_processing_dispatch_v1 import SourceProcessingDispatcher
 from tests.test_source_dispatch_hardening import console, receive
 from tests.test_availability_repair import accounts, bind, provider, login
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
-def test_http_origin_survives_restart_duplicate_and_read_only_export(console, tmp_path, monkeypatch):
+def test_http_origin_survives_restart_duplicate_and_read_only_export(console, tmp_path, monkeypatch, *, production_app):
     actor, reviewer = accounts(console)
     bind(console, provider)
     sid = receive(console, actor, reviewer, 'trace')
     monkeypatch.setattr(SourceProcessingDispatcher, 'notify', lambda *args: False)
-    app = create_console_app(console)
-    app.add_middleware(RequestDiagnostics)
+    app = production_app(console)
     with TestClient(app, base_url='https://testserver') as client:
         login(client)
         data = {'document': sid, 'command_id': 'private-command',
@@ -58,11 +55,8 @@ def test_http_origin_survives_restart_duplicate_and_read_only_export(console, tm
 
 
 def restart(console):
-    if hasattr(console, 'workflow_document_store'):
-        from tests.test_review_batch_atomic_postgres import _console
-        return _console(console.root, console.workflow_document_store.config)
-    from tests.test_availability_repair import state
-    return state(console.root)
+    from tests.production_support import restart_production
+    return restart_production(console)
 
 
 def test_checkpoint_restart_and_retry_reuses_exact_extraction(console, monkeypatch):
@@ -172,7 +166,7 @@ def test_two_runtimes_claim_once_and_trace_hides_claim_token(console):
     assert token not in json.dumps(trace)
 
 
-def test_export_authorization_and_observer_failure_do_not_change_command(console, monkeypatch):
+def test_export_authorization_and_observer_failure_do_not_change_command(console, monkeypatch, *, production_app):
     from src.request_diagnostics_v1 import _LOGGER
     actor, reviewer = accounts(console)
     sid = receive(console, actor, reviewer, 'permissions')
@@ -182,8 +176,7 @@ def test_export_authorization_and_observer_failure_do_not_change_command(console
         raise OSError('private telemetry failure')
     monkeypatch.setattr(_LOGGER, 'info', broken)
     bind(console, provider)
-    app = create_console_app(console)
-    app.add_middleware(RequestDiagnostics)
+    app = production_app(console)
     with TestClient(app, base_url='https://testserver') as client:
         denied = client.get('/source-selection/processing-trace', params={'document':sid}, follow_redirects=False)
         assert denied.status_code in (303, 401)
@@ -199,9 +192,9 @@ def test_export_authorization_and_observer_failure_do_not_change_command(console
 
 
 def _crash_worker(root, config, actor, sid, attempt, reached):
-    from tests.test_availability_repair import state, bind
-    from tests.test_review_batch_atomic_postgres import _console
-    child = _console(root, config) if config is not None else state(root)
+    from tests.production_support import production_application
+    from tests.test_availability_repair import bind
+    child = production_application(root, config, processing_binder=lambda console: None).state.operations_kernel
     def blocked(*args):
         reached.set()  # existing extraction/checkpoint has committed before model I/O
         import time
@@ -211,7 +204,7 @@ def _crash_worker(root, config, actor, sid, attempt, reached):
     child.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
 
 
-def test_process_death_preserves_origin_and_checkpoint_then_authorized_retry(console, monkeypatch):
+def test_process_death_preserves_origin_and_checkpoint_then_authorized_retry(console, monkeypatch, *, production_app):
     import multiprocessing
     from datetime import timedelta
     from src.processing_retry_v1 import expire_running, now
@@ -220,7 +213,7 @@ def test_process_death_preserves_origin_and_checkpoint_then_authorized_retry(con
     sid = receive(console, actor, reviewer, 'crash')
     bind(console, provider)
     monkeypatch.setattr(SourceProcessingDispatcher, 'notify', lambda *args: False)
-    app = create_console_app(console); app.add_middleware(RequestDiagnostics)
+    app = production_app(console)
     with TestClient(app, base_url='https://testserver') as client:
         login(client)
         response = client.post('/source-selection/start', data={'document':sid, 'command_id':'crash-command',
@@ -362,12 +355,12 @@ def test_processing_only_cli_exports_redacted_trace_without_browser(tmp_path):
     assert 'Stored processing state: succeeded' in (output/'summary.txt').read_text()
 
 
-def test_semantic_resume_trace_keeps_completed_candidate_and_targets_only_open_work(console, monkeypatch):
+def test_semantic_resume_trace_keeps_completed_candidate_and_targets_only_open_work(console, monkeypatch, *, production_app, production_console):
     from tests.test_recoverable_formation_v1 import system
     from tests.test_recommendation_coverage_v1 import FIRST, SECOND
     from src.processing_trace_v1 import processing_trace
     state, sid, actor, reviewer, calls, mode, make, bind_semantics = system(
-        console.root, make_console=lambda: restart(console))
+        console.root, make_console=lambda: restart(console), production_console=production_console)
     before = state.snapshot_objects(sid)
     complete = next(o for o in before if o['content']['clean_text'] == FIRST)
     initial = processing_trace(state._envelope(sid))
@@ -377,7 +370,7 @@ def test_semantic_resume_trace_keeps_completed_candidate_and_targets_only_open_w
         raise AssertionError('resume must retain extraction')
     monkeypatch.setattr(current, '_extract', forbidden)
     monkeypatch.setattr(SourceProcessingDispatcher, 'notify', lambda *args: False)
-    app = create_console_app(current); app.add_middleware(RequestDiagnostics)
+    app = production_app(current)
     with TestClient(app, base_url='https://testserver') as client:
         assert client.post('/login', data={'username':'author', 'password':'strong-test-password'}, follow_redirects=False).status_code == 303
         response = client.post('/source-selection/start', data={'document':sid,
@@ -396,7 +389,7 @@ def test_semantic_resume_trace_keeps_completed_candidate_and_targets_only_open_w
     assert [b['text'] for b in json.loads(calls[-1]['input'][1]['content'])['source_blocks']] == [SECOND]
 
 
-def test_background_phases_do_not_reopen_finished_http_evidence(console, monkeypatch):
+def test_background_phases_do_not_reopen_finished_http_evidence(console, monkeypatch, *, production_app):
     from threading import Event
     from src.request_diagnostics_v1 import _LOGGER
     from tests.test_availability_repair import drain
@@ -412,9 +405,7 @@ def test_background_phases_do_not_reopen_finished_http_evidence(console, monkeyp
     bind(console, blocked)
     events = []
     monkeypatch.setattr(_LOGGER, 'info', lambda fmt, msg: events.append(json.loads(msg)))
-    app = create_console_app(console)
-    from src.console_performance_v1 import install_console_performance
-    install_console_performance(app)
+    app = production_app(console)
     with TestClient(app, base_url='https://testserver') as client:
         login(client)
         response = client.post('/source-selection/start', data={'document':sid,

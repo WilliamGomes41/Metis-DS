@@ -33,12 +33,14 @@ def configure_production(patch, root, config):
 def production_application(root, config, *, azure=False,
                            processing_binder=bind_pre_review_semantic_processing,
                            immutable_source_store=None, source_store=None, runtime=None,
-                           canonical_publication_store=None):
+                           canonical_publication_store=None, environment=None):
     """Call build_app itself; replace only model/Blob transport and configuration."""
     from src import console_asgi
     root = Path(root)
     with _configuration_lock, pytest.MonkeyPatch.context() as patch:
         configure_production(patch, root, config)
+        for name, value in (environment or {}).items():
+            patch.setenv(name, str(value))
         if runtime is not None:
             patch.setenv("CONSOLE_RUNTIME", str(runtime))
         if source_store is not None:
@@ -54,4 +56,22 @@ def production_application(root, config, *, azure=False,
         if azure:
             patch.setenv("WEBSITE_SITE_NAME", "d6a-test")
             patch.setenv("CONSOLE_PUBLIC_ORIGIN", "https://console.example.test")
-        return console_asgi.build_app()
+        app = console_asgi.build_app()
+        app.state.operations_kernel._metis_test_application = app
+        return app
+
+
+def application_for(console):
+    """Return the actual ASGI composition created by this shared factory."""
+    return console._metis_test_application
+
+
+def restart_production(console):
+    """New production composition over the same committed test authorities."""
+    from src.workflows.workflow_badge_counts_postgres_v1 import FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole
+    return production_application(
+        console.root, console.workflow_document_store.config,
+        azure=isinstance(console, FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole),
+        processing_binder=lambda console: None, immutable_source_store=console.immutable_source_store,
+        runtime=console.runtime, source_store=console.source_store,
+    ).state.operations_kernel
