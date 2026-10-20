@@ -449,3 +449,11 @@ van alle geneste testhelperimports vindt geen ontbrekende factoryargumenten.
 De meetrunner maakt zelf per suite een lege, eigen database; dat gold lokaal al
 via de wrapper en geldt nu ook rechtstreeks in CI. Een echte voor/na-probe toont
 dat de opgegeven database, inclusief een sentinelrij, ongewijzigd blijft.
+
+
+De native retry-/R2-proeven bereiden de volledige historische publicatie voor
+met de bestaande canonical reconciliatie. Envelope, objecten en revision blijven
+ook vóór herstart exact gelijk na weigering. De R2-race gebruikt een gestructureerde
+productie-reparatie en bewijst een gewijzigde tekst én nieuwe actuele versie,
+naast de ongewijzigde volledige PG-historie en bindings/audit na herstel.
+Alle 16 cases zijn groen; deze fixture-aanpassing hoort bij portie 11.
