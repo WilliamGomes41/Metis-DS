@@ -170,9 +170,9 @@ def _console_paths(tmp_path: Path) -> tuple[Path, Path, Path]:
     return tmp_path / "root", tmp_path / "sources", tmp_path / "runtime"
 
 
-def _new_console(tmp_path: Path) -> OperationsConsole:
+def _new_console(tmp_path: Path, *, production_console) -> OperationsConsole:
     root, source_store, runtime = _console_paths(tmp_path)
-    return OperationsConsole(root=root, source_store=source_store, runtime=runtime)
+    return production_console(processing_binder=lambda console: None, root=root, source_store=source_store, runtime=runtime)
 
 
 def _bind(
@@ -228,7 +228,7 @@ def _accounts(console: OperationsConsole) -> tuple[dict, dict]:
     return researcher, reviewer
 
 
-def test_exact_replay_survives_restart_and_makes_zero_provider_calls(tmp_path: Path) -> None:
+def test_exact_replay_survives_restart_and_makes_zero_provider_calls(tmp_path: Path, *, production_console) -> None:
     fragments = [
         _fragment(
             "p1",
@@ -251,7 +251,7 @@ def test_exact_replay_survives_restart_and_makes_zero_provider_calls(tmp_path: P
         calls += 1
         return _response(_full_span_proposal(payload))
 
-    console = _new_console(tmp_path)
+    console = _new_console(tmp_path, production_console=production_console)
     researcher, reviewer = _accounts(console)
     _bind(console, env=env, post_json=inference, fragments=fragments)
     receipt = _ingest(
@@ -275,7 +275,7 @@ def test_exact_replay_survives_restart_and_makes_zero_provider_calls(tmp_path: P
     assert {row["metadata"]["source_occurrence_authority"]["principal_section_role"] for row in candidates} == {"summary", "primary"}
     assert candidate["metadata"]["source_occurrence_authority"]["principal_section_role"] == "summary"
 
-    restarted = _new_console(tmp_path)
+    restarted = _new_console(tmp_path, production_console=production_console)
     replay_env = {
         PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
         LLM_MODEL_ENV: "test-model",
@@ -318,7 +318,7 @@ def test_exact_replay_survives_restart_and_makes_zero_provider_calls(tmp_path: P
     assert calls == 1
 
 
-def test_model_identity_change_forces_inference_not_replay(tmp_path: Path) -> None:
+def test_model_identity_change_forces_inference_not_replay(tmp_path: Path, *, production_console) -> None:
     fragments = [_fragment("p1")]
     first_env = {
         PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
@@ -332,7 +332,7 @@ def test_model_identity_change_forces_inference_not_replay(tmp_path: Path) -> No
         calls += 1
         return _response(_full_span_proposal(payload))
 
-    console = _new_console(tmp_path)
+    console = _new_console(tmp_path, production_console=production_console)
     researcher, reviewer = _accounts(console)
     _bind(console, env=first_env, post_json=provider, fragments=fragments)
     receipt = _ingest(
@@ -342,7 +342,7 @@ def test_model_identity_change_forces_inference_not_replay(tmp_path: Path) -> No
     )
     assert calls == 1
 
-    restarted = _new_console(tmp_path)
+    restarted = _new_console(tmp_path, production_console=production_console)
     changed_env = {
         PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
         LLM_API_KEY_ENV: "product-key",
@@ -369,12 +369,12 @@ def _persist_corrupt_but_hash_consistent_replay(
     record["proposal"]["objects"][0]["spans"][0]["block_id"] = "semblock-does-not-exist"
     record["proposal_hash"] = stable_json_hash(record["proposal"])
     envelope["semantic_replay"] = record
-    console._envelopes[snapshot_id] = envelope
-    console._save_envelopes()
+    console.workflow_document_store.write_bundle(envelope=envelope)
+    console.refresh_workflow_documents()
     return record
 
 
-def test_corrupt_replay_is_revalidated_then_replaced_by_inference(tmp_path: Path) -> None:
+def test_corrupt_replay_is_revalidated_then_replaced_by_inference(tmp_path: Path, *, production_console) -> None:
     fragments = [_fragment("p1")]
     env = {
         PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
@@ -388,7 +388,7 @@ def test_corrupt_replay_is_revalidated_then_replaced_by_inference(tmp_path: Path
         calls += 1
         return _response(_full_span_proposal(payload))
 
-    console = _new_console(tmp_path)
+    console = _new_console(tmp_path, production_console=production_console)
     researcher, reviewer = _accounts(console)
     _bind(console, env=env, post_json=provider, fragments=fragments)
     receipt = _ingest(
@@ -398,7 +398,7 @@ def test_corrupt_replay_is_revalidated_then_replaced_by_inference(tmp_path: Path
     )
     _persist_corrupt_but_hash_consistent_replay(console, receipt["snapshot_id"])
 
-    restarted = _new_console(tmp_path)
+    restarted = _new_console(tmp_path, production_console=production_console)
     _bind(restarted, env=env, post_json=provider, fragments=fragments)
     restarted.reextract_unpublished(
         actor_id=researcher["account_id"],
@@ -411,7 +411,7 @@ def test_corrupt_replay_is_revalidated_then_replaced_by_inference(tmp_path: Path
     assert repaired["replay_rejection_reason"] == "semantic_span_unknown_block"
 
 
-def test_corrupt_replay_plus_provider_failure_remains_fail_closed(tmp_path: Path) -> None:
+def test_corrupt_replay_plus_provider_failure_remains_fail_closed(tmp_path: Path, *, production_console) -> None:
     fragments = [_fragment("p1")]
     env = {
         PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
@@ -422,7 +422,7 @@ def test_corrupt_replay_plus_provider_failure_remains_fail_closed(tmp_path: Path
     def provider(_url: str, _headers: dict, payload: dict, _timeout: int) -> dict:
         return _response(_full_span_proposal(payload))
 
-    console = _new_console(tmp_path)
+    console = _new_console(tmp_path, production_console=production_console)
     researcher, reviewer = _accounts(console)
     _bind(console, env=env, post_json=provider, fragments=fragments)
     receipt = _ingest(
@@ -434,7 +434,7 @@ def test_corrupt_replay_plus_provider_failure_remains_fail_closed(tmp_path: Path
     corrupt_record = _persist_corrupt_but_hash_consistent_replay(console, snapshot_id)
     before_objects = console.snapshot_objects(snapshot_id)
 
-    restarted = _new_console(tmp_path)
+    restarted = _new_console(tmp_path, production_console=production_console)
 
     def unavailable(*_args):
         raise ConsoleError("pre_review_llm_provider_unavailable")
@@ -451,7 +451,7 @@ def test_corrupt_replay_plus_provider_failure_remains_fail_closed(tmp_path: Path
     assert restarted._envelope(snapshot_id)["semantic_replay"] == corrupt_record
 
 
-def test_abstention_never_creates_a_replay_artifact(tmp_path: Path) -> None:
+def test_abstention_never_creates_a_replay_artifact(tmp_path: Path, *, production_console) -> None:
     fragments = [_fragment("p1")]
     env = {
         PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
@@ -467,7 +467,7 @@ def test_abstention_never_creates_a_replay_artifact(tmp_path: Path) -> None:
             }
         )
 
-    console = _new_console(tmp_path)
+    console = _new_console(tmp_path, production_console=production_console)
     researcher, reviewer = _accounts(console)
     _bind(console, env=env, post_json=abstain, fragments=fragments)
     receipt = _ingest(

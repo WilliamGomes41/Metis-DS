@@ -427,13 +427,13 @@ def test_canonical_publication_seals_type_relation_and_review_after_restart(tmp_
         assert restarted.canonical_publication_store.active_publication_rows() == projection
 
 
-def test_source_context_rekeys_proposed_relations_before_readmission(tmp_path):
+def test_source_context_rekeys_proposed_relations_before_readmission(tmp_path, *, production_console):
     from tests.test_d4_3_human_relation_confirmation import _console as relation_console, _accounts, _plant_proposals, _html, REC, COND, EXPL
     from tests.semantic_fixture_support import install_fixture_history
     from src.integrity_kernel import stamp_canonical_hashes
     from src.knowledge_relation_proposal_v1 import relation_proposal_admission_codes
     from src.knowledge_relations_v1 import validate_knowledge_relation_set
-    state = relation_console(tmp_path)
+    state = relation_console(tmp_path, production_console=production_console)
     accounts = _accounts(state)
     from tests.semantic_fixture_support import bind_fixture_selections
     from tests.context_test_support import bind_detected_context

@@ -31,8 +31,8 @@ KEY = "d34-fixture-key"
 RECOMMENDATION_TEXT = "De werkgroep adviseert de verpleegkundige de interventie te gebruiken."
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime" / "console",
@@ -85,15 +85,8 @@ def _semantics_proposal(
     }
 
 
-def _reviewed_source_objects(
-    tmp_path: Path,
-    *,
-    direction: str,
-    strength_choice: str,
-    label: str,
-    text: str = RECOMMENDATION_TEXT,
-) -> tuple[list[dict], str]:
-    console = _console(tmp_path)
+def _reviewed_source_objects(tmp_path: Path, *, direction: str, strength_choice: str, label: str, text: str=RECOMMENDATION_TEXT, production_console) -> tuple[list[dict], str]:
+    console = _console(tmp_path, production_console=production_console)
     researcher, reviewer = _accounts(console)
     from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console, [(text, "recommendation")])
@@ -229,20 +222,13 @@ def _product_client(tmp_path: Path, records: list[dict]) -> TestClient:
         ("for", "not_stated", "Aanbeveling", None, "not_stated"),
     ],
 )
-def test_real_source_review_projection_api_preserves_confirmed_semantics(
-    tmp_path: Path,
-    direction: str,
-    strength_choice: str,
-    label: str,
-    expected_strength: str | None,
-    expected_status: str,
-) -> None:
+def test_real_source_review_projection_api_preserves_confirmed_semantics(tmp_path: Path, direction: str, strength_choice: str, label: str, expected_strength: str | None, expected_status: str, *, production_console) -> None:
     objects, object_id = _reviewed_source_objects(
         tmp_path,
         direction=direction,
         strength_choice=strength_choice,
         label=label,
-    )
+     production_console=production_console)
     records, blocked = build_projection(_published_envelopes(objects))
     assert blocked == []
     record = next(row for row in records if row["metadata"]["object_id"] == object_id)
@@ -261,7 +247,7 @@ def test_real_source_review_projection_api_preserves_confirmed_semantics(
     assert served == semantics
 
 
-def test_clinical_condition_does_not_rewrite_strong_to_weak(tmp_path: Path) -> None:
+def test_clinical_condition_does_not_rewrite_strong_to_weak(tmp_path: Path, *, production_console) -> None:
     text = "Bij patiënten met een verhoogd risico adviseert de werkgroep de interventie te gebruiken."
     objects, object_id = _reviewed_source_objects(
         tmp_path,
@@ -269,7 +255,7 @@ def test_clinical_condition_does_not_rewrite_strong_to_weak(tmp_path: Path) -> N
         strength_choice="strong",
         label="Sterke aanbeveling",
         text=text,
-    )
+     production_console=production_console)
     records, blocked = build_projection(_published_envelopes(objects))
     assert blocked == []
     semantics = next(
@@ -279,13 +265,13 @@ def test_clinical_condition_does_not_rewrite_strong_to_weak(tmp_path: Path) -> N
     assert semantics["strength"] == "strong"
 
 
-def test_proposal_is_never_promoted_over_confirmed_semantics(tmp_path: Path) -> None:
+def test_proposal_is_never_promoted_over_confirmed_semantics(tmp_path: Path, *, production_console) -> None:
     objects, object_id = _reviewed_source_objects(
         tmp_path,
         direction="for",
         strength_choice="strong",
         label="Sterke aanbeveling",
-    )
+     production_console=production_console)
     live = next(row for row in objects if row["object_id"] == object_id)
     live[PROPOSED_FIELD] = _semantics_proposal(
         direction="against",
@@ -303,13 +289,13 @@ def test_proposal_is_never_promoted_over_confirmed_semantics(tmp_path: Path) -> 
     assert "proposed_recommendation_semantics" not in projected["metadata"]
 
 
-def test_legacy_only_strength_is_not_promoted_to_new_serving_semantics(tmp_path: Path) -> None:
+def test_legacy_only_strength_is_not_promoted_to_new_serving_semantics(tmp_path: Path, *, production_console) -> None:
     objects, object_id = _reviewed_source_objects(
         tmp_path,
         direction="for",
         strength_choice="strong",
         label="Sterke aanbeveling",
-    )
+     production_console=production_console)
     live = next(row for row in objects if row["object_id"] == object_id)
     live.pop(CONFIRMED_FIELD, None)
     live.pop(PROPOSED_FIELD, None)
@@ -322,13 +308,13 @@ def test_legacy_only_strength_is_not_promoted_to_new_serving_semantics(tmp_path:
     assert "confirmed_recommendation_strength" not in projected["metadata"]
 
 
-def test_dual_new_and_legacy_confirmed_authority_is_blocked(tmp_path: Path) -> None:
+def test_dual_new_and_legacy_confirmed_authority_is_blocked(tmp_path: Path, *, production_console) -> None:
     objects, object_id = _reviewed_source_objects(
         tmp_path,
         direction="for",
         strength_choice="strong",
         label="Sterke aanbeveling",
-    )
+     production_console=production_console)
     live = next(row for row in objects if row["object_id"] == object_id)
     live["confirmed_recommendation_strength"] = "niet_doen"
 
@@ -341,13 +327,13 @@ def test_dual_new_and_legacy_confirmed_authority_is_blocked(tmp_path: Path) -> N
     )
 
 
-def test_unconfirmed_new_format_proposal_remains_absent_from_api(tmp_path: Path) -> None:
+def test_unconfirmed_new_format_proposal_remains_absent_from_api(tmp_path: Path, *, production_console) -> None:
     objects, object_id = _reviewed_source_objects(
         tmp_path,
         direction="for",
         strength_choice="weak",
         label="Zwakke aanbeveling",
-    )
+     production_console=production_console)
     live = next(row for row in objects if row["object_id"] == object_id)
     live.pop(CONFIRMED_FIELD, None)
     live["confirmed_object_type"] = "recommendation"
@@ -366,13 +352,13 @@ def test_unconfirmed_new_format_proposal_remains_absent_from_api(tmp_path: Path)
     assert "recommendation_semantics" not in response.json()
 
 
-def test_retrieve_surface_exposes_the_same_confirmed_semantics(tmp_path: Path) -> None:
+def test_retrieve_surface_exposes_the_same_confirmed_semantics(tmp_path: Path, *, production_console) -> None:
     objects, object_id = _reviewed_source_objects(
         tmp_path,
         direction="against",
         strength_choice="weak",
         label="Zwakke aanbeveling",
-    )
+     production_console=production_console)
     records, blocked = build_projection(_published_envelopes(objects))
     assert blocked == []
     expected = next(
@@ -423,13 +409,13 @@ def test_retrieve_surface_exposes_the_same_confirmed_semantics(tmp_path: Path) -
     assert data["results"][0]["recommendation_semantics"] == expected
 
 
-def test_malformed_confirmed_semantics_blocks_projection(tmp_path: Path) -> None:
+def test_malformed_confirmed_semantics_blocks_projection(tmp_path: Path, *, production_console) -> None:
     objects, object_id = _reviewed_source_objects(
         tmp_path,
         direction="for",
         strength_choice="strong",
         label="Sterke aanbeveling",
-    )
+     production_console=production_console)
     live = next(row for row in objects if row["object_id"] == object_id)
     live[CONFIRMED_FIELD]["direction"] = "sideways"
 

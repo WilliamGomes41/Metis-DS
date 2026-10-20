@@ -31,8 +31,8 @@ COND = "De patiënt heeft een verhoogd risico wanneer score X aanwezig is."
 EXPL = "Deze toelichting beschrijft waarom intensieve monitoring nodig is."
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime" / "console",
@@ -194,8 +194,8 @@ def _approve(
     )
 
 
-def test_confirmation_rebinds_relation_ids_to_new_source_version_atomically(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_confirmation_rebinds_relation_ids_to_new_source_version_atomically(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snapshot_id = _ingest(console, accounts)["snapshot_id"]
     rec, proposals = _plant_proposals(console, snapshot_id, include_explanation=False)
@@ -256,8 +256,8 @@ def test_confirmation_rebinds_relation_ids_to_new_source_version_atomically(tmp_
     )
 
 
-def test_reviewer_can_reject_one_machine_relation_from_atomic_set(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_reviewer_can_reject_one_machine_relation_from_atomic_set(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snapshot_id = _ingest(console, accounts)["snapshot_id"]
     rec, proposals = _plant_proposals(console, snapshot_id, include_explanation=True)
@@ -278,8 +278,8 @@ def test_reviewer_can_reject_one_machine_relation_from_atomic_set(tmp_path: Path
     assert rejected["relation_id"] in evidence["rejected_proposal_relation_ids"]
 
 
-def test_empty_selection_is_valid_only_with_explicit_relation_acknowledgement(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_empty_selection_is_valid_only_with_explicit_relation_acknowledgement(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snapshot_id = _ingest(console, accounts)["snapshot_id"]
     rec, _proposals = _plant_proposals(console, snapshot_id, include_explanation=False)
@@ -302,8 +302,8 @@ def test_empty_selection_is_valid_only_with_explicit_relation_acknowledgement(tm
     assert live["confirmed_relations"] == []
 
 
-def test_stale_source_snapshot_revision_rejects_relation_confirmation(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_stale_source_snapshot_revision_rejects_relation_confirmation(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snapshot_id = _ingest(console, accounts)["snapshot_id"]
     rec, proposals = _plant_proposals(console, snapshot_id, include_explanation=False)
@@ -332,8 +332,8 @@ def test_stale_source_snapshot_revision_rejects_relation_confirmation(tmp_path: 
     assert PROPOSED_FIELD in live
 
 
-def test_target_version_change_rejects_entire_confirmation_without_partial_write(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_target_version_change_rejects_entire_confirmation_without_partial_write(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snapshot_id = _ingest(console, accounts)["snapshot_id"]
     rec, proposals = _plant_proposals(console, snapshot_id, include_explanation=False)
@@ -368,8 +368,8 @@ def test_target_version_change_rejects_entire_confirmation_without_partial_write
     )
 
 
-def test_identical_human_confirmation_is_semantically_idempotent(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_identical_human_confirmation_is_semantically_idempotent(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snapshot_id = _ingest(console, accounts)["snapshot_id"]
     rec, proposals = _plant_proposals(console, snapshot_id, include_explanation=False)
@@ -398,13 +398,13 @@ def test_identical_human_confirmation_is_semantically_idempotent(tmp_path: Path)
     assert compute_canonical_object_hash(second) == first_hash
 
 
-def test_review_ui_shows_version_bound_relations_and_requires_ack(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_review_ui_shows_version_bound_relations_and_requires_ack(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snapshot_id = _ingest(console, accounts)["snapshot_id"]
     rec, proposals = _plant_proposals(console, snapshot_id, include_explanation=False)
 
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post(
         "/login",
         data={"username": "reviewer.d43", "password": "reviewer-secret"},
@@ -419,10 +419,10 @@ def test_review_ui_shows_version_bound_relations_and_requires_ack(tmp_path: Path
     assert "versie 1.0" in html
 
 
-def test_d43_does_not_make_new_format_relations_serving_authority(tmp_path: Path) -> None:
+def test_d43_does_not_make_new_format_relations_serving_authority(tmp_path: Path, *, production_console) -> None:
     from src.serving_relations_v1 import binding_relations
 
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snapshot_id = _ingest(console, accounts)["snapshot_id"]
     rec, proposals = _plant_proposals(console, snapshot_id, include_explanation=False)
@@ -440,12 +440,12 @@ def test_d43_does_not_make_new_format_relations_serving_authority(tmp_path: Path
 
 
 @pytest.mark.parametrize("choice_count", [0, 1, 2])
-def test_semantic_retry_preserves_relation_decisions(tmp_path: Path, choice_count: int) -> None:
+def test_semantic_retry_preserves_relation_decisions(tmp_path: Path, choice_count: int, *, production_app, production_console) -> None:
     from html.parser import HTMLParser
     from src.recommendation_semantics_v1 import PROPOSED_FIELD as SEMANTICS_FIELD
     from tests.test_d3_3_human_recommendation_semantics import _proposal
 
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     sid = _ingest(console, accounts)["snapshot_id"]
     rec, proposals = _plant_proposals(console, sid)
@@ -460,7 +460,7 @@ def test_semantic_retry_preserves_relation_decisions(tmp_path: Path, choice_coun
     install_fixture_history(console, sid, rows)
     before = deepcopy(console.snapshot_objects(sid))
     selected = [relation_choice_value(row) for row in proposals[:choice_count]]
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.d43", "password": "reviewer-secret"})
     data = {
         "snapshot_id": sid, "object_id": rec["object_id"],

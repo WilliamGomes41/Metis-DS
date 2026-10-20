@@ -722,8 +722,8 @@ def test_semantic_recommendation_without_new_semantics_is_hard_blocked_not_legac
     assert "proposed_recommendation_strength" not in gated
 
 
-def test_runtime_current_schema_is_v14_while_legacy_schemas_remain_addressable(tmp_path: Path) -> None:
-    console = OperationsConsole(
+def test_runtime_current_schema_is_v14_while_legacy_schemas_remain_addressable(tmp_path: Path, *, production_console) -> None:
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",

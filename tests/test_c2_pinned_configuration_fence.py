@@ -22,8 +22,8 @@ from src.source_preparation_context_v1 import build_formation_context
 from tests.test_resv1_reservation_configuration import _reextract_ready
 
 
-def _setup(tmp_path):
-    console, sid, actor = _reextract_ready(tmp_path)
+def _setup(tmp_path, *, production_console):
+    console, sid, actor = _reextract_ready(tmp_path, production_console=production_console)
     envelope = deepcopy(console._envelope(sid))
     attempt = deepcopy(envelope['processing_attempts'][-1])
     assert attempt.get('processing_configuration'), 'fixture MOET have a pinned attempt'
@@ -52,8 +52,8 @@ def _variant(envelope, variant):
 
 
 @pytest.mark.parametrize('variant', ['html', 'beslisboom', 'non_html_pdf'])
-def test_changed_configuration_refused_before_every_return(tmp_path, variant):
-    console, envelope, attempt, actor, extracted = _setup(tmp_path)
+def test_changed_configuration_refused_before_every_return(tmp_path, variant, *, production_console):
+    console, envelope, attempt, actor, extracted = _setup(tmp_path, production_console=production_console)
     attempt['processing_configuration'] = {**attempt['processing_configuration'], 'mode': 'deployed-mid-flight'}
     with pytest.raises(ConsoleError, match='^processing_configuration_changed$'):
         _build(console, _variant(envelope, variant), attempt, actor)
@@ -61,24 +61,24 @@ def test_changed_configuration_refused_before_every_return(tmp_path, variant):
 
 
 @pytest.mark.parametrize('variant', ['html', 'beslisboom', 'non_html_pdf'])
-def test_unpinned_attempt_refused_fail_closed(tmp_path, variant):
-    console, envelope, attempt, actor, extracted = _setup(tmp_path)
+def test_unpinned_attempt_refused_fail_closed(tmp_path, variant, *, production_console):
+    console, envelope, attempt, actor, extracted = _setup(tmp_path, production_console=production_console)
     attempt.pop('processing_configuration')
     with pytest.raises(ConsoleError, match='^processing_configuration_unpinned$'):
         _build(console, _variant(envelope, variant), attempt, actor)
     assert extracted['n'] == 0
 
 
-def test_empty_pinned_configuration_is_unpinned(tmp_path):
-    console, envelope, attempt, actor, extracted = _setup(tmp_path)
+def test_empty_pinned_configuration_is_unpinned(tmp_path, *, production_console):
+    console, envelope, attempt, actor, extracted = _setup(tmp_path, production_console=production_console)
     attempt['processing_configuration'] = {}
     with pytest.raises(ConsoleError, match='^processing_configuration_unpinned$'):
         _build(console, envelope, attempt, actor)
     assert extracted['n'] == 0
 
 
-def test_matching_pinned_configuration_passes_the_check(tmp_path):
-    console, envelope, attempt, actor, extracted = _setup(tmp_path)
+def test_matching_pinned_configuration_passes_the_check(tmp_path, *, production_console):
+    console, envelope, attempt, actor, extracted = _setup(tmp_path, production_console=production_console)
     assert attempt['processing_configuration'] == selection.configuration(console)
     context = _build(console, envelope, attempt, actor)
     assert context['snapshot_id'] == envelope['snapshot_id']
