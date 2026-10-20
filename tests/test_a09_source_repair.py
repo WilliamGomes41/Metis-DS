@@ -104,7 +104,7 @@ def repair_setup(request, tmp_path):
     factory = None
     if request.param == 'postgres':
         from tests.decision_graph_native_support import native_state
-        state, _canonical, _source = native_state(tmp_path)
+        state, _canonical, _source = native_state(tmp_path, config=request.getfixturevalue("complete_postgres"))
         counter = iter(range(100))
         factory = lambda: state(f'a09-{next(counter)}')
     return lambda **kwargs: setup_repair(tmp_path, factory=factory, **kwargs)
@@ -271,8 +271,7 @@ def test_direct_kernel_rejects_partial_materialisation_before_storage(repair_set
     with pytest.raises(ConsoleError, match='materialisation_text_mismatch'):
         OperationsConsole.correct_object(console, actor_id=reviewer['account_id'], snapshot_id=sid,
             object_id=obj['object_id'], patch=patch, expected_revision=console.objects_revision(sid))
-    assert fresh()._load_objects(sid, remember=False) == before
-    assert read_events(fresh()._ledger_path) == events
+    _assert_failed_command_readback(console, fresh, sid, before, events)
 
 
 def test_new_process_restart_reconstructs_committed_revision(repair_setup):
@@ -343,8 +342,7 @@ def test_source_identity_rechecked_at_actual_commit(repair_setup, monkeypatch):
         OperationsConsole.correct_object(console, actor_id=reviewer['account_id'], snapshot_id=sid,
             object_id=obj['object_id'], expected_revision=console.objects_revision(sid),
             patch={'reason':'Zelfde selectie', 'operations':[{'op':'set','path':'content.clean_text','value':obj['content']['clean_text']}]})
-    assert fresh()._load_objects(sid, remember=False) == before
-    assert read_events(fresh()._ledger_path) == before_events
+    _assert_failed_command_readback(console, fresh, sid, before, before_events)
 
 
 
@@ -354,20 +352,20 @@ def test_authorization_revoked_during_preparation_cannot_commit(repair_setup, mo
     from src.review_ledger import read_events
     console, sid, obj, reviewer, fresh = repair_setup()
     publisher = console.create_account(username='publisher', password=PASSWORD, roles=('publisher',))
+    peer = fresh()  # Start before creating the legacy revise fixture.
     console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=obj['object_id'],
                          decision='revise', comment='Correctie nodig.')
     before = deepcopy(console._load_objects(sid, remember=False))
     before_events = read_events(console._ledger_path)
     def revoke(previous, revised, *, fragments):
         rebind_revision_evidence(previous, revised, fragments=fragments)
-        fresh().assign_roles(actor_id=publisher['account_id'], account_id=reviewer['account_id'], roles=['publisher'])
+        peer.assign_roles(actor_id=publisher['account_id'], account_id=reviewer['account_id'], roles=['publisher'])
     monkeypatch.setattr('src.source_bound_fields_v2.rebind_revision_evidence', revoke)
     with pytest.raises(ConsoleError, match='correction_role_required'):
         OperationsConsole.correct_object(console, actor_id=reviewer['account_id'], snapshot_id=sid,
             object_id=obj['object_id'], expected_revision=console.objects_revision(sid),
             patch={'reason':'Zelfde selectie', 'operations':[{'op':'set','path':'content.clean_text','value':obj['content']['clean_text']}]})
-    assert fresh()._load_objects(sid, remember=False) == before
-    assert read_events(fresh()._ledger_path) == before_events
+    _assert_failed_command_readback(console, fresh, sid, before, before_events)
 
 
 
@@ -405,7 +403,7 @@ def test_direct_correction_cannot_save_inconsistent_raw_text(repair_setup, entra
             OperationsConsole.correct_object(console, **kwargs)
         else:
             console.correct_object(**kwargs)
-    assert fresh()._load_objects(sid, remember=False) == before
+    _assert_failed_command_readback(console, fresh, sid, before)
 
 
 def test_nonadjacent_units_do_not_silently_include_the_gap(repair_setup):
@@ -445,3 +443,44 @@ def test_older_direct_preparation_cannot_overwrite_a_committed_winner(repair_set
     from src.review_ledger import read_events
     assert len([event for event in read_events(fresh()._ledger_path)
                 if event['event_type']=='quality_object_corrected']) == 1
+
+
+def _assert_failed_command_readback(console, fresh, sid, before, events=None):
+    """Prove rollback before startup, then preserve canonical content on real restart.
+
+    build_app intentionally reopens legacy revise metadata. A bare constructor
+    never performed that migration, so its byte-equality check was not a
+    production restart proof.
+    """
+    store = getattr(console, "workflow_document_store", None)
+    if store is not None:
+        assert store.list_document_objects(sid) == before
+        if events is not None:
+            assert console.workflow_review_store.read_events() == events
+    restarted = fresh()
+    after = restarted._load_objects(sid, remember=False)
+    if store is not None:
+        from src.integrity_kernel import compute_canonical_object_hash
+        def canonical(rows):
+            return {(o['object_id'], o['object_version']): compute_canonical_object_hash(o) for o in rows}
+        previous, current = canonical(before), canonical(after)
+        assert {key: current.get(key) for key in previous} == previous
+        extra = [o for o in after if (o['object_id'], o['object_version']) not in previous]
+        legacy = {o['object_id'] for o in before if o.get('governance', {}).get('validation_status') == 'revise'}
+        assert len(extra) == len(legacy)
+        assert {o['object_id'] for o in extra} == legacy
+        rows = {(o['object_id'], o['object_version']): o for o in before}
+        for successor in extra:
+            edge = successor['metadata']['revision_lineage']
+            predecessor = (successor['object_id'], edge['previous_object_version'])
+            assert edge['reason'] == 'clear repair context'
+            assert edge['actor'] == 'repair-command'
+            assert edge['previous_canonical_object_hash'] == previous[predecessor]
+            assert successor['content'] == rows[predecessor]['content']
+            assert successor['source'] == rows[predecessor]['source']
+            assert successor['governance']['validation_status'] == 'needs_review'
+    else:
+        assert after == before
+        if events is not None:
+            from src.review_ledger import read_events
+            assert read_events(restarted._ledger_path) == events

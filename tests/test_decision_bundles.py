@@ -14,14 +14,14 @@ from tests.test_decision_graph_chain import _console, _accounts, _ingest_boom, p
 
 
 @pytest.mark.parametrize("backend", ["local", "postgres"])
-def test_pdf_bundle_needs_each_member_review_and_preserves_source(tmp_path, backend):
+def test_pdf_bundle_needs_each_member_review_and_preserves_source(tmp_path, backend, *, complete_postgres):
     with fitz.open() as doc:
         page = doc.new_page()
         page.insert_text((70, 80), "Plan:\n- Neem contact op.\n- Maak een afspraak.")
         data = doc.tobytes()
     if backend == "postgres":
         from tests.decision_graph_native_support import native_state
-        state, store, source = native_state(tmp_path)
+        state, store, source = native_state(tmp_path, config=complete_postgres)
         console = state()
     else:
         console = _console(tmp_path)
