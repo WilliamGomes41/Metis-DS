@@ -143,139 +143,143 @@ def test_normal_risk_batch_excludes_action_high_risk_second_review_blocked_and_u
     ]
 
 
-class _BatchHarness(ProportionateReviewConsole):
-    def __init__(self, objects: list[dict]) -> None:
-        self._objects = {row["object_id"]: deepcopy(row) for row in objects}
-        self.calls: list[dict] = []
-        self.opened: list[str] = []
-        self.revision = "rev-1"
+@pytest.fixture
+def batch_console(production_console, tmp_path, monkeypatch):
+    """Real PG commands; spies observe delegation without replacing authority."""
+    from src.integrity_kernel import stamp_canonical_hashes
+    from tests.semantic_fixture_support import bind_fixture_selections, install_fixture_history
+    from tests.test_t4_single_knowledge_path_invariants import _project_policy
 
-    def _require_role(self, actor_id: str, role: str) -> dict:
-        assert actor_id == "reviewer-1"
-        assert role == "reviewer"
-        return {"account_id": actor_id, "username": "reviewer.one"}
+    def make(requested):
+        console = production_console(root=tmp_path, processing_binder=lambda console: None, isolated=True)
+        bind_fixture_selections(console, [("Oedeem is een ophoping van vocht.", "definition")])
+        author = console.create_account('author', 'fixture-password', ['researcher'])
+        reviewer = console.create_account('reviewer', 'fixture-password', ['reviewer'])
+        receipt = console.ingest(actor_id=author['account_id'], filename='batch.html',
+            content_type='text/html', data=b'<html><h1>Begrippen</h1><h2>1 Achtergrond</h2><p>Oedeem is een ophoping van vocht.</p></html>',
+            ingest_kind='new', title='Batch', version='1', date='2026-10-20', live_url='',
+            class_='richtlijn', family='batch', named_reviewers=[reviewer['account_id']])
+        sid = receipt['snapshot_id']
+        base = next(o for o in console.snapshot_objects(sid) if o.get('proposed_object_type')=='definition')
+        rows = []
+        for requested_row in requested:
+            row = deepcopy(base)
+            for key in ['object_id','object_type','proposed_object_type','confirmed_object_type',
+                        'uncertainty']:
+                if key in requested_row:
+                    row[key] = deepcopy(requested_row[key])
+            row['structure'].update(requested_row['structure'])
+            row['governance'].update(requested_row['governance'])
+            row['risk'].update({('risk_level' if key=='level' else key): value
+                                for key,value in requested_row['risk'].items()})
+            row['metadata']['admission'] = deepcopy(requested_row['metadata']['admission'])
+            _project_policy(console, sid, row)
+            stamp_canonical_hashes(row)
+            rows.append(row)
+        install_fixture_history(console, sid, rows)
+        console.test_snapshot_id, console.test_reviewer_id = sid, reviewer['account_id']
+        console.initial_revision = console.objects_revision(sid)
+        console.calls, console.opened, console.review_revisions = [], [], []
+        review, open_original = console.review_object, console._require_open_original
+        def observe_review(**command):
+            if not console.calls:
+                console.preflight_open_count = len(console.opened)
+            console.calls.append(dict(command))
+            result = review(**command)
+            console.review_revisions.append(console.objects_revision(sid))
+            return result
+        def observe_source(snapshot_id, object_id):
+            console.opened.append(object_id)
+            return open_original(snapshot_id, object_id)
+        monkeypatch.setattr(console, 'review_object', observe_review)
+        monkeypatch.setattr(console, '_require_open_original', observe_source)
+        return console
+    return make
 
-    def _envelope(self, snapshot_id: str) -> dict:
-        assert snapshot_id == "snap-1"
-        return {"class": "richtlijn", "named_reviewers": ["reviewer-1"]}
 
-    def snapshot_objects(self, snapshot_id: str, *args, **kwargs) -> list[dict]:
-        assert snapshot_id == "snap-1"
-        return [deepcopy(row) for row in self._objects.values()]
-
-    def review_source_fragments(self, snapshot_id, **kwargs):
-        return _allowed_source()
-
-    def object_review_bindings(self, snapshot_id):
-        return []
-
-    def _require_open_original(self, snapshot_id: str, object_id: str) -> dict:
-        self.opened.append(object_id)
-        return {"passage": object_id}
-
-    def review_object(self, **kwargs) -> list[dict]:
-        self.calls.append(dict(kwargs))
-        object_id = kwargs["object_id"]
-        row = self._objects[object_id]
-        row["confirmed_object_type"] = kwargs["confirmed_object_type"]
-        row["object_type"] = kwargs["confirmed_object_type"]
-        row["governance"]["validation_status"] = "approved"
-        self.revision = f"rev-{len(self.calls) + 1}"
-        return self.snapshot_objects("snap-1")
-
-    def objects_revision(self, snapshot_id: str) -> str:
-        assert snapshot_id == "snap-1"
-        return self.revision
-
-    def snapshot_objects_and_revision(self, snapshot_id: str) -> tuple[list[dict], str]:
-        return self.snapshot_objects(snapshot_id), self.revision
-
-    def _objects_expected_revs(self) -> dict[str, str]:
-        return {"snap-1": self.revision}
-
-
-def test_one_batch_interaction_delegates_to_individual_object_reviews() -> None:
-    console = _BatchHarness([
+def test_one_batch_interaction_delegates_to_individual_object_reviews(batch_console) -> None:
+    console = batch_console([
         _obj("d1", "definition"),
         _obj("d2", "definition"),
     ])
     updated = console.batch_review_normal_risk(
-        actor_id="reviewer-1",
-        snapshot_id="snap-1",
+        actor_id=console.test_reviewer_id,
+        snapshot_id=console.test_snapshot_id,
         object_ids=["d1", "d2"],
-        expected_revision="rev-1",
+        expected_revision=console.initial_revision,
     )
-    assert console.opened == ["d1", "d2"]
+    assert console.preflight_open_count == 2
+    assert console.opened == ["d1", "d2", "d1", "d2"]
     assert [call["object_id"] for call in console.calls] == ["d1", "d2"]
     assert [call["decision"] for call in console.calls] == ["approve", "approve"]
     assert [call["confirmed_object_type"] for call in console.calls] == ["definition", "definition"]
     assert all(call["suitability"] == "ja" for call in console.calls)
-    assert [call["expected_revision"] for call in console.calls] == ["rev-1", "rev-2"]
+    assert [call["expected_revision"] for call in console.calls] == [console.initial_revision, console.review_revisions[0]]
     assert {row["object_id"] for row in updated} == {"d1", "d2"}
 
 
-def test_batch_preflights_all_objects_before_writing() -> None:
-    console = _BatchHarness([
+def test_batch_preflights_all_objects_before_writing(batch_console) -> None:
+    console = batch_console([
         _obj("d1", "definition"),
         _obj("high", "definition", high=True),
     ])
     with pytest.raises(ConsoleError, match="normal_risk_batch_ineligible"):
         console.batch_review_normal_risk(
-            actor_id="reviewer-1",
-            snapshot_id="snap-1",
+            actor_id=console.test_reviewer_id,
+            snapshot_id=console.test_snapshot_id,
             object_ids=["d1", "high"],
         )
     assert console.calls == []
     assert console.opened == []
 
 
-def test_batch_cannot_cross_sections() -> None:
-    console = _BatchHarness([
+def test_batch_cannot_cross_sections(batch_console) -> None:
+    console = batch_console([
         _obj("d1", "definition", section=("1 Achtergrond",)),
         _obj("d2", "definition", section=("2 Uitwerking",)),
     ])
     with pytest.raises(ConsoleError, match="normal_risk_batch_mixed_section"):
         console.batch_review_normal_risk(
-            actor_id="reviewer-1",
-            snapshot_id="snap-1",
+            actor_id=console.test_reviewer_id,
+            snapshot_id=console.test_snapshot_id,
             object_ids=["d1", "d2"],
         )
     assert console.calls == []
 
 
-def test_batch_cannot_mix_definition_and_explanation() -> None:
-    console = _BatchHarness([
+def test_batch_cannot_mix_definition_and_explanation(batch_console) -> None:
+    console = batch_console([
         _obj("d1", "definition"),
         _obj("e1", "explanation"),
     ])
     with pytest.raises(ConsoleError, match="normal_risk_batch_mixed_type"):
         console.batch_review_normal_risk(
-            actor_id="reviewer-1",
-            snapshot_id="snap-1",
+            actor_id=console.test_reviewer_id,
+            snapshot_id=console.test_snapshot_id,
             object_ids=["d1", "e1"],
         )
     assert console.calls == []
     assert console.opened == []
 
 
-def test_batch_has_hard_maximum_of_twenty_objects() -> None:
+def test_batch_has_hard_maximum_of_twenty_objects(batch_console) -> None:
     rows = [_obj(f"d{index}", "definition") for index in range(NORMAL_RISK_BATCH_MAX + 1)]
-    console = _BatchHarness(rows)
+    console = batch_console(rows)
     with pytest.raises(ConsoleError, match="normal_risk_batch_too_large"):
         console.batch_review_normal_risk(
-            actor_id="reviewer-1",
-            snapshot_id="snap-1",
+            actor_id=console.test_reviewer_id,
+            snapshot_id=console.test_snapshot_id,
             object_ids=[row["object_id"] for row in rows],
         )
     assert console.calls == []
     assert console.opened == []
 
 
-def test_rendered_batch_panel_splits_large_groups_by_type_and_maximum() -> None:
+def test_rendered_batch_panel_splits_large_groups_by_type_and_maximum(batch_console) -> None:
     rows = [_obj(f"d{index}", "definition") for index in range(NORMAL_RISK_BATCH_MAX + 1)]
     rows += [_obj("e1", "explanation"), _obj("r1", "recommendation"), _obj("u1", "definition", uncertain=True)]
-    console = _BatchHarness(rows)
-    html = render_normal_risk_batch_panel(console, "snap-1")
+    console = batch_console(rows)
+    html = render_normal_risk_batch_panel(console, console.test_snapshot_id)
     assert html.count('action="/review/normal-risk/batch-confirm"') == 1
     assert html.count('class="normal-risk-single"') == 2
     assert f"Maximaal {NORMAL_RISK_BATCH_MAX} passages per bevestiging" in html
@@ -288,36 +292,37 @@ def test_rendered_batch_panel_splits_large_groups_by_type_and_maximum() -> None:
 
 @pytest.mark.parametrize("human_type", ["recommendation", "condition", "exception"])
 @pytest.mark.parametrize("field", ["confirmed_object_type", "object_type"])
-def test_batch_never_overwrites_authoritative_action_type(human_type: str, field: str) -> None:
+def test_batch_never_overwrites_authoritative_action_type(human_type: str, field: str, batch_console) -> None:
     row = _obj("d1", "definition")
     row[field] = human_type
-    console = _BatchHarness([row])
+    console = batch_console([row])
     with pytest.raises(ConsoleError, match="normal_risk_batch_ineligible"):
-        console.batch_review_normal_risk(actor_id="reviewer-1", snapshot_id="snap-1", object_ids=["d1"])
+        console.batch_review_normal_risk(actor_id=console.test_reviewer_id, snapshot_id=console.test_snapshot_id, object_ids=["d1"])
     assert console.calls == []
 
 
-def test_sectionless_single_object_is_not_batchable() -> None:
-    console = _BatchHarness([_obj("d1", "definition", section=())])
+def test_sectionless_single_object_is_not_batchable(batch_console) -> None:
+    console = batch_console([_obj("d1", "definition", section=())])
     with pytest.raises(ConsoleError, match="normal_risk_batch_ineligible"):
-        console.batch_review_normal_risk(actor_id="reviewer-1", snapshot_id="snap-1", object_ids=["d1"])
+        console.batch_review_normal_risk(actor_id=console.test_reviewer_id, snapshot_id=console.test_snapshot_id, object_ids=["d1"])
     assert console.calls == []
 
 
-def test_nonbatch_content_and_batch_members_have_individual_routes() -> None:
+def test_nonbatch_content_and_batch_members_have_individual_routes(batch_console) -> None:
     rows = [_obj("d1", "definition"), _obj("u1", "definition", uncertain=True),
             _obj("s1", "definition", section=())]
-    panel = render_normal_risk_batch_panel(_BatchHarness(rows), "snap-1")
+    console = batch_console(rows)
+    panel = render_normal_risk_batch_panel(console, console.test_snapshot_id)
     for row in rows:
         assert f'&amp;object={row["object_id"]}' in panel
     assert 'value="u1"' not in panel
     assert 'value="s1"' not in panel
 
 
-def test_stale_batch_fails_before_any_review_or_source_open() -> None:
-    console = _BatchHarness([_obj("d1", "definition")])
+def test_stale_batch_fails_before_any_review_or_source_open(batch_console) -> None:
+    console = batch_console([_obj("d1", "definition")])
     with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
-        console.batch_review_normal_risk(actor_id="reviewer-1", snapshot_id="snap-1", object_ids=["d1"], expected_revision="old")
+        console.batch_review_normal_risk(actor_id=console.test_reviewer_id, snapshot_id=console.test_snapshot_id, object_ids=["d1"], expected_revision="old")
     assert console.calls == []
     assert console.opened == []
 
@@ -329,22 +334,27 @@ def test_source_contains_no_new_store_or_review_tier() -> None:
     assert "new database" not in source.lower()
 
 
-def test_batch_type_is_a_proposal_and_correction_does_not_confirm_it() -> None:
+def test_batch_type_is_a_proposal_and_correction_does_not_confirm_it(batch_console) -> None:
     row = _obj('definition', 'definition')
     before = deepcopy(row)
-    html = render_normal_risk_batch_panel(_BatchHarness([row]), 'snap-1', snapshot=([row], 'rev-1'))
+    console = batch_console([row])
+    html = render_normal_risk_batch_panel(console, console.test_snapshot_id,
+        snapshot=(console.snapshot_objects(console.test_snapshot_id), console.initial_revision))
     assert 'Voorstel van Metis: Definitie' in html
     assert '#classification-definition' in html
     assert 'Type of gebruik controleren' in html
     assert row == before
     row['confirmed_object_type'] = 'explanation'
-    html = render_normal_risk_batch_panel(_BatchHarness([row]), 'snap-1', snapshot=([row], 'rev-1'))
+    console = batch_console([row])
+    html = render_normal_risk_batch_panel(console, console.test_snapshot_id,
+        snapshot=(console.snapshot_objects(console.test_snapshot_id), console.initial_revision))
     assert 'Bevestigd type: Toelichting' in html
     assert 'Voorstel van Metis: Definitie' not in html
 
 
-def test_singleton_has_individual_review_without_batch_controls():
-    html = render_normal_risk_batch_panel(_BatchHarness([_obj("single", "definition")]), "snap-1")
+def test_singleton_has_individual_review_without_batch_controls(batch_console):
+    console = batch_console([_obj("single", "definition")])
+    html = render_normal_risk_batch_panel(console, console.test_snapshot_id)
     assert "Passage beoordelen" in html
     assert 'name="object_ids"' not in html
     assert "data-select-review-batch" not in html

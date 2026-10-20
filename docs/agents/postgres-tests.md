@@ -426,3 +426,10 @@ maken; na herstel zijn alle 120 groen. De historische bronregel-dekking wordt
 niet geclaimd omdat beide productiebestanden inmiddels van de oude SHA afwijken.
 De aparte characterization-CI-job krijgt dezelfde PostgreSQL16-service als de
 suitejob; deze configuratie is lokaal voorbereid, CI is nog niet uitgevoerd.
+
+
+Portie 22 verwijdert de muterende `_BatchHarness` van de oudste proportionele
+reviewproef. Alle 22 bestaande cases zijn groen op echte PG-commando's. De eerste
+bronpreflight is voltooid vóór de eerste review; de individuele reviews valideren
+de bron nogmaals. Spies observeren beide, zonder de reviewoperatie of toestand
+te vervangen. De pin tussen batchleden is de echte PG-revision.

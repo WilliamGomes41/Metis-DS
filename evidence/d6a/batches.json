@@ -825,5 +825,25 @@
     ],
     "full_suite_status": "pending",
     "ci_status": "not run: push approval pending"
+  },
+  {
+    "batch": "22",
+    "base": "4d8f43d",
+    "commit": "codex/d6a-22-batch-authority",
+    "test_files": [
+      "tests/test_v233_product_proportionate_review.py"
+    ],
+    "executed_unique_cases": 22,
+    "failures": 0,
+    "skipped": 0,
+    "verification": "Removed in-memory mutating batch harness. Actual PG source-bound review commands and real revision pins; spies observe existing preflight and per-member source validation. All22 original cases retained and green.",
+    "junit": [
+      {
+        "file": "d6a22-complete.xml",
+        "sha256": "94de0f154fb5a35dd447444204f212adce8413d7eb70a2d793d7925ecf529651"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending"
   }
 ]
