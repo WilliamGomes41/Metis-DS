@@ -1,0 +1,121 @@
+{
+  "environment": "Codex; DSN unset; PGBIN points to an unavailable installation",
+  "files": [
+    {
+      "file": "tests/test_665_tier_d_refused_postgres.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_a06_selected_occurrence_relations.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_a08_heading_batch_atomic.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_a09_source_repair.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_a10_source_cache_repair.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_api_access_lifecycle_v1.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_api_access_postgres_v1.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_console_badge_counts_postgres_v1.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_console_list_reads_postgres_v1.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_d5_pg_recovery_and_source_v1.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_d6a_postgres_support.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_docling_real_pdf.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_lifecycle_identity_v1.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_live_v1_working_v2_v1.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_logical_document_withdrawal_v1.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_migration_018_postgres_v1.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_pg_console_without_disk_mirrors.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_product_api_consumer_contract_v1.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_publish_refusal_audit_postgres_v1.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_published_working_revision_immutable_2b_postgres.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_review_queue_sql_parity_v1.py",
+      "exit_code": 4,
+      "database_messages": 1
+    },
+    {
+      "file": "tests/test_security_sandbox.py",
+      "exit_code": 0,
+      "database_messages": 0
+    },
+    {
+      "file": "tests/test_successor_release_cutover_v1.py",
+      "exit_code": 4,
+      "database_messages": 1
+    }
+  ],
+  "summary": "22 selected PG test modules stop during collection with exactly one named database message; the security sandbox environment-only tests collect without PG."
+}
