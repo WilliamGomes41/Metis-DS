@@ -13,7 +13,6 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.review_ledger import read_events
 
@@ -33,8 +32,8 @@ NO_DELETE_ROOMS = (
 )
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -104,8 +103,8 @@ def _ingest(
     return console.ingest(**defaults)
 
 
-def _client(console: OperationsConsole, username: str = "researcher.anne") -> TestClient:
-    client = TestClient(create_console_app(console))
+def _client(console: OperationsConsole, username: str='researcher.anne', *, production_app) -> TestClient:
+    client = TestClient(production_app(console))
     passwords = {
         "reviewer.bert": "bert-secret",
         "researcher.anne": "anne-secret",
@@ -161,17 +160,18 @@ def _delete_forms(html: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def test_delete_control_absent_from_inleveren_review_publiceren_accounts(
-    tmp_path: Path,
-) -> None:
-    console = _console(tmp_path)
+def test_delete_control_absent_from_inleveren_review_publiceren_accounts(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Continentie fixture")
     snap = receipt["snapshot_id"]
-    client = _client(console)
+    client = _client(console, production_app=production_app)
 
     for path, heading in NO_DELETE_ROOMS:
-        html = client.get(path).text
+        room_client = _client(console, "publisher.carla", production_app=production_app) if path == "/publish" else client
+        response = room_client.get(path)
+        assert response.status_code == 200
+        html = response.text
         assert heading in html
         assert DELETE_LABEL not in html
         assert not _has_delete_control(html)
@@ -188,11 +188,11 @@ def test_delete_control_absent_from_inleveren_review_publiceren_accounts(
     assert DELETE_LABEL not in ingest_receipt
 
 
-def test_no_separate_delete_room_or_kamer(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_no_separate_delete_room_or_kamer(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     _ingest(console, accounts, title="Geen delete-kamer")
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     tree = client.get("/tree").text
     visible = _visible_text(tree)
     assert "Documenten" in tree
@@ -210,12 +210,12 @@ def test_no_separate_delete_room_or_kamer(tmp_path: Path) -> None:
     assert "/delete" not in rooms
 
 
-def test_delete_control_present_on_documentenhierarchie_only(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_delete_control_present_on_documentenhierarchie_only(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Alleen hiërarchie")
     snap = receipt["snapshot_id"]
-    client = _client(console)
+    client = _client(console, production_app=production_app)
 
     tree = client.get("/tree").text
     assert "Documenten" in tree
@@ -238,14 +238,12 @@ def test_delete_control_present_on_documentenhierarchie_only(tmp_path: Path) -> 
 # ---------------------------------------------------------------------------
 
 
-def test_type_to_confirm_shows_exact_title_on_documentenhierarchie(
-    tmp_path: Path,
-) -> None:
-    console = _console(tmp_path)
+def test_type_to_confirm_shows_exact_title_on_documentenhierarchie(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     title = "Continentie bij ouderen"
     _ingest(console, accounts, title=title)
-    html = _client(console).get("/tree").text
+    html = _client(console, production_app=production_app).get("/tree").text
     visible = _visible_text(html)
     assert title in visible
     forms = _delete_forms(html)
@@ -259,8 +257,8 @@ def test_type_to_confirm_shows_exact_title_on_documentenhierarchie(
     assert "envelope" not in _visible_text(form).lower()
 
 
-def test_kernel_wrong_or_empty_title_does_not_delete(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_kernel_wrong_or_empty_title_does_not_delete(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     title = "Exacte titel"
     receipt = _ingest(console, accounts, title=title)
@@ -275,13 +273,11 @@ def test_kernel_wrong_or_empty_title_does_not_delete(tmp_path: Path) -> None:
                 confirm_title=typed,
             )
     assert snap in {row["snapshot_id"] for row in console.list_envelopes()}
-    assert console._objects_path(snap).is_file()
+    assert console.workflow_document_store.list_document_objects(snap)
 
 
-def test_kernel_generic_confirm_without_exact_title_does_not_delete(
-    tmp_path: Path,
-) -> None:
-    console = _console(tmp_path)
+def test_kernel_generic_confirm_without_exact_title_does_not_delete(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Bevestig alleen")
     snap = receipt["snapshot_id"]
@@ -294,13 +290,13 @@ def test_kernel_generic_confirm_without_exact_title_does_not_delete(
     assert snap in {row["snapshot_id"] for row in console.list_envelopes()}
 
 
-def test_http_wrong_empty_or_partial_title_does_not_delete(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_http_wrong_empty_or_partial_title_does_not_delete(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     title = "HTTP titel"
     receipt = _ingest(console, accounts, title=title)
     snap = receipt["snapshot_id"]
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     for typed in ("", "HTTP", "HTTP titelX", "andere"):
         response = client.post(
             "/documents/delete",
@@ -317,8 +313,8 @@ def test_http_wrong_empty_or_partial_title_does_not_delete(tmp_path: Path) -> No
     assert DELETE_LABEL in client.get("/tree").text
 
 
-def test_exact_title_match_required_then_delete_runs(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_exact_title_match_required_then_delete_runs(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     title = "Weg na exacte titel"
     receipt = _ingest(console, accounts, title=title)
@@ -334,15 +330,13 @@ def test_exact_title_match_required_then_delete_runs(tmp_path: Path) -> None:
     assert snap not in {row["snapshot_id"] for row in console.list_envelopes()}
 
 
-def test_http_exact_title_match_deletes_from_documentenhierarchie(
-    tmp_path: Path,
-) -> None:
-    console = _console(tmp_path)
+def test_http_exact_title_match_deletes_from_documentenhierarchie(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     title = "Weg via hiërarchie"
     receipt = _ingest(console, accounts, title=title)
     snap = receipt["snapshot_id"]
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     response = client.post(
         "/documents/delete",
         data={
@@ -365,14 +359,16 @@ def test_http_exact_title_match_deletes_from_documentenhierarchie(
 # ---------------------------------------------------------------------------
 
 
-def test_unpublished_only_published_projection_not_deleted(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_unpublished_only_published_projection_not_deleted(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     unpublished = _ingest(console, accounts, title="Live unpublished")
     planted = _ingest(console, accounts, title="In projectie", filename="proj.html")
     rows = console._load_objects(planted["snapshot_id"])
     rows[0]["governance"]["publication_status"] = "published"
     console._save_objects(planted["snapshot_id"], rows)
+    from tests.complete_workflow_support import seed_canonical_release
+    seed_canonical_release(console.canonical_publication_store, snapshot_id=planted["snapshot_id"], token=planted["snapshot_id"])
     with pytest.raises(ConsoleError, match="published_projection_must_not_be_deleted"):
         console.delete_unpublished_snapshot(
             actor_id=accounts["researcher"]["account_id"],
@@ -380,7 +376,7 @@ def test_unpublished_only_published_projection_not_deleted(tmp_path: Path) -> No
             confirmed=True,
             confirm_title="In projectie",
         )
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     tree = client.get("/tree").text
     assert DELETE_LABEL in tree
     assert unpublished["snapshot_id"] in tree
@@ -393,8 +389,8 @@ def test_unpublished_only_published_projection_not_deleted(tmp_path: Path) -> No
     assert planted["snapshot_id"] in {row["snapshot_id"] for row in console.list_envelopes()}
 
 
-def test_audit_ledger_row_still_recorded_after_type_to_confirm(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_audit_ledger_row_still_recorded_after_type_to_confirm(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     title = "Audit na type-to-confirm"
     receipt = _ingest(console, accounts, title=title)
@@ -424,10 +420,8 @@ def test_audit_ledger_row_still_recorded_after_type_to_confirm(tmp_path: Path) -
 # ---------------------------------------------------------------------------
 
 
-def test_no_ssh_wipe_and_four_eyes_not_required_for_unpublished_delete(
-    tmp_path: Path,
-) -> None:
-    console = _console(tmp_path)
+def test_no_ssh_wipe_and_four_eyes_not_required_for_unpublished_delete(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     title = "Geen four-eyes"
     receipt = _ingest(console, accounts, title=title)
@@ -453,8 +447,8 @@ def test_no_ssh_wipe_and_four_eyes_not_required_for_unpublished_delete(
     assert "/home/data/metis-console" in asgi
 
 
-def test_g2_still_blocks_publish_after_v227_delete_surface(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_g2_still_blocks_publish_after_v227_delete_surface(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     keep = _ingest(console, accounts, title="Nog live", filename="live.html")
     gone = _ingest(console, accounts, title="Opruimen", filename="opruimen.html")
@@ -476,8 +470,9 @@ def test_g2_still_blocks_publish_after_v227_delete_surface(tmp_path: Path) -> No
     )
     assert considered["publish_allowed"] is False
     assert considered["g2"] == "BLOCKED"
-    html = _client(console, "publisher.carla").get("/publish").text
-    assert "geblokkeerd" in html.lower() or "BLOCKED" in html
+    html = _client(console, "publisher.carla", production_app=production_app).get("/publish").text
+    assert '<h1>Publiceren</h1>' in html
+    assert "data-publish-form" not in html
     assert DELETE_LABEL not in html
 
 

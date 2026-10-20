@@ -105,3 +105,30 @@ CI bewaart de metingen als `suite-timing-*`. Op `codex/d6a*`-PR's meet Python
 3.13 eerst de vaste baseline; beide Python-versies meten vervolgens de suite.
 Een lokale tijdmeting is geen CI-resultaat. D6b wacht op volledige migratie,
 acceptabele CI-looptijd, omgevingsbewijs en de voorgeschreven reviewronde.
+
+## Vervolgporties (lokaal)
+
+Portie 2 vervangt schema-resetfixtures en isoleert ook de afnemers die eerder
+stilzwijgend op zo'n reset door een andere module vertrouwden. De aanvullende
+publicatie-, successor- en intrekproeven houden hun eigen database.
+De tijdens de migratie gevonden directe accountmap-lookup is als afzonderlijke
+Class B-reparatie beschreven in
+[de lezersreparatie](../change-contracts/d6a-reader-authority.md).
+
+Portie 4 migreert elf pagina-/opslagmodules (128 bestaande gevallen).
+Drie expliciete proeven van de lokale JSON-schrijver blijven `file_topology`.
+PG-concurrency toetst conflicterende writes op hetzelfde object; de bestaande
+PG-store mag onafhankelijke objectwijzigingen samenvoegen.
+
+Portie 5 migreert twaalf oudere ingest-/document-/reviewmodules (257 bestaande
+gevallen). Gepubliceerd werk wordt in de fixture met de bestaande canonical
+PG-seed vastgelegd, zodat de seal van PostgreSQL komt. De productieworkboard-knop,
+de vereenvoudigde parentkeuze en de compacte publicatiepagina vervangen oude
+presentatieverwachtingen van de kale basisapp. Publicatiepagina's worden met
+een bevoegde publisher gelezen; de bestaande kernelblokkades blijven getoetst.
+Twee bestandsspecifieke gevallen blijven `file_topology`. Er zijn geen
+productieregels aangepast om deze tests groen te maken.
+
+De JUnit-bronnen en aantallen staan in `evidence/d6a/batches.json`. Een reeks
+lokale herhalingen wordt daar onderscheiden van één foutloze volledige run.
+De overige porties, CI-metingen, Cursor-bewijs en de D6b-voorwaarden zijn nog open.

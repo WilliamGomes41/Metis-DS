@@ -73,5 +73,45 @@
     "targeted_junit": "d6a04.xml",
     "full_suite_status": "batch 02 running; subsequent full measurements pending",
     "ci_status": "not run: push approval pending"
+  },
+  {
+    "batch": "05",
+    "base": "cd9e42c",
+    "commit": "pending",
+    "test_files": [
+      "tests/test_a1_instrumentation.py",
+      "tests/test_bounded_processing_lifecycle.py",
+      "tests/test_v215_ingest_date_version_review_lanes.py",
+      "tests/test_v216_review_page_researcher_bar.py",
+      "tests/test_v217_review_page_researcher_surface.py",
+      "tests/test_v218_review_card_extract_dedup.py",
+      "tests/test_v220_unpublished_document_delete.py",
+      "tests/test_v221_wave_a_knowledge_object_bounds.py",
+      "tests/test_v226_klasse_wijzigen.py",
+      "tests/test_v227_unpublished_delete_documentenhierarchie_type_confirm.py",
+      "tests/test_v228_structural_heading_nav_and_confirmed_strength_gate.py",
+      "tests/test_v232_console_documenten_landing_b.py"
+    ],
+    "existing_count": 257,
+    "executed_count": 257,
+    "failures": 0,
+    "skipped": 0,
+    "verification": "Full targeted run plus reruns of the repaired cases; not one all-green invocation",
+    "junit": [
+      {
+        "file": "d6a05b.xml",
+        "sha256": "973fcbb83d9e1ffe4ce88176f774a0949cee87c515baa606a97908855b22933c"
+      },
+      {
+        "file": "d6a05-repaired.xml",
+        "sha256": "6dd2dfe3d60492558a0c37ca64cf46fc7983c9ad9fa575ea41918b37cb6bfbb1"
+      },
+      {
+        "file": "d6a05-last.xml",
+        "sha256": "bcbe9d49ee66dd61eba044fe4b86f86211d543ae4306a9d636f12c4865efcbf1"
+      }
+    ],
+    "ci_status": "not run: push approval pending",
+    "full_suite_status": "pending"
   }
 ]
