@@ -135,6 +135,7 @@ def production_console(tmp_path, production_environment, monkeypatch):
     """Use the actual ASGI startup, including PG classes, stores and reconciliation."""
     from src import console_asgi
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    apps = {}
 
     def factory(root=None, *, azure=False, processing_binder=bind_pre_review_semantic_processing, **options):
         root = Path(root or tmp_path)
@@ -155,18 +156,19 @@ def production_console(tmp_path, production_environment, monkeypatch):
                 setup.setenv("CONSOLE_PUBLIC_ORIGIN", "https://console.example.test")
             else:
                 setup.delenv("WEBSITE_SITE_NAME", raising=False)
-            return console_asgi.build_app().state.operations_kernel
+            app = console_asgi.build_app()
+            console = app.state.operations_kernel
+            apps[console] = app
+            return console
+    factory.apps = apps
     return factory
 
 
 @pytest.fixture
 def production_app(production_console):
-    from src.console_asgi import build_console_app
-    from src.topology_bound_v1 import assert_supported_topology
-
     def factory(console=None, **options):
-        return build_console_app(console if console is not None else production_console(**options),
-                                 topology=assert_supported_topology())
+        console = console if console is not None else production_console(**options)
+        return production_console.apps[console]
     return factory
 
 
