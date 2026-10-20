@@ -1,0 +1,39 @@
+{
+  "scope": "Combined execution covering every collected case; not a single complete-suite timing",
+  "runtime_commit": "5481dfb06c46011cbafb8de5585162274e79044d",
+  "cases": 5698,
+  "counts": {
+    "passed": 5665,
+    "failed": 0,
+    "skipped": 27,
+    "xfailed": 6
+  },
+  "postgres_skips": 0,
+  "junit": [
+    {
+      "file": "d6a-final-full.xml",
+      "sha256": "a8259132294f4ac154f7883aa417e3af9cff5e5c475574daaeec41b8d8fe7365"
+    },
+    {
+      "file": "d6a-final-tail.xml",
+      "sha256": "b8eb2ab95697aecbce6569a75d301f90f346c40b8d5949ef51f94147ec834a12"
+    },
+    {
+      "file": "d6a22-topology.xml",
+      "sha256": "229d6b7119ed57ed2f61156587afd775dbe687eda50a8def9b9583ce37b7c1b0"
+    },
+    {
+      "file": "d6a21-lane-consumer.xml",
+      "sha256": "4a8138d44e84643c6b4aa36e867628a8fc99e22b3e830d32afe210bb75771bd1"
+    },
+    {
+      "file": "d6a21-overview-consumer.xml",
+      "sha256": "8984fea80af23fc60bc5b3c0d8fd86c6b285edbc95cdd9d0cb7b98f148477a5d"
+    },
+    {
+      "file": "d6a-native-recovery-final.xml",
+      "sha256": "cbea4747e7e6a5f4e48d6699dfa2383cf63700e366e195f43025f1834aab193d"
+    }
+  ],
+  "limits": "The stale diagnostic was interrupted. Its passing cases plus complete tail and repaired-module runs cover all5698 cases; the uninterrupted measurement is separate."
+}

@@ -1,70 +1,20 @@
 {
-  "scope": "D6a first batch; not completion of D6a",
-  "baseline": {
-    "tests": 5674,
-    "passed": 5638,
-    "failed": 3,
-    "skipped": 27,
-    "xfailed": 6
-  },
-  "after": {
-    "tests": 5679,
-    "passed": 5643,
-    "failed": 3,
-    "skipped": 27,
-    "xfailed": 6
-  },
-  "same_existing_failures": [
-    "tests.test_security_harden_wave3::test_ssrf_https_sni_stays_original_hostname_when_dns_rebinds",
-    "tests.test_security_harden_wave3::test_ssrf_redirect_from_pinned_public_to_metadata_is_rejected",
-    "tests.test_security_harden_wave3::test_ssrf_redirect_hop_revalidates_and_rebinds"
-  ],
-  "new_failures": [],
-  "new_tests": 5,
-  "ported_batch": {
-    "files": [
-      "test_console_asgi",
-      "test_console_workspace_layout",
-      "test_console_settings_hub_v1",
-      "test_console_ingest_names_review_labels",
-      "test_review_batch_atomic_postgres",
-      "test_navigation_reads_postgres",
-      "test_review_workboard_heading_advance_postgres_v1"
-    ],
-    "before": {
-      "tests": 37,
-      "passed": 37,
-      "failed": 0,
-      "skipped": 0,
-      "xfailed": 0
-    },
-    "after": {
-      "tests": 37,
-      "passed": 37,
-      "failed": 0,
-      "skipped": 0,
-      "xfailed": 0
-    }
-  },
-  "infrastructure": {
-    "tests": 5,
-    "passed": 5,
-    "failed": 0,
-    "skipped": 0,
-    "xfailed": 0
-  },
-  "postgres_skips": 0,
-  "ratio": 0.9899,
-  "within_twice_baseline": true,
-  "xml_sha256": {
-    "d6a-final-before.xml": "17f2a8c8dc5c1983c8db79e0935e4e7ec2b35f69e74ac1bb097f1792655d4950",
-    "d6a-verified-after.xml": "6d14969b2c939bb0a01ff8de03157a42196052a91c9cdf2efdd11c9d6e77c907"
+  "scope": "Local D6a implementation; not D6a completion",
+  "D6a_done": false,
+  "D6b_started": false,
+  "combined_verification": "combined-verification.json",
+  "inventory": "file-topology-inventory.json",
+  "complete_suite": {
+    "status": "running",
+    "commit": "5481dfb06c46011cbafb8de5585162274e79044d",
+    "output": "/workspace/scratch/d6a-final-clean-full.json"
   },
   "not_verified": [
-    "GitHub CI",
-    "Cursor local",
-    "Cursor cloud if used",
-    "persistent managed environment configuration"
+    "GitHub CI baseline and after each proposed portion",
+    "Cursor local and Cursor cloud if used",
+    "persistent managed Codex environment settings",
+    "Lex/Sherlock/Argos cutover review",
+    "William decision about existing local JSON state"
   ],
-  "setup_policy": "root success/failure and sudo flow tested with command doubles; actual apt install not tested in Cursor"
+  "external_publication": "blocked: automatic approval review rejected a source push; explicit destination approval still pending"
 }
