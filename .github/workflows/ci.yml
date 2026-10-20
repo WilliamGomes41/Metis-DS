@@ -148,8 +148,8 @@ jobs:
           python - <<'PYCODE'
           import xml.etree.ElementTree as ET
           root = ET.parse('output/pg-without-mirrors.xml').getroot()
-          cases = [case for case in root.iter('testcase') if case.get('name') == 'test_pg_console_without_disk_mirrors']
-          assert len(cases) == 1, 'Missing native D4 evidence'
+          cases = [case for case in root.iter('testcase') if case.get('name', '').startswith('test_pg_console_without_disk_mirrors[')]
+          assert len(cases) == 2, 'Missing Durable or Azure native D4 evidence'
           assert not list(root.iter('failure')) and not list(root.iter('error'))
           for skipped in root.iter('skipped'):
               assert skipped.get('type') == 'pytest.xfail', 'Native D4 proof skipped rather than executed'
