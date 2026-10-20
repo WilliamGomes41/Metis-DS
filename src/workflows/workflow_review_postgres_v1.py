@@ -104,6 +104,18 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
         except Exception as exc:
             raise WorkflowReviewStoreError("workflow_review_events_read_failed") from exc
 
+    def read_command_events(self) -> list[dict[str, Any]]:
+        """Persisted events plus this command context's pending audit evidence."""
+        events = self.read_events()
+        levels = []
+        level = self._buffer.get()
+        while level is not None:
+            levels.append(level)
+            level = level.parent
+        for level in reversed(levels):
+            events.extend(deepcopy(list(level)))
+        return events
+
     def read_events_after(self, previous_event_hash: str | None, limit: int) -> list[dict[str, Any]]:
         """Up to ``limit`` committed events chained directly after ``previous_event_hash``.
 

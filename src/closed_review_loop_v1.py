@@ -23,7 +23,7 @@ from src.passage_register_v1 import (
 from src.proportionate_review_v1 import ProportionateReviewConsole
 from src.publish_authorization_v1 import invalidate_for_object
 from src.review_cockpit_v1 import broncontext_parts, map_eindoordeel
-from src.review_ledger import append_event, read_events
+from src.review_ledger import append_event, read_events, read_command_events
 from src.serving_relations_v1 import binding_relations
 
 REVIEW_AUDIT_EVIDENCE_EVENT = "review_audit_evidence"
@@ -98,7 +98,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
     def _latest_review_signal(
         self, object_id: str, *, decision: str = ""
     ) -> dict[str, Any] | None:
-        for event in reversed(read_events(self._ledger_path)):
+        for event in reversed(read_command_events(self._ledger_path)):
             if event.get("event_type") != REVIEW_AUDIT_EVIDENCE_EVENT:
                 continue
             if str(event.get("object_id") or "") != object_id:
