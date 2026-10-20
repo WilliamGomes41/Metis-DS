@@ -1,0 +1,13 @@
+{
+  "commit": "9fa200426f715d5b4beb3882a92c81f57026c1d2",
+  "python": "3.13.5",
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+  "seconds": 1096.328,
+  "exit_code": 1,
+  "postgres_version": 160015,
+  "tests": 5674,
+  "failures": 3,
+  "errors": 0,
+  "skipped": 33,
+  "postgres_skips": []
+}
