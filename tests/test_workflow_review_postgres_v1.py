@@ -79,18 +79,6 @@ class FakeAuthoritativeReviewStore:
         return {snapshot_id: list(rows) for snapshot_id, rows in self.bindings.items()}
 
 
-class _ReviewStartupConsole(_PostgresWorkflowReviewMixin, OperationsConsole):
-    pass
-
-
-class _StartupReviewStore(FakeAuthoritativeReviewStore):
-    def verify_review_schema(self) -> None:
-        return None
-
-    def bind_ledger_mirror(self, path: Path) -> None:
-        self.mirror_path = path
-
-
 class _Rows:
     def __init__(self, rows: list[dict]) -> None:
         self._rows = rows
@@ -290,23 +278,27 @@ def test_review_runtime_buffers_events_without_disk_mirrors() -> None:
     assert "_mirror_bindings" not in source
 
 
-def test_postgres_review_startup_leaves_corrupt_binding_mirror_unused(
-    tmp_path: Path,
-) -> None:
-    runtime = tmp_path / "review-runtime"
-    runtime.mkdir(parents=True)
-    (runtime / "publish_authorizations.json").write_text('{"broken":', encoding="utf-8")
-    events = _event_chain(1)
-    bindings = {"snap-1": [{"decision": "approve", "valid": True}]}
-    store = _StartupReviewStore(events, bindings)
-
-    console = _ReviewStartupConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources",
-        runtime=runtime,
-        workflow_review_store=store,  # type: ignore[arg-type]
-    )
-
-    assert console._bindings == bindings
-    assert (runtime / "publish_authorizations.json").read_text(encoding="utf-8") == '{"broken":'
-    assert not (runtime / "review_ledger.jsonl").exists()
+def test_postgres_review_startup_leaves_corrupt_binding_mirror_unused(tmp_path: Path, production_console) -> None:
+    from tests.semantic_fixture_support import bind_fixture_selections
+    runtime = tmp_path/'review-runtime'
+    console = production_console(root=tmp_path, runtime=runtime, processing_binder=lambda console:None)
+    author = console.create_account(username='author', password='fixture-password', roles=['researcher'])
+    reviewer = console.create_account(username='reviewer', password='fixture-password', roles=['reviewer'])
+    text = 'Een observatie is een systematische waarneming.'
+    bind_fixture_selections(console, [(text,'definition')])
+    sid = console.ingest(actor_id=author['account_id'], filename='review.html',
+        data=('<html><h1>Begrippen</h1><p>'+text+'</p></html>').encode(), content_type='text/html',
+        ingest_kind='new', title='Review fixture',version='1',date='2026-10-20',live_url='',
+        class_='richtlijn',family='fixture',named_reviewers=[reviewer['account_id']])['snapshot_id']
+    obj = next(o for o in console.snapshot_objects(sid) if o.get('proposed_object_type')=='definition')
+    console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid,object_id=obj['object_id'],
+                          decision='approve',confirmed_object_type='definition')
+    bindings = console.object_review_bindings(sid)
+    events = read_events(console._ledger_path)
+    assert bindings and events
+    (runtime/'publish_authorizations.json').write_text('{"broken":',encoding='utf-8')
+    fresh = production_console(root=tmp_path,runtime=runtime,processing_binder=lambda console:None)
+    assert fresh.object_review_bindings(sid)==bindings
+    assert read_events(fresh._ledger_path)==events
+    assert (runtime/'publish_authorizations.json').read_text()=='{"broken":'
+    assert not (runtime/'review_ledger.jsonl').exists()

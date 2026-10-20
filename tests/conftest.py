@@ -15,9 +15,7 @@ root documents.
 from __future__ import annotations
 
 from pathlib import Path
-import ast
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -60,39 +58,17 @@ def _start_test_postgres(config):
 
 
 def pytest_collection_modifyitems(config, items):
-    """Bootstrap before fixtures can skip missing PG evidence; pure suites stay offline.
-
-    During D6a the file scan also covers legacy helper imports and inline DSN
-    fixtures. Pure cases in mixed modules can declare ``pure_function``.
-    ``file_topology`` identifies behavior scheduled for removal in D6b.
-    """
-    console = re.compile(
-        r"OperationsConsole\(|DurablePublicationConsole\(|AzureAuthoritativePublicationConsole\("
-        r"|complete_console|create_console_app|build_app\(|METIS_TEST_POSTGRES_DSN"
-    )
-    files = {}
-    def uses_console(path):
-        if path in files:
-            return files[path]
-        source = path.read_text(encoding="utf-8")
-        files[path] = bool(console.search(source))
-        if not files[path]:
-            for node in ast.walk(ast.parse(source)):
-                if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("tests."):
-                    helper = ROOT.joinpath(*node.module.split(".")).with_suffix(".py")
-                    if helper.is_file() and uses_console(helper):
-                        files[path] = True
-                        break
-        return files[path]
-
+    """Require PG for selected runtime/adapter cases; pure mixed-module cases stay offline."""
+    from tests.postgres_collection import PostgresCollectionInputs
+    inputs = PostgresCollectionInputs(ROOT)
     for item in items:
-        if {"complete_postgres", "production_console", "production_app", "postgres_template"}.intersection(item.fixturenames):
+        if (any('postgres' in name for name in item.fixturenames)
+                or {'production_console','production_app'}.intersection(item.fixturenames)):
             _start_test_postgres(config)
             return
-        if item.get_closest_marker("pure_function") or item.get_closest_marker("file_topology"):
+        if item.get_closest_marker('pure_function') or item.get_closest_marker('file_topology'):
             continue
-        path = Path(item.path)
-        if uses_console(path):
+        if inputs.item(item):
             _start_test_postgres(config)
             return
 
@@ -117,6 +93,29 @@ def pytest_unconfigure(config):
             os.environ.pop("METIS_TEST_POSTGRES_DSN", None)
         else:
             os.environ["METIS_TEST_POSTGRES_DSN"] = previous
+
+
+@pytest.fixture(autouse=True)
+def _require_production_console_class(request, monkeypatch):
+    """Catch runtime constructors missed by inventories, including helper aliases."""
+    if request.node.get_closest_marker("file_topology"):
+        return
+    from src.operations_console_v1 import OperationsConsole
+    from src.workflows.workflow_badge_counts_postgres_v1 import (
+        FastBadgePostgresCompleteWorkflowDurablePublicationConsole,
+        FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
+    )
+    original = OperationsConsole.__init__
+    supported = (FastBadgePostgresCompleteWorkflowDurablePublicationConsole,
+                 FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole)
+
+    def initialize(console, *args, **kwargs):
+        if type(console) not in supported:
+            raise AssertionError("Console tests must use production_console/production_app; "
+                                 "retiring file behavior must be marked file_topology")
+        return original(console, *args, **kwargs)
+
+    monkeypatch.setattr(OperationsConsole, "__init__", initialize)
 
 
 @pytest.fixture(scope="session")

@@ -9,6 +9,8 @@
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import os
 import uuid
 from pathlib import Path
@@ -403,13 +405,13 @@ def test_lifecycle_readmodel_derives_superseded_from_document_lineage() -> None:
             published_at="2026-09-16T15:01:00+00:00",
         )
 
-        console = object.__new__(DurablePublicationConsole)
+        console = SimpleNamespace()
         console.canonical_publication_store = store
-        assert console.document_release_serving_status(snapshot1) == {
+        assert DurablePublicationConsole.document_release_serving_status(console, snapshot1) == {
             "release_status": "superseded",
             "serving_status": "inactive",
         }
-        assert console.document_release_serving_status(snapshot2) == {
+        assert DurablePublicationConsole.document_release_serving_status(console, snapshot2) == {
             "release_status": "published",
             "serving_status": "active",
         }

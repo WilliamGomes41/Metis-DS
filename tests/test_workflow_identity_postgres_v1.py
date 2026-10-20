@@ -85,19 +85,14 @@ class SharedIdentityStore:
             session["revoked"] = True
 
 
-def _console(tmp_path: Path, shared: SharedIdentityStore, name: str) -> PostgresIdentityDurablePublicationConsole:
-    return PostgresIdentityDurablePublicationConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources",
-        runtime=tmp_path / name,
-        workflow_identity_store=shared,  # type: ignore[arg-type]
-    )
+def _console(tmp_path: Path, name: str, *, production_console):
+    return production_console(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/name,
+                              processing_binder=lambda console:None)
 
 
-def test_session_created_on_one_instance_is_valid_on_another(tmp_path: Path) -> None:
-    shared = SharedIdentityStore()
-    first = _console(tmp_path, shared, "runtime-a")
-    second = _console(tmp_path, shared, "runtime-b")
+def test_session_created_on_one_instance_is_valid_on_another(tmp_path: Path, *, production_console) -> None:
+    first = _console(tmp_path, "runtime-a", production_console=production_console)
+    second = _console(tmp_path, "runtime-b", production_console=production_console)
 
     account = first.create_account("anne", "correct-horse", ["researcher", "reviewer"])
     session = first.authenticate("anne", "correct-horse")
@@ -110,10 +105,9 @@ def test_session_created_on_one_instance_is_valid_on_another(tmp_path: Path) -> 
     }
 
 
-def test_logout_on_one_instance_revokes_session_for_all_instances(tmp_path: Path) -> None:
-    shared = SharedIdentityStore()
-    first = _console(tmp_path, shared, "runtime-a")
-    second = _console(tmp_path, shared, "runtime-b")
+def test_logout_on_one_instance_revokes_session_for_all_instances(tmp_path: Path, *, production_console) -> None:
+    first = _console(tmp_path, "runtime-a", production_console=production_console)
+    second = _console(tmp_path, "runtime-b", production_console=production_console)
     first.create_account("anne", "correct-horse", ["researcher"])
     session = first.authenticate("anne", "correct-horse")
 
@@ -123,10 +117,9 @@ def test_logout_on_one_instance_revokes_session_for_all_instances(tmp_path: Path
         first.session_account(session["token"])
 
 
-def test_role_change_is_visible_across_instances(tmp_path: Path) -> None:
-    shared = SharedIdentityStore()
-    first = _console(tmp_path, shared, "runtime-a")
-    second = _console(tmp_path, shared, "runtime-b")
+def test_role_change_is_visible_across_instances(tmp_path: Path, *, production_console) -> None:
+    first = _console(tmp_path, "runtime-a", production_console=production_console)
+    second = _console(tmp_path, "runtime-b", production_console=production_console)
     publisher = first.create_account("pub", "secret-pass", ["publisher"])
     reviewer = first.create_account("reviewer", "secret-pass", ["reviewer"])
 
@@ -203,12 +196,11 @@ def test_legacy_sessions_without_secure_expiry_are_not_migratable() -> None:
     assert migratable_legacy_sessions(accounts, sessions) == {"valid": sessions["valid"]}
 
 
-def test_accounts_page_reads_shared_identity_authority_after_create_and_restart(tmp_path: Path) -> None:
-    shared = SharedIdentityStore()
-    first = _console(tmp_path, shared, "runtime-a")
+def test_accounts_page_reads_shared_identity_authority_after_create_and_restart(tmp_path: Path, *, production_app, production_console) -> None:
+    first = _console(tmp_path, "runtime-a", production_console=production_console)
     publisher = first.create_account("publisher", "publisher-secret", ["publisher"])
 
-    app = create_console_app(first)
+    app = production_app(first)
     client = TestClient(app, base_url="https://testserver")
     login = client.post(
         "/login",
@@ -233,7 +225,7 @@ def test_accounts_page_reads_shared_identity_authority_after_create_and_restart(
     assert "Nieuwe Onderzoeker" in created.text
     assert first._accounts == {}
 
-    second = _console(tmp_path, shared, "runtime-b")
+    second = _console(tmp_path, "runtime-b", production_console=production_console)
     assert {row["username"] for row in second.list_accounts()} == {
         "publisher",
         "new.researcher",
@@ -250,7 +242,7 @@ def test_accounts_page_reads_shared_identity_authority_after_create_and_restart(
     assert page.status_code == 200
     assert "researcher, reviewer" in page.text
 
-    restarted = _console(tmp_path, shared, "runtime-c")
+    restarted = _console(tmp_path, "runtime-c", production_console=production_console)
     reloaded = next(row for row in restarted.list_accounts() if row["username"] == "new.researcher")
     assert reloaded["roles"] == ["researcher", "reviewer"]
 
@@ -274,39 +266,12 @@ def test_local_only_account_listing_uses_local_authority(tmp_path: Path) -> None
     ]
 
 
-def test_runtime_identity_cutover_ignores_corrupt_local_identity_mirrors(
-    tmp_path: Path,
-) -> None:
-    runtime = tmp_path / "cutover-runtime"
-    runtime.mkdir(parents=True)
-    (runtime / "accounts.json").write_text('{"broken":', encoding="utf-8")
-    (runtime / "sessions.json").write_text('{"broken":', encoding="utf-8")
-
-    shared = SharedIdentityStore()
-    shared.legacy_startup_import_enabled = False
-    shared.accounts["acc-pg"] = {
-        "account_id": "acc-pg",
-        "username": "pg-user",
-        "display_name": "PG User",
-        "roles": ["researcher"],
-        "password_salt": "00" * 16,
-        "password_hash": "00" * 32,
-        "created_at": "2026-09-19T00:00:00Z",
-    }
-
-    console = PostgresIdentityDurablePublicationConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources",
-        runtime=runtime,
-        workflow_identity_store=shared,  # type: ignore[arg-type]
-    )
-
-    assert console.list_accounts() == [
-        {
-            "account_id": "acc-pg",
-            "username": "pg-user",
-            "display_name": "PG User",
-            "roles": ["researcher"],
-        }
-    ]
-    assert shared.migration_calls == 1
+def test_runtime_identity_cutover_ignores_corrupt_local_identity_mirrors(tmp_path: Path, *, production_console) -> None:
+    runtime = tmp_path/'cutover-runtime'
+    first = production_console(root=tmp_path, runtime=runtime, processing_binder=lambda console:None)
+    first.create_account(username='pg-user', password='fixture-password', roles=['researcher'], display_name='PG User')
+    for name in ['accounts.json','sessions.json']:
+        (runtime/name).write_text('{"broken":', encoding='utf-8')
+    console = production_console(root=tmp_path, runtime=runtime, processing_binder=lambda console:None)
+    assert [(a['username'],a['display_name'],a['roles']) for a in console.list_accounts()]==[('pg-user','PG User',['researcher'])]
+    assert all((runtime/name).read_text()=='{"broken":' for name in ['accounts.json','sessions.json'])

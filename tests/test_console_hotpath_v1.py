@@ -141,320 +141,6 @@ def test_tree_publication_prefetch_fails_closed_for_delete_affordance() -> None:
     assert subject.fallback_publication_calls == 0
 
 
-class _WorkflowResult:
-    def fetchone(self) -> dict[str, Any]:
-        return {
-            "ingest": 0,
-            "review": 2,
-            "tree": 0,
-            "publish_snapshot_ids": [],
-        }
-
-
-class _WorkflowConnection:
-    def __init__(self, owner: "_WorkflowStore") -> None:
-        self.owner = owner
-
-    def __enter__(self) -> "_WorkflowConnection":
-        self.owner.connect_calls += 1
-        return self
-
-    def __exit__(self, *_args: Any) -> None:
-        return None
-
-    def execute(self, sql: str, _params: tuple[Any, ...]) -> _WorkflowResult:
-        self.owner.execute_calls += 1
-        assert "document_status" in sql
-        return _WorkflowResult()
-
-
-class _WorkflowStore:
-    def __init__(self) -> None:
-        self.connect_calls = 0
-        self.execute_calls = 0
-        self.objects = {
-            "snap-published": [object() for _ in range(205)],
-            "snap-unpublished": [object() for _ in range(205)],
-        }
-
-    def _connect(self) -> _WorkflowConnection:
-        return _WorkflowConnection(self)
-
-    def list_document_objects(self, _snapshot_id: str) -> list[dict[str, Any]]:
-        raise AssertionError("hot GET must not materialize object payloads")
-
-
-_ROUTE_ENVELOPES = [
-    {
-        "snapshot_id": "snap-published",
-        "title": "Published fixture",
-        "version": "1.0",
-        "family": "hotpath",
-        "class": "richtlijn",
-        "state": "captured_not_published",
-        "named_reviewers": ["acc-hotpath"],
-    },
-    {
-        "snapshot_id": "snap-unpublished",
-        "title": "Unpublished fixture",
-        "version": "1.0",
-        "family": "hotpath",
-        "class": "richtlijn",
-        "state": "captured_not_published",
-        "named_reviewers": ["acc-hotpath"],
-    },
-]
-
-
-class _RouteFixtureConsole(OperationsConsole):
-    def _route_account(self) -> dict[str, Any]:
-        return {
-            "account_id": "acc-hotpath",
-            "username": "hotpath.researcher",
-            "display_name": "Hotpath Researcher",
-            "roles": ["researcher", "reviewer"],
-        }
-
-    def session_account(self, token: str | None) -> dict[str, Any]:
-        assert token == "hotpath-session"
-        return self._route_account()
-
-    def _account(self, account_id: str) -> dict[str, Any]:
-        assert account_id == "acc-hotpath"
-        return self._route_account()
-
-    def family_tree(self) -> dict[str, Any]:
-        return {
-            "families": {
-                "hotpath": {
-                    "children": [dict(row) for row in _ROUTE_ENVELOPES]
-                }
-            }
-        }
-
-    def list_envelopes(self) -> list[dict[str, Any]]:
-        return [dict(row) for row in _ROUTE_ENVELOPES]
-
-    def snapshot_is_published(self, _snapshot_id: str) -> bool:
-        raise AssertionError("tree card must use the prefetched publication set")
-
-
-class _HotPathRouteConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self.list_status_calls = 0
-        self.workboard_summary_calls = 0
-        self.snapshot_object_reads = 0
-
-    def list_document_lifecycle_statuses(
-        self,
-        snapshot_ids: list[str] | None = None,
-    ) -> dict[str, dict[str, str]]:
-        self.list_status_calls += 1
-        assert snapshot_ids is None
-        return {
-            "snap-published": {
-                "workflow_status": "closed",
-                "release_status": "published",
-                "serving_status": "active",
-                "presentation_status": "published",
-            },
-            "snap-unpublished": {
-                "workflow_status": "in_review",
-                "release_status": "none",
-                "serving_status": "inactive",
-                "presentation_status": "in_review",
-            },
-        }
-
-    def review_source_fragments(self, snapshot_id, **kwargs):
-        # The selected HTTP fixture has no content candidates.
-        return []
-
-    def _navigation_review_count(self, account):
-        # This HTTP fixture supplies the already computed navigation projection.
-        # Kernel and native-store parity are exercised by NavigationProbe tests.
-        return 1
-
-    def review_workboard_summaries(
-        self,
-        account_id: str,
-        snapshot_id: str | None = None,
-        *, navigation_only: bool = False,
-    ) -> dict[str, dict[str, Any]]:
-        self.workboard_summary_calls += 1
-        assert account_id == "acc-hotpath"
-        summaries = {
-            "snap-published": {
-                "envelope": dict(_ROUTE_ENVELOPES[0]),
-                "heading_pending": 0,
-                "individual_pending": 0,
-                "normal_passages": 0,
-                "normal_batches": 0,
-                "blocked_count": 0,
-                "closure_gap_count": 0,
-                "closure_gap_first": "",
-                "source_passage_review_complete": True,
-                "heading_total": 0,
-                "individual_total": 0,
-                "progress_total": 204,
-                "progress_done": 204,
-                "progress_approved": 204,
-                "progress_rejected": 0,
-                "progress_not_included": 0,
-                "progress_context": 0,
-                "progress_support": 0,
-                "progress_superseded": 0,
-                "progress_revised": 0,
-            },
-            "snap-unpublished": {
-                "envelope": dict(_ROUTE_ENVELOPES[1]),
-                "heading_pending": 1,
-                "individual_pending": 2,
-                "normal_passages": 20,
-                "normal_batches": 1,
-                "blocked_count": 0,
-                "closure_gap_count": 0,
-                "closure_gap_first": "",
-                "source_passage_review_complete": False,
-                "heading_total": 4,
-                "individual_total": 5,
-                "progress_total": 204,
-                "progress_done": 181,
-                "progress_approved": 170,
-                "progress_rejected": 2,
-                "progress_not_included": 3,
-                "progress_context": 2,
-                "progress_support": 3,
-                "progress_superseded": 1,
-                "progress_revised": 4,
-            },
-        }
-        if snapshot_id is not None:
-            return {snapshot_id: summaries[snapshot_id]} if snapshot_id in summaries else {}
-        return summaries
-
-    def document_readiness(self, _snapshot_id: str) -> dict[str, Any]:
-        raise AssertionError("presentation GET must not invoke document_readiness")
-
-    def publication_readiness(self, _snapshot_id: str) -> dict[str, Any]:
-        raise AssertionError("presentation GET must not invoke publication_readiness")
-
-    def consider_publish(self, **_kwargs: Any) -> dict[str, Any]:
-        raise AssertionError("presentation GET must not invoke consider_publish")
-
-    def snapshot_objects(self, _snapshot_id: str) -> list[dict[str, Any]]:
-        raise AssertionError("Review index must not load full snapshot objects")
-
-    def snapshot_objects_and_revision(
-        self,
-        snapshot_id: str,
-    ) -> tuple[list[dict[str, Any]], str]:
-        assert snapshot_id == "snap-unpublished"
-        self.snapshot_object_reads += 1
-        return [], "revision-hotpath"
-
-
-def _installed_client(console: OperationsConsole) -> TestClient:
-    app = create_console_app(console)
-    install_document_status_ui(app, console)
-    install_review_workboard(app, console)
-    client = TestClient(app)
-    client.cookies.set("console_session", "hotpath-session")
-    return client
-
-
-def test_authenticated_tree_and_review_gets_use_production_list_installers(
-    tmp_path: Path,
-) -> None:
-    canonical = _CanonicalStore({"snap-published"})
-    workflow = _WorkflowStore()
-    assert sum(len(rows) for rows in workflow.objects.values()) == 410
-
-    console = _HotPathRouteConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources" / "private",
-        runtime=tmp_path / "output" / "runtime" / "operations-console",
-    )
-    console.canonical_publication_store = canonical
-    console.workflow_document_store = workflow
-    client = _installed_client(console)
-
-    tree = client.get("/tree")
-    assert tree.status_code == 200
-    assert "Published fixture" in tree.text
-    assert "Unpublished fixture" in tree.text
-    assert console.list_status_calls == 1
-    assert workflow.connect_calls == 0
-    assert workflow.execute_calls == 0
-    assert canonical.connect_calls == 1
-    assert canonical.execute_calls == 1
-
-    workflow.connect_calls = 0
-    workflow.execute_calls = 0
-    canonical.connect_calls = 0
-    canonical.execute_calls = 0
-    review = client.get("/review")
-    assert review.status_code == 200
-    assert "Published fixture" in review.text
-    assert "Unpublished fixture" in review.text
-    assert "data-review-workboard" not in review.text
-    assert "Jouw open werk" in review.text
-    assert review.text.count('class="doc-card document-disclosure review-document-card"') == 2
-    assert console.list_status_calls == 2
-    assert console.workboard_summary_calls == 1
-    assert console.snapshot_object_reads == 0
-    assert workflow.connect_calls == 0
-    assert workflow.execute_calls == 0
-    assert canonical.connect_calls == 0
-    assert canonical.execute_calls == 0
-
-
-def test_review_default_document_dashboard_uses_projection_without_snapshot_read(
-    tmp_path: Path,
-) -> None:
-    canonical = _CanonicalStore(set())
-    workflow = _WorkflowStore()
-    console = _HotPathRouteConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources" / "private",
-        runtime=tmp_path / "output" / "runtime" / "operations-console",
-    )
-    console.canonical_publication_store = canonical
-    console.workflow_document_store = workflow
-    client = _installed_client(console)
-
-    review = client.get("/review?document=snap-unpublished")
-    assert review.status_code == 200
-    assert "Unpublished fixture" in review.text
-    assert "Reviewvoortgang" in review.text
-    assert "181 van 204 bronpassages afgehandeld" in review.text
-    assert "1 te controleren · 3 afgerond" in review.text
-    assert "2 te beoordelen · 3 afgerond" in review.text
-    assert console.snapshot_object_reads == 0
-
-
-def test_review_task_detail_keeps_one_bounded_selected_snapshot_read(
-    tmp_path: Path,
-) -> None:
-    canonical = _CanonicalStore(set())
-    workflow = _WorkflowStore()
-    console = _HotPathRouteConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources" / "private",
-        runtime=tmp_path / "output" / "runtime" / "operations-console",
-    )
-    console.canonical_publication_store = canonical
-    console.workflow_document_store = workflow
-    client = _installed_client(console)
-
-    review = client.get("/review?document=snap-unpublished&task=headings")
-    assert review.status_code == 200
-    assert "Unpublished fixture" in review.text
-    assert console.list_status_calls == 1
-    assert console.snapshot_object_reads == 1
-
-
 class _Token:
     def __init__(self, value: str, expires_on: int) -> None:
         self.token = value
@@ -493,135 +179,146 @@ def test_shared_cached_credential_avoids_token_request_per_connect(monkeypatch: 
     assert {call["password"] for call in connect_calls} == {"token-1"}
 
 
-def test_status_middleware_slow_sync_read_does_not_block_event_loop(tmp_path: Path) -> None:
-    canonical = _CanonicalStore(set())
-    workflow = _WorkflowStore()
-    console = _HotPathRouteConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources" / "private",
-        runtime=tmp_path / "output" / "runtime" / "operations-console",
-    )
-    console.canonical_publication_store = canonical
-    console.workflow_document_store = workflow
+@pytest.fixture
+def hotpath(production_console,production_app,monkeypatch):
+    from collections import Counter
+    from functools import wraps
+    from types import SimpleNamespace
+    from tests.complete_workflow_support import seed_canonical_release
+    console=production_console(processing_binder=lambda console:None)
+    author=console.create_account(username='author',password='fixture-password',roles=['researcher'])
+    reviewer=console.create_account(username='reviewer',password='fixture-password',roles=['reviewer'])
+    snapshots=[]
+    for index,title in enumerate(['Published fixture','Unpublished fixture']):
+        data=('<html><h1>'+title+'</h1>'+''.join(
+            f'<p>Een observatie {index}-{j} is een systematische waarneming.</p>' for j in range(205))+'</html>').encode()
+        snapshots.append(console.ingest(actor_id=author['account_id'],filename=f'fixture-{index}.html',data=data,
+            content_type='text/html',ingest_kind='new',title=title,version='1',date='2026-10-20',live_url='',
+            class_='richtlijn',family='hotpath',named_reviewers=[reviewer['account_id']])['snapshot_id'])
+    assert sum(len(console.workflow_document_store.list_document_objects(sid)) for sid in snapshots)>=410
+    seed_canonical_release(console.canonical_publication_store,snapshot_id=snapshots[0],token='hotpath')
+    expected=console.review_workboard_summaries(reviewer['account_id'],snapshots[1])[snapshots[1]]
+    calls=Counter()
+    single_reads=[]
+    def spy(owner,name,label):
+        real=getattr(owner,name)
+        @wraps(real)
+        def observe(*args,**kwargs):
+            key=label+('_navigation' if kwargs.get('navigation_only') else '')
+            calls[key]+=1
+            if label=='single_objects':single_reads.append(args[0])
+            return real(*args,**kwargs)
+        monkeypatch.setattr(owner,name,observe)
+    for name,label in [('list_document_lifecycle_statuses','statuses'),('review_workboard_summaries','summaries'),
+                       ('snapshot_objects_and_revision','snapshot_api'),('_published_snapshot_ids','publication_fallback')]:
+        spy(console,name,label)
+    spy(console.workflow_document_store,'list_document_objects','single_objects')
+    spy(console.workflow_document_store,'list_current_objects_batch','bulk_objects')
+    def forbidden_readiness(*args,**kwargs):
+        raise AssertionError('List presentation must not run full publication readiness')
+    monkeypatch.setattr(console,'document_readiness',forbidden_readiness)
+    monkeypatch.setattr(console,'publication_readiness',forbidden_readiness)
+    app=production_app(console)
+    def client_for(username='reviewer'):
+        client=TestClient(app,base_url='https://testserver')
+        assert client.post('/login',data={'username':username,'password':'fixture-password'},follow_redirects=False).status_code==303
+        return client
+    client=client_for()
+    calls.clear(); single_reads.clear()
+    return SimpleNamespace(console=console,client=client,client_for=client_for,app=app,
+                           calls=calls,single_reads=single_reads,snapshots=snapshots,summary=expected)
 
-    started = threading.Event()
-    release = threading.Event()
-    original_session_account = console.session_account
 
-    def slow_session_account(token: str | None) -> dict[str, Any]:
+def test_authenticated_tree_and_review_gets_use_production_list_installers(hotpath):
+    h=hotpath
+    tree=h.client.get('/tree')
+    assert tree.status_code==200
+    assert 'Published fixture' in tree.text and 'Unpublished fixture' in tree.text
+    assert h.calls['statuses']==1 and h.calls['snapshot_api']==0 and h.calls['single_objects']==0,dict(h.calls)
+    assert h.calls['publication_fallback']==0,dict(h.calls)
+    assert h.calls['bulk_objects']<=1,dict(h.calls)
+    h.calls.clear();h.single_reads.clear()
+    review=h.client.get('/review')
+    assert review.status_code==200
+    assert 'Published fixture' in review.text and 'Unpublished fixture' in review.text
+    assert 'Jouw open werk' in review.text
+    assert review.text.count('class="doc-card document-disclosure review-document-card"')==2
+    assert h.calls['statuses']==1 and h.calls['summaries']==1,dict(h.calls)
+    assert h.calls['snapshot_api']==0 and h.calls['single_objects']==0,dict(h.calls)
+    assert h.calls['bulk_objects']<=2,dict(h.calls)
+
+
+def test_review_default_document_dashboard_uses_projection_without_snapshot_read(hotpath):
+    h=hotpath
+    review=h.client.get('/review',params={'document':h.snapshots[1]})
+    assert review.status_code==200 and 'Unpublished fixture' in review.text
+    assert 'Reviewvoortgang' in review.text
+    assert h.summary['progress_total']>=205 and h.summary['progress_done']==0
+    assert f"0 van {h.summary['progress_total']} bronpassages afgehandeld" in review.text
+    assert h.calls['snapshot_api']==0 and h.calls['single_objects']==0,dict(h.calls)
+
+
+def test_review_task_detail_keeps_one_bounded_selected_snapshot_read(hotpath):
+    h=hotpath
+    review=h.client.get('/review',params={'document':h.snapshots[1],'task':'headings'})
+    assert review.status_code==200 and 'Unpublished fixture' in review.text
+    assert h.calls['statuses']==1 and h.calls['snapshot_api']==1,dict(h.calls)
+    assert set(h.single_reads)=={h.snapshots[1]},h.single_reads
+    assert len(h.single_reads)==1,h.single_reads
+
+
+def test_status_middleware_slow_sync_read_does_not_block_event_loop(hotpath,monkeypatch):
+    h=hotpath
+    started,release=threading.Event(),threading.Event()
+    real=h.console.session_account
+    def slow(token):
         started.set()
-        release.wait(timeout=2)
-        return original_session_account(token)
-
-    console.session_account = slow_session_account  # type: ignore[method-assign]
-    app = create_console_app(console)
-    install_document_status_ui(app, console)
-
-    async def _run() -> None:
-        transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(
-            transport=transport,
-            base_url="https://test",
-        ) as client:
-            client.cookies.set("console_session", "hotpath-session")
-            tree_task = asyncio.create_task(client.get("/tree"))
+        assert release.wait(timeout=2)
+        return real(token)
+    monkeypatch.setattr(h.console,'session_account',slow)
+    token=h.client.cookies.get('console_session')
+    async def run():
+        transport=ASGITransport(app=h.app)
+        async with httpx.AsyncClient(transport=transport,base_url='https://testserver',cookies={'console_session':token}) as client:
+            tree_task=asyncio.create_task(client.get('/tree'))
             for _ in range(80):
-                if started.is_set():
-                    break
+                if started.is_set():break
                 await asyncio.sleep(0.01)
-            assert started.is_set(), "status middleware never entered the slow sync read"
-
-            t0 = time.perf_counter()
-            login = await client.get("/login")
-            elapsed = time.perf_counter() - t0
-            release.set()
-            tree = await tree_task
-
-        assert login.status_code == 200
-        assert elapsed < 0.25, (
-            f"lightweight request waited {elapsed:.3f}s; event loop was blocked"
-        )
-        assert tree.status_code == 200
-        assert console.list_status_calls == 1
-
-    asyncio.run(_run())
+            assert started.is_set()
+            t0=time.perf_counter()
+            try:
+                login=await client.get('/login')
+                elapsed=time.perf_counter()-t0
+            finally:
+                release.set()
+            tree=await tree_task
+        assert login.status_code==200 and tree.status_code==200
+        assert elapsed<0.25,f'Lightweight request waited {elapsed:.3f}s'
+        assert h.calls['statuses']==1,dict(h.calls)
+    asyncio.run(run())
 
 
-class _ContextPropagationConsole(_PostgresBadgeCountsMixin, _RouteFixtureConsole):
-    def _navigation_review_count(self, account):
-        # This test exercises propagation of the tree's publication prefetch,
-        # with no review work in its independent route fixture.
-        return 0
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        self.canonical_publication_store = object()
-        self.workflow_document_store = _WorkflowStore()
-        self.fallback_publication_reads = 0
-
-    def _workflow_list_status_rows(
-        self,
-        snapshot_ids: list[str] | None = None,
-    ) -> dict[str, dict[str, Any]]:
-        assert snapshot_ids is None
-        return {
-            "snap-published": {
-                "snapshot_id": "snap-published",
-                "state": "captured_not_published",
-                "has_open_review": False,
-            },
-            "snap-unpublished": {
-                "snapshot_id": "snap-unpublished",
-                "state": "captured_not_published",
-                "has_open_review": True,
-            },
-        }
-
-    def _canonical_list_release_rows(
-        self,
-        snapshot_ids: list[str],
-    ) -> dict[str, dict[str, Any]]:
-        assert set(snapshot_ids) == {"snap-published", "snap-unpublished"}
-        return {
-            "snap-published": {
-                "snapshot_id": "snap-published",
-                "status": "published",
-                "item_count": 1,
-                "active_same_release": 1,
-                "active_other_release": 0,
-                "later_release": False,
-            }
-        }
-
-    def published_snapshot_ids(self, snapshot_ids: list[str]) -> set[str]:
-        self.fallback_publication_reads += 1
-        raise AssertionError(
-            f"request-local publication batch was lost before tree render: {snapshot_ids}"
-        )
-
-
-def test_status_offload_preserves_tree_publication_batch_context(tmp_path: Path) -> None:
-    console = _ContextPropagationConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources" / "private",
-        runtime=tmp_path / "output" / "runtime" / "operations-console",
-    )
-    app = create_console_app(console)
-    install_document_status_ui(app, console)
-
-    async def _run() -> None:
-        transport = ASGITransport(app=app)
-        async with httpx.AsyncClient(
-            transport=transport,
-            base_url="https://test",
-        ) as client:
-            client.cookies.set("console_session", "hotpath-session")
-            response = await client.get("/tree")
-
-        assert response.status_code == 200, response.text
-        assert "Published fixture" in response.text
-        assert "Unpublished fixture" in response.text
-
-    asyncio.run(_run())
-    assert console.fallback_publication_reads == 0
-
+def test_status_offload_preserves_tree_publication_batch_context(hotpath,monkeypatch):
+    h=hotpath
+    author=h.client_for('author')
+    token=author.cookies.get('console_session')
+    real=h.console.family_tree
+    seen=[]
+    def observed_tree():
+        batch=h.console._tree_publication_batch.get()
+        assert batch is not None
+        assert batch[0]==frozenset(h.snapshots) and batch[1]==frozenset({h.snapshots[0]})
+        seen.append(batch)
+        return real()
+    def forbidden_fallback(*args,**kwargs):
+        raise AssertionError('The route worker lost the middleware publication prefetch')
+    monkeypatch.setattr(h.console,'family_tree',observed_tree)
+    monkeypatch.setattr(h.console,'_published_snapshot_ids',forbidden_fallback)
+    async def run():
+        transport=ASGITransport(app=h.app)
+        async with httpx.AsyncClient(transport=transport,base_url='https://testserver',cookies={'console_session':token}) as client:
+            response=await client.get('/tree')
+        assert response.status_code==200,response.text
+        assert 'Published fixture' in response.text and 'Unpublished fixture' in response.text
+    asyncio.run(run())
+    assert len(seen)==1 and h.calls['statuses']==1,dict(h.calls)
