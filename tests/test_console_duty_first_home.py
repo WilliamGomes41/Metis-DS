@@ -30,7 +30,6 @@ from urllib.parse import urlparse
 import pytest
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
 
 
@@ -58,8 +57,8 @@ SKETCH_B_PRIMARY_MARKERS = (
 TEST_PASSWORD = token_urlsafe(24)
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -112,12 +111,12 @@ def _ingest(console: OperationsConsole, accounts: dict, *, title: str = "Test ri
     )
 
 
-def _fresh_client(console: OperationsConsole) -> TestClient:
-    return TestClient(create_console_app(console))
+def _fresh_client(console: OperationsConsole, *, production_app) -> TestClient:
+    return TestClient(production_app(console))
 
 
-def _client(console: OperationsConsole, username: str = "researcher.anne") -> TestClient:
-    client = _fresh_client(console)
+def _client(console: OperationsConsole, username: str='researcher.anne', *, production_app) -> TestClient:
+    client = _fresh_client(console, production_app=production_app)
     client.post("/login", data={"username": username, "password": TEST_PASSWORD})
     return client
 
@@ -213,42 +212,34 @@ def _rule(css: str, selector: str) -> str:
     return match.group(1)
 
 
-def test_nav_home_is_first_room_and_current_on_home(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_home_uses_brand_and_tiles_as_workflow_doors(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    html = _client(console).get("/").text
+    html = _client(console, production_app=production_app).get("/").text
     hrefs = _nav_hrefs(html)
-    assert hrefs, "logged-in pages must render room nav"
-    assert hrefs[:6] == ["/", "/ingest", "/source-selection", "/review", "/publish", "/tree"]
-    home_label, home_current = _nav_entry(html, "/")
-    assert home_label == "Mijn werk"
-    assert home_current == "page"
-    ingest_html = _client(console).get("/ingest").text
-    ingest_hrefs = _nav_hrefs(ingest_html)
-    assert ingest_hrefs[0] == "/"
-    _ingest_home_label, ingest_home_current = _nav_entry(ingest_html, "/")
-    assert ingest_home_current != "page"
-    _ingest_label, ingest_current = _nav_entry(ingest_html, "/ingest")
-    assert ingest_current == "page"
+    assert '/settings' in hrefs
+    assert not set(['/', '/ingest', '/source-selection', '/review', '/publish', '/tree']) & set(hrefs)
+    assert re.search(r'<a class="brand metis-brand" href="/"', html)
+    ingest_html = _client(console, production_app=production_app).get("/ingest").text
+    assert _nav_hrefs(ingest_html)[0] == '/ingest'
+    assert '/' not in _nav_hrefs(ingest_html)
+    assert _nav_entry(ingest_html, '/ingest')[1] == 'page'
 
 
-def test_home_must_not_mark_inleveren_current(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_home_does_not_mark_ingest_tile_as_current_navigation(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    html = _client(console).get("/").text
-    ingest_label, ingest_current = _nav_entry(html, "/ingest")
-    assert "Inleveren" in ingest_label
-    assert ingest_current != "page"
-    home = _nav_html(html)
-    ingest_link = re.search(r'<a href="/ingest"[^>]*>', home)
-    assert ingest_link, "home nav must include Inleveren"
-    assert "aria-current" not in ingest_link.group(0)
+    html = _client(console, production_app=production_app).get("/").text
+    assert '/ingest' not in _nav_hrefs(html)
+    tile = re.search(r'<a class="home-tile[^>]* href="/ingest"[^>]*>', html)
+    assert tile and 'aria-current' not in tile.group(0)
+    assert 'Inleveren' in _visible_text(html)
 
 
-def test_home_heading_and_lead(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_home_heading_and_lead(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    html = _client(console).get("/").text
+    html = _client(console, production_app=production_app).get("/").text
     headings = _h1s(html)
     assert headings, "logged-in home must render an h1"
     assert headings[0] == "Mijn werk"
@@ -258,10 +249,10 @@ def test_home_heading_and_lead(tmp_path: Path) -> None:
     assert "Kies de volgende stap in het proces." in visible
 
 
-def test_home_has_five_horizontal_process_tiles_with_links(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_home_has_five_horizontal_process_tiles_with_links(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    html = _client(console).get("/").text
+    html = _client(console, production_app=production_app).get("/").text
     visible = _visible_text(html)
     assert "Inleveren" in visible
     assert "Nieuwe bron toevoegen" in visible
@@ -278,13 +269,13 @@ def test_home_has_five_horizontal_process_tiles_with_links(tmp_path: Path) -> No
     assert 'enctype="multipart/form-data"' not in html
 
 
-def test_home_tiles_stay_neutral_when_review_work_exists(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_home_tiles_stay_neutral_when_review_work_exists(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     _ingest(console, accounts, title="Wachtende richtlijn")
     waiting = console.waiting_task_counts(accounts["researcher"]["account_id"])["review"]
     assert waiting >= 1
-    home = _client(console).get("/").text
+    home = _client(console, production_app=production_app).get("/").text
     visible = _visible_text(home)
     assert "Review openen" in visible
     assert "Publicatieoverzicht openen" in visible
@@ -295,10 +286,10 @@ def test_home_tiles_stay_neutral_when_review_work_exists(tmp_path: Path) -> None
     assert console.waiting_task_counts(accounts["researcher"]["account_id"])["review"] == waiting
 
 
-def test_post_auth_redirect_lands_on_home_not_ingest(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_post_auth_redirect_lands_on_home_not_ingest(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    client = _fresh_client(console)
+    client = _fresh_client(console, production_app=production_app)
     login = client.post(
         "/login",
         data={"username": "researcher.anne", "password": TEST_PASSWORD},
@@ -313,10 +304,10 @@ def test_post_auth_redirect_lands_on_home_not_ingest(tmp_path: Path) -> None:
     assert _h1s(home.text)[0] == "Mijn werk"
 
 
-def test_tree_documenten_unchanged_v232(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_tree_documenten_unchanged_v232(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     tree = client.get("/tree").text
     headings = _h1s(tree)
     assert headings, "/tree must render an h1"
@@ -324,19 +315,18 @@ def test_tree_documenten_unchanged_v232(tmp_path: Path) -> None:
     tree_label, tree_current = _nav_entry(tree, "/tree")
     assert tree_label == "Documenten" or tree_label.startswith("Documenten")
     assert tree_current == "page"
-    home_label, home_current = _nav_entry(tree, "/")
-    assert home_label == "Mijn werk"
-    assert home_current != "page"
+    assert '/' not in _nav_hrefs(tree)
+    assert re.search(r'<a class="brand metis-brand" href="/"', tree)
     for label in FORBIDDEN_LIVE_LABELS:
         assert label not in tree
     title = re.search(r"<title[^>]*>(.*?)</title>", tree, flags=re.I | re.S)
     assert title and "Documenten" in re.sub(r"<[^>]+>", "", title.group(1))
 
 
-def test_mobile_nav_does_not_clip_publiceren_to_pub(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_mobile_nav_does_not_clip_publiceren_to_pub(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    html = _client(console).get("/").text
+    html = _client(console, production_app=production_app).get("/tree").text
     nav = _nav_html(html)
     publish_label, _current = _nav_entry(html, "/publish")
     assert "Publicatie" in publish_label
@@ -359,10 +349,10 @@ def test_mobile_nav_does_not_clip_publiceren_to_pub(tmp_path: Path) -> None:
     assert "ellipsis" not in rooms_a
 
 
-def test_home_uses_tiles_instead_of_the_previous_small_duty_cards(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_home_uses_tiles_instead_of_the_previous_small_duty_cards(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    html = _client(console).get("/").text
+    html = _client(console, production_app=production_app).get("/").text
     for marker in SKETCH_B_PRIMARY_MARKERS:
         assert marker not in html
     assert "duty-card" not in html

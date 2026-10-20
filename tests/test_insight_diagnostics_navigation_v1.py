@@ -13,7 +13,6 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
 from src.review_ledger import read_events
 from tests.test_d5_4_review_interaction_evidence import PASSWORD, _system
 from tests.test_review_context_navigation_asgi_v1 import installed  # noqa: F401
@@ -64,11 +63,11 @@ def test_installed_work_pages_lead_to_one_document_diagnosis_without_writes(inst
     assert before == (state.snapshot_objects(sid), state.objects_revision(sid), read_events(state._ledger_path))
 
 
-def test_diagnosis_roles_keep_processing_passages_and_publication_evidence_separate(tmp_path):
-    state, users, sid, _ = _system(tmp_path)
+def test_diagnosis_roles_keep_processing_passages_and_publication_evidence_separate(tmp_path, *, production_app, production_console):
+    state, users, sid, _ = _system(tmp_path, production_console=production_console)
     outsider = state.create_account(username='outsider.diagnosis', password=PASSWORD, roles=('reviewer',))
     publisher = state.create_account(username='publisher.diagnosis', password=PASSWORD, roles=('publisher',))
-    app = create_console_app(state)
+    app = production_app(state)
     assert TestClient(app).get('/inzicht/document', params={'document': sid}).status_code == 401
     other = login(app, outsider['username'])
     assert other.get('/inzicht/document', params={'document': sid}).status_code == 400
@@ -112,9 +111,9 @@ def test_diagnosis_roles_keep_processing_passages_and_publication_evidence_separ
     ('/settings/quality/compare', '/inzicht/routevergelijking'),
     ('/settings/quality/compare/comparison-1', '/inzicht/routevergelijking/comparison-1'),
 ])
-def test_legacy_get_redirects_preserve_document_attempt_format_report_and_filters(tmp_path, old, new):
-    state, users, sid, _ = _system(tmp_path)
-    app = create_console_app(state)
+def test_legacy_get_redirects_preserve_document_attempt_format_report_and_filters(tmp_path, old, new, *, production_app, production_console):
+    state, users, sid, _ = _system(tmp_path, production_console=production_console)
+    app = production_app(state)
     client = login(app, users['reviewer_a']['username'])
     params = {'document': sid, 'attempt': 'pa_' + 'a' * 32, 'format': 'csv', 'report': 'report1', 'from': '2026-09-01', 'q': 'Zorg & herstel', 'download': '1'}
     response = client.get(old, params=params, follow_redirects=False)
@@ -130,9 +129,9 @@ def test_legacy_get_redirects_preserve_document_attempt_format_report_and_filter
     assert TestClient(app).get(old, params=params, follow_redirects=False).status_code == 401
 
 
-def test_quality_table_history_and_graphs_stay_in_one_tab_and_same_report(tmp_path):
-    state, users, _, _ = _system(tmp_path)
-    client = login(create_console_app(state), users['researcher']['username'])
+def test_quality_table_history_and_graphs_stay_in_one_tab_and_same_report(tmp_path, *, production_app, production_console):
+    state, users, _, _ = _system(tmp_path, production_console=production_console)
+    client = login(production_app(state), users['researcher']['username'])
     data = client.get('/inzicht/api/quality', params={'kind': 'richtlijn'}).json()
     params = {'tab': 'kwaliteit', 'view': 'table', 'kind': 'richtlijn', 'report': data['calculation_id']}
     table = client.get('/inzicht', params=params)
@@ -145,9 +144,9 @@ def test_quality_table_history_and_graphs_stay_in_one_tab_and_same_report(tmp_pa
     assert client.get('/inzicht/api/quality', params={'report': data['calculation_id']}).json()['calculation_id'] == data['calculation_id']
 
 
-def test_configuration_has_no_diagnostics_and_controls_use_insight_addresses(tmp_path):
-    state, users, _, _ = _system(tmp_path)
-    client = login(create_console_app(state), users['researcher']['username'])
+def test_configuration_has_no_diagnostics_and_controls_use_insight_addresses(tmp_path, *, production_app, production_console):
+    state, users, _, _ = _system(tmp_path, production_console=production_console)
+    client = login(production_app(state), users['researcher']['username'])
     config = client.get('/settings/technical').text
     assert '/settings/llm' in config and '/settings/api-access' in config
     assert not any(item in config for item in ('Routevergelijking', 'Semantische veiligheidstests', 'Alle exports', 'Verwerkingsproblemen herstellen', 'href="/inzicht'))

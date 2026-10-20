@@ -18,10 +18,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.console_entra_v1 import EntraConfig, EntraIdentity, FLOW_COOKIE, admitted_claims, install_entra
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
-from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore, PostgresIdentityDurablePublicationConsole
+from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
 from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter, check_workflow_integrity
 from tests.test_workflow_chain_recovery_v1 import recovery_postgres, _install_schema  # noqa: F401
 
@@ -57,17 +56,21 @@ class FakeMicrosoft:
         return deepcopy(self.claims)
 
 
-def console(root, cfg):
-    return PostgresIdentityDurablePublicationConsole(root=root, workflow_identity_store=PostgresWorkflowIdentityStore(cfg))
+def console(root, cfg, *, production_console):
+    state = production_console(root=root, processing_binder=lambda console: None)
+    assert state.workflow_identity_store.config == cfg
+    return state
 
 
-def app_client(monkeypatch, state, bindings=None):
+def app_client(monkeypatch, state, bindings=None, *, production_app):
     monkeypatch.setenv('METIS_CONSOLE_AUTH', 'entra')
     monkeypatch.setenv('METIS_ENTRA_TENANT_ID', TENANT)
     monkeypatch.setenv('METIS_ENTRA_CLIENT_ID', CLIENT)
     monkeypatch.setenv('METIS_ENTRA_CLIENT_SECRET', 'test-only-secret')
     monkeypatch.setenv('METIS_ENTRA_ACCOUNT_BINDINGS_JSON', json.dumps(bindings or {}))
-    app = create_console_app(state, trusted_origin=ORIGIN)
+    environment = {name: value for name, value in __import__('os').environ.items()
+                   if name.startswith('METIS_ENTRA_') or name == 'METIS_CONSOLE_AUTH'}
+    app = production_app(state, trusted_origin=ORIGIN, environment=environment)
     provider = FakeMicrosoft()
     app.state.microsoft_login = provider
     client = TestClient(app, base_url=ORIGIN, headers={'Origin': ORIGIN}, raise_server_exceptions=False)
@@ -87,9 +90,9 @@ def login(client, store, *, code='test-code'):
     return client.get('/auth/microsoft/callback', params={'state': state, 'code': code}, follow_redirects=False)
 
 
-def test_callback_lands_on_home_without_review_or_inventory_reads(recovery_postgres, tmp_path, monkeypatch):
-    state = console(tmp_path, recovery_postgres)
-    client, _ = app_client(monkeypatch, state)
+def test_callback_lands_on_home_without_review_or_inventory_reads(recovery_postgres, tmp_path, monkeypatch, *, production_app, production_console):
+    state = console(tmp_path, recovery_postgres, production_console=production_console)
+    client, _ = app_client(monkeypatch, state, production_app=production_app)
     response = login(client, state.workflow_identity_store)
     assert response.status_code == 303
     assert response.headers['location'] == '/'
@@ -116,6 +119,7 @@ def test_invalid_identity_and_role_claims_fail_closed(patch):
         admitted_claims(config(), dict(claims(), **patch))
 
 
+@pytest.mark.file_topology
 def test_activation_requires_explicit_valid_configuration_and_postgres(monkeypatch, tmp_path):
     state = OperationsConsole(root=tmp_path)
     assert install_entra(state, None) is None
@@ -129,12 +133,12 @@ def test_activation_requires_explicit_valid_configuration_and_postgres(monkeypat
         install_entra(state, ORIGIN)
 
 
-def test_http_login_migration_revocation_restart_and_no_password_bypass(recovery_postgres, tmp_path, monkeypatch):
-    state = console(tmp_path, recovery_postgres)
+def test_http_login_migration_revocation_restart_and_no_password_bypass(recovery_postgres, tmp_path, monkeypatch, *, production_app, production_console):
+    state = console(tmp_path, recovery_postgres, production_console=production_console)
     admin = state.create_account('admin', 'local-password', ['publisher'])
     reviewer = state.create_account('anne', 'local-password', ['reviewer'])
     old_session = state.authenticate('anne', 'local-password')['token']
-    client, provider = app_client(monkeypatch, state, {ADMIN: admin['account_id'], USER: reviewer['account_id']})
+    client, provider = app_client(monkeypatch, state, {ADMIN: admin['account_id'], USER: reviewer['account_id']}, production_app=production_app)
     assert 'Inloggen met Microsoft' in client.get('/login').text
     assert 'type="password"' not in client.get('/login').text
     client.cookies.set('console_session', old_session)
@@ -152,8 +156,8 @@ def test_http_login_migration_revocation_restart_and_no_password_bypass(recovery
     assert '/accounts/roles' not in client.get('/accounts').text
     assert client.post('/accounts/access', data={'account_id': admin['account_id'], 'blocked': 'true'}).status_code >= 400
 
-    restarted = console(tmp_path/'restart', recovery_postgres)
-    admin_client, admin_provider = app_client(monkeypatch, restarted)
+    restarted = console(tmp_path/'restart', recovery_postgres, production_console=production_console)
+    admin_client, admin_provider = app_client(monkeypatch, restarted, production_app=production_app)
     assert restarted.session_account(token)['account_id'] == reviewer['account_id']
     admin_provider.claims = claims(ADMIN, ['Metis.Publisher'])
     assert login(admin_client, restarted.workflow_identity_store).status_code == 303
@@ -173,9 +177,9 @@ def test_http_login_migration_revocation_restart_and_no_password_bypass(recovery
     assert admin_client.post('/accounts/access', headers={'Origin': 'https://evil.example'}, data={'account_id': reviewer['account_id'], 'blocked': 'true'}).status_code == 403
 
 
-def test_entra_session_slides_for_thirty_minutes_warns_and_keeps_eight_hour_cap(recovery_postgres, tmp_path, monkeypatch):
-    state = console(tmp_path, recovery_postgres)
-    client, _ = app_client(monkeypatch, state)
+def test_entra_session_slides_for_thirty_minutes_warns_and_keeps_eight_hour_cap(recovery_postgres, tmp_path, monkeypatch, *, production_app, production_console):
+    state = console(tmp_path, recovery_postgres, production_console=production_console)
+    client, _ = app_client(monkeypatch, state, production_app=production_app)
     assert login(client, state.workflow_identity_store).status_code == 303
     token = client.cookies['console_session']
     account_id = state.session_account(token)['account_id']
@@ -225,9 +229,9 @@ def test_entra_session_slides_for_thirty_minutes_warns_and_keeps_eight_hour_cap(
     assert client.get('/accounts', follow_redirects=False).status_code == 303
 
 
-def test_callback_browser_state_replay_denied_and_no_header_trust(recovery_postgres, tmp_path, monkeypatch):
-    state = console(tmp_path, recovery_postgres)
-    client, provider = app_client(monkeypatch, state)
+def test_callback_browser_state_replay_denied_and_no_header_trust(recovery_postgres, tmp_path, monkeypatch, *, production_app, production_console):
+    state = console(tmp_path, recovery_postgres, production_console=production_console)
+    client, provider = app_client(monkeypatch, state, production_app=production_app)
     assert client.get('/accounts', headers={'X-MS-CLIENT-PRINCIPAL': 'fake'}, follow_redirects=False).status_code == 303
     nonce = begin(client, state.workflow_identity_store)
     stolen = client.get('/auth/microsoft/callback', params={'state': nonce, 'code': 'code'}, cookies={FLOW_COOKIE: 'wrong'}, follow_redirects=False)
@@ -248,8 +252,8 @@ def test_callback_browser_state_replay_denied_and_no_header_trust(recovery_postg
     assert client.get('/auth/microsoft/callback', params={'state': nonce, 'code': 'code'}, follow_redirects=False).status_code == 403
 
 
-def test_explicit_binding_atomicity_and_concurrent_provisioning(recovery_postgres, tmp_path):
-    state = console(tmp_path, recovery_postgres)
+def test_explicit_binding_atomicity_and_concurrent_provisioning(recovery_postgres, tmp_path, *, production_console):
+    state = console(tmp_path, recovery_postgres, production_console=production_console)
     a = state.create_account('anne', 'password', ['reviewer'])
     b = state.create_account('bert', 'password', ['reviewer'])
     store = state.workflow_identity_store
@@ -383,9 +387,9 @@ def test_sql_failure_rolls_back_provisioning_and_session(recovery_postgres):
     assert identity.session_account(session['token'])['account_id'] == session['account_id']
 
 
-def test_postgres_outage_cannot_fall_back_to_local_session(recovery_postgres, tmp_path, monkeypatch):
-    state = console(tmp_path, recovery_postgres)
-    client, _ = app_client(monkeypatch, state)
+def test_postgres_outage_cannot_fall_back_to_local_session(recovery_postgres, tmp_path, monkeypatch, *, production_app, production_console):
+    state = console(tmp_path, recovery_postgres, production_console=production_console)
+    client, _ = app_client(monkeypatch, state, production_app=production_app)
     assert login(client, state.workflow_identity_store).status_code == 303
     def unavailable():
         raise RuntimeError('database down')
@@ -398,10 +402,10 @@ def test_postgres_outage_cannot_fall_back_to_local_session(recovery_postgres, tm
     assert 'SECRET-CODE' not in response.text and 'database down' not in response.text
 
 
-def test_navigation_return_replay_and_expired_handshake(recovery_postgres, tmp_path, monkeypatch):
+def test_navigation_return_replay_and_expired_handshake(recovery_postgres, tmp_path, monkeypatch, *, production_app, production_console):
     from src.workflows.workflow_identity_postgres_v1 import _token_hash
-    state = console(tmp_path, recovery_postgres)
-    client, _ = app_client(monkeypatch, state)
+    state = console(tmp_path, recovery_postgres, production_console=production_console)
+    client, _ = app_client(monkeypatch, state, production_app=production_app)
     response = client.get('/review?document=example', follow_redirects=False)
     assert response.status_code == 303
     assert response.headers['location'].startswith('/auth/microsoft?next=')

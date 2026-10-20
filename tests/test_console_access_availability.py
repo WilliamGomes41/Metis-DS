@@ -15,8 +15,6 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from src.console_entra_routes_v1 import install_entra_routes
-from src.operations_console_app import _page, create_console_app
 from src.operations_console_v1 import ConsoleError
 from tests.test_console_duty_first_home import TEST_PASSWORD, _accounts, _client, _console, _visible_text
 
@@ -26,24 +24,25 @@ def unavailable(*args, **kwargs):
 
 
 @pytest.mark.parametrize("path", ["/", "/ingest", "/tree", "/review", "/publish", "/settings", "/over-console"])
-def test_navigation_does_not_request_review_badges(tmp_path, monkeypatch, path):
-    console = _console(tmp_path)
+def test_navigation_does_not_request_review_badges(tmp_path, monkeypatch, path, *, production_app, production_console):
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
 
     def forbidden(*args, **kwargs):
         pytest.fail("page navigation requested the review-count calculation")
 
     monkeypatch.setattr(console, "waiting_task_counts", forbidden)
     response = client.get(path)
-    assert response.status_code == 200
-    assert '<nav class="rooms">' in response.text
+    assert response.status_code == (403 if path == '/publish' else 200)
+    if path != '/publish':
+        assert '<nav class="rooms">' in response.text
 
 
-def test_authenticated_home_does_not_load_document_inventory(tmp_path, monkeypatch):
-    console = _console(tmp_path)
+def test_authenticated_home_does_not_load_document_inventory(tmp_path, monkeypatch, *, production_app, production_console):
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
 
     def forbidden():
         pytest.fail("home requested the complete document inventory")
@@ -56,10 +55,8 @@ def test_authenticated_home_does_not_load_document_inventory(tmp_path, monkeypat
     assert "0 documenten" not in response.text
 
 
-def test_production_composition_navigation_never_requests_badges(tmp_path, monkeypatch):
-    from src.console_asgi import build_app
-    monkeypatch.setenv("CONSOLE_DATA_ROOT", str(tmp_path))
-    app = build_app()
+def test_production_composition_navigation_never_requests_badges(tmp_path, monkeypatch, *, production_app, production_console):
+    app = production_app(production_console(root=tmp_path, processing_binder=lambda console: None))
     console = app.state.operations_kernel
     console.create_account(username="researcher.anne", password=TEST_PASSWORD,
                            roles=("researcher", "reviewer", "publisher"))
@@ -78,10 +75,10 @@ def test_production_composition_navigation_never_requests_badges(tmp_path, monke
 
 
 @pytest.mark.parametrize("path", ["/", "/settings"])
-def test_identity_outage_is_503_and_keeps_cookie(tmp_path, monkeypatch, path):
-    console = _console(tmp_path)
+def test_identity_outage_is_503_and_keeps_cookie(tmp_path, monkeypatch, path, *, production_app, production_console):
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     cookie = client.cookies.get("console_session")
     with monkeypatch.context() as patch:
         patch.setattr(console, "session_account", unavailable)
@@ -95,15 +92,15 @@ def test_identity_outage_is_503_and_keeps_cookie(tmp_path, monkeypatch, path):
     assert "Mijn werk" in client.get("/").text
 
 
-def test_navigation_renewal_outage_preserves_cookie_and_denies_access(tmp_path, monkeypatch):
-    console = _console(tmp_path)
+def test_navigation_renewal_outage_preserves_cookie_and_denies_access(tmp_path, monkeypatch, *, production_app, production_console):
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    login_client = _client(console)
-    app = create_console_app(console)
-    # Exercise the real Entra navigation middleware, injecting only its boundary.
-    monkeypatch.setattr("src.console_entra_routes_v1.MicrosoftLogin", lambda config: None)
+    login_client = _client(console, production_app=production_app)
+    # Exercise the actual installer once, injecting only the renewal boundary.
     identity = SimpleNamespace(config=None, renew_session=unavailable)
-    install_entra_routes(app, console, identity, render_page=_page)
+    monkeypatch.setattr("src.console_entra_routes_v1.MicrosoftLogin", lambda config: None)
+    monkeypatch.setattr("src.console_entra_v1.install_entra", lambda console, origin: identity)
+    app = production_app(console, environment={})
     client = TestClient(app, base_url="https://testserver", cookies=login_client.cookies)
     cookie = client.cookies.get("console_session")
     response = client.get("/settings", follow_redirects=False)
@@ -115,8 +112,8 @@ def test_navigation_renewal_outage_preserves_cookie_and_denies_access(tmp_path, 
     assert client.get("/settings").status_code == 200
 
 
-def test_invalid_session_still_denies_protected_page(tmp_path):
-    client = TestClient(create_console_app(_console(tmp_path)))
+def test_invalid_session_still_denies_protected_page(tmp_path, *, production_app, production_console):
+    client = TestClient(production_app(_console(tmp_path, production_console=production_console)))
     client.cookies.set("console_session", "invalid-test-session")
     response = client.get("/settings", follow_redirects=False)
     assert response.status_code == 401
@@ -201,8 +198,8 @@ setImmediate(async () => {
 
 @pytest.mark.parametrize("path", ["/", "/login"])
 @pytest.mark.parametrize("script_tag", ["script", 'SCRIPT data-test="session"'])
-def test_anonymous_page_never_checks_or_warns_about_session(tmp_path, path, script_tag):
-    client = TestClient(create_console_app(_console(tmp_path)))
+def test_anonymous_page_never_checks_or_warns_about_session(tmp_path, path, script_tag, *, production_app, production_console):
+    client = TestClient(production_app(_console(tmp_path, production_console=production_console)))
     html = client.get(path).text.replace("<script>", f"<{script_tag}>")
     html = html.replace("</script>", f"</{script_tag.split()[0]}>")
     result = run_session_script(html, path=path)
@@ -216,10 +213,10 @@ def test_anonymous_page_never_checks_or_warns_about_session(tmp_path, path, scri
     (200, 60, "idle", 0, "Je sessie verloopt bijna"),
     (200, 60, "absolute", 0, "Je sessie verloopt bijna"),
 ])
-def test_authenticated_session_warning_and_renewal(tmp_path, status, remaining, reason, ticks, expected_title):
-    console = _console(tmp_path)
+def test_authenticated_session_warning_and_renewal(tmp_path, status, remaining, reason, ticks, expected_title, *, production_app, production_console):
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    result = run_session_script(_client(console).get("/").text, status=status,
+    result = run_session_script(_client(console, production_app=production_app).get("/").text, status=status,
                                 remaining=remaining, reason=reason, ticks=ticks, click=True)
     assert result["hidden"] is False
     assert result["title"] == expected_title
@@ -230,9 +227,9 @@ def test_authenticated_session_warning_and_renewal(tmp_path, status, remaining, 
         assert result["requests"] == ["/session/status", "/session/renew"]
 
 
-def test_session_poll_outage_does_not_claim_expiry(tmp_path):
-    console = _console(tmp_path)
+def test_session_poll_outage_does_not_claim_expiry(tmp_path, *, production_app, production_console):
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    result = run_session_script(_client(console).get("/").text, status=503)
+    result = run_session_script(_client(console, production_app=production_app).get("/").text, status=503)
     assert result["hidden"] is True
     assert result["href"] == ""

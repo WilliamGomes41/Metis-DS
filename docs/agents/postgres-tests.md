@@ -246,3 +246,20 @@ De echte Docling-acceptancemodule is eveneens omgezet, maar de twaalf bestaande
 acceptancegevallen blijven zichtbaar overgeslagen zolang de officiële
 ML-omgeving niet is ingeschakeld. Dat is geen uitgevoerd Docling-bewijs en geen
 PG-skip; normale consoletests blijven zonder PostgreSQL falen.
+
+Portie 13 migreert Home/navigatie, Entra, review-interactie-evidence,
+Inzicht/kwaliteit en consoletelemetrie. Expliciete HTTP-configuratie loopt via
+dezelfde `build_console_app`-installatie op de reeds door de factory gemaakte
+PG-console. Entra gebruikt echte accounts/sessies; alleen de externe Microsoft-
+uitwisseling of een expliciete uitvalgrens wordt geïnjecteerd.
+
+De navigatieproef volgt de bestaande productievereenvoudiging: het merklinkje
+brengt de gebruiker naar Home, Home heeft de procestegels en de overige pagina's
+behouden de werkruimtenavigatie. Publicatie blijft voor de gewone researcher
+geweigerd; een bestaande aparte publisher-proef leest die route wel. Lock- en
+telemetrieproeven voegen alleen hun probe-endpoint toe aan de echte app en
+installeren de diagnostiek niet nogmaals.
+
+De expliciete weigering van Entra op een bestandsconsole en de observability-
+proef van de oude `serve-console`-CLI zijn `file_topology`: beide oude starts
+verdwijnen in D6b. De Entra- en uitgeversrechten zijn niet gewijzigd.
