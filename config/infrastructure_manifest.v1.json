@@ -555,6 +555,31 @@
         "docs/PROTOCOL_V2_2.md#13-protocol-v22-gates",
         "docs/STACK_SETUP_BASELINE.md"
       ]
+    },
+    {
+      "capability_id": "bend-experiment-local",
+      "capability": "Optional Bend language and proof experiment toolchain",
+      "environment": "local_development",
+      "requirement_status": "optional",
+      "implementation_status": "implemented",
+      "current_implementation": "Bend 2.0.37 with SHA-256-pinned upstream release installer; installed by the Codespace workspace postCreate hook and the path-filtered Bend GitHub Actions workflow",
+      "target_implementation": "Isolated experiments/bend toolchain; existing Metis Python application is unchanged",
+      "provider": "bendlang/bend GitHub releases",
+      "data_classification": "source_code_and_synthetic_proof_examples",
+      "region": "developer_or_github_runner",
+      "persistence": "repository_stores_installer_and_proofs_binaries_are_recreated",
+      "identity_secret_boundary": "No account, API key, production data, or new permissions required; version-check telemetry disabled in configured workspace and CI",
+      "cost_model": "Existing Codespaces compute and GitHub Actions minutes; no additional managed service",
+      "expected_cost_range": "No new service subscription; existing runner/Codespace quota usage applies",
+      "budget_owner": "project_owner",
+      "operational_owner": "developer",
+      "decision_deadline_gate": "Optional experiment only; no publication or production gate",
+      "evidence": [
+        "experiments/bend/README.md",
+        "experiments/bend/install.sh",
+        ".devcontainer/devcontainer.json",
+        ".github/workflows/bend-proof.yml"
+      ]
     }
   ]
 }

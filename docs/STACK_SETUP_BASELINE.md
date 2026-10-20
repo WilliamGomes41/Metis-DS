@@ -57,6 +57,19 @@ The G0 local operations console MVP is implemented in this repository (`vvn-data
 | Domain/TLS | Local API endpoints | Azure-managed endpoint may suffice for pilot; custom domain/DNS/certificate only if governance/product requires it | G8 if externally exposed | Conditional | Not yet required |
 | Infrastructure as code | No Bicep/Terraform/`azd` deployment baseline found | Deployment resources/configuration should become reproducible before production | G8 | Engineering/setup effort; service costs captured above | Not implemented |
 
+### Optional Bend development experiment
+
+Bend 2.0.37 is an optional development tool for `experiments/bend/` (#773).
+The repository stores a version- and checksum-pinned upstream installer; the
+Codespace workspace installs it after creation. A path-filtered GitHub Actions
+workflow runs the demonstration proof. Existing Codespaces need a rebuild or
+manual installation. The isolated security runner and production runtime are
+unchanged. No account, secret, hosted model, or additional managed service is
+required; normal Codespaces/Actions compute quotas still apply. The default
+upstream version-check telemetry is disabled in the configured workspace and CI.
+The example verifies only its own Bend law, not the existing Python application.
+See `experiments/bend/README.md` for setup and the optional Lean kernel check.
+
 ## 3. Most likely budget surprises if left implicit
 
 ### 3.1 Production hosting is not yet selected
