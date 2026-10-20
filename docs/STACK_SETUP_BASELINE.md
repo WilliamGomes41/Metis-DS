@@ -74,6 +74,33 @@ conformance tests. Lean is proof tooling only, with no runtime service or
 production dependency. See `experiments/bend/README.md` and
 `experiments/bend/pr_d2/README.md` for setup and proof limits.
 
+### Test PostgreSQL for laptops and cloud coding agents
+
+PostgreSQL tests need a server. `scripts/test_postgres.sh` reuses a reachable
+`METIS_TEST_POSTGRES_DSN`, or starts a disposable PostgreSQL 16 cluster under
+`/tmp/metis-test-pg-<uid>` on `127.0.0.1:54329` (trust auth, test data only) and
+prints its DSN. As root it runs the cluster as the unprivileged user `metis-pg`,
+because `initdb` refuses root. `tests/conftest.py` calls it automatically when no
+DSN is set, so PostgreSQL evidence runs instead of being skipped. GitHub Actions
+is excluded (CI jobs own their database setup); `METIS_TEST_POSTGRES_AUTOSTART=0`
+opts out; without PostgreSQL binaries the previous skip behaviour is unchanged.
+Overrides: `METIS_TEST_PG_DIR`, `METIS_TEST_PG_PORT`, `METIS_TEST_PG_USER`, `PGBIN`.
+
+`scripts/agent_env_setup.sh` prepares a cloud agent: it installs PostgreSQL 16
+via `apt` when missing, installs `requirements-dev.lock` plus the package, and
+proves the test server starts. It does not leave a server running.
+
+- **Codex (ChatGPT):** in the environment settings, set the setup script to
+  `bash scripts/agent_env_setup.sh`. Setup has internet access; the agent phase
+  needs none for PostgreSQL, because the server is local.
+- **Cursor cloud agents (also with Grok as model):** `.cursor/environment.json`
+  runs the same script as `install`. A committed file takes precedence over
+  personal and team settings in the Cursor UI.
+- **Local Cursor or a laptop:** install PostgreSQL 16 (or set `PGBIN`); the
+  autostart does the rest.
+
+No managed service, account or secret is involved.
+
 ## 3. Most likely budget surprises if left implicit
 
 ### 3.1 Production hosting is not yet selected
