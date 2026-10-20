@@ -62,6 +62,11 @@ def test_missing_postgres_fails_once_during_collection_but_pure_cases_can_run():
     assert failed.returncode == 4
     assert failed.stderr.count("Console/PostgreSQL tests require a database") == 1
     assert "SKIPPED" not in failed.stdout
+    indirect = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q",
+                                "tests/test_decision_graph_structure.py"],
+                               cwd=ROOT, env=env, capture_output=True, text=True, timeout=30)
+    assert indirect.returncode == 4
+    assert indirect.stderr.count("Console/PostgreSQL tests require a database") == 1
     pure = subprocess.run([sys.executable, "-m", "pytest", "-q", "tests/test_workflow_postgres_schema.py",
                            "tests/test_console_asgi.py::test_azure_console_requires_explicit_https_public_origin",
                            "tests/test_workflow_identity_postgres_v1.py::test_local_only_account_listing_uses_local_authority"],

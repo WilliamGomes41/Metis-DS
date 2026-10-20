@@ -15,6 +15,7 @@ root documents.
 from __future__ import annotations
 
 from pathlib import Path
+import ast
 import os
 import re
 import shutil
@@ -70,6 +71,20 @@ def pytest_collection_modifyitems(config, items):
         r"|complete_console|create_console_app|build_app\(|METIS_TEST_POSTGRES_DSN"
     )
     files = {}
+    def uses_console(path):
+        if path in files:
+            return files[path]
+        source = path.read_text(encoding="utf-8")
+        files[path] = bool(console.search(source))
+        if not files[path]:
+            for node in ast.walk(ast.parse(source)):
+                if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("tests."):
+                    helper = ROOT.joinpath(*node.module.split(".")).with_suffix(".py")
+                    if helper.is_file() and uses_console(helper):
+                        files[path] = True
+                        break
+        return files[path]
+
     for item in items:
         if {"complete_postgres", "production_console", "production_app", "postgres_template"}.intersection(item.fixturenames):
             _start_test_postgres(config)
@@ -77,9 +92,7 @@ def pytest_collection_modifyitems(config, items):
         if item.get_closest_marker("pure_function") or item.get_closest_marker("file_topology"):
             continue
         path = Path(item.path)
-        if path not in files:
-            files[path] = bool(console.search(path.read_text(encoding="utf-8")))
-        if files[path]:
+        if uses_console(path):
             _start_test_postgres(config)
             return
 
