@@ -59,9 +59,9 @@ def test_reservation_only_reads_configuration():
     assert envelope['processing_configuration'] == before
 
 
-def test_resume_reservation_equals_contract_of_the_stored_replay(tmp_path):
+def test_resume_reservation_equals_contract_of_the_stored_replay(tmp_path, *, production_console):
     from tests.test_recoverable_formation_v1 import system
-    state, sid, actor, *_ = system(tmp_path)
+    state, sid, actor, *_ = system(tmp_path, production_console=production_console)
     produced = state._envelope(sid)['semantic_replay']['identity']['components']['semantic_contract_version']
     assert produced == _expected(v3=True)  # helper output identical to pre_review_semantic_v1:585
     try:
