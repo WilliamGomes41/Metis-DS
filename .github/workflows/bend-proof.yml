@@ -1,0 +1,39 @@
+name: Bend experiment proof
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'experiments/bend/**'
+      - '.devcontainer/devcontainer.json'
+      - '.github/workflows/bend-proof.yml'
+      - 'tests/test_bend_experiment.py'
+  push:
+    branches: [main]
+    paths:
+      - 'experiments/bend/**'
+      - '.devcontainer/devcontainer.json'
+      - '.github/workflows/bend-proof.yml'
+      - 'tests/test_bend_experiment.py'
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BEND_NO_TELEMETRY: '1'
+      TAR_OPTIONS: '--no-same-owner --warning=no-unknown-keyword'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install checksum-pinned Bend 2.0.37
+        run: |
+          sh experiments/bend/install.sh
+          echo "$HOME/.bend/bin" >> "$GITHUB_PATH"
+      - name: Verify proof and reject an incorrect implementation
+        run: |
+          command -v bend
+          bend guide > /dev/null
+          python3 tests/test_bend_experiment.py
