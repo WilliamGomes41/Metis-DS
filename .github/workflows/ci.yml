@@ -334,7 +334,22 @@ jobs:
           assert not list(root.iter("skipped")), "Processing trace proof must execute every backend"
           assert not list(root.iter("failure")) and not list(root.iter("error")), "Processing trace proof failed"
           PYCODE
-      - run: pytest -q
+      - name: D6a baseline on the unchanged main base
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'codex/d6a') && matrix.python-version == '3.13'
+        run: python scripts/measure_test_suite.py --ref 9fa2004 --output output/d6a-before.json
+      - name: Full suite with timing and zero PostgreSQL skips
+        run: |
+          python scripts/benchmark_test_database.py > output/d6a-database-benchmark.json
+          args=()
+          if [ -f output/d6a-before.json ]; then args+=(--compare output/d6a-before.json); fi
+          python scripts/measure_test_suite.py --output output/d6a-after.json "${args[@]}"
+      - name: Upload suite timing and executed test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: suite-timing-${{ matrix.python-version }}
+          path: output/d6a-*
+          if-no-files-found: warn
         if: ${{ !cancelled() }}
       - name: Install isolated browser test tooling
         if: matrix.python-version == '3.12'

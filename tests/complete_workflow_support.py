@@ -1,11 +1,7 @@
 """Native R+ test constructor; all workflow stores share one transaction binding."""
 import json
-import os
-from pathlib import Path
-from uuid import uuid4
 
 import pytest
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 from src.integrity_kernel import compute_canonical_object_hash
 from src.workflows.workflow_badge_counts_postgres_v1 import FastBadgePostgresCompleteWorkflowDurablePublicationConsole
@@ -34,34 +30,18 @@ def complete_console(root, config, console_cls=FastBadgePostgresCompleteWorkflow
 
 
 @pytest.fixture
-def complete_postgres(monkeypatch):
+def complete_postgres(monkeypatch, postgres_template):
     """Full schema in an owned disposable database; never reset the supplied DB.
 
     METIS_TEST_POSTGRES_DSN must identify a test server with CREATEDB rights.
     Failure to create the isolated database is a test failure, not a skip.
     """
-    dsn = os.environ.get("METIS_TEST_POSTGRES_DSN", "").strip()
-    if not dsn:
-        pytest.skip("METIS_TEST_POSTGRES_DSN is required for complete PostgreSQL evidence")
-    import psycopg
-    from psycopg import sql
-    from psycopg.conninfo import make_conninfo
-
-    database = "metis_718_" + uuid4().hex
-    with psycopg.connect(dsn, autocommit=True) as admin:
-        admin.execute(sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(sql.Identifier(database)))
-    isolated_dsn = make_conninfo(dsn, dbname=database)
-    try:
-        root = Path(__file__).resolve().parents[1]
-        with psycopg.connect(isolated_dsn, autocommit=True) as con:
-            for path in [root / "db/schema_v2.sql", *sorted((root / "db/migrations").glob("*.sql"))]:
-                con.execute(path.read_text(encoding="utf-8"))
+    from tests.postgres_support import database
+    dsn, template = postgres_template
+    with database(dsn, template=template) as config:
         # Child-process proofs must connect to this same isolated authority.
-        monkeypatch.setenv("METIS_TEST_POSTGRES_DSN", isolated_dsn)
-        yield PostgresCanonicalConfig(dsn=isolated_dsn)
-    finally:
-        with psycopg.connect(dsn, autocommit=True) as admin:
-            admin.execute(sql.SQL("DROP DATABASE {} WITH (FORCE)").format(sql.Identifier(database)))
+        monkeypatch.setenv("METIS_TEST_POSTGRES_DSN", config.dsn)
+        yield config
 
 
 def seed_canonical_release(store, *, snapshot_id, token):

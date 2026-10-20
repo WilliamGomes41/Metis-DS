@@ -21,9 +21,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.admission_gate_v1 import GATE_BLOCKED
-from src.operations_console_app import FILENAME_HINT, _render_review_index, create_console_app
+from src.operations_console_app import FILENAME_HINT, _render_review_index
 from src.operations_console_v1 import (
-    ConsoleError, OperationsConsole, normalize_upload_filename, safe_path_under,
+    ConsoleError, normalize_upload_filename, safe_path_under,
 )
 
 pytestmark = [
@@ -33,6 +33,7 @@ pytestmark = [
     pytest.mark.release_control_slop,
     pytest.mark.release_control_releasebewijs,
 ]
+REVIEWER_PASSWORD = __name__
 
 
 class VisibleRows(HTMLParser):
@@ -65,13 +66,12 @@ class VisibleRows(HTMLParser):
 
 
 @pytest.fixture
-def upload(tmp_path):
-    console = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources" / "private", runtime=tmp_path / "runtime")
+def upload(production_console, production_app):
+    from tests.semantic_fixture_support import bind_fixture_selections
+    console = production_console(processing_binder=bind_fixture_selections)
     password = token_urlsafe(24)
     actor = console.create_account("uploader", password, roles=("researcher", "reviewer"), display_name="Onderzoeker")
-    reviewer = console.create_account("reviewer", token_urlsafe(24), roles=("reviewer",), display_name="Reviewer")
-    from tests.semantic_fixture_support import bind_fixture_selections
-    bind_fixture_selections(console)
+    reviewer = console.create_account("reviewer", REVIEWER_PASSWORD, roles=("reviewer",), display_name="Reviewer")
     with pymupdf.open() as pdf:
         page = pdf.new_page()
         page.insert_text((72, 72), "Eenzaamheid bij ouderen", fontsize=18)
@@ -80,7 +80,7 @@ def upload(tmp_path):
         page.insert_text((72, 172), "De vragenlijst bevat zes vragen over sociale contacten.")
         payload = pdf.tobytes()
     form = dict(ingest_kind="new", title="Eenzaamheid bij ouderen", version="1.2", date="2026-09-05", class_="richtlijn", family="Eenzaamheid", named_reviewers=[reviewer["account_id"]])
-    with TestClient(create_console_app(console), base_url="https://testserver") as client:
+    with TestClient(production_app(console), base_url="https://testserver") as client:
         assert client.post("/login", data={"username": "uploader", "password": password}).status_code == 200
         yield console, client, payload, form, actor
 
@@ -113,6 +113,7 @@ def test_browser_filename_ingest_preserves_bytes_and_stays_under_store(upload, n
 
 
 @pytest.mark.parametrize("name", ["", None, "..", ".", "../doc.pdf", r"C:\Users\..\Doc.pdf", "foo/../doc.pdf", "trailing/", "💙", ".pdf", "a" * 201 + ".pdf"])
+@pytest.mark.pure_function
 def test_unusable_names_and_traversal_remain_rejected(name):
     with pytest.raises(ConsoleError, match="invalid_store_path"):
         normalize_upload_filename(name)
@@ -127,6 +128,7 @@ def test_ingest_rejects_missing_or_traversal_name_before_storage(upload, name):
     assert not list(console.source_store.rglob("*.pdf"))
 
 
+@pytest.mark.pure_function
 def test_path_joins_remain_strict_and_symlink_escape_is_rejected(tmp_path):
     store = tmp_path / "store"
     store.mkdir()
@@ -165,6 +167,9 @@ def test_pdf_review_index_uses_human_labels_and_working_object_links(upload):
         import asyncio
         await asyncio.gather(*tuple(client.app.state.source_selection_workers))
     client.portal.call(wait)
+    # Production routes require the assigned reviewer, not the uploader.
+    client.cookies.clear()
+    assert client.post("/login", data={"username": "reviewer", "password": REVIEWER_PASSWORD}).status_code == 200
     response = client.get("/review", params={"document": envelope["snapshot_id"], "task": "individual"})
     assert response.status_code == 200
     visible = VisibleRows()
@@ -179,6 +184,7 @@ def test_pdf_review_index_uses_human_labels_and_working_object_links(upload):
     assert client.get(visible.rows[0][0]).status_code == 200
 
 
+@pytest.mark.pure_function
 def test_other_blocked_candidates_are_readable_and_remain_accessible():
     objects = [
         {"object_id": f"console-eenzaamheid-p001-f{index:03d}-u01", "object_type": "unclassified", "proposed_object_type": "unclassified", "content": {"clean_text": text}, "metadata": {"admission": {"gate_result": GATE_BLOCKED}}}

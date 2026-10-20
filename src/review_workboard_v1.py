@@ -844,6 +844,7 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
     app.router.routes[:] = retained
 
     @app.get("/review", response_class=HTMLResponse)
+    @console.source_selection_read_scope()
     def review_get(
         request: Request,
         document: str = "",

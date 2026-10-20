@@ -11,23 +11,17 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
-from src.operations_console_v1 import OperationsConsole
 
 
-def _client(tmp_path: Path) -> TestClient:
-    console = OperationsConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources" / "private",
-        runtime=tmp_path / "output" / "runtime" / "operations-console",
-    )
+def _client(production_console, production_app) -> TestClient:
+    console = production_console()
     console.create_account(
         username="publisher.carla",
         password="carla-secret",
         roles=("publisher",),
         display_name="Carla Publisher",
     )
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     login = client.post(
         "/login",
         data={"username": "publisher.carla", "password": "carla-secret"},
@@ -37,20 +31,15 @@ def _client(tmp_path: Path) -> TestClient:
     return client
 
 
-def test_settings_routes_require_login(tmp_path: Path) -> None:
-    console = OperationsConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources" / "private",
-        runtime=tmp_path / "output" / "runtime" / "operations-console",
-    )
-    client = TestClient(create_console_app(console))
+def test_settings_routes_require_login(production_app) -> None:
+    client = TestClient(production_app())
 
     assert client.get("/settings").status_code == 401
     assert client.get("/settings/llm").status_code == 401
 
 
-def test_settings_is_single_top_level_door_for_accounts_llm_and_about(tmp_path: Path) -> None:
-    client = _client(tmp_path)
+def test_settings_is_single_top_level_door_for_accounts_llm_and_about(production_console, production_app) -> None:
+    client = _client(production_console, production_app)
 
     response = client.get("/settings")
     assert response.status_code == 200
@@ -70,10 +59,11 @@ def test_settings_is_single_top_level_door_for_accounts_llm_and_about(tmp_path: 
 def test_llm_settings_only_exposes_shared_deployment_status(
     tmp_path: Path,
     monkeypatch,
+    production_console, production_app,
 ) -> None:
     monkeypatch.setenv("METIS_LLM_API_KEY", "never-render-this-secret")
     monkeypatch.setenv("METIS_LLM_MODEL", "shared-test-model")
-    client = _client(tmp_path)
+    client = _client(production_console, production_app)
 
     response = client.get("/settings/llm")
     assert response.status_code == 200
@@ -85,8 +75,8 @@ def test_llm_settings_only_exposes_shared_deployment_status(
     assert "deploymentconfiguratie" in response.text
 
 
-def test_settings_deep_links_remain_compatible_and_keep_settings_active(tmp_path: Path) -> None:
-    client = _client(tmp_path)
+def test_settings_deep_links_remain_compatible_and_keep_settings_active(production_console, production_app) -> None:
+    client = _client(production_console, production_app)
 
     for path in ("/accounts", "/over-console"):
         response = client.get(path)

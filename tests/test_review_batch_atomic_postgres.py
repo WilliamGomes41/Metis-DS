@@ -11,7 +11,7 @@ from copy import deepcopy
 
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
+from src.console_asgi import build_console_app
 from src.proportionate_review_v1 import install_proportionate_review_routes, normal_risk_batch_queue
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
@@ -20,8 +20,7 @@ from tests.complete_workflow_support import complete_console as _console
 
 
 def _client(console):
-    app = create_console_app(console)
-    install_proportionate_review_routes(app, console)
+    app = build_console_app(console)
     client = TestClient(app, raise_server_exceptions=False)
     assert client.post("/login", data={"username": "bert", "password": "bert-secret"}, follow_redirects=False).status_code == 303
     return client

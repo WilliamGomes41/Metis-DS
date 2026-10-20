@@ -15,32 +15,18 @@ from src.console_performance_v1 import performance_scope
 from src.review_policy_v1 import CONTRACT, project_policy
 from src.publish_authorization_v1 import tuple_record
 from src.review_workboard_v1 import review_workboard_items
-from src.workflows.workflow_badge_counts_postgres_v1 import FastBadgePostgresCompleteWorkflowDurablePublicationConsole
-from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
-from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
-from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-from src.workflows.workflow_transaction_v1 import bind_workflow_stores
-from tests.test_console_badge_counts_postgres_v1 import ROOT, _envelope
+from tests.test_console_badge_counts_postgres_v1 import _envelope
 from tests.test_console_navigation_performance import NavigationProbe
 from tests.test_review_workboard_heading_advance_postgres_v1 import workflow_postgres
 
 
 @pytest.mark.parametrize("object_count", [2, 200])
-def test_native_navigation_count_matches_workboard_with_five_connections(
-    tmp_path, workflow_postgres, object_count,
+def test_native_navigation_count_matches_workboard_with_six_connections(
+    tmp_path, workflow_postgres, object_count, production_console,
 ):
-    identity = PostgresWorkflowIdentityStore(workflow_postgres)
-    documents = PostgresConcurrentWorkflowDocumentStore(workflow_postgres)
-    reviews = PostgresWorkflowReviewStore(workflow_postgres)
-    remaining = PostgresWorkflowRemainingStore(workflow_postgres)
-    bind_workflow_stores(identity, documents, reviews, remaining)
-    console = FastBadgePostgresCompleteWorkflowDurablePublicationConsole(
-        root=ROOT, source_store=tmp_path / "sources", runtime=tmp_path / "runtime",
-        canonical_publication_store=None, immutable_source_store=None,
-        workflow_identity_store=identity, workflow_document_store=documents,
-        workflow_review_store=reviews, workflow_remaining_store=remaining,
-    )
+    console = production_console()
+    documents = console.workflow_document_store
+    reviews = console.workflow_review_store
     accounts = [console.create_account(username=f"synthetic-reviewer-{i}",
                                       password=__name__, roles=["reviewer", "researcher"])
                 for i in range(2)]
@@ -62,7 +48,8 @@ def test_native_navigation_count_matches_workboard_with_five_connections(
     with performance_scope() as metrics:
         counts = console.waiting_task_counts(primary)
     assert counts["review"] == expected == 2
-    assert metrics.connections == 5 and metrics.queries == 5
+    # Full production topology also reads the canonical publication authority.
+    assert metrics.connections == 6 and metrics.queries == 6
     for sid, objects in fixture.objects.items():
         obj = objects[0]
         reviews.replace_snapshot_bindings(sid, [tuple_record(

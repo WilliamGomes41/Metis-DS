@@ -1,5 +1,7 @@
 ## Agent skills
 
+Voor consoletests eerst `scripts/test_postgres.sh`; nooit PG-tests overslaan.
+
 ### Skill selection
 
 For complex or multi-phase work, read and apply [skill-dispatcher](.agents/skills/skill-dispatcher/SKILL.md) before substantive work, and reconsider the route when the task phase, scope, or material risk changes. Use the current available skill catalog and read the selected skills before applying them. Briefly state the selected skills and their purpose; do not require the user to remember skill names.

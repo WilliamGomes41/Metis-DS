@@ -93,6 +93,7 @@ def _release(console: DurablePublicationConsole, snapshot_id: str) -> dict[str, 
     }
 
 
+@pytest.mark.file_topology
 def test_canonical_authority_does_not_fall_back_to_stale_local_publication(tmp_path: Path) -> None:
     console, authority, _reviewer, snapshot_id = _system(tmp_path)
     stale = deepcopy(console._envelope(snapshot_id))
@@ -144,6 +145,7 @@ def test_central_guard_blocks_type_and_relation_helpers_after_release(tmp_path: 
     assert console.objects_revision(snapshot_id) == revision
 
 
+@pytest.mark.file_topology
 def test_release_copy_preserves_existing_historical_state(tmp_path: Path) -> None:
     console, authority, _reviewer, snapshot_id = _system(tmp_path)
     release = _release(console, snapshot_id)
