@@ -21,7 +21,7 @@ from src.deterministic_review_repair_v1 import (
 )
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
-from src.review_closure_v1 import ReviewClosureConsole, harden_legacy_repair_routes
+from src.review_closure_v1 import ReviewClosureConsole, install_review_recovery_page
 from src.review_ledger import read_events
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
@@ -157,7 +157,7 @@ def _system(tmp_path, console=None):
     app = create_console_app(console)
     install_deterministic_review_repair_routes(app, console)
     install_closed_review_routes(app, console)
-    harden_legacy_repair_routes(app, console)
+    install_review_recovery_page(app, console)
     client = TestClient(app)
     client.post("/login", data={"username": "bert", "password": "bert-secret"})
     return console, client, researcher, reviewer, sid, objects
@@ -179,15 +179,7 @@ def test_legacy_free_text_repair_is_not_writable(tmp_path):
     )
     assert response.status_code == 404
 
-    with pytest.raises(ConsoleError, match="legacy_free_text_repair_disabled"):
-        console.repair_source(
-            actor_id="irrelevant",
-            snapshot_id=sid,
-            object_id=obj["object_id"],
-            corrected_text="vrije tekst",
-            reason="mag niet",
-            expected_revision=console.objects_revision(sid),
-        )
+    assert not hasattr(console, "repair_source")
 
 
 def test_existing_recommendation_strength_does_not_force_classification_repair(tmp_path):

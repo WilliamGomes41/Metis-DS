@@ -249,45 +249,6 @@ def test_revise_is_non_terminal_until_repair(tmp_path):
     assert console.audit_review_signals()[0]["details"]["final_disposition"] == "repair_required"
 
 
-def test_repair_is_revision_pinned_and_reopens_review(tmp_path):
-    console, researcher, reviewer, sid, ids = _system(tmp_path)
-    oid = ids[0]
-    _review(
-        console,
-        reviewer,
-        sid,
-        oid,
-        decision="revise",
-        suitability="mist_context",
-        eindoordeel="goedkeuren_na_correctie",
-        comment="Brongebonden herstel.",
-    )
-    revised = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
-    exact = broncontext_parts(revised)["source_text_exact"]
-    with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
-        console.repair_source(
-            actor_id=reviewer["account_id"],
-            snapshot_id=sid,
-            object_id=oid,
-            corrected_text=exact,
-            reason="Brongebonden herstel",
-            expected_revision="0" * 64,
-        )
-    repaired = console.repair_source(
-        actor_id=reviewer["account_id"],
-        snapshot_id=sid,
-        object_id=oid,
-        corrected_text=exact,
-        reason="Brongebonden herstel",
-        expected_revision=console.objects_revision(sid),
-    )
-    assert repaired["governance"]["validation_status"] == "needs_review"
-    assert repaired["object_version"] != revised["object_version"]
-    assert console.waiting_task_counts(researcher["account_id"])["ingest"] == 0
-    assert console.waiting_task_counts(reviewer["account_id"])["review"] == 1
-    assert console.audit_review_signals()[0]["details"]["decision"] == "repair"
-
-
 def test_proposed_correction_is_not_automatically_applied(tmp_path):
     console, _researcher, reviewer, sid, ids = _system(tmp_path)
     oid = ids[0]
@@ -473,34 +434,6 @@ def test_revise_and_rejected_objects_do_not_leak_from_question_selector(tmp_path
     }
     assert revise_id not in selected_ids
     assert reject_id not in selected_ids
-
-
-def test_repair_ui_escapes_evidence_and_carries_revision_pin(tmp_path):
-    console, _researcher, reviewer, sid, ids = _system(tmp_path)
-    oid = ids[0]
-    _review(
-        console,
-        reviewer,
-        sid,
-        oid,
-        decision="revise",
-        suitability="mist_context",
-        eindoordeel="goedkeuren_na_correctie",
-        comment='<script>alert("x")</script>',
-        proposed_correction='<img src=x onerror=alert("x")>',
-    )
-    app = create_console_app(console)
-    install_closed_review_routes(app, console)
-    client = TestClient(app, base_url="https://testserver")
-    client.post("/login", data={"username": "bert", "password": "bert-secret"})
-    response = client.get(f"/review/repair?document={sid}&object={oid}")
-    assert response.status_code == 200
-    assert "<script>alert" not in response.text
-    assert "<img src=x" not in response.text
-    assert "&lt;script&gt;" in response.text
-    assert "&lt;img src=x" in response.text
-    assert 'action="/review/repair/source"' in response.text
-    assert 'name="snapshot_revision"' in response.text
 
 
 def test_review_evidence_is_visible_in_read_only_audit_route(tmp_path):

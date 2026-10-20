@@ -18,6 +18,54 @@
       "status": "LEGACY-REMOVED",
       "reason": "Always overwritten by the later dictionary entry; removed without changing the effective message.",
       "historical_value": "Het antwoord van de modeldienst was niet volledig. De voorcontrole kon daardoor niet worden afgerond."
+    },
+    {
+      "path": "src/closed_review_loop_v1.py",
+      "symbol": "ClosedLoopReviewConsole.repair_source",
+      "status": "LEGACY-REMOVED",
+      "reason": "Legacy free-text repair route: overridden by ReviewClosureConsole and its routes stripped by the former harden_legacy_repair_routes, so unreachable from every runtime root; removed without changing either console route table."
+    },
+    {
+      "path": "src/closed_review_loop_v1.py",
+      "symbol": "ClosedLoopReviewConsole._require_repair_access",
+      "status": "LEGACY-REMOVED",
+      "reason": "Only caller was ClosedLoopReviewConsole.repair_source; removed with it."
+    },
+    {
+      "path": "src/closed_review_loop_v1.py",
+      "symbol": "_review_url",
+      "status": "LEGACY-REMOVED",
+      "reason": "Only caller was the removed repair_home handler; deterministic_review_repair_v1 keeps its own _review_url."
+    },
+    {
+      "path": "src/closed_review_loop_v1.py",
+      "symbol": "install_closed_review_routes.repair_home (GET /review/repair)",
+      "status": "LEGACY-REMOVED",
+      "reason": "Legacy free-text repair route: overridden by ReviewClosureConsole and its routes stripped by the former harden_legacy_repair_routes, so unreachable from every runtime root; removed without changing either console route table."
+    },
+    {
+      "path": "src/closed_review_loop_v1.py",
+      "symbol": "install_closed_review_routes.repair_source_route (POST /review/repair/source)",
+      "status": "LEGACY-REMOVED",
+      "reason": "Legacy free-text repair route: overridden by ReviewClosureConsole and its routes stripped by the former harden_legacy_repair_routes, so unreachable from every runtime root; removed without changing either console route table."
+    },
+    {
+      "path": "src/closed_review_loop_v1.py",
+      "symbol": "install_closed_review_routes.repair_support_route (POST /review/repair/support)",
+      "status": "LEGACY-REMOVED",
+      "reason": "Legacy free-text repair route: overridden by ReviewClosureConsole and its routes stripped by the former harden_legacy_repair_routes, so unreachable from every runtime root; removed without changing either console route table. ClosedLoopReviewConsole.resolve_support_relation stays; deterministic_review_repair_v1 calls it."
+    },
+    {
+      "path": "src/review_closure_v1.py",
+      "symbol": "ReviewClosureConsole.repair_source",
+      "status": "LEGACY-REMOVED",
+      "reason": "Override that always raised legacy_free_text_repair_disabled; redundant once the base method is gone."
+    },
+    {
+      "path": "src/review_closure_v1.py",
+      "symbol": "_LEGACY_REPAIR_PATHS",
+      "status": "LEGACY-REMOVED",
+      "reason": "Route filter list for the removed legacy repair routes; nothing left to filter. harden_legacy_repair_routes is renamed install_review_recovery_page and keeps the read-only GET /review/repair."
     }
   ],
   "status_definitions": {
