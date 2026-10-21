@@ -1,6 +1,0 @@
-# Keep checksum-pinned snapshots and generated discovery adapters stable on Windows.
-.agents/skills/verify-this/SKILL.md text eol=lf
-.agents/skills/make-pr-easy-to-review/SKILL.md text eol=lf
-.agents/licenses/cursor-team-kit.txt text eol=lf
-.claude/skills/verify-this/SKILL.md text eol=lf
-.claude/skills/make-pr-easy-to-review/SKILL.md text eol=lf

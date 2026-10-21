@@ -41,12 +41,17 @@ async function run(input) {
     let pageErrors = 0;
     page.on('pageerror', () => pageErrors++);
     const query = new URLSearchParams({document:input.document});
-    const exportResponse = await page.goto(origin+'/inzicht/document/passages?'+query);
-    if (exportResponse.status() !== 200) throw Error('export_unavailable');
-    const exported = JSON.parse(await page.locator('body').innerText());
-    if (exported.snapshot_id !== input.document || exported.objects_revision !== input.revision || exported.rows.length>1000) throw Error('context_changed');
     const selection = await page.goto(origin+'/source-selection?'+query);
     if (selection.status() !== 200) throw Error('selection_unavailable');
+    // The export intentionally has Content-Disposition: attachment. Navigation
+    // would start a download, which this context forbids. Fetch its JSON from
+    // the scoped same-origin page; browser routing and capability checks apply.
+    const exported = await page.evaluate(async url => {
+      const response = await fetch(url, {credentials:'same-origin', redirect:'error'});
+      if (response.status !== 200) throw Error('export_unavailable');
+      return response.json();
+    }, origin+'/inzicht/document/passages?'+query+'&format=json');
+    if (exported.snapshot_id !== input.document || exported.objects_revision !== input.revision || exported.rows.length>1000) throw Error('context_changed');
     const selected = await page.locator('[data-source-document][data-selected="true"]').getAttribute('data-source-document');
     const selectedValue = await page.locator('select[name=document]').inputValue();
     const review = await page.goto(origin+'/review?'+query+'&task=inventory');

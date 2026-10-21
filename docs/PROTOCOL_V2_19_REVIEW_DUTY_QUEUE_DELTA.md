@@ -1,1 +1,0 @@
-history/protocol-v2/PROTOCOL_V2_19_REVIEW_DUTY_QUEUE_DELTA.md

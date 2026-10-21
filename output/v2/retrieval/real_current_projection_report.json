@@ -1,9 +1,0 @@
-{
-  "status": "PASS",
-  "input_published_envelopes": 0,
-  "retrieval_records": 0,
-  "blocked_records": 0,
-  "blocked": [],
-  "embedding_status": "disabled",
-  "canonical_data_mutated": false
-}

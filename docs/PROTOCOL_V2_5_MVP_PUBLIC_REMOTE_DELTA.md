@@ -1,1 +1,0 @@
-history/protocol-v2/PROTOCOL_V2_5_MVP_PUBLIC_REMOTE_DELTA.md

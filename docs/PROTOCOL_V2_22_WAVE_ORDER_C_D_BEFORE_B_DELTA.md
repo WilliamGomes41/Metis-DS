@@ -1,1 +1,0 @@
-history/protocol-v2/PROTOCOL_V2_22_WAVE_ORDER_C_D_BEFORE_B_DELTA.md

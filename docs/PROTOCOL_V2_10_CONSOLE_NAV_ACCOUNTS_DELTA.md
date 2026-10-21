@@ -1,1 +1,0 @@
-history/protocol-v2/PROTOCOL_V2_10_CONSOLE_NAV_ACCOUNTS_DELTA.md

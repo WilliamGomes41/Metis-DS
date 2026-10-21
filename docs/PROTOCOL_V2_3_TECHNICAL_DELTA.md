@@ -1,1 +1,0 @@
-history/protocol-v2/PROTOCOL_V2_3_TECHNICAL_DELTA.md

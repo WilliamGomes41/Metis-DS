@@ -1,1 +1,0 @@
-history/protocol-v2/PROTOCOL_V2_9_CONSOLE_UX_BRAND_DELTA.md

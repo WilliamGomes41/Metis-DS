@@ -1,9 +1,0 @@
-{
-  "evidence_sha256": "4581af597deffd5d8060345db72848979a00958c91c212be9bbec4641e75e7ce",
-  "checker": "standard Bend checker",
-  "proof_exit": 0,
-  "proof_output": "ALL PROOFS CHECK\nUse --verdict for mathematical validity.\n",
-  "limits": "Supplied JUnit classification only; not exhaustive I/O, Python correctness or merge/deploy approval",
-  "false_clean_claim_rejected": true,
-  "negative_output": "SOME PROOFS FAIL\nError:\n- expected : False{}\n- observed : True{}\nLocation: Laws.false_clean_claim\n15 | def Laws.false_clean_claim():\n16>|   {==}\n   |   ^^^^\n17 | \n"
-}
