@@ -145,6 +145,9 @@ def test_postgres_overview_reuses_full_source_for_retained_records(review_client
     from src.workflows.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin
 
     console, client, sid = review_client
+    # The page shows the observation time to the minute; two renders must not
+    # straddle a minute boundary when their output is compared byte for byte.
+    monkeypatch.setattr(workboard, "_observed_at", lambda: "2026-10-21T12:00:00Z")
     before = deepcopy(console.snapshot_objects(sid))
     assert sum(is_source_record(obj) for obj in before) == 20
     envelope = deepcopy(console._envelope(sid))
