@@ -229,8 +229,8 @@ def test_direct_rejections_make_no_writes(storage, tmp_path, rejection):
             console.workflow_document_store.write_bundle(envelope=envelope)
             # R+ publication truth is the canonical release history, not the
             # envelope flag. Seed that same authority before testing refusal.
-            from tests.test_published_working_revision_immutable_v1 import _seed_durable_release
-            _seed_durable_release(console.workflow_document_store, snapshot_id=sid, token="a08-" + sid)
+            from tests.complete_workflow_support import seed_canonical_release
+            seed_canonical_release(console.canonical_publication_store, snapshot_id=sid, token="a08-" + sid)
         else:
             console._envelopes[sid] = envelope
             console._save_envelopes()
@@ -240,7 +240,14 @@ def test_direct_rejections_make_no_writes(storage, tmp_path, rejection):
     before = _state(console, sid)
     with pytest.raises(ConsoleError):
         console.batch_confirm_headings(actor_id=actor, snapshot_id=sid, object_ids=selected, expected_revision=before[3])
-    assert _state(storage(tmp_path), sid) == before
+    # Check refusal before production startup reconciles the published envelope.
+    assert _state(console, sid) == before
+    after = _state(storage(tmp_path), sid)
+    if rejection == "published" and hasattr(console, "workflow_document_store"):
+        assert after[:-1] == before[:-1]
+        assert after[-1] == before[-1] + 1  # Existing startup reconciliation.
+    else:
+        assert after == before
 
 
 def test_direct_command_success_and_late_failure(storage, tmp_path, monkeypatch):
