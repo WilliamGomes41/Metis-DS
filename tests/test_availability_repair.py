@@ -71,6 +71,18 @@ def drain(client, app):
     client.portal.call(wait)
 
 
+def _preparation_context(console):
+    from src.workflows.workflow_transaction_v1 import workflow_transaction_active
+    try:
+        asyncio.get_running_loop()
+        on_loop = True
+    except RuntimeError:
+        on_loop = False
+    # Shared depth can belong to another request or the dispatcher scan.
+    # Check whether THIS preparation thread owns the store lock.
+    return on_loop, console._store_thread_lock._is_owned(), workflow_transaction_active()
+
+
 def test_a26_receipt_without_provider_restart_duplicate_and_later_failure(backend_state, tmp_path, *, production_app, production_console):
     console=state(tmp_path, production_console=production_console); author, reviewer=accounts(console); calls=[]
     def failure(*args):
@@ -111,10 +123,7 @@ def test_a26_short_selection_request_health_reads_writer_refresh_duplicate(backe
     entered=Event();release=Event();calls=[];observations=[]
     def paused(*args):
         calls.append(1)
-        try: asyncio.get_running_loop(); on_loop=True
-        except RuntimeError: on_loop=False
-        from src.workflows.workflow_transaction_v1 import workflow_transaction_active
-        observations.append((on_loop, console._store_lock_depth, workflow_transaction_active()))
+        observations.append(_preparation_context(console))
         entered.set(); assert release.wait(5)
         return provider(*args)
     bind(console,paused); app=production_app(console)
@@ -138,7 +147,7 @@ def test_a26_short_selection_request_health_reads_writer_refresh_duplicate(backe
         result=client.get('/source-selection',params={'document':sid})
         assert 'Status: voltooid' in result.text and 'Naar Review' in result.text
         assert console.processing_status(sid)['state']=='succeeded'
-        assert observations==[(False,0,False)]
+        assert observations==[(False,False,False)]
         assert len(calls)==1
 
 
@@ -151,10 +160,7 @@ def test_a04_a05_successor_register_then_prepare_without_lock_and_stale_parent(b
     sid=receipt['snapshot_id'];before=deepcopy(console.snapshot_objects(sid));original=console._fragments_and_spec
     entered=Event();release=Event();observations=[]
     def paused(*args,**kwargs):
-        try: asyncio.get_running_loop();on_loop=True
-        except RuntimeError:on_loop=False
-        from src.workflows.workflow_transaction_v1 import workflow_transaction_active
-        observations.append((on_loop,console._store_lock_depth,workflow_transaction_active()))
+        observations.append(_preparation_context(console))
         entered.set();assert release.wait(5);return original(*args,**kwargs)
     console._fragments_and_spec=paused;app=production_app(console)
     with TestClient(app,base_url='https://testserver') as client,ThreadPoolExecutor(3) as pool:
@@ -183,7 +189,7 @@ def test_a04_a05_successor_register_then_prepare_without_lock_and_stale_parent(b
     assert console.snapshot_objects(sid2)==[]
     attempt=console._envelope(sid2)['processing_attempts'][-1]
     assert attempt['state']=='failed' and attempt['error_code']=='snapshot_object_write_conflict'
-    assert observations==[(False,0,False)]
+    assert observations==[(False,False,False)]
 
 
 def test_restart_expired_reservation_resumes_without_losing_source(backend_state, tmp_path, monkeypatch, *, production_app, production_console):
