@@ -1,9 +1,14 @@
 """Production composition shared by pytest fixtures and real subprocess proofs."""
 from pathlib import Path
+from threading import RLock
 
 import pytest
 
 from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+
+
+# Configuration/composition touches process globals; console commands stay concurrent.
+_configuration_lock = RLock()
 
 
 def configure_production(patch, root, config):
@@ -31,7 +36,7 @@ def production_application(root, config, *, azure=False,
     """Call build_app itself; replace only model/Blob transport and configuration."""
     from src import console_asgi
     root = Path(root)
-    with pytest.MonkeyPatch.context() as patch:
+    with _configuration_lock, pytest.MonkeyPatch.context() as patch:
         configure_production(patch, root, config)
         if runtime is not None:
             patch.setenv("CONSOLE_RUNTIME", str(runtime))
