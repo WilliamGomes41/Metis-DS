@@ -50,7 +50,9 @@ def main():
     console = complete_console(root, config, console_cls=Azure if payload['kind'] == 'azure' else Durable,
                                immutable_source_store=source)
     bind_fixture_selections(console)
-    console.reconcile_durable_publications()
+    if payload['legacy']:
+        # The pinned pre-D6a helper did not run ASGI startup itself.
+        console.reconcile_durable_publications()
     if payload['legacy']:
         # Prove startup actually replaced the poisoned copies from PG, rather
         # than inferring that rebuilding happens from constructor source alone.

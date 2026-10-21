@@ -167,10 +167,8 @@ def test_u3_reprocessing_rollback_leaves_no_uncommitted_envelope_mirror(workflow
 
 def test_u4_correct_object_original_error_survives_failing_recovery(workflow_postgres, tmp_path, monkeypatch):
     console, rid, sid, (_obj_a, obj_b) = _setup(tmp_path, workflow_postgres)
-    text = obj_b["content"]["clean_text"]
-    # A proposal other than the patch value: the legacy auto-apply guard MAG NIET short-circuit.
-    console.review_object(actor_id=rid, snapshot_id=sid, object_id=obj_b["object_id"], decision="revise",
-                          comment="Corrigeer.", proposed_correction="Een andere formulering.")
+    from src.deterministic_review_repair_v1 import REPAIR_SOURCE_UNITS
+    units = console.source_units(snapshot_id=sid, object_id=obj_b["object_id"])
     before = _state(console, sid)
     flag = threading.Event()
     _inject_fault(monkeypatch, flag)
@@ -180,10 +178,15 @@ def test_u4_correct_object_original_error_survives_failing_recovery(workflow_pos
 
     monkeypatch.setattr(console, "_refresh_review_runtime", failing_remirror)
     with pytest.raises(RuntimeError, match="^r2_injected_fault$"):
-        console.correct_object(actor_id=rid, snapshot_id=sid, object_id=obj_b["object_id"],
-                               patch={"reason": "u4", "operations": [
-                                   {"op": "set", "path": "content.clean_text", "value": text}]})
+        console.submit_review_resolution(
+            actor_id=rid, snapshot_id=sid, object_id=obj_b["object_id"],
+            expected_revision=console.objects_revision(sid),
+            suitability="nee", comment="Herstel deze bronselectie.",
+            repair_kind=REPAIR_SOURCE_UNITS,
+            source_unit_ids=[units[0]["unit_id"]],
+        )
     assert flag.is_set()
+    assert _state(console, sid) == before
     assert _state(_console(tmp_path, workflow_postgres), sid) == before
 
 
@@ -211,19 +214,8 @@ def test_u4_inaccessible_mirror_does_not_affect_committed_command(workflow_postg
 
 
 def _foreign_console(root, config, runtime):
-    from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-    from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
-    from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-    from src.workflows.workflow_transaction_v1 import bind_workflow_stores
-    identity = PostgresWorkflowIdentityStore(config)
-    documents = PostgresConcurrentWorkflowDocumentStore(config)
-    reviews = PostgresWorkflowReviewStore(config)
-    bind_workflow_stores(identity, documents, reviews)
-    return rc.PostgresReviewWorkflowDurablePublicationConsole(
-        root=root, source_store=root / "sources", runtime=runtime,
-        workflow_identity_store=identity, workflow_document_store=documents,
-        workflow_review_store=reviews,
-    )
+    from tests.complete_workflow_support import complete_console
+    return complete_console(root, config, runtime=runtime)
 
 
 def test_foreign_console_cannot_join_open_command(workflow_postgres, tmp_path):

@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 
 from src.document_status_ui_v1 import install_document_status_ui
 from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
-from src.operations_console_app import create_console_app
+from tests.production_support import application_for as create_console_app
 from src.operations_console_v1 import ConsoleError, PRE_REVIEW_BLOCKED
 from src.pre_review_semantic_v1 import (
     PASSAGE_FORMATION_MODE_ENV, SEMANTIC_MODE, _PROCESSING_REFERENCE,
@@ -62,7 +62,6 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
     actor = console.create_account(username="researcher", password="researcher-secret", roles=("researcher", "reviewer"))
     other = console.create_account(username="other", password="other-secret", roles=("reviewer",))
     app = create_console_app(console)
-    install_document_status_ui(app, console)
     with TestClient(app, base_url="https://testserver") as client:
         client.post("/login", data={"username": "researcher", "password": "researcher-secret"})
         response = client.post("/ingest", data={

@@ -159,13 +159,18 @@ def test_reservation_guards_do_not_change_existing_work(workflow_postgres, tmp_p
     if mutation == "published":
         # R+ publication truth is the canonical release history, not the envelope flag.
         seed_canonical_release(console.workflow_document_store, snapshot_id=sid, token="retry-" + sid)
+        console.reconcile_durable_publications()
     elif mutation == "unauthorized":
         actor = console.create_account(username="visitor", password="visitor-secret", roles=("publisher",))["account_id"]
     before = deepcopy(console._envelope(sid))
     before_objects = console.snapshot_objects(sid)
+    before_revision = console.objects_revision(sid)
     with pytest.raises(ConsoleError) as error:
         console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id="bad key" if mutation == "invalid-key" else "guard")
     assert error.value.code == code
+    assert console.workflow_document_store.get_envelope(sid) == before
+    assert console.snapshot_objects(sid) == before_objects
+    assert console.objects_revision(sid) == before_revision
     restarted = _console(tmp_path, workflow_postgres)
     assert restarted._envelope(sid) == before
     assert restarted.snapshot_objects(sid) == before_objects
@@ -213,11 +218,14 @@ def test_changes_during_provider_work_block_stale_activation(workflow_postgres, 
             if change == "published":
                 # R+ publication truth is the canonical release history, not the envelope flag.
                 seed_canonical_release(second.workflow_document_store, snapshot_id=sid, token="stale-" + sid)
+                second.reconcile_durable_publications()
                 sealed.append(deepcopy(second.workflow_document_store.get_envelope(sid)))
         return result
     monkeypatch.setattr(console, "_fragments_and_spec", changed)
     with pytest.raises(ConsoleError) as rejected:
         console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id="stale")
+    if change == "published":
+        assert console.workflow_document_store.get_envelope(sid) == sealed[0]
     restarted = _console(tmp_path, workflow_postgres)
     assert restarted.snapshot_objects(sid) == retained
     if change == "published":

@@ -214,3 +214,20 @@ zijn eigen wegwerpdatabase en ruimt die bij afsluiten op. Zij gebruikt hetzelfde
 startscript als pytest; er wordt geen aangeboden database gereset. Een lokale
 geauthenticeerde HTTP-proef is uitgevoerd; een volledige browser- of Cursor-run
 wordt daarmee niet geclaimd.
+
+Portie 11 verwijdert de tweede samenstelling uit `complete_console`: ook die
+legacy testsignatuur roept nu de gedeelde productie-ASGI-fabriek aan. Alleen de
+twee ondersteunde FastBadge-PG-klassen zijn toegestaan. Bestaande model-/Blob-
+fixtures blijven transportinjecties. A03 en de native publicatieproef gebruiken
+canonical PostgreSQL; persist-tellers observeren de echte adapter en release-ID's
+worden uit PostgreSQL gelezen. De parallelle canonical-geheugenstore in die
+native publicatieproef is verwijderd.
+
+De D4/D5-gifproef, twee workerprocessen, backup/herstel en rollback blijven
+deel van het bewijs. Bij procesafbreking wordt de exacte PG-baseline na de echte
+startup en vóór het commando vastgelegd. Tussen de ouder en die startup mogen
+uitsluitend bestaande document-revisietellers/tijdstempels veranderen; alle
+domeinpayloads blijven exact gelijk. Voor de afgebroken opdracht worden vervolgens
+alle tabellen inclusief die tellers exact vergeleken. De rollback-child voert
+startupreconciliatie eenmaal uit: via de huidige factory of expliciet bij de
+gepinde oude code die die factory nog niet kende.

@@ -8,8 +8,6 @@
 """
 from __future__ import annotations
 
-import json
-import os
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -17,12 +15,10 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig, PostgresCanonicalPublicationStore
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, review_lane
 from src.passage_register_v1 import passage_register_of
-from src.publish_readiness_ui_v1 import install_publish_readiness_ui
 from src.review_disposition_v1 import definitive_review_disposition
 from src.workflows.workflow_documents_cutover_v1 import _PostgresWorkflowDocumentsMixin
 from src.workflows.workflow_remaining_cutover_v1 import (
@@ -31,6 +27,7 @@ from src.workflows.workflow_remaining_cutover_v1 import (
 )
 from src.workflows.workflow_badge_counts_postgres_v1 import FastBadgePostgresCompleteWorkflowDurablePublicationConsole
 from tests.complete_workflow_support import complete_console
+from tests.production_support import application_for
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
@@ -81,76 +78,28 @@ class MemorySourceStore:
             raise G2SourceStoreError("canonical_source_missing") from exc
 
 
-class MemoryCanonicalStore:
-    """Small canonical authority fake; workflow persistence is real PostgreSQL."""
+def canonical_store(config):
+    """Observe persist calls on the actual PostgreSQL canonical adapter."""
+    from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+    store = PostgresCanonicalPublicationStore(config)
+    store.persist_calls = 0
+    persist = store.persist_published_release
+    def counted(**payload):
+        store.persist_calls += 1
+        return persist(**payload)
+    store.persist_published_release = counted
+    return store
 
-    def __init__(self) -> None:
-        self.releases: dict[str, dict[str, Any]] = {}
-        self.persist_calls = 0
 
-    def persist_published_release(self, **payload: Any) -> None:
-        self.persist_calls += 1
-        release_id = str(payload["release_id"])
-        self.releases[release_id] = json.loads(
-            json.dumps(payload, default=str, sort_keys=True)
-        )
-
-    def release_for_snapshot(self, snapshot_id: str) -> dict[str, Any] | None:
-        matches = [row for row in self.releases.values() if row["snapshot_id"] == snapshot_id]
-        if not matches:
-            return None
-        payload = sorted(matches, key=lambda row: row["published_at"])[-1]
-        return {
-            "release_id": payload["release_id"],
-            "release_version": payload["release_version"],
-            "release_owner": payload["release_owner"],
-            "published_at": payload["published_at"],
-            "snapshot_id": payload["snapshot_id"],
-            "source_sha256": payload["source_sha256"],
-            "source_locator": payload["source_locator"],
-            "objects": [
-                {
-                    "object_id": obj["object_id"],
-                    "object_version": obj["object_version"],
-                    "canonical_object_hash": (obj.get("provenance") or {}).get(
-                        "canonical_object_hash"
-                    ),
-                    "content_hash": (obj.get("provenance") or {}).get("content_hash"),
-                    "confirmed_object_type": obj.get("confirmed_object_type"),
-                }
-                for obj in payload["objects"]
-            ],
-        }
-
-    def active_publication_rows(self) -> list[dict[str, Any]]:
-        latest_by_object: dict[str, tuple[str, dict[str, Any], dict[str, Any]]] = {}
-        for payload in self.releases.values():
-            for obj in payload["objects"]:
-                object_id = str(obj["object_id"])
-                prior = latest_by_object.get(object_id)
-                if prior is None or prior[0] < payload["published_at"]:
-                    latest_by_object[object_id] = (payload["published_at"], payload, obj)
-        return [
-            {
-                "knowledge_object": deepcopy(obj),
-                "publication": {
-                    "release_id": payload["release_id"],
-                    "release_version": payload["release_version"],
-                    "published_at": payload["published_at"],
-                },
-                "snapshot_id": payload["snapshot_id"],
-                "release_owner": payload["release_owner"],
-            }
-            for _stamp, payload, obj in sorted(
-                latest_by_object.values(), key=lambda item: item[2]["object_id"]
-            )
-        ]
+def release_ids(store):
+    with store._connect() as connection:
+        return [row['release_id'] for row in connection.execute('SELECT release_id FROM publication_releases ORDER BY release_id')]
 
 
 def _console(
     tmp_path: Path,
     config: PostgresCanonicalConfig,
-    durable: MemoryCanonicalStore,
+    durable: PostgresCanonicalPublicationStore,
     source: MemorySourceStore,
     *,
     runtime_name: str,
@@ -165,7 +114,7 @@ def _console(
 def _ready_console(
     tmp_path: Path,
     config: PostgresCanonicalConfig,
-    durable: MemoryCanonicalStore,
+    durable: PostgresCanonicalPublicationStore,
     source: MemorySourceStore,
 ) -> tuple[FastBadgePostgresCompleteWorkflowDurablePublicationConsole, dict[str, dict], dict]:
     console = _console(
@@ -288,7 +237,7 @@ def test_publication_readiness_has_bounded_postgres_query_count(
     tmp_path: Path,
     workflow_postgres: PostgresCanonicalConfig,
 ) -> None:
-    durable = MemoryCanonicalStore()
+    durable = canonical_store(workflow_postgres)
     source = MemorySourceStore()
     console, _accounts, receipt = _ready_console(
         tmp_path, workflow_postgres, durable, source
@@ -314,7 +263,7 @@ def test_publish_persists_published_envelope_in_postgres_document_authority_and_
     tmp_path: Path,
     workflow_postgres: PostgresCanonicalConfig,
 ) -> None:
-    durable = MemoryCanonicalStore()
+    durable = canonical_store(workflow_postgres)
     source = MemorySourceStore()
     console, accounts, receipt = _ready_console(tmp_path, workflow_postgres, durable, source)
     snapshot_id = receipt["snapshot_id"]
@@ -330,8 +279,7 @@ def test_publish_persists_published_envelope_in_postgres_document_authority_and_
     assert stored["state"] == "published"
     assert stored["release_id"] == result["release_id"]
 
-    app = create_console_app(console)
-    install_publish_readiness_ui(app, console)
+    app = application_for(console)
     client = TestClient(app, base_url="https://testserver", raise_server_exceptions=False)
     login = client.post(
         "/login",
@@ -349,7 +297,7 @@ def test_restart_reads_published_state_from_postgres_document_authority(
     tmp_path: Path,
     workflow_postgres: PostgresCanonicalConfig,
 ) -> None:
-    durable = MemoryCanonicalStore()
+    durable = canonical_store(workflow_postgres)
     source = MemorySourceStore()
     console, accounts, receipt = _ready_console(tmp_path, workflow_postgres, durable, source)
     snapshot_id = receipt["snapshot_id"]
@@ -377,7 +325,7 @@ def test_postcanonical_workflow_failure_retries_same_release_and_converges(
     workflow_postgres: PostgresCanonicalConfig,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    durable = MemoryCanonicalStore()
+    durable = canonical_store(workflow_postgres)
     source = MemorySourceStore()
     console, accounts, receipt = _ready_console(tmp_path, workflow_postgres, durable, source)
     snapshot_id = receipt["snapshot_id"]
@@ -400,7 +348,7 @@ def test_postcanonical_workflow_failure_retries_same_release_and_converges(
         )
     assert caught.value.code == "durable_publication_local_copy_failed"
     assert durable.persist_calls == 1
-    assert len(durable.releases) == 1
+    assert len(release_ids(durable)) == 1
     persisted_after_failure = real_write.__self__.get_envelope(snapshot_id)
     assert persisted_after_failure is not None
     assert persisted_after_failure["state"] == "captured_not_published"
@@ -412,8 +360,8 @@ def test_postcanonical_workflow_failure_retries_same_release_and_converges(
     assert retry["status"] == "PASS"
     assert retry["local_projection"] == "reconciled"
     assert durable.persist_calls == 1
-    assert len(durable.releases) == 1
-    assert retry["release_id"] == next(iter(durable.releases))
+    assert len(release_ids(durable)) == 1
+    assert retry["release_id"] == release_ids(durable)[0]
     persisted = documents.get_envelope(snapshot_id)
     assert persisted is not None
     assert persisted["state"] == "published"
@@ -434,7 +382,7 @@ def test_reviewer_cannot_reconcile_existing_release_via_publish_route(
     workflow_postgres: PostgresCanonicalConfig,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    durable = MemoryCanonicalStore()
+    durable = canonical_store(workflow_postgres)
     source = MemorySourceStore()
     console, accounts, receipt = _ready_console(tmp_path, workflow_postgres, durable, source)
     snapshot_id = str(receipt["snapshot_id"])
@@ -453,7 +401,7 @@ def test_reviewer_cannot_reconcile_existing_release_via_publish_route(
         "envelope": deepcopy(console.workflow_document_store.get_envelope(snapshot_id)),
         "events": deepcopy(console.workflow_review_store.read_events()),
         "persist_calls": durable.persist_calls,
-        "release_count": len(durable.releases),
+        "release_count": len(release_ids(durable)),
     }
 
     calls = {"sync": 0, "apply": 0}
@@ -471,7 +419,7 @@ def test_reviewer_cannot_reconcile_existing_release_via_publish_route(
     monkeypatch.setattr(console, "_sync_snapshot_from_authority", count_sync)
     monkeypatch.setattr(console, "_apply_release_state", count_apply)
 
-    app = create_console_app(console)
+    app = application_for(console)
     client = TestClient(app, base_url="https://testserver", raise_server_exceptions=False)
     login = client.post(
         "/login",
@@ -490,7 +438,7 @@ def test_reviewer_cannot_reconcile_existing_release_via_publish_route(
     assert "publisher_role_required" in denied.text
     assert calls == {"sync": 0, "apply": 0}
     assert durable.persist_calls == before["persist_calls"]
-    assert len(durable.releases) == before["release_count"]
+    assert len(release_ids(durable)) == before["release_count"]
     assert console.workflow_document_store.get_envelope(snapshot_id) == before["envelope"]
     assert not projection_path.exists() and not manifest_path.exists() and not ledger_path.exists()
     assert console.workflow_review_store.read_events() == before["events"]
