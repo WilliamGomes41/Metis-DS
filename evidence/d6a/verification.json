@@ -27,7 +27,7 @@
     "first_pr": "https://github.com/WilliamGomes41/Metis-DS/pull/791",
     "first_pr_draft": true,
     "ci_run": "https://github.com/WilliamGomes41/Metis-DS/actions/runs/39540968976",
-    "remaining_prs": "9 prepared branches have no PR yet",
+    "remaining_prs": "6 prepared branches have no PR yet",
     "initial_ci_run": "https://github.com/WilliamGomes41/Metis-DS/actions/runs/39539031210",
     "status_evidence": "publication-status.json",
     "second_pr": "https://github.com/WilliamGomes41/Metis-DS/pull/792",
@@ -85,11 +85,24 @@
       {
         "portion": "12",
         "url": "https://github.com/WilliamGomes41/Metis-DS/pull/803"
+      },
+      {
+        "portion": "13",
+        "url": "https://github.com/WilliamGomes41/Metis-DS/pull/804"
+      },
+      {
+        "portion": "14",
+        "url": "https://github.com/WilliamGomes41/Metis-DS/pull/805"
+      },
+      {
+        "portion": "15",
+        "url": "https://github.com/WilliamGomes41/Metis-DS/pull/806"
       }
     ],
     "portions03_05_evidence": "portions03-05-publication.json",
     "portions06_10_evidence": "portions06-10-publication.json",
-    "prerequisite_portions11_12_evidence": "prerequisite-portions11-12-publication.json"
+    "prerequisite_portions11_12_evidence": "prerequisite-portions11-12-publication.json",
+    "portions13_15_evidence": "portions13-15-publication.json"
   },
   "fixture_speedup": "fixture-prefetch-benchmark.json",
   "environment_isolation": "fixture-environment-isolation.json",
@@ -102,7 +115,7 @@
   "review_stack_validation": "review-stack-validation.json",
   "post_measurement_ci_integration": "main-ci-integration.json",
   "historical_ci_probe_repair": "historical-ci-probes.json",
-  "current_ci_status": "publication-status.json",
+  "current_ci_status": "09/10 and review prerequisite successful;11 externally merged; additional11/12 test corrections pushed and inherited by13–15, newly opened with full CI pending.",
   "portion02_publication": "portion02-publication.json",
   "portions03_05_publication": "portions03-05-publication.json",
   "portions06_10_publication": "portions06-10-publication.json",
@@ -111,5 +124,6 @@
   "portion09_10_recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
   "portion09_10_native_label_repair": "portion09-10-native-label-repair.json",
   "portions09_10_ci_success": "portions09-10-ci-success.json",
-  "prerequisite_portions11_12_publication": "prerequisite-portions11-12-publication.json"
+  "prerequisite_portions11_12_publication": "prerequisite-portions11-12-publication.json",
+  "portions13_15_publication": "portions13-15-publication.json"
 }

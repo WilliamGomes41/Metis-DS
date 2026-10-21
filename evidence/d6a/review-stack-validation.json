@@ -1,5 +1,7 @@
 {
   "proposed_prs": 22,
+  "opened_prs": 16,
+  "remaining_prs": 6,
   "change_contracts": "passed",
   "base_ancestry": "passed",
   "test_file_maps": "passed",

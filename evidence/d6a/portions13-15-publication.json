@@ -1,0 +1,475 @@
+{
+  "recorded_at": "2026-10-21T15:19:21.953510+00:00",
+  "action": "Open three draft PRs; correct failed fixture proofs on11/12; no merge or deploy",
+  "snapshots": [
+    {
+      "portion": "13",
+      "pr": 804,
+      "url": "https://github.com/WilliamGomes41/Metis-DS/pull/804",
+      "head": "codex/d6a-13-navigation-auth",
+      "head_sha": "169aa2cb6a787b908821b3e8ef509b82b9e05b2f",
+      "base": "codex/d6a-12-source-context",
+      "base_sha": "b891d12fe8698dd5751526b059110f3208aa2444",
+      "draft": true,
+      "created_at": "2026-10-21T15:13:21Z"
+    },
+    {
+      "portion": "14",
+      "pr": 805,
+      "url": "https://github.com/WilliamGomes41/Metis-DS/pull/805",
+      "head": "codex/d6a-14-workboards",
+      "head_sha": "bc98392bc3d9505ffa22ee736c00039f02e58970",
+      "base": "codex/d6a-13-navigation-auth",
+      "base_sha": "169aa2cb6a787b908821b3e8ef509b82b9e05b2f",
+      "draft": true,
+      "created_at": "2026-10-21T15:13:37Z"
+    },
+    {
+      "portion": "15",
+      "pr": 806,
+      "url": "https://github.com/WilliamGomes41/Metis-DS/pull/806",
+      "head": "codex/d6a-15-decision-console",
+      "head_sha": "dc774f961ec16cc41331eea17e56cb595459a88c",
+      "base": "codex/d6a-14-workboards",
+      "base_sha": "bc98392bc3d9505ffa22ee736c00039f02e58970",
+      "draft": true,
+      "created_at": "2026-10-21T15:19:15Z"
+    }
+  ],
+  "checks": [
+    {
+      "portion": "13",
+      "tested_implementation_commit": "1df532e2e072d56d7f4b41b6176a756e0b1edf0e",
+      "published_head": "169aa2cb6a787b908821b3e8ef509b82b9e05b2f",
+      "junit": "d6a13-publication.xml",
+      "sha256": "2ae2361183691b3aaa47a7f2e4080e8f198678460cef0153b7b980a6660b81af",
+      "tests": 167,
+      "passed": 167,
+      "skipped": 0,
+      "postgres_skips": 0,
+      "failures": 0,
+      "errors": 0,
+      "elapsed_seconds": 48.069,
+      "post_test_source_changes": [
+        "tests/test_availability_repair.py"
+      ],
+      "source_limit": "Only independent comparison tests changed after run; runtime, helpers and all exercised modules identical."
+    },
+    {
+      "portion": "14",
+      "tested_implementation_commit": "b4bea47949342cebbd9a327a7d9d5b0d422194e7",
+      "published_head": "bc98392bc3d9505ffa22ee736c00039f02e58970",
+      "junit": "d6a14-publication.xml",
+      "sha256": "84246e00d14caa67e03425905ba15b2b9c9a0064370431452ec3fe29f04a5464",
+      "tests": 149,
+      "passed": 149,
+      "skipped": 0,
+      "postgres_skips": 0,
+      "failures": 0,
+      "errors": 0,
+      "elapsed_seconds": 95.579,
+      "post_test_source_changes": [
+        "tests/test_availability_repair.py"
+      ],
+      "source_limit": "Only independent comparison tests changed after run; runtime, helpers and all exercised modules identical."
+    },
+    {
+      "portion": "15",
+      "tested_implementation_commit": "99058b44fc1255202296e49842f8466ff25a1c5a",
+      "published_head": "dc774f961ec16cc41331eea17e56cb595459a88c",
+      "junit": "d6a15-publication.xml",
+      "sha256": "e0263506ced587ec3badccd92644ce771abb64cb8560fcea91cb0f929a8c8a45",
+      "tests": 394,
+      "passed": 394,
+      "skipped": 0,
+      "postgres_skips": 0,
+      "failures": 0,
+      "errors": 0,
+      "elapsed_seconds": 515.304,
+      "post_test_source_changes": [
+        "tests/test_availability_repair.py"
+      ],
+      "source_limit": "Only independent comparison tests changed after run; runtime, helpers and all exercised modules identical."
+    }
+  ],
+  "repair_checks": [
+    {
+      "proof": "A08 complete release fixture",
+      "junit": "d6a11-a08-green.xml",
+      "sha256": "a7f42e9c4154ea686776fd1a6b865f2c92e266e86a34a7d0e4b754313f954a48",
+      "tests": 70,
+      "passed": 70,
+      "skipped": 0
+    },
+    {
+      "proof": "deterministic minute-rollover replay",
+      "junit": "d6a12-clock-green.xml",
+      "sha256": "5bab20655e955c6612906cccfe8732d03e31ee055a5636fbe9247e07ff10744f",
+      "tests": 1,
+      "passed": 1,
+      "skipped": 0
+    },
+    {
+      "proof": "clock comparison consumers",
+      "junit": "d6a12-clock-consumers-green.xml",
+      "sha256": "6ed8d62c39db89325f9f52879a3e5293c91c4a7e0725ac11de3fee832a4b224f",
+      "tests": 48,
+      "passed": 48,
+      "skipped": 0
+    }
+  ],
+  "diagnostic_red_checks": [
+    {
+      "junit": "d6a11-a08-red.xml",
+      "sha256": "c015b9b27e1bd57c2eb5a2ea056c90dff50f87cf733118206cff667c47cb563b",
+      "tests": 1,
+      "failures": 1
+    },
+    {
+      "junit": "d6a12-clock-red.xml",
+      "sha256": "8c3037032bb27c76456e84eac63b2ff84098e922868bce2ec8335e34b3711306",
+      "tests": 1,
+      "failures": 1
+    }
+  ],
+  "helper_audit": [
+    {
+      "worktree": "/workspace/d6a13-publish",
+      "helpers": 70,
+      "direct_calls": 564,
+      "missing": [],
+      "scope": "Direct helper imports/local calls; dynamic/attribute dispatch and **kwargs excluded"
+    },
+    {
+      "worktree": "/workspace/d6a14-publish",
+      "helpers": 82,
+      "direct_calls": 631,
+      "missing": [],
+      "scope": "Direct helper imports/local calls; dynamic/attribute dispatch and **kwargs excluded"
+    },
+    {
+      "worktree": "/workspace/d6a15-publish",
+      "helpers": 92,
+      "direct_calls": 739,
+      "missing": [],
+      "scope": "Direct helper imports/local calls; dynamic/attribute dispatch and **kwargs excluded"
+    }
+  ],
+  "prior_failed_ci": {
+    "11": {
+      "head": "65c9090524a199ed65861ca8d0b5319fcaf97bd1",
+      "runs": [
+        39595912948,
+        39595912974
+      ],
+      "cause": "Incomplete canonical release fixture rejected by real ASGI startup"
+    },
+    "12": {
+      "head": "1fab6271c4670e8ad272ccfc7d605e5ae498d0dc",
+      "runs": [
+        39596236011,
+        39596235670
+      ],
+      "cause": "Inherited release fixture plus rendered observation minute rollover"
+    }
+  },
+  "repair_scope": "Only test fixture data and fixed presentation observation clocks; runtime source and lifecycle guards unchanged. Exact equality checks retained. Remote repairs integrated by merge, no force push.",
+  "verification": {
+    "repository_preflight": "PASS",
+    "architecture_boundaries": "PASS",
+    "release_control": "PASS against each direct base",
+    "compileall": "PASS",
+    "diff": "PASS",
+    "contracts": "PASS",
+    "max_test_files": 20
+  },
+  "opened_total": 16,
+  "remaining_to_open": 6,
+  "D6a_done": false,
+  "D6b_started": false,
+  "externally_merged_pr802": {
+    "merged_head": "c182ac877b9011836cc58928c73d153356c5ba2c",
+    "merged_at": "2026-10-21T14:42:26Z",
+    "agent_did_not_merge": true
+  },
+  "limits": [
+    "Exact-head full CI and baseline/after timing remain pending.",
+    "No new Cursor environment proof.",
+    "Historical whole-suite local2x gate still open; these targeted runs do not replace it."
+  ],
+  "ci_snapshot": [
+    {
+      "portion": "13",
+      "head": "169aa2cb6a787b908821b3e8ef509b82b9e05b2f",
+      "runs": [
+        {
+          "id": 39623677642,
+          "name": "source-processing-proof",
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs": [
+            {
+              "id": 119303418447,
+              "name": "native-and-browser",
+              "status": "in_progress",
+              "conclusion": null,
+              "failed_steps": []
+            },
+            {
+              "id": 119303418702,
+              "name": "baseline",
+              "status": "completed",
+              "conclusion": "success",
+              "failed_steps": []
+            }
+          ]
+        },
+        {
+          "id": 39623677565,
+          "name": "ci",
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs": [
+            {
+              "id": 119303418852,
+              "name": "change-contract",
+              "status": "completed",
+              "conclusion": "success",
+              "failed_steps": []
+            },
+            {
+              "id": 119303419680,
+              "name": "architecture-boundaries",
+              "status": "completed",
+              "conclusion": "success",
+              "failed_steps": []
+            },
+            {
+              "id": 119303523516,
+              "name": "characterization-evidence",
+              "status": "completed",
+              "conclusion": "success",
+              "failed_steps": []
+            },
+            {
+              "id": 119303523596,
+              "name": "test (3.12)",
+              "status": "in_progress",
+              "conclusion": null,
+              "failed_steps": []
+            },
+            {
+              "id": 119303523765,
+              "name": "test (3.13)",
+              "status": "in_progress",
+              "conclusion": null,
+              "failed_steps": []
+            }
+          ]
+        },
+        {
+          "id": 39623677650,
+          "name": "docling-acceptance",
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs": [
+            {
+              "id": 119303419223,
+              "name": "real-pdf",
+              "status": "in_progress",
+              "conclusion": null,
+              "failed_steps": []
+            }
+          ]
+        },
+        {
+          "id": 39623677715,
+          "name": "workflow-topology-proof",
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs": [
+            {
+              "id": 119303418779,
+              "name": "topology-and-review",
+              "status": "in_progress",
+              "conclusion": null,
+              "failed_steps": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "portion": "14",
+      "head": "bc98392bc3d9505ffa22ee736c00039f02e58970",
+      "runs": [
+        {
+          "id": 39623719277,
+          "name": "workflow-topology-proof",
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs": [
+            {
+              "id": 119303560770,
+              "name": "topology-and-review",
+              "status": "in_progress",
+              "conclusion": null,
+              "failed_steps": []
+            }
+          ]
+        },
+        {
+          "id": 39623719415,
+          "name": "source-processing-proof",
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs": [
+            {
+              "id": 119303561538,
+              "name": "native-and-browser",
+              "status": "in_progress",
+              "conclusion": null,
+              "failed_steps": []
+            },
+            {
+              "id": 119303561669,
+              "name": "baseline",
+              "status": "completed",
+              "conclusion": "success",
+              "failed_steps": []
+            }
+          ]
+        },
+        {
+          "id": 39623719491,
+          "name": "ci",
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs": [
+            {
+              "id": 119303562658,
+              "name": "change-contract",
+              "status": "completed",
+              "conclusion": "success",
+              "failed_steps": []
+            },
+            {
+              "id": 119303562917,
+              "name": "architecture-boundaries",
+              "status": "completed",
+              "conclusion": "success",
+              "failed_steps": []
+            },
+            {
+              "id": 119303669686,
+              "name": "characterization-evidence",
+              "status": "completed",
+              "conclusion": "success",
+              "failed_steps": []
+            },
+            {
+              "id": 119303669765,
+              "name": "test (3.12)",
+              "status": "in_progress",
+              "conclusion": null,
+              "failed_steps": []
+            },
+            {
+              "id": 119303669817,
+              "name": "test (3.13)",
+              "status": "in_progress",
+              "conclusion": null,
+              "failed_steps": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "portion": "15",
+      "head": "dc774f961ec16cc41331eea17e56cb595459a88c",
+      "runs": [
+        {
+          "id": 39624549544,
+          "name": "source-processing-proof",
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs": [
+            {
+              "id": 119306396785,
+              "name": "native-and-browser",
+              "status": "in_progress",
+              "conclusion": null,
+              "failed_steps": []
+            },
+            {
+              "id": 119306397462,
+              "name": "baseline",
+              "status": "in_progress",
+              "conclusion": null,
+              "failed_steps": []
+            }
+          ]
+        },
+        {
+          "id": 39624549726,
+          "name": "workflow-topology-proof",
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs": [
+            {
+              "id": 119306397783,
+              "name": "topology-and-review",
+              "status": "in_progress",
+              "conclusion": null,
+              "failed_steps": []
+            }
+          ]
+        },
+        {
+          "id": 39624549595,
+          "name": "ci",
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs": [
+            {
+              "id": 119306398561,
+              "name": "architecture-boundaries",
+              "status": "completed",
+              "conclusion": "success",
+              "failed_steps": []
+            },
+            {
+              "id": 119306399348,
+              "name": "change-contract",
+              "status": "completed",
+              "conclusion": "success",
+              "failed_steps": []
+            },
+            {
+              "id": 119306509685,
+              "name": "test (3.12)",
+              "status": "in_progress",
+              "conclusion": null,
+              "failed_steps": []
+            },
+            {
+              "id": 119306509745,
+              "name": "test (3.13)",
+              "status": "in_progress",
+              "conclusion": null,
+              "failed_steps": []
+            },
+            {
+              "id": 119306509799,
+              "name": "characterization-evidence",
+              "status": "in_progress",
+              "conclusion": null,
+              "failed_steps": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

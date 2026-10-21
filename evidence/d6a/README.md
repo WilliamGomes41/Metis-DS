@@ -17,7 +17,7 @@ Ook porties03 tot en met10 zijn als draft geopend:
 [#798](https://github.com/WilliamGomes41/Metis-DS/pull/798),
 [#799](https://github.com/WilliamGomes41/Metis-DS/pull/799) en
 [#800](https://github.com/WilliamGomes41/Metis-DS/pull/800).
-Dertien draft-PRs zijn geopend; negen moeten nog worden geopend.
+Zestien PRs zijn aangemaakt; zes moeten nog worden geopend. De nieuwe drie zijn drafts.
 De publicatiebewijzen bewaren hun oorspronkelijke momentopname. Porties09 en10 zijn inmiddels volledig groen in CI.
 Zie [publicatiebewijs van porties03–05](portions03-05-publication.json) en
 [porties06–10](portions06-10-publication.json).
@@ -27,8 +27,16 @@ De volgende drie zijn nu geopend: de afzonderlijke PG-reviewreparatie
 D6a/11 [#802](https://github.com/WilliamGomes41/Metis-DS/pull/802) en
 D6a/12 [#803](https://github.com/WilliamGomes41/Metis-DS/pull/803).
 Lokaal opnieuw uitgevoerd:9/9,110/110 en193 geslaagd plus12 optionele
-PDF-skips; nul PG-skips. De volledige CI loopt nog.
+PDF-skips; nul PG-skips. Daarna vond CI een onvolledige A08-releasefixture
+en een minuutgrens in een HTML-vergelijking. Die zijn als testcorrecties
+hersteld en naar de volgende branches doorgegeven. PR #802 is buiten deze
+sessie gemergd; nieuwe volledige CI loopt op de vervolg-PRs.
 Zie [het publicatiebewijs](prerequisite-portions11-12-publication.json).
+
+Ook geopend: [D6a/13 #804](https://github.com/WilliamGomes41/Metis-DS/pull/804), [D6a/14 #805](https://github.com/WilliamGomes41/Metis-DS/pull/805), [D6a/15 #806](https://github.com/WilliamGomes41/Metis-DS/pull/806).
+Nieuwe gerichte PG-runs: 13: 167 groen, 14: 149 groen, 15: 394 groen; nul PG-skips.
+De vorige CI-fouten zijn lokaal rood/groen bevestigd; volledige CI en
+tijdmetingen blijven open. Zie [publicatie- en reparatiebewijs](portions13-15-publication.json).
 
 D6a is nog niet formeel afgerond en D6b is niet gestart. #695 houdt voorrang
 bij capaciteitsgebrek; GNC is niet gestart.
