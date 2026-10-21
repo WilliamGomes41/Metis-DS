@@ -306,7 +306,7 @@
       ],
       "changed_test_files": 20,
       "support_files": [],
-      "ci_status": "fixture-boundary correction verified locally; CI rerun pending",
+      "ci_status": "source-processing workflow passed on the corrected head; complete suite/timing still running",
       "delivery": "published reviewable branch",
       "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/799",
       "publication_evidence": "portions06-10-publication.json",
@@ -340,7 +340,7 @@
         "tests/conftest.py",
         "tests/production_support.py"
       ],
-      "ci_status": "fixture-boundary correction verified locally; CI rerun pending",
+      "ci_status": "CI rerun started after merging the corrected parent; outcome pending",
       "delivery": "published reviewable branch",
       "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/800",
       "publication_evidence": "portions06-10-publication.json",

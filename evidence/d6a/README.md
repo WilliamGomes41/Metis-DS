@@ -25,7 +25,9 @@ Zie [publicatiebewijs van porties03–05](portions03-05-publication.json) en
 D6a is nog niet formeel afgerond en D6b is niet gestart. #695 houdt voorrang
 bij capaciteitsgebrek; GNC is niet gestart.
 
-PR09 wordt hersteld na een gemiste fixturedoorgifte bij de portiegrens.
+PR09 is hersteld na een gemiste fixturedoorgifte bij de portiegrens.
+De eerder mislukte source-processing-workflow is groen op de gecorrigeerde head;
+de volledige CI-suite en timing lopen nog.
 Alle directe afnemers zijn meegenomen; vier zelfstandige migraties schuiven naar10.
 Zie [het herstelbewijs](portion09-fixture-boundary-repair.json).
 

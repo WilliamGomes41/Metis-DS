@@ -72,7 +72,15 @@
       "skipped": 0
     }
   ],
-  "ci_rerun": "pending publication; no green CI claim",
+  "ci_rerun": {
+    "status": "success",
+    "run_id": 39559979497,
+    "run_url": "https://github.com/WilliamGomes41/Metis-DS/actions/runs/39559979497",
+    "head": "be1f72e8c255a12a4289822ada520298e6cbf3fa",
+    "native_job_id": 119088619300,
+    "baseline_job_id": 119088619783,
+    "complete_suite_and_timing": "still running in39559979524; no completion claim"
+  },
   "case_preservation": {
     "before_commit": "54ab77721f40e7a83420bce2320989dca594e310",
     "after_commit": "be1f72e8c255a12a4289822ada520298e6cbf3fa",
@@ -190,5 +198,12 @@
     "missing_required_keywords": 0,
     "includes_aliases": true
   },
-  "limits": "The original 206-case acceptance ran during preparation; the483-case run and collection comparison ran on the committed corrected head. Complete CI timing per portion remains pending; no D6a/D6b completion claim."
+  "limits": "The original 206-case acceptance ran during preparation; the483-case run and collection comparison ran on the committed corrected head. Complete CI timing per portion remains pending; no D6a/D6b completion claim.",
+  "original_feedback_loop": {
+    "before": "1 failed: missing required production_console",
+    "after": "1 passed",
+    "junit": "d6a09-original-loop-green.xml",
+    "sha256": "b390df31f96ca1f06474b5da393d332a7d5b9a448ef78f8df6934328ca62b69a",
+    "commit": "be1f72e8c255a12a4289822ada520298e6cbf3fa"
+  }
 }
