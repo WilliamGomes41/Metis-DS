@@ -96,6 +96,10 @@ jobs:
           test "$result" = 1
           grep -F A01_DENIED_RETRY_MUTATED_WORKFLOW proof/a01-red.log
           grep -F "2 failed" proof/a01-red.log
+      - name: Verify view-check persistence and authorization
+        run: |
+          mkdir -p proof
+          pytest -q tests/test_view_check_postgres.py --junitxml=proof/view-check.xml
       - name: Verify native receipt, kernel recovery, concurrency and full lifecycle
         run: |
           mkdir -p proof
@@ -111,7 +115,7 @@ jobs:
           export METIS_PLAYWRIGHT_MODULE="$RUNNER_TEMP/metis-browser/node_modules/playwright"
           export METIS_BROWSER_EXECUTABLE="$(node -e 'process.stdout.write(require(process.env.METIS_PLAYWRIGHT_MODULE).chromium.executablePath())')"
           set +e
-          pytest -q tests/test_browser_source_selection.py tests/test_browser_view_check.py --basetemp="$RUNNER_TEMP/source-browser-proof" --junitxml=proof/browser.xml > proof/browser.log 2>&1
+          pytest -q tests/test_browser_source_selection.py tests/test_browser_view_check.py tests/test_browser_knowledge_context.py --basetemp="$RUNNER_TEMP/source-browser-proof" --junitxml=proof/browser.xml > proof/browser.log 2>&1
           result=$?
           set -e
           cat proof/browser.log
@@ -121,7 +125,7 @@ jobs:
         run: |
           python - <<'PY'
           import xml.etree.ElementTree as ET
-          for path in ("proof/native.xml", "proof/browser.xml"):
+          for path in ("proof/view-check.xml", "proof/native.xml", "proof/browser.xml"):
               root = ET.parse(path).getroot()
               tests = root.findall(".//testcase")
               assert tests, path

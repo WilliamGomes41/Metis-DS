@@ -33,6 +33,10 @@ HEADERS = {'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'}
 ROOT = Path(__file__).resolve().parents[1]
 
 
+class ViewCheckAccessDenied(ConsoleError):
+    """Document authorization refusal, distinct from invalid context or outages."""
+
+
 @dataclass(frozen=True)
 class ViewCheckConfig:
     origin: str
@@ -85,7 +89,7 @@ def authorize(state, actor, document):
     envelope = state._envelope(document)
     if (account.get('retirement') or 'reviewer' not in account.get('roles', [])
             or actor not in envelope.get('named_reviewers', [])):
-        raise ConsoleError('reviewer_not_named_on_snapshot')
+        raise ViewCheckAccessDenied('reviewer_not_named_on_snapshot')
     return account, envelope
 
 
@@ -235,6 +239,10 @@ def validate_checks(raw):
 
 
 def install(app, state, require, render_page, nav):
+    @app.exception_handler(ViewCheckAccessDenied)
+    async def access_denied(request, error):
+        return JSONResponse({'error': 'view_check_access_denied'}, status_code=403, headers=HEADERS)
+
     app.state.view_checks = None
     origin = os.environ.get('METIS_VIEW_CHECK_ORIGIN', '').rstrip('/')
     if origin:
@@ -306,6 +314,8 @@ def install(app, state, require, render_page, nav):
                 raise ValueError('context_changed')
             pinned['origin'] = expected
             row = await asyncio.to_thread(service().store.register, account['account_id'], document, key, pinned)
+        except ViewCheckAccessDenied:
+            raise
         except (ValueError, ViewCheckConflict):
             return JSONResponse({'error': 'view_check_context_unavailable'}, status_code=409, headers=HEADERS)
         return RedirectResponse('/inzicht/document?' + urlencode({'document': document, 'attempt': attempt,

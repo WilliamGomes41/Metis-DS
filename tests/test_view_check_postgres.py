@@ -117,7 +117,19 @@ def test_http_scope_origin_revision_and_revocation_leave_domain_state_unchanged(
     assert scoped.get('/inzicht/document/passages?document='+document).status_code == 200
     other = TestClient(app, base_url='https://testserver')
     login(other, 'outsider')
-    assert other.get('/inzicht/weergavecontrole/'+row['id']).status_code == 403
+    job_before_denial = service.store.get(row['id'])
+    for method, path, kwargs in (
+        ('get', '/inzicht/weergavecontrole/'+row['id'], {}),
+        ('get', '/inzicht/weergavecontrole/'+row['id']+'/bewijs', {}),
+        ('post', '/inzicht/weergavecontrole/'+row['id']+'/annuleren', {'headers': {'Origin':'https://testserver'}}),
+        ('post', '/inzicht/document/weergavecontrole', {'data': {**data, 'request_key': uuid4().hex},
+                                                     'headers': {'Origin':'https://testserver'}}),
+    ):
+        denied = getattr(other, method)(path, **kwargs)
+        assert denied.status_code == 403
+        assert denied.json() == {'error': 'view_check_access_denied'}
+    assert service.store.get(row['id']) == job_before_denial
+    assert len(service.store.history(document)) == 1
     assert before == (state._envelope(document), state.objects_revision(document))
     # Current roles, not a copied human session, decide the next worker read.
     original = state._account
@@ -128,3 +140,6 @@ def test_http_scope_origin_revision_and_revocation_leave_domain_state_unchanged(
         return account
     state._account = revoked
     assert scoped.get('/inzicht/document/passages?document='+document).status_code == 403
+    assert reviewer_client.get('/inzicht/weergavecontrole/'+row['id']).status_code == 403
+    assert reviewer_client.get('/inzicht/weergavecontrole/'+row['id']+'/bewijs').status_code == 403
+    assert service.store.get(row['id']) == job_before_denial
