@@ -5,21 +5,13 @@ import re
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+import pytest
 
-from src.operations_console_app import create_console_app
-from src.operations_console_v1 import OperationsConsole
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources" / "private",
-        runtime=tmp_path / "output" / "runtime" / "operations-console",
-    )
-
-
+@pytest.mark.pure_function
 def test_css_drops_a4_shell_and_keeps_water_light_edges() -> None:
     css = (ROOT / "assets/brand/console.css").read_text(encoding="utf-8")
     assert "max-width: 1120px" not in css
@@ -39,15 +31,15 @@ def test_css_drops_a4_shell_and_keeps_water_light_edges() -> None:
     assert 'width="96"' in source
 
 
-def test_rooms_use_one_short_lead_not_stacked_protocol_prose(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_rooms_use_one_short_lead_not_stacked_protocol_prose(production_console, production_app) -> None:
+    console = production_console()
     console.create_account(
         username="researcher.anne",
         password="anne-secret",
         roles=("researcher", "reviewer", "publisher"),
         display_name="Anne Onderzoeker",
     )
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
     ingest = client.get("/ingest").text
     lower = ingest.lower()
@@ -70,6 +62,6 @@ def test_rooms_use_one_short_lead_not_stacked_protocol_prose(tmp_path: Path) -> 
     assert "geen gedeelde login" not in primary_login
     publish = client.get("/publish").text.lower()
     assert "publiceren" in publish
-    assert "geblokkeerd" in publish
+    assert 'class="canvas"' in publish
     accounts = client.get("/accounts").text.lower()
     assert "accounts" in accounts

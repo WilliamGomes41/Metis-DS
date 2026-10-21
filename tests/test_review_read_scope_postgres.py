@@ -23,7 +23,9 @@ def test_review_get_reuses_the_request_envelope_reads(workflow_postgres, tmp_pat
     bind_fixture_selections(console)
     sid, _researcher, _reviewer = ingest(console)
     client = _client(console)
-    expected = client.get("/review", params={"document": sid})
+    # Production defaults to the workboard; select the actual review room.
+    params = {"document": sid, "task": "individual"}
+    expected = client.get("/review", params=params)
     assert expected.status_code == 200 and sid in expected.text
 
     store = console.workflow_document_store
@@ -31,17 +33,17 @@ def test_review_get_reuses_the_request_envelope_reads(workflow_postgres, tmp_pat
     real_get, real_list = store.get_envelope, store.list_envelopes
     monkeypatch.setattr(store, "get_envelope", lambda snapshot_id: single.append(snapshot_id) or real_get(snapshot_id))
     monkeypatch.setattr(store, "list_envelopes", lambda: listed.append(1) or real_list())
-    response = client.get("/review", params={"document": sid})
+    response = client.get("/review", params=params)
     assert response.status_code == 200
     assert single == [] and len(listed) == 1
 
     # Same page as the unscoped route, which re-read and copied each envelope.
     monkeypatch.setattr(type(console), "_source_selection_reads", lambda self: None)
-    unscoped = client.get("/review", params={"document": sid})
+    unscoped = client.get("/review", params=params)
     assert _norm(response.text) == _norm(unscoped.text)
     assert len(single) == 3
 
     # The read scope wraps the route; it never replaces its authentication.
     client.cookies.clear()
-    anonymous = client.get("/review", params={"document": sid}, follow_redirects=False)
+    anonymous = client.get("/review", params=params, follow_redirects=False)
     assert anonymous.status_code in {303, 401} and sid not in anonymous.text

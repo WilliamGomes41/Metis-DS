@@ -15,12 +15,185 @@ root documents.
 from __future__ import annotations
 
 from pathlib import Path
+import ast
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
 
 import pytest
 from starlette.testclient import TestClient
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+from tests.complete_workflow_support import complete_postgres  # noqa: F401, E402
+
+
+def _start_test_postgres(config):
+    if getattr(config, "_metis_postgres_dsn", None):
+        return config._metis_postgres_dsn
+    state_dir = Path(tempfile.mkdtemp(prefix="metis-pytest-postgres-"))
+    config._metis_postgres_state_dir = state_dir
+    config._metis_previous_dsn = os.environ.get("METIS_TEST_POSTGRES_DSN")
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/test_postgres.sh")],
+        env={**os.environ, "PYTHON": sys.executable,
+             "METIS_TEST_POSTGRES_STATE_FILE": str(state_dir / "state.json")},
+        capture_output=True, text=True,
+    )
+    if result.returncode:
+        raise pytest.UsageError(
+            "Console/PostgreSQL tests require a database. " + result.stderr.strip())
+    config._metis_postgres_dsn = result.stdout.strip()
+    import psycopg
+    with psycopg.connect(config._metis_postgres_dsn, connect_timeout=3) as connection:
+        can_create = connection.execute(
+            "SELECT rolcreatedb OR rolsuper FROM pg_roles WHERE rolname=current_user"
+        ).fetchone()[0]
+    if not can_create:
+        raise pytest.UsageError("Console/PostgreSQL tests require CREATEDB rights for isolated databases")
+    os.environ["METIS_TEST_POSTGRES_DSN"] = config._metis_postgres_dsn
+    return config._metis_postgres_dsn
+
+
+def pytest_collection_modifyitems(config, items):
+    """Bootstrap before fixtures can skip missing PG evidence; pure suites stay offline.
+
+    During D6a the file scan also covers legacy helper imports and inline DSN
+    fixtures. Pure cases in mixed modules can declare ``pure_function``.
+    ``file_topology`` identifies behavior scheduled for removal in D6b.
+    """
+    console = re.compile(
+        r"OperationsConsole\(|DurablePublicationConsole\(|AzureAuthoritativePublicationConsole\("
+        r"|complete_console|create_console_app|build_app\(|METIS_TEST_POSTGRES_DSN"
+    )
+    files = {}
+    def uses_console(path):
+        if path in files:
+            return files[path]
+        source = path.read_text(encoding="utf-8")
+        files[path] = bool(console.search(source))
+        if not files[path]:
+            for node in ast.walk(ast.parse(source)):
+                if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("tests."):
+                    helper = ROOT.joinpath(*node.module.split(".")).with_suffix(".py")
+                    if helper.is_file() and uses_console(helper):
+                        files[path] = True
+                        break
+        return files[path]
+
+    for item in items:
+        if {"complete_postgres", "production_console", "production_app", "postgres_template"}.intersection(item.fixturenames):
+            _start_test_postgres(config)
+            return
+        if item.get_closest_marker("pure_function") or item.get_closest_marker("file_topology"):
+            continue
+        path = Path(item.path)
+        if uses_console(path):
+            _start_test_postgres(config)
+            return
+
+
+def pytest_unconfigure(config):
+    directory = getattr(config, "_metis_postgres_state_dir", None)
+    if directory is None:
+        return
+    state = directory / "state.json"
+    try:
+        if state.exists():
+            result = subprocess.run(
+                ["bash", str(ROOT / "scripts/test_postgres.sh"), "--stop", str(state)],
+                env={**os.environ, "PYTHON": sys.executable}, capture_output=True, text=True,
+            )
+            if result.returncode:
+                raise RuntimeError(result.stderr.strip())
+    finally:
+        shutil.rmtree(directory)
+        previous = config._metis_previous_dsn
+        if previous is None:
+            os.environ.pop("METIS_TEST_POSTGRES_DSN", None)
+        else:
+            os.environ["METIS_TEST_POSTGRES_DSN"] = previous
+
+
+@pytest.fixture(scope="session")
+def postgres_template(pytestconfig):
+    from psycopg.conninfo import conninfo_to_dict
+    from tests.postgres_support import database, install_schema, prefetched_databases
+
+    dsn = _start_test_postgres(pytestconfig)
+    with database(dsn) as template:
+        install_schema(template.dsn)
+        name = conninfo_to_dict(template.dsn)["dbname"]
+        with prefetched_databases(dsn, name):
+            yield dsn, name
+
+
+@pytest.fixture
+def production_console(tmp_path, production_environment, monkeypatch):
+    """Use the actual ASGI startup, including PG classes, stores and reconciliation."""
+    from src import console_asgi
+    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    apps = {}
+
+    def factory(root=None, *, azure=False, processing_binder=bind_pre_review_semantic_processing, **options):
+        root = Path(root or tmp_path)
+        source = options.pop("immutable_source_store", None)
+        runtime = options.pop("runtime", root / "runtime")
+        sources = options.pop("source_store", root / "sources")
+        if options:
+            raise ValueError("production_console only accepts paths, Blob and a processing binder")
+        with monkeypatch.context() as setup:
+            setup.setattr(console_asgi, "ROOT", root)
+            setup.setenv("CONSOLE_DATA_ROOT", str(root))
+            setup.setenv("CONSOLE_RUNTIME", str(runtime))
+            setup.setenv("CONSOLE_SOURCE_STORE", str(sources))
+            setup.setattr(console_asgi, "_immutable_source_store", lambda: source)
+            setup.setattr(console_asgi, "bind_pre_review_semantic_processing", processing_binder)
+            if azure:
+                setup.setenv("WEBSITE_SITE_NAME", "d6a-test")
+                setup.setenv("CONSOLE_PUBLIC_ORIGIN", "https://console.example.test")
+            else:
+                setup.delenv("WEBSITE_SITE_NAME", raising=False)
+            app = console_asgi.build_app()
+            console = app.state.operations_kernel
+            apps[console] = app
+            return console
+    factory.apps = apps
+    return factory
+
+
+@pytest.fixture
+def production_app(production_console):
+    def factory(console=None, **options):
+        console = console if console is not None else production_console(**options)
+        return production_console.apps[console]
+    return factory
+
+
+@pytest.fixture
+def production_environment(tmp_path, complete_postgres, monkeypatch):
+    """Use the real ASGI composition root without cloud credentials or bootstrap users."""
+    from src import console_asgi
+    from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
+
+    for name in POSTGRES_STORE_SETTINGS:
+        monkeypatch.setenv(name, "postgres")
+    monkeypatch.setenv("METIS_CANONICAL_DB_DSN", complete_postgres.dsn)
+    monkeypatch.setenv("CONSOLE_DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("CONSOLE_RUNTIME", str(tmp_path / "runtime"))
+    monkeypatch.setenv("CONSOLE_SOURCE_STORE", str(tmp_path / "sources"))
+    monkeypatch.setenv("WEB_CONCURRENCY", "1")
+    for name in ("WEBSITE_SITE_NAME", "CONSOLE_BOOTSTRAP_USERNAME", "CONSOLE_BOOTSTRAP_PASSWORD",
+                 "CONSOLE_BOOTSTRAP_REVIEWER_USERNAME", "CONSOLE_BOOTSTRAP_REVIEWER_PASSWORD",
+                 "CONSOLE_IMMUTABLE_SOURCE_STORE", "METIS_CONSOLE_AUTH"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(console_asgi, "ROOT", tmp_path)
+    monkeypatch.setattr(console_asgi, "_postgres_credential", lambda: None)
+
 
 _V2_PROTOCOL = ROOT / "docs" / "history" / "protocol-v2" / "PROTOCOL_ROOT_FINAL_2026-09-10.md"
 _V2_ROADMAP = ROOT / "docs" / "history" / "protocol-v2" / "ROADMAP_PRE_V3_2026-09-10.md"
@@ -104,46 +277,6 @@ def _migrate_legacy_product_api_regression_to_canonical_authority(request, monke
         "_default_real_store",
         lambda: _EmptyCanonicalPublicationAuthority(),
     )
-
-
-_POSTGRES_SCRIPT = ROOT / "scripts" / "test_postgres.sh"
-
-
-def _autostart_test_postgres() -> str:
-    """Give agent and laptop runs a local PostgreSQL instead of skipping PG evidence.
-
-    Skipped when a DSN is already configured, inside GitHub Actions (CI jobs own
-    their database setup), or when METIS_TEST_POSTGRES_AUTOSTART=0. Returns a
-    warning for a failed start; missing PostgreSQL binaries stay silent so the
-    existing skip behaviour is unchanged where no server can exist.
-    """
-    import os
-    import subprocess
-
-    if os.environ.get("METIS_TEST_POSTGRES_DSN", "").strip():
-        return ""
-    if os.environ.get("GITHUB_ACTIONS") == "true":
-        return ""
-    if os.environ.get("METIS_TEST_POSTGRES_AUTOSTART", "1").strip() == "0":
-        return ""
-    try:
-        result = subprocess.run(["bash", str(_POSTGRES_SCRIPT)], capture_output=True,
-                                text=True, timeout=120, check=False)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return f"test PostgreSQL autostart failed: {type(exc).__name__}"
-    if result.returncode == 3:
-        return ""
-    dsn = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
-    if result.returncode != 0 or not dsn.startswith("postgresql://"):
-        return "test PostgreSQL autostart failed: " + (result.stderr.strip() or f"exit {result.returncode}")
-    os.environ["METIS_TEST_POSTGRES_DSN"] = dsn
-    return ""
-
-
-def pytest_configure(config):  # type: ignore[no-untyped-def]
-    warning = _autostart_test_postgres()
-    if warning:
-        config.issue_config_time_warning(pytest.PytestConfigWarning(warning), stacklevel=2)
 
 
 _orig_init = TestClient.__init__

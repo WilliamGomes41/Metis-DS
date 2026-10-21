@@ -142,9 +142,26 @@ jobs:
       - name: Product API v1 backward compatibility
         run: python scripts/product_api_contract.py --check --base-ref origin/main
       - run: python -m compileall -q src tests
+      - name: D6a baseline on the unchanged main base
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'codex/d6a') && matrix.python-version == '3.13'
+        run: python scripts/measure_test_suite.py --ref 9fa2004 --output output/d6a-before.json
+      - name: Full suite with timing and zero PostgreSQL skips
+        if: ${{ !cancelled() }}
+        run: |
+          python scripts/benchmark_test_database.py > output/d6a-database-benchmark.json
+          args=()
+          if [ -f output/d6a-before.json ]; then args+=(--compare output/d6a-before.json); fi
+          python scripts/measure_test_suite.py --output output/d6a-after.json "${args[@]}"
+      - name: Upload suite timing and executed test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: suite-timing-${{ matrix.python-version }}
+          path: output/d6a-*
+          if-no-files-found: warn
       - name: D5 PostgreSQL lifecycle without disk mirrors
         run: |
-          pytest -q -rx tests/test_pg_console_without_disk_mirrors.py tests/test_d5_pg_recovery_and_source_v1.py tests/test_d5_code_rollback_postgres.py tests/test_d5_two_workers_postgres.py --junitxml=output/pg-without-mirrors.xml
+          python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/pg-without-mirrors.xml tests/test_pg_console_without_disk_mirrors.py tests/test_d5_pg_recovery_and_source_v1.py tests/test_d5_code_rollback_postgres.py tests/test_d5_two_workers_postgres.py
           python - <<'PYCODE'
           import xml.etree.ElementTree as ET
           root = ET.parse('output/pg-without-mirrors.xml').getroot()
@@ -172,7 +189,7 @@ jobs:
           if-no-files-found: error
       - name: Verify reprocessing owner guard and PG state against native PostgreSQL (#708)
         run: |
-          pytest -q tests/test_708_reprocessing_guard_postgres.py --junitxml=output/reprocessing-708.xml
+          python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/reprocessing-708.xml tests/test_708_reprocessing_guard_postgres.py
           python - <<'PYCODE'
           import xml.etree.ElementTree as ET
           root = ET.parse("output/reprocessing-708.xml").getroot()
@@ -182,7 +199,7 @@ jobs:
           PYCODE
       - name: Verify blockage diagnostics and native read-only access
         run: |
-          pytest -q tests/test_blockage_diagnostics_v1.py --junitxml=output/blockage-diagnostics.xml
+          python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/blockage-diagnostics.xml tests/test_blockage_diagnostics_v1.py
           python - <<'PYCODE'
           import xml.etree.ElementTree as ET
           root = ET.parse("output/blockage-diagnostics.xml").getroot()
@@ -196,7 +213,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -o pipefail; mkdir -p output
-          pytest -rA -q tests/test_publish_refusal_audit_postgres_v1.py tests/test_migration_018_postgres_v1.py --junitxml=output/refusal-postgres.xml | tee output/refusal-postgres.txt
+          python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/refusal-postgres.xml tests/test_publish_refusal_audit_postgres_v1.py tests/test_migration_018_postgres_v1.py | tee output/refusal-postgres.txt
           python - <<'PYCODE'
           import xml.etree.ElementTree as ET
           root = ET.parse("output/refusal-postgres.xml").getroot()
@@ -208,7 +225,7 @@ jobs:
           PYCODE
       - name: Verify A10 source repair against native PostgreSQL
         if: ${{ !cancelled() }}
-        run: pytest -q tests/test_a10_source_cache_repair.py --junitxml=output/a10-native.xml
+        run: python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/a10-native.xml tests/test_a10_source_cache_repair.py
       - name: Require executed A10 evidence without skipped cases
         if: ${{ !cancelled() }}
         run: |
@@ -265,7 +282,7 @@ jobs:
           if-no-files-found: error
       - name: Verify A08 atomic heading batches against native PostgreSQL
         if: ${{ !cancelled() }}
-        run: pytest -q tests/test_a08_heading_batch_atomic.py --junitxml=output/a08-native.xml
+        run: python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/a08-native.xml tests/test_a08_heading_batch_atomic.py
       - name: Require executed A08 native evidence without skipped cases
         if: ${{ !cancelled() }}
         run: |
@@ -298,7 +315,7 @@ jobs:
       - name: Verify durable processing trace and restart evidence
         if: ${{ !cancelled() }}
         run: |
-          pytest -q tests/test_processing_trace_v1.py --junitxml=output/processing-trace.xml
+          python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/processing-trace.xml tests/test_processing_trace_v1.py
           python - <<'PYCODE'
           import xml.etree.ElementTree as ET
           root = ET.parse("output/processing-trace.xml").getroot()
@@ -307,30 +324,6 @@ jobs:
           assert not list(root.iter("skipped")), "Processing trace proof must execute every backend"
           assert not list(root.iter("failure")) and not list(root.iter("error")), "Processing trace proof failed"
           PYCODE
-      # Every ignored module has already run in full above, with its native
-      # no-skip evidence check. Update this list when moving proof modules.
-      - name: Remaining regression suite
-        if: ${{ !cancelled() }}
-        run: >-
-          pytest -q --durations=25 --junitxml=output/regression.xml
-          --ignore=tests/test_pg_console_without_disk_mirrors.py
-          --ignore=tests/test_d5_pg_recovery_and_source_v1.py
-          --ignore=tests/test_d5_code_rollback_postgres.py
-          --ignore=tests/test_d5_two_workers_postgres.py
-          --ignore=tests/test_708_reprocessing_guard_postgres.py
-          --ignore=tests/test_blockage_diagnostics_v1.py
-          --ignore=tests/test_publish_refusal_audit_postgres_v1.py
-          --ignore=tests/test_migration_018_postgres_v1.py
-          --ignore=tests/test_a10_source_cache_repair.py
-          --ignore=tests/test_a08_heading_batch_atomic.py
-          --ignore=tests/test_processing_trace_v1.py
-      - name: Upload regression results and timings
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: regression-${{ matrix.python-version }}
-          path: output/regression.xml
-          if-no-files-found: error
       - name: Install isolated browser test tooling
         if: matrix.python-version == '3.12'
         run: |

@@ -1,0 +1,41 @@
+{
+  "probe_commit": "fc23eee7b4d5ed4996f9da8a8fab5551af8cb869",
+  "scope": "One black-box runner isolation probe; not the full application suite",
+  "runs": [
+    {
+      "stage": "before",
+      "exit_code": 1,
+      "measurement": {
+        "commit": "fc23eee7b4d5ed4996f9da8a8fab5551af8cb869",
+        "python": "3.13.5",
+        "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+        "seconds": 0.348,
+        "exit_code": 1,
+        "postgres_version": 160015,
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "postgres_skips": []
+      }
+    },
+    {
+      "stage": "after",
+      "exit_code": 0,
+      "measurement": {
+        "commit": "fc23eee7b4d5ed4996f9da8a8fab5551af8cb869",
+        "python": "3.13.5",
+        "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+        "seconds": 0.393,
+        "exit_code": 0,
+        "postgres_version": 160015,
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "postgres_skips": []
+      }
+    }
+  ],
+  "supplied_database_unchanged": true
+}

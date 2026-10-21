@@ -8,7 +8,6 @@
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -16,15 +15,6 @@ import pytest
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.operations_console_v1 import review_lane
 from src.review_workboard_v1 import review_workboard_items
-from src.workflows.workflow_badge_counts_postgres_v1 import (
-    FastBadgePostgresCompleteWorkflowDurablePublicationConsole,
-)
-from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
-from src.workflows.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
-from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
-from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-from src.workflows.workflow_transaction_v1 import bind_workflow_stores
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,25 +30,9 @@ pytestmark = [
 ]
 
 
-@pytest.fixture()
-def workflow_postgres() -> PostgresCanonicalConfig:
-    dsn = os.environ.get("METIS_TEST_POSTGRES_DSN", "").strip()
-    if not dsn:
-        pytest.skip("METIS_TEST_POSTGRES_DSN is required for Review workboard regression evidence")
-
-    import psycopg
-    from psycopg.rows import dict_row
-
-    with psycopg.connect(dsn, autocommit=True, row_factory=dict_row) as con:
-        con.execute("DROP SCHEMA IF EXISTS workflow CASCADE")
-        paths = migration_paths(ROOT)
-        apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))
-
-    config = PostgresCanonicalConfig(dsn=dsn)
-    yield config
-
-    with psycopg.connect(dsn, autocommit=True) as con:
-        con.execute("DROP SCHEMA IF EXISTS workflow CASCADE")
+@pytest.fixture
+def workflow_postgres(complete_postgres):
+    return complete_postgres
 
 
 def _fresh_current_validation_statuses(
@@ -89,24 +63,10 @@ def _fresh_current_validation_statuses(
 def test_batch_confirmed_headings_disappear_from_fast_workboard_summary(
     tmp_path: Path,
     workflow_postgres: PostgresCanonicalConfig,
+    production_console,
 ) -> None:
-    identity = PostgresWorkflowIdentityStore(workflow_postgres)
-    documents = PostgresConcurrentWorkflowDocumentStore(workflow_postgres)
-    reviews = PostgresWorkflowReviewStore(workflow_postgres)
-    remaining = PostgresWorkflowRemainingStore(workflow_postgres)
-    bind_workflow_stores(identity, documents, reviews, remaining)
-
-    console = FastBadgePostgresCompleteWorkflowDurablePublicationConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources" / "private",
-        runtime=tmp_path / "runtime",
-        immutable_source_store=None,
-        canonical_publication_store=None,
-        workflow_identity_store=identity,
-        workflow_document_store=documents,
-        workflow_review_store=reviews,
-        workflow_remaining_store=remaining,
-    )
+    from tests.semantic_fixture_support import bind_fixture_selections
+    console = production_console(processing_binder=bind_fixture_selections)
 
     researcher = console.create_account(
         username="researcher.heading-regression",

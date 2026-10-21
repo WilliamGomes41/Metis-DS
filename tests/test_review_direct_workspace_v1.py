@@ -7,6 +7,7 @@
 # release-control-evidence: releasebewijs
 """
 from copy import deepcopy
+from contextlib import contextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -18,6 +19,10 @@ from src.review_workboard_v1 import install_review_workboard
 
 class Console:
     _ledger_path = None
+
+    @contextmanager
+    def source_selection_read_scope(self):
+        yield
 
     def __init__(self, *, roles=('reviewer',), documents=()):
         self.roles = roles

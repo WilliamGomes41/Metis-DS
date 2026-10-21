@@ -11,12 +11,10 @@ the diff. PROTOCOL.md / PROTOCOL_V2_* are not edited here.
 from __future__ import annotations
 
 import importlib.util
+import ast
 import json
-import re
-import shlex
 import subprocess
 import sys
-from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -346,40 +344,8 @@ def test_ci_runs_release_control_after_repository_preflight() -> None:
     assert workflow.index("repository_preflight") < workflow.index("release_control_preflight")
 
 
-def _assert_prior_runs_cover_exclusions(workflow: str) -> None:
-    # Inspect executable commands rather than maintain a second module list.
-    workflow = re.sub(
-        r"(?m)^        run: >-\n((?:          [^\n]*\n)+)",
-        lambda match: "        run: " + " ".join(line.strip() for line in match[1].splitlines()) + "\n",
-        workflow,
-    )
-    test_job = workflow.split("\n  test:\n", 1)[1]
-    prior_runs: Counter[str] = Counter()
-    checked = False
-    for step in re.split(r"(?m)^      - ", test_job)[1:]:
-        condition = re.search(r"(?m)^        if: (.+)$", step)
-        if condition and condition[1] != "${{ !cancelled() }}":
-            continue  # Branch-specific reproductions do not cover every PR.
-        for command in re.findall(r"(?m)^(?:        run: |          )(?:python -m )?pytest ([^\n]+)", step):
-            args = shlex.split(command)
-            filtered = any(arg.startswith(("-k", "-m", "--deselect", "--collect-only", "--co", "--lf", "--last-failed")) for arg in args)
-            ignored = [arg.split("=", 1)[1] for arg in args if arg.startswith("--ignore=")]
-            if ignored:
-                assert not filtered, "Remaining suite must not filter tests"
-                assert all(arg.startswith("-") for arg in args), "Remaining suite must discover all tests from the repository root"
-                assert len(ignored) == len(set(ignored)), "Repeated CI exclusion"
-                for module in ignored:
-                    assert (ROOT / module).is_file(), f"Missing excluded module: {module}"
-                    assert prior_runs[module] == 1, f"Excluded module lacks exactly one prior full run: {module}"
-                checked = True
-                continue
-            if not filtered and not any(arg.startswith("--ignore") for arg in args):
-                prior_runs.update(arg for arg in args if arg.startswith("tests/") and arg.endswith(".py"))
-    assert checked, "Missing CI partition"
-
-
 def test_ci_retains_required_matrix_and_full_verification() -> None:
-    """Retain both versions and all tests, allowing non-overlapping proof runs."""
+    """Scheduling/cache optimizations must preserve both required test checks."""
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     test_job = workflow.split("\n  test:\n", 1)[1]
     assert "python-version: ['3.12', '3.13']" in test_job
@@ -388,9 +354,57 @@ def test_ci_retains_required_matrix_and_full_verification() -> None:
         "python scripts/release_control_preflight.py --base origin/main",
         "python scripts/product_api_contract.py --check --base-ref origin/main",
         "python -m compileall -q src tests",
+        "python scripts/measure_test_suite.py --output output/d6a-after.json",
     ):
         assert command in test_job, f"Required CI verification removed: {command}"
-    _assert_prior_runs_cover_exclusions(workflow)
+    # The timed runner must execute the whole suite, without paths or filters.
+    runner = ast.parse((ROOT / "scripts/measure_test_suite.py").read_text())
+    commands = [node.args[0].elts for node in ast.walk(runner)
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "run" and node.args and isinstance(node.args[0], ast.List)
+                and any(isinstance(arg, ast.Constant) and arg.value == "pytest" for arg in node.args[0].elts)]
+    assert len(commands) == 1
+    command, = commands
+    assert len(command) == 5
+    assert [ast.literal_eval(arg) for arg in command[1:4]] == ["-m", "pytest", "-q"]
+    assert isinstance(command[4], ast.JoinedStr) and command[4].values[0].value == "--junitxml="
+
+
+@pytest.mark.parametrize("outcome", [None, "failure", "error", "skipped"])
+def test_native_evidence_export_preserves_executed_results(tmp_path, outcome) -> None:
+    import xml.etree.ElementTree as ET
+    spec = importlib.util.spec_from_file_location("export_test_evidence", ROOT / "scripts/export_test_evidence.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    root = ET.Element("testsuite")
+    case = ET.SubElement(root, "testcase", classname="tests.test_native.TestRestart", name="test_commit", time="1.25")
+    if outcome:
+        ET.SubElement(case, outcome, message="original failure detail").text = "unchanged trace"
+    ET.SubElement(root, "testcase", classname="tests.test_native_extra", name="unrelated", time="9")
+    source, output = tmp_path / "full.xml", tmp_path / "proof.xml"
+    ET.ElementTree(root).write(source)
+    assert module.export(source, output, ["tests/test_native.py"]) == int(outcome is not None)
+    exported = ET.parse(output).getroot()
+    assert exported.get("tests") == "1" and exported.get("time") == "1.25"
+    assert ET.tostring(next(exported.iter("testcase"))) == ET.tostring(case)
+    with pytest.raises(ValueError, match="No executed evidence"):
+        module.export(source, tmp_path / "missing.xml", ["tests/test_missing.py"])
+
+
+def test_ci_reuses_full_suite_for_native_proof_artifacts() -> None:
+    import re
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text().split("\n  test:\n", 1)[1]
+    proof_commands = re.findall(r"export_test_evidence.py ([^\n]+)", workflow)
+    assert len(proof_commands) == 7
+    for command in proof_commands:
+        assert "--source output/d6a-after.xml" in command
+    # The full measured run precedes every native export; only the conditional
+    # old-code reproduction and the separately installed browser may rerun pytest.
+    assert workflow.index("python scripts/measure_test_suite.py --output") < workflow.index("export_test_evidence.py")
+    pytest_commands = re.findall(r"(?m)^          pytest ([^\n]+)", workflow)
+    assert len(pytest_commands) == 2
+    assert "a08-before.xml" in pytest_commands[0]
+    assert "test_browser_knowledge_context.py" in pytest_commands[1]
 
 
 def test_contributing_names_skill_checks_and_ci_must_not_forget_them() -> None:

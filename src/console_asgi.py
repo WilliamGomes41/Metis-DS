@@ -217,10 +217,15 @@ def build_app() -> object:
         console.migrate_legacy_revise_to_review()
         console.reconcile_durable_publications()
 
-    app = create_console_app(
-        console,
-        trusted_origin=_console_public_origin(running_in_azure=running_in_azure),
+    return build_console_app(
+        console, trusted_origin=_console_public_origin(running_in_azure=running_in_azure),
+        topology=topology,
     )
+
+
+def build_console_app(console: OperationsConsole, *, trusted_origin=None, topology=None):
+    """Install the production routes for both ASGI startup and console tests."""
+    app = create_console_app(console, trusted_origin=trusted_origin)
     install_publish_readiness_ui(app, console)
     install_document_status_ui(app, console)
     install_review_workboard(app, console)

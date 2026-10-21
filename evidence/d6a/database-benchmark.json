@@ -1,0 +1,23 @@
+{
+  "schema_once_seconds": 0.104938,
+  "methods": {
+    "schema": {
+      "repeats": 10,
+      "median_seconds": 0.197393,
+      "total_seconds": 2.337632,
+      "independent_commit_visible": true
+    },
+    "template": {
+      "repeats": 10,
+      "median_seconds": 0.07925,
+      "total_seconds": 0.819781,
+      "independent_commit_visible": true
+    },
+    "rollback": {
+      "repeats": 10,
+      "median_seconds": 0.006174,
+      "total_seconds": 0.060957,
+      "independent_commit_visible": false
+    }
+  }
+}

@@ -1,112 +1,113 @@
 #!/usr/bin/env bash
-# Start (or reuse) a disposable local PostgreSQL for Metis tests.
-#
-#   scripts/test_postgres.sh          start or reuse; prints the DSN on stdout
-#   scripts/test_postgres.sh --export print "export METIS_TEST_POSTGRES_DSN=..."
-#   scripts/test_postgres.sh stop     stop the server this script started
-#
-# Exit codes: 0 ready, 1 failed to start, 3 PostgreSQL binaries not installed.
-#
-# A reachable METIS_TEST_POSTGRES_DSN is reused unchanged (CI, devcontainer).
-# Otherwise a throwaway cluster is created under METIS_TEST_PG_DIR with trust
-# auth on 127.0.0.1 only, in UTC like CI. Test data only: never point this at real data.
-# initdb refuses to run as root, so as root the cluster runs as an unprivileged
-# user (METIS_TEST_PG_USER, default "metis-pg", created when missing).
+# stdout is only the DSN; diagnostics go to stderr. No network installation here.
 set -euo pipefail
+exec "${PYTHON:-python3}" - "$@" <<'PY'
+import json
+import os
+from pathlib import Path
+import pwd
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
 
-PG_DIR="${METIS_TEST_PG_DIR:-${TMPDIR:-/tmp}/metis-test-pg-$(id -u)}"
-PG_PORT="${METIS_TEST_PG_PORT:-54329}"
-PG_RUN_USER="${METIS_TEST_PG_USER:-metis-pg}"
-DATA="$PG_DIR/data"
-LOG="$PG_DIR/server.log"
-DSN="postgresql://postgres@127.0.0.1:${PG_PORT}/postgres"
+import psycopg
 
-die() { echo "test_postgres: $*" >&2; exit 1; }
 
-emit() {
-  if [ "${MODE}" = "--export" ]; then
-    echo "export METIS_TEST_POSTGRES_DSN=$1"
-  else
-    echo "$1"
-  fi
-}
+def command(args, owner=None):
+    executable = Path(args[0]).name
+    if owner:
+        args = ["runuser", "-u", owner, "--", *args]
+    try:
+        return subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(f"{executable} failed: {error.stderr.strip()}") from None
 
-reachable() {
-  command -v psql >/dev/null 2>&1 || return 1
-  PGCONNECT_TIMEOUT=3 psql "$1" -Atqc 'select 1' >/dev/null 2>&1
-}
 
-find_bindir() {
-  if [ -n "${PGBIN:-}" ] && [ -x "$PGBIN/initdb" ]; then echo "$PGBIN"; return; fi
-  if command -v pg_config >/dev/null 2>&1; then
-    local d; d="$(pg_config --bindir)"
-    if [ -x "$d/initdb" ]; then echo "$d"; return; fi
-  fi
-  local newest
-  newest="$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -V | tail -1 || true)"
-  if [ -n "$newest" ] && [ -x "$newest/initdb" ]; then echo "$newest"; return; fi
-  if command -v initdb >/dev/null 2>&1; then dirname "$(command -v initdb)"; return; fi
-  return 1
-}
+def stop(state):
+    command([str(Path(state["pgbin"]) / "pg_ctl"), "-D", state["directory"] + "/data",
+             "-m", "immediate", "-w", "stop"], state["owner"])
+    shutil.rmtree(state["directory"])
 
-as_owner() {
-  # Run a command as the cluster owner (root cannot own a cluster).
-  if [ "$(id -u)" -eq 0 ]; then
-    if command -v runuser >/dev/null 2>&1; then
-      runuser -u "$PG_RUN_USER" -- "$@"
-    else
-      su -s /bin/sh "$PG_RUN_USER" -c "$(printf '%q ' "$@")"
-    fi
-  else
-    "$@"
-  fi
-}
 
-ensure_owner() {
-  [ "$(id -u)" -eq 0 ] || return 0
-  if ! id "$PG_RUN_USER" >/dev/null 2>&1; then
-    useradd --system --no-create-home --shell /usr/sbin/nologin "$PG_RUN_USER" 2>/dev/null \
-      || useradd -r -M -s /bin/false "$PG_RUN_USER" \
-      || die "cannot create user $PG_RUN_USER for the cluster"
-  fi
-  chown -R "$PG_RUN_USER" "$PG_DIR"
-  as_owner test -w "$PG_DIR" \
-    || die "$PG_RUN_USER cannot reach $PG_DIR (a parent directory is private); set METIS_TEST_PG_DIR under /tmp"
-}
+def main():
+    if len(sys.argv) == 3 and sys.argv[1] == "--stop":
+        path = Path(sys.argv[2])
+        stop(json.loads(path.read_text()))
+        path.unlink(missing_ok=True)
+        return
+    if len(sys.argv) != 1:
+        raise RuntimeError("usage: scripts/test_postgres.sh [--stop STATE_FILE]")
+    supplied = os.environ.get("METIS_TEST_POSTGRES_DSN", "").strip()
+    if supplied:
+        try:
+            with psycopg.connect(supplied, connect_timeout=3) as con:
+                con.execute("SELECT 1")
+            print(supplied)
+            return
+        except psycopg.Error:
+            print("Configured test PostgreSQL is unreachable; trying a disposable server.", file=sys.stderr)
 
-MODE="${1:-}"
+    pgbin = Path(os.environ.get("PGBIN", "/usr/lib/postgresql/16/bin"))
+    if not (pgbin / "initdb").is_file():
+        found = shutil.which("initdb")
+        if found and "PGBIN" not in os.environ:
+            pgbin = Path(found).parent
+        else:
+            raise RuntimeError("PostgreSQL 16 is unavailable; install it during setup and set PGBIN, "
+                               "or configure a reachable METIS_TEST_POSTGRES_DSN with CREATEDB rights")
+    if not command([str(pgbin / "postgres"), "--version"]).stdout.startswith("postgres (PostgreSQL) 16."):
+        raise RuntimeError("PGBIN must point to PostgreSQL 16")
 
-if [ "$MODE" = "stop" ]; then
-  BIN="$(find_bindir)" || die "PostgreSQL binaries not found"
-  [ -d "$DATA" ] || exit 0
-  as_owner "$BIN/pg_ctl" -D "$DATA" -m fast stop >/dev/null 2>&1 || true
-  exit 0
-fi
-case "$MODE" in ""|--export) ;; *) die "unknown argument: $MODE" ;; esac
+    owner = None
+    directory = tempfile.mkdtemp(prefix="metis-test-postgres-")
+    if os.geteuid() == 0:
+        try:
+            account = pwd.getpwnam("postgres")
+        except KeyError:
+            account = pwd.getpwnam("nobody")
+        owner = account.pw_name
+        os.chown(directory, account.pw_uid, account.pw_gid)
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    state = dict(directory=directory, pgbin=str(pgbin), owner=owner)
+    started = False
+    try:
+        command([str(pgbin / "initdb"), "-D", directory + "/data", "-U", "postgres",
+                 "--encoding=UTF8", "--no-locale", "--auth-local=trust", "--auth-host=trust"], owner)
+        command([str(pgbin / "pg_ctl"), "-D", directory + "/data", "-l", directory + "/server.log",
+                 "-o", f"-h 127.0.0.1 -p {port} -k {directory} -c timezone=UTC", "-w", "start"], owner)
+        started = True
+        dsn = f"postgresql://postgres@127.0.0.1:{port}/postgres"
+        with psycopg.connect(dsn, connect_timeout=3) as con:
+            con.execute("SELECT 1")
+        state_file = os.environ.get("METIS_TEST_POSTGRES_STATE_FILE")
+        if state_file:
+            Path(state_file).write_text(json.dumps(state))
+        else:
+            # Keep control metadata owned by the caller, outside the directory
+            # owned by the unprivileged PostgreSQL process (especially as root).
+            descriptor, state_file = tempfile.mkstemp(prefix="metis-test-postgres-state-", suffix=".json")
+            with os.fdopen(descriptor, "w") as stream:
+                json.dump(state, stream)
+            print(f"Disposable server state: {state_file}; stop with "
+                  f"scripts/test_postgres.sh --stop {state_file}", file=sys.stderr)
+        print(dsn)
+    except BaseException:
+        if started:
+            stop(state)
+        else:
+            shutil.rmtree(directory)
+        raise
 
-if [ -n "${METIS_TEST_POSTGRES_DSN:-}" ] && reachable "$METIS_TEST_POSTGRES_DSN"; then
-  emit "$METIS_TEST_POSTGRES_DSN"; exit 0
-fi
 
-if ! BIN="$(find_bindir)"; then
-  echo "test_postgres: PostgreSQL 16 binaries not found; install them (see docs/STACK_SETUP_BASELINE.md) or set PGBIN" >&2
-  exit 3
-fi
-
-mkdir -p "$PG_DIR"
-chmod 0755 "$PG_DIR"
-ensure_owner
-
-if [ ! -s "$DATA/PG_VERSION" ]; then
-  as_owner "$BIN/initdb" -D "$DATA" -U postgres --auth=trust -E UTF8 --no-instructions >/dev/null \
-    || die "initdb failed in $DATA"
-fi
-
-if ! as_owner "$BIN/pg_ctl" -D "$DATA" status >/dev/null 2>&1; then
-  as_owner "$BIN/pg_ctl" -D "$DATA" -l "$LOG" -w -t 30 \
-    -o "-p $PG_PORT -c listen_addresses=127.0.0.1 -c timezone=UTC -c log_timezone=UTC -k $PG_DIR -c fsync=off -c synchronous_commit=off -c full_page_writes=off" \
-    start >/dev/null || die "server did not start; see $LOG"
-fi
-
-reachable "$DSN" || die "server started but $DSN is not reachable; see $LOG"
-emit "$DSN"
+try:
+    main()
+except Exception as error:
+    # Never expose a supplied DSN/password or subprocess output in pytest errors.
+    detail = str(error) if isinstance(error, RuntimeError) else type(error).__name__
+    print(f"test_postgres_unavailable: {detail}", file=sys.stderr)
+    sys.exit(1)
+PY

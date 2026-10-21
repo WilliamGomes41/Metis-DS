@@ -135,6 +135,7 @@ def test_role_change_is_visible_across_instances(tmp_path: Path) -> None:
     assert second._account(reviewer["account_id"])["roles"] == ["researcher", "reviewer"]
 
 
+@pytest.mark.file_topology
 def test_legacy_file_identity_is_imported_only_when_shared_store_is_empty(tmp_path: Path) -> None:
     runtime = tmp_path / "legacy-runtime"
     legacy = DurablePublicationConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=runtime)
@@ -254,6 +255,7 @@ def test_accounts_page_reads_shared_identity_authority_after_create_and_restart(
     assert reloaded["roles"] == ["researcher", "reviewer"]
 
 
+@pytest.mark.file_topology
 def test_local_only_account_listing_uses_local_authority(tmp_path: Path) -> None:
     console = DurablePublicationConsole(
         root=tmp_path,
