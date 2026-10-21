@@ -304,7 +304,10 @@ def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(backend
             try:return read(*args,**kwargs)
             finally:materialisation._source_reconstruction.reset(token)
         def normalize(text):
-            return re.sub(r'(name="(?:command_id|interaction_id)" value=")[^"]+',r'\1COMMAND',text)
+            # Per-request tokens and the minute-resolution observation time
+            # differ between two renders without being a representation change.
+            text=re.sub(r'(name="(?:command_id|interaction_id)" value=")[^"]+',r'\1COMMAND',text)
+            return re.sub(r'peiltijd \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC','peiltijd OBSERVED',text)
         monkeypatch.setattr(materialisation,'_read_source_blocks',uncached)
         without=client.get(path,params=query)
         assert normalize(response.text)==normalize(without.text)
