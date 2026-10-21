@@ -48,8 +48,8 @@ FORBIDDEN_IDENTITIES = (
 )
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -231,8 +231,8 @@ def _product_client(tmp_path: Path, records_path: Path):
 # ---------------------------------------------------------------------------
 
 
-def test_a_non_heading_extract_defaults_unclassified_heading_may_be_heading(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_a_non_heading_extract_defaults_unclassified_heading_may_be_heading(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts)
     objects = console.snapshot_objects(receipt["snapshot_id"])
@@ -266,8 +266,8 @@ def test_a_html_extract_structure_marks_headings_without_meaning() -> None:
     assert body_frags
 
 
-def test_a_unconfirmed_proposal_is_not_published_type(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_a_unconfirmed_proposal_is_not_published_type(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts)
     target = _unclassified(console.snapshot_objects(receipt["snapshot_id"]))
@@ -280,8 +280,8 @@ def test_a_unconfirmed_proposal_is_not_published_type(tmp_path: Path) -> None:
     assert target["object_type"] != "recommendation" or target.get("confirmed_object_type") == "recommendation"
 
 
-def test_a_closed_type_set_rejects_invented_types(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_a_closed_type_set_rejects_invented_types(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts)
     target = _unclassified(console.snapshot_objects(receipt["snapshot_id"]))
@@ -426,8 +426,8 @@ def test_a_matching_type_on_lighter_class_must_not_fill_heavier_class() -> None:
     assert "pod-def" not in ids
 
 
-def test_a_review_tuple_required_envelope_tick_insufficient(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_a_review_tuple_required_envelope_tick_insufficient(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts)
     envelope = console._envelope(receipt["snapshot_id"])
@@ -475,8 +475,8 @@ def test_a_review_tuple_required_envelope_tick_insufficient(tmp_path: Path) -> N
     assert row["decision"] == "approve"
 
 
-def test_a_hash_version_or_type_change_invalidates_authorization(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_a_hash_version_or_type_change_invalidates_authorization(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts)
     target = _unclassified(console.snapshot_objects(receipt["snapshot_id"]))
@@ -537,8 +537,8 @@ def test_a_hash_version_or_type_change_invalidates_authorization(tmp_path: Path)
     )
 
 
-def test_a_publish_stays_g2_blocked_even_with_tuple(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_a_publish_stays_g2_blocked_even_with_tuple(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts)
     target = _unclassified(console.snapshot_objects(receipt["snapshot_id"]))
@@ -628,10 +628,10 @@ def test_a_withdraw_atomically_removes_from_projection_no_live_governance_recons
 # ---------------------------------------------------------------------------
 
 
-def test_b_live_url_html_ingest_rejected(tmp_path: Path) -> None:
+def test_b_live_url_html_ingest_rejected(tmp_path: Path, *, production_console) -> None:
     payload = HTML_FIXTURE.read_bytes()
     url = "https://example.test/continentie.html"
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     console.url_fetcher = lambda _url: (payload, "text/html; charset=utf-8", "continentie.html")
     accounts = _accounts(console)
     with pytest.raises(ConsoleError, match="live_url_html_not_allowed"):
@@ -649,8 +649,8 @@ def test_b_live_url_html_ingest_rejected(tmp_path: Path) -> None:
         )
 
 
-def test_b_uploaded_html_freeze_accepted_exact_bytes(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_b_uploaded_html_freeze_accepted_exact_bytes(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     data = HTML_FIXTURE.read_bytes()
     receipt = _ingest_html(console, accounts, data=data)
@@ -667,10 +667,10 @@ def test_b_uploaded_html_freeze_accepted_exact_bytes(tmp_path: Path) -> None:
     assert locators[0]["source_locator"]["locator_value"]
 
 
-def test_b_pdf_url_accepted_only_with_immediate_exact_byte_hash(tmp_path: Path) -> None:
+def test_b_pdf_url_accepted_only_with_immediate_exact_byte_hash(tmp_path: Path, *, production_console) -> None:
     payload = _tiny_pdf(tmp_path)
     url = "https://example.test/guideline.pdf"
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     console.url_fetcher = lambda _url: (payload, "application/pdf", "guideline.pdf")
     accounts = _accounts(console)
     receipt = console.ingest(
@@ -747,10 +747,10 @@ def test_b_missing_or_empty_source_locator_is_not_supported(tmp_path: Path) -> N
 # ---------------------------------------------------------------------------
 
 
-def test_c_nav_heading_is_documentenhierarchie_not_familieboom(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_c_nav_heading_is_documentenhierarchie_not_familieboom(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
     html = client.get("/tree").text
     assert "Documenten" in html
@@ -764,8 +764,8 @@ def test_c_nav_heading_is_documentenhierarchie_not_familieboom(tmp_path: Path) -
     assert "Familieboom" not in nav
 
 
-def test_c_kernel_counts_remain_available_without_automatic_navigation_badges(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_c_kernel_counts_remain_available_without_automatic_navigation_badges(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     empty = console.waiting_task_counts(accounts["reviewer"]["account_id"])
     assert empty["review"] == 0
@@ -773,7 +773,7 @@ def test_c_kernel_counts_remain_available_without_automatic_navigation_badges(tm
     assert empty["ingest"] == 0
     assert empty["accounts"] == 0
 
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     html = client.get("/review").text
     assert 'class="badge"' not in html or "wachtende" not in html.lower()
@@ -802,8 +802,8 @@ def test_c_kernel_counts_remain_available_without_automatic_navigation_badges(tm
     assert 'href="/accounts"' not in nav
 
 
-def test_c_publisher_creates_users_and_assigns_closed_roles_others_cannot(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_c_publisher_creates_users_and_assigns_closed_roles_others_cannot(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     created = console.create_managed_account(
         actor_id=accounts["publisher"]["account_id"],
@@ -841,7 +841,7 @@ def test_c_publisher_creates_users_and_assigns_closed_roles_others_cannot(tmp_pa
             roles=("publisher",),
         )
 
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "publisher.carla", "password": "carla-secret"})
     page = client.get("/accounts").text
     assert "Accounts" in page
@@ -873,8 +873,8 @@ def test_c_publisher_creates_users_and_assigns_closed_roles_others_cannot(tmp_pa
     assert forbidden.status_code in {400, 403}
 
 
-def test_c_forbidden_identities_rejected_as_required_reviewers(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_c_forbidden_identities_rejected_as_required_reviewers(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     for name in FORBIDDEN_IDENTITIES:
         with pytest.raises(ConsoleError, match="forbidden_reviewer_identity"):
@@ -887,11 +887,11 @@ def test_c_forbidden_identities_rejected_as_required_reviewers(tmp_path: Path) -
             )
 
 
-def test_c_no_envelope_or_snapshot_as_researcher_ui_terms(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_c_no_envelope_or_snapshot_as_researcher_ui_terms(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     _ingest_html(console, accounts)
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "publisher.carla", "password": "carla-secret"})
     for path in ("/ingest", "/tree", "/review", "/publish", "/accounts"):
         html = client.get(path).text.lower()

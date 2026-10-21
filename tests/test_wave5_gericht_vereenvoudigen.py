@@ -265,8 +265,8 @@ def test_heading_chooser_omits_radio_for_self_and_structurally_invalid_parent() 
     assert 'name="parent_choice" value="h-541"' not in html
 
 
-def test_unpublished_delete_control_stays_tree_only(tmp_path: Path) -> None:
-    console = OperationsConsole(
+def test_unpublished_delete_control_stays_tree_only(tmp_path: Path, *, production_console) -> None:
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -318,8 +318,8 @@ def test_unpublished_delete_control_stays_tree_only(tmp_path: Path) -> None:
         ) == ""
 
 
-def test_blocked_candidates_stay_out_of_ordinary_review_lane(tmp_path: Path) -> None:
-    console = OperationsConsole(
+def test_blocked_candidates_stay_out_of_ordinary_review_lane(tmp_path: Path, *, production_app, production_console) -> None:
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -353,8 +353,8 @@ def test_blocked_candidates_stay_out_of_ordinary_review_lane(tmp_path: Path) -> 
         family="fractuurpreventie",
         named_reviewers=[reviewer["account_id"]],
     )
-    client = TestClient(create_console_app(console))
-    client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
+    client = TestClient(production_app(console))
+    client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     review = client.get(
         f"/review?document={receipt['snapshot_id']}&task=individual"
     ).text

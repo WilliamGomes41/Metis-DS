@@ -19,8 +19,8 @@ from src.operations_console_v1 import ConsoleError, OperationsConsole
 from tests.test_attempt_diagnostics_postgres import bound, ingest
 
 
-def _console(tmp_path):
-    return OperationsConsole(root=tmp_path, source_store=tmp_path / 'sources' / 'private',
+def _console(tmp_path, *, production_console):
+    return production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / 'sources' / 'private',
                              runtime=tmp_path / 'output' / 'runtime' / 'operations-console')
 
 
@@ -34,8 +34,8 @@ def _broken(monkeypatch):
     monkeypatch.setattr(selection, 'configuration', broken)
 
 
-def test_ingest_reservation_records_active_configuration(tmp_path):
-    console = _console(tmp_path)
+def test_ingest_reservation_records_active_configuration(tmp_path, *, production_console):
+    console = _console(tmp_path, production_console=production_console)
     bound(console, reject=False)
     sid, _, _ = ingest(console)
     [attempt] = _attempts(console, sid, 'ingest')
@@ -43,8 +43,8 @@ def test_ingest_reservation_records_active_configuration(tmp_path):
     assert attempt['processing_configuration']['mode'] != 'unbound'
 
 
-def test_ingest_reservation_fails_closed_when_configuration_unreadable(tmp_path, monkeypatch):
-    console = _console(tmp_path)
+def test_ingest_reservation_fails_closed_when_configuration_unreadable(tmp_path, monkeypatch, *, production_console):
+    console = _console(tmp_path, production_console=production_console)
     bound(console, reject=False)
     _broken(monkeypatch)
     with pytest.raises(ConsoleError, match='processing_configuration_unavailable'):
@@ -52,16 +52,16 @@ def test_ingest_reservation_fails_closed_when_configuration_unreadable(tmp_path,
     assert console._envelopes == {}
 
 
-def _reextract_ready(tmp_path):
-    console = _console(tmp_path)
+def _reextract_ready(tmp_path, *, production_console):
+    console = _console(tmp_path, production_console=production_console)
     bound(console, reject=False)
     sid, actor, _ = ingest(console)
     assert not console.snapshot_is_published(sid)
     return console, sid, actor
 
 
-def test_reextract_reservation_records_active_configuration(tmp_path):
-    console, sid, actor = _reextract_ready(tmp_path)
+def test_reextract_reservation_records_active_configuration(tmp_path, *, production_console):
+    console, sid, actor = _reextract_ready(tmp_path, production_console=production_console)
     try:
         console.reextract_unpublished(actor_id=actor, snapshot_id=sid)
     except ConsoleError:
@@ -70,8 +70,8 @@ def test_reextract_reservation_records_active_configuration(tmp_path):
     assert attempt['processing_configuration'] == selection.configuration(console)
 
 
-def test_reextract_reservation_fails_closed_when_configuration_unreadable(tmp_path, monkeypatch):
-    console, sid, actor = _reextract_ready(tmp_path)
+def test_reextract_reservation_fails_closed_when_configuration_unreadable(tmp_path, monkeypatch, *, production_console):
+    console, sid, actor = _reextract_ready(tmp_path, production_console=production_console)
     before = list(console._envelope(sid)['processing_attempts'])
     _broken(monkeypatch)
     with pytest.raises(ConsoleError, match='processing_configuration_unavailable'):
@@ -79,8 +79,8 @@ def test_reextract_reservation_fails_closed_when_configuration_unreadable(tmp_pa
     assert console._envelope(sid)['processing_attempts'] == before
 
 
-def test_stale_configuration_is_never_reserved_on_reextract(tmp_path):
-    console, sid, actor = _reextract_ready(tmp_path)
+def test_stale_configuration_is_never_reserved_on_reextract(tmp_path, *, production_console):
+    console, sid, actor = _reextract_ready(tmp_path, production_console=production_console)
     console._envelope(sid)['processing_configuration'] = {'mode': 'stale-mode'}
     try:
         console.reextract_unpublished(actor_id=actor, snapshot_id=sid)
@@ -90,8 +90,8 @@ def test_stale_configuration_is_never_reserved_on_reextract(tmp_path):
     assert attempt['processing_configuration']['mode'] != 'stale-mode'
 
 
-def test_concurrent_ingests_each_record_active_configuration(tmp_path):
-    console = _console(tmp_path)
+def test_concurrent_ingests_each_record_active_configuration(tmp_path, *, production_console):
+    console = _console(tmp_path, production_console=production_console)
     bound(console, reject=False)
     researcher = console.create_account(username='anne', password='anne-secret', roles=('researcher',))
     reviewer = console.create_account(username='bert', password='bert-secret', roles=('reviewer', 'publisher'))
@@ -120,11 +120,11 @@ def test_resume_duplicate_receipt_accepts_incomplete_budget():
     assert 'attempt["state"] in {"succeeded", "incomplete_budget"}' in source
 
 
-def test_reextract_reserved_contract_follows_active_configuration_not_stale_envelope(tmp_path):
+def test_reextract_reserved_contract_follows_active_configuration_not_stale_envelope(tmp_path, *, production_console):
     """#630 reconcile: reserve() records the contract of the active configuration."""
     from src.pre_review_semantic_v1 import semantic_contract_version_for_mode
     from copy import deepcopy
-    console, sid, actor = _reextract_ready(tmp_path)
+    console, sid, actor = _reextract_ready(tmp_path, production_console=production_console)
     stale = deepcopy(console._envelope(sid))
     stale['processing_configuration'] = {'mode': 'stale-mode'}
     console._commit_prepared_store(envelopes={sid: stale}, snapshot_id=sid)  # durable stale value
@@ -154,8 +154,8 @@ def _deploy_after_reservation(console):
     console._processing_configuration_reader = reader
 
 
-def test_reextract_config_change_mid_flight_gives_configuration_changed(tmp_path):
-    console, sid, actor = _reextract_ready(tmp_path)
+def test_reextract_config_change_mid_flight_gives_configuration_changed(tmp_path, *, production_console):
+    console, sid, actor = _reextract_ready(tmp_path, production_console=production_console)
     before = console.snapshot_objects(sid)
     _deploy_after_reservation(console)
     with pytest.raises(ConsoleError, match='processing_configuration_changed'):
@@ -165,8 +165,8 @@ def test_reextract_config_change_mid_flight_gives_configuration_changed(tmp_path
     assert console.snapshot_objects(sid) == before
 
 
-def test_ingest_config_change_mid_flight_gives_configuration_changed(tmp_path):
-    console = _console(tmp_path)
+def test_ingest_config_change_mid_flight_gives_configuration_changed(tmp_path, *, production_console):
+    console = _console(tmp_path, production_console=production_console)
     bound(console, reject=False)
     _deploy_after_reservation(console)
     with pytest.raises(ConsoleError, match='processing_configuration_changed'):
@@ -220,11 +220,8 @@ def exact_counters(console):
     return lambda: {**counters, 'provider': provider_calls['n']}
 
 
-def test_reused_extraction_with_changed_configuration_is_refused_before_provider(tmp_path):
-    # Same source: the re-extract produces the stored prepared_source_extraction (reuse return in retain()).
-    # A deploy after the initial check in the re-extract wrapper and before the extraction checkpoint
-    # MOET give processing_configuration_changed; the provider MAG NIET be called.
-    console, sid, actor = _reextract_ready(tmp_path)
+def test_reused_extraction_with_changed_configuration_is_refused_before_provider(tmp_path, *, production_console):
+    console, sid, actor = _reextract_ready(tmp_path, production_console=production_console)
     stored = console._envelope(sid).get('prepared_source_extraction')
     assert stored, 'fixture MOET have a stored prepared_source_extraction (reuse path)'
     counts = exact_counters(console)

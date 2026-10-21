@@ -392,8 +392,8 @@ def test_runbook_requires_separate_service_principals_and_app_settings() -> None
     assert "v2.29" in runbook
 
 
-def test_wave_c_does_not_open_publish(tmp_path: Path) -> None:
-    console = OperationsConsole(
+def test_wave_c_does_not_open_publish(tmp_path: Path, *, production_console) -> None:
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
