@@ -8,7 +8,6 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
-import asyncio
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from copy import deepcopy
 from threading import Event, Thread
@@ -17,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.workflows.workflow_identity_postgres_v1 import _token_hash
-from tests.test_availability_repair import bind, drain, login, provider, state
+from tests.test_availability_repair import _preparation_context, bind, drain, login, provider, state
 from tests.test_console_entra_v1 import (
     ADMIN, USER, CLIENT, TENANT, FakeMicrosoft, claims, login as entra_login,
 )
@@ -81,18 +80,6 @@ def _session_row(console, token):
         return connection.execute(
             "SELECT created_at,expires_at,revoked_at FROM workflow.sessions WHERE token_hash=%s",
             (_token_hash(token),)).fetchone()
-
-
-def _preparation_context(console):
-    from src.workflows.workflow_transaction_v1 import workflow_transaction_active
-    try:
-        asyncio.get_running_loop()
-        on_loop = True
-    except RuntimeError:
-        on_loop = False
-    # The shared depth can belong to a concurrent request or dispatcher scan.
-    # RLock ownership answers whether THIS preparation thread holds the lock.
-    return on_loop, console._store_thread_lock._is_owned(), workflow_transaction_active()
 
 
 def test_preparation_context_distinguishes_concurrent_lock_owner(tmp_path, *, production_console):
