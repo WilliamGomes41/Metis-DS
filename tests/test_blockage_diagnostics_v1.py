@@ -22,7 +22,7 @@ from fastapi.testclient import TestClient
 
 from src.blockage_diagnostics_v1 import blockage_report, collect_blockage, read_blockage_zip
 from src.processing_evidence_export_v1 import _csv
-@pytest.fixture(params=['first-start', 'restart'])
+@pytest.fixture(params=['first-start', 'restart'], ids=['postgres-first-start', 'postgres-restart'])
 def console(request, tmp_path, production_console):
     first = production_console(root=tmp_path, processing_binder=lambda console: None)
     return first if request.param == 'first-start' else production_console(root=tmp_path, processing_binder=lambda console: None)
