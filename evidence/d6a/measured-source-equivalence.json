@@ -1,13 +1,17 @@
 {
   "measured_commit": "bafa24395e8fe1a32e2dd5ab0a7afa34fca9978a",
-  "current_implementation_commit": "03c1c55070c3378dbab0c92e26c42a38a7328c5e",
+  "current_implementation_commit": "9b78eabfc8e2598e637be16f9cac90cb428914dc",
   "runtime_fixtures_and_measurement_runner_identical": true,
   "entire_source_tree_identical": false,
   "changed_files": [
     "scripts/export_test_evidence.py",
+    "tests/test_a04_session_availability.py",
+    "tests/test_availability_repair.py",
     "tests/test_release_control_preflight.py"
   ],
   "additional_cases": 5,
   "proof": "main-ci-integration.json",
-  "whole_suite_not_rerun_after_ci_only_changes": true
+  "whole_suite_not_rerun_after_ci_only_changes": false,
+  "post_measurement_test_probe_change": "portion10-lock-observation-repair.json",
+  "whole_suite_not_rerun_after_ci_and_test_observation_changes": true
 }

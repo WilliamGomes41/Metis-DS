@@ -99,3 +99,5 @@ startscript. Zie [omgevingsinstructies](../../docs/agents/postgres-tests.md).
 D6b wacht daarnaast op de afgesproken review van Lex, Sherlock en Argos en de
 beslissing over bestaande lokale JSON-toestand. De bestandsruntime, vijf
 storevariabelen en lokale CLI-start zijn daarom nog aanwezig.
+
+PR10: een gedeelde lockteller veroorzaakte een wisselende testuitkomst. De voorbereidingsproeven meten nu lockeigenaarschap per thread; bestaande rode/groene proef en alle 206 native acceptatiegevallen zijn vastgelegd in [het herstelbewijs](portion10-lock-observation-repair.json). Nieuwe volledige CI en tijdmeting zijn nog open.

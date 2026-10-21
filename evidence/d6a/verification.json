@@ -12,7 +12,8 @@
     "postgres_skips": 0,
     "within_twice_local_baseline": false,
     "required_ci_comparison": "pending",
-    "previous_unaccepted_complete_run": "local-unprefetched-full.json"
+    "previous_unaccepted_complete_run": "local-unprefetched-full.json",
+    "post_measurement_test_probe_change": "Two test files now share thread ownership observation; original 206-case native acceptance rerun. Full suite timing remains the historical measured revision."
   },
   "not_verified": [
     "GitHub CI baseline and after each proposed portion",
@@ -92,5 +93,6 @@
   "portion02_publication": "portion02-publication.json",
   "portions03_05_publication": "portions03-05-publication.json",
   "portions06_10_publication": "portions06-10-publication.json",
-  "portion09_boundary_repair": "portion09-fixture-boundary-repair.json"
+  "portion09_boundary_repair": "portion09-fixture-boundary-repair.json",
+  "portion10_lock_observation_repair": "portion10-lock-observation-repair.json"
 }

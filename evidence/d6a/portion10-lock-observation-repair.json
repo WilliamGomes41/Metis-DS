@@ -1,0 +1,178 @@
+{
+  "change_class": "C",
+  "rewrite_risk": "none",
+  "runtime_changes": false,
+  "promise": "Preparation probes reject a lock owned by their own thread without mistaking another request or dispatcher scan for that owner.",
+  "reported_pr": 800,
+  "reported_run": 39559976796,
+  "reported_job": 119088610491,
+  "original_ci_result": {
+    "passed": 205,
+    "failed": 1
+  },
+  "same_code_green_run": 39559977171,
+  "both_runs_checkout": "3f2c5c138389bfc87d1f590f7b9c8d98ab7412bb",
+  "cause": "The shared _store_lock_depth may be positive for a different thread. The existing A04 _preparation_context already uses RLock ownership; availability probes now share that same measurement.",
+  "regression": "Existing deterministic test distinguishes another-thread lock from own-thread lock. With the old depth observation it fails with (False,1,False); after repair it passes, including rejecting own-thread ownership.",
+  "fixed_head": "6eff0d623cb7a48a87b5f1d7c8333917b9a44d37",
+  "checks": [
+    {
+      "name": "deterministic old observation red",
+      "junit": "d6a10-lock-red.xml",
+      "sha256": "8b637be10123d198789c9186216dabdf4920bb8f112ad81ce0f16a36b017191b",
+      "tests": 1,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 2.14
+    },
+    {
+      "name": "same-thread lock ownership and reported cases green",
+      "junit": "d6a10-lock-green.xml",
+      "sha256": "0f4e8291e9b0fd94ad42645f39c4d9ed7bb3d790971233078d48a41f279b2257",
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 7.692
+    },
+    {
+      "name": "original native acceptance",
+      "junit": "d6a10-native-fixed.xml",
+      "sha256": "88a87e5d6a3289c028e6f8675e45e7720df75284936857ce21dc526ebc90e9dd",
+      "tests": 206,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 269.891
+    }
+  ],
+  "source_propagation": [
+    {
+      "portion": "10",
+      "before": "2a73bc5145a314f8e3d67e799d910b9715f46ce3",
+      "after": "6eff0d623cb7a48a87b5f1d7c8333917b9a44d37",
+      "changed_files": [
+        "tests/test_a04_session_availability.py",
+        "tests/test_availability_repair.py"
+      ]
+    },
+    {
+      "portion": "review-evidence-prerequisite",
+      "before": "15019de7843da731676482b1493aba5c704dc3fe",
+      "after": "45205d5aad1f3baeadc09437eb7015e88fb618c0",
+      "changed_files": [
+        "tests/test_a04_session_availability.py",
+        "tests/test_availability_repair.py"
+      ]
+    },
+    {
+      "portion": "11",
+      "before": "35f7b16760aa1c96384afed74de565e1e1734602",
+      "after": "eeb601ec0c39959aaac8ccc3238ec8c55cefd465",
+      "changed_files": [
+        "tests/test_a04_session_availability.py",
+        "tests/test_availability_repair.py"
+      ]
+    },
+    {
+      "portion": "12",
+      "before": "b91f5aac04432693a23f24293050768ce6756b93",
+      "after": "ed53a0411e1b10836b15c9e3a22da67aec3161f3",
+      "changed_files": [
+        "tests/test_a04_session_availability.py",
+        "tests/test_availability_repair.py"
+      ]
+    },
+    {
+      "portion": "13",
+      "before": "f0a7fbc8ee1a3c90170f935f8b0bd3d07647889b",
+      "after": "308cbd6228dacfe6f896124eb14d9ef8fe5855dc",
+      "changed_files": [
+        "tests/test_a04_session_availability.py",
+        "tests/test_availability_repair.py"
+      ]
+    },
+    {
+      "portion": "14",
+      "before": "175566dcf24cabcdf97b06d0139b3afc6f34748c",
+      "after": "09f4d02706b66d9798d58fec2c9fd40ccd94ed4a",
+      "changed_files": [
+        "tests/test_a04_session_availability.py",
+        "tests/test_availability_repair.py"
+      ]
+    },
+    {
+      "portion": "15",
+      "before": "ae46a6b5e91fc095d8e4858f927a36cb8527b7b9",
+      "after": "7a00f73519102a13d26e15cfd8fcddf6081fe57a",
+      "changed_files": [
+        "tests/test_a04_session_availability.py",
+        "tests/test_availability_repair.py"
+      ]
+    },
+    {
+      "portion": "16",
+      "before": "eda7e7ea7feec9cfd98543c1edb04ff45c6cb937",
+      "after": "ed8aed045c88d501924628ce1ba9b8edf2414bc4",
+      "changed_files": [
+        "tests/test_a04_session_availability.py",
+        "tests/test_availability_repair.py"
+      ]
+    },
+    {
+      "portion": "17",
+      "before": "b3062621e2a303d96f9a24ccd349763d02a3af1d",
+      "after": "7965e1a5ad17ed63c13d065d94f83d493530a18e",
+      "changed_files": [
+        "tests/test_a04_session_availability.py",
+        "tests/test_availability_repair.py"
+      ]
+    },
+    {
+      "portion": "18",
+      "before": "7217977a6fd82d980f11716890a5f32d6e1c9133",
+      "after": "a6ee0537601faf4bcd72767e13031790fb47736f",
+      "changed_files": [
+        "tests/test_a04_session_availability.py",
+        "tests/test_availability_repair.py"
+      ]
+    },
+    {
+      "portion": "19",
+      "before": "f36ffd8ab5c8c2ba35853f905ce5c01e17c0537c",
+      "after": "437d8012a0d568d97742f63ee8847d650101cdd4",
+      "changed_files": [
+        "tests/test_a04_session_availability.py",
+        "tests/test_availability_repair.py"
+      ]
+    },
+    {
+      "portion": "21",
+      "before": "e8583066a769de0282744bcc4611e7e77604ae72",
+      "after": "04e0bade682d360973587b986a3330655386f3cf",
+      "changed_files": [
+        "tests/test_a04_session_availability.py",
+        "tests/test_availability_repair.py"
+      ]
+    },
+    {
+      "portion": "22",
+      "before": "62e17c4b3f87206fe427299aa6a17a514d38ce53",
+      "after": "9b78eabfc8e2598e637be16f9cac90cb428914dc",
+      "changed_files": [
+        "tests/test_a04_session_availability.py",
+        "tests/test_availability_repair.py"
+      ]
+    }
+  ],
+  "repository_checks": [
+    "repository_preflight PASS",
+    "release_control_preflight against portion09 PASS",
+    "architecture boundaries PASS",
+    "compile changed tests PASS",
+    "git diff --check PASS"
+  ],
+  "ci": "pending on corrected head",
+  "full_suite_and_timing": "pending; no D6a completion claim"
+}
