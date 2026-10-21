@@ -1,5 +1,9 @@
 """Bounded capability and scenario checks; no database/browser claims.
-# release-control-evidence: scope/belofte toegang kwaliteit slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: toegang
+# release-control-evidence: kwaliteit
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 import json
 from pathlib import Path

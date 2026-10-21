@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS workflow.view_checks (
     owner_account_id text NOT NULL,
     snapshot_id text NOT NULL,
     request_key text NOT NULL,
+    request_aliases jsonb NOT NULL DEFAULT '[]',
     context jsonb NOT NULL,
     context_hash text NOT NULL,
     state text NOT NULL CHECK (state IN ('queued','running','completed','failed','cancelled')),

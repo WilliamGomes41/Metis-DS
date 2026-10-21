@@ -38,8 +38,8 @@ class ViewCheckStore:
         with self.connect() as con, con.cursor(row_factory=dict_row) as cur:
             # Also serializes active-scope deduplication across different keys.
             cur.execute('SELECT pg_advisory_xact_lock(807019)')
-            cur.execute('SELECT * FROM workflow.view_checks WHERE owner_account_id=%s AND request_key=%s',
-                        (owner, request_key))
+            cur.execute('SELECT * FROM workflow.view_checks WHERE owner_account_id=%s '
+                        'AND (request_key=%s OR request_aliases ? %s)', (owner, request_key, request_key))
             previous = cur.fetchone()
             if previous:
                 if previous['snapshot_id'] != snapshot or previous['context_hash'] != fingerprint:
@@ -49,6 +49,8 @@ class ViewCheckStore:
                         "AND context_hash=%s AND state IN ('queued','running')", (owner, snapshot, fingerprint))
             active = cur.fetchone()
             if active:
+                cur.execute('UPDATE workflow.view_checks SET request_aliases=request_aliases||'
+                            'jsonb_build_array(%s::text) WHERE id=%s', (request_key, active['id']))
                 return self.public(active)
             identifier = uuid4().hex
             cur.execute("INSERT INTO workflow.view_checks(id,owner_account_id,snapshot_id,request_key,context,"

@@ -1,5 +1,10 @@
 """Native persistence, fencing and installed HTTP authorization for #807.
-# release-control-evidence: scope/belofte opslag concurrent stale interrupt toegang beschikbaarheid slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: opslag concurrent stale interrupt
+# release-control-evidence: toegang
+# release-control-evidence: beschikbaarheid
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from copy import deepcopy
 from pathlib import Path
@@ -38,6 +43,7 @@ def test_registration_deduplicates_survives_restart_and_fences_late_workers(comp
     assert not restarted.finish(row['id'], job['attempt'], token, {'reason': 'obsolete'})
     assert restarted.finish(row['id'], retried['attempt'], new_token, {'checks': [], 'reason': 'completed'})
     assert restarted.get(row['id'])['result']['reason'] == 'completed'
+    assert restarted.register('reviewer', 'snapshot', 'other-key', {'revision': 'one'})['id'] == row['id']
     assert restarted.capability(new_token) is None
     assert len(restarted.get(row['id'])['events']) == 5
 

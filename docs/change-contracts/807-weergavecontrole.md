@@ -51,7 +51,7 @@ Een taak met afwijkingen eindigt als completed met fail-checks; completed beteke
 
 ## Verificatie
 
-- Lokaal: 19 pure/architectuur/migratieplancontroles geslaagd; JavaScript-syntax, Python-compilatie, dependencygrenzen en repositorypreflight geslaagd.
+- Lokaal: 20 pure/architectuur/migratieplancontroles geslaagd; JavaScript-syntax, Python-compilatie, dependencygrenzen en repositorypreflight geslaagd.
 - Native PG-tests zijn hier geblokkeerd door ontbrekende PostgreSQL 16; setup faalt op OS-groepsrechten. Dit is geen skip/pass.
 - Native opslag/autorisatieproeven en een echte browserketen zijn toegevoegd. `source-processing-proof` moet ze met native PostgreSQL en Chromium uitvoeren en ontbrekend/overgeslagen browserbewijs afwijzen. Hun uitslag wordt op de PR bijgehouden.
 - Geen actuele productie-uitvoering, performanceacceptatie, Azure-bewijsopslagacceptatie of volledige issue-acceptatie vastgesteld.
