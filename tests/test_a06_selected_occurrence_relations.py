@@ -291,11 +291,11 @@ def test_older_occurrence_replay_requires_fresh_inference(tmp_path):
     assert_bundle(restored, sid)
 
 
-def test_older_occurrence_checkpoint_cannot_resume_silently(tmp_path):
+def test_older_occurrence_checkpoint_cannot_resume_silently(tmp_path, *, production_console):
     from tests.test_recoverable_formation_v1 import system as partial_system
     from src.semantic_replay_v1 import stable_json_hash
     from src.source_occurrence_authority_v1 import SOURCE_OCCURRENCE_AUTHORITY_VERSION
-    state, sid, actor, _, calls, _, make, bind = partial_system(tmp_path)
+    state, sid, actor, _, calls, _, make, bind = partial_system(tmp_path, production_console=production_console)
     envelope = deepcopy(state._envelope(sid))
     identity = envelope['semantic_replay']['identity']
     identity['components']['semantic_contract_version'] = identity['components']['semantic_contract_version'].removesuffix('/' + SOURCE_OCCURRENCE_AUTHORITY_VERSION)
