@@ -7,6 +7,7 @@
 from copy import deepcopy
 from threading import Thread, Barrier
 import json
+import os
 
 import pytest
 
@@ -67,6 +68,8 @@ def test_failed_initial_ingest_evidence_restart_http_replay_and_success_activati
 
 
 def test_recovery_permission_http_restart_and_concurrent_consumption(workflow_postgres, tmp_path):
+    from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
+    environment_before = {name: os.environ.get(name) for name in POSTGRES_STORE_SETTINGS}
     console = _console(tmp_path, workflow_postgres)
     bound(console)
     sid, actor, reviewer = ingest(console)
@@ -104,3 +107,4 @@ def test_recovery_permission_http_restart_and_concurrent_consumption(workflow_po
     assert final["processing_recovery"]["consumed_by"] == final["processing_attempts"][-1]["attempt_id"]
     assert len(outcomes) == 2 and "pre_review_llm_proposal_rejected" in outcomes
     assert not _console(tmp_path, workflow_postgres).processing_status(sid)["retry_allowed"]
+    assert {name: os.environ.get(name) for name in POSTGRES_STORE_SETTINGS} == environment_before
