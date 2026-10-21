@@ -46,9 +46,50 @@ def test_template_copies_keep_commits_visible_and_databases_independent(postgres
             assert fresh.execute("SELECT count(*) FROM workflow.topics").fetchone()[0] == 1
             assert other.execute("SELECT count(*) FROM workflow.topics").fetchone()[0] == 0
     with psycopg.connect(dsn) as admin:
+        from tests.postgres_support import _copies
+        _copies[dsn, template].flush()
         assert admin.execute("SELECT count(*) FROM pg_database WHERE datname IN (%s,%s)",
                              (psycopg.conninfo.conninfo_to_dict(first.dsn)["dbname"],
                               psycopg.conninfo.conninfo_to_dict(second.dsn)["dbname"])).fetchone()[0] == 0
+
+
+def test_prefetch_keeps_fresh_committed_copies_and_cleans_up_after_exception(postgres_template):
+    from tests.postgres_support import prefetched_databases
+    dsn, template = postgres_template
+    connect = psycopg.connect
+    with database(dsn, template=template) as nested_template:
+        name = psycopg.conninfo.conninfo_to_dict(nested_template.dsn)["dbname"]
+        with prefetched_databases(dsn, name) as copies:
+            with pytest.MonkeyPatch.context() as patch:
+                def forbidden(*args, **kwargs):
+                    raise AssertionError("A test-local connection spy must not intercept administrative work")
+                patch.setattr(psycopg, "connect", forbidden)
+                owned = []
+                for value in ("first", "second"):
+                    with database(dsn, template=name) as config:
+                        owned.append(psycopg.conninfo.conninfo_to_dict(config.dsn)["dbname"])
+                        with connect(config.dsn) as connection:
+                            assert connection.execute("SELECT count(*) FROM workflow.topics").fetchone()[0] == 0
+                            connection.execute("INSERT INTO workflow.topics(topic_id,identity_key,display_name) VALUES (%s,%s,%s)",
+                                               (value, value, value))
+                        with connect(config.dsn) as fresh:
+                            assert fresh.execute("SELECT topic_id FROM workflow.topics").fetchone()[0] == value
+                with pytest.raises(RuntimeError, match="test body failed"):
+                    with database(dsn, template=name):
+                        raise RuntimeError("test body failed")
+                owned.append(copies.ready.result())
+        assert copies.owned == set()
+        with connect(dsn) as admin:
+            assert admin.execute("SELECT count(*) FROM pg_database WHERE datname = ANY(%s)", (owned,)).fetchone()[0] == 0
+
+
+def test_prefetch_reports_background_creation_failure(postgres_template):
+    from tests.postgres_support import prefetched_databases
+    dsn, _ = postgres_template
+    with pytest.raises(ExceptionGroup, match="Could not prepare or remove") as failure:
+        with prefetched_databases(dsn, "metis_missing_template"):
+            pass
+    assert isinstance(failure.value.exceptions[0], psycopg.errors.InvalidCatalogName)
 
 
 @pytest.mark.pure_function

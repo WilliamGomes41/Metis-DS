@@ -122,12 +122,14 @@ def pytest_unconfigure(config):
 @pytest.fixture(scope="session")
 def postgres_template(pytestconfig):
     from psycopg.conninfo import conninfo_to_dict
-    from tests.postgres_support import database, install_schema
+    from tests.postgres_support import database, install_schema, prefetched_databases
 
     dsn = _start_test_postgres(pytestconfig)
     with database(dsn) as template:
         install_schema(template.dsn)
-        yield dsn, conninfo_to_dict(template.dsn)["dbname"]
+        name = conninfo_to_dict(template.dsn)["dbname"]
+        with prefetched_databases(dsn, name):
+            yield dsn, name
 
 
 @pytest.fixture
