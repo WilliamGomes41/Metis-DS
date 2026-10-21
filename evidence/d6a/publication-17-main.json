@@ -1,0 +1,74 @@
+{
+  "batch": "17",
+  "target": "main",
+  "base_main": "d81b5a48ea380fe0dfe1b5f163d1dfda396f1b0d",
+  "change_class": "C",
+  "rewrite_risk": "none",
+  "code_parent": "895bfbbf95cd84372f32ee4d7be6500afaa66584",
+  "tests_tree": "349b4b649349a6f341cca0b7214ccc569a68613d",
+  "runtime_changes": false,
+  "publication_authorized": true,
+  "merge_order": [
+    17,
+    18,
+    19
+  ],
+  "targeted_python": "3.13.5",
+  "targeted_cases": 399,
+  "passed": 398,
+  "failures": 0,
+  "errors": 0,
+  "skipped": [
+    "tests.test_browser_view_check::test_browser_inzicht_investigation"
+  ],
+  "postgres_skips": 0,
+  "junit_sha256": "c004a4a44e0331475ae91eea5fa080d958a7222bfae5512c5574ef38f61c308e",
+  "static_checks": [
+    {
+      "command": [
+        "python",
+        "scripts/repository_preflight.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python",
+        "scripts/release_control_preflight.py",
+        "--base",
+        "origin/main"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python",
+        "scripts/check_architecture_boundaries.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python",
+        "-m",
+        "compileall",
+        "-q",
+        "src",
+        "tests"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "origin/main"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "full_suite": "Required; combined local run in progress and GitHub matrix pending publication",
+  "ci_status": "not yet run on these new main-targeting heads",
+  "inherited_batch16": "PR809 merged into codex/d6a-15-decision-console; included here because it is absent from main"
+}
