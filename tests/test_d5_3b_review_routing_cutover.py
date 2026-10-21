@@ -27,8 +27,8 @@ PASSWORD = "d53b-secret"
 HTML = b"""<!doctype html><html><body><h1>Advies</h1><p>Gebruik interventie A bij verhoogd risico.</p></body></html>"""
 
 
-def _console(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], str, str]:
-    console = OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> tuple[OperationsConsole, dict[str, dict], str, str]:
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime" / "console",
@@ -205,8 +205,8 @@ def test_workboard_uses_actionable_duties_and_waiting_state() -> None:
     assert actionable["next_href"].endswith("task=second_review")
 
 
-def test_second_review_approval_preserves_canonical_tuple_and_is_idempotent(tmp_path: Path) -> None:
-    console, accounts, snapshot_id, object_id = _console(tmp_path)
+def test_second_review_approval_preserves_canonical_tuple_and_is_idempotent(tmp_path: Path, *, production_console) -> None:
+    console, accounts, snapshot_id, object_id = _console(tmp_path, production_console=production_console)
     before = next(row for row in console.snapshot_objects(snapshot_id) if row["object_id"] == object_id)
     before_version = before["object_version"]
     before_hash = compute_canonical_object_hash(before)
@@ -243,8 +243,8 @@ def test_second_review_approval_preserves_canonical_tuple_and_is_idempotent(tmp_
     ]) == 1
 
 
-def test_first_reviewer_cannot_self_approve_second_review(tmp_path: Path) -> None:
-    console, accounts, snapshot_id, object_id = _console(tmp_path)
+def test_first_reviewer_cannot_self_approve_second_review(tmp_path: Path, *, production_console) -> None:
+    console, accounts, snapshot_id, object_id = _console(tmp_path, production_console=production_console)
 
     with pytest.raises(ConsoleError, match="independent_second_reviewer_required"):
         console.approve_second_review(
@@ -255,8 +255,8 @@ def test_first_reviewer_cannot_self_approve_second_review(tmp_path: Path) -> Non
         )
 
 
-def test_stale_second_review_write_does_not_add_binding(tmp_path: Path) -> None:
-    console, accounts, snapshot_id, object_id = _console(tmp_path)
+def test_stale_second_review_write_does_not_add_binding(tmp_path: Path, *, production_console) -> None:
+    console, accounts, snapshot_id, object_id = _console(tmp_path, production_console=production_console)
     stale = console.objects_revision(snapshot_id)
 
     rows = console._load_objects(snapshot_id)
@@ -277,10 +277,9 @@ def test_stale_second_review_write_does_not_add_binding(tmp_path: Path) -> None:
     assert after == before
 
 
-def test_second_review_http_surface_is_read_only_for_canonical_semantics(tmp_path: Path) -> None:
-    console, accounts, snapshot_id, object_id = _console(tmp_path)
-    app = create_console_app(console)
-    install_review_workboard(app, console)
+def test_second_review_http_surface_is_read_only_for_canonical_semantics(tmp_path: Path, *, production_app, production_console) -> None:
+    console, accounts, snapshot_id, object_id = _console(tmp_path, production_console=production_console)
+    app = production_app(console)
     client = TestClient(app)
 
     login = client.post(
@@ -307,10 +306,9 @@ def test_second_review_http_surface_is_read_only_for_canonical_semantics(tmp_pat
     assert "Wat voor informatie is dit?" not in card.text
 
 
-def test_legacy_individual_url_redirects_into_contextual_surface(tmp_path: Path) -> None:
-    console, accounts, snapshot_id, _object_id = _console(tmp_path)
-    app = create_console_app(console)
-    install_review_workboard(app, console)
+def test_legacy_individual_url_redirects_into_contextual_surface(tmp_path: Path, *, production_app, production_console) -> None:
+    console, accounts, snapshot_id, _object_id = _console(tmp_path, production_console=production_console)
+    app = production_app(console)
     client = TestClient(app)
     client.post(
         "/login",
@@ -323,10 +321,9 @@ def test_legacy_individual_url_redirects_into_contextual_surface(tmp_path: Path)
     assert "task=individual" not in response.text
 
 
-def test_dashboard_routes_waiting_reviewer_without_mutating_decisions(tmp_path: Path) -> None:
-    console, accounts, snapshot_id, object_id = _console(tmp_path)
-    app = create_console_app(console)
-    install_review_workboard(app, console)
+def test_dashboard_routes_waiting_reviewer_without_mutating_decisions(tmp_path: Path, *, production_app, production_console) -> None:
+    console, accounts, snapshot_id, object_id = _console(tmp_path, production_console=production_console)
+    app = production_app(console)
     client = TestClient(app)
     assert client.get(f'/review?document={snapshot_id}', follow_redirects=False).status_code == 401
     client.post('/login', data={'username': accounts['reviewer_a']['username'], 'password': PASSWORD})

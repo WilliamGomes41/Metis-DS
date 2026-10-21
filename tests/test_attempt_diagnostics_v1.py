@@ -142,15 +142,15 @@ def test_only_diagnostic_metadata_is_excluded_from_activation_comparison():
     assert comparable_envelope(changed) != comparable_envelope(envelope)
 
 
-def test_file_adapter_restart_replay_and_activation(tmp_path, monkeypatch):
+def test_production_adapter_restart_replay_and_activation(tmp_path, monkeypatch, *, production_console):
     from tests import test_attempt_diagnostics_postgres as proof
-    monkeypatch.setattr(proof, "_console", lambda root, _: OperationsConsole(root=root, source_store=root/"sources", runtime=root/"runtime"))
+    monkeypatch.setattr(proof, "_console", lambda root, _: production_console(processing_binder=lambda console: None, root=root, source_store=root/"sources", runtime=root/"runtime"))
     proof.test_failed_initial_ingest_evidence_restart_http_replay_and_success_activation(None, tmp_path)
 
 
-def test_file_adapter_recovery_http_and_concurrent_consumption(tmp_path, monkeypatch):
+def test_production_adapter_recovery_http_and_concurrent_consumption(tmp_path, monkeypatch, *, production_console):
     from tests import test_attempt_diagnostics_postgres as proof
-    monkeypatch.setattr(proof, "_console", lambda root, _: OperationsConsole(root=root, source_store=root/"sources", runtime=root/"runtime"))
+    monkeypatch.setattr(proof, "_console", lambda root, _: production_console(processing_binder=lambda console: None, root=root, source_store=root/"sources", runtime=root/"runtime"))
     proof.test_recovery_permission_http_restart_and_concurrent_consumption(None, tmp_path)
 
 
@@ -187,9 +187,9 @@ def test_malformed_json_output_survives_before_parsing():
     assert replay_diagnostic(attempt)["reason_code"] == "diagnostic_input_not_recorded"
 
 
-def test_expired_attempt_is_interrupted_and_late_checkpoint_is_rejected(tmp_path):
+def test_expired_attempt_is_interrupted_and_late_checkpoint_is_rejected(tmp_path, *, production_console):
     from tests.test_attempt_diagnostics_postgres import bound, ingest
-    console = OperationsConsole(root=tmp_path, source_store=tmp_path/"sources", runtime=tmp_path/"runtime")
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path/"sources", runtime=tmp_path/"runtime")
     bound(console)
     sid, actor, reviewer = ingest(console)
     with console._reprocessing_transaction(sid):
@@ -201,9 +201,9 @@ def test_expired_attempt_is_interrupted_and_late_checkpoint_is_rejected(tmp_path
     assert "proposal" not in console._envelope(sid)["processing_attempts"][-1]["diagnostic"]
 
 
-def test_failed_diagnostic_write_stops_before_provider(tmp_path, monkeypatch):
+def test_failed_diagnostic_write_stops_before_provider(tmp_path, monkeypatch, *, production_console):
     from tests.test_attempt_diagnostics_postgres import bound, ingest
-    console = OperationsConsole(root=tmp_path, source_store=tmp_path/"sources", runtime=tmp_path/"runtime")
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path/"sources", runtime=tmp_path/"runtime")
     bound(console)
     sid, actor, reviewer = ingest(console)
     with console._reprocessing_transaction(sid):

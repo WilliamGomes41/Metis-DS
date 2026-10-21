@@ -34,8 +34,8 @@ RECOMMENDATION_TEXT = (
 )
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime" / "console",
@@ -259,8 +259,8 @@ def test_explicit_strength_must_match_source_literal_evidence() -> None:
         )
 
 
-def test_review_confirmation_updates_version_hash_and_binding_atomically(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_review_confirmation_updates_version_hash_and_binding_atomically(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -308,8 +308,8 @@ def test_review_confirmation_updates_version_hash_and_binding_atomically(tmp_pat
     assert any(row["object_version"] == before_version and CONFIRMED_FIELD not in row for row in history)
 
 
-def test_same_confirmation_is_idempotent_for_semantic_object_version(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_same_confirmation_is_idempotent_for_semantic_object_version(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -343,8 +343,8 @@ def test_same_confirmation_is_idempotent_for_semantic_object_version(tmp_path: P
     assert compute_canonical_object_hash(second) == first_hash
 
 
-def test_stale_confirmation_leaves_no_partial_semantics_or_binding(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_stale_confirmation_leaves_no_partial_semantics_or_binding(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -383,8 +383,8 @@ def test_stale_confirmation_leaves_no_partial_semantics_or_binding(tmp_path: Pat
     )
 
 
-def test_type_change_away_clears_active_semantics_but_keeps_history(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_type_change_away_clears_active_semantics_but_keeps_history(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -418,8 +418,8 @@ def test_type_change_away_clears_active_semantics_but_keeps_history(tmp_path: Pa
     )
 
 
-def test_new_format_recommendation_rejects_legacy_strength_write(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_new_format_recommendation_rejects_legacy_strength_write(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -442,8 +442,8 @@ def test_new_format_recommendation_rejects_legacy_strength_write(tmp_path: Path)
         )
 
 
-def test_legacy_recommendation_compatibility_does_not_auto_migrate(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_legacy_recommendation_compatibility_does_not_auto_migrate(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -464,8 +464,8 @@ def test_legacy_recommendation_compatibility_does_not_auto_migrate(tmp_path: Pat
     assert CONFIRMED_FIELD not in live
 
 
-def test_review_ui_uses_direction_strength_and_preserves_proposal_evidence(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_review_ui_uses_direction_strength_and_preserves_proposal_evidence(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -474,7 +474,7 @@ def test_review_ui_uses_direction_strength_and_preserves_proposal_evidence(tmp_p
         snapshot_id,
         _target(console, snapshot_id)["object_id"],
     )
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
 
     html = client.get(
@@ -492,8 +492,8 @@ def test_review_ui_uses_direction_strength_and_preserves_proposal_evidence(tmp_p
     assert ">NIET DOEN<" not in html
 
 
-def test_authenticated_review_post_confirms_new_semantics(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_authenticated_review_post_confirms_new_semantics(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -502,7 +502,7 @@ def test_authenticated_review_post_confirms_new_semantics(tmp_path: Path) -> Non
         snapshot_id,
         _target(console, snapshot_id)["object_id"],
     )
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
 
     response = client.post(
@@ -536,14 +536,14 @@ def test_boom_outcome_legacy_field_remains_outside_new_semantics_kernel() -> Non
     assert outcome["confirmed_recommendation_strength"] == "niet_doen"
 
 
-def test_strength_error_keeps_review_input_without_saving(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_strength_error_keeps_review_input_without_saving(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snapshot_id = _ingest(console, accounts)["snapshot_id"]
     target = _plant_new_format_proposal(console, snapshot_id, _target(console, snapshot_id)["object_id"])
     before = deepcopy(console.snapshot_objects(snapshot_id))
     revision = console.objects_revision(snapshot_id)
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     response = client.post("/review", data={
         "snapshot_id": snapshot_id, "object_id": target["object_id"],
@@ -562,8 +562,8 @@ def test_strength_error_keeps_review_input_without_saving(tmp_path: Path) -> Non
     assert console.objects_revision(snapshot_id) == revision
 
 
-def test_strength_error_does_not_hide_a_stale_review(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_strength_error_does_not_hide_a_stale_review(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     sid = _ingest(console, accounts)['snapshot_id']
     target = _plant_new_format_proposal(console, sid, _target(console, sid)['object_id'])
@@ -579,7 +579,7 @@ def test_strength_error_does_not_hide_a_stale_review(tmp_path: Path) -> None:
     before = deepcopy(console.snapshot_objects(sid))
     latest_revision = console.objects_revision(sid)
     assert latest_revision != old_revision
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post('/login', data={'username': 'reviewer.bert', 'password': 'bert-secret'})
     response = client.post('/review', data={
         'snapshot_id': sid, 'object_id': target['object_id'],
@@ -595,11 +595,11 @@ def test_strength_error_does_not_hide_a_stale_review(tmp_path: Path) -> None:
     assert console.objects_revision(sid) == latest_revision
 
 
-def test_strength_retry_preserves_selected_parent(tmp_path: Path) -> None:
+def test_strength_retry_preserves_selected_parent(tmp_path: Path, *, production_app, production_console) -> None:
     from html.parser import HTMLParser
     from src.heading_parent_list_v1 import parent_choice_list
 
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     sid = _ingest(console, accounts)["snapshot_id"]
     target = _plant_new_format_proposal(console, sid, _target(console, sid)["object_id"])
@@ -607,7 +607,7 @@ def test_strength_retry_preserves_selected_parent(tmp_path: Path) -> None:
                    if "Toelichting" in str(row))
     parent_id = heading["object_id"]
     before = deepcopy(console.snapshot_objects(sid))
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     data = {
         "snapshot_id": sid, "object_id": target["object_id"],

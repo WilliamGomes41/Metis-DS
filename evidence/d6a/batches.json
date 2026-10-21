@@ -588,5 +588,49 @@
     ],
     "full_suite_status": "pending",
     "ci_status": "not run: push approval pending"
+  },
+  {
+    "batch": "16",
+    "base": "089d66a",
+    "commit": "codex/d6a-16-semantics-reservations",
+    "test_files": [
+      "tests/test_d3_2_recommendation_semantics_proposal.py",
+      "tests/test_d3_3_human_recommendation_semantics.py",
+      "tests/test_d3_4_confirmed_recommendation_serving.py",
+      "tests/test_d4_2_relation_proposals.py",
+      "tests/test_d4_3_human_relation_confirmation.py",
+      "tests/test_d5_3b_review_routing_cutover.py",
+      "tests/test_resv1_reservation_configuration.py",
+      "tests/test_c2_pinned_configuration_fence.py",
+      "tests/test_c3_processing_admission.py",
+      "tests/test_reservation_contract_version.py",
+      "tests/test_attempt_diagnostics_v1.py",
+      "tests/test_wave5_gericht_vereenvoudigen.py",
+      "tests/test_wave_c_deploy_packaging.py",
+      "tests/test_v212_kernel_v211_ingest_v210_console.py",
+      "tests/test_vsa_f2_semantic_replay.py",
+      "tests/test_t11_knowledge_revision_lineage.py"
+    ],
+    "executed_unique_cases": 270,
+    "failures": 0,
+    "skipped": 0,
+    "renamed_cases": {
+      "test_file_adapter_restart_replay_and_activation": "test_production_adapter_restart_replay_and_activation",
+      "test_file_adapter_recovery_http_and_concurrent_consumption": "test_production_adapter_recovery_http_and_concurrent_consumption"
+    },
+    "verification": "270 unique cases pass across initial run and four repaired consumers. Recommendation/relation/reservation/replay use actual production PG; two explicitly file-specific duplicate-history cases remain file_topology. Production UI is exercised as the assigned reviewer.",
+    "junit": [
+      {
+        "file": "d6a16.xml",
+        "sha256": "1ab8c658d4b6cb8e99653eb474f9b0e2a85f6d56e39d65214e2a04bc00005ef7"
+      },
+      {
+        "file": "d6a16-fixed.xml",
+        "sha256": "19437df7f4906f007320acdbc087f70b77b3c39d4a1de79b541139e1d3cdf0a0"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending",
+    "local_preparation": "portion16-local-preparation.json"
   }
 ]

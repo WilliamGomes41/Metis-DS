@@ -319,3 +319,11 @@ vergelijking met de eerste lokale baseline. CI blijft afzonderlijk vereist.
 Portie 15: 296 unieke cases groen (220 + 76), inclusief drie aanvullende pure
 vlagproeven; geen skips. De T12-proef toetst zowel de productie-dispatch als de
 bestaande basisowner op dezelfde PG-console.
+
+Portie 16 zet de aanbevelings-/relatiebevestiging, reserveringsconfiguratie,
+replay, diagnostiek en oudere kernelproeven over. 270 unieke cases zijn groen,
+zonder skips. De hergebruikte diagnostiekproeven gebruiken nu de productieklasse
+in plaats van de oude bestandsadapter. De ongewijzigde twee JSON-historyproeven
+blijven expliciet `file_topology`; hun dubbele objecttuples zijn geen ondersteund
+PG-schema. De blocked-candidate UI-proef meldt de daadwerkelijk aangewezen reviewer
+aan, zodat de productiepoort de juiste werkpagina toont.

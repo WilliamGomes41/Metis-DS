@@ -60,13 +60,13 @@ def test_repeated_command_returns_existing_attempt_when_closed(monkeypatch):
     assert len(envelope['processing_attempts']) == 1
 
 
-def test_ingest_reservation_refused_when_admission_closed(tmp_path, monkeypatch):
-    console = _console(tmp_path)
+def test_ingest_reservation_refused_when_admission_closed(tmp_path, monkeypatch, *, production_console):
+    console = _console(tmp_path, production_console=production_console)
     bound(console, reject=False)
     monkeypatch.setenv(ENV, 'closed')
     with pytest.raises(ConsoleError, match='^processing_admission_closed$'):
         ingest(console)
-    restarted = _console(tmp_path)
+    restarted = _console(tmp_path, production_console=production_console)
     assert restarted._envelopes == {} and console._envelopes == {}
 
 
@@ -222,22 +222,22 @@ def _count_extract(console):
     return counter
 
 
-def test_e2e_llm_ingest_refused_before_extraction_when_admission_closed(tmp_path, monkeypatch):
+def test_e2e_llm_ingest_refused_before_extraction_when_admission_closed(tmp_path, monkeypatch, *, production_console):
     from tests.test_resv1_reservation_configuration import _counting_provider
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     provider = _counting_provider(console)
     extracted = _count_extract(console)
     monkeypatch.setenv(ENV, 'closed')
     with pytest.raises(ConsoleError, match='^processing_admission_closed$'):
         ingest(console)
     assert (extracted['n'], provider['n']) == (0, 0)
-    assert _console(tmp_path)._envelopes == {}
+    assert _console(tmp_path, production_console=production_console)._envelopes == {}
 
 
-def test_e2e_llm_ingest_extracts_once_when_admission_open(tmp_path, monkeypatch):
+def test_e2e_llm_ingest_extracts_once_when_admission_open(tmp_path, monkeypatch, *, production_console):
     from tests.test_resv1_reservation_configuration import _counting_provider
     monkeypatch.delenv(ENV, raising=False)
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     provider = _counting_provider(console)
     extracted = _count_extract(console)
     sid, _, _ = ingest(console)
@@ -245,8 +245,8 @@ def test_e2e_llm_ingest_extracts_once_when_admission_open(tmp_path, monkeypatch)
     assert console._envelope(sid)['processing_attempts'][-1]['state'] == 'succeeded'
 
 
-def test_e2e_non_llm_ingest_and_deterministic_reextract_run_when_admission_closed(tmp_path, monkeypatch):
-    console = _console(tmp_path)  # no semantic binding: deterministic, no attempt reserved
+def test_e2e_non_llm_ingest_and_deterministic_reextract_run_when_admission_closed(tmp_path, monkeypatch, *, production_console):
+    console = _console(tmp_path, production_console=production_console)  # no semantic binding: deterministic, no attempt reserved
     extracted = _count_extract(console)
     monkeypatch.setenv(ENV, 'closed')
     sid, actor, _ = ingest(console)
