@@ -103,3 +103,5 @@ storevariabelen en lokale CLI-start zijn daarom nog aanwezig.
 PR10: een gedeelde lockteller veroorzaakte een wisselende testuitkomst. De voorbereidingsproeven meten nu lockeigenaarschap per thread; bestaande rode/groene proef en alle 206 native acceptatiegevallen zijn vastgelegd in [het herstelbewijs](portion10-lock-observation-repair.json). Nieuwe volledige CI en tijdmeting zijn nog open.
 
 PR09/10: de volledige CI toonde één gemiste aanbevelingshelper-afnemer. De fixture- en consolefabriek zijn naar de introducerende portie verplaatst, met behoud van alle bestaande verwachtingen. Zie [het herstelbewijs](portion09-10-recommendation-boundary-repair.json); de nieuwe volledige CI-uitkomsten zijn nog open.
+
+PR09/10: de volledige suites waren op Python3.12 groen; een volgende bewijscheck herkende de hernoemde diagnosegevallen niet als PG. De bestaande gate blijft intact, met expliciete PG-test-IDs en 23/23 lokaal uitgevoerde diagnosegevallen op beide porties. Zie [het labelherstelbewijs](portion09-10-native-label-repair.json). Nieuwe exacte-head CI loopt nog.

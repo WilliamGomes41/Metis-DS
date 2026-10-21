@@ -1,12 +1,13 @@
 {
   "measured_commit": "bafa24395e8fe1a32e2dd5ab0a7afa34fca9978a",
-  "current_implementation_commit": "f9a378edde9b30d18a55e96a122f87b768b0e652",
+  "current_implementation_commit": "1b4bae82c5775f5321a37b9b7df75cdd30d0b620",
   "runtime_fixtures_and_measurement_runner_identical": true,
   "entire_source_tree_identical": false,
   "changed_files": [
     "scripts/export_test_evidence.py",
     "tests/test_a04_session_availability.py",
     "tests/test_availability_repair.py",
+    "tests/test_blockage_diagnostics_v1.py",
     "tests/test_recommendation_context_postgres.py",
     "tests/test_release_control_preflight.py"
   ],
@@ -15,5 +16,6 @@
   "whole_suite_not_rerun_after_ci_only_changes": false,
   "post_measurement_test_probe_change": "portion10-lock-observation-repair.json",
   "whole_suite_not_rerun_after_ci_and_test_observation_changes": true,
-  "post_measurement_consumer_factory_change": "portion09-10-recommendation-boundary-repair.json"
+  "post_measurement_consumer_factory_change": "portion09-10-recommendation-boundary-repair.json",
+  "post_measurement_native_test_ids": "portion09-10-native-label-repair.json"
 }

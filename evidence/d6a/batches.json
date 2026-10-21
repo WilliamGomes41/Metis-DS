@@ -551,7 +551,7 @@
     "current_delivery": {
       "portion": "09",
       "head": "codex/d6a-09-source-formation",
-      "head_commit": "0920b990905adc5527d1e0de8d84febf058cb3ac",
+      "head_commit": "96a19fdcb1c8de28161ef614356736ebe343d6a4",
       "base": "codex/d6a-08-key-list",
       "base_commit": "39127a5206e913d27af1e5e3b62fc30758d2e2d0",
       "test_files": [
@@ -578,12 +578,13 @@
       ],
       "changed_test_files": 20,
       "support_files": [],
-      "ci_status": "native recommendation story boundary repaired; targeted tests passed; full exact-head CI running",
+      "ci_status": "full suite passed on previous head; native diagnostic IDs repaired; new exact-head CI running",
       "delivery": "published reviewable branch",
       "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/799",
       "publication_evidence": "portions06-10-publication.json",
       "boundary_repair_evidence": "portion09-fixture-boundary-repair.json",
-      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json"
+      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
+      "native_label_repair": "portion09-10-native-label-repair.json"
     },
     "introducing_portion_consumer_proof": [
       {
@@ -630,9 +631,9 @@
     "current_delivery": {
       "portion": "10",
       "head": "codex/d6a-10-processing-routes",
-      "head_commit": "adf783bdf762abfce63f7bc9a3504571f13131ad",
+      "head_commit": "22f903402c386d16108bc3757b72e3caf33ad5c8",
       "base": "codex/d6a-09-source-formation",
-      "base_commit": "0920b990905adc5527d1e0de8d84febf058cb3ac",
+      "base_commit": "96a19fdcb1c8de28161ef614356736ebe343d6a4",
       "test_files": [
         "tests/test_a04_session_availability.py",
         "tests/test_admission_language_variation.py",
@@ -656,13 +657,14 @@
         "tests/conftest.py",
         "tests/production_support.py"
       ],
-      "ci_status": "native recommendation story boundary repaired; targeted tests passed; full exact-head CI running",
+      "ci_status": "full suite passed on previous head; native diagnostic IDs repaired; new exact-head CI running",
       "delivery": "published reviewable branch",
       "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/800",
       "publication_evidence": "portions06-10-publication.json",
       "boundary_repair_evidence": "portion09-fixture-boundary-repair.json",
       "lock_observation_repair": "portion10-lock-observation-repair.json",
-      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json"
+      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
+      "native_label_repair": "portion09-10-native-label-repair.json"
     }
   },
   {
@@ -701,9 +703,9 @@
     "current_delivery": {
       "portion": "11",
       "head": "codex/d6a-11-native-composition",
-      "head_commit": "4408f28cbc1219f0d43a6af72795b84721858753",
+      "head_commit": "6e9122bbf48ccfae168345795219ffeebbf3c771",
       "base": "codex/fix-pg-command-review-evidence",
-      "base_commit": "35d7abbf2d77630c5cc0fab1e9952ca378b83a94",
+      "base_commit": "fc245d52e3edc3afa346ed0e8a7474dd09963af9",
       "test_files": [
         "tests/test_678_store_command_postgres.py",
         "tests/test_a03_formation_coverage.py",
@@ -724,7 +726,8 @@
       "ci_status": "not started; branch pushed, no PR opened",
       "delivery": "published reviewable branch",
       "lock_observation_repair": "portion10-lock-observation-repair.json",
-      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json"
+      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
+      "native_label_repair": "portion09-10-native-label-repair.json"
     },
     "introducing_portion_consumer_proof": [
       {
@@ -772,9 +775,9 @@
     "current_delivery": {
       "portion": "12",
       "head": "codex/d6a-12-source-context",
-      "head_commit": "8ce5e7d4e0fc403676d93c2ce69a74d1a81a5b20",
+      "head_commit": "1e937b248b375266a1adbf4451e9623e98f731da",
       "base": "codex/d6a-11-native-composition",
-      "base_commit": "4408f28cbc1219f0d43a6af72795b84721858753",
+      "base_commit": "6e9122bbf48ccfae168345795219ffeebbf3c771",
       "test_files": [
         "tests/test_a06_selected_occurrence_relations.py",
         "tests/test_a07_strength_binding.py",
@@ -792,7 +795,8 @@
       "ci_status": "not started; branch pushed, no PR opened",
       "delivery": "published reviewable branch",
       "lock_observation_repair": "portion10-lock-observation-repair.json",
-      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json"
+      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
+      "native_label_repair": "portion09-10-native-label-repair.json"
     }
   },
   {
@@ -840,9 +844,9 @@
     "current_delivery": {
       "portion": "13",
       "head": "codex/d6a-13-navigation-auth",
-      "head_commit": "0c33ce622aea96cfc0e7e230d1d3766b82d37904",
+      "head_commit": "5d2ecf3fc50d9e10d9b4ec5bb263a904706afee0",
       "base": "codex/d6a-12-source-context",
-      "base_commit": "8ce5e7d4e0fc403676d93c2ce69a74d1a81a5b20",
+      "base_commit": "1e937b248b375266a1adbf4451e9623e98f731da",
       "test_files": [
         "tests/test_account_retirement_v1.py",
         "tests/test_console_access_availability.py",
@@ -864,7 +868,8 @@
       "ci_status": "not started; branch pushed, no PR opened",
       "delivery": "published reviewable branch",
       "lock_observation_repair": "portion10-lock-observation-repair.json",
-      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json"
+      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
+      "native_label_repair": "portion09-10-native-label-repair.json"
     },
     "introducing_portion_consumer_proof": [
       {
@@ -918,9 +923,9 @@
     "current_delivery": {
       "portion": "14",
       "head": "codex/d6a-14-workboards",
-      "head_commit": "c33c129d39cc9dc3307d063e0fafc200b0e4aeb4",
+      "head_commit": "0372dc977b54d0ca544d8b81c2080be7d116d84e",
       "base": "codex/d6a-13-navigation-auth",
-      "base_commit": "0c33ce622aea96cfc0e7e230d1d3766b82d37904",
+      "base_commit": "5d2ecf3fc50d9e10d9b4ec5bb263a904706afee0",
       "test_files": [
         "tests/test_console_cleanup_v1.py",
         "tests/test_console_feedback_v1.py",
@@ -940,7 +945,8 @@
       "ci_status": "not started; branch pushed, no PR opened",
       "delivery": "published reviewable branch",
       "lock_observation_repair": "portion10-lock-observation-repair.json",
-      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json"
+      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
+      "native_label_repair": "portion09-10-native-label-repair.json"
     },
     "introducing_portion_consumer_proof": [
       {
@@ -999,9 +1005,9 @@
     "current_delivery": {
       "portion": "15",
       "head": "codex/d6a-15-decision-console",
-      "head_commit": "3887f8635e905539f1e2cf3335360175afe3615d",
+      "head_commit": "6d0beec8a946f67007be31d96795fdf781abae7c",
       "base": "codex/d6a-14-workboards",
-      "base_commit": "c33c129d39cc9dc3307d063e0fafc200b0e4aeb4",
+      "base_commit": "0372dc977b54d0ca544d8b81c2080be7d116d84e",
       "test_files": [
         "tests/test_665_tier_d_refused_postgres.py",
         "tests/test_a08_heading_batch_atomic.py",
@@ -1028,7 +1034,8 @@
       "ci_status": "not started; branch pushed, no PR opened",
       "delivery": "published reviewable branch",
       "lock_observation_repair": "portion10-lock-observation-repair.json",
-      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json"
+      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
+      "native_label_repair": "portion09-10-native-label-repair.json"
     },
     "introducing_portion_consumer_proof": [
       {
@@ -1082,9 +1089,9 @@
     "current_delivery": {
       "portion": "16",
       "head": "codex/d6a-16-semantics-reservations",
-      "head_commit": "3ca7417eab1e6212ecba91bf6cfef5304d26ba98",
+      "head_commit": "b900d3ba1d0f8f94a33895f14d7fd45341b7f42c",
       "base": "codex/d6a-15-decision-console",
-      "base_commit": "3887f8635e905539f1e2cf3335360175afe3615d",
+      "base_commit": "6d0beec8a946f67007be31d96795fdf781abae7c",
       "test_files": [
         "tests/test_attempt_diagnostics_v1.py",
         "tests/test_c2_pinned_configuration_fence.py",
@@ -1107,7 +1114,8 @@
       "ci_status": "not started; branch pushed, no PR opened",
       "delivery": "published reviewable branch",
       "lock_observation_repair": "portion10-lock-observation-repair.json",
-      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json"
+      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
+      "native_label_repair": "portion09-10-native-label-repair.json"
     },
     "introducing_portion_consumer_proof": [
       {
@@ -1158,9 +1166,9 @@
     "current_delivery": {
       "portion": "17",
       "head": "codex/d6a-17-publication-authority",
-      "head_commit": "b9ca8b2f1908bf69349409631241568be5fdb298",
+      "head_commit": "ca3c6ea1d6d0b4979bc3f9267c158e05f4fb43de",
       "base": "codex/d6a-16-semantics-reservations",
-      "base_commit": "3ca7417eab1e6212ecba91bf6cfef5304d26ba98",
+      "base_commit": "b900d3ba1d0f8f94a33895f14d7fd45341b7f42c",
       "test_files": [
         "tests/test_azure_blob_publication_authority_v1.py",
         "tests/test_console_publication_c5.py",
@@ -1178,7 +1186,8 @@
       "ci_status": "not started; branch pushed, no PR opened",
       "delivery": "published reviewable branch",
       "lock_observation_repair": "portion10-lock-observation-repair.json",
-      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json"
+      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
+      "native_label_repair": "portion09-10-native-label-repair.json"
     }
   },
   {
@@ -1224,9 +1233,9 @@
     "current_delivery": {
       "portion": "18",
       "head": "codex/d6a-18-review-surfaces",
-      "head_commit": "2ec8b7031009a38b430c76dbe69fa71f43598f25",
+      "head_commit": "8753208d01d5518f2d50ff6fdaad0c5be6f1edae",
       "base": "codex/d6a-17-publication-authority",
-      "base_commit": "b9ca8b2f1908bf69349409631241568be5fdb298",
+      "base_commit": "ca3c6ea1d6d0b4979bc3f9267c158e05f4fb43de",
       "test_files": [
         "tests/test_deterministic_review_repair_v1.py",
         "tests/test_ingest_beschikbaarheid.py",
@@ -1244,7 +1253,8 @@
       "ci_status": "not started; branch pushed, no PR opened",
       "delivery": "published reviewable branch",
       "lock_observation_repair": "portion10-lock-observation-repair.json",
-      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json"
+      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
+      "native_label_repair": "portion09-10-native-label-repair.json"
     }
   },
   {
@@ -1299,9 +1309,9 @@
     "current_delivery": {
       "portion": "19",
       "head": "codex/d6a-19-runtime-boundaries",
-      "head_commit": "8291e49d2e694454f45c77ec7a89b98f8c6358e8",
+      "head_commit": "6a206ad2de38bad29cfd9a597c17ca6d64e7718e",
       "base": "codex/d6a-18-review-surfaces",
-      "base_commit": "2ec8b7031009a38b430c76dbe69fa71f43598f25",
+      "base_commit": "8753208d01d5518f2d50ff6fdaad0c5be6f1edae",
       "test_files": [
         "tests/test_665_tier_d_refused_postgres.py",
         "tests/test_718_workflow_topology.py",
@@ -1331,7 +1341,8 @@
       "ci_status": "not started; branch pushed, no PR opened",
       "delivery": "published reviewable branch",
       "lock_observation_repair": "portion10-lock-observation-repair.json",
-      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json"
+      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
+      "native_label_repair": "portion09-10-native-label-repair.json"
     },
     "executed_unique_cases": 330
   },
@@ -1408,9 +1419,9 @@
     "current_delivery": {
       "portion": "21",
       "head": "codex/d6a-21-characterization",
-      "head_commit": "7acc1dbd85a51f040716f5d77e4d990a11fb5481",
+      "head_commit": "e5591e56b88e548faecb6933814c60953a2404bc",
       "base": "codex/d6a-19-runtime-boundaries",
-      "base_commit": "8291e49d2e694454f45c77ec7a89b98f8c6358e8",
+      "base_commit": "6a206ad2de38bad29cfd9a597c17ca6d64e7718e",
       "test_files": [
         "tests/test_lane_total_672_v1.py",
         "tests/test_review_overview_v1.py"
@@ -1423,7 +1434,8 @@
       "ci_status": "not started; branch pushed, no PR opened",
       "delivery": "published reviewable branch",
       "lock_observation_repair": "portion10-lock-observation-repair.json",
-      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json"
+      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
+      "native_label_repair": "portion09-10-native-label-repair.json"
     },
     "additional_junit": [
       {
@@ -1458,9 +1470,9 @@
     "current_delivery": {
       "portion": "22",
       "head": "codex/d6a-22-batch-authority",
-      "head_commit": "f9a378edde9b30d18a55e96a122f87b768b0e652",
+      "head_commit": "1b4bae82c5775f5321a37b9b7df75cdd30d0b620",
       "base": "codex/d6a-21-characterization",
-      "base_commit": "7acc1dbd85a51f040716f5d77e4d990a11fb5481",
+      "base_commit": "e5591e56b88e548faecb6933814c60953a2404bc",
       "test_files": [
         "tests/test_v233_product_proportionate_review.py"
       ],
@@ -1471,7 +1483,8 @@
       "ci_status": "not started; branch pushed, no PR opened",
       "delivery": "published reviewable branch",
       "lock_observation_repair": "portion10-lock-observation-repair.json",
-      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json"
+      "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
+      "native_label_repair": "portion09-10-native-label-repair.json"
     }
   }
 ]

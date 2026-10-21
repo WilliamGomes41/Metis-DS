@@ -1,0 +1,184 @@
+{
+  "change_class": "C",
+  "rewrite_risk": "none",
+  "runtime_changes": false,
+  "promise": "The existing native blockage evidence gate recognizes the already PostgreSQL-only first-start and restart cases.",
+  "cause": "The fixture migrated to production_console and renamed its parameter slots from backend names to first-start/restart. CI still requires a postgres label to recognize native execution. Explicit pytest ids restore that label while keeping parameter values and all assertions unchanged.",
+  "evidence_gate_changed": false,
+  "assertions_changed": false,
+  "cases_added_or_removed": false,
+  "original_gate_red": {
+    "junit": "d6a-blockage-before.xml",
+    "tests": 23,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "sha256": "a109ef9d524d2cd6d280b1a699e25064923e94f95edd7bd5a6109ce3bcd8452c",
+    "assertion": "No native blockage proof"
+  },
+  "checks": [
+    {
+      "junit": "d6a09-blockage-native.xml",
+      "sha256": "6634f4d18cf0540ae8e7e991a1590c140d1b364e1707880b037518de9bcc6a1d",
+      "tests": 23,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "junit": "d6a10-blockage-native.xml",
+      "sha256": "c7d8a9ce193f4c7ef01c9e6ab60bb479063b28f8e18688241f4de19198221e3d",
+      "tests": 23,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "case_identity": "Identical after stripping only the explicit postgres- prefix from first-start/restart IDs.",
+  "previous_full_suite_results": [
+    {
+      "pr": 799,
+      "run": 39576308383,
+      "job": 119142653793,
+      "python": "3.12",
+      "passed": 5658,
+      "optional_skips": 27,
+      "xfails": 6,
+      "postgres_skips": 0,
+      "seconds": 2347.08,
+      "subsequent_job_failure": "No native blockage proof"
+    },
+    {
+      "pr": 800,
+      "run": 39576306888,
+      "job": 119142665150,
+      "python": "3.12",
+      "passed": 5658,
+      "optional_skips": 27,
+      "xfails": 6,
+      "postgres_skips": 0,
+      "seconds": 2654.04,
+      "subsequent_job_failure": "No native blockage proof"
+    }
+  ],
+  "source_propagation": [
+    {
+      "portion": "09",
+      "before": "0920b990905adc5527d1e0de8d84febf058cb3ac",
+      "after": "96a19fdcb1c8de28161ef614356736ebe343d6a4",
+      "changed_files": [
+        "tests/test_blockage_diagnostics_v1.py"
+      ]
+    },
+    {
+      "portion": "10",
+      "before": "adf783bdf762abfce63f7bc9a3504571f13131ad",
+      "after": "22f903402c386d16108bc3757b72e3caf33ad5c8",
+      "changed_files": [
+        "tests/test_blockage_diagnostics_v1.py"
+      ]
+    },
+    {
+      "portion": "review-evidence-prerequisite",
+      "before": "35d7abbf2d77630c5cc0fab1e9952ca378b83a94",
+      "after": "fc245d52e3edc3afa346ed0e8a7474dd09963af9",
+      "changed_files": [
+        "tests/test_blockage_diagnostics_v1.py"
+      ]
+    },
+    {
+      "portion": "11",
+      "before": "4408f28cbc1219f0d43a6af72795b84721858753",
+      "after": "6e9122bbf48ccfae168345795219ffeebbf3c771",
+      "changed_files": [
+        "tests/test_blockage_diagnostics_v1.py"
+      ]
+    },
+    {
+      "portion": "12",
+      "before": "8ce5e7d4e0fc403676d93c2ce69a74d1a81a5b20",
+      "after": "1e937b248b375266a1adbf4451e9623e98f731da",
+      "changed_files": [
+        "tests/test_blockage_diagnostics_v1.py"
+      ]
+    },
+    {
+      "portion": "13",
+      "before": "0c33ce622aea96cfc0e7e230d1d3766b82d37904",
+      "after": "5d2ecf3fc50d9e10d9b4ec5bb263a904706afee0",
+      "changed_files": [
+        "tests/test_blockage_diagnostics_v1.py"
+      ]
+    },
+    {
+      "portion": "14",
+      "before": "c33c129d39cc9dc3307d063e0fafc200b0e4aeb4",
+      "after": "0372dc977b54d0ca544d8b81c2080be7d116d84e",
+      "changed_files": [
+        "tests/test_blockage_diagnostics_v1.py"
+      ]
+    },
+    {
+      "portion": "15",
+      "before": "3887f8635e905539f1e2cf3335360175afe3615d",
+      "after": "6d0beec8a946f67007be31d96795fdf781abae7c",
+      "changed_files": [
+        "tests/test_blockage_diagnostics_v1.py"
+      ]
+    },
+    {
+      "portion": "16",
+      "before": "3ca7417eab1e6212ecba91bf6cfef5304d26ba98",
+      "after": "b900d3ba1d0f8f94a33895f14d7fd45341b7f42c",
+      "changed_files": [
+        "tests/test_blockage_diagnostics_v1.py"
+      ]
+    },
+    {
+      "portion": "17",
+      "before": "b9ca8b2f1908bf69349409631241568be5fdb298",
+      "after": "ca3c6ea1d6d0b4979bc3f9267c158e05f4fb43de",
+      "changed_files": [
+        "tests/test_blockage_diagnostics_v1.py"
+      ]
+    },
+    {
+      "portion": "18",
+      "before": "2ec8b7031009a38b430c76dbe69fa71f43598f25",
+      "after": "8753208d01d5518f2d50ff6fdaad0c5be6f1edae",
+      "changed_files": [
+        "tests/test_blockage_diagnostics_v1.py"
+      ]
+    },
+    {
+      "portion": "19",
+      "before": "8291e49d2e694454f45c77ec7a89b98f8c6358e8",
+      "after": "6a206ad2de38bad29cfd9a597c17ca6d64e7718e",
+      "changed_files": [
+        "tests/test_blockage_diagnostics_v1.py"
+      ]
+    },
+    {
+      "portion": "21",
+      "before": "7acc1dbd85a51f040716f5d77e4d990a11fb5481",
+      "after": "e5591e56b88e548faecb6933814c60953a2404bc",
+      "changed_files": [
+        "tests/test_blockage_diagnostics_v1.py"
+      ]
+    },
+    {
+      "portion": "22",
+      "before": "96b66523ccdc2054e6566c0b43723a4a9665532f",
+      "after": "1b4bae82c5775f5321a37b9b7df75cdd30d0b620",
+      "changed_files": [
+        "tests/test_blockage_diagnostics_v1.py"
+      ]
+    }
+  ],
+  "new_ci": {
+    "portion09": 39583790280,
+    "portion10": 39583789282,
+    "status": "running on label-corrected heads"
+  },
+  "scope_limit": "This is a repair of test evidence metadata. D6a and D6b completion are not claimed."
+}

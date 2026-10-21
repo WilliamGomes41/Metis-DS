@@ -95,5 +95,6 @@
   "portions06_10_publication": "portions06-10-publication.json",
   "portion09_boundary_repair": "portion09-fixture-boundary-repair.json",
   "portion10_lock_observation_repair": "portion10-lock-observation-repair.json",
-  "portion09_10_recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json"
+  "portion09_10_recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
+  "portion09_10_native_label_repair": "portion09-10-native-label-repair.json"
 }
