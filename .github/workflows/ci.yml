@@ -160,9 +160,26 @@ jobs:
       - name: Product API v1 backward compatibility
         run: python scripts/product_api_contract.py --check --base-ref origin/main
       - run: python -m compileall -q src tests
+      - name: D6a baseline on the unchanged main base
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'codex/d6a') && matrix.python-version == '3.13'
+        run: python scripts/measure_test_suite.py --ref 9fa2004 --output output/d6a-before.json
+      - name: Full suite with timing and zero PostgreSQL skips
+        if: ${{ !cancelled() }}
+        run: |
+          python scripts/benchmark_test_database.py > output/d6a-database-benchmark.json
+          args=()
+          if [ -f output/d6a-before.json ]; then args+=(--compare output/d6a-before.json); fi
+          python scripts/measure_test_suite.py --output output/d6a-after.json "${args[@]}"
+      - name: Upload suite timing and executed test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: suite-timing-${{ matrix.python-version }}
+          path: output/d6a-*
+          if-no-files-found: warn
       - name: D5 PostgreSQL lifecycle without disk mirrors
         run: |
-          pytest -q -rx tests/test_pg_console_without_disk_mirrors.py tests/test_d5_pg_recovery_and_source_v1.py tests/test_d5_code_rollback_postgres.py tests/test_d5_two_workers_postgres.py --junitxml=output/pg-without-mirrors.xml
+          python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/pg-without-mirrors.xml tests/test_pg_console_without_disk_mirrors.py tests/test_d5_pg_recovery_and_source_v1.py tests/test_d5_code_rollback_postgres.py tests/test_d5_two_workers_postgres.py
           python - <<'PYCODE'
           import xml.etree.ElementTree as ET
           root = ET.parse('output/pg-without-mirrors.xml').getroot()
@@ -188,11 +205,9 @@ jobs:
           name: pg-without-mirrors-${{ matrix.python-version }}
           path: output/pg-without-mirrors.xml
           if-no-files-found: error
-      - name: Verify architecture invariants
-        run: pytest -q tests/test_architecture_invariants.py
       - name: Verify reprocessing owner guard and PG state against native PostgreSQL (#708)
         run: |
-          pytest -q tests/test_708_reprocessing_guard_postgres.py --junitxml=output/reprocessing-708.xml
+          python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/reprocessing-708.xml tests/test_708_reprocessing_guard_postgres.py
           python - <<'PYCODE'
           import xml.etree.ElementTree as ET
           root = ET.parse("output/reprocessing-708.xml").getroot()
@@ -202,7 +217,7 @@ jobs:
           PYCODE
       - name: Verify blockage diagnostics and native read-only access
         run: |
-          pytest -q tests/test_blockage_diagnostics_v1.py --junitxml=output/blockage-diagnostics.xml
+          python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/blockage-diagnostics.xml tests/test_blockage_diagnostics_v1.py
           python - <<'PYCODE'
           import xml.etree.ElementTree as ET
           root = ET.parse("output/blockage-diagnostics.xml").getroot()
@@ -216,7 +231,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -o pipefail; mkdir -p output
-          pytest -rA -q tests/test_publish_refusal_audit_postgres_v1.py tests/test_migration_018_postgres_v1.py --junitxml=output/refusal-postgres.xml | tee output/refusal-postgres.txt
+          python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/refusal-postgres.xml tests/test_publish_refusal_audit_postgres_v1.py tests/test_migration_018_postgres_v1.py | tee output/refusal-postgres.txt
           python - <<'PYCODE'
           import xml.etree.ElementTree as ET
           root = ET.parse("output/refusal-postgres.xml").getroot()
@@ -228,7 +243,7 @@ jobs:
           PYCODE
       - name: Verify A10 source repair against native PostgreSQL
         if: ${{ !cancelled() }}
-        run: pytest -q tests/test_a10_source_cache_repair.py --junitxml=output/a10-native.xml
+        run: python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/a10-native.xml tests/test_a10_source_cache_repair.py
       - name: Require executed A10 evidence without skipped cases
         if: ${{ !cancelled() }}
         run: |
@@ -285,7 +300,7 @@ jobs:
           if-no-files-found: error
       - name: Verify A08 atomic heading batches against native PostgreSQL
         if: ${{ !cancelled() }}
-        run: pytest -q tests/test_a08_heading_batch_atomic.py --junitxml=output/a08-native.xml
+        run: python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/a08-native.xml tests/test_a08_heading_batch_atomic.py
       - name: Require executed A08 native evidence without skipped cases
         if: ${{ !cancelled() }}
         run: |
@@ -315,35 +330,10 @@ jobs:
           name: a08-native-${{ matrix.python-version }}
           path: output/a08-native.xml
           if-no-files-found: error
-      - name: Verify extraction workload metrics
-        run: pytest -q tests/test_extract_metrics_wave4_quality_claim.py tests/test_extract_metrics_independent_quality.py
-      - name: Verify T11 knowledge revision lineage
-        run: pytest -q tests/test_t11_knowledge_revision_lineage.py
-      - name: Verify T10 source accountability authority
-        run: pytest -q tests/test_t10_source_accountability_authority.py tests/test_source_containers_v1.py tests/test_source_context_review_v1.py
-      - name: Verify T9 ReviewKnowledge authority
-        run: pytest -q tests/test_t9_review_knowledge_authority.py
-      - name: Verify T8 materialisation and Admission integrity
-        run: pytest -q tests/test_t8_materialisation_admission_integrity.py
-      - name: Verify T8 compatibility regressions
-        if: ${{ !cancelled() }}
-        run: pytest -q tests/test_d2b2b_admission_completeness.py tests/test_d2b2c_candidate_eligibility.py tests/test_source2_html_pipeline.py tests/test_source_bound_context.py tests/test_source_bound_fields_v2.py tests/test_source_layout_v1.py tests/test_source_mapping_regressions.py tests/test_v230_phase1_admission_gate.py tests/test_v230_phase2_deep_context_scan.py tests/test_v233_review_audit_regressions.py
-      - name: Verify A06 selected occurrence endpoints on native PostgreSQL
-        if: ${{ !cancelled() }}
-        run: pytest -q tests/test_a06_selected_occurrence_relations.py
-      - name: Verify T7 duplicate candidate integrity
-        if: ${{ !cancelled() }}
-        run: pytest -q tests/test_t7_duplicate_candidate_integrity.py tests/test_pre_review_semantic_v1.py::test_source_authority_does_not_erase_selected_semantics_when_primary_is_coverage tests/test_v221_wave_a_knowledge_object_bounds.py::test_splitter_yields_complete_units_with_bronpassage_and_locator tests/test_v221_wave_a_knowledge_object_bounds.py::test_stamps_attach_to_following_advice_and_are_not_objects
-      - name: Verify T5-T7 audit regressions
-        if: ${{ !cancelled() }}
-        run: pytest -q tests/test_t4_single_knowledge_path_invariants.py tests/test_t5_t7_audit_repairs.py tests/test_t7_creator_cut.py tests/test_d5_3a_binding_aware_review_duty.py tests/test_d5_3b_review_routing_cutover.py tests/test_review_queue_sql_parity_v1.py
-      - name: Verify lifecycle compatibility regressions
-        if: ${{ !cancelled() }}
-        run: pytest -q tests/test_console_review_completeness.py tests/test_d3_3_human_recommendation_semantics.py tests/test_d4_3_human_relation_confirmation.py tests/test_processing_retry_postgres.py tests/test_protocol_v2_13_kernel.py tests/test_v212_kernel_v211_ingest_v210_console.py tests/test_v215_ingest_date_version_review_lanes.py tests/test_v216_review_page_researcher_bar.py tests/test_v228_structural_heading_nav_and_confirmed_strength_gate.py tests/test_v230_phase3_review_cockpit.py tests/test_v230_phase4_passage_register_coverage_gold.py tests/test_wave5_gericht_vereenvoudigen.py tests/test_lifecycle_withdrawal_recovery_v1.py tests/test_source_bound_continuation_repair.py
       - name: Verify durable processing trace and restart evidence
         if: ${{ !cancelled() }}
         run: |
-          pytest -q tests/test_processing_trace_v1.py --junitxml=output/processing-trace.xml
+          python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/processing-trace.xml tests/test_processing_trace_v1.py
           python - <<'PYCODE'
           import xml.etree.ElementTree as ET
           root = ET.parse("output/processing-trace.xml").getroot()
@@ -352,23 +342,6 @@ jobs:
           assert not list(root.iter("skipped")), "Processing trace proof must execute every backend"
           assert not list(root.iter("failure")) and not list(root.iter("error")), "Processing trace proof failed"
           PYCODE
-      - name: D6a baseline on the unchanged main base
-        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'codex/d6a') && matrix.python-version == '3.13'
-        run: python scripts/measure_test_suite.py --ref 9fa2004 --output output/d6a-before.json
-      - name: Full suite with timing and zero PostgreSQL skips
-        if: ${{ !cancelled() }}
-        run: |
-          python scripts/benchmark_test_database.py > output/d6a-database-benchmark.json
-          args=()
-          if [ -f output/d6a-before.json ]; then args+=(--compare output/d6a-before.json); fi
-          python scripts/measure_test_suite.py --output output/d6a-after.json "${args[@]}"
-      - name: Upload suite timing and executed test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: suite-timing-${{ matrix.python-version }}
-          path: output/d6a-*
-          if-no-files-found: warn
       - name: Install isolated browser test tooling
         if: matrix.python-version == '3.12'
         run: |
