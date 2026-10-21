@@ -10,7 +10,7 @@ from tests.test_decision_graph_chain import _accounts, _ingest_boom, policy, sou
 
 
 @pytest.mark.parametrize("backend", ["local", "postgres"])
-def test_timeout_after_source_storage_then_retry_and_restart(tmp_path, monkeypatch, backend, *, complete_postgres):
+def test_timeout_after_source_storage_then_retry_and_restart(tmp_path, monkeypatch, backend, *, complete_postgres, production_console):
     if backend == "postgres":
         from tests.decision_graph_native_support import native_state
         state, _, source = native_state(tmp_path, config=complete_postgres)
@@ -19,7 +19,7 @@ def test_timeout_after_source_storage_then_retry_and_restart(tmp_path, monkeypat
         from tests.test_durable_publication_console_v1 import MemorySourceStore
         source = MemorySourceStore()
         def state():
-            return DurablePublicationConsole(root=tmp_path, source_store=tmp_path / "sources",
+            return production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources",
                 runtime=tmp_path / "runtime", immutable_source_store=source)
     console = state()
     accounts = _accounts(console)

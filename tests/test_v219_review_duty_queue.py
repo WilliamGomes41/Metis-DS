@@ -33,7 +33,6 @@ from src.object_taxonomy_v1 import (
     recommendation_strength_ui_applies,
 )
 from src.open_original_v1 import researcher_visible_prose
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import (
     ConsoleError,
     OperationsConsole,
@@ -62,8 +61,8 @@ OVERWEEG = (
 )
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -121,8 +120,8 @@ def _ingest(
     return console.ingest(**defaults)
 
 
-def _client(console: OperationsConsole, username: str = "reviewer.bert") -> TestClient:
-    client = TestClient(create_console_app(console))
+def _client(console: OperationsConsole, username: str='reviewer.bert', *, production_app) -> TestClient:
+    client = TestClient(production_app(console))
     passwords = {
         "reviewer.bert": "bert-secret",
         "researcher.anne": "anne-secret",
@@ -378,12 +377,10 @@ def test_old_queue_would_require_2008_inhoud_cards_new_duty_does_not() -> None:
     assert leftover_ids.isdisjoint({obj["object_id"] for obj in koppen})
 
 
-def test_researchers_are_not_required_to_open_thousands_of_inhoud_cards(
-    tmp_path: Path,
-) -> None:
+def test_researchers_are_not_required_to_open_thousands_of_inhoud_cards(tmp_path: Path, *, production_app, production_console) -> None:
     leftover_n = 40
     freeze = _duty_html(leftover=leftover_n)
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=freeze, filename="wachtrij.html", title="Wachtrij"
@@ -398,7 +395,7 @@ def test_researchers_are_not_required_to_open_thousands_of_inhoud_cards(
     assert len(old_inhoud) >= leftover_n
     assert len(leftover) >= leftover_n
     assert duty == []
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
     html = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
     control = client.get(f"/review?document={receipt['snapshot_id']}&task=inventory").text
@@ -419,10 +416,8 @@ def test_researchers_are_not_required_to_open_thousands_of_inhoud_cards(
         assert obj in console.snapshot_objects(receipt["snapshot_id"])
 
 
-def test_leftover_unclassified_stays_in_store_and_is_openable_not_duty(
-    tmp_path: Path,
-) -> None:
-    console = _console(tmp_path)
+def test_leftover_unclassified_stays_in_store_and_is_openable_not_duty(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=_duty_html(leftover=8), filename="open.html", title="Open"
@@ -430,10 +425,10 @@ def test_leftover_unclassified_stays_in_store_and_is_openable_not_duty(
     leftover = remaining_unclassified(
         _non_document(console.snapshot_objects(receipt["snapshot_id"])), fragments=source_fragments())
     planted = leftover[0]
-    list_html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    list_html = _client(console, production_app=production_app).get(f"/review?document={receipt['snapshot_id']}").text
     slow = _section(list_html, "review-lane-slow")
     assert planted["object_id"] not in slow
-    card = _client(console).get(
+    card = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={planted['object_id']}"
     ).text
     assert _text_of(planted) in _visible_text(card)
@@ -446,10 +441,8 @@ def test_leftover_unclassified_stays_in_store_and_is_openable_not_duty(
 # ---------------------------------------------------------------------------
 
 
-def test_koppen_remain_batch_confirmable_as_structure_never_advice(
-    tmp_path: Path,
-) -> None:
-    console = _console(tmp_path)
+def test_koppen_remain_batch_confirmable_as_structure_never_advice(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=_duty_html(leftover=5), filename="koppen.html", title="Koppen"
@@ -458,7 +451,7 @@ def test_koppen_remain_batch_confirmable_as_structure_never_advice(
     koppen, _ = review_stacks(objects)
     assert koppen
     assert all(review_lane(obj) == "fast" for obj in koppen)
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&task=headings"
     ).text
     fast = _section(html, "review-lane-fast")
@@ -483,10 +476,8 @@ def test_koppen_remain_batch_confirmable_as_structure_never_advice(
         assert is_advice_weight("action_advice", published_object_type(row)) is False
 
 
-def test_batch_confirm_rejects_slow_duty_and_leftover_unclassified(
-    tmp_path: Path,
-) -> None:
-    console = _console(tmp_path)
+def test_batch_confirm_rejects_slow_duty_and_leftover_unclassified(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=_duty_html(leftover=5), filename="batch.html", title="Batch"
@@ -545,8 +536,8 @@ def test_slow_duty_is_recommendation_condition_exception_and_high_risk() -> None
     assert requires_four_eyes(high) is True
 
 
-def test_console_inhoud_lists_only_slow_duty_cards(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_console_inhoud_lists_only_slow_duty_cards(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=_duty_html(leftover=12), filename="plicht.html", title="Plicht"
@@ -554,7 +545,7 @@ def test_console_inhoud_lists_only_slow_duty_cards(tmp_path: Path) -> None:
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     duty = slow_review_duty(objects, fragments=console.review_source_fragments(receipt["snapshot_id"]))
     leftover = remaining_unclassified(objects, fragments=source_fragments())
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     html = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
     slow = _section(html, "review-lane-slow")
     titles = _index_link_titles(slow)
@@ -563,7 +554,7 @@ def test_console_inhoud_lists_only_slow_duty_cards(tmp_path: Path) -> None:
         assert any(
             _text_of(obj)[:40] in title or title[:40] in _text_of(obj) for title in titles
         )
-        card = _client(console).get(
+        card = _client(console, production_app=production_app).get(
             f"/review?document={receipt['snapshot_id']}&object={obj['object_id']}"
         ).text
         assert "review-card-two-column" in card
@@ -583,8 +574,8 @@ def test_console_inhoud_lists_only_slow_duty_cards(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_no_zwaar_licht_switch_no_auto_confirm_no_auto_promote(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_no_zwaar_licht_switch_no_auto_confirm_no_auto_promote(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=_duty_html(leftover=6), filename="geen-switch.html", title="Geen switch"
@@ -596,7 +587,7 @@ def test_no_zwaar_licht_switch_no_auto_confirm_no_auto_promote(tmp_path: Path) -
     assert all(not obj.get("confirmed_object_type") for obj in leftover)
     ordinary = next(obj for obj in leftover if "Gewone toelichtende tekst" in _text_of(obj))
     assert ordinary.get("proposed_object_type") not in {"recommendation", "heading"}
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&task=inventory"
     ).text
     lower = html.lower()
@@ -712,9 +703,7 @@ def test_four_eyes_unchanged_on_exception_and_high_risk() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_v216_tiny_objects_v217_chrome_v218_no_duplicate_sentence_still_hold(
-    tmp_path: Path,
-) -> None:
+def test_v216_tiny_objects_v217_chrome_v218_no_duplicate_sentence_still_hold(tmp_path: Path, *, production_app, production_console) -> None:
     freeze = (
         "<!doctype html><html lang=\"nl\"><body>"
         "<nav class=\"bricks-nav-menu\"><a>Tools</a><a>Home</a>"
@@ -746,7 +735,7 @@ def test_v216_tiny_objects_v217_chrome_v218_no_duplicate_sentence_still_hold(
         "Tenzij samen met de cliënt hiervan wordt afgezien."
     )
     assert fusion_is_forbidden(fused_exception) is True
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=freeze, filename="hold.html", title="Hold"
@@ -762,13 +751,13 @@ def test_v216_tiny_objects_v217_chrome_v218_no_duplicate_sentence_still_hold(
     assert EVENTUEEL not in stored
     assert any(OVERWEEG in text and EVENTUEEL in text for text in stored)
     rec = next(obj for obj in objects if OVERWEEG in _text_of(obj))
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    html = _client(console, production_app=production_app).get(f"/review?document={receipt['snapshot_id']}").text
     assert SLOGAN not in html
     assert "wat een EPD MAG zeggen" not in html
     assert "envelope" not in html.lower()
     assert "Documenten" in html
     assert "Documentenhiërarchie" not in html
-    card = _client(console).get(
+    card = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
     heading = review_card_sentence(rec)
@@ -798,10 +787,10 @@ def test_v216_tiny_objects_v217_chrome_v218_no_duplicate_sentence_still_hold(
 # ---------------------------------------------------------------------------
 
 
-def test_unpublished_continentie_reextract_on_same_sha256_allowed(tmp_path: Path) -> None:
+def test_unpublished_continentie_reextract_on_same_sha256_allowed(tmp_path: Path, *, production_console) -> None:
     freeze = _duty_html(leftover=6)
     expected = sha256_bytes(freeze)
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=freeze, filename="continentie.html", title="Continentie"
@@ -837,8 +826,8 @@ def test_unpublished_continentie_reextract_on_same_sha256_allowed(tmp_path: Path
     assert before_ids
 
 
-def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=_duty_html(leftover=4), filename="hide.html", title="Hide"
@@ -873,7 +862,7 @@ def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path) -> None:
     leftover = remaining_unclassified(
         _non_document(console.snapshot_objects(receipt["snapshot_id"])), fragments=source_fragments())
     assert any(obj["object_id"] == planted["object_id"] for obj in leftover)
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&task=inventory"
     ).text
     visible = _visible_text(html)
@@ -881,7 +870,7 @@ def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path) -> None:
     assert "unclassified" not in visible.casefold()
     slow = _section(html, "review-lane-slow")
     assert planted["object_id"] not in slow
-    card = _client(console).get(
+    card = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={planted['object_id']}"
     ).text
     assert planted_text in _visible_text(card)
@@ -901,15 +890,15 @@ def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path) -> None:
     }
 
 
-def test_reextract_refuses_published_objects(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_reextract_refuses_published_objects(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=_duty_html(leftover=3), filename="pub.html", title="Pub"
     )
-    rows = console._load_objects(receipt["snapshot_id"])
-    rows[0]["governance"]["publication_status"] = "published"
-    console._save_objects(receipt["snapshot_id"], rows)
+    from tests.complete_workflow_support import seed_canonical_release
+    seed_canonical_release(console.canonical_publication_store,
+                           snapshot_id=receipt["snapshot_id"], token=receipt["snapshot_id"])
     with pytest.raises(ConsoleError, match="published_objects_must_not_be_rewritten"):
         console.reextract_unpublished(
             actor_id=accounts["researcher"]["account_id"],
@@ -922,8 +911,8 @@ def test_reextract_refuses_published_objects(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_publish_remains_g2_blocked(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_publish_remains_g2_blocked(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=_duty_html(leftover=3), filename="g2.html", title="G2"
@@ -940,8 +929,8 @@ def test_publish_remains_g2_blocked(tmp_path: Path) -> None:
     )
     assert considered["publish_allowed"] is False
     assert considered["g2"] == "BLOCKED"
-    html = _client(console, "publisher.carla").get("/publish").text
-    assert "geblokkeerd" in html.lower() or "BLOCKED" in html
+    html = _client(console, "publisher.carla", production_app=production_app).get("/publish", params={"document": receipt["snapshot_id"]}).text
+    assert 'data-publication-state="blocked"' in html
 
 
 # ---------------------------------------------------------------------------
@@ -960,10 +949,8 @@ def test_publish_remains_g2_blocked(tmp_path: Path) -> None:
         "continentie/../escape.html",
     ],
 )
-def test_v219_ingest_filename_cannot_escape_source_store(
-    tmp_path: Path, filename: str
-) -> None:
-    console = _console(tmp_path)
+def test_v219_ingest_filename_cannot_escape_source_store(tmp_path: Path, filename: str, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     store = (tmp_path / "sources" / "private").resolve()
     with pytest.raises(ConsoleError, match="invalid_store_path"):

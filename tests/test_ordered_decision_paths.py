@@ -8,8 +8,8 @@ from src.decision_graph_v1 import ordered_paths
 from tests.test_decision_graph_structure import structure
 
 
-def test_alternatives_reference_one_shared_outcome_without_modifying_graph(tmp_path):
-    graph, objects, inventory = structure(tmp_path, 'single')
+def test_alternatives_reference_one_shared_outcome_without_modifying_graph(tmp_path, *, production_console):
+    graph, objects, inventory = structure(tmp_path, 'single', production_console=production_console)
     before = deepcopy(graph)
     outcome = graph['edges'][0]['to']
     result = ordered_paths(graph, objects, inventory, outcome)
@@ -23,8 +23,8 @@ def test_alternatives_reference_one_shared_outcome_without_modifying_graph(tmp_p
 
 
 @pytest.mark.parametrize('change', ['unresolved', 'missing', 'stale', 'cycle', 'source'])
-def test_uncertain_or_invalid_paths_are_not_asserted(tmp_path, change):
-    graph, objects, inventory = structure(tmp_path, 'single')
+def test_uncertain_or_invalid_paths_are_not_asserted(tmp_path, change, *, production_console):
+    graph, objects, inventory = structure(tmp_path, 'single', production_console=production_console)
     outcome = graph['edges'][0]['to']
     if change == 'unresolved': graph['unresolved'] = ['uncertain_pdf_connection']
     elif change == 'missing': graph['edges'].pop(1)
@@ -35,7 +35,7 @@ def test_uncertain_or_invalid_paths_are_not_asserted(tmp_path, change):
     assert result['issues'] and not result['paths']
 
 
-def test_bundle_members_inherit_each_alternative_without_copying_nodes(tmp_path):
+def test_bundle_members_inherit_each_alternative_without_copying_nodes(tmp_path, *, production_console):
     import fitz
     from tests.test_decision_graph_chain import _console, _accounts, _ingest_boom, policy
     with fitz.open() as doc:
@@ -43,7 +43,7 @@ def test_bundle_members_inherit_each_alternative_without_copying_nodes(tmp_path)
         for y,text in [(80,'Hoe vaak?'),(130,'Vaak'),(180,'Soms'),(260,'Plan:\n- Neem contact op.\n- Maak een afspraak.')]:
             page.insert_text((70,y),text)
         page.draw_line((110,90),(110,245)); data=doc.tobytes()
-    console=_console(tmp_path); accounts=_accounts(console)
+    console=_console(tmp_path, production_console=production_console); accounts=_accounts(console)
     sid=_ingest_boom(console,accounts,data=data,filename='bundle-paths.pdf',content_type='application/pdf',
                      named_reviewers=[],review_policy=policy(accounts))['snapshot_id']
     env=console._envelope(sid); rows=console.snapshot_objects(sid)

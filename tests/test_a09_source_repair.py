@@ -14,10 +14,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
-from src.deterministic_review_repair_v1 import install_deterministic_review_repair_routes
 from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-from src.review_closure_v1 import ReviewClosureConsole
 from src.knowledge_materialisation_v1 import validate_materialised_candidate
 from src.source_bound_fields_v3 import validate_object_fields
 from tests.test_recommendation_context_v3 import response_for
@@ -26,9 +23,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PASSWORD = 'a09-local-fixture'
 
 
-def setup_repair(tmp_path, *, text='Gebruik geen zalf. Bespreek de opties.', core='Gebruik geen zalf.', heading=None, factory=None, secondary=None):
+def setup_repair(tmp_path, *, text='Gebruik geen zalf. Bespreek de opties.', core='Gebruik geen zalf.', heading=None, factory=None, secondary=None, production_console):
     def fresh():
-        return factory() if factory else ReviewClosureConsole(root=ROOT, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
+        return factory() if factory else production_console(processing_binder=lambda console: None, root=ROOT, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
     console = fresh()
     author = console.create_account(username='author', password=PASSWORD, roles=('researcher',))
     reviewer = console.create_account(username='reviewer', password=PASSWORD, roles=('reviewer',))
@@ -62,16 +59,15 @@ def setup_repair(tmp_path, *, text='Gebruik geen zalf. Bespreek de opties.', cor
     return console, sid, obj, reviewer, fresh
 
 
-def client(console):
-    app = create_console_app(console)
-    install_deterministic_review_repair_routes(app, console)
+def client(console, *, production_app):
+    app = production_app(console)
     c = TestClient(app, base_url='https://testserver', raise_server_exceptions=False)
     c.post('/login', data={'username':'reviewer', 'password':PASSWORD})
     return c
 
 
-def repair(console, sid, obj, units, *, revision=None):
-    with client(console) as c:
+def repair(console, sid, obj, units, *, revision=None, production_app):
+    with client(console, production_app=production_app) as c:
         return c.post('/review/resolve', data={'snapshot_id':sid, 'object_id':obj['object_id'],
             'snapshot_revision':revision or console.objects_revision(sid), 'suitability':'mist_context',
             'comment':'Selecteer exacte bronzinnen.', 'repair_kind':'source_units',
@@ -79,11 +75,11 @@ def repair(console, sid, obj, units, *, revision=None):
 
 
 @pytest.mark.parametrize('count', [1, 2])
-def test_http_source_selection_has_complete_revision_after_restart(tmp_path, count):
-    console, sid, obj, reviewer, fresh = setup_repair(tmp_path)
+def test_http_source_selection_has_complete_revision_after_restart(tmp_path, count, *, production_app, production_console):
+    console, sid, obj, reviewer, fresh = setup_repair(tmp_path, production_console=production_console)
     units = console.source_units(snapshot_id=sid, object_id=obj['object_id'])
     old = deepcopy(console._load_objects(sid, remember=False))
-    response = repair(console, sid, obj, units[:count])
+    response = repair(console, sid, obj, units[:count], production_app=production_app)
     assert response.status_code == 303
     live = fresh()._current_object(sid, obj['object_id'])
     fragments = fresh().review_source_fragments(sid)
@@ -99,15 +95,15 @@ def test_http_source_selection_has_complete_revision_after_restart(tmp_path, cou
 
 
 @pytest.fixture(params=['file', 'postgres'])
-def repair_setup(request, tmp_path):
-    """Same HTTP probes on file compatibility and production PostgreSQL mixins."""
+def repair_setup(request, tmp_path, *, production_console):
+    """Retain both historical fixture paths, each on the production PG class."""
     factory = None
     if request.param == 'postgres':
         from tests.decision_graph_native_support import native_state
         state, _canonical, _source = native_state(tmp_path, config=request.getfixturevalue("complete_postgres"))
         counter = iter(range(100))
         factory = lambda: state(f'a09-{next(counter)}')
-    return lambda **kwargs: setup_repair(tmp_path, factory=factory, **kwargs)
+    return lambda **kwargs: setup_repair(tmp_path, factory=factory, **{**kwargs, 'production_console': production_console})
 
 
 def assert_complete(console, sid, oid):
@@ -124,36 +120,36 @@ def assert_complete(console, sid, oid):
     return obj
 
 
-def test_expand_shorten_context_restart_and_stale_replay(repair_setup):
-    console, sid, obj, reviewer, fresh = repair_setup(heading='Bij een natte plek:')
+def test_expand_shorten_context_restart_and_stale_replay(repair_setup, *, production_app, production_console):
+    console, sid, obj, reviewer, fresh = repair_setup(heading='Bij een natte plek:', production_console=production_console)
     units = console.source_units(snapshot_id=sid, object_id=obj['object_id'])
-    assert repair(console, sid, obj, units[:1]).status_code == 303
+    assert repair(console, sid, obj, units[:1], production_app=production_app).status_code == 303
     same = assert_complete(fresh(), sid, obj['object_id'])
     assert same['metadata']['admission']['gate_result'] == 'allowed'
     assert same['metadata']['source_bound_context']['target_object_version_at_binding'] == same['object_version']
     assert same['metadata']['source_bound_context']['entries'][0]['text'] == 'Bij een natte plek:'
     stale = console.objects_revision(sid)
-    assert repair(console, sid, same, units).status_code == 303
+    assert repair(console, sid, same, units, production_app=production_app).status_code == 303
     expanded = assert_complete(fresh(), sid, obj['object_id'])
     assert expanded['metadata']['admission']['gate_result'] == 'blocked'
     assert expanded['metadata']['source_bound_context']['entries'][0]['unresolved_reason'] == 'relation_uncertain'
     before = deepcopy(fresh()._load_objects(sid, remember=False))
-    conflict = repair(fresh(), sid, expanded, units, revision=stale)
+    conflict = repair(fresh(), sid, expanded, units, revision=stale, production_app=production_app)
     assert conflict.status_code == 400
     assert 'tussentijds gewijzigd' in conflict.text
     assert fresh()._load_objects(sid, remember=False) == before
-    assert repair(fresh(), sid, expanded, units[:1]).status_code == 303
+    assert repair(fresh(), sid, expanded, units[:1], production_app=production_app).status_code == 303
     shortened = assert_complete(fresh(), sid, obj['object_id'])
     assert shortened['content']['clean_text'] == 'Gebruik geen zalf.'
     # Returning to old text does not resurrect historical semantic authority.
     assert shortened['metadata']['admission']['gate_result'] == 'blocked'
 
 
-def test_repeated_text_selects_second_position_without_inheriting_meaning(repair_setup):
-    console, sid, obj, reviewer, fresh = repair_setup(text='Gebruik geen zalf. Gebruik geen zalf.')
+def test_repeated_text_selects_second_position_without_inheriting_meaning(repair_setup, *, production_app, production_console):
+    console, sid, obj, reviewer, fresh = repair_setup(text='Gebruik geen zalf. Gebruik geen zalf.', production_console=production_console)
     units = console.source_units(snapshot_id=sid, object_id=obj['object_id'])
     assert len(units) == 2
-    assert repair(console, sid, obj, units[1:]).status_code == 303
+    assert repair(console, sid, obj, units[1:], production_app=production_app).status_code == 303
     live = assert_complete(fresh(), sid, obj['object_id'])
     span = live['metadata']['semantic_passage']['spans'][0]
     assert span['start'] == len('Gebruik geen zalf. ')
@@ -163,9 +159,9 @@ def test_repeated_text_selects_second_position_without_inheriting_meaning(repair
                for e in live['metadata']['source_bound_fields']['evidence'].values())
 
 
-def test_old_approval_is_retained_and_invalidated(repair_setup):
+def test_old_approval_is_retained_and_invalidated(repair_setup, *, production_app, production_console):
     from src.review_ledger import read_events
-    console, sid, obj, reviewer, fresh = repair_setup()
+    console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=obj['object_id'],
         decision='approve', confirmed_object_type='recommendation', recommendation_direction='against',
         recommendation_strength_level='not_stated', comment='Bron gecontroleerd.')
@@ -173,7 +169,7 @@ def test_old_approval_is_retained_and_invalidated(repair_setup):
     assert any(b['valid'] for b in bindings)
     events = read_events(console._ledger_path)
     units = console.source_units(snapshot_id=sid, object_id=obj['object_id'])
-    assert repair(console, sid, obj, units).status_code == 303
+    assert repair(console, sid, obj, units, production_app=production_app).status_code == 303
     restarted = fresh()
     assert not any(b['valid'] for b in restarted.object_review_bindings(sid))
     assert len(restarted.object_review_bindings(sid)) == len(bindings)
@@ -181,17 +177,17 @@ def test_old_approval_is_retained_and_invalidated(repair_setup):
     assert_complete(restarted, sid, obj['object_id'])
 
 
-def test_overlapping_http_corrections_have_one_winner(repair_setup):
+def test_overlapping_http_corrections_have_one_winner(repair_setup, *, production_app, production_console):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
     from src.review_ledger import read_events
-    console, sid, obj, reviewer, fresh = repair_setup()
+    console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     units = console.source_units(snapshot_id=sid, object_id=obj['object_id'])
     revision = console.objects_revision(sid)
     states = [fresh(), fresh()]
     barrier = Barrier(2)
     def send(index):
-        with client(states[index]) as c:
+        with client(states[index], production_app=production_app) as c:
             barrier.wait(timeout=10)
             return c.post('/review/resolve', data={'snapshot_id':sid, 'object_id':obj['object_id'],
                 'snapshot_revision':revision, 'suitability':'mist_context', 'comment':'Concurrente selectie.',
@@ -207,9 +203,9 @@ def test_overlapping_http_corrections_have_one_winner(repair_setup):
 
 
 @pytest.mark.parametrize("kind", ["source", "merge"])
-def test_failed_http_commit_rolls_back_objects_bindings_and_audit(repair_setup, monkeypatch, kind):
+def test_failed_http_commit_rolls_back_objects_bindings_and_audit(repair_setup, monkeypatch, kind, *, production_app, production_console):
     from src.review_ledger import read_events
-    console, sid, obj, reviewer, fresh = repair_setup(secondary="Bespreek de opties." if kind == "merge" else None)
+    console, sid, obj, reviewer, fresh = repair_setup(secondary="Bespreek de opties." if kind == "merge" else None, production_console=production_console)
     console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid, object_id=obj["object_id"],
         decision="approve", confirmed_object_type="recommendation", recommendation_direction="against",
         recommendation_strength_level="not_stated", comment="Bron gecontroleerd.")
@@ -238,13 +234,13 @@ def test_failed_http_commit_rolls_back_objects_bindings_and_audit(repair_setup, 
     try:
         if kind == "merge":
             other = next(o for o in console.snapshot_objects(sid) if o["content"]["clean_text"] == "Bespreek de opties.")
-            with client(console) as c:
+            with client(console, production_app=production_app) as c:
                 response = c.post('/review/resolve', data={'snapshot_id':sid, 'object_id':obj['object_id'],
                     'snapshot_revision':console.objects_revision(sid), 'suitability':'samenvoegen',
                     'comment':'Samenvoegen met commitfout.', 'repair_kind':'merge_objects',
                     'merge_object_ids':[other['object_id']]}, follow_redirects=False)
         else:
-            response = repair(console, sid, obj, units)
+            response = repair(console, sid, obj, units, production_app=production_app)
         assert response.status_code >= 400
     finally:
         if hasattr(console, 'workflow_review_store'):
@@ -258,10 +254,10 @@ def test_failed_http_commit_rolls_back_objects_bindings_and_audit(repair_setup, 
     assert read_events(restarted._ledger_path) == before_events
 
 
-def test_direct_kernel_rejects_partial_materialisation_before_storage(repair_setup):
+def test_direct_kernel_rejects_partial_materialisation_before_storage(repair_setup, *, production_console):
     from src.operations_console_v1 import OperationsConsole, ConsoleError
     from src.review_ledger import read_events
-    console, sid, obj, reviewer, fresh = repair_setup()
+    console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=obj['object_id'],
                          decision='revise', comment='Correctie nodig.')
     before = deepcopy(console._load_objects(sid, remember=False))
@@ -274,18 +270,17 @@ def test_direct_kernel_rejects_partial_materialisation_before_storage(repair_set
     _assert_failed_command_readback(console, fresh, sid, before, events)
 
 
-def test_new_process_restart_reconstructs_committed_revision(repair_setup):
+def test_new_process_restart_reconstructs_committed_revision(repair_setup, *, production_app, production_console):
     import os
     import subprocess
     import sys
-    console, sid, obj, reviewer, fresh = repair_setup()
+    console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     units = console.source_units(snapshot_id=sid, object_id=obj['object_id'])
-    assert repair(console, sid, obj, units).status_code == 303
+    assert repair(console, sid, obj, units, production_app=production_app).status_code == 303
     native = hasattr(console, 'workflow_review_store')
     code = r'''
 import json, sys
 from pathlib import Path
-from src.review_closure_v1 import ReviewClosureConsole
 from tests.test_a09_source_repair import assert_complete
 root, sources, runtime, sid, oid, native = sys.argv[1:]
 kwargs = dict(root=Path(root), source_store=Path(sources), runtime=Path(runtime))
@@ -320,11 +315,11 @@ print(json.dumps(assert_complete(console, sid, oid)))
     assert json.loads(result.stdout) == assert_complete(fresh(), sid, obj['object_id'])
 
 
-def test_source_identity_rechecked_at_actual_commit(repair_setup, monkeypatch):
+def test_source_identity_rechecked_at_actual_commit(repair_setup, monkeypatch, *, production_console):
     from src.operations_console_v1 import OperationsConsole, ConsoleError
     from src.source_bound_fields_v2 import rebind_revision_evidence
     from src.review_ledger import read_events
-    console, sid, obj, reviewer, fresh = repair_setup()
+    console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     # The supported direct kernel entrance has preparation outside the lock.
     console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=obj['object_id'],
                          decision='revise', comment='Correctie nodig.')
@@ -346,11 +341,11 @@ def test_source_identity_rechecked_at_actual_commit(repair_setup, monkeypatch):
 
 
 
-def test_authorization_revoked_during_preparation_cannot_commit(repair_setup, monkeypatch):
+def test_authorization_revoked_during_preparation_cannot_commit(repair_setup, monkeypatch, *, production_console):
     from src.operations_console_v1 import OperationsConsole, ConsoleError
     from src.source_bound_fields_v2 import rebind_revision_evidence
     from src.review_ledger import read_events
-    console, sid, obj, reviewer, fresh = repair_setup()
+    console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     publisher = console.create_account(username='publisher', password=PASSWORD, roles=('publisher',))
     peer = fresh()  # Start before creating the legacy revise fixture.
     console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=obj['object_id'],
@@ -370,11 +365,11 @@ def test_authorization_revoked_during_preparation_cannot_commit(repair_setup, mo
 
 
 @pytest.mark.parametrize('later_primary', [False, True])
-def test_http_merge_reconstructs_shared_block_in_source_order(repair_setup, later_primary):
-    console, sid, obj, reviewer, fresh = repair_setup(secondary='Bespreek de opties.')
+def test_http_merge_reconstructs_shared_block_in_source_order(repair_setup, later_primary, *, production_app, production_console):
+    console, sid, obj, reviewer, fresh = repair_setup(secondary='Bespreek de opties.', production_console=production_console)
     other = next(o for o in console.snapshot_objects(sid) if o['content']['clean_text']=='Bespreek de opties.')
     primary, absorbed = (other, obj) if later_primary else (obj, other)
-    with client(console) as c:
+    with client(console, production_app=production_app) as c:
         response = c.post('/review/resolve', data={'snapshot_id':sid, 'object_id':primary['object_id'],
             'snapshot_revision':console.objects_revision(sid), 'suitability':'samenvoegen',
             'comment':'Samenvoegen in bronvolgorde.', 'repair_kind':'merge_objects',
@@ -389,9 +384,9 @@ def test_http_merge_reconstructs_shared_block_in_source_order(repair_setup, late
 
 
 @pytest.mark.parametrize('entrance', ['kernel', 'closure'])
-def test_direct_correction_cannot_save_inconsistent_raw_text(repair_setup, entrance):
+def test_direct_correction_cannot_save_inconsistent_raw_text(repair_setup, entrance, *, production_console):
     from src.operations_console_v1 import OperationsConsole, ConsoleError
-    console, sid, obj, reviewer, fresh = repair_setup()
+    console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=obj['object_id'],
                          decision='revise', comment='Correctie nodig.')
     before = deepcopy(console._load_objects(sid, remember=False))
@@ -406,20 +401,20 @@ def test_direct_correction_cannot_save_inconsistent_raw_text(repair_setup, entra
     _assert_failed_command_readback(console, fresh, sid, before)
 
 
-def test_nonadjacent_units_do_not_silently_include_the_gap(repair_setup):
-    console, sid, obj, reviewer, fresh = repair_setup(text='Gebruik geen zalf. Bespreek de opties. Controleer de huid.')
+def test_nonadjacent_units_do_not_silently_include_the_gap(repair_setup, *, production_app, production_console):
+    console, sid, obj, reviewer, fresh = repair_setup(text='Gebruik geen zalf. Bespreek de opties. Controleer de huid.', production_console=production_console)
     units = console.source_units(snapshot_id=sid, object_id=obj['object_id'])
     before = deepcopy(console._load_objects(sid, remember=False))
-    response = repair(console, sid, obj, [units[0], units[2]])
+    response = repair(console, sid, obj, [units[0], units[2]], production_app=production_app)
     assert response.status_code == 400
     assert 'repair_source_units_must_be_contiguous' in response.text
     assert fresh()._load_objects(sid, remember=False) == before
 
 
-def test_older_direct_preparation_cannot_overwrite_a_committed_winner(repair_setup, monkeypatch):
+def test_older_direct_preparation_cannot_overwrite_a_committed_winner(repair_setup, monkeypatch, *, production_console):
     from src.operations_console_v1 import OperationsConsole, ConsoleError
     import src.source_bound_fields_v2 as fields
-    console, sid, obj, reviewer, fresh = repair_setup()
+    console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     revision = console.objects_revision(sid)
     selection = {'decision_kind':'semantic_selection', 'selection_origin':'proposal_selected',
                  'spans':deepcopy(obj['metadata']['semantic_passage']['spans']),

@@ -16,16 +16,15 @@ from fastapi.testclient import TestClient
 
 from src.operations_console_v1 import ConsoleError
 from src.source_processing_dispatch_v1 import claim, SourceProcessingDispatcher
-from tests.test_availability_repair import accounts, bind, state, provider, installed_app, login
+from tests.test_availability_repair import accounts, bind, provider, installed_app, login
 from tests.test_source_dispatch_hardening import receive
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
-@pytest.fixture(params=["local", "postgres"])
-def console(request, tmp_path, *, production_console):
-    if request.param == "postgres":
-        return production_console(root=tmp_path, processing_binder=lambda console: None)
-    return state(tmp_path, production_console=production_console)
+@pytest.fixture(params=["postgres"])
+def console(tmp_path, *, production_console):
+    # Both former labels called this exact production PostgreSQL factory.
+    return production_console(root=tmp_path, processing_binder=lambda console: None)
 
 
 def snapshot(console, sid):

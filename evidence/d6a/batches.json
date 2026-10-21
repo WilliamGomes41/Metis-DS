@@ -69,9 +69,10 @@
     "failures": 0,
     "skipped": 0,
     "targeted_junit": "d6a-reader.xml",
-    "full_suite_status": "batch 02 running; subsequent full measurements pending",
+    "full_suite_status": "local green: 5647 passed, 27 non-PG skips, 6 xfailed; zero PG skips; 1061.821 seconds",
     "ci_status": "not run: push approval pending",
-    "historical_commit": "4c087e2"
+    "historical_commit": "4c087e2",
+    "full_suite_evidence": "local-batch03-full.json"
   },
   {
     "batch": "04",
@@ -492,6 +493,97 @@
       {
         "file": "d6a13-middleware.xml",
         "sha256": "cb967583a38f98c0aac21daf1bc1abd5a883bcefda17ecb000e5b162dcc16d67"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending"
+  },
+  {
+    "batch": "14",
+    "base": "b3be159",
+    "commit": "codex/d6a-14-workboards",
+    "test_files": [
+      "tests/test_console_cleanup_v1.py",
+      "tests/test_console_feedback_v1.py",
+      "tests/test_console_withdrawal_v1.py",
+      "tests/test_execution_workspace_separation_v1.py",
+      "tests/test_metis_mcp_v1.py",
+      "tests/test_review_passage_coverage_v1.py",
+      "tests/test_vsa_meaningful_document_status_v1.py",
+      "tests/test_vsa_publish_readiness_ui_v1.py",
+      "tests/test_vsa_review_workboard_v1.py"
+    ],
+    "executed_unique_cases": 74,
+    "failures": 0,
+    "skipped": 0,
+    "renamed_cases": {
+      "test_ready_blocked_and_published_labels_are_shared_across_rooms": "test_fast_lists_stay_conservative_while_publication_checks_current_readiness"
+    },
+    "verification": "Workboard/publication/withdrawal/MCP targeted run plus repaired cases. Real PostgreSQL withdrawal, successor supersession and MCP account/deny authority; pre-existing conservative PG list policy preserved.",
+    "junit": [
+      {
+        "file": "d6a14.xml",
+        "sha256": "ff2102ccb0c501eab1b1af7da924705a9669774fcd46eaffd129ee3896321962"
+      },
+      {
+        "file": "d6a14-fixed.xml",
+        "sha256": "34d61e655b1f1acbb05e19410c09b46f6b05ba4e8006a970541633b839b620ec"
+      },
+      {
+        "file": "d6a14-superseded.xml",
+        "sha256": "bdd8773e9d10062c68aca1de51a1ffe69be76a5497f27c215bfbda8864af4e69"
+      },
+      {
+        "file": "d6a14-superseded-final.xml",
+        "sha256": "f1550862d64a810a38936ba40e48170047b6053fc64fa4b8558488c72d6894a2"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending"
+  },
+  {
+    "batch": "15",
+    "base": "d2d4cdf",
+    "commit": "codex/d6a-15-decision-console",
+    "test_files": [
+      "tests/test_v225_beslisboom_path.py",
+      "tests/test_v219_review_duty_queue.py",
+      "tests/test_a08_heading_batch_atomic.py",
+      "tests/test_explicit_review_policy.py",
+      "tests/test_decision_graph_chain.py",
+      "tests/test_decision_graph_structure.py",
+      "tests/test_ordered_decision_paths.py",
+      "tests/test_decision_bundles.py",
+      "tests/test_decision_review_copy.py",
+      "tests/test_decision_successors.py",
+      "tests/test_review_participation_management.py",
+      "tests/test_decision_ingest_recovery.py",
+      "tests/test_decision_tree_route_lifecycle_v1.py",
+      "tests/test_a09_source_repair.py",
+      "tests/test_a10_source_cache_repair.py",
+      "tests/test_t12_publication_readiness_authority.py",
+      "tests/browser_knowledge_context_fixture.py"
+    ],
+    "executed_unique_cases": 296,
+    "failures": 0,
+    "skipped": 0,
+    "added_cases": 3,
+    "renamed_cases": {
+      "test_stale_local_account_roles_are_rechecked": "test_stale_account_roles_are_rechecked"
+    },
+    "verification": "Full selected portion: 220 production console/decision/heading/repair cases plus 76 Azure source-cache repair cases; T12 base owner and production dispatch both checked. Standalone knowledge browser authenticated PostgreSQL HTTP probe passed. No runtime changes.",
+    "junit": [
+      {
+        "file": "d6a15-final.xml",
+        "sha256": "a0682f999bcdd0c21b1ee716c30b75b75aff3c23f4aed2cfc245fa4fe84999fe"
+      },
+      {
+        "file": "d6a15-cache.xml",
+        "sha256": "0f4ebe2caae46d1f47b23f409924381b7d8672cde3f54a7584102f144bb197d4"
+      },
+      {
+        "file": "d6a15-t12.xml",
+        "sha256": "94773cbe147597400a570dd47b48d3620d2ed5da7c56de4fb06de610273a344f"
       }
     ],
     "full_suite_status": "pending",

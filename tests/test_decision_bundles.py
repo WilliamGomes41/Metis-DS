@@ -14,7 +14,7 @@ from tests.test_decision_graph_chain import _console, _accounts, _ingest_boom, p
 
 
 @pytest.mark.parametrize("backend", ["local", "postgres"])
-def test_pdf_bundle_needs_each_member_review_and_preserves_source(tmp_path, backend, *, complete_postgres):
+def test_pdf_bundle_needs_each_member_review_and_preserves_source(tmp_path, backend, *, complete_postgres, production_console):
     with fitz.open() as doc:
         page = doc.new_page()
         page.insert_text((70, 80), "Plan:\n- Neem contact op.\n- Maak een afspraak.")
@@ -24,7 +24,7 @@ def test_pdf_bundle_needs_each_member_review_and_preserves_source(tmp_path, back
         state, store, source = native_state(tmp_path, config=complete_postgres)
         console = state()
     else:
-        console = _console(tmp_path)
+        console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     sid = _ingest_boom(console, accounts, data=data, filename="bundle.pdf", content_type="application/pdf",
         named_reviewers=[], review_policy=policy(accounts))["snapshot_id"]
@@ -71,12 +71,12 @@ def test_pdf_bundle_needs_each_member_review_and_preserves_source(tmp_path, back
         assert state()._projection_from_authority() == []
 
 
-def test_explicit_json_bundle_preserves_legacy_source_adapter(tmp_path):
+def test_explicit_json_bundle_preserves_legacy_source_adapter(tmp_path, *, production_console):
     import json
     from tests.test_v225_beslisboom_path import _boom_freeze_bytes
     payload = json.loads(_boom_freeze_bytes())
     payload["outcomes"][0]["text"] = "Plan:\n- Neem contact op.\n- Maak een afspraak."
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     sid = _ingest_boom(console, accounts, data=json.dumps(payload).encode(), named_reviewers=[],
                        review_policy=policy(accounts))["snapshot_id"]
