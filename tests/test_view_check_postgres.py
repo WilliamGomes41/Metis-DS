@@ -7,6 +7,8 @@
 # release-control-evidence: releasebewijs
 """
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 from pathlib import Path
 import sys
 from uuid import uuid4
@@ -132,14 +134,151 @@ def test_http_scope_origin_revision_and_revocation_leave_domain_state_unchanged(
     assert len(service.store.history(document)) == 1
     assert before == (state._envelope(document), state.objects_revision(document))
     # Current roles, not a copied human session, decide the next worker read.
-    original = state._account
-    def revoked(identifier, **kwargs):
-        account = deepcopy(original(identifier, **kwargs))
-        if identifier == reviewer:
-            account['retirement'] = {'at': 'now'}
-        return account
-    state._account = revoked
+    state.assign_roles(actor_id=author, account_id=reviewer, roles=('researcher',))
     assert scoped.get('/inzicht/document/passages?document='+document).status_code == 403
     assert reviewer_client.get('/inzicht/weergavecontrole/'+row['id']).status_code == 403
     assert reviewer_client.get('/inzicht/weergavecontrole/'+row['id']+'/bewijs').status_code == 403
     assert service.store.get(row['id']) == job_before_denial
+    state.assign_roles(actor_id=author, account_id=reviewer, roles=('reviewer',))
+    assert scoped.get('/inzicht/document/passages?document='+document).status_code == 200
+    # Missing, corrupted and expired evidence remain distinct from authorization.
+    assert reviewer_client.get('/inzicht/weergavecontrole/'+row['id']+'/bewijs').status_code == 404
+    image = b'\x89PNG\r\n\x1a\nfixture'
+    key = f"{row['id']}/1/{sha256(image).hexdigest()}.png"
+    manifest = {'key': key, 'sha256': sha256(image).hexdigest(),
+                'expires_at': (datetime.now(timezone.utc)+timedelta(days=1)).isoformat()}
+    service.store.finish(row['id'], job['attempt'], token, {'evidence': [manifest]})
+    evidence_url = '/inzicht/weergavecontrole/'+row['id']+'/bewijs'
+    assert reviewer_client.get(evidence_url).status_code == 503
+    service.evidence.put(key, b'corrupt')
+    assert reviewer_client.get(evidence_url).status_code == 503
+    service.evidence.put(key, image)
+    evidence = reviewer_client.get(evidence_url)
+    assert evidence.status_code == 200 and evidence.content == image
+    assert evidence.headers['cache-control'] == 'no-store'
+    original_get = service.evidence.get
+    def revoke_during_download(key):
+        state.assign_roles(actor_id=author, account_id=reviewer, roles=('researcher',))
+        return original_get(key)
+    service.evidence.get = revoke_during_download
+    assert reviewer_client.get(evidence_url).status_code == 403
+    service.evidence.get = original_get
+    state.assign_roles(actor_id=author, account_id=reviewer, roles=('reviewer',))
+    manifest['expires_at'] = (datetime.now(timezone.utc)-timedelta(seconds=1)).isoformat()
+    from psycopg.types.json import Jsonb
+    with psycopg.connect(complete_postgres.dsn) as con:
+        con.execute('UPDATE workflow.view_checks SET result=%s WHERE id=%s', (Jsonb({'evidence': [manifest]}), row['id']))
+    assert reviewer_client.get(evidence_url).status_code == 410
+    assert before == (state._envelope(document), state.objects_revision(document))
+    # Cancellation returns to the job's stored historical reference, not a query override.
+    pinned = {**context(state, reviewer, document), 'attempt_id': 'historical-reference'}
+    pending = service.store.register(reviewer, document, uuid4().hex, pinned)
+    cancelled = reviewer_client.post('/inzicht/weergavecontrole/'+pending['id']+'/annuleren',
+                                    headers={'Origin': 'https://testserver'}, follow_redirects=False)
+    assert cancelled.status_code == 303
+    assert 'attempt=historical-reference' in cancelled.headers['location']
+    assert cancelled.headers['location'].endswith('#weergavecontrole')
+    assert service.store.get(pending['id'])['state'] == 'cancelled'
+
+
+@pytest.mark.parametrize('unsupported', ['unknown_attempt', 'decision_graph'])
+def test_panel_does_not_offer_an_unsupported_scenario(unsupported, production_console, production_app, complete_postgres, tmp_path, monkeypatch):
+    from src.view_check import panel
+    from tests.test_availability_repair import accounts, bind, provider, login, upload
+    state = production_console(processing_binder=lambda state: None)
+    _, reviewer = accounts(state)
+    bind(state, provider)
+    app = production_app(state)
+    client = TestClient(app, base_url='https://testserver')
+    login(client)
+    document = upload(client, reviewer).headers['location'].split('document=')[1].split('&')[0]
+    service = configure(app, state, complete_postgres, tmp_path / 'evidence')
+    pinned = context(state, reviewer, document)
+    old = service.store.register(reviewer, document, uuid4().hex, pinned)
+    attempt = 'unknown-attempt' if unsupported == 'unknown_attempt' else ''
+    if unsupported == 'decision_graph':
+        envelope = state._envelope
+        monkeypatch.setattr(state, '_envelope', lambda sid: {**envelope(sid), 'decision_graph': {}})
+    html = panel(app, state, state._account(reviewer), document, attempt)
+    assert 'Controleer weergave</button>' not in html
+    assert 'niet beschikbaar' in html
+    assert old['id'] in html  # Existing investigations remain accessible.
+
+
+def test_second_expired_lease_is_terminal_and_does_not_block_next_job(complete_postgres):
+    store = store_for(complete_postgres)
+    first = store.register('reviewer', 'one', 'one', {})
+    second = store.register('reviewer', 'two', 'two', {})
+    tokens = []
+    for attempt in (1, 2):
+        job, token = store.claim()
+        tokens.append(token)
+        assert job['id'] == first['id'] and job['attempt'] == attempt
+        with psycopg.connect(complete_postgres.dsn) as con:
+            con.execute("UPDATE workflow.view_checks SET lease_until=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE id=%s", (job['id'],))
+    next_job, _ = store.claim()
+    assert next_job['id'] == second['id']
+    assert store.get(first['id'])['state'] == 'failed'
+    assert store.get(first['id'])['result']['reason'] == 'worker_interrupted'
+    for attempt, token in enumerate(tokens, 1):
+        assert store.capability(token) is None
+        assert not store.finish(first['id'], attempt, token, {'checks': []})
+
+
+@pytest.mark.parametrize('interruption', ['none', 'browser_revocation', 'upload_revocation', 'cancel', 'storage_failure'])
+def test_worker_activation_rechecks_authority_and_preserves_document(interruption, production_console, production_app, complete_postgres, tmp_path, monkeypatch):
+    import base64
+    import json
+    from types import SimpleNamespace
+    from src.view_check import CHECK_IDS
+    from tests.test_availability_repair import accounts, bind, provider, login, upload
+    state = production_console(processing_binder=lambda state: None)
+    author, reviewer = accounts(state)
+    bind(state, provider)
+    app = production_app(state)
+    client = TestClient(app, base_url='https://testserver')
+    login(client)
+    document = upload(client, reviewer).headers['location'].split('document=')[1].split('&')[0]
+    service = configure(app, state, complete_postgres, tmp_path / 'evidence')
+    pinned = {**context(state, reviewer, document), 'origin': service.config.origin}
+    row = service.store.register(reviewer, document, uuid4().hex, pinned)
+    before = deepcopy(state._envelope(document)), state.objects_revision(document)
+    monkeypatch.setenv('METIS_LLM_API_KEY', 'must-stay-in-parent')
+
+    def revoke():
+        state.assign_roles(actor_id=author, account_id=reviewer, roles=('researcher',))
+
+    def browser(*args, **kwargs):
+        # Only the process transport is doubled; PG claims, auth and activation run.
+        assert 'METIS_LLM_API_KEY' not in kwargs['env']
+        assert set(kwargs['env']) <= {'PATH', 'HOME', 'TMPDIR', 'SYSTEMROOT', 'METIS_PLAYWRIGHT_MODULE', 'METIS_BROWSER_EXECUTABLE'}
+        if interruption == 'browser_revocation':
+            revoke()
+        if interruption == 'cancel':
+            service.store.cancel(row['id'], reviewer)
+        return SimpleNamespace(returncode=0, stdout=json.dumps({
+            'checks': [{'id': key, 'verdict': 'pass', 'expected': 1, 'observed': 1} for key in CHECK_IDS],
+            'screenshot': base64.b64encode(b'\x89PNG\r\n\x1a\nfixture').decode()}))
+
+    original_put = service.evidence.put
+    def put(key, data):
+        if interruption == 'storage_failure':
+            raise OSError('private storage details must not be retained')
+        original_put(key, data)
+        if interruption == 'upload_revocation':
+            revoke()
+    monkeypatch.setattr('src.view_check.subprocess.run', browser)
+    monkeypatch.setattr(service.evidence, 'put', put)
+    service.execute_one()
+    result = service.store.get(row['id'])
+    assert before == (state._envelope(document), state.objects_revision(document))
+    if interruption == 'none':
+        assert result['state'] == 'completed' and len(result['result']['evidence']) == 1
+    elif interruption == 'cancel':
+        assert result['state'] == 'cancelled' and result['result'] is None
+    else:
+        assert result['state'] == 'failed'
+        assert result['result']['reason'] == 'investigation_unavailable'
+        assert result['result']['evidence'] == []
+        assert all(check['verdict'] == 'not_established' for check in result['result']['checks'])
+        assert 'private storage details' not in json.dumps(result['result'])

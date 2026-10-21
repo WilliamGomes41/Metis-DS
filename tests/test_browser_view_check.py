@@ -33,11 +33,15 @@ def test_browser_inzicht_investigation(tmp_path, complete_postgres):
                     time.sleep(.1)
             else:
                 pytest.fail((tmp_path/'server.log').read_text())
-            # Existing mutating source journey only seeds the isolated test app.
-            for script in ('browser_source_selection_check.cjs', 'browser_view_check.cjs'):
-                subprocess.run(['node', str(root/'tests'/script)], cwd=root, env=env, check=True, timeout=100)
+            # Fixture ingestion precedes browser reads; upload has its own acceptance test.
+            run = subprocess.run(['node', str(root/'tests/browser_view_check.cjs')], cwd=root, env=env,
+                                 capture_output=True, text=True, timeout=100)
+            assert run.returncode == 0, run.stderr
             result = json.loads((tmp_path/'view-check-result.json').read_text())
             assert result['state'] == 'completed' and result['evidence']['status'] == 200
+            assert result['domainUnchanged'] is True
+            assert result['sourceCase']['state'] == 'completed'
+            assert result['sourceCase']['evidence']['status'] == 200
         finally:
             server.terminate()
             server.wait(timeout=20)

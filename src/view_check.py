@@ -34,7 +34,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ViewCheckAccessDenied(ConsoleError):
-    """Document authorization refusal, distinct from invalid context or outages."""
+    """Authorization refusal, distinct from an unavailable scenario/context."""
 
 
 @dataclass(frozen=True)
@@ -239,11 +239,12 @@ def validate_checks(raw):
 
 
 def install(app, state, require, render_page, nav):
+    app.state.view_checks = None
+
     @app.exception_handler(ViewCheckAccessDenied)
     async def access_denied(request, error):
         return JSONResponse({'error': 'view_check_access_denied'}, status_code=403, headers=HEADERS)
 
-    app.state.view_checks = None
     origin = os.environ.get('METIS_VIEW_CHECK_ORIGIN', '').rstrip('/')
     if origin:
         owner = getattr(state, 'workflow_document_store', None)
@@ -332,7 +333,8 @@ def install(app, state, require, render_page, nav):
         if request.headers.get('origin') != service().config.origin:
             return JSONResponse({'error': 'origin_denied'}, status_code=403, headers=HEADERS)
         service().store.cancel(identifier, account['account_id'])
-        return RedirectResponse('/inzicht/document?' + urlencode({'document': row['snapshot_id']}), status_code=303)
+        return RedirectResponse('/inzicht/document?' + urlencode({'document': row['snapshot_id'],
+                                'attempt': row['context']['attempt_id']}) + '#weergavecontrole', status_code=303, headers=HEADERS)
 
     @app.get('/inzicht/weergavecontrole/{identifier}/bewijs')
     def get_evidence(request: Request, identifier: str):
@@ -365,10 +367,15 @@ def panel(app, state, account, document, attempt=''):
         return title + '<p>De weergavecontrole is nog niet ingericht voor deze omgeving.</p></section>'
     body = title + '<p>Vergelijkt de schermweergave met vastgelegde gegevens. Dit is geen inhoudelijke documentbeoordeling.</p>'
     body += '<p>De eerste controle vergelijkt passage-identiteit, scheiding van bronregels, reviewlinks en browserfouten. Broninhoud, locators en klinische volledigheid worden hiermee nog niet vastgesteld.</p>'
-    body += ('<form method="post" action="/inzicht/document/weergavecontrole">'
+    try:
+        pinned = context(state, account['account_id'], document, attempt)
+    except ValueError:
+        body += '<p>Deze controle is niet beschikbaar voor dit document of deze verwerkingspoging.</p>'
+    else:
+        body += ('<form method="post" action="/inzicht/document/weergavecontrole">'
              f'<input type="hidden" name="document" value="{escape(document, quote=True)}">'
              f'<input type="hidden" name="attempt" value="{escape(attempt, quote=True)}">'
-             f'<input type="hidden" name="expected_revision" value="{escape(state.objects_revision(document), quote=True)}">'
+             f'<input type="hidden" name="expected_revision" value="{escape(pinned["revision"], quote=True)}">'
              f'<input type="hidden" name="request_key" value="{uuid4().hex}">'
              '<button type="submit">Controleer weergave</button></form>')
     states = {'queued': 'In wachtrij', 'running': 'Weergave wordt gecontroleerd',
