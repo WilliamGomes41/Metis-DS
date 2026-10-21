@@ -39,8 +39,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # --- D-DEL-1 ---------------------------------------------------------------------
 
-def _delete_setup(tmp_path, title):
-    console = delete_fixture._console(tmp_path)
+def _delete_setup(tmp_path, title, *, production_console):
+    console = delete_fixture._console(tmp_path, production_console=production_console)
     accounts = delete_fixture._accounts(console)
     accounts["other_researcher"] = console.create_account(
         username="researcher.dirk", password="dirk-secret", roles=("researcher", "reviewer"),
@@ -58,21 +58,21 @@ def _listed(console, receipt):
     return receipt["snapshot_id"] in {row["snapshot_id"] for row in console.list_envelopes()}
 
 
-def test_publisher_role_deletes_unpublished_document(tmp_path):
-    console, accounts, receipt = _delete_setup(tmp_path, "Publisher verwijdert")
+def test_publisher_role_deletes_unpublished_document(tmp_path, *, production_console):
+    console, accounts, receipt = _delete_setup(tmp_path, "Publisher verwijdert", production_console=production_console)
     _delete(console, accounts["publisher"], receipt, "Publisher verwijdert")
     assert not _listed(console, receipt)
 
 
-def test_uploader_deletes_unpublished_document(tmp_path):
-    console, accounts, receipt = _delete_setup(tmp_path, "Uploader verwijdert")
+def test_uploader_deletes_unpublished_document(tmp_path, *, production_console):
+    console, accounts, receipt = _delete_setup(tmp_path, "Uploader verwijdert", production_console=production_console)
     _delete(console, accounts["researcher"], receipt, "Uploader verwijdert")
     assert not _listed(console, receipt)
 
 
 @pytest.mark.parametrize("actor", ["other_researcher", "reviewer"])
-def test_non_uploader_non_publisher_delete_is_refused(tmp_path, actor):
-    console, accounts, receipt = _delete_setup(tmp_path, "Niet van jou")
+def test_non_uploader_non_publisher_delete_is_refused(tmp_path, actor, *, production_console):
+    console, accounts, receipt = _delete_setup(tmp_path, "Niet van jou", production_console=production_console)
     with pytest.raises(ConsoleError, match="unpublished_delete_not_permitted"):
         _delete(console, accounts[actor], receipt, "Niet van jou")
     assert _listed(console, receipt)

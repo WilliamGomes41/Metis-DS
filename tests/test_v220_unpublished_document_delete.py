@@ -28,7 +28,6 @@ from src.object_taxonomy_v1 import (
     recommendation_strength_ui_applies,
 )
 from src.open_original_v1 import researcher_visible_prose
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import (
     CAPTURED,
     ConsoleError,
@@ -58,8 +57,8 @@ OVERWEEG = (
 CONFIRM_COPY = "Ik bevestig dat ik dit unpublished document wil verwijderen"
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -129,8 +128,8 @@ def _ingest(
     return console.ingest(**defaults)
 
 
-def _client(console: OperationsConsole, username: str = "researcher.anne") -> TestClient:
-    client = TestClient(create_console_app(console))
+def _client(console: OperationsConsole, username: str='researcher.anne', *, production_app) -> TestClient:
+    client = TestClient(production_app(console))
     passwords = {
         "reviewer.bert": "bert-secret",
         "researcher.anne": "anne-secret",
@@ -192,12 +191,12 @@ def _freeze_path(console: OperationsConsole, envelope: dict) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def test_delete_control_on_document_card_and_review_chooser(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_delete_control_on_document_card_and_review_chooser(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Continentie fixture")
     snap = receipt["snapshot_id"]
-    client = _client(console)
+    client = _client(console, production_app=production_app)
 
     ingest_html = client.get("/ingest").text
     assert DELETE_LABEL not in ingest_html
@@ -226,14 +225,16 @@ def test_delete_control_on_document_card_and_review_chooser(tmp_path: Path) -> N
     assert "envelope" not in _visible_text(ingest_html).lower()
 
 
-def test_delete_control_absent_for_published_projection(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_delete_control_absent_for_published_projection(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Gepubliceerd")
     rows = console._load_objects(receipt["snapshot_id"])
     rows[0]["governance"]["publication_status"] = "published"
     console._save_objects(receipt["snapshot_id"], rows)
-    client = _client(console)
+    from tests.complete_workflow_support import seed_canonical_release
+    seed_canonical_release(console.canonical_publication_store, snapshot_id=receipt["snapshot_id"], token=receipt["snapshot_id"])
+    client = _client(console, production_app=production_app)
     chooser = client.get("/review").text
     assert DELETE_LABEL not in chooser
     tree = client.get("/tree").text
@@ -255,8 +256,8 @@ def test_delete_label_is_researcher_dutch() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_kernel_no_confirm_does_not_delete(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_kernel_no_confirm_does_not_delete(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Bevestiging")
     snap = receipt["snapshot_id"]
@@ -272,15 +273,15 @@ def test_kernel_no_confirm_does_not_delete(tmp_path: Path) -> None:
             snapshot_id=snap,
         )
     assert snap in {row["snapshot_id"] for row in console.list_envelopes()}
-    assert _objects_path(console, snap).is_file()
+    assert console.workflow_document_store.list_document_objects(snap)
 
 
-def test_http_no_confirm_does_not_delete(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_http_no_confirm_does_not_delete(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="HTTP bevestiging")
     snap = receipt["snapshot_id"]
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     response = client.post(
         "/documents/delete",
         data={"snapshot_id": snap, "next": "/review"},
@@ -288,13 +289,13 @@ def test_http_no_confirm_does_not_delete(tmp_path: Path) -> None:
     )
     assert response.status_code == 400
     assert snap in {row["snapshot_id"] for row in console.list_envelopes()}
-    assert _objects_path(console, snap).is_file()
+    assert console.workflow_document_store.list_document_objects(snap)
     assert DELETE_LABEL not in client.get("/review").text
     assert DELETE_LABEL in client.get("/tree").text
 
 
-def test_confirmed_delete_runs(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_confirmed_delete_runs(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Weg")
     snap = receipt["snapshot_id"]
@@ -314,12 +315,12 @@ def test_confirmed_delete_runs(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_after_delete_snapshot_gone_from_inleveren_review_tree(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_after_delete_snapshot_gone_from_inleveren_review_tree(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     keep = _ingest(console, accounts, title="Blijft", filename="blijft.html", family="wondzorg")
     gone = _ingest(console, accounts, title="Weg", filename="weg.html", family="continentie")
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     response = client.post(
         "/documents/delete",
         data={
@@ -351,13 +352,12 @@ def test_after_delete_snapshot_gone_from_inleveren_review_tree(tmp_path: Path) -
 # ---------------------------------------------------------------------------
 
 
-def test_after_delete_objects_and_envelope_gone(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_after_delete_objects_and_envelope_gone(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Objecten weg")
     snap = receipt["snapshot_id"]
-    objects_path = _objects_path(console, snap)
-    assert objects_path.is_file()
+    assert console.workflow_document_store.list_document_objects(snap)
     assert console.snapshot_objects(snap)
     console.delete_unpublished_snapshot(
         actor_id=accounts["researcher"]["account_id"],
@@ -366,7 +366,7 @@ def test_after_delete_objects_and_envelope_gone(tmp_path: Path) -> None:
         confirm_title="Objecten weg",
     )
     assert snap not in console._envelopes
-    assert objects_path.exists() is False
+    assert console.workflow_document_store.list_document_objects(snap) == []
     with pytest.raises(ConsoleError, match="unknown_snapshot"):
         console.snapshot_objects(snap)
     with pytest.raises(ConsoleError, match="unknown_snapshot"):
@@ -374,8 +374,8 @@ def test_after_delete_objects_and_envelope_gone(tmp_path: Path) -> None:
     assert console._bindings.get(snap, []) == [] or snap not in console._bindings
 
 
-def test_freeze_bytes_of_unpublished_source_may_be_removed(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_freeze_bytes_of_unpublished_source_may_be_removed(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Freeze mee")
     freeze = _freeze_path(console, receipt)
@@ -391,8 +391,8 @@ def test_freeze_bytes_of_unpublished_source_may_be_removed(tmp_path: Path) -> No
     assert digest_dir.exists() is False or any(digest_dir.iterdir()) is False
 
 
-def test_shared_freeze_bytes_kept_when_other_snapshot_remains(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_shared_freeze_bytes_kept_when_other_snapshot_remains(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     data = _tiny_html("Gedeelde freeze")
     first = _ingest(
@@ -420,8 +420,8 @@ def test_shared_freeze_bytes_kept_when_other_snapshot_remains(tmp_path: Path) ->
 # ---------------------------------------------------------------------------
 
 
-def test_audit_ledger_records_who_when_snapshot_sha_title(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_audit_ledger_records_who_when_snapshot_sha_title(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Audit titel")
     deleted = console.delete_unpublished_snapshot(
@@ -454,14 +454,16 @@ def test_audit_ledger_records_who_when_snapshot_sha_title(tmp_path: Path) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_published_objects_must_not_be_deleted(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_published_objects_must_not_be_deleted(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Gepubliceerde objecten")
     snap = receipt["snapshot_id"]
     rows = console._load_objects(snap)
     rows[0]["governance"]["publication_status"] = "published"
     console._save_objects(snap, rows)
+    from tests.complete_workflow_support import seed_canonical_release
+    seed_canonical_release(console.canonical_publication_store, snapshot_id=snap, token=snap)
     with pytest.raises(ConsoleError, match="published_projection_must_not_be_deleted"):
         console.delete_unpublished_snapshot(
             actor_id=accounts["researcher"]["account_id"],
@@ -470,12 +472,13 @@ def test_published_objects_must_not_be_deleted(tmp_path: Path) -> None:
             confirm_title="Gepubliceerde objecten",
         )
     assert snap in {row["snapshot_id"] for row in console.list_envelopes()}
-    assert _objects_path(console, snap).is_file()
+    assert console.workflow_document_store.list_document_objects(snap)
     assert _freeze_path(console, receipt).is_file()
 
 
+@pytest.mark.file_topology
 def test_published_projection_file_is_not_deleted(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+    console = _file_console(tmp_path)
     accounts = _accounts(console)
     live = _ingest(console, accounts, title="Live unpublished")
     planted = _ingest(console, accounts, title="In projectie", filename="proj.html")
@@ -510,13 +513,16 @@ def test_published_projection_file_is_not_deleted(tmp_path: Path) -> None:
     assert planted["snapshot_id"] in {row["snapshot_id"] for row in console.list_envelopes()}
 
 
-def test_published_envelope_state_must_not_be_deleted(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+
+def test_published_envelope_state_must_not_be_deleted(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="State published")
     envelope = console._envelope(receipt["snapshot_id"])
     envelope["state"] = "published"
     console._save_envelopes()
+    from tests.complete_workflow_support import seed_canonical_release
+    seed_canonical_release(console.canonical_publication_store, snapshot_id=receipt["snapshot_id"], token=receipt["snapshot_id"])
     with pytest.raises(ConsoleError, match="published_projection_must_not_be_deleted"):
         console.delete_unpublished_snapshot(
             actor_id=accounts["researcher"]["account_id"],
@@ -531,15 +537,15 @@ def test_published_envelope_state_must_not_be_deleted(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_hide_selected_objects_in_staying_freeze_is_forbidden(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_hide_selected_objects_in_staying_freeze_is_forbidden(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Niet verbergen")
     snap = receipt["snapshot_id"]
     objects = console.snapshot_objects(snap)
     leftover = remaining_unclassified(_non_document(objects))
     target = leftover[0] if leftover else _non_document(objects)[0]
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     before = client.get(f"/review?document={snap}").text
     response = client.post(
         "/documents/delete",
@@ -576,8 +582,8 @@ def test_delete_is_whole_unpublished_snapshot_only() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_other_snapshots_untouched(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_other_snapshots_untouched(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     keep = _ingest(console, accounts, title="Houden", filename="houden.html", family="wondzorg")
     gone = _ingest(console, accounts, title="Verwijderen", filename="verwijderen.html")
@@ -598,8 +604,8 @@ def test_other_snapshots_untouched(tmp_path: Path) -> None:
     assert _freeze_path(console, still).read_bytes() == keep_freeze
 
 
-def test_delete_does_not_wipe_home_data_or_unrelated_files(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_delete_does_not_wipe_home_data_or_unrelated_files(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Geen wipe")
     unrelated = tmp_path / "unrelated.txt"
@@ -608,7 +614,7 @@ def test_delete_does_not_wipe_home_data_or_unrelated_files(tmp_path: Path) -> No
     fake_home.parent.mkdir(parents=True)
     fake_home.write_text("store", encoding="utf-8")
     accounts_path = console.runtime / "accounts.json"
-    assert accounts_path.is_file()
+    assert console.list_accounts()
     console.delete_unpublished_snapshot(
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
@@ -617,7 +623,7 @@ def test_delete_does_not_wipe_home_data_or_unrelated_files(tmp_path: Path) -> No
     )
     assert unrelated.read_text(encoding="utf-8") == "keep"
     assert fake_home.read_text(encoding="utf-8") == "store"
-    assert accounts_path.is_file()
+    assert console.list_accounts()
     assert console.runtime.is_dir()
     source_root = (tmp_path / "sources" / "private").resolve()
     assert source_root.is_dir()
@@ -648,8 +654,8 @@ def test_no_ssh_or_home_data_wipe_as_product_path() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_uploader_may_delete_without_second_reviewer_or_four_eyes(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_uploader_may_delete_without_second_reviewer_or_four_eyes(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Uploader delete")
     deleted = console.delete_unpublished_snapshot(
@@ -663,9 +669,9 @@ def test_uploader_may_delete_without_second_reviewer_or_four_eyes(tmp_path: Path
     assert deleted["second_named_reviewer_required"] is False
 
 
-def test_reviewer_who_is_not_the_uploader_is_not_the_delete_operator(tmp_path: Path) -> None:
+def test_reviewer_who_is_not_the_uploader_is_not_the_delete_operator(tmp_path: Path, *, production_console) -> None:
     """D-DEL-1 (William, 14-10-2026): alleen publisher en uploader MOETEN verwijderen."""
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Reviewer delete")
     with pytest.raises(ConsoleError, match="unpublished_delete_not_permitted"):
@@ -678,9 +684,9 @@ def test_reviewer_who_is_not_the_uploader_is_not_the_delete_operator(tmp_path: P
     assert receipt["snapshot_id"] in {row["snapshot_id"] for row in console.list_envelopes()}
 
 
-def test_publisher_is_a_delete_operator(tmp_path: Path) -> None:
+def test_publisher_is_a_delete_operator(tmp_path: Path, *, production_console) -> None:
     """D-DEL-1: de rol publisher MOET een ongepubliceerd document verwijderen."""
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Publisher wel")
     console.delete_unpublished_snapshot(
@@ -705,8 +711,8 @@ def test_forbidden_identities_are_not_the_delete_operator() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_delete_is_not_publication_and_g2_still_blocks(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_delete_is_not_publication_and_g2_still_blocks(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     keep = _ingest(console, accounts, title="Nog live", filename="live.html")
     gone = _ingest(console, accounts, title="Opruimen", filename="opruimen.html")
@@ -728,8 +734,9 @@ def test_delete_is_not_publication_and_g2_still_blocks(tmp_path: Path) -> None:
     )
     assert considered["publish_allowed"] is False
     assert considered["g2"] == "BLOCKED"
-    html = _client(console, "publisher.carla").get("/publish").text
-    assert "geblokkeerd" in html.lower() or "BLOCKED" in html
+    html = _client(console, "publisher.carla", production_app=production_app).get("/publish").text
+    assert '<h1>Publiceren</h1>' in html
+    assert "data-publish-form" not in html
     events = read_events(console._ledger_path)
     delete_events = [row for row in events if row.get("event_type") == "unpublished_snapshot_deleted"]
     assert delete_events
@@ -754,7 +761,7 @@ def test_unclassified_still_never_served() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_v216_through_v219_review_extract_still_holds(tmp_path: Path) -> None:
+def test_v216_through_v219_review_extract_still_holds(tmp_path: Path, *, production_app, production_console) -> None:
     freeze = (
         "<html><body>"
         "<nav>Tools</nav><a>Home</a><span>Richtlijnen</span><p>Meedenken</p>"
@@ -784,7 +791,7 @@ def test_v216_through_v219_review_extract_still_holds(tmp_path: Path) -> None:
         "Tenzij samen met de cliënt hiervan wordt afgezien."
     )
     assert fusion_is_forbidden(fused_exception) is True
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=freeze, filename="hold.html", title="Hold")
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
@@ -803,7 +810,7 @@ def test_v216_through_v219_review_extract_still_holds(tmp_path: Path) -> None:
     assert all(obj.get("proposed_object_type") == "heading" or obj.get("object_type") == "heading" for obj in koppen)
     assert leftover
     rec = next(obj for obj in objects if OVERWEEG in _text_of(obj))
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
     headings = client.get(f"/review?document={receipt['snapshot_id']}&task=headings").text
     individual = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
@@ -823,7 +830,7 @@ def test_v216_through_v219_review_extract_still_holds(tmp_path: Path) -> None:
     leftover_ids = {obj["object_id"] for obj in leftover}
     assert duty_ids.isdisjoint(leftover_ids)
     heading = review_card_sentence(rec)
-    card = _client(console).get(
+    card = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
     object_text = re.search(
@@ -843,7 +850,7 @@ def test_v216_through_v219_review_extract_still_holds(tmp_path: Path) -> None:
     )
     assert "<" not in passage
     assert "class=" not in passage
-    ingest_form = _client(console).get("/ingest").text
+    ingest_form = _client(console, production_app=production_app).get("/ingest").text
     family_input = re.search(r'<input id="family"[^>]*>', ingest_form)
     assert family_input is not None
     assert "value=" not in family_input.group(0)
@@ -872,10 +879,8 @@ def test_fixture_html_still_extracts_when_present() -> None:
         "continentie/../escape.html",
     ],
 )
-def test_v220_ingest_filename_cannot_escape_source_store(
-    tmp_path: Path, filename: str
-) -> None:
-    console = _console(tmp_path)
+def test_v220_ingest_filename_cannot_escape_source_store(tmp_path: Path, filename: str, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     store = (tmp_path / "sources" / "private").resolve()
     with pytest.raises(ConsoleError, match="invalid_store_path"):
@@ -899,10 +904,8 @@ def test_v220_ingest_filename_cannot_escape_source_store(
         "snap-0123456789abcdef-01234567/../../etc/passwd",
     ],
 )
-def test_v220_delete_snapshot_id_cannot_escape_store(
-    tmp_path: Path, snapshot_id: str
-) -> None:
-    console = _console(tmp_path)
+def test_v220_delete_snapshot_id_cannot_escape_store(tmp_path: Path, snapshot_id: str, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     _ingest(console, accounts, title="Pad")
     store = (tmp_path / "sources" / "private").resolve()
@@ -925,3 +928,11 @@ def test_v220_delete_snapshot_id_cannot_escape_store(
 def test_v220_safe_filename_still_accepts_plain_basenames() -> None:
     assert safe_store_filename("continentie.html") == "continentie.html"
     assert safe_store_filename("richtlijn-v2.html") == "richtlijn-v2.html"
+
+
+def _file_console(tmp_path: Path) -> OperationsConsole:
+    return OperationsConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "output" / "runtime" / "operations-console",
+    )

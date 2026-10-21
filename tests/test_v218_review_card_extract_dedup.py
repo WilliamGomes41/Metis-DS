@@ -29,7 +29,6 @@ from src.object_taxonomy_v1 import (
     recommendation_strength_ui_applies,
 )
 from src.open_original_v1 import researcher_visible_prose
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import (
     ConsoleError,
     OperationsConsole,
@@ -54,8 +53,8 @@ BIJVOORBEELD = "Bijvoorbeeld een toiletdagboek van drie dagen."
 CHROME_LABELS = ("Tools", "Home", "Richtlijnen", "Meedenken")
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -113,8 +112,8 @@ def _ingest(
     return console.ingest(**defaults)
 
 
-def _client(console: OperationsConsole, username: str = "reviewer.bert") -> TestClient:
-    client = TestClient(create_console_app(console))
+def _client(console: OperationsConsole, username: str='reviewer.bert', *, production_app) -> TestClient:
+    client = TestClient(production_app(console))
     passwords = {
         "reviewer.bert": "bert-secret",
         "researcher.anne": "anne-secret",
@@ -318,16 +317,16 @@ def _eval(query: str, records: list[dict]) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def test_review_card_shows_freeze_sentence_once_not_h3_and_body(tmp_path: Path) -> None:
+def test_review_card_shows_freeze_sentence_once_not_h3_and_body(tmp_path: Path, *, production_app, production_console) -> None:
     freeze = _snapshot_fail_html()
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=freeze, filename="continentie.html", title="Continentie"
     )
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     rec = next(obj for obj in objects if OVERWEEG in _text_of(obj))
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
     left = _object_column(html)
@@ -345,9 +344,9 @@ def test_review_card_shows_freeze_sentence_once_not_h3_and_body(tmp_path: Path) 
     assert review_row_title(rec) in _text_of(rec) or review_row_title(rec).rstrip("…") in _text_of(rec)
 
 
-def test_eventueel_clause_screenshot_fail_is_not_a_standalone_card(tmp_path: Path) -> None:
+def test_eventueel_clause_screenshot_fail_is_not_a_standalone_card(tmp_path: Path, *, production_app, production_console) -> None:
     freeze = _snapshot_fail_html()
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=freeze, filename="continentie.html", title="Continentie"
@@ -358,7 +357,7 @@ def test_eventueel_clause_screenshot_fail_is_not_a_standalone_card(tmp_path: Pat
     rec = next(obj for obj in objects if FULL_RECOMMENDATION == _text_of(obj) or (
         OVERWEEG in _text_of(obj) and EVENTUEEL in _text_of(obj)
     ))
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
     left = _object_column(html)
@@ -381,7 +380,7 @@ def test_eventueel_clause_screenshot_fail_is_not_a_standalone_card(tmp_path: Pat
 # ---------------------------------------------------------------------------
 
 
-def test_extract_does_not_split_trailing_eventueel_or_bijvoorbeeld(tmp_path: Path) -> None:
+def test_extract_does_not_split_trailing_eventueel_or_bijvoorbeeld(tmp_path: Path, *, production_console) -> None:
     assert is_continuation_fragment(EVENTUEEL) is True
     assert is_continuation_fragment(BIJVOORBEELD) is True
     assert is_continuation_fragment("Zoals bij een vaste plasroutine.") is True
@@ -404,7 +403,7 @@ def test_extract_does_not_split_trailing_eventueel_or_bijvoorbeeld(tmp_path: Pat
     )
     fragment_texts = [row["clean_text"] for row in fragments]
     assert EVENTUEEL in fragment_texts or any(EVENTUEEL in text for text in fragment_texts)
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=freeze, filename="continentie.html", title="Continentie"
@@ -427,9 +426,9 @@ def test_extract_does_not_split_trailing_eventueel_or_bijvoorbeeld(tmp_path: Pat
 # ---------------------------------------------------------------------------
 
 
-def test_extract_does_not_emit_identical_clean_text_from_one_freeze(tmp_path: Path) -> None:
+def test_extract_does_not_emit_identical_clean_text_from_one_freeze(tmp_path: Path, *, production_console) -> None:
     freeze = _snapshot_fail_html()
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=freeze, filename="continentie.html", title="Continentie"
@@ -449,11 +448,9 @@ def test_extract_does_not_emit_identical_clean_text_from_one_freeze(tmp_path: Pa
     assert texts.count("2. Inleiding") == 1
 
 
-def test_overweeg_recommendation_is_one_object_not_truncated_clause_plus_duplicates(
-    tmp_path: Path,
-) -> None:
+def test_overweeg_recommendation_is_one_object_not_truncated_clause_plus_duplicates(tmp_path: Path, *, production_app, production_console) -> None:
     freeze = _snapshot_fail_html()
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=freeze, filename="continentie.html", title="Continentie"
@@ -466,7 +463,7 @@ def test_overweeg_recommendation_is_one_object_not_truncated_clause_plus_duplica
     assert len(matches) == 1
     assert EVENTUEEL in matches[0]
     rec = next(obj for obj in objects if OVERWEEG in _text_of(obj))
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
     left = _object_column(html)
@@ -481,10 +478,10 @@ def test_overweeg_recommendation_is_one_object_not_truncated_clause_plus_duplica
 # ---------------------------------------------------------------------------
 
 
-def test_unpublished_continentie_reextract_on_same_sha256_allowed(tmp_path: Path) -> None:
+def test_unpublished_continentie_reextract_on_same_sha256_allowed(tmp_path: Path, *, production_console) -> None:
     freeze = _snapshot_fail_html()
     expected = sha256_bytes(freeze)
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=freeze, filename="continentie.html", title="Continentie"
@@ -518,8 +515,8 @@ def test_unpublished_continentie_reextract_on_same_sha256_allowed(tmp_path: Path
     assert replaced["sha256"] == fixture_receipt["sha256"] == sha256_bytes(fixture)
 
 
-def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=_snapshot_fail_html(), filename="continentie.html", title="Continentie"
@@ -550,12 +547,12 @@ def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path) -> None:
         _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     )
     assert any(obj["object_id"] == planted["object_id"] for obj in leftover)
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&task=inventory"
     ).text
     assert "Alle passages en hun afhandeling" in html
     assert "unclassified" not in html.casefold()
-    card = _client(console).get(
+    card = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={planted['object_id']}"
     ).text
     assert planted_text in card
@@ -575,15 +572,15 @@ def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path) -> None:
     }
 
 
-def test_reextract_refuses_published_objects(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_reextract_refuses_published_objects(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=_snapshot_fail_html(), filename="continentie.html", title="Continentie"
     )
-    rows = console._load_objects(receipt["snapshot_id"])
-    rows[0]["governance"]["publication_status"] = "published"
-    console._save_objects(receipt["snapshot_id"], rows)
+    from tests.complete_workflow_support import seed_canonical_release
+    seed_canonical_release(console.canonical_publication_store,
+                           snapshot_id=receipt["snapshot_id"], token=receipt["snapshot_id"])
     with pytest.raises(ConsoleError, match="published_objects_must_not_be_rewritten"):
         console.reextract_unpublished(
             actor_id=accounts["researcher"]["account_id"],
@@ -596,9 +593,9 @@ def test_reextract_refuses_published_objects(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_v217_chrome_slogan_bronpassage_prose_still_holds(tmp_path: Path) -> None:
+def test_v217_chrome_slogan_bronpassage_prose_still_holds(tmp_path: Path, *, production_app, production_console) -> None:
     freeze = _snapshot_fail_html()
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=freeze, filename="continentie.html", title="Continentie"
@@ -610,7 +607,7 @@ def test_v217_chrome_slogan_bronpassage_prose_still_holds(tmp_path: Path) -> Non
         assert all(label.casefold() != text.casefold() for text in texts)
     source = APP_SOURCE.read_text(encoding="utf-8")
     assert SLOGAN not in source
-    html = _client(console, "researcher.anne").get(
+    html = _client(console, "researcher.anne", production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}"
     ).text
     assert SLOGAN not in html
@@ -619,7 +616,7 @@ def test_v217_chrome_slogan_bronpassage_prose_still_holds(tmp_path: Path) -> Non
     assert "Documenten" in html
     assert "Documentenhiërarchie" not in html
     rec = next(obj for obj in objects if OVERWEEG in _text_of(obj))
-    card = _client(console).get(
+    card = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
     if recommendation_strength_ui_applies(rec):
@@ -695,8 +692,8 @@ def test_serving_still_fail_closed_only_confirmed_recommendation_mag() -> None:
     assert published_object_type(unclassified) == "unclassified"
 
 
-def test_publish_remains_g2_blocked(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_publish_remains_g2_blocked(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console, accounts, data=_snapshot_fail_html(), filename="continentie.html", title="Continentie"
@@ -713,8 +710,9 @@ def test_publish_remains_g2_blocked(tmp_path: Path) -> None:
     )
     assert considered["publish_allowed"] is False
     assert considered["g2"] == "BLOCKED"
-    html = _client(console, "publisher.carla").get("/publish").text
-    assert "geblokkeerd" in html.lower() or "BLOCKED" in html
+    html = _client(console, "publisher.carla", production_app=production_app).get("/publish").text
+    assert '<h1>Publiceren</h1>' in html
+    assert "data-publish-form" not in html
 
 
 # ---------------------------------------------------------------------------
@@ -733,10 +731,8 @@ def test_publish_remains_g2_blocked(tmp_path: Path) -> None:
         "continentie/../escape.html",
     ],
 )
-def test_v218_ingest_filename_cannot_escape_source_store(
-    tmp_path: Path, filename: str
-) -> None:
-    console = _console(tmp_path)
+def test_v218_ingest_filename_cannot_escape_source_store(tmp_path: Path, filename: str, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     store = (tmp_path / "sources" / "private").resolve()
     with pytest.raises(ConsoleError, match="invalid_store_path"):

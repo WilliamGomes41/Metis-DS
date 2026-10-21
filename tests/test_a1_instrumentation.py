@@ -216,12 +216,10 @@ def test_diagnostics_identity_falls_back_to_deployed_commit_file(events, marker,
     assert RequestDiagnostics(FastAPI()).identity['version'] == 'unknown'  # unchanged default
 
 
-def test_console_health_reports_running_commit(tmp_path, marker):
-    from src.operations_console_app import create_console_app
-    from src.operations_console_v1 import OperationsConsole
-    console = OperationsConsole(root=tmp_path, source_store=tmp_path / 'sources' / 'private',
+def test_console_health_reports_running_commit(tmp_path, marker, *, production_app, production_console):
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / 'sources' / 'private',
                                 runtime=tmp_path / 'output' / 'runtime' / 'operations-console')
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     assert client.get('/health').json()['deployed_commit'] == 'not_recorded'
     marker.write_text(COMMIT + '\n')
     health = client.get('/health').json()
