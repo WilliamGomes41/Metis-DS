@@ -2,7 +2,7 @@ Een gestructureerde PG-reparatie kon haar eigen voorbereide reviewbewijs niet le
 
 ## Scope
 
-V&VN Data Services, besluit B-D6-1. Gebaseerd op `codex/d6a-10-processing-routes`. D6b en GNC zijn niet gestart; #695 blijft onafhankelijk en gaat voor bij capaciteitstekort.
+Voortbouwend op [#800](https://github.com/WilliamGomes41/Metis-DS/pull/800). V&VN Data Services, besluit B-D6-1. Gebaseerd op `codex/d6a-10-processing-routes`. D6b en GNC zijn niet gestart; #695 blijft onafhankelijk en gaat voor bij capaciteitstekort.
 
 ## Change class / rewrite risk
 
@@ -85,4 +85,6 @@ PostgreSQL 16 is al gedeclareerd. Lokale/testsetup en de meetwijze staan in `doc
 - [x] `python -m compileall -q src tests`
 - [ ] CI op deze exacte head
 
-Gewijzigde testbestanden in deze PR: 1. De PR is lokaal voorbereid; deze beschrijving is nog niet naar GitHub verzonden.
+Gewijzigde testbestanden in deze PR: 1. De branch is gepusht; dit is een draft-PR binnen de bestaande stack.
+
+Op de huidige implementatie zijn de negen gerichte PostgreSQL-cases opnieuw groen, zonder skips. De release-control-preflight herkent alle bestaande bewijslabels afzonderlijk; de uitvoerbare testcode is daarbij ongewijzigd. De directe helperaanroepen zijn gecontroleerd op ontbrekende productiefixtures. Volledige CI op deze head moet nog draaien.

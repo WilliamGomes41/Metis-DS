@@ -1,0 +1,286 @@
+{
+  "recorded_at": "2026-10-21T12:02:34.242746+00:00",
+  "action": "Open exactly three draft PRs in the existing stack; no merge/deploy",
+  "snapshots": [
+    {
+      "portion": "review-evidence-prerequisite",
+      "pr": 801,
+      "url": "https://github.com/WilliamGomes41/Metis-DS/pull/801",
+      "head": "codex/fix-pg-command-review-evidence",
+      "head_sha": "a553af3064c7d0900a1a7e412f4c18d9b24d8e9d",
+      "base": "codex/d6a-10-processing-routes",
+      "base_sha": "22f903402c386d16108bc3757b72e3caf33ad5c8",
+      "draft": true,
+      "runs": [
+        {
+          "id": 39595696738,
+          "name": "Bend experiment proof",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 39595696773,
+          "name": "ci",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 39595696699,
+          "name": "source-processing-proof",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 39595696769,
+          "name": "workflow-topology-proof",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 39595696713,
+          "name": "docling-acceptance",
+          "status": "in_progress",
+          "conclusion": null
+        }
+      ]
+    },
+    {
+      "portion": "11",
+      "pr": 802,
+      "url": "https://github.com/WilliamGomes41/Metis-DS/pull/802",
+      "head": "codex/d6a-11-native-composition",
+      "head_sha": "65c9090524a199ed65861ca8d0b5319fcaf97bd1",
+      "base": "codex/fix-pg-command-review-evidence",
+      "base_sha": "a553af3064c7d0900a1a7e412f4c18d9b24d8e9d",
+      "draft": true,
+      "runs": [
+        {
+          "id": 39595912974,
+          "name": "workflow-topology-proof",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 39595912956,
+          "name": "source-processing-proof",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 39595912948,
+          "name": "ci",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 39595912927,
+          "name": "docling-acceptance",
+          "status": "in_progress",
+          "conclusion": null
+        }
+      ]
+    },
+    {
+      "portion": "12",
+      "pr": 803,
+      "url": "https://github.com/WilliamGomes41/Metis-DS/pull/803",
+      "head": "codex/d6a-12-source-context",
+      "head_sha": "1fab6271c4670e8ad272ccfc7d605e5ae498d0dc",
+      "base": "codex/d6a-11-native-composition",
+      "base_sha": "65c9090524a199ed65861ca8d0b5319fcaf97bd1",
+      "draft": true,
+      "runs": [
+        {
+          "id": 39596235670,
+          "name": "workflow-topology-proof",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 39596235591,
+          "name": "docling-acceptance",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 39596236011,
+          "name": "ci",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 39596235799,
+          "name": "source-processing-proof",
+          "status": "in_progress",
+          "conclusion": null
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "portion": "review-evidence-prerequisite",
+      "tested_implementation_commit": "fc245d52e3edc3afa346ed0e8a7474dd09963af9",
+      "published_head": "a553af3064c7d0900a1a7e412f4c18d9b24d8e9d",
+      "junit": "d6a-review-publication.xml",
+      "sha256": "42a1b03b9dbd2cce9f057e11b755fe3d4eee60d8194eea732fc7076494dae413",
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "postgres_skips": 0
+    },
+    {
+      "portion": "11",
+      "tested_implementation_commit": "6e9122bbf48ccfae168345795219ffeebbf3c771",
+      "published_head": "65c9090524a199ed65861ca8d0b5319fcaf97bd1",
+      "junit": "d6a11-publication.xml",
+      "sha256": "965e5e606a0e6b5417116c9e737066738459068ed337a403ab5147e4e4b77dfd",
+      "tests": 110,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "postgres_skips": 0
+    },
+    {
+      "portion": "12",
+      "tested_implementation_commit": "1fab6271c4670e8ad272ccfc7d605e5ae498d0dc",
+      "published_head": "1fab6271c4670e8ad272ccfc7d605e5ae498d0dc",
+      "junit": "d6a12-publication.xml",
+      "sha256": "e5372003b518ff1f68bf40cfb57145b888c692880548fbc723611427ab03ff3c",
+      "tests": 205,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 12,
+      "postgres_skips": 0
+    }
+  ],
+  "helper_audit": [
+    {
+      "worktree": "/workspace/d6a-review-publish",
+      "helpers": 58,
+      "direct_calls": 472,
+      "missing": [],
+      "scope": "Direct helper imports/local calls; dynamic/attribute dispatch and **kwargs excluded"
+    },
+    {
+      "worktree": "/workspace/d6a11-verify",
+      "helpers": 60,
+      "direct_calls": 484,
+      "missing": [],
+      "scope": "Direct helper imports/local calls; dynamic/attribute dispatch and **kwargs excluded"
+    },
+    {
+      "worktree": "/workspace/d6a12-publish",
+      "helpers": 63,
+      "direct_calls": 494,
+      "missing": [],
+      "scope": "Direct helper imports/local calls; dynamic/attribute dispatch and **kwargs excluded"
+    }
+  ],
+  "direct_native_constructor_keywords": {
+    "calls": 50,
+    "unexpected_keywords": []
+  },
+  "prerequisite_marker_repair": {
+    "before_errors": [
+      "slop: required but no matching test marker/evidence path",
+      "releasebewijs: required but no matching test marker/evidence path"
+    ],
+    "after_errors": [],
+    "source_change": "Only existing module evidence labels split into separate comment lines",
+    "executable_AST_identical": true
+  },
+  "source_propagation": [
+    {
+      "portion": "review-evidence-prerequisite",
+      "before": "fc245d52e3edc3afa346ed0e8a7474dd09963af9",
+      "after": "a553af3064c7d0900a1a7e412f4c18d9b24d8e9d",
+      "change": "Only module evidence labels split; executable AST identical"
+    },
+    {
+      "portion": "11",
+      "before": "6e9122bbf48ccfae168345795219ffeebbf3c771",
+      "after": "65c9090524a199ed65861ca8d0b5319fcaf97bd1",
+      "change": "Only module evidence labels split; executable AST identical"
+    },
+    {
+      "portion": "12",
+      "before": "1e937b248b375266a1adbf4451e9623e98f731da",
+      "after": "1fab6271c4670e8ad272ccfc7d605e5ae498d0dc",
+      "change": "Only module evidence labels split; executable AST identical"
+    },
+    {
+      "portion": "13",
+      "before": "5d2ecf3fc50d9e10d9b4ec5bb263a904706afee0",
+      "after": "cc2e080fbc6b49d984fd5c2dd54cd74602e5f3bf",
+      "change": "Only module evidence labels split; executable AST identical"
+    },
+    {
+      "portion": "14",
+      "before": "0372dc977b54d0ca544d8b81c2080be7d116d84e",
+      "after": "2368d0b8a2c9ad0a6fbe69b25800f5d61b9b5ef9",
+      "change": "Only module evidence labels split; executable AST identical"
+    },
+    {
+      "portion": "15",
+      "before": "6d0beec8a946f67007be31d96795fdf781abae7c",
+      "after": "7b8ddb9855883d1c513d7931fa6249ea9c0167a8",
+      "change": "Only module evidence labels split; executable AST identical"
+    },
+    {
+      "portion": "16",
+      "before": "b900d3ba1d0f8f94a33895f14d7fd45341b7f42c",
+      "after": "431ed9390d593a41fcabe50b88e69ed8608f3be7",
+      "change": "Only module evidence labels split; executable AST identical"
+    },
+    {
+      "portion": "17",
+      "before": "ca3c6ea1d6d0b4979bc3f9267c158e05f4fb43de",
+      "after": "4660e4343b7184dc28062e5da8bb89fc1b5939a8",
+      "change": "Only module evidence labels split; executable AST identical"
+    },
+    {
+      "portion": "18",
+      "before": "8753208d01d5518f2d50ff6fdaad0c5be6f1edae",
+      "after": "f402ccab3257ef52d791300ad8846c682371ca4a",
+      "change": "Only module evidence labels split; executable AST identical"
+    },
+    {
+      "portion": "19",
+      "before": "6a206ad2de38bad29cfd9a597c17ca6d64e7718e",
+      "after": "f0c5e293555d935d25f2e2b75a28f3424c429736",
+      "change": "Only module evidence labels split; executable AST identical"
+    },
+    {
+      "portion": "21",
+      "before": "e5591e56b88e548faecb6933814c60953a2404bc",
+      "after": "e4b25d762274409e85d8576a9eed1fbaffa349ab",
+      "change": "Only module evidence labels split; executable AST identical"
+    },
+    {
+      "portion": "22",
+      "before": "6a5ede6b53d9350643e74f7e8926d5026771a0c6",
+      "after": "1b1827ecbac0857e399b259d28d2a5631c6255bb",
+      "change": "Only module evidence labels split; executable AST identical"
+    }
+  ],
+  "opened_total": 13,
+  "remaining_to_open": 9,
+  "verification": {
+    "repository_preflight": "PASS",
+    "architecture_boundaries": "PASS",
+    "release_control": "PASS for each immediate base",
+    "compileall": "PASS",
+    "change_contracts": "PASS",
+    "max_test_files": 20,
+    "branch_ancestry": "PASS"
+  },
+  "limits": [
+    "Full exact-head CI and per-portion timing are running, not yet completed.",
+    "Twelve real Docling PDF cases are optional local skips, not native PG acceptance evidence; dedicated CI must execute them.",
+    "First two local runs preceded only the module-label comment fix; executable source equivalence verified for all affected branches."
+  ],
+  "D6a_done": false,
+  "D6b_started": false
+}

@@ -27,7 +27,7 @@
     "first_pr": "https://github.com/WilliamGomes41/Metis-DS/pull/791",
     "first_pr_draft": true,
     "ci_run": "https://github.com/WilliamGomes41/Metis-DS/actions/runs/39540968976",
-    "remaining_prs": "12 prepared branches have no PR yet",
+    "remaining_prs": "9 prepared branches have no PR yet",
     "initial_ci_run": "https://github.com/WilliamGomes41/Metis-DS/actions/runs/39539031210",
     "status_evidence": "publication-status.json",
     "second_pr": "https://github.com/WilliamGomes41/Metis-DS/pull/792",
@@ -73,10 +73,23 @@
       {
         "portion": "10",
         "url": "https://github.com/WilliamGomes41/Metis-DS/pull/800"
+      },
+      {
+        "portion": "review-evidence-prerequisite",
+        "url": "https://github.com/WilliamGomes41/Metis-DS/pull/801"
+      },
+      {
+        "portion": "11",
+        "url": "https://github.com/WilliamGomes41/Metis-DS/pull/802"
+      },
+      {
+        "portion": "12",
+        "url": "https://github.com/WilliamGomes41/Metis-DS/pull/803"
       }
     ],
     "portions03_05_evidence": "portions03-05-publication.json",
-    "portions06_10_evidence": "portions06-10-publication.json"
+    "portions06_10_evidence": "portions06-10-publication.json",
+    "prerequisite_portions11_12_evidence": "prerequisite-portions11-12-publication.json"
   },
   "fixture_speedup": "fixture-prefetch-benchmark.json",
   "environment_isolation": "fixture-environment-isolation.json",
@@ -97,5 +110,6 @@
   "portion10_lock_observation_repair": "portion10-lock-observation-repair.json",
   "portion09_10_recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
   "portion09_10_native_label_repair": "portion09-10-native-label-repair.json",
-  "portions09_10_ci_success": "portions09-10-ci-success.json"
+  "portions09_10_ci_success": "portions09-10-ci-success.json",
+  "prerequisite_portions11_12_publication": "prerequisite-portions11-12-publication.json"
 }

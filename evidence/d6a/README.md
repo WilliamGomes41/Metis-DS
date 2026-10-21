@@ -17,10 +17,18 @@ Ook porties03 tot en met10 zijn als draft geopend:
 [#798](https://github.com/WilliamGomes41/Metis-DS/pull/798),
 [#799](https://github.com/WilliamGomes41/Metis-DS/pull/799) en
 [#800](https://github.com/WilliamGomes41/Metis-DS/pull/800).
-Tien PRs zijn geopend; twaalf moeten nog worden geopend.
+Dertien draft-PRs zijn geopend; negen moeten nog worden geopend.
 De publicatiebewijzen bewaren hun oorspronkelijke momentopname. Porties09 en10 zijn inmiddels volledig groen in CI.
 Zie [publicatiebewijs van porties03–05](portions03-05-publication.json) en
 [porties06–10](portions06-10-publication.json).
+
+De volgende drie zijn nu geopend: de afzonderlijke PG-reviewreparatie
+[#801](https://github.com/WilliamGomes41/Metis-DS/pull/801),
+D6a/11 [#802](https://github.com/WilliamGomes41/Metis-DS/pull/802) en
+D6a/12 [#803](https://github.com/WilliamGomes41/Metis-DS/pull/803).
+Lokaal opnieuw uitgevoerd:9/9,110/110 en193 geslaagd plus12 optionele
+PDF-skips; nul PG-skips. De volledige CI loopt nog.
+Zie [het publicatiebewijs](prerequisite-portions11-12-publication.json).
 
 D6a is nog niet formeel afgerond en D6b is niet gestart. #695 houdt voorrang
 bij capaciteitsgebrek; GNC is niet gestart.
