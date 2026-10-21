@@ -146,3 +146,20 @@ canonical tuples blijven behouden en alleen de benoemde `clear repair context`-
 opvolger met dezelfde bron/inhoud wordt toegestaan. De autorisatie-race start
 zijn tweede worker vóór de legacy fixture, zodat alleen de rolwijziging tijdens
 de voorbereiding plaatsvindt. Deze aanpassingen veranderen geen runtimecode.
+
+Portie 7 migreert broncontext-, lineage-, closed-loop- en HTTP-leesproeven.
+Fixture-aliassen delen één onderliggende geïsoleerde database per test; een
+extra onafhankelijke identity-reader bewijst dat zij dezelfde authority zien.
+De source-selection-kostproef instrumenteert echte PG-methoden en schrijft
+concurrente wijzigingen via een onafhankelijke PG-store. Geen opslagdouble of
+vervangende consoleklasse is daarvoor nodig. De productiemiddleware wordt
+precies eenmaal gebruikt.
+
+Closed-loop-unitproeven roepen expliciet de bestaande owner-methode aan op de
+productieconsole, waar zij historische ongestructureerde `revise`-records nodig
+hebben. Dit is owner-unitbewijs; het is geen claim dat de bovenliggende
+structured-repair-router die legacy opdracht accepteert. De HTTP-negatiefproef
+gebruikt na het klaarzetten van zo'n historisch record de echte productieroutes.
+Twee T11-proeven van dubbele exacte tupleversies in een JSON-bestand blijven
+`file_topology`; PostgreSQL weigert die representatie via zijn primary key.
+De semantische publicatie-sealproef controleert nu canonical PG-rijen.

@@ -29,7 +29,7 @@ from starlette.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 
-from tests.complete_workflow_support import complete_postgres  # noqa: F401, E402
+from tests.complete_workflow_support import complete_postgres, _isolated_console_postgres  # noqa: F401, E402
 
 
 def _start_test_postgres(config):

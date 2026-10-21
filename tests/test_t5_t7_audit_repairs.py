@@ -144,8 +144,8 @@ def test_consider_publish_passes_explicit_boom_path(tmp_path):
     assert "not_knowledge_candidate" not in considered["blockers"]
 
 
-def test_historical_heading_does_not_enter_publish_set_or_change_knowledge_gate(tmp_path):
-    console, reviewer, snapshot = _console(tmp_path)
+def test_historical_heading_does_not_enter_publish_set_or_change_knowledge_gate(tmp_path, production_console):
+    console, reviewer, snapshot = _console(tmp_path, production_console=production_console)
     publisher = console.create_account(username="carla", password="carla-secret", roles=("publisher",))
     envelope = console._envelope(snapshot)
     path, _ = console._verified_source_bytes(envelope)
@@ -166,7 +166,7 @@ def test_historical_heading_does_not_enter_publish_set_or_change_knowledge_gate(
     _project_policy(console, snapshot, obj)
     _stamp_hash(obj)
     _append(console, snapshot, obj)
-    console._bindings[snapshot] = [_binding(obj, reviewer["account_id"])]
+    console._bindings[snapshot] = [{**_binding(obj, reviewer["account_id"]), "reviewer": reviewer["display_name"]}]
     console._save_bindings()
     before = console.consider_publish(actor_id=publisher["account_id"], snapshot_id=snapshot)
     heading = _row("historical-heading", "heading", confirmed="heading", validation="approved",
@@ -185,9 +185,9 @@ def test_historical_heading_does_not_enter_publish_set_or_change_knowledge_gate(
 
 
 @pytest.mark.parametrize("command", ["first", "second"])
-def test_corrupt_persisted_source_cannot_acquire_review_binding(tmp_path, command):
+def test_corrupt_persisted_source_cannot_acquire_review_binding(tmp_path, command, production_console):
     from src.operations_console_v1 import ConsoleError
-    console, reviewer, snapshot = _console(tmp_path)
+    console, reviewer, snapshot = _console(tmp_path, production_console=production_console)
     obj = _allowed_candidate()
     obj["object_id"] = "corrupt-selected"
     obj["metadata"]["semantic_passage"]["spans"][0]["block_id"] = "missing-block"

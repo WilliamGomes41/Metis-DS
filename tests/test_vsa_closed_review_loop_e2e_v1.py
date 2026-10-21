@@ -165,10 +165,8 @@ def _review(
     )
 
 
-def test_exact_object_decisions_close_document_review_only_after_last_passage(
-    tmp_path: Path,
-) -> None:
-    console = ReviewClosureConsole(
+def test_exact_object_decisions_close_document_review_only_after_last_passage(tmp_path: Path, *, production_console) -> None:
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",
@@ -303,9 +301,7 @@ def _semantic_response(proposal: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def test_semantic_coverage_remainder_blocks_publication_until_human_disposition(
-    tmp_path: Path,
-) -> None:
+def test_semantic_coverage_remainder_blocks_publication_until_human_disposition(tmp_path: Path, *, production_console) -> None:
     omitted_text = "Niet gebruiken bij patiënten met nierfalen."
     fragments = [
         _semantic_fragment("p1", "Behandeling X kan worden toegepast."),
@@ -356,7 +352,7 @@ def test_semantic_coverage_remainder_blocks_publication_until_human_disposition(
             }
         )
 
-    console = ReviewClosureConsole(
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",

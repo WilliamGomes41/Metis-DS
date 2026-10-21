@@ -11,8 +11,7 @@ from html.parser import HTMLParser
 
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app, _source_context_panel
-from src.review_closure_v1 import ReviewClosureConsole
+from src.operations_console_app import _source_context_panel
 from src.source_context_review_v1 import links_of, role_of
 from tests.test_source_context_review_v1 import _system
 
@@ -38,8 +37,8 @@ class Forms(HTMLParser):
             self.current = None
 
 
-def _client(state, username='bert', password='bert-secret'):
-    client = TestClient(create_console_app(state))
+def _client(state, username='bert', password='bert-secret', *, production_app):
+    client = TestClient(production_app(state))
     assert client.post('/login', data={'username': username, 'password': password}, follow_redirects=False).status_code == 303
     return client
 
@@ -56,10 +55,10 @@ def _payload(form, role='label', reason='Dit label hoort bij de geselecteerde pa
     return values
 
 
-def test_passage_first_navigation_preserves_existing_targets_and_reopens_reviews(tmp_path):
-    state, _, reviewer, source, target, command = _system(tmp_path)
+def test_passage_first_navigation_preserves_existing_targets_and_reopens_reviews(tmp_path, *, production_app, production_console):
+    state, _, reviewer, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
     sid = command['snapshot_id']
-    client = _client(state)
+    client = _client(state, production_app=production_app)
     before = deepcopy(state.snapshot_objects(sid))
     page = client.get('/review', params={'document': sid, 'object': target['object_id']})
     assert page.status_code == 200
@@ -97,14 +96,14 @@ def test_passage_first_navigation_preserves_existing_targets_and_reopens_reviews
         assert row['governance']['validation_status'] == 'needs_review'
     assert not any(binding.get('valid') for binding in state.object_review_bindings(sid)
                    if binding['object_id'] == target['object_id'])
-    restarted = ReviewClosureConsole(root=tmp_path, source_store=tmp_path / 'sources', runtime=tmp_path / 'runtime')
+    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / 'sources', runtime=tmp_path / 'runtime')
     assert restarted.snapshot_objects(sid) == rows
 
 
-def test_separate_exclude_and_reset_commands_have_no_hidden_targets(tmp_path):
-    state, _, _, source, target, command = _system(tmp_path)
+def test_separate_exclude_and_reset_commands_have_no_hidden_targets(tmp_path, *, production_app, production_console):
+    state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
     state.confirm_source_context(**command)
-    client = _client(state)
+    client = _client(state, production_app=production_app)
     sid = command['snapshot_id']
     page = client.get('/review', params={'document': sid, 'object': source['object_id']})
     forms = Forms(page.text).forms
@@ -125,9 +124,9 @@ def test_separate_exclude_and_reset_commands_have_no_hidden_targets(tmp_path):
     assert row['governance']['validation_status'] == 'needs_review'
 
 
-def test_invalid_and_stale_submission_retains_draft_without_mutation(tmp_path):
-    state, _, _, source, target, command = _system(tmp_path)
-    client = _client(state)
+def test_invalid_and_stale_submission_retains_draft_without_mutation(tmp_path, *, production_app, production_console):
+    state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
+    client = _client(state, production_app=production_app)
     sid = command['snapshot_id']
     page = client.get('/review', params={'document': sid, 'object': source['object_id'], 'context_target': target['object_id']})
     form = _link_form(page)
@@ -150,8 +149,8 @@ def test_invalid_and_stale_submission_retains_draft_without_mutation(tmp_path):
     assert state.snapshot_objects(sid) == before
 
 
-def test_context_ui_keeps_full_text_and_explicit_choices(tmp_path):
-    state, _, _, source, target, command = _system(tmp_path)
+def test_context_ui_keeps_full_text_and_explicit_choices(tmp_path, *, production_console):
+    state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
     rows = deepcopy(state.snapshot_objects(command['snapshot_id']))
     source = next(row for row in rows if row['object_id'] == source['object_id'])
     target = next(row for row in rows if row['object_id'] == target['object_id'])
@@ -177,17 +176,17 @@ def test_context_ui_keeps_full_text_and_explicit_choices(tmp_path):
     assert not any('checked' in field for field in Forms(panel).forms[0]['inputs'] if field.get('name') == 'role')
 
 
-def test_context_navigation_cannot_bypass_authorization_or_redirect_externally(tmp_path, monkeypatch):
-    state, researcher, _, source, target, command = _system(tmp_path)
+def test_context_navigation_cannot_bypass_authorization_or_redirect_externally(tmp_path, monkeypatch, *, production_app, production_console):
+    state, researcher, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
     sid = command['snapshot_id']
-    client = _client(state)
+    client = _client(state, production_app=production_app)
     before = deepcopy(state.snapshot_objects(sid))
     invalid = client.get('/review', params={'document': sid, 'object': source['object_id'], 'context_target': 'other-snapshot-object'})
     assert invalid.status_code == 400
     data = dict(snapshot_id=sid, source_object_id=source['object_id'], role='label',
                 target_object_ids=[target['object_id']], reason=command['reason'], command_id='ui-access',
                 snapshot_revision=command['expected_revision'], source_checked='1', return_object_id='https://example.com')
-    outsider = _client(state, researcher['username'], 'anne-secret')
+    outsider = _client(state, researcher['username'], 'anne-secret', production_app=production_app)
     assert outsider.post('/review/source-context', data=data).status_code == 403
     assert state.snapshot_objects(sid) == before
     result = client.post('/review/source-context', data=data, follow_redirects=False)

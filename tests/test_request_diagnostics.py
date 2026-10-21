@@ -136,7 +136,7 @@ def test_unrelated_routes_are_not_collected(events):
 
 def test_actual_authenticated_routes_report_owner_phases(review_client,events):
     console,client,sid=review_client
-    observed=TestClient(RequestDiagnostics(client.app), base_url="https://testserver", cookies=client.cookies)
+    observed=client  # Production already installs the diagnostics middleware.
     before=json.dumps(console.snapshot_objects(sid),sort_keys=True)
     for route,phase in [('/source-selection','selection_projection'),('/review','review_render')]:
         response=observed.get(route,params={'document':sid})
@@ -146,7 +146,6 @@ def test_actual_authenticated_routes_report_owner_phases(review_client,events):
         assert finished['phases']['document_list']['calls']>=1
     assert before==json.dumps(console.snapshot_objects(sid),sort_keys=True)
     assert sid not in json.dumps(events)
-    observed.close()
 
 
 from tests.test_review_render_source_reuse import review_client  # real authenticated route fixture

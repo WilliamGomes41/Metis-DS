@@ -20,8 +20,8 @@ def current(console, sid, oid):
     return next(o for o in console.snapshot_objects(sid) if o["object_id"] == oid)
 
 
-def test_review_type_revision_has_real_predecessor_and_preserves_history(tmp_path):
-    console, reviewer, sid, before = _console(tmp_path)
+def test_review_type_revision_has_real_predecessor_and_preserves_history(tmp_path, *, production_console):
+    console, reviewer, sid, before = _console(tmp_path, production_console=production_console)
     original = deepcopy(before)
     _approve(console, reviewer, sid, before)
     after = current(console, sid, before["object_id"])
@@ -34,8 +34,8 @@ def test_review_type_revision_has_real_predecessor_and_preserves_history(tmp_pat
     assert exact_current_approver_ids(after, bindings) == (reviewer["account_id"],)
 
 
-def test_source_context_target_has_explicit_predecessor(tmp_path):
-    console, _, _, source, before, command = _system(tmp_path)
+def test_source_context_target_has_explicit_predecessor(tmp_path, *, production_console):
+    console, _, _, source, before, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
     console.confirm_source_context(**command)
     after = current(console, command["snapshot_id"], before["object_id"])
     assert before in console.snapshot_objects(command["snapshot_id"], include_blocked=True)
@@ -46,8 +46,8 @@ def test_source_context_target_has_explicit_predecessor(tmp_path):
 
 
 @pytest.mark.parametrize("new_version", ["1.0", "0.9"])
-def test_correction_cannot_reuse_or_decrease_version(tmp_path, new_version):
-    console, reviewer, sid, obj = _console(tmp_path)
+def test_correction_cannot_reuse_or_decrease_version(tmp_path, new_version, *, production_console):
+    console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
     console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
         object_id=obj["object_id"], decision="revise", comment="Expliciete correctie.")
     before = deepcopy(console.snapshot_objects(sid, include_blocked=True))
@@ -61,20 +61,20 @@ def test_correction_cannot_reuse_or_decrease_version(tmp_path, new_version):
     assert console.snapshot_objects(sid, include_blocked=True) == before
 
 
-def test_unchanged_review_retry_keeps_revision_and_legacy_history(tmp_path):
-    console, reviewer, sid, obj = _console(tmp_path)
+def test_unchanged_review_retry_keeps_revision_and_legacy_history(tmp_path, *, production_console):
+    console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
     _approve(console, reviewer, sid, obj)
     rows = deepcopy(console.snapshot_objects(sid, include_blocked=True))
     token = console.objects_revision(sid)
     _approve(console, reviewer, sid, obj)
     assert console.objects_revision(sid) == token
     assert console.snapshot_objects(sid, include_blocked=True) == rows
-    restarted = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted.snapshot_objects(sid, include_blocked=True) == rows
 
 
-def test_stale_review_writes_nothing(tmp_path):
-    console, reviewer, sid, obj = _console(tmp_path)
+def test_stale_review_writes_nothing(tmp_path, *, production_console):
+    console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
     stale = console.objects_revision(sid)
     _approve(console, reviewer, sid, obj)
     rows = deepcopy(console.snapshot_objects(sid, include_blocked=True))
@@ -83,9 +83,9 @@ def test_stale_review_writes_nothing(tmp_path):
     assert console.snapshot_objects(sid, include_blocked=True) == rows
 
 
-def test_forward_cutover_chain_and_old_approval_does_not_carry(tmp_path):
+def test_forward_cutover_chain_and_old_approval_does_not_carry(tmp_path, *, production_console):
     from src.revision_workflow import current_revisions, LINEAGE_CONTRACT
-    console, _, reviewer, source, before, command = _system(tmp_path)
+    console, _, reviewer, source, before, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
     sid = command["snapshot_id"]
     initial = deepcopy(console.snapshot_objects(sid, include_blocked=True))
     console.confirm_source_context(**command)
@@ -112,15 +112,15 @@ def test_forward_cutover_chain_and_old_approval_does_not_carry(tmp_path):
     assert all(obj in rows for obj in initial)
     assert current_revisions(rows, snapshot_id=sid) == console.snapshot_objects(sid)
     from src.review_closure_v1 import ReviewClosureConsole
-    restarted = ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted.snapshot_objects(sid, include_blocked=True) == rows
 
 
 @pytest.mark.parametrize("corruption", ["missing", "hash", "cycle", "scope", "downgrade", "inplace"])
-def test_strict_history_corruption_is_rejected_without_writes(tmp_path, corruption):
+def test_strict_history_corruption_is_rejected_without_writes(tmp_path, corruption, *, production_console):
     from src.revision_workflow import current_revisions, validate_revision_write
     from src.integrity_kernel import stamp_canonical_hashes
-    console, reviewer, sid, obj = _console(tmp_path)
+    console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
     _approve(console, reviewer, sid, obj)
     rows = console.snapshot_objects(sid, include_blocked=True)
     changed = deepcopy(rows)
@@ -145,10 +145,10 @@ def test_strict_history_corruption_is_rejected_without_writes(tmp_path, corrupti
     assert console.snapshot_objects(sid, include_blocked=True) == rows
 
 
-def test_legacy_unknown_is_not_proven_root_and_new_edge_is_exact(tmp_path):
+def test_legacy_unknown_is_not_proven_root_and_new_edge_is_exact(tmp_path, *, production_console):
     from src.revision_workflow import revise_object, current_revisions
     from src.integrity_kernel import stamp_canonical_hashes
-    console, _, sid, original = _console(tmp_path)
+    console, _, sid, original = _console(tmp_path, production_console=production_console)
     legacy = deepcopy(original)
     legacy["object_version"] = "1.0.1"
     stamp_canonical_hashes(legacy)
@@ -162,9 +162,9 @@ def test_legacy_unknown_is_not_proven_root_and_new_edge_is_exact(tmp_path):
     assert legacy["provenance"]["previous_object_version"] is None
 
 
-def test_relation_supersedes_is_not_a_revision_predecessor(tmp_path):
+def test_relation_supersedes_is_not_a_revision_predecessor(tmp_path, *, production_console):
     from src.revision_workflow import revise_object
-    console, _, sid, original = _console(tmp_path)
+    console, _, sid, original = _console(tmp_path, production_console=production_console)
     desired = deepcopy(original)
     desired["relations"] = [{"relation_type": "supersedes", "target_object_id": "different-object"}]
     strict = revise_object(original, desired, snapshot_id=sid, actor="reviewer", reason="relation confirmation")
@@ -236,10 +236,10 @@ def test_native_deferred_failure_rolls_back_strict_revision_and_review(recovery_
             connection.execute("DROP FUNCTION workflow.fail_t11()")
 
 
-def test_legacy_history_reorder_cannot_restore_old_current_approval(tmp_path):
+def test_legacy_history_reorder_cannot_restore_old_current_approval(tmp_path, *, production_console):
     from src.revision_workflow import validate_revision_write
     from src.integrity_kernel import stamp_canonical_hashes
-    console, _, sid, first = _console(tmp_path)
+    console, _, sid, first = _console(tmp_path, production_console=production_console)
     second = deepcopy(first)
     second["object_version"] = "1.0.1"
     stamp_canonical_hashes(second)
@@ -249,7 +249,7 @@ def test_legacy_history_reorder_cannot_restore_old_current_approval(tmp_path):
 
 @pytest.mark.parametrize("attack", ["reorder", "promote_in_place", "alter_predecessor"])
 @pytest.mark.parametrize("backend", ["file", "postgres"])
-def test_locked_storage_rejects_adversarial_history(attack, backend, recovery_postgres, tmp_path):
+def test_locked_storage_rejects_adversarial_history(attack, backend, recovery_postgres, tmp_path, *, production_console):
     from src.integrity_kernel import stamp_canonical_hashes
     from src.revision_workflow import revise_object
     from tests.test_lifecycle_withdrawal_recovery_v1 import _console as native_console
@@ -260,7 +260,7 @@ def test_locked_storage_rejects_adversarial_history(attack, backend, recovery_po
         state, _, _, _, obj, command = _system(tmp_path, state)
         sid = command["snapshot_id"]
     else:
-        state, _, sid, obj = _console(tmp_path)
+        state, _, sid, obj = _console(tmp_path, production_console=production_console)
     original = deepcopy(state.snapshot_objects(sid, include_blocked=True))
     token = state.objects_revision(sid)
     if attack == "promote_in_place":
@@ -292,11 +292,11 @@ def test_locked_storage_rejects_adversarial_history(attack, backend, recovery_po
     assert state.snapshot_objects(sid, include_blocked=True) == original
 
 
-def test_revision_rebinds_exact_relation_endpoints_and_preserves_predecessor(tmp_path):
+def test_revision_rebinds_exact_relation_endpoints_and_preserves_predecessor(tmp_path, *, production_console):
     from src.revision_workflow import revise_object
     from src.knowledge_relations_v1 import build_knowledge_relation, validate_knowledge_relation_set
     from src.integrity_kernel import stamp_canonical_hashes
-    _, _, sid, candidate = _console(tmp_path)
+    _, _, sid, candidate = _console(tmp_path, production_console=production_console)
     original = deepcopy(candidate)
     relation = build_knowledge_relation(source_object_id=original["object_id"],
         source_object_version=original["object_version"], relation_type="supported_by",
@@ -316,9 +316,9 @@ def test_revision_rebinds_exact_relation_endpoints_and_preserves_predecessor(tmp
     assert after["relation_id"] != relation["relation_id"]
 
 
-def test_reprocessing_retirement_and_reappearance_preserve_strict_history(tmp_path):
+def test_reprocessing_retirement_and_reappearance_preserve_strict_history(tmp_path, *, production_console):
     from src.revision_workflow import reprocessed_history, current_revisions
-    _, _, sid, candidate = _console(tmp_path)
+    _, _, sid, candidate = _console(tmp_path, production_console=production_console)
     retired = reprocessed_history([candidate], [], snapshot_id=sid, actor="researcher")
     assert retired[0] == candidate
     assert len(retired) == 2
@@ -332,9 +332,9 @@ def test_reprocessing_retirement_and_reappearance_preserve_strict_history(tmp_pa
     assert latest["governance"]["validation_status"] == "needs_review"
 
 
-def test_successor_object_diff_reports_retired_candidate_as_removed(tmp_path):
+def test_successor_object_diff_reports_retired_candidate_as_removed(tmp_path, *, production_console):
     from src.revision_workflow import reprocessed_history
-    console, _, sid, candidate = _console(tmp_path)
+    console, _, sid, candidate = _console(tmp_path, production_console=production_console)
     history = reprocessed_history([candidate], [], snapshot_id=sid, actor="researcher")
     before = deepcopy(history)
     text = candidate["content"]["clean_text"]
@@ -349,10 +349,10 @@ def test_successor_object_diff_reports_retired_candidate_as_removed(tmp_path):
     assert history[-1]["governance"]["validation_status"] == "superseded"
 
 
-def test_reprocessing_retains_nonknowledge_ancestor_of_promoted_candidate(tmp_path):
+def test_reprocessing_retains_nonknowledge_ancestor_of_promoted_candidate(tmp_path, *, production_console):
     from src.revision_workflow import revise_object, reprocessed_history, current_revisions, knowledge_revision
     from src.integrity_kernel import stamp_canonical_hashes
-    _, _, sid, candidate = _console(tmp_path)
+    _, _, sid, candidate = _console(tmp_path, production_console=production_console)
     structural = deepcopy(candidate)
     structural["object_type"] = "heading"
     structural.pop("confirmed_object_type", None)
@@ -365,9 +365,9 @@ def test_reprocessing_retains_nonknowledge_ancestor_of_promoted_candidate(tmp_pa
     assert current_revisions(rebuilt, snapshot_id=sid)
 
 
-def test_legacy_published_history_remains_readable_but_cannot_gain_successor(tmp_path):
+def test_legacy_published_history_remains_readable_but_cannot_gain_successor(tmp_path, *, production_console):
     from src.revision_workflow import revise_object, validate_revision_write, current_revisions
-    _, _, sid, candidate = _console(tmp_path)
+    _, _, sid, candidate = _console(tmp_path, production_console=production_console)
     published = deepcopy(candidate)
     published["governance"]["publication_status"] = "published"
     before = deepcopy(published)
@@ -380,12 +380,12 @@ def test_legacy_published_history_remains_readable_but_cannot_gain_successor(tmp
     assert published == before
 
 
-def test_actual_file_legacy_publication_seals_type_relation_and_review_after_restart(tmp_path):
+def test_canonical_publication_seals_type_relation_and_review_after_restart(tmp_path, *, production_console):
     from tests.test_durable_publication_console_v1 import MemorySourceStore
     from tests.semantic_fixture_support import bind_fixture_selections, install_fixture_history
     from src.integrity_kernel import stamp_canonical_hashes
     source = MemorySourceStore()
-    state = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources",
+    state = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources",
                               runtime=tmp_path / "runtime", immutable_source_store=source)
     author = state.create_account(username="anne", password="anne-secret", roles=("researcher",))
     reviewer = state.create_account(username="bert", password="bert-secret", roles=("reviewer",))
@@ -405,8 +405,8 @@ def test_actual_file_legacy_publication_seals_type_relation_and_review_after_res
     assert state.publish(actor_id=publisher["account_id"], snapshot_id=sid)["status"] == "PASS"
     before = deepcopy(state.snapshot_objects(sid, include_blocked=True))
     bindings = deepcopy(state.object_review_bindings(sid))
-    projection = state._published_projection_path().read_bytes()
-    restarted = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources",
+    projection = deepcopy(state.canonical_publication_store.active_publication_rows())
+    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources",
                                   runtime=tmp_path / "runtime", immutable_source_store=source)
     assert restarted.snapshot_objects(sid, include_blocked=True) == before
     commands = [
@@ -424,7 +424,7 @@ def test_actual_file_legacy_publication_seals_type_relation_and_review_after_res
             command()
         assert restarted.snapshot_objects(sid, include_blocked=True) == before
         assert restarted.object_review_bindings(sid) == bindings
-        assert restarted._published_projection_path().read_bytes() == projection
+        assert restarted.canonical_publication_store.active_publication_rows() == projection
 
 
 def test_source_context_rekeys_proposed_relations_before_readmission(tmp_path):
@@ -473,11 +473,11 @@ def test_source_context_rekeys_proposed_relations_before_readmission(tmp_path):
 
 
 @pytest.mark.parametrize("profile", ["base", "closure"])
-def test_scoped_commit_discards_stale_unrelated_published_maps(tmp_path, profile):
-    state, reviewer, sid, _ = _console(tmp_path)
+def test_scoped_commit_discards_stale_unrelated_published_maps(tmp_path, profile, *, production_console):
+    state, reviewer, sid, _ = _console(tmp_path, production_console=production_console)
     if profile == "closure":
         from src.review_closure_v1 import ReviewClosureConsole
-        state = ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+        state = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     # Only envelope/binding state is relevant to this cross-snapshot race.
     unrelated = "snap-unrelated-history"
     state._envelopes[unrelated] = {**deepcopy(state._envelope(sid)), "snapshot_id": unrelated}
@@ -485,7 +485,7 @@ def test_scoped_commit_discards_stale_unrelated_published_maps(tmp_path, profile
     stale_envelopes = deepcopy(state._envelopes)
     stale_bindings = deepcopy(state._bindings)
     stale_envelopes[sid]["title"] = "Updated open work"
-    competing = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    competing = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     competing._envelopes[unrelated].update(state="published", published=True)
     competing._save_envelopes()
     published = deepcopy(competing._envelope(unrelated))
@@ -494,12 +494,14 @@ def test_scoped_commit_discards_stale_unrelated_published_maps(tmp_path, profile
     assert state._envelope(sid)["title"] == "Updated open work"
 
 
+@pytest.mark.file_topology
 def test_legacy_duplicate_versions_keep_append_last_projection_and_strict_cutover(tmp_path):
     import json
     from tests.semantic_fixture_support import install_fixture_history
     from src.revision_workflow import revise_object, current_revisions, validate_revision_write
     from src.integrity_kernel import stamp_canonical_hashes
-    state, _, sid, candidate = _console(tmp_path)
+    state, _, sid, candidate = _console(tmp_path, production_console=lambda **options: OperationsConsole(
+        root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime"))
     first = deepcopy(candidate)
     last = deepcopy(candidate)
     last["content"]["clean_text"] += " Historical correction."
@@ -537,9 +539,10 @@ def test_legacy_duplicate_versions_keep_append_last_projection_and_strict_cutove
         validate_revision_write([], [first, unmarked], snapshot_id=sid)
 
 
-def test_identical_legacy_duplicate_ancestor_is_immutable_when_successor_is_added(tmp_path):
+
+def test_identical_legacy_duplicate_ancestor_is_immutable_when_successor_is_added(tmp_path, *, production_console):
     from src.revision_workflow import revise_object, validate_revision_write
-    _, _, sid, candidate = _console(tmp_path)
+    _, _, sid, candidate = _console(tmp_path, production_console=production_console)
     rows = [deepcopy(candidate), deepcopy(candidate)]
     successor = revise_object(rows[-1], rows[-1], snapshot_id=sid, actor="reviewer",
                               reason="forced review change", force=True)
@@ -550,10 +553,12 @@ def test_identical_legacy_duplicate_ancestor_is_immutable_when_successor_is_adde
     validate_revision_write(rows, rows + [successor], snapshot_id=sid)
 
 
+@pytest.mark.file_topology
 def test_unchanged_legacy_duplicate_review_retry_preserves_prior_occurrences(tmp_path):
     from tests.semantic_fixture_support import install_fixture_history
     from src.integrity_kernel import stamp_canonical_hashes
-    state, reviewer, sid, candidate = _console(tmp_path)
+    state, reviewer, sid, candidate = _console(tmp_path, production_console=lambda **options: OperationsConsole(
+        root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime"))
     candidate["object_type"] = candidate["confirmed_object_type"] = "definition"
     stamp_canonical_hashes(candidate)
     rows = [deepcopy(candidate), deepcopy(candidate)]

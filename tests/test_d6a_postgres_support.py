@@ -134,3 +134,13 @@ def test_factory_refuses_a_fake_or_different_canonical_authority(production_cons
         PostgresCanonicalConfig(dsn="postgresql://postgres@127.0.0.1:1/foreign_database"))
     with pytest.raises(ValueError, match="Canonical store must be the production PostgreSQL store for this test database"):
         production_console(canonical_publication_store=store)
+
+
+from tests.complete_workflow_support import complete_postgres as legacy_postgres  # noqa: E402,F401
+
+
+def test_legacy_fixture_alias_observes_the_factorys_committed_accounts(legacy_postgres, production_console):
+    from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
+    console = production_console()
+    account = console.create_account('shared-fixture', 'fixture-test-secret', roles=['reviewer'])
+    assert PostgresWorkflowIdentityStore(legacy_postgres).account_by_id(account['account_id']) is not None

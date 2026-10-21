@@ -17,7 +17,6 @@ import pytest
 from src.operations_console_v1 import ConsoleError
 from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing, semantic_spec_from_fragments
 from src.publication_readiness_v1 import source_passage_closure
-from src.review_closure_v1 import ReviewClosureConsole
 from src.review_duty_v1 import review_duty_for
 from src.source_accountability_v1 import KEY, evidence_of, validate_assessments
 from src.source_bound_fields_v2 import FIELDS
@@ -49,8 +48,8 @@ def proposal(data, *, v3=False, supplemental=False):
             "source_assessments": assessments, "relations": [], "abstain_reason": None}
 
 
-def system(tmp_path, console=None):
-    state = console or ReviewClosureConsole(root=tmp_path, source_store=tmp_path/"sources", runtime=tmp_path/"runtime")
+def system(tmp_path, console=None, *, production_console):
+    state = console or production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path/"sources", runtime=tmp_path/"runtime")
     author = state.create_account(username="author", password="long-test-password", roles=("researcher",))
     reviewer = state.create_account(username="reviewer", password="long-test-password", roles=("reviewer",))
     def provider(_url, _headers, payload, _timeout):
@@ -72,8 +71,8 @@ def system(tmp_path, console=None):
     return state, rows, command
 
 
-def test_metadata_batch_preserves_unselected_condition_history_and_restart(tmp_path):
-    state, before, command = system(tmp_path)
+def test_metadata_batch_preserves_unselected_condition_history_and_restart(tmp_path, *, production_console):
+    state, before, command = system(tmp_path, production_console=production_console)
     source = [r for r in before if KEY in (r.get("metadata") or {})]
     assert len(source) == 3
     assert all(r["governance"]["review_track"] == "technical" for r in source)
@@ -99,13 +98,13 @@ def test_metadata_batch_preserves_unselected_condition_history_and_restart(tmp_p
             assert row["governance"]["validation_status"] == "rejected"
             assert row["governance"]["publication_status"] == "unpublished"
     assert all(row in state._load_objects(command["snapshot_id"], remember=False) for row in before)
-    restarted = ReviewClosureConsole(root=tmp_path, source_store=tmp_path/"sources", runtime=tmp_path/"runtime")
+    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path/"sources", runtime=tmp_path/"runtime")
     assert restarted.snapshot_objects(command["snapshot_id"]) == current
     assert confirm_source_exclusions(restarted, **command)["idempotent"] is True
 
 
-def test_source_records_cannot_be_approved_or_distributed_as_knowledge(tmp_path):
-    state, rows, command = system(tmp_path)
+def test_source_records_cannot_be_approved_or_distributed_as_knowledge(tmp_path, *, production_console):
+    state, rows, command = system(tmp_path, production_console=production_console)
     source = next(r for r in rows if r["object_id"] in command["source_object_ids"])
     with pytest.raises(ConsoleError, match="source_context_not_knowledge"):
         state.review_object(actor_id=command["actor_id"], snapshot_id=command["snapshot_id"],
@@ -122,11 +121,11 @@ def test_source_records_cannot_be_approved_or_distributed_as_knowledge(tmp_path)
     assert "source_context_not_knowledge" in blocked[0]["errors"]
 
 
-def test_http_source_batch_requires_named_reviewer_and_explicit_confirmation(tmp_path):
+def test_http_source_batch_requires_named_reviewer_and_explicit_confirmation(tmp_path, *, production_app, production_console):
     from fastapi.testclient import TestClient
     from src.operations_console_app import create_console_app
-    state, before, command = system(tmp_path)
-    with TestClient(create_console_app(state), base_url="https://testserver") as client:
+    state, before, command = system(tmp_path, production_console=production_console)
+    with TestClient(production_app(state), base_url="https://testserver") as client:
         assert client.post("/login", data={"username": "reviewer", "password": "long-test-password"},
                            follow_redirects=False).status_code == 303
         data = {"snapshot_id": command["snapshot_id"], "source_object_ids": command["source_object_ids"],
@@ -138,14 +137,14 @@ def test_http_source_batch_requires_named_reviewer_and_explicit_confirmation(tmp
         assert response.status_code == 303, response.text
 
 
-def test_native_source_batch_commit_failure_stale_worker_and_restart(recovery_postgres, tmp_path):
+def test_native_source_batch_commit_failure_stale_worker_and_restart(recovery_postgres, tmp_path, *, production_console):
     import psycopg
     from tests.test_lifecycle_withdrawal_recovery_v1 import _console
     from tests.test_publication_chain_recovery_v1 import FakeBlobStore
     blobs = FakeBlobStore()
     root = tmp_path/"writer"
     root.mkdir()
-    state, before, command = system(root, _console(root, recovery_postgres, blobs))
+    state, before, command = system(root, _console(root, recovery_postgres, blobs), production_console=production_console)
     with psycopg.connect(recovery_postgres.dsn) as con:
         con.execute("""CREATE FUNCTION workflow.fail_source_batch_test() RETURNS trigger
             LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'source_batch_commit_failure'; END; $$""")
@@ -173,8 +172,8 @@ def test_native_source_batch_commit_failure_stale_worker_and_restart(recovery_po
     assert confirm_source_exclusions(fresh, **command)["idempotent"] is True
 
 
-def test_batch_fails_closed_for_stale_substantive_unauthorized_and_failed_commit(tmp_path, monkeypatch):
-    state, before, command = system(tmp_path)
+def test_batch_fails_closed_for_stale_substantive_unauthorized_and_failed_commit(tmp_path, monkeypatch, *, production_console):
+    state, before, command = system(tmp_path, production_console=production_console)
     sid = command["snapshot_id"]
     with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
         confirm_source_exclusions(state, **{**command, "expected_revision": "stale"})
@@ -239,8 +238,8 @@ def test_partial_supplement_preserves_unresolved_prefix_and_suffix():
         merge_proposals(primary, supplement)
 
 
-def test_damaged_source_evidence_cannot_close_after_human_disposition(tmp_path):
-    state, _, command = system(tmp_path)
+def test_damaged_source_evidence_cannot_close_after_human_disposition(tmp_path, *, production_console):
+    state, _, command = system(tmp_path, production_console=production_console)
     confirm_source_exclusions(state, **command)
     current = state.snapshot_objects(command["snapshot_id"])
     metadata = next(row for row in current if row["object_id"] in command["source_object_ids"])
