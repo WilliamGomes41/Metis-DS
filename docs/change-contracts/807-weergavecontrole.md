@@ -49,12 +49,21 @@ De eerste implementatie controleert de volledige inventaris tot 1.000 opgeslagen
 
 Een taak met afwijkingen eindigt als completed met fail-checks; completed betekent niet dat het document goed is. Onvolledige uitvoering maakt eerdere pass-checks inconclusief; waargenomen afwijkingen blijven zichtbaar. De UI toont de laatste twintig onderzoeken; oudere onderzoeken blijven via hun ID bereikbaar.
 
-## Verificatie
+## Reparatie en verificatie van PR 808
 
-- Lokaal: 20 pure/architectuur/migratieplancontroles geslaagd; JavaScript-syntax, Python-compilatie, dependencygrenzen en repositorypreflight geslaagd.
-- Native PG-tests zijn hier geblokkeerd door ontbrekende PostgreSQL 16; setup faalt op OS-groepsrechten. Dit is geen skip/pass.
-- Native opslag/autorisatieproeven en een echte browserketen zijn toegevoegd. `source-processing-proof` moet ze met native PostgreSQL en Chromium uitvoeren en ontbrekend/overgeslagen browserbewijs afwijzen. Hun uitslag wordt op de PR bijgehouden.
-- Geen actuele productie-uitvoering, performanceacceptatie, Azure-bewijsopslagacceptatie of volledige issue-acceptatie vastgesteld.
-- CI-correctie: de routetabelgolden bevat nu de vier bewust toegevoegde weergavecontroleroutes; een directe vergelijking bevestigt nul verwijderde of gewijzigde bestaande routes. De characterization-suite blijft verplicht. Lokaal blokkeert haar PostgreSQL-bootstrap; de volledige uitslag moet uit CI komen.
-- Integrale CI-controle: de volledige 3.13-run op `b90b05c` bevat één falende testcase (autorisatie-HTTP-code). De domeinweigering bereikte de algemene 400-handler; starten ving haar bovendien als contextfout (409). Een specifieke autorisatie-exceptie behoudt de domeinweigering en vertaalt haar op alle nieuwe HTTP-ingangen naar 403, zonder de algemene consolehandler of storingsafhandeling te wijzigen. Gerichte handlerreproductie: vóór 400/400/400/409, na viermaal 403. De native test controleert nu alle vier ingangen, geen nieuwe taak/annulering bij weigering en intrekking van toegang.
-- De D5-, herverwerkings-, blokkade-, publicatieweigerings-, A10-, A08- en tracebewijsstappen zijn afzonderlijk met het volledige CI-JUnitrapport uitgevoerd en geslaagd; dit is hergebruik van uitgevoerd bewijs, geen nieuwe databaserun. De dedicated proof-workflow draait nu de native weergavecontroletests vroeg en neemt ook de bestaande desktop-/mobiel-reviewtest mee. De volledige Python 3.12/3.13-suite blijft vereist.
+De bestaande documentauthority blijft eigenaar van rechten, processing attempts, objectrevisies en bindings. De feature gebruikt `authorize` en `context` bij aanvraag, workerreads, activatie en bewijsdownload. De reparatie verandert alleen de featuregebonden HTTP-vertaling van weigering (403), de beschikbaarheid van de startknop en de terugkeercontext na annuleren. Alleen de operationele onderzoekstabel mag veranderen; document-, bron-, review- en publicatieauthority blijven ongewijzigd.
+
+De volledige CI-suite op `b90b05c` faalde op de autorisatiestatus. De algemene consolehandler vertaalde de weigering naar 400; de aanvraagroute ving haar als contextfout (409). De specifieke `ViewCheckAccessDenied` behoudt de weigering en geeft op alle vier nieuwe ingangen 403. De algemene consolehandler blijft behouden. De ontbrekende vervolg-JUnitbestanden waren gevolgschade van de afgebroken suitestap.
+
+De startknop gebruikt nu dezelfde contextvalidatie als de aanvraagroute: een onbekende poging of niet-ondersteund scenario biedt geen aanvraagknop; eerdere resultaten blijven zichtbaar. Annuleren keert terug naar de in de taak opgeslagen poging.
+
+Uitgevoerd na integratie met `main` (`d28f12f`):
+
+- 23 gerichte tests geslaagd met echte PostgreSQL 16 en Chromium, nul skips. De foutreproducties waren eerst rood: vier autorisatie-ingangen gaven 400/400/400/409 en twee niet-ondersteunde scenario's boden toch een startknop.
+- Native opslagproeven bewijzen deduplicatie, herstart, twee leaseverlopen, fencing, terminale mislukking en voortgang van de volgende taak.
+- De geïnstalleerde HTTP-app bewijst echte rolintrekking in PostgreSQL, ook tijdens bewijs-I/O; ontbrekend, beschadigd en verlopen bewijs; en geen ongeautoriseerde taakregistratie/annulering.
+- Workerproeven met alleen het procestransport vervangen bewijzen dat annulering, rolintrekking tijdens browserwerk/upload en opslagfalen geen geldig resultaat activeren. Private foutdetails en parentcredentials worden niet doorgegeven.
+- De echte browserketen doorloopt aanvraag, afzonderlijke Chromiumworker, vijf geslaagde checks, herladen en beschermde PNG-download voor documenten zonder én met bronregels. Alle PostgreSQL-authorityrijen zijn vóór en na vergeleken; alleen sessies en operationele onderzoeken zijn uitgezonderd. Geen domeinmutatie gevonden.
+- Repositorypreflight, release-control-mapping, dependencygrenzen, Python-compilatie, JavaScript-syntax en diffcontrole geslaagd. De volledige Python 3.12/3.13-suites en characterization blijven vereist; hun actuele uitslag staat op de PR.
+
+Geen productie-uitvoering, performanceacceptatie, Azure-bewijsopslagacceptatie of volledige #807-acceptatie vastgesteld. De browser- en opslagtests gebruiken synthetische bronnen/modelantwoorden en een private testtransportadapter; zij certificeren geen Azure-infrastructuur.
