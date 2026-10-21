@@ -3926,6 +3926,9 @@ def create_console_app(
     login_attempts_per_minute = 10
 
     def _current(request: Request) -> dict[str, Any] | None:
+        scoped = getattr(request.state, 'view_check_account', None)
+        if scoped is not None:
+            return scoped
         token = request.cookies.get(COOKIE)
         try:
             return state.session_account(token)
@@ -3956,6 +3959,8 @@ def create_console_app(
     install_telemetry_routes(app, require_account=_require)
     from src.insight_v1 import install_insight_routes
     install_insight_routes(app, state, require_account=_require, render_page=_page, nav=_nav)
+    from src.view_check import install as install_view_checks
+    install_view_checks(app, state, _require, _page, _nav)
 
     @app.exception_handler(ConsoleError)
     async def console_errors(_request: Request, exc: ConsoleError) -> HTMLResponse:

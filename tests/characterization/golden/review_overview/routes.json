@@ -157,6 +157,12 @@
       ]
     ],
     [
+      "/inzicht/document/weergavecontrole",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/inzicht/routevergelijking",
       [
         "GET"
@@ -208,6 +214,24 @@
       "/inzicht/routevergelijking/{comparison_id}/run/{route}",
       [
         "POST"
+      ]
+    ],
+    [
+      "/inzicht/weergavecontrole/{identifier}",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/inzicht/weergavecontrole/{identifier}/annuleren",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/inzicht/weergavecontrole/{identifier}/bewijs",
+      [
+        "GET"
       ]
     ],
     [

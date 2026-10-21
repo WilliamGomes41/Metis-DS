@@ -22,7 +22,7 @@ _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_.<>]{0,120}")
 MIDDLEWARE_FUNCTIONS = frozenset({
     "console_performance", "document_status_context", "document_status_calculation",
     "renew_on_navigation", "request_id_middleware", "require_same_origin",
-    "simplify_duplicate_doors", "source_read_calculation",
+    "simplify_duplicate_doors", "source_read_calculation", "restricted_browser",
 })
 
 
