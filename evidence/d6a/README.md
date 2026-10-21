@@ -25,6 +25,10 @@ Zie [publicatiebewijs van porties03–05](portions03-05-publication.json) en
 D6a is nog niet formeel afgerond en D6b is niet gestart. #695 houdt voorrang
 bij capaciteitsgebrek; GNC is niet gestart.
 
+PR09 wordt hersteld na een gemiste fixturedoorgifte bij de portiegrens.
+Alle directe afnemers zijn meegenomen; vier zelfstandige migraties schuiven naar10.
+Zie [het herstelbewijs](portion09-fixture-boundary-repair.json).
+
 ## Actuele controle
 
 De volledige ononderbroken lokale suite heeft **5.667 groene tests,

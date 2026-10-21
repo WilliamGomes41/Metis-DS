@@ -279,73 +279,79 @@
     {
       "portion": "09",
       "head": "codex/d6a-09-source-formation",
-      "head_commit": "54ab77721f40e7a83420bce2320989dca594e310",
+      "head_commit": "be1f72e8c255a12a4289822ada520298e6cbf3fa",
       "base": "codex/d6a-08-key-list",
       "base_commit": "39127a5206e913d27af1e5e3b62fc30758d2e2d0",
       "test_files": [
+        "tests/test_a06_selected_occurrence_relations.py",
         "tests/test_a3_attempt_correctness.py",
-        "tests/test_admission_language_variation.py",
+        "tests/test_availability_repair.py",
         "tests/test_blockage_diagnostics_v1.py",
         "tests/test_context_preservation.py",
         "tests/test_estimate_linear_golden.py",
-        "tests/test_form_bound_revision.py",
+        "tests/test_processing_authorization.py",
+        "tests/test_processing_trace_v1.py",
         "tests/test_protocol_v2_13_kernel.py",
         "tests/test_publish_refusal_audit_v1.py",
         "tests/test_recommendation_coverage_v1.py",
         "tests/test_recoverable_formation_v1.py",
         "tests/test_reservation_contract_version.py",
-        "tests/test_semantic_safety_app_v1.py",
         "tests/test_source_bound_continuation_repair.py",
         "tests/test_source_bound_fields_v2.py",
         "tests/test_source_cache_work_v1.py",
         "tests/test_source_evidence_resolution_v1.py",
         "tests/test_source_resume_acceptance.py",
         "tests/test_source_selection_key_list_golden.py",
-        "tests/test_stale_write_ux.py",
         "tests/test_t8_materialisation_admission_integrity.py"
       ],
       "changed_test_files": 20,
       "support_files": [],
-      "ci_status": "CI workflows started/queued; outcome pending",
+      "ci_status": "fixture-boundary correction verified locally; CI rerun pending",
       "delivery": "published reviewable branch",
       "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/799",
-      "publication_evidence": "portions06-10-publication.json"
+      "publication_evidence": "portions06-10-publication.json",
+      "boundary_repair_evidence": "portion09-fixture-boundary-repair.json"
     },
     {
       "portion": "10",
       "head": "codex/d6a-10-processing-routes",
-      "head_commit": "c69d44383ea0ab16b76aed6343d3b877aeaa12c7",
+      "head_commit": "2a73bc5145a314f8e3d67e799d910b9715f46ce3",
       "base": "codex/d6a-09-source-formation",
-      "base_commit": "54ab77721f40e7a83420bce2320989dca594e310",
+      "base_commit": "be1f72e8c255a12a4289822ada520298e6cbf3fa",
       "test_files": [
         "tests/test_a04_session_availability.py",
+        "tests/test_admission_language_variation.py",
         "tests/test_availability_repair.py",
         "tests/test_azure_source_processing.py",
         "tests/test_context_preservation.py",
         "tests/test_docling_contract_v1.py",
+        "tests/test_form_bound_revision.py",
         "tests/test_processing_authorization.py",
         "tests/test_processing_trace_v1.py",
+        "tests/test_semantic_safety_app_v1.py",
         "tests/test_source_dispatch_hardening.py",
-        "tests/test_source_resume_acceptance.py"
+        "tests/test_source_resume_acceptance.py",
+        "tests/test_stale_write_ux.py"
       ],
-      "changed_test_files": 9,
+      "changed_test_files": 13,
       "support_files": [
         "tests/browser_postgres_support.py",
         "tests/browser_source_selection_fixture.py",
         "tests/conftest.py",
         "tests/production_support.py"
       ],
-      "ci_status": "CI workflows started/queued; outcome pending",
+      "ci_status": "fixture-boundary correction verified locally; CI rerun pending",
       "delivery": "published reviewable branch",
       "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/800",
-      "publication_evidence": "portions06-10-publication.json"
+      "publication_evidence": "portions06-10-publication.json",
+      "boundary_repair_evidence": "portion09-fixture-boundary-repair.json"
     },
     {
       "portion": "review-evidence-prerequisite",
       "head": "codex/fix-pg-command-review-evidence",
-      "head_commit": "c4cbe75dced2988ecf57a681bf05bc08a9716ca2",
+      "head_commit": "15019de7843da731676482b1493aba5c704dc3fe",
       "base": "codex/d6a-10-processing-routes",
-      "base_commit": "c69d44383ea0ab16b76aed6343d3b877aeaa12c7",
+      "base_commit": "2a73bc5145a314f8e3d67e799d910b9715f46ce3",
       "test_files": [
         "tests/test_pg_command_review_evidence.py"
       ],
@@ -359,9 +365,9 @@
     {
       "portion": "11",
       "head": "codex/d6a-11-native-composition",
-      "head_commit": "008e8403cfaab8bc34cdfd6cff503ba3ec8e3be0",
+      "head_commit": "35f7b16760aa1c96384afed74de565e1e1734602",
       "base": "codex/fix-pg-command-review-evidence",
-      "base_commit": "c4cbe75dced2988ecf57a681bf05bc08a9716ca2",
+      "base_commit": "15019de7843da731676482b1493aba5c704dc3fe",
       "test_files": [
         "tests/test_678_store_command_postgres.py",
         "tests/test_a03_formation_coverage.py",
@@ -385,9 +391,9 @@
     {
       "portion": "12",
       "head": "codex/d6a-12-source-context",
-      "head_commit": "9761719f0a7104e396352f01bc45f0ed4e5a72ed",
+      "head_commit": "b91f5aac04432693a23f24293050768ce6756b93",
       "base": "codex/d6a-11-native-composition",
-      "base_commit": "008e8403cfaab8bc34cdfd6cff503ba3ec8e3be0",
+      "base_commit": "35f7b16760aa1c96384afed74de565e1e1734602",
       "test_files": [
         "tests/test_a06_selected_occurrence_relations.py",
         "tests/test_a07_strength_binding.py",
@@ -408,9 +414,9 @@
     {
       "portion": "13",
       "head": "codex/d6a-13-navigation-auth",
-      "head_commit": "0e9dfabd246f2340783128c95acb2ad1dabbdd7e",
+      "head_commit": "f0a7fbc8ee1a3c90170f935f8b0bd3d07647889b",
       "base": "codex/d6a-12-source-context",
-      "base_commit": "9761719f0a7104e396352f01bc45f0ed4e5a72ed",
+      "base_commit": "b91f5aac04432693a23f24293050768ce6756b93",
       "test_files": [
         "tests/test_account_retirement_v1.py",
         "tests/test_console_access_availability.py",
@@ -435,9 +441,9 @@
     {
       "portion": "14",
       "head": "codex/d6a-14-workboards",
-      "head_commit": "0b387078f4789389d16883db7121837168d943c1",
+      "head_commit": "175566dcf24cabcdf97b06d0139b3afc6f34748c",
       "base": "codex/d6a-13-navigation-auth",
-      "base_commit": "0e9dfabd246f2340783128c95acb2ad1dabbdd7e",
+      "base_commit": "f0a7fbc8ee1a3c90170f935f8b0bd3d07647889b",
       "test_files": [
         "tests/test_console_cleanup_v1.py",
         "tests/test_console_feedback_v1.py",
@@ -460,9 +466,9 @@
     {
       "portion": "15",
       "head": "codex/d6a-15-decision-console",
-      "head_commit": "608ad97d855439b55a65003e7f2e079c0c1e0ce7",
+      "head_commit": "ae46a6b5e91fc095d8e4858f927a36cb8527b7b9",
       "base": "codex/d6a-14-workboards",
-      "base_commit": "0b387078f4789389d16883db7121837168d943c1",
+      "base_commit": "175566dcf24cabcdf97b06d0139b3afc6f34748c",
       "test_files": [
         "tests/test_665_tier_d_refused_postgres.py",
         "tests/test_a08_heading_batch_atomic.py",
@@ -492,9 +498,9 @@
     {
       "portion": "16",
       "head": "codex/d6a-16-semantics-reservations",
-      "head_commit": "2ed0bf416ba8e59f4b9e7ed8e3a2c00e5c0d8d85",
+      "head_commit": "eda7e7ea7feec9cfd98543c1edb04ff45c6cb937",
       "base": "codex/d6a-15-decision-console",
-      "base_commit": "608ad97d855439b55a65003e7f2e079c0c1e0ce7",
+      "base_commit": "ae46a6b5e91fc095d8e4858f927a36cb8527b7b9",
       "test_files": [
         "tests/test_attempt_diagnostics_v1.py",
         "tests/test_c2_pinned_configuration_fence.py",
@@ -521,9 +527,9 @@
     {
       "portion": "17",
       "head": "codex/d6a-17-publication-authority",
-      "head_commit": "fffcf08cc3e1885d1b22dad1612f7b9f9e4553fb",
+      "head_commit": "b3062621e2a303d96f9a24ccd349763d02a3af1d",
       "base": "codex/d6a-16-semantics-reservations",
-      "base_commit": "2ed0bf416ba8e59f4b9e7ed8e3a2c00e5c0d8d85",
+      "base_commit": "eda7e7ea7feec9cfd98543c1edb04ff45c6cb937",
       "test_files": [
         "tests/test_azure_blob_publication_authority_v1.py",
         "tests/test_console_publication_c5.py",
@@ -544,9 +550,9 @@
     {
       "portion": "18",
       "head": "codex/d6a-18-review-surfaces",
-      "head_commit": "13c46f723072fd50503ec3c26f9f2221dec743f0",
+      "head_commit": "7217977a6fd82d980f11716890a5f32d6e1c9133",
       "base": "codex/d6a-17-publication-authority",
-      "base_commit": "fffcf08cc3e1885d1b22dad1612f7b9f9e4553fb",
+      "base_commit": "b3062621e2a303d96f9a24ccd349763d02a3af1d",
       "test_files": [
         "tests/test_deterministic_review_repair_v1.py",
         "tests/test_ingest_beschikbaarheid.py",
@@ -567,9 +573,9 @@
     {
       "portion": "19",
       "head": "codex/d6a-19-runtime-boundaries",
-      "head_commit": "37cb1520d7456f61a078d45213b67cc22557ac36",
+      "head_commit": "f36ffd8ab5c8c2ba35853f905ce5c01e17c0537c",
       "base": "codex/d6a-18-review-surfaces",
-      "base_commit": "13c46f723072fd50503ec3c26f9f2221dec743f0",
+      "base_commit": "7217977a6fd82d980f11716890a5f32d6e1c9133",
       "test_files": [
         "tests/test_665_tier_d_refused_postgres.py",
         "tests/test_718_workflow_topology.py",
@@ -602,9 +608,9 @@
     {
       "portion": "21",
       "head": "codex/d6a-21-characterization",
-      "head_commit": "ec984703d6a11005cffe5a6b3e0d62abc90d8645",
+      "head_commit": "e8583066a769de0282744bcc4611e7e77604ae72",
       "base": "codex/d6a-19-runtime-boundaries",
-      "base_commit": "37cb1520d7456f61a078d45213b67cc22557ac36",
+      "base_commit": "f36ffd8ab5c8c2ba35853f905ce5c01e17c0537c",
       "test_files": [
         "tests/characterization/test_ingest.py",
         "tests/characterization/test_ingest_boundaries.py",
@@ -624,9 +630,9 @@
     {
       "portion": "22",
       "head": "codex/d6a-22-batch-authority",
-      "head_commit": "03c1c55070c3378dbab0c92e26c42a38a7328c5e",
+      "head_commit": "b08cbfbcbccbe40bb779daca541a11f3e79c8de0",
       "base": "codex/d6a-21-characterization",
-      "base_commit": "ec984703d6a11005cffe5a6b3e0d62abc90d8645",
+      "base_commit": "e8583066a769de0282744bcc4611e7e77604ae72",
       "test_files": [
         "tests/test_v233_product_proportionate_review.py"
       ],

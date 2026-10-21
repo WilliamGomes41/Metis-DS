@@ -1,0 +1,194 @@
+{
+  "change_class": "C",
+  "rewrite_risk": "none",
+  "promise": "Every caller of the migrated formation helper receives production_console in portion09; existing authorization/resume assertions remain unchanged.",
+  "cause": "Shared helper migrated in09, but three consumer functions (four cases) received its new required keyword in10.",
+  "runtime_changes": false,
+  "max_test_files": 20,
+  "scope": [
+    "tests/test_processing_authorization.py",
+    "tests/test_availability_repair.py",
+    "tests/test_processing_trace_v1.py",
+    "tests/test_a06_selected_occurrence_relations.py"
+  ],
+  "boundary_rebalance": {
+    "from09to10": [
+      "tests/test_admission_language_variation.py",
+      "tests/test_form_bound_revision.py",
+      "tests/test_semantic_safety_app_v1.py",
+      "tests/test_stale_write_ux.py"
+    ]
+  },
+  "proof": [
+    "Same four-case loop must fail before the fix and pass after it.",
+    "Re-run original native acceptance command without selection filters.",
+    "Exercise all changed portion09 modules against PostgreSQL; no PG skips.",
+    "Assert all final runtime/test blobs are unchanged from portion12 onward; earlier differences are limited to the shifted fixture arguments."
+  ],
+  "reported_pr": 799,
+  "reported_ci_run": 39556933308,
+  "reported_job": 119078776731,
+  "reported_native_result": {
+    "failed": 4,
+    "passed": 202,
+    "cause": "Required production_console keyword missing in three functions, four parameterized cases"
+  },
+  "corrected_head": "be1f72e8c255a12a4289822ada520298e6cbf3fa",
+  "checks": [
+    {
+      "name": "minimal red",
+      "junit": "d6a09-repro-red.xml",
+      "sha256": "0e3330c21a8bac0d62b8a7585dd553ab4e840de2208c62cca9a1a24def15f70e",
+      "tests": 1,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "reported cases green",
+      "junit": "d6a09-repro-green.xml",
+      "sha256": "e207ee5fa2a52895fc915530ee5b4156d91c060e29f47410827e6668a661ecd8",
+      "tests": 4,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "original native acceptance",
+      "junit": "d6a09-native-fixed.xml",
+      "sha256": "30823e8fbbdae1e0cb53270c5bebb9603fa6954bc9db5838a95677472c2a6941",
+      "tests": 206,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "complete rebalanced portion",
+      "junit": "d6a09-rebalanced-portion.xml",
+      "sha256": "9d77d4520afd0767a8846770652085c8767a7acf4d636a1754b74c3696adec6f",
+      "tests": 483,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "ci_rerun": "pending publication; no green CI claim",
+  "case_preservation": {
+    "before_commit": "54ab77721f40e7a83420bce2320989dca594e310",
+    "after_commit": "be1f72e8c255a12a4289822ada520298e6cbf3fa",
+    "before_cases": 483,
+    "after_cases": 483,
+    "node_ids_identical": true,
+    "removed_cases": [],
+    "modules": [
+      "tests/test_a06_selected_occurrence_relations.py",
+      "tests/test_a3_attempt_correctness.py",
+      "tests/test_availability_repair.py",
+      "tests/test_blockage_diagnostics_v1.py",
+      "tests/test_context_preservation.py",
+      "tests/test_estimate_linear_golden.py",
+      "tests/test_processing_authorization.py",
+      "tests/test_processing_trace_v1.py",
+      "tests/test_protocol_v2_13_kernel.py",
+      "tests/test_publish_refusal_audit_v1.py",
+      "tests/test_recommendation_coverage_v1.py",
+      "tests/test_recoverable_formation_v1.py",
+      "tests/test_reservation_contract_version.py",
+      "tests/test_source_bound_continuation_repair.py",
+      "tests/test_source_bound_fields_v2.py",
+      "tests/test_source_cache_work_v1.py",
+      "tests/test_source_evidence_resolution_v1.py",
+      "tests/test_source_resume_acceptance.py",
+      "tests/test_source_selection_key_list_golden.py",
+      "tests/test_t8_materialisation_admission_integrity.py",
+      "tests/test_admission_language_variation.py",
+      "tests/test_form_bound_revision.py",
+      "tests/test_semantic_safety_app_v1.py",
+      "tests/test_stale_write_ux.py"
+    ]
+  },
+  "later_source_equivalence": [
+    {
+      "portion": "review-evidence-prerequisite",
+      "head": "codex/fix-pg-command-review-evidence",
+      "commit": "15019de7843da731676482b1493aba5c704dc3fe",
+      "source_changes": [
+        "tests/test_a06_selected_occurrence_relations.py"
+      ]
+    },
+    {
+      "portion": "11",
+      "head": "codex/d6a-11-native-composition",
+      "commit": "35f7b16760aa1c96384afed74de565e1e1734602",
+      "source_changes": [
+        "tests/test_a06_selected_occurrence_relations.py"
+      ]
+    },
+    {
+      "portion": "12",
+      "head": "codex/d6a-12-source-context",
+      "commit": "b91f5aac04432693a23f24293050768ce6756b93",
+      "source_changes": []
+    },
+    {
+      "portion": "13",
+      "head": "codex/d6a-13-navigation-auth",
+      "commit": "f0a7fbc8ee1a3c90170f935f8b0bd3d07647889b",
+      "source_changes": []
+    },
+    {
+      "portion": "14",
+      "head": "codex/d6a-14-workboards",
+      "commit": "175566dcf24cabcdf97b06d0139b3afc6f34748c",
+      "source_changes": []
+    },
+    {
+      "portion": "15",
+      "head": "codex/d6a-15-decision-console",
+      "commit": "ae46a6b5e91fc095d8e4858f927a36cb8527b7b9",
+      "source_changes": []
+    },
+    {
+      "portion": "16",
+      "head": "codex/d6a-16-semantics-reservations",
+      "commit": "eda7e7ea7feec9cfd98543c1edb04ff45c6cb937",
+      "source_changes": []
+    },
+    {
+      "portion": "17",
+      "head": "codex/d6a-17-publication-authority",
+      "commit": "b3062621e2a303d96f9a24ccd349763d02a3af1d",
+      "source_changes": []
+    },
+    {
+      "portion": "18",
+      "head": "codex/d6a-18-review-surfaces",
+      "commit": "7217977a6fd82d980f11716890a5f32d6e1c9133",
+      "source_changes": []
+    },
+    {
+      "portion": "19",
+      "head": "codex/d6a-19-runtime-boundaries",
+      "commit": "f36ffd8ab5c8c2ba35853f905ce5c01e17c0537c",
+      "source_changes": []
+    },
+    {
+      "portion": "21",
+      "head": "codex/d6a-21-characterization",
+      "commit": "e8583066a769de0282744bcc4611e7e77604ae72",
+      "source_changes": []
+    },
+    {
+      "portion": "22",
+      "head": "codex/d6a-22-batch-authority",
+      "commit": "b08cbfbcbccbe40bb779daca541a11f3e79c8de0",
+      "source_changes": []
+    }
+  ],
+  "helper_call_audit": {
+    "direct_calls": 20,
+    "missing_required_keywords": 0,
+    "includes_aliases": true
+  },
+  "limits": "The original 206-case acceptance ran during preparation; the483-case run and collection comparison ran on the committed corrected head. Complete CI timing per portion remains pending; no D6a/D6b completion claim."
+}
