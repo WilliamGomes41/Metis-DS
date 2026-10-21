@@ -6,8 +6,10 @@ Proof: geïsoleerde databases, dezelfde ASGI-klassen/routes, falen bij verzamele
 Touches lifecycle invariants: no
 Rewrite risk: none
 
-Dit is de eerste portie van D6a. De bestandsopstelling blijft bestaan tot D6b;
-deze portie sluit D6a niet af. B-D6-1 vervangt de eerdere HOLD op PostgreSQL
+De lokale D6a-implementatie is verdeeld in porties van maximaal twintig
+testbestanden per voorgestelde PR. Het actuele bewijs en de reviewvolgorde staan
+in `evidence/d6a/README.md` en `evidence/d6a/review-stack.json`. De
+bestandsopstelling blijft bestaan tot D6b; lokale uitvoering sluit D6a niet af. B-D6-1 vervangt de eerdere HOLD op PostgreSQL
 voor lokaal ontwikkelen en testen. #695 blijft onafhankelijk en gaat voor bij
 capaciteitsgebrek. GNC begint pas na D6b.
 
@@ -68,8 +70,7 @@ de uitslag afzonderlijk. Een Codex-run bewijst geen werking in Cursor.
 `complete_postgres` maakt per test een eigen database met `CREATE DATABASE …
 TEMPLATE …` en verwijdert alleen die eigen database. De aangeboden DSN wordt
 nooit gereset door deze fixture. Onafhankelijke verbindingen, subprocessen,
-commits en herstarts blijven echte PostgreSQL-operaties. Legacy-fixtures die
-zelf schema's resetten worden in volgende porties vervangen.
+commits en herstarts blijven echte PostgreSQL-operaties. De voormalige schema-resetfixtures delen nu deze geïsoleerde autoriteit.
 
 `production_console(...)` roept werkelijk `console_asgi.build_app()` aan, met
 de vijf PG-stores, startupreconciliatie en de productieklasse. Gebruik
@@ -83,8 +84,9 @@ navigatie, kopbevestiging en de HTTP-helper voor de batchproef. De leestest
 selecteert nu de echte reviewkamer (`task=individual`); de vervangende
 productieroute gebruikt dezelfde bestaande leesscope als de basisroute.
 De HTML-equivalentie en authenticatie blijven onderdeel van het bewijs.
-Vier expliciete lokale bestandsgevallen zijn gemarkeerd; de volledige
-`file_topology`-inventaris volgt met de resterende porties.
+De volledige `file_topology`-inventaris staat in
+`evidence/d6a/file-topology-inventory.json`; de onderstaande portiebeschrijvingen
+bewaren ook de historische tussenstanden.
 
 ## Meten
 
@@ -435,8 +437,9 @@ de bron nogmaals. Spies observeren beide, zonder de reviewoperatie of toestand
 te vervangen. De pin tussen batchleden is de echte PG-revision.
 
 
-De afsluitende inventaris telt 5.698 verzamelde cases, waarvan 2.031 een PG-
-afhankelijkheid hebben (inclusief adapterproeven). De 130 `file_topology`-cases
+De inventaris vóór de afsluitende fixtureversnelling telde 5.698 verzamelde
+cases, waarvan 2.031 een PG-afhankelijkheid hadden (inclusief adapterproeven).
+De actuele aantallen staan in `evidence/d6a/file-topology-inventory.json`. De 130 `file_topology`-cases
 in 21 bestanden staan volledig in `evidence/d6a/file-topology-inventory.json`.
 Daaronder vallen expliciet de oude lokale bestandsstart en de bijbehorende
 Azure-weigering; de productieklasseguard mag deze uitdovende opstelling niet
@@ -457,3 +460,48 @@ ook vóór herstart exact gelijk na weigering. De R2-race gebruikt een gestructu
 productie-reparatie en bewijst een gewijzigde tekst én nieuwe actuele versie,
 naast de ongewijzigde volledige PG-historie en bindings/audit na herstel.
 Alle 16 cases zijn groen; deze fixture-aanpassing hoort bij portie 11.
+
+
+## Afsluitende fixturecontrole
+
+De ononderbroken meting op `5481dfb` duurde 2.284,630 seconden tegenover
+1.043,807 seconden voor de schone baseline: 2,1887×, dus boven de beslisgrens.
+Ze bevatte vijf fouten en nul PG-skips; dit was geen geaccepteerde eindmeting.
+De exacte uitslag staat in `evidence/d6a/local-unprefetched-full.json`.
+
+De fixture bereidt daarom één verse sjabloonkopie vooruit en verwijdert
+teruggegeven kopieën op één achtergrondthread, met een begrensde opruimwachtrij.
+Een gebruikte database wordt nooit hergebruikt. De worker gebruikt één eigen
+administratieve verbinding; verbindingen en transacties van de console zelf
+blijven echte PostgreSQL-verbindingen met echte commits. Alle warme kopieën en
+teruggegeven databases verdwijnen vóór het sessiesjabloon wordt verwijderd.
+Achtergrondfouten laten de sessie falen. `fsync` en `synchronous_commit` blijven
+ingeschakeld.
+
+Op dezelfde 37 tests daalt de gemeten subprocessduur van 17,036 naar 15,096
+seconden; beide varianten zijn groen zonder skips.
+`evidence/d6a/fixture-prefetch-benchmark.json` bevat deze vergelijking. De
+eerdere rollbackvergelijking blijft ongeldig voor algemeen gebruik: zes van
+dezelfde 37 tests verliezen commit-/herstartzichtbaarheid onder rollback.
+
+Een gerichte protocoltrace vond het instellingenlek in
+`test_recovery_permission_http_restart_and_concurrent_consumption`: twee
+threads bouwden tegelijk een console en herstelden elkaars tijdelijke
+procesconfiguratie. Alleen de configuratie/compositie is nu geserialiseerd;
+de oorspronkelijke gelijktijdige commando's blijven ongewijzigd. Die test
+controleert tevens dat de procesinstellingen gelijk blijven. De oude
+bestandstopologietests kiezen hun eigen omgeving expliciet. De subprocessproef
+voor de console/retrieval-grens start nu eveneens op PostgreSQL.
+De bijbehorende 100 tests en alle 130 bestandstopologiegevallen zijn groen;
+laatstgenoemde draaien ook met vooraf ingestelde PG-storevariabelen. De
+volledige, ononderbroken nameting staat hieronder afzonderlijk vastgelegd.
+
+
+De volledige ononderbroken nameting op `bafa243` bevat
+5.700 cases: 5.667 groen, 27 optionele skips,
+6 bestaande xfails en nul PG-skips; geen fouten.
+De duur is 2313.951 seconden tegenover 1043.807 seconden: 2.2168×.
+De lokale tijdgrens is niet gehaald. De meetopdracht eindigt daarom met 1;
+verdere fixtureversnelling en de vereiste CI-vergelijking blijven nodig.
+Zie `evidence/d6a/final-suite-verification.json` en `local-final-full.json`.
+D6a is niet formeel afgerond; D6b is niet gestart.

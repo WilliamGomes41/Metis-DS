@@ -1,0 +1,24 @@
+{
+  "scope": "Complete uninterrupted local execution; CI remains independently required",
+  "measured_commit": "bafa24395e8fe1a32e2dd5ab0a7afa34fca9978a",
+  "tests": 5700,
+  "counts": {
+    "passed": 5667,
+    "skipped": 27,
+    "xfailed": 6
+  },
+  "postgres_skips": [],
+  "junit": {
+    "file": "d6a-prefetched-full.xml",
+    "sha256": "187f61c904731379b1bcb069fe156160974da260fff9c8c0d91a3b5d7eefbf09"
+  },
+  "log": {
+    "file": "d6a-prefetched-full.log",
+    "sha256": "fff8d73e946c5d4ddaa4a558886569015ac273ed2fbb62476f4e0da3b510265c"
+  },
+  "test_exit_code": 0,
+  "measurement_exit_code": 1,
+  "timing": "local-final-full.json",
+  "source_equivalence": "measured-source-equivalence.json",
+  "measurement_limits": "Local runs are not the required CI baseline/after-each-portion evidence. Small metadata/static checks ran during this measurement; no other test suite ran concurrently."
+}

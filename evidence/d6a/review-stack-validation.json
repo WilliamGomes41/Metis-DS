@@ -1,0 +1,8 @@
+{
+  "proposed_prs": 22,
+  "change_contracts": "passed",
+  "base_ancestry": "passed",
+  "test_file_maps": "passed",
+  "max_test_files": 20,
+  "external_publication": false
+}

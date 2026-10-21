@@ -1,0 +1,16 @@
+{
+  "commit": "40ad364d57f6d83e04fb6ac69c5dc02900258468",
+  "python": "3.13.5",
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+  "seconds": 1039.487,
+  "exit_code": 0,
+  "postgres_version": 160015,
+  "tests": 5679,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 33,
+  "postgres_skips": [],
+  "baseline_seconds": 1096.328,
+  "ratio": 0.9482,
+  "within_twice_baseline": true
+}

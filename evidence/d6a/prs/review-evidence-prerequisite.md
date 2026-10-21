@@ -62,7 +62,7 @@ Een volledige vastgepinde lokale meting en CI blijven afzonderlijk vereist.
 
 - [x] Uses an already-declared dependency
 
-PostgreSQL16 is al gedeclareerd. Lokale/testsetup en de meetwijze staan in `docs/agents/postgres-tests.md` en `docs/STACK_SETUP_BASELINE.md`. Geen Azure-provisioning of deployment. CI-minuten worden per portie gemeten; open de stack opeenvolgend zodat #695 voorrang houdt.
+PostgreSQL 16 is al gedeclareerd. Lokale/testsetup en de meetwijze staan in `docs/agents/postgres-tests.md` en `docs/STACK_SETUP_BASELINE.md`. Geen Azure-provisioning of deployment. CI-minuten worden per portie gemeten; open de stack opeenvolgend zodat #695 voorrang houdt.
 
 ## Safety checks
 
@@ -85,4 +85,4 @@ PostgreSQL16 is al gedeclareerd. Lokale/testsetup en de meetwijze staan in `docs
 - [x] `python -m compileall -q src tests`
 - [ ] CI op deze exacte head
 
-Gewijzigde testbestanden in deze PR: 1. Lokale publicatie is voorbereid; deze beschrijving is nog niet naar GitHub verzonden.
+Gewijzigde testbestanden in deze PR: 1. De PR is lokaal voorbereid; deze beschrijving is nog niet naar GitHub verzonden.

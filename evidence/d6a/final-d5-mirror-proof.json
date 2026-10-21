@@ -1,0 +1,146 @@
+{
+  "scope": "D5 proof completed inside the uninterrupted passing final suite",
+  "commit": "bafa24395e8fe1a32e2dd5ab0a7afa34fca9978a",
+  "production_classes": [
+    "Durable",
+    "Azure"
+  ],
+  "maps": [
+    {
+      "control": {
+        "accesses": [],
+        "completed": [
+          "startup",
+          "accounts-and-session",
+          "ingest-v1",
+          "review-v1-four-eyes",
+          "publish-v1",
+          "build-app-startup",
+          "successor-v2",
+          "review-v2-four-eyes",
+          "publish-v2",
+          "successor-v3",
+          "withdraw",
+          "restart",
+          "resume-successor",
+          "ingest-delete",
+          "delete-unpublished"
+        ]
+      },
+      "guarded": {
+        "accesses": [],
+        "blocked": null,
+        "completed": [
+          "startup",
+          "accounts-and-session",
+          "ingest-v1",
+          "review-v1-four-eyes",
+          "publish-v1",
+          "build-app-startup",
+          "successor-v2",
+          "review-v2-four-eyes",
+          "publish-v2",
+          "successor-v3",
+          "withdraw",
+          "restart",
+          "resume-successor",
+          "ingest-delete",
+          "delete-unpublished"
+        ],
+        "not_reached": [],
+        "pg_equivalence": "complete"
+      },
+      "poisoned": {
+        "accesses": [],
+        "blocked": null,
+        "completed": [
+          "startup",
+          "accounts-and-session",
+          "ingest-v1",
+          "review-v1-four-eyes",
+          "publish-v1",
+          "build-app-startup",
+          "successor-v2",
+          "review-v2-four-eyes",
+          "publish-v2",
+          "successor-v3",
+          "withdraw",
+          "restart",
+          "resume-successor",
+          "ingest-delete",
+          "delete-unpublished"
+        ],
+        "not_reached": [],
+        "pg_equivalence": "complete"
+      }
+    },
+    {
+      "control": {
+        "accesses": [],
+        "completed": [
+          "startup",
+          "accounts-and-session",
+          "ingest-v1",
+          "review-v1-four-eyes",
+          "publish-v1",
+          "build-app-startup",
+          "successor-v2",
+          "review-v2-four-eyes",
+          "publish-v2",
+          "successor-v3",
+          "withdraw",
+          "restart",
+          "resume-successor",
+          "ingest-delete",
+          "delete-unpublished"
+        ]
+      },
+      "guarded": {
+        "accesses": [],
+        "blocked": null,
+        "completed": [
+          "startup",
+          "accounts-and-session",
+          "ingest-v1",
+          "review-v1-four-eyes",
+          "publish-v1",
+          "build-app-startup",
+          "successor-v2",
+          "review-v2-four-eyes",
+          "publish-v2",
+          "successor-v3",
+          "withdraw",
+          "restart",
+          "resume-successor",
+          "ingest-delete",
+          "delete-unpublished"
+        ],
+        "not_reached": [],
+        "pg_equivalence": "complete"
+      },
+      "poisoned": {
+        "accesses": [],
+        "blocked": null,
+        "completed": [
+          "startup",
+          "accounts-and-session",
+          "ingest-v1",
+          "review-v1-four-eyes",
+          "publish-v1",
+          "build-app-startup",
+          "successor-v2",
+          "review-v2-four-eyes",
+          "publish-v2",
+          "successor-v3",
+          "withdraw",
+          "restart",
+          "resume-successor",
+          "ingest-delete",
+          "delete-unpublished"
+        ],
+        "not_reached": [],
+        "pg_equivalence": "complete"
+      }
+    }
+  ]
+}

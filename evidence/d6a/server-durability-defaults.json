@@ -1,0 +1,7 @@
+{
+  "server_version_num": 160015,
+  "fsync": "on",
+  "synchronous_commit": "on",
+  "full_page_writes": "on",
+  "scope": "Server defaults after the final suite; startup config does not disable durability"
+}

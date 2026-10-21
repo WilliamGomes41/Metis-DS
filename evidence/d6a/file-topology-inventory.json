@@ -1,7 +1,7 @@
 {
-  "collected_cases": 5698,
-  "postgres_cases": 2031,
-  "postgres_files": 217,
+  "collected_cases": 5700,
+  "postgres_cases": 2034,
+  "postgres_files": 218,
   "file_topology_cases": 130,
   "file_topology_files": 21,
   "explicit_pure_cases": 21,

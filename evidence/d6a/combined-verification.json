@@ -35,5 +35,6 @@
       "sha256": "cbea4747e7e6a5f4e48d6699dfa2383cf63700e366e195f43025f1834aab193d"
     }
   ],
-  "limits": "The stale diagnostic was interrupted. Its passing cases plus complete tail and repaired-module runs cover all5698 cases; the uninterrupted measurement is separate."
+  "limits": "Historical combined passing cases did not establish order independence: a later complete run found five failures. The complete final-suite-verification.json is authoritative for current local execution.",
+  "superseded_by": "final-suite-verification.json"
 }

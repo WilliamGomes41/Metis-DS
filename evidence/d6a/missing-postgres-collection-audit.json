@@ -115,6 +115,11 @@
       "file": "tests/test_successor_release_cutover_v1.py",
       "exit_code": 4,
       "database_messages": 1
+    },
+    {
+      "file": "tests/test_v224_console_retrieval_requirements_split.py",
+      "exit_code": 4,
+      "database_messages": 1
     }
   ],
   "summary": "22 selected PG test modules stop during collection with exactly one named database message; the security sandbox environment-only tests collect without PG."

@@ -2,12 +2,17 @@
   "scope": "Local D6a implementation; not D6a completion",
   "D6a_done": false,
   "D6b_started": false,
-  "combined_verification": "combined-verification.json",
   "inventory": "file-topology-inventory.json",
   "complete_suite": {
-    "status": "running",
-    "commit": "5481dfb06c46011cbafb8de5585162274e79044d",
-    "output": "/workspace/scratch/d6a-final-clean-full.json"
+    "status": "all tests passed",
+    "evidence": "final-suite-verification.json",
+    "timing": "local-final-full.json",
+    "commit": "bafa24395e8fe1a32e2dd5ab0a7afa34fca9978a",
+    "tests": 5700,
+    "postgres_skips": 0,
+    "within_twice_local_baseline": false,
+    "required_ci_comparison": "pending",
+    "previous_unaccepted_complete_run": "local-unprefetched-full.json"
   },
   "not_verified": [
     "GitHub CI baseline and after each proposed portion",
@@ -16,5 +21,14 @@
     "Lex/Sherlock/Argos cutover review",
     "William decision about existing local JSON state"
   ],
-  "external_publication": "blocked: automatic approval review rejected a source push; explicit destination approval still pending"
+  "external_publication": "blocked: automatic approval review rejected a source push; explicit destination approval still pending",
+  "fixture_speedup": "fixture-prefetch-benchmark.json",
+  "environment_isolation": "fixture-environment-isolation.json",
+  "source_equivalence": "measured-source-equivalence.json",
+  "workflow_static_validation": "workflow-validation.json",
+  "historical_combined_verification": "combined-verification.json",
+  "local_timing_gate": "not met: improve/verify fixture performance before D6b; required CI comparison is pending",
+  "D5_full_suite_proof": "final-d5-mirror-proof.json",
+  "final_checks": "final-checks.json",
+  "review_stack_validation": "review-stack-validation.json"
 }

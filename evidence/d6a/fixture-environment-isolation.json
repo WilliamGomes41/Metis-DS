@@ -1,0 +1,45 @@
+{
+  "root_cause": "Concurrent production_application calls interleaved temporary process configuration; only composition is now serialized, not commands.",
+  "before_trace": {
+    "passed": 76,
+    "non_pg_skips": 1,
+    "environment_leaks": [
+      {
+        "nodeid": "tests/test_attempt_diagnostics_postgres.py::test_recovery_permission_http_restart_and_concurrent_consumption",
+        "before": {
+          "METIS_WORKFLOW_STORE": null,
+          "METIS_WORKFLOW_DOCUMENT_STORE": null,
+          "METIS_WORKFLOW_REVIEW_STORE": null,
+          "METIS_WORKFLOW_REMAINING_STORE": null,
+          "METIS_CANONICAL_STORE": null
+        },
+        "after": {
+          "METIS_WORKFLOW_STORE": "postgres",
+          "METIS_WORKFLOW_DOCUMENT_STORE": "postgres",
+          "METIS_WORKFLOW_REVIEW_STORE": "postgres",
+          "METIS_WORKFLOW_REMAINING_STORE": "postgres",
+          "METIS_CANONICAL_STORE": "postgres"
+        }
+      }
+    ]
+  },
+  "after": [
+    {
+      "file": "d6a-fixture-env-repairs.xml",
+      "tests": 100,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "sha256": "f4c46b4cae624b974b4c97f39cc554f8ab44f927ac0ba42b58b09cbf41b8ef25"
+    },
+    {
+      "file": "d6a-file-topology-explicit-env.xml",
+      "tests": 130,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0,
+      "sha256": "e0a9e68ebde0fc5f1600cdaff6d6e61c41e34a52e2b777b608d70071a0309233"
+    }
+  ],
+  "after_environment_trace": "No additional leak was appended by the 100-case repaired run."
+}

@@ -1,0 +1,17 @@
+{
+  "measured_commit": "bafa24395e8fe1a32e2dd5ab0a7afa34fca9978a",
+  "current_implementation_commit": "87e07200117fe5e6e453796e9e189d5ab8455faa",
+  "source_directories": [
+    "src",
+    "tests",
+    "scripts"
+  ],
+  "git_blob_inventory_sha256": "d362f10eea8f715fc7d4f8b47cc98960a26f2bbfb49fa887f6fbf7171190404a",
+  "identical": true,
+  "unmeasured_workflow_fix": {
+    "file": ".github/workflows/ci.yml",
+    "scope": "Move the existing !cancelled condition to the suite step and retain only always() on the artifact upload.",
+    "proof": "workflow-validation.json"
+  },
+  "metadata_changes_do_not_change_test_execution": true
+}

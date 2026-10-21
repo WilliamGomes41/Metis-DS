@@ -1,0 +1,16 @@
+{
+  "files": [
+    ".github/workflows/bend-proof.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/deploy-production.yml",
+    ".github/workflows/deploy-test.yml",
+    ".github/workflows/docling-acceptance.yml",
+    ".github/workflows/shared-agent-skills.yml",
+    ".github/workflows/source-processing-proof.yml",
+    ".github/workflows/workflow-topology-proof.yml"
+  ],
+  "duplicate_keys": "rejected",
+  "result": "passed",
+  "change": "The original full-suite !cancelled condition belongs to the measurement step; the timing upload has only always().",
+  "github_actions_execution": false
+}
