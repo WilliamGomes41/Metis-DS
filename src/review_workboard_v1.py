@@ -70,6 +70,9 @@ _TASK_COPY = {
 
 @diagnostic_phase("authorization")
 def _current_account(console: OperationsConsole, request: Request) -> dict[str, Any]:
+    scoped = getattr(request.state, 'view_check_account', None)
+    if scoped is not None:
+        return scoped
     token = request.cookies.get(COOKIE)
     try:
         return console.session_account(token)

@@ -87,7 +87,9 @@ def install(app, console, require, page, nav, esc):
         with diagnostic_phase("authorization"):
             actor = require(request)
         # PR-a: lichte sleutellijst; NOOIT een deepcopy-receipt per document.
-        documents = [console._envelope(sid) for sid in document_keys(console)]
+        scoped_document = actor.get('_view_document')
+        documents = ([console._envelope(scoped_document)] if scoped_document else
+                     [console._envelope(sid) for sid in document_keys(console)])
         visible = [row for row in documents if "researcher" in actor['roles'] or actor['account_id'] in row.get('named_reviewers', [])]
         if document and document not in {row['snapshot_id'] for row in visible}:
             raise ConsoleError('reviewer_not_named_on_snapshot')

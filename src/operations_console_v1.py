@@ -710,8 +710,9 @@ class OperationsConsole:
         Diagnostic callers can forbid native extraction when retained evidence
         disappears during the read. Other callers keep the existing fallback.
         """
+        parent = self._source_selection_reads()
         token = _SOURCE_SELECTION_READS.set({"console": self, "envelopes": None, "objects": {},
-                                           "retained_only": retained_only})
+                                           "retained_only": retained_only or bool(parent and parent.get('retained_only'))})
         try:
             yield
         finally:

@@ -111,7 +111,7 @@ jobs:
           export METIS_PLAYWRIGHT_MODULE="$RUNNER_TEMP/metis-browser/node_modules/playwright"
           export METIS_BROWSER_EXECUTABLE="$(node -e 'process.stdout.write(require(process.env.METIS_PLAYWRIGHT_MODULE).chromium.executablePath())')"
           set +e
-          pytest -q tests/test_browser_source_selection.py --basetemp="$RUNNER_TEMP/source-browser-proof" --junitxml=proof/browser.xml > proof/browser.log 2>&1
+          pytest -q tests/test_browser_source_selection.py tests/test_browser_view_check.py --basetemp="$RUNNER_TEMP/source-browser-proof" --junitxml=proof/browser.xml > proof/browser.log 2>&1
           result=$?
           set -e
           cat proof/browser.log

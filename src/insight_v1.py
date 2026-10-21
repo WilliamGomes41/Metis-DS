@@ -274,6 +274,8 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
             {controls}<details><summary>Laatste verwerkingspoging ({len(attempts)} opgeslagen)</summary><pre>{detail}</pre></details>
             <p><a href="/inzicht/document/blokkade?{query}">Blokkade en bewijs per verwerkingspoging onderzoeken</a></p>
           </section>''' if processing_access else '<section id="verwerking"><h2>Verwerking</h2><p>Verwerkingsdiagnostiek is beschikbaar voor onderzoekers en aangewezen reviewers.</p></section>'
+        from src.view_check import panel as view_check_panel
+        view_checks = view_check_panel(app, state, account, document, request.query_params.get('attempt', ''))
         body = f'''{nav(account, "settings")}<section class="room">
           {insight_tabs("documenten")}
           <p><a href="/inzicht?tab=documenten">← Alle documentdiagnoses</a></p>
@@ -283,6 +285,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
             <a href="#passages">Passages en brondekking</a> · <a href="#bewijs">Bewijs en downloads</a></nav>
           {processing_html}
           <section id="passages"><h2>Passages en brondekking</h2>{passages}</section>
+          {view_checks}
           <section id="bewijs"><h2>Bewijs en downloads</h2><ul class="export-options">
             {source_exports}{publication_export}{passage_exports}</ul></section></section>'''
         return HTMLResponse(render_page(body, title="Documentdiagnose — Inzicht — Metis"), headers=_HEADERS)

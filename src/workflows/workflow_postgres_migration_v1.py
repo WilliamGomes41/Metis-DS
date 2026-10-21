@@ -25,6 +25,7 @@ MIGRATION_NAMES = (
     "015_historical_accounts.sql",
     "016_workflow_topic_identity.sql",
     "018_publication_refusal_audit.sql",
+    "019_view_checks.sql",
 )
 REQUIRED_TABLES = frozenset(
     {
