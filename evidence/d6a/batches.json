@@ -33,7 +33,7 @@
       "d6a02-isolation.xml"
     ],
     "full_suite_status": "passed locally; CI pending",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "full_suite": {
       "commit": "40ad364d57f6d83e04fb6ac69c5dc02900258468",
       "python": "3.13.5",
@@ -55,9 +55,9 @@
     "current_delivery": {
       "portion": "02",
       "head": "codex/d6a-02-native-fixtures",
-      "head_commit": "1ba56781852f3be240c9f0109abb987165a643f9",
+      "head_commit": "0119bbb68cb607ef0478abbc3360727a7025857f",
       "base": "codex/d6a-postgres-tests",
-      "base_commit": "6ce7d2b74e50150d1c3daa84dbf932c6e8d0a305",
+      "base_commit": "79d053e089730a13a45fcafa57081b96ee58b2a6",
       "test_files": [
         "tests/test_api_access_lifecycle_v1.py",
         "tests/test_api_access_postgres_v1.py",
@@ -81,8 +81,8 @@
         "tests/conftest.py",
         "tests/production_support.py"
       ],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     }
   },
   {
@@ -102,22 +102,22 @@
     "skipped": 0,
     "targeted_junit": "d6a-reader.xml",
     "full_suite_status": "local green: 5647 passed, 27 non-PG skips, 6 xfailed; zero PG skips; 1061.821 seconds",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "historical_commit": "4c087e2",
     "full_suite_evidence": "local-batch03-full.json",
     "current_delivery": {
       "portion": "03",
       "head": "codex/d6a-03-reader-authority",
-      "head_commit": "d634a5033ca18179e761de30312e09a780580dd2",
+      "head_commit": "cb76b4838b6b14f0efc97e119d151a5038c163ed",
       "base": "codex/d6a-02-native-fixtures",
-      "base_commit": "1ba56781852f3be240c9f0109abb987165a643f9",
+      "base_commit": "0119bbb68cb607ef0478abbc3360727a7025857f",
       "test_files": [
         "tests/test_review_configuration_upload_v1.py"
       ],
       "changed_test_files": 1,
       "support_files": [],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     }
   },
   {
@@ -145,7 +145,7 @@
     "skipped": 0,
     "targeted_junit": "d6a04.xml",
     "full_suite_status": "passed locally; CI pending",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "full_suite": {
       "commit": "cd9e42c58563455b8a2b300f09df64c1f83fe2f6",
       "python": "3.13.5",
@@ -167,9 +167,9 @@
     "current_delivery": {
       "portion": "04",
       "head": "codex/d6a-04-console-pages",
-      "head_commit": "87e1bbca8929064ba32d5b8f9c564a2ad3399b6b",
+      "head_commit": "7dd093e6d449d8e0f51a70c68c46bef2073405b2",
       "base": "codex/d6a-03-reader-authority",
-      "base_commit": "d634a5033ca18179e761de30312e09a780580dd2",
+      "base_commit": "cb76b4838b6b14f0efc97e119d151a5038c163ed",
       "test_files": [
         "tests/test_console_metis_dictionary.py",
         "tests/test_console_review_card_two_column.py",
@@ -185,8 +185,8 @@
       ],
       "changed_test_files": 11,
       "support_files": [],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     }
   },
   {
@@ -226,7 +226,7 @@
         "sha256": "bcbe9d49ee66dd61eba044fe4b86f86211d543ae4306a9d636f12c4865efcbf1"
       }
     ],
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "full_suite_status": "local green: 5647 passed, 27 non-PG skips, 6 xfailed; zero PG skips; 1169.733 seconds",
     "historical_commit": "57c6bb4",
     "followup": "Four imported deletion-proof callers were found in the full run and fixed on this batch branch; later local branches were rebased to include the repair.",
@@ -240,9 +240,9 @@
     "current_delivery": {
       "portion": "05",
       "head": "codex/d6a-05-console-workflows",
-      "head_commit": "9f26aa9df70a7cb9efe678984d36733cb2f19e85",
+      "head_commit": "8f54a6944deb17bbefd748e2c503fd5ba4bf2a98",
       "base": "codex/d6a-04-console-pages",
-      "base_commit": "87e1bbca8929064ba32d5b8f9c564a2ad3399b6b",
+      "base_commit": "7dd093e6d449d8e0f51a70c68c46bef2073405b2",
       "test_files": [
         "tests/test_a1_instrumentation.py",
         "tests/test_bounded_processing_lifecycle.py",
@@ -260,8 +260,8 @@
       ],
       "changed_test_files": 13,
       "support_files": [],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     }
   },
   {
@@ -312,15 +312,15 @@
       }
     ],
     "full_suite_status": "local green: 5649 passed, 27 non-PG skips, 6 xfailed; zero PG skips; 1268.878 seconds",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "historical_commit": "80d68c3",
     "full_suite_evidence": "local-batch06-full.json",
     "current_delivery": {
       "portion": "06",
       "head": "codex/d6a-06-native-graphs",
-      "head_commit": "a43e1e835ab7dd1e6a07a540f74ccb7afd62195e",
+      "head_commit": "8ac653d4037ce90ffdd3187143384de23f104207",
       "base": "codex/d6a-05-console-workflows",
-      "base_commit": "9f26aa9df70a7cb9efe678984d36733cb2f19e85",
+      "base_commit": "8f54a6944deb17bbefd748e2c503fd5ba4bf2a98",
       "test_files": [
         "tests/test_665_tier_d_refused_postgres.py",
         "tests/test_a09_source_repair.py",
@@ -340,8 +340,8 @@
         "tests/decision_graph_native_support.py",
         "tests/production_support.py"
       ],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     }
   },
   {
@@ -410,14 +410,14 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "historical_commit": "pending",
     "current_delivery": {
       "portion": "07",
       "head": "codex/d6a-07-production-review",
-      "head_commit": "3101ceb8ce5dd09738cbfca2a8083abc44f34cb8",
+      "head_commit": "f348e079850dbebc8938c46390821bb6ad46d308",
       "base": "codex/d6a-06-native-graphs",
-      "base_commit": "a43e1e835ab7dd1e6a07a540f74ccb7afd62195e",
+      "base_commit": "8ac653d4037ce90ffdd3187143384de23f104207",
       "test_files": [
         "tests/test_closed_review_loop_http_negative.py",
         "tests/test_closed_review_loop_v1.py",
@@ -444,8 +444,8 @@
         "tests/complete_workflow_support.py",
         "tests/conftest.py"
       ],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     },
     "introducing_portion_consumer_proof": [
       {
@@ -470,21 +470,21 @@
       }
     ],
     "full_suite_status": "queued",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "historical_commit": "2fb109f",
     "current_delivery": {
       "portion": "08",
       "head": "codex/d6a-08-key-list",
-      "head_commit": "21b04cac9d180d3e49932afc58020ea112bba306",
+      "head_commit": "26b16091842e3a0e82e00d473e39db98d3a79196",
       "base": "codex/d6a-07-production-review",
-      "base_commit": "3101ceb8ce5dd09738cbfca2a8083abc44f34cb8",
+      "base_commit": "f348e079850dbebc8938c46390821bb6ad46d308",
       "test_files": [
         "tests/test_postgres_key_list_receipts.py"
       ],
       "changed_test_files": 1,
       "support_files": [],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     }
   },
   {
@@ -531,16 +531,16 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "historical_commit": "pending",
     "consumer_repair_commit": "fe3b288",
     "consumer_repair": "Replay reservation consumer now passes the PG factory; targeted case passed on batch 9. Descendant branches rebased; original targeted evidence remains historical.",
     "current_delivery": {
       "portion": "09",
       "head": "codex/d6a-09-source-formation",
-      "head_commit": "be1f6f85d66c4f9d8d3934cb4cb234c279e3e12d",
+      "head_commit": "b0a3c21512447171d7ecbe01c2b524dce5780a53",
       "base": "codex/d6a-08-key-list",
-      "base_commit": "21b04cac9d180d3e49932afc58020ea112bba306",
+      "base_commit": "26b16091842e3a0e82e00d473e39db98d3a79196",
       "test_files": [
         "tests/test_a3_attempt_correctness.py",
         "tests/test_admission_language_variation.py",
@@ -565,8 +565,8 @@
       ],
       "changed_test_files": 20,
       "support_files": [],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     },
     "introducing_portion_consumer_proof": [
       {
@@ -608,14 +608,14 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "historical_commit": "pending",
     "current_delivery": {
       "portion": "10",
       "head": "codex/d6a-10-processing-routes",
-      "head_commit": "4dc814d10e9412ddc0faba070df36a865b98a26f",
+      "head_commit": "6ce3f52bfd46acd2be635622c2fc281753d13702",
       "base": "codex/d6a-09-source-formation",
-      "base_commit": "be1f6f85d66c4f9d8d3934cb4cb234c279e3e12d",
+      "base_commit": "b0a3c21512447171d7ecbe01c2b524dce5780a53",
       "test_files": [
         "tests/test_a04_session_availability.py",
         "tests/test_availability_repair.py",
@@ -634,8 +634,8 @@
         "tests/conftest.py",
         "tests/production_support.py"
       ],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     }
   },
   {
@@ -670,13 +670,13 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "current_delivery": {
       "portion": "11",
       "head": "codex/d6a-11-native-composition",
-      "head_commit": "12006661e3b5bb37b43216791ae0f19761c716f4",
+      "head_commit": "acbd9c3830f5e7bc7524af98db95868346712ff5",
       "base": "codex/fix-pg-command-review-evidence",
-      "base_commit": "734d24f8a8252a93051c9957b99e97315eac26b2",
+      "base_commit": "1a2badaaf405304de876938e4d77649492f1b8ef",
       "test_files": [
         "tests/test_678_store_command_postgres.py",
         "tests/test_a03_formation_coverage.py",
@@ -694,8 +694,8 @@
         "tests/conftest.py",
         "tests/d5_rollback_support.py"
       ],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     },
     "introducing_portion_consumer_proof": [
       {
@@ -739,13 +739,13 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "current_delivery": {
       "portion": "12",
       "head": "codex/d6a-12-source-context",
-      "head_commit": "984006331fd9d6196bf399141e012e83ae5eabf4",
+      "head_commit": "fe9d186ae335565bf10a9bb7b22af4bea5562f07",
       "base": "codex/d6a-11-native-composition",
-      "base_commit": "12006661e3b5bb37b43216791ae0f19761c716f4",
+      "base_commit": "acbd9c3830f5e7bc7524af98db95868346712ff5",
       "test_files": [
         "tests/test_a06_selected_occurrence_relations.py",
         "tests/test_a07_strength_binding.py",
@@ -760,8 +760,8 @@
       "support_files": [
         "tests/browser_source_context_fixture.py"
       ],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     }
   },
   {
@@ -805,13 +805,13 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "current_delivery": {
       "portion": "13",
       "head": "codex/d6a-13-navigation-auth",
-      "head_commit": "3040b7839e934be3ba0103a649675bda44c97163",
+      "head_commit": "be50496f30a4c538292f2f4dfb9ba7be62d0bfe2",
       "base": "codex/d6a-12-source-context",
-      "base_commit": "984006331fd9d6196bf399141e012e83ae5eabf4",
+      "base_commit": "fe9d186ae335565bf10a9bb7b22af4bea5562f07",
       "test_files": [
         "tests/test_account_retirement_v1.py",
         "tests/test_console_access_availability.py",
@@ -830,8 +830,8 @@
         "tests/conftest.py",
         "tests/production_support.py"
       ],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     },
     "introducing_portion_consumer_proof": [
       {
@@ -881,13 +881,13 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "current_delivery": {
       "portion": "14",
       "head": "codex/d6a-14-workboards",
-      "head_commit": "fb939675b50e3f0d7ad6b0f2cf3b68d399d7fb32",
+      "head_commit": "b65c4182c56982404f758d8fd4962af3f3ecd1a2",
       "base": "codex/d6a-13-navigation-auth",
-      "base_commit": "3040b7839e934be3ba0103a649675bda44c97163",
+      "base_commit": "be50496f30a4c538292f2f4dfb9ba7be62d0bfe2",
       "test_files": [
         "tests/test_console_cleanup_v1.py",
         "tests/test_console_feedback_v1.py",
@@ -904,8 +904,8 @@
       ],
       "changed_test_files": 12,
       "support_files": [],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     },
     "introducing_portion_consumer_proof": [
       {
@@ -960,13 +960,13 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "current_delivery": {
       "portion": "15",
       "head": "codex/d6a-15-decision-console",
-      "head_commit": "9e95853f56e10711cd6df39331379b5d7434299c",
+      "head_commit": "8b892bc9fcf0dd04c034e39df343d8b759e53025",
       "base": "codex/d6a-14-workboards",
-      "base_commit": "fb939675b50e3f0d7ad6b0f2cf3b68d399d7fb32",
+      "base_commit": "b65c4182c56982404f758d8fd4962af3f3ecd1a2",
       "test_files": [
         "tests/test_665_tier_d_refused_postgres.py",
         "tests/test_a08_heading_batch_atomic.py",
@@ -990,8 +990,8 @@
       "support_files": [
         "tests/browser_knowledge_context_fixture.py"
       ],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     },
     "introducing_portion_consumer_proof": [
       {
@@ -1041,13 +1041,13 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "current_delivery": {
       "portion": "16",
       "head": "codex/d6a-16-semantics-reservations",
-      "head_commit": "750786609eaece911540daf8b16e6548eed2961e",
+      "head_commit": "daa3ee2a3476c233bb9d00e4b8b7d48613f12277",
       "base": "codex/d6a-15-decision-console",
-      "base_commit": "9e95853f56e10711cd6df39331379b5d7434299c",
+      "base_commit": "8b892bc9fcf0dd04c034e39df343d8b759e53025",
       "test_files": [
         "tests/test_attempt_diagnostics_v1.py",
         "tests/test_c2_pinned_configuration_fence.py",
@@ -1068,8 +1068,8 @@
       ],
       "changed_test_files": 16,
       "support_files": [],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     },
     "introducing_portion_consumer_proof": [
       {
@@ -1116,13 +1116,13 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "current_delivery": {
       "portion": "17",
       "head": "codex/d6a-17-publication-authority",
-      "head_commit": "f4c0f9da48141bf0eaf4d10e073fe713912c4e33",
+      "head_commit": "595ee5de91d0cec23452e3f4335d76bd1da47133",
       "base": "codex/d6a-16-semantics-reservations",
-      "base_commit": "750786609eaece911540daf8b16e6548eed2961e",
+      "base_commit": "daa3ee2a3476c233bb9d00e4b8b7d48613f12277",
       "test_files": [
         "tests/test_azure_blob_publication_authority_v1.py",
         "tests/test_console_publication_c5.py",
@@ -1137,8 +1137,8 @@
       "support_files": [
         "tests/conftest.py"
       ],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     }
   },
   {
@@ -1180,13 +1180,13 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "current_delivery": {
       "portion": "18",
       "head": "codex/d6a-18-review-surfaces",
-      "head_commit": "e3da4b15d3d2031f18f03031415330839d855ef6",
+      "head_commit": "683f7cc32be522496df753a3c6c1804ff102b0b5",
       "base": "codex/d6a-17-publication-authority",
-      "base_commit": "f4c0f9da48141bf0eaf4d10e073fe713912c4e33",
+      "base_commit": "595ee5de91d0cec23452e3f4335d76bd1da47133",
       "test_files": [
         "tests/test_deterministic_review_repair_v1.py",
         "tests/test_ingest_beschikbaarheid.py",
@@ -1201,8 +1201,8 @@
       ],
       "changed_test_files": 10,
       "support_files": [],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     }
   },
   {
@@ -1230,7 +1230,7 @@
       "tests/test_678_store_command_postgres.py"
     ],
     "full_suite_status": "pending final verification",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "verification": "Runtime identity/documents/review/API access/hotpath and recovery use production PG. Constructor ancestor guards construct production leaves. Pure selected functions do not require PG; inline native cases fail during collection if unavailable. Retiring inventory/session/serialization file cases remain file_topology. All existing test functions retained.",
     "junit": [
       {
@@ -1257,9 +1257,9 @@
     "current_delivery": {
       "portion": "19",
       "head": "codex/d6a-19-runtime-boundaries",
-      "head_commit": "4036dec6a685fd285b649d61d56a94bd36fe86b0",
+      "head_commit": "3b74ba873294e07a45e0c1586edce9edbdec8040",
       "base": "codex/d6a-18-review-surfaces",
-      "base_commit": "e3da4b15d3d2031f18f03031415330839d855ef6",
+      "base_commit": "683f7cc32be522496df753a3c6c1804ff102b0b5",
       "test_files": [
         "tests/test_665_tier_d_refused_postgres.py",
         "tests/test_718_workflow_topology.py",
@@ -1286,8 +1286,8 @@
         "tests/conftest.py",
         "tests/postgres_collection.py"
       ],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     },
     "executed_unique_cases": 330
   },
@@ -1316,7 +1316,7 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "current_delivery": {
       "portion": "20",
       "head": "codex/d6a-20-helper-consumers",
@@ -1360,13 +1360,13 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "current_delivery": {
       "portion": "21",
       "head": "codex/d6a-21-characterization",
-      "head_commit": "3b336242cb00b96731d2846ca780f9a7bd9b896c",
+      "head_commit": "29c708426a6febd1b4c06da0905274921b3adba6",
       "base": "codex/d6a-19-runtime-boundaries",
-      "base_commit": "4036dec6a685fd285b649d61d56a94bd36fe86b0",
+      "base_commit": "3b74ba873294e07a45e0c1586edce9edbdec8040",
       "test_files": [
         "tests/characterization/test_ingest.py",
         "tests/characterization/test_ingest_boundaries.py",
@@ -1380,8 +1380,8 @@
         "tests/characterization/overview_support.py",
         "tests/characterization/support.py"
       ],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     },
     "additional_junit": [
       {
@@ -1412,13 +1412,13 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending",
+    "ci_status": "historical local proof; current published CI status is recorded in review-stack.json",
     "current_delivery": {
       "portion": "22",
       "head": "codex/d6a-22-batch-authority",
-      "head_commit": "87e07200117fe5e6e453796e9e189d5ab8455faa",
+      "head_commit": "318a0558db865f297d10892b790f3b62693218d3",
       "base": "codex/d6a-21-characterization",
-      "base_commit": "3b336242cb00b96731d2846ca780f9a7bd9b896c",
+      "base_commit": "29c708426a6febd1b4c06da0905274921b3adba6",
       "test_files": [
         "tests/test_v233_product_proportionate_review.py"
       ],
@@ -1426,8 +1426,8 @@
       "support_files": [
         "tests/production_support.py"
       ],
-      "ci_status": "pending; no push or PR has been authorized",
-      "delivery": "local reviewable branch"
+      "ci_status": "not started; branch pushed, no PR opened",
+      "delivery": "published reviewable branch"
     }
   }
 ]

@@ -1,0 +1,57 @@
+{
+  "main_commit": "8059c67d758b81290757c059b122ab4f3d6db543",
+  "first_pr_head": "79d053e089730a13a45fcafa57081b96ee58b2a6",
+  "change": "Preserve #790 deduplication by executing the complete measured suite once, then export existing native proof artifacts from its JUnit; all previous semantic/no-skip validators remain.",
+  "ci_contracts": {
+    "tests": 34,
+    "passed": 34,
+    "junit": "d6a-main-ci-contract.xml",
+    "sha256": "ec0fdfd78888480cf8fe180e71f7793aadfa2f17285c80453e15fb3aba0ba215"
+  },
+  "exports": [
+    {
+      "artifact": "a08-native.xml",
+      "tests": 70,
+      "exit_code": 0,
+      "sha256": "462bf53100bc9f14e301560a3f644d6bc0275c891e122aa1e00b6ccfe682a8b3"
+    },
+    {
+      "artifact": "a10-native.xml",
+      "tests": 76,
+      "exit_code": 0,
+      "sha256": "41b68ffbda98dafedd0e5172f8f62a4a1f25d18559dfbecf46fdb2cf42cd9250"
+    },
+    {
+      "artifact": "blockage-diagnostics.xml",
+      "tests": 23,
+      "exit_code": 0,
+      "sha256": "6f3351f8c7045a905c047d18d0f494d227758fe0b245dd64ce1485ddcdc3ce6c"
+    },
+    {
+      "artifact": "pg-without-mirrors.xml",
+      "tests": 20,
+      "exit_code": 0,
+      "sha256": "3b1c05c15ae485cc0c09dbb9a0bffc71896ae79a35d2cd38a4c1d7e3f6732412"
+    },
+    {
+      "artifact": "processing-trace.xml",
+      "tests": 23,
+      "exit_code": 0,
+      "sha256": "ae2110275d81fa224dd4f98cb3a44d9ba4bd16fe2c4e28bcd296083ffedc9931"
+    },
+    {
+      "artifact": "refusal-postgres.xml",
+      "tests": 19,
+      "exit_code": 0,
+      "sha256": "a060aa21204f2e1022932abf07b9cb2f1214f929b47f67652d8e6ba179d7f6fc"
+    },
+    {
+      "artifact": "reprocessing-708.xml",
+      "tests": 6,
+      "exit_code": 0,
+      "sha256": "d2232319bffc38490004197755e251cd361c49cd3182a87e268c16ca6987a795"
+    }
+  ],
+  "complete_suite_source": "bafa24395e8fe1a32e2dd5ab0a7afa34fca9978a",
+  "scope_limit": "The 5700-case whole-suite result predates these five tooling cases. Runtime, fixture and measured runner are unchanged; CI result is pending."
+}

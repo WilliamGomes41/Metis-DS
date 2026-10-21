@@ -3,7 +3,9 @@
 De lokale migratie naar de productiecompositie op PostgreSQL is voorbereid in
 21 migratieporties plus één afzonderlijke Class A-bugreparatie. Iedere
 voorgestelde PR raakt maximaal twintig testbestanden. Alle branches en
-[PR-teksten](prs/) zijn lokaal; er is niets gepusht en CI is niet uitgevoerd.
+[PR-teksten](prs/) zijn voorbereid; alle 22 branches zijn gepusht. De eerste
+[draft-PR #791](https://github.com/WilliamGomes41/Metis-DS/pull/791) draait CI;
+de overige PRs worden opeenvolgend geopend.
 D6a is nog niet formeel afgerond en D6b is niet gestart. #695 houdt voorrang
 bij capaciteitsgebrek; GNC is niet gestart.
 
@@ -20,12 +22,13 @@ De fixture moet verder worden verbeterd en in CI vergeleken voordat D6b kan star
 [Volledige testuitslag en JUnit-hash](final-suite-verification.json),
 [exacte meetgegevens](local-final-full.json) en
 [alle verificatiegrenzen](verification.json).
-De runtime-, test- en runnerbroncode is identiek aan de gemeten commit; alleen
-metadata en een afzonderlijk statisch gecontroleerde CI-conditie zijn later
-bijgewerkt. De gegevens per portie bewaren hun oorspronkelijke uitgevoerde
+De runtime-, fixture- en meetrunnerbroncode zijn identiek aan de gemeten commit.
+Daarna zijn alleen CI, één rapportexportscript en vijf CI-contractcases
+aangepast om de versnelling op main (#790) te behouden; deze 34 contracttests
+en zeven echte rapportexports slagen. Zie [CI-integratie](main-ci-integration.json). De gegevens per portie bewaren hun oorspronkelijke uitgevoerde
 revisies; de actuele branches staan daarnaast in de reviewvolgorde.
 
-De actuele inventaris telt 5700 cases, waarvan 2034
+De volledige gemeten inventaris telt 5700 cases, waarvan 2034
 PG-afhankelijk in 218 bestanden (inclusief adapterproeven).
 
 - [Reviewvolgorde en branches](review-stack.json), met concrete testbestanden
@@ -52,7 +55,7 @@ PG-afhankelijk in 218 bestanden (inclusief adapterproeven).
   bestandsgevallen zijn ook met vooraf ingestelde PG-variabelen groen.
 - [Afsluitende repositorychecks](final-checks.json) en
   [22 gevalideerde PR-contracten en portiegrenzen](review-stack-validation.json).
-- [Identieke gemeten broncode](measured-source-equivalence.json) en
+- [Gemeten broncode en begrensde CI-wijzigingen](measured-source-equivalence.json) en
   [statische workflowcontrole](workflow-validation.json).
 - [Collection zonder database](missing-postgres-collection-audit.json),
   [meetisolatie](measurement-isolation.json) en

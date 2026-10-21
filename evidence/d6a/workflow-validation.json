@@ -11,6 +11,6 @@
   ],
   "duplicate_keys": "rejected",
   "result": "passed",
-  "change": "The original full-suite !cancelled condition belongs to the measurement step; the timing upload has only always().",
-  "github_actions_execution": false
+  "change": "main #790 integrated: one complete measured execution, with native proof artifacts exported from the same JUnit.",
+  "github_actions_execution": "started on PR #791, outcome pending"
 }

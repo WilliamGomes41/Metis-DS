@@ -2,44 +2,38 @@
   {
     "name": "repository",
     "status": "passed",
-    "log": "d6a-final-check-repository.log",
-    "sha256": "258b64185c7c67990b5a3a614488e912eddba27c19a365887726fae039f02293"
+    "log": "d6a-published-repository.log",
+    "sha256": "47f6f085cbb07c96a24ee0f65b915173572158d665ee56e8c87a0531d43a63c3"
   },
   {
     "name": "release-control",
     "status": "passed",
-    "log": "d6a-final-check-release-control.log",
-    "sha256": "08790b5beedd83a010bac36c797bb3137907613584b1acd11410d899dba884bd"
+    "log": "d6a-published-release-control.log",
+    "sha256": "966506aa8523739d39d619d47a614a19b7b9593a73b4c7429830384eb4e23ea0"
   },
   {
     "name": "architecture",
     "status": "passed",
-    "log": "d6a-final-check-architecture.log",
+    "log": "d6a-published-architecture.log",
     "sha256": "49827e1628cb4718f0c0ed529b63a1bbc77a33a9133b141f70970be2bbe7cb52"
   },
   {
     "name": "compile",
     "status": "passed",
-    "log": "d6a-final-check-compile.log",
+    "log": "d6a-published-compile.log",
     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   {
     "name": "product-api",
     "status": "passed",
-    "log": "d6a-final-check-product-api.log",
+    "log": "d6a-published-product-api.log",
     "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   {
-    "name": "diff",
+    "name": "CI/runner contracts on published workflow",
     "status": "passed",
-    "log": "d6a-final-check-diff.log",
-    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-  },
-  {
-    "name": "CI/runner contracts on current workflow",
-    "status": "passed",
-    "tests": 29,
-    "junit": "d6a-final-runner-contract-current.xml",
-    "sha256": "32a7562a2caf990a600cf865fabeaa3f8f2bb6da397e5b306e4e1a4810c51718"
+    "tests": 34,
+    "junit": "d6a-published-ci-contract.xml",
+    "sha256": "144f1f782f9eeeace2ddd469a881ad745d0594ef554a2cf494b0b62bb8851121"
   }
 ]
