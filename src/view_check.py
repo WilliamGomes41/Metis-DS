@@ -249,7 +249,7 @@ def install(app, state, require, render_page, nav):
         evidence = EvidenceStore(source._service, os.environ.get('METIS_VIEW_CHECK_EVIDENCE_CONTAINER', ''), source.container)
         app.state.view_checks = ViewChecks(state, store, config, evidence)
 
-    @app.middleware('http')
+    @app.middleware("http")
     async def restricted_browser(request, call_next):
         if COOKIE in request.cookies:
             service = app.state.view_checks
@@ -378,6 +378,7 @@ def panel(app, state, account, document, attempt=''):
             expired = datetime.fromisoformat(result['evidence'][0]['expires_at']) <= datetime.now(timezone.utc)
             body += ('<p>Bewijs verlopen.</p>' if expired else f'<a href="/inzicht/weergavecontrole/{row["id"]}/bewijs">Bekijk schermbewijs</a>')
         if row['state'] in {'queued', 'running'} and row['owner_account_id'] == account['account_id']:
+            body += '<p><a href="/inzicht/document?' + escape(urlencode({'document': document, 'attempt': attempt}), quote=True) + '#weergavecontrole">Vernieuw resultaat</a></p>'
             body += f'<form method="post" action="/inzicht/weergavecontrole/{row["id"]}/annuleren"><button>Annuleren</button></form>'
         body += '</article>'
     return body + '</section>'

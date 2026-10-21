@@ -42,7 +42,7 @@ def test_review_overview_golden(case, tmp_path, monkeypatch, golden):
 
 
 def test_review_route_table_golden(tmp_path, golden):
-    """The set of review routes; the presentation change adds or removes none."""
+    """Freeze the console routes, including the four scoped view-check endpoints."""
     from src.operations_console_app import create_console_app
     from src.proportionate_review_v1 import ProportionateReviewConsole, install_proportionate_review_routes
     from src.review_workboard_v1 import install_review_workboard

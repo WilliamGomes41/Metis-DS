@@ -23,7 +23,7 @@ class ViewCheckStore:
 
     def verify(self):
         with self.connect() as con:
-            con.execute('SELECT id, capability_hash, events FROM workflow.view_checks LIMIT 0')
+            con.execute('SELECT id, request_aliases, capability_hash, events FROM workflow.view_checks LIMIT 0')
 
     @staticmethod
     def public(row):

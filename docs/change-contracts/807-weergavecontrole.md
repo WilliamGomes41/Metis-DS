@@ -55,3 +55,4 @@ Een taak met afwijkingen eindigt als completed met fail-checks; completed beteke
 - Native PG-tests zijn hier geblokkeerd door ontbrekende PostgreSQL 16; setup faalt op OS-groepsrechten. Dit is geen skip/pass.
 - Native opslag/autorisatieproeven en een echte browserketen zijn toegevoegd. `source-processing-proof` moet ze met native PostgreSQL en Chromium uitvoeren en ontbrekend/overgeslagen browserbewijs afwijzen. Hun uitslag wordt op de PR bijgehouden.
 - Geen actuele productie-uitvoering, performanceacceptatie, Azure-bewijsopslagacceptatie of volledige issue-acceptatie vastgesteld.
+- CI-correctie: de routetabelgolden bevat nu de vier bewust toegevoegde weergavecontroleroutes; een directe vergelijking bevestigt nul verwijderde of gewijzigde bestaande routes. De characterization-suite blijft verplicht. Lokaal blokkeert haar PostgreSQL-bootstrap; de volledige uitslag moet uit CI komen.
