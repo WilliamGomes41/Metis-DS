@@ -64,6 +64,13 @@ def read_events(path: Path) -> list[dict[str, Any]]:
     return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
 
 
+def read_command_events(path: Path) -> list[dict[str, Any]]:
+    """Explicit command-local evidence read; public audit reads stay unchanged."""
+    backend = _backend(path)
+    reader = getattr(backend, "read_command_events", None)
+    return reader() if reader is not None else read_events(path)
+
+
 def append_event(
     path: Path,
     *,
