@@ -40,7 +40,7 @@ pytestmark = [
 def _dsn() -> str:
     value = os.getenv("METIS_TEST_POSTGRES_DSN", "").strip()
     if not value:
-        pytest.skip("METIS_TEST_POSTGRES_DSN not configured")
+        pytest.fail("PostgreSQL was not bootstrapped during collection")
     return value
 
 
@@ -168,3 +168,9 @@ def test_withdrawn_projection_is_not_forced_back_to_published() -> None:
             con.execute("DELETE FROM workflow.accounts WHERE account_id=%s", (account_id,))
             con.execute("DELETE FROM audit_events WHERE entity_type='release' AND entity_id=%s", (release_id,))
             con.execute("DELETE FROM publication_releases WHERE release_id=%s", (release_id,))
+
+
+@pytest.fixture(autouse=True)
+def isolated_postgres(complete_postgres):
+    """All store connections in this test target its own cloned database."""
+    return complete_postgres
