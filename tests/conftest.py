@@ -151,7 +151,8 @@ def production_console(tmp_path, complete_postgres):
 def production_app(production_console):
     def factory(console=None, **options):
         console = console if console is not None else production_console(**options)
-        return production_console.apps[console]
+        from tests.production_support import application_for
+        return application_for(console)
     return factory
 
 

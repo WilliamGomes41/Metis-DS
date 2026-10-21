@@ -22,8 +22,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
-from src.operations_console_v1 import OperationsConsole, _file_revision
+from src.operations_console_v1 import OperationsConsole
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
@@ -42,8 +41,8 @@ pytestmark = [
 ]
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -96,8 +95,8 @@ def _content_rows(console: OperationsConsole, snapshot_id: str) -> list[dict]:
     return rows
 
 
-def _client(console: OperationsConsole, username: str) -> TestClient:
-    client = TestClient(create_console_app(console))
+def _client(console: OperationsConsole, username: str, *, production_app) -> TestClient:
+    client = TestClient(production_app(console))
     passwords = {
         "researcher.anne": "anne-secret",
         "reviewer.bert": "bert-secret",
@@ -158,7 +157,7 @@ def _review_payload(
         "suitability": suitability,
         "documentpositie_action": "dit_klopt",
         "type_action": "dit_klopt",
-        "eindoordeel": "later_beoordelen",
+        "eindoordeel": "afwijzen",
         "comment": comment,
         "proposed_correction": "",
     }
@@ -177,15 +176,15 @@ def _open_review_form(
     return opened.text, revision
 
 
-def test_review_form_get_embeds_snapshot_revision(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_review_form_get_embeds_snapshot_revision(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
     first = _content_rows(console, snapshot_id)[0]
-    client = _client(console, "researcher.anne")
+    client = _client(console, "researcher.anne", production_app=production_app)
     body, revision = _open_review_form(client, snapshot_id, first["object_id"])
-    expected = _file_revision(console._objects_path(snapshot_id))
+    expected = console.objects_revision(snapshot_id)
     assert revision == expected
     assert f'name="snapshot_revision" value="{expected}"' in body or (
         f'value="{expected}"' in body and 'name="snapshot_revision"' in body
@@ -193,14 +192,14 @@ def test_review_form_get_embeds_snapshot_revision(tmp_path: Path) -> None:
     assert "data-review-form" in body
 
 
-def test_two_clients_overlapping_forms_conflict_on_stale_revision(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_two_clients_overlapping_forms_conflict_on_stale_revision(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
     target = _content_rows(console, snapshot_id)[0]
-    anne = _client(console, "researcher.anne")
-    bert = _client(console, "reviewer.bert")
+    anne = _client(console, "researcher.anne", production_app=production_app)
+    bert = _client(console, "reviewer.bert", production_app=production_app)
     _opened_a, rev_a = _open_review_form(anne, snapshot_id, target["object_id"])
     _opened_b, rev_b = _open_review_form(bert, snapshot_id, target["object_id"])
     assert rev_a == rev_b
@@ -246,7 +245,7 @@ def test_two_clients_overlapping_forms_conflict_on_stale_revision(tmp_path: Path
     assert BERT_SUIT in body
     after = next(
         row
-        for row in OperationsConsole(
+        for row in production_console(processing_binder=lambda console: None,
             root=tmp_path,
             source_store=tmp_path / "sources" / "private",
             runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -257,15 +256,15 @@ def test_two_clients_overlapping_forms_conflict_on_stale_revision(tmp_path: Path
     assert ANNE_SUIT != _passage_suitability(after)
 
 
-def test_overlapping_forms_conflict_survives_worker_thread_reuse(tmp_path: Path) -> None:
+def test_overlapping_forms_conflict_survives_worker_thread_reuse(tmp_path: Path, *, production_app, production_console) -> None:
     """TLS / reused worker must not let a stale form win after another client saved."""
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
     target = _content_rows(console, snapshot_id)[0]
-    anne = _client(console, "researcher.anne")
-    bert = _client(console, "reviewer.bert")
+    anne = _client(console, "researcher.anne", production_app=production_app)
+    bert = _client(console, "reviewer.bert", production_app=production_app)
     _opened_a, rev_a = _open_review_form(anne, snapshot_id, target["object_id"])
     _opened_b, rev_b = _open_review_form(bert, snapshot_id, target["object_id"])
 
@@ -289,7 +288,7 @@ def test_overlapping_forms_conflict_survives_worker_thread_reuse(tmp_path: Path)
     def reused_worker() -> None:
         try:
             console._objects_tls.expected = {
-                snapshot_id: _file_revision(console._objects_path(snapshot_id))
+                snapshot_id: console.objects_revision(snapshot_id)
             }
             posted["response"] = anne.post(
                 "/review",
@@ -325,14 +324,14 @@ def test_overlapping_forms_conflict_survives_worker_thread_reuse(tmp_path: Path)
     assert _passage_suitability(live) == BERT_SUIT
 
 
-def test_stale_form_keeps_draft_and_shows_current_differences(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_stale_form_keeps_draft_and_shows_current_differences(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
     target = _content_rows(console, snapshot_id)[0]
-    anne = _client(console, "researcher.anne")
-    bert = _client(console, "reviewer.bert")
+    anne = _client(console, "researcher.anne", production_app=production_app)
+    bert = _client(console, "reviewer.bert", production_app=production_app)
     _opened_a, rev_a = _open_review_form(anne, snapshot_id, target["object_id"])
     _opened_b, rev_b = _open_review_form(bert, snapshot_id, target["object_id"])
     bert.post(
@@ -369,15 +368,15 @@ def test_stale_form_keeps_draft_and_shows_current_differences(tmp_path: Path) ->
     fresh = _hidden(body, "snapshot_revision")
     assert fresh
     assert fresh != rev_a
-    assert fresh == _file_revision(console._objects_path(snapshot_id))
+    assert fresh == console.objects_revision(snapshot_id)
 
 
-def test_batch_confirm_carries_and_compares_form_revision(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_batch_confirm_carries_and_compares_form_revision(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
-    client = _client(console, "researcher.anne")
+    client = _client(console, "researcher.anne", production_app=production_app)
     index = client.get(f"/review?document={snapshot_id}&task=headings")
     assert index.status_code == 200
     revision = _hidden(index.text, "snapshot_revision")
@@ -386,7 +385,7 @@ def test_batch_confirm_carries_and_compares_form_revision(tmp_path: Path) -> Non
     if not heading_ids:
         heading_ids = re.findall(r'value="([^"]+)"[^>]*name="object_ids"', index.text)
     assert heading_ids
-    other = OperationsConsole(
+    other = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -406,19 +405,19 @@ def test_batch_confirm_carries_and_compares_form_revision(tmp_path: Path) -> Non
     assert any(row.get("reliability_marker") == "batch-concurrent-winner" for row in stored.values())
 
 
-def test_form_content_and_revision_are_co_read_not_separate_gets(tmp_path: Path) -> None:
+def test_form_content_and_revision_are_co_read_not_separate_gets(tmp_path: Path, *, production_app, production_console) -> None:
     """GET MUST pin revision to the same objects generation as the shown fields."""
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
     target = _content_rows(console, snapshot_id)[0]
-    original = _file_revision(console._objects_path(snapshot_id))
+    original = console.objects_revision(snapshot_id)
     real = console.snapshot_objects_and_revision
 
     def raced(snapshot_id_arg: str, include_blocked: bool = False, *, for_update: bool = False):
         rows, revision = real(snapshot_id_arg, include_blocked)
-        other = OperationsConsole(
+        other = production_console(processing_binder=lambda console: None,
             root=tmp_path,
             source_store=tmp_path / "sources" / "private",
             runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -431,9 +430,9 @@ def test_form_content_and_revision_are_co_read_not_separate_gets(tmp_path: Path)
         return rows, revision
 
     console.snapshot_objects_and_revision = raced  # type: ignore[method-assign]
-    client = _client(console, "researcher.anne")
+    client = _client(console, "researcher.anne", production_app=production_app)
     body, revision = _open_review_form(client, snapshot_id, target["object_id"])
-    live = _file_revision(console._objects_path(snapshot_id))
+    live = console.objects_revision(snapshot_id)
     assert live != original
     shown_winner = "form-coread-winner" in body
     if shown_winner:

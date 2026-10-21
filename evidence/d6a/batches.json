@@ -328,5 +328,40 @@
     ],
     "full_suite_status": "pending",
     "ci_status": "not run: push approval pending"
+  },
+  {
+    "batch": "10",
+    "base": "4b25004",
+    "commit": "pending",
+    "test_files": [
+      "tests/browser_source_selection_fixture.py",
+      "tests/conftest.py",
+      "tests/production_support.py",
+      "tests/test_a04_session_availability.py",
+      "tests/test_availability_repair.py",
+      "tests/test_azure_source_processing.py",
+      "tests/test_context_preservation.py",
+      "tests/test_processing_authorization.py",
+      "tests/test_processing_trace_v1.py",
+      "tests/test_source_dispatch_hardening.py",
+      "tests/test_source_resume_acceptance.py",
+      "tests/browser_postgres_support.py"
+    ],
+    "executed_unique_cases": 231,
+    "failures": 0,
+    "skipped": 0,
+    "verification": "Targeted processing suite plus repaired-case reruns; standalone source-selection browser fixture authenticated HTTP probe passed; no real browser or Cursor result claimed.",
+    "junit": [
+      {
+        "file": "d6a10.xml",
+        "sha256": "c1806fd7af64040931a3dbd6e7c9f40c02996f6460cb147716a8cad296f04a54"
+      },
+      {
+        "file": "d6a10-fixed.xml",
+        "sha256": "714ee90c6dc95e551c09789de53514d5ebf3fb723b7a9507a0cc789a4ba88fd0"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending"
   }
 ]

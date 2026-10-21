@@ -14,9 +14,7 @@ from threading import Event
 import pytest
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
-from src.review_closure_v1 import ReviewClosureConsole
 from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 from src.processing_retry_v1 import now
 from tests.test_recommendation_context_v3 import response_for
@@ -25,16 +23,13 @@ from tests.complete_workflow_support import complete_postgres as workflow_postgr
 
 
 @pytest.fixture(params=["local", "postgres"])
-def backend_state(request, monkeypatch):
-    if request.param == "postgres":
-        import sys
-        from tests.test_review_batch_atomic_postgres import _console
-        config = request.getfixturevalue("workflow_postgres")
-        monkeypatch.setattr(sys.modules[__name__], "state", lambda root: _console(root, config))
+def backend_state(request):
+    # Both historical parameter slots now exercise the production PG topology.
+    return request.param
 
 
-def state(root):
-    return ReviewClosureConsole(root=root, source_store=root/'sources', runtime=root/'runtime')
+def state(root, *, production_console):
+    return production_console(root=root, processing_binder=lambda console: None)
 
 
 def accounts(console):
@@ -76,13 +71,25 @@ def drain(client, app):
     client.portal.call(wait)
 
 
-def test_a26_receipt_without_provider_restart_duplicate_and_later_failure(backend_state,tmp_path):
-    console=state(tmp_path); author, reviewer=accounts(console); calls=[]
+def _preparation_context(console):
+    from src.workflows.workflow_transaction_v1 import workflow_transaction_active
+    try:
+        asyncio.get_running_loop()
+        on_loop = True
+    except RuntimeError:
+        on_loop = False
+    # Shared depth can belong to another request or the dispatcher scan.
+    # Check whether THIS preparation thread owns the store lock.
+    return on_loop, console._store_thread_lock._is_owned(), workflow_transaction_active()
+
+
+def test_a26_receipt_without_provider_restart_duplicate_and_later_failure(backend_state, tmp_path, *, production_app, production_console):
+    console=state(tmp_path, production_console=production_console); author, reviewer=accounts(console); calls=[]
     def failure(*args):
         calls.append(1)
         raise ConsoleError('processing_dependency_failed')
     bind(console,failure)
-    app=create_console_app(console)
+    app=production_app(console)
     with TestClient(app,base_url='https://testserver') as client:
         login(client)
         receipt=upload(client,reviewer)
@@ -97,32 +104,29 @@ def test_a26_receipt_without_provider_restart_duplicate_and_later_failure(backen
         selected=client.get(receipt.headers['location'])
         assert f'data-source-document="{sid}" data-selected="true"' in selected.text
         assert 'Status: nog niet gestart' in selected.text and '>Starten</button>' in selected.text
-    restarted=state(tmp_path);bind(restarted,failure);app=create_console_app(restarted)
+    restarted=state(tmp_path, production_console=production_console);bind(restarted,failure);app=production_app(restarted)
     before=deepcopy(restarted._envelope(sid))
     with TestClient(app,base_url='https://testserver') as client:
         login(client)
         assert start(client,restarted,sid).status_code==303
         drain(client,app)
         assert client.get('/source-selection',params={'document':sid}).status_code==200
-    final=state(tmp_path)
+    final=state(tmp_path, production_console=production_console)
     assert final._envelope(sid)['sha256']==before['sha256']
     assert final._verified_source_bytes(final._envelope(sid))[1].startswith(b'<html>')
     assert final._envelope(sid)['processing_attempts'][-1]['state']=='failed'
     assert calls==[1]
 
 
-def test_a26_short_selection_request_health_reads_writer_refresh_duplicate(backend_state,tmp_path):
-    console=state(tmp_path);author,reviewer=accounts(console)
+def test_a26_short_selection_request_health_reads_writer_refresh_duplicate(backend_state, tmp_path, *, production_app, production_console):
+    console=state(tmp_path, production_console=production_console);author,reviewer=accounts(console)
     entered=Event();release=Event();calls=[];observations=[]
     def paused(*args):
         calls.append(1)
-        try: asyncio.get_running_loop(); on_loop=True
-        except RuntimeError: on_loop=False
-        from src.workflows.workflow_transaction_v1 import workflow_transaction_active
-        observations.append((on_loop, console._store_lock_depth, workflow_transaction_active()))
+        observations.append(_preparation_context(console))
         entered.set(); assert release.wait(5)
         return provider(*args)
-    bind(console,paused); app=create_console_app(console)
+    bind(console,paused); app=production_app(console)
     with TestClient(app,base_url='https://testserver') as client,ThreadPoolExecutor(3) as pool:
         login(client);assert upload(client,reviewer).status_code==303
         sid=console.list_envelopes()[0]['snapshot_id'];rev=console.objects_revision(sid)
@@ -143,12 +147,12 @@ def test_a26_short_selection_request_health_reads_writer_refresh_duplicate(backe
         result=client.get('/source-selection',params={'document':sid})
         assert 'Status: voltooid' in result.text and 'Naar Review' in result.text
         assert console.processing_status(sid)['state']=='succeeded'
-        assert observations==[(False,0,False)]
+        assert observations==[(False,False,False)]
         assert len(calls)==1
 
 
-def test_a04_a05_successor_register_then_prepare_without_lock_and_stale_parent(backend_state,tmp_path):
-    console=state(tmp_path);author,_=accounts(console);bind_fixture_selections(console)
+def test_a04_a05_successor_register_then_prepare_without_lock_and_stale_parent(backend_state, tmp_path, *, production_app, production_console):
+    console=state(tmp_path, production_console=production_console);author,_=accounts(console);bind_fixture_selections(console)
     policy={'contract':'explicit-review-v1','revision':1,'primary':author,'assignments':[]}
     receipt=console.ingest(actor_id=author,filename='fixture.html',data=b'<html><body><p>Een observatie is een systematische waarneming.</p></body></html>',
         content_type='text/html',ingest_kind='new',title='Fixture',version='1',date='2026-10-08',live_url='',
@@ -156,12 +160,9 @@ def test_a04_a05_successor_register_then_prepare_without_lock_and_stale_parent(b
     sid=receipt['snapshot_id'];before=deepcopy(console.snapshot_objects(sid));original=console._fragments_and_spec
     entered=Event();release=Event();observations=[]
     def paused(*args,**kwargs):
-        try: asyncio.get_running_loop();on_loop=True
-        except RuntimeError:on_loop=False
-        from src.workflows.workflow_transaction_v1 import workflow_transaction_active
-        observations.append((on_loop,console._store_lock_depth,workflow_transaction_active()))
+        observations.append(_preparation_context(console))
         entered.set();assert release.wait(5);return original(*args,**kwargs)
-    console._fragments_and_spec=paused;app=create_console_app(console)
+    console._fragments_and_spec=paused;app=production_app(console)
     with TestClient(app,base_url='https://testserver') as client,ThreadPoolExecutor(3) as pool:
         login(client)
         command={'document':sid,'expected_revision':console.objects_revision(sid),'command_id':'successor',
@@ -188,24 +189,24 @@ def test_a04_a05_successor_register_then_prepare_without_lock_and_stale_parent(b
     assert console.snapshot_objects(sid2)==[]
     attempt=console._envelope(sid2)['processing_attempts'][-1]
     assert attempt['state']=='failed' and attempt['error_code']=='snapshot_object_write_conflict'
-    assert observations==[(False,0,False)]
+    assert observations==[(False,False,False)]
 
 
-def test_restart_expired_reservation_resumes_without_losing_source(backend_state,tmp_path,monkeypatch):
-    console=state(tmp_path);author,reviewer=accounts(console)
-    app=create_console_app(console)
+def test_restart_expired_reservation_resumes_without_losing_source(backend_state, tmp_path, monkeypatch, *, production_app, production_console):
+    console=state(tmp_path, production_console=production_console);author,reviewer=accounts(console)
+    app=production_app(console)
     with TestClient(app,base_url='https://testserver') as client:
         login(client);upload(client,reviewer)
     sid=console.list_envelopes()[0]['snapshot_id']
     attempt,fresh=console.reserve_source_selection(actor_id=author,snapshot_id=sid,command_id='lost-worker',expected_revision=console.objects_revision(sid))
     assert fresh
-    restarted=state(tmp_path);bind(restarted,provider)
+    restarted=state(tmp_path, production_console=production_console);bind(restarted,provider)
     from datetime import datetime
     future=datetime.fromisoformat(attempt['expires_at'])+timedelta(seconds=1)
     monkeypatch.setattr('src.processing_retry_v1.now',lambda:future)
     monkeypatch.setattr('src.source_selection_v1.now',lambda:future)
     monkeypatch.setattr('src.source_processing_dispatch_v1.now',lambda:future)
-    app=create_console_app(restarted)
+    app=production_app(restarted)
     with TestClient(app,base_url='https://testserver') as client:
         login(client)
         screen=client.get('/source-selection',params={'document':sid}).text
@@ -213,16 +214,16 @@ def test_restart_expired_reservation_resumes_without_losing_source(backend_state
         assert start(client,restarted,sid,'resume').status_code==303
         drain(client,app)
         assert 'Status: voltooid' in client.get('/source-selection',params={'document':sid}).text
-    final=state(tmp_path)
+    final=state(tmp_path, production_console=production_console)
     assert [a['state'] for a in final._envelope(sid)['processing_attempts']]==['interrupted','succeeded']
     with pytest.raises(ConsoleError):
         final.execute_source_selection(actor_id=author,snapshot_id=sid,attempt=attempt)
     assert final.snapshot_objects(sid)
 
 
-def test_layout_and_estimate_unknown(tmp_path):
-    console=state(tmp_path);_,reviewer=accounts(console)
-    with TestClient(create_console_app(console),base_url='https://testserver') as client:
+def test_layout_and_estimate_unknown(tmp_path, *, production_app, production_console):
+    console=state(tmp_path, production_console=production_console);_,reviewer=accounts(console)
+    with TestClient(production_app(console),base_url='https://testserver') as client:
         login(client)
         home=client.get('/').text
         positions=[home.index(f'title="{name}"') if f'title="{name}"' in home else home.index(f'>{name}<') for name in ('Inleveren','Bronselectie','Review','Publicatie','Documenten')]
@@ -232,11 +233,11 @@ def test_layout_and_estimate_unknown(tmp_path):
         assert 'Onvoldoende vergelijkbare metingen' in screen and 'fixture.html' in screen and 'Bronversie 1' in screen
 
 
-def test_unauthorized_start_and_storage_failure_never_call_provider(backend_state,tmp_path,monkeypatch):
-    console=state(tmp_path);_,reviewer=accounts(console);calls=[]
+def test_unauthorized_start_and_storage_failure_never_call_provider(backend_state, tmp_path, monkeypatch, *, production_app, production_console):
+    console=state(tmp_path, production_console=production_console);_,reviewer=accounts(console);calls=[]
     bind(console,lambda *args:calls.append(1))
     outsider=console.create_account(username='outsider',password='fixture-only',roles=('reviewer',))
-    app=create_console_app(console)
+    app=production_app(console)
     with TestClient(app,base_url='https://testserver',raise_server_exceptions=False) as client:
         login(client);upload(client,reviewer)
         sid=console.list_envelopes()[0]['snapshot_id']
@@ -250,31 +251,20 @@ def test_unauthorized_start_and_storage_failure_never_call_provider(backend_stat
 
 
 def installed_app(console):
-    from src.publish_readiness_ui_v1 import install_publish_readiness_ui
-    from src.document_status_ui_v1 import install_document_status_ui
-    from src.review_workboard_v1 import install_review_workboard
-    from src.proportionate_review_v1 import install_proportionate_review_routes
-    from src.deterministic_review_repair_v1 import install_deterministic_review_repair_routes
-    from src.closed_review_loop_v1 import install_closed_review_routes
-    from src.console_navigation_simplify_v1 import install_navigation_simplification
-    app=create_console_app(console)
-    install_publish_readiness_ui(app,console);install_document_status_ui(app,console)
-    install_review_workboard(app,console);install_proportionate_review_routes(app,console)
-    install_deterministic_review_repair_routes(app,console);install_closed_review_routes(app,console)
-    install_navigation_simplification(app)
-    return app
+    from tests.production_support import application_for
+    return application_for(console)
 
 
 @pytest.mark.parametrize('path,params',[
     ('/publish',{}),('/review',{'work':'all'}),('/review',{}),
     ('/review',{'task':'disposition'}),('/review',{'task':'individual'}),
     ('/review',{'task':'detail'}),('/review/bronpassage',{})])
-def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(backend_state,tmp_path,monkeypatch,path,params):
+def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(backend_state, tmp_path, monkeypatch, path, params, *, production_console):
     import re
     import src.knowledge_materialisation_v1 as materialisation
     import src.semantic_passage_v1 as semantic
     from src.source_accountability_v1 import is_source_record
-    console=state(tmp_path);author,reviewer=accounts(console)
+    console=state(tmp_path, production_console=production_console);author,reviewer=accounts(console)
     texts=['Gebruik geen zalf.',*[f'Bronpassage {i} bevat aanvullende informatie voor menselijke beoordeling.' for i in range(30)]]
     def select(_url,_headers,payload,_timeout):
         data=json.loads(payload['input'][1]['content'])
@@ -341,9 +331,9 @@ def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(backend
         if path=='/publish':assert client.get(path,params=query).status_code==403
 
 
-def test_installed_layout_receipt_and_automatic_selection(tmp_path):
+def test_installed_layout_receipt_and_automatic_selection(tmp_path, *, production_console):
     import re
-    console=state(tmp_path);_,reviewer=accounts(console)
+    console=state(tmp_path, production_console=production_console);_,reviewer=accounts(console)
     with TestClient(installed_app(console),base_url='https://testserver') as client:
         login(client)
         home=client.get('/').text
@@ -424,10 +414,10 @@ def test_next_http_read_observes_tampered_source_and_new_review_decision(tmp_pat
         assert next(o for o in console.snapshot_objects(sid) if o['object_id']==candidate['object_id'])['governance']['validation_status']=='rejected'
 
 
-def test_failed_receipt_sync_retries_same_registration(tmp_path,monkeypatch):
+def test_failed_receipt_sync_retries_same_registration(tmp_path, monkeypatch, *, production_app, production_console):
     import os
-    console=state(tmp_path);_,reviewer=accounts(console)
-    app=create_console_app(console)
+    console=state(tmp_path, production_console=production_console);_,reviewer=accounts(console)
+    app=production_app(console)
     with TestClient(app,base_url='https://testserver',raise_server_exceptions=False) as client:
         login(client)
         original=os.fsync
@@ -442,9 +432,9 @@ def test_failed_receipt_sync_retries_same_registration(tmp_path,monkeypatch):
         assert console.list_envelopes()[0].get('processing_attempts',[])==[]
 
 
-def test_expired_first_selection_can_complete_with_only_retained_source(tmp_path,monkeypatch):
-    console=state(tmp_path);author,reviewer=accounts(console)
-    with TestClient(create_console_app(console),base_url='https://testserver') as client:
+def test_expired_first_selection_can_complete_with_only_retained_source(tmp_path, monkeypatch, *, production_app, production_console):
+    console=state(tmp_path, production_console=production_console);author,reviewer=accounts(console)
+    with TestClient(production_app(console),base_url='https://testserver') as client:
         login(client);upload(client,reviewer)
     sid=console.list_envelopes()[0]['snapshot_id']
     attempt,_=console.reserve_source_selection(actor_id=author,snapshot_id=sid,command_id='expired',expected_revision=console.objects_revision(sid))
@@ -454,8 +444,9 @@ def test_expired_first_selection_can_complete_with_only_retained_source(tmp_path
     monkeypatch.setattr('src.source_selection_v1.now',lambda:future)
     def abstain(*args):
         return {'output':[{'content':[{'type':'output_text','text':json.dumps({'objects':[],'relations':[],'abstain_reason':'uncertain'})}]}]}
+    console = state(tmp_path, production_console=production_console)
     bind(console,abstain)
-    app=create_console_app(console)
+    app=production_app(console)
     with TestClient(app,base_url='https://testserver') as client:
         login(client);assert start(client,console,sid,'recover-empty').status_code==303;drain(client,app)
         text=client.get('/source-selection',params={'document':sid}).text

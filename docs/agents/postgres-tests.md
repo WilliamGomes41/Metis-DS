@@ -194,3 +194,23 @@ zichtbaar in de inventaris; dit is geen afronding van D6a. De afzonderlijke
 publication-refusal-module bewaart tijdelijk expliciet haar bestaande
 bestandsconstructor, zodat een helperwijziging haar oude bewijs niet stilzwijgend
 naar een andere opstelling omzet.
+
+Portie 10 migreert receipt-/dispatch-/autorisatie-/trace- en A04-sessieproeven.
+De gedeelde testcompositie kan expliciete omgevingsconfiguratie ontvangen,
+zodat de Entra-sessieproef via `build_app()` zelf wordt geïnstalleerd.
+Een herstart bouwt via dezelfde factory een nieuwe app/console boven dezelfde
+PG-authority. De door de factory gemaakte app hoort bij de console; helpers
+installeren geen tweede middlewarelaag meer. Een tweede ASGI-lifespan krijgt
+expliciet een nieuwe compositie, zoals een echte procesherstart.
+
+Blob-herstel, gelijktijdige receipts en orphan-herstel gebruiken de echte
+Azure-productieklasse met alleen Blob als transportfixture. De fork/spawn-
+crashproef bouwt in het kindproces dezelfde productiecompositie. Bestaande
+barrières, onafhankelijke SQL-lezers, intrekkingen, sessieverval en het bewijs
+van behouden checkpoints blijven onderdeel van de portie.
+
+De bronselectie-browserfixture gebruikt ook deze fabriek. Haar proces bezit
+zijn eigen wegwerpdatabase en ruimt die bij afsluiten op. Zij gebruikt hetzelfde
+startscript als pytest; er wordt geen aangeboden database gereset. Een lokale
+geauthenticeerde HTTP-proef is uitgevoerd; een volledige browser- of Cursor-run
+wordt daarmee niet geclaimd.

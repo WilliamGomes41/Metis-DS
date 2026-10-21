@@ -18,15 +18,14 @@ from src.operations_console_v1 import ConsoleError
 from src.source_processing_dispatch_v1 import claim, SourceProcessingDispatcher
 from tests.test_availability_repair import accounts, bind, state, provider, installed_app, login
 from tests.test_source_dispatch_hardening import receive
-from tests.test_review_batch_atomic_postgres import _console
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 @pytest.fixture(params=["local", "postgres"])
-def console(request, tmp_path):
+def console(request, tmp_path, *, production_console):
     if request.param == "postgres":
-        return _console(tmp_path, request.getfixturevalue("workflow_postgres"))
-    return state(tmp_path)
+        return production_console(root=tmp_path, processing_binder=lambda console: None)
+    return state(tmp_path, production_console=production_console)
 
 
 def snapshot(console, sid):
@@ -48,9 +47,8 @@ def test_denied_retry_has_no_durable_effect(console):
 
 
 def restart(console):
-    if hasattr(console, "workflow_identity_store"):
-        return _console(console.root, console.workflow_identity_store.config)
-    return state(console.root)
+    from tests.production_support import restart_production
+    return restart_production(console)
 
 
 def revoke(console, actor, sid, change):
@@ -300,10 +298,10 @@ def test_actual_resume_preserves_completed_work_and_denies_outsider(console, mon
 
 
 @pytest.mark.parametrize("boundary", ["admission", "standalone_activation"])
-def test_native_revocation_is_ordered_with_short_admission(workflow_postgres, tmp_path, monkeypatch, boundary):
+def test_native_revocation_is_ordered_with_short_admission(workflow_postgres, tmp_path, monkeypatch, boundary, *, production_console):
     import psycopg
     from time import monotonic, sleep
-    first = _console(tmp_path, workflow_postgres)
+    first = production_console(root=tmp_path, processing_binder=lambda console: None)
     author, reviewer = accounts(first)
     bind(first, provider)
     sid = receive(first, author, reviewer, "native-order")
