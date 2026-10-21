@@ -1,0 +1,118 @@
+{
+  "observed_at": "2026-10-21 05:23:48 UTC",
+  "scope": "Open the next three prepared D6a PRs; no merge or runtime changes",
+  "published_pr_count": 5,
+  "remaining_planned_prs": 17,
+  "pull_requests": [
+    {
+      "portion": "03",
+      "number": 793,
+      "url": "https://github.com/WilliamGomes41/Metis-DS/pull/793",
+      "head": "codex/d6a-03-reader-authority",
+      "head_commit": "df33c1c4ba5f57d9048a43e38d795cf2edc7d6d0",
+      "base": "codex/d6a-02-native-fixtures",
+      "base_commit": "a9f6758a37369e20add78284acda67923a8ba0e0",
+      "draft": true,
+      "changed_files": 3,
+      "changed_test_files": 1,
+      "workflow_runs": [
+        {
+          "id": 39549210816,
+          "name": "workflow-topology-proof",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 39549210838,
+          "name": "Bend experiment proof",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 39549210819,
+          "name": "source-processing-proof",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 39549210910,
+          "name": "docling-acceptance",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 39549210825,
+          "name": "ci",
+          "status": "queued",
+          "conclusion": null
+        }
+      ]
+    },
+    {
+      "portion": "04",
+      "number": 794,
+      "url": "https://github.com/WilliamGomes41/Metis-DS/pull/794",
+      "head": "codex/d6a-04-console-pages",
+      "head_commit": "fe0f1a3af38478b711783ab6ef0f5be1b52f39ce",
+      "base": "codex/d6a-03-reader-authority",
+      "base_commit": "df33c1c4ba5f57d9048a43e38d795cf2edc7d6d0",
+      "draft": true,
+      "changed_files": 12,
+      "changed_test_files": 11,
+      "workflow_runs": [
+        {
+          "id": 39549219655,
+          "name": "workflow-topology-proof",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 39549219642,
+          "name": "source-processing-proof",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 39549219878,
+          "name": "ci",
+          "status": "in_progress",
+          "conclusion": null
+        }
+      ]
+    },
+    {
+      "portion": "05",
+      "number": 795,
+      "url": "https://github.com/WilliamGomes41/Metis-DS/pull/795",
+      "head": "codex/d6a-05-console-workflows",
+      "head_commit": "9edf7b8cc6b989613aac8f4aa3ad57886169d397",
+      "base": "codex/d6a-04-console-pages",
+      "base_commit": "fe0f1a3af38478b711783ab6ef0f5be1b52f39ce",
+      "draft": true,
+      "changed_files": 15,
+      "changed_test_files": 13,
+      "workflow_runs": [
+        {
+          "id": 39549229269,
+          "name": "source-processing-proof",
+          "status": "queued",
+          "conclusion": null
+        },
+        {
+          "id": 39549229328,
+          "name": "workflow-topology-proof",
+          "status": "in_progress",
+          "conclusion": null
+        },
+        {
+          "id": 39549229310,
+          "name": "ci",
+          "status": "in_progress",
+          "conclusion": null
+        }
+      ]
+    }
+  ],
+  "D6a_done": false,
+  "D6b_started": false
+}

@@ -117,8 +117,10 @@
       ],
       "changed_test_files": 1,
       "support_files": [],
-      "ci_status": "not started; branch pushed, no PR opened",
-      "delivery": "published reviewable branch"
+      "ci_status": "CI workflows started/queued; outcome pending",
+      "delivery": "published reviewable branch",
+      "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/793",
+      "publication_evidence": "portions03-05-publication.json"
     }
   },
   {
@@ -186,8 +188,10 @@
       ],
       "changed_test_files": 11,
       "support_files": [],
-      "ci_status": "not started; branch pushed, no PR opened",
-      "delivery": "published reviewable branch"
+      "ci_status": "CI workflows started/queued; outcome pending",
+      "delivery": "published reviewable branch",
+      "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/794",
+      "publication_evidence": "portions03-05-publication.json"
     }
   },
   {
@@ -261,8 +265,10 @@
       ],
       "changed_test_files": 13,
       "support_files": [],
-      "ci_status": "not started; branch pushed, no PR opened",
-      "delivery": "published reviewable branch"
+      "ci_status": "CI workflows started/queued; outcome pending",
+      "delivery": "published reviewable branch",
+      "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/795",
+      "publication_evidence": "portions03-05-publication.json"
     }
   },
   {
