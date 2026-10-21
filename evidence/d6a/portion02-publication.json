@@ -1,0 +1,45 @@
+{
+  "observed_at": "2026-10-21 05:15:17 UTC",
+  "pr": "https://github.com/WilliamGomes41/Metis-DS/pull/792",
+  "number": 792,
+  "draft": true,
+  "head": "codex/d6a-02-native-fixtures",
+  "head_commit": "a9f6758a37369e20add78284acda67923a8ba0e0",
+  "base": "codex/d6a-postgres-tests",
+  "base_commit": "68350e3aae28865a710500943008f117f20997c1",
+  "depends_on": 791,
+  "changed_test_files": 16,
+  "changed_files": 18,
+  "local_architecture_check": "passed",
+  "change_contract": "passed",
+  "ci": "started; no completion claim",
+  "workflow_runs": [
+    {
+      "id": 39548444714,
+      "name": "source-processing-proof",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 39548444618,
+      "name": "workflow-topology-proof",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 39548444621,
+      "name": "docling-acceptance",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "id": 39548444684,
+      "name": "ci",
+      "status": "in_progress",
+      "conclusion": null
+    }
+  ],
+  "first_pr_workflows": "all six completed successfully",
+  "D6a_done": false,
+  "D6b_started": false
+}

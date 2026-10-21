@@ -81,8 +81,9 @@
         "tests/conftest.py",
         "tests/production_support.py"
       ],
-      "ci_status": "not started; branch pushed, no PR opened",
-      "delivery": "published reviewable branch"
+      "ci_status": "started on draft PR #792; outcome pending",
+      "delivery": "published reviewable branch",
+      "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/792"
     }
   },
   {

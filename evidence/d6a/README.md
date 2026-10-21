@@ -3,11 +3,13 @@
 De lokale migratie naar de productiecompositie op PostgreSQL is voorbereid in
 21 migratieporties plus één afzonderlijke Class A-bugreparatie. Iedere
 voorgestelde PR raakt maximaal twintig testbestanden. Alle branches en
-[PR-teksten](prs/) zijn voorbereid; alle 22 branches zijn gepusht. De eerste
-[draft-PR #791](https://github.com/WilliamGomes41/Metis-DS/pull/791) draait CI;
-de overige PRs worden opeenvolgend geopend. De herstelde historische
-roodproeven, 206 native cases en de browserproef zijn groen in CI; de volledige
-tijdmeting loopt nog. Zie [gepubliceerde status](publication-status.json).
+[PR-teksten](prs/) zijn voorbereid; alle 22 branches zijn gepusht.
+Alle zes workflows van [draft-PR #791](https://github.com/WilliamGomes41/Metis-DS/pull/791)
+zijn groen. [D6a/02, draft-PR #792](https://github.com/WilliamGomes41/Metis-DS/pull/792)
+is nu ook geopend, tegen de branch van #791: 16 testbestanden, CI gestart.
+Zie [publicatiebewijs van portie02](portion02-publication.json).
+De overige PRs worden opeenvolgend geopend.
+
 D6a is nog niet formeel afgerond en D6b is niet gestart. #695 houdt voorrang
 bij capaciteitsgebrek; GNC is niet gestart.
 

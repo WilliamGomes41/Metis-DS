@@ -6,9 +6,12 @@
     "first_pr": "https://github.com/WilliamGomes41/Metis-DS/pull/791",
     "first_pr_draft": true,
     "ci_run": "https://github.com/WilliamGomes41/Metis-DS/actions/runs/39540968976",
-    "remaining_prs": "not opened; sequential CI preserves #695 capacity priority",
+    "remaining_prs": "portions after02 have no PR yet",
     "initial_ci_run": "https://github.com/WilliamGomes41/Metis-DS/actions/runs/39539031210",
-    "status_evidence": "publication-status.json"
+    "status_evidence": "publication-status.json",
+    "second_pr": "https://github.com/WilliamGomes41/Metis-DS/pull/792",
+    "second_pr_draft": true,
+    "portion02_evidence": "portion02-publication.json"
   },
   "order": [
     {
@@ -39,7 +42,7 @@
         "tests/conftest.py",
         "tests/postgres_support.py"
       ],
-      "ci_status": "source-processing, architecture, contract and characterization passed; full timing in progress",
+      "ci_status": "all six PR workflows completed successfully",
       "delivery": "published reviewable branch"
     },
     {
@@ -71,8 +74,9 @@
         "tests/conftest.py",
         "tests/production_support.py"
       ],
-      "ci_status": "not started; branch pushed, no PR opened",
-      "delivery": "published reviewable branch"
+      "ci_status": "started on draft PR #792; outcome pending",
+      "delivery": "published reviewable branch",
+      "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/792"
     },
     {
       "portion": "03",

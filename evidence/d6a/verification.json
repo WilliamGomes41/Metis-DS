@@ -26,9 +26,12 @@
     "first_pr": "https://github.com/WilliamGomes41/Metis-DS/pull/791",
     "first_pr_draft": true,
     "ci_run": "https://github.com/WilliamGomes41/Metis-DS/actions/runs/39540968976",
-    "remaining_prs": "not opened; sequential CI preserves #695 capacity priority",
+    "remaining_prs": "portions after02 have no PR yet",
     "initial_ci_run": "https://github.com/WilliamGomes41/Metis-DS/actions/runs/39539031210",
-    "status_evidence": "publication-status.json"
+    "status_evidence": "publication-status.json",
+    "second_pr": "https://github.com/WilliamGomes41/Metis-DS/pull/792",
+    "second_pr_draft": true,
+    "portion02_evidence": "portion02-publication.json"
   },
   "fixture_speedup": "fixture-prefetch-benchmark.json",
   "environment_isolation": "fixture-environment-isolation.json",
@@ -41,5 +44,6 @@
   "review_stack_validation": "review-stack-validation.json",
   "post_measurement_ci_integration": "main-ci-integration.json",
   "historical_ci_probe_repair": "historical-ci-probes.json",
-  "current_ci_status": "publication-status.json"
+  "current_ci_status": "publication-status.json",
+  "portion02_publication": "portion02-publication.json"
 }
