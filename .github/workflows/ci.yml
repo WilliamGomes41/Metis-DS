@@ -338,6 +338,7 @@ jobs:
         if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'codex/d6a') && matrix.python-version == '3.13'
         run: python scripts/measure_test_suite.py --ref 9fa2004 --output output/d6a-before.json
       - name: Full suite with timing and zero PostgreSQL skips
+        if: ${{ !cancelled() }}
         run: |
           python scripts/benchmark_test_database.py > output/d6a-database-benchmark.json
           args=()
@@ -350,7 +351,6 @@ jobs:
           name: suite-timing-${{ matrix.python-version }}
           path: output/d6a-*
           if-no-files-found: warn
-        if: ${{ !cancelled() }}
       - name: Install isolated browser test tooling
         if: matrix.python-version == '3.12'
         run: |
