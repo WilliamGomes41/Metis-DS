@@ -17,9 +17,9 @@ from src.operations_console_v1 import ConsoleError
 from test_vsa_review_workboard_v1 import _client, _login, _system
 
 
-def test_error_has_safe_fallback_and_ingest_return_link(tmp_path, monkeypatch):
-    console, _, _, _ = _system(tmp_path)
-    client = _client(console)
+def test_error_has_safe_fallback_and_ingest_return_link(tmp_path, monkeypatch, *, production_app, production_console):
+    console, _, _, _ = _system(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
     _login(client, "researcher.anne")
 
     def fail(**kwargs):
@@ -36,17 +36,17 @@ def test_error_has_safe_fallback_and_ingest_return_link(tmp_path, monkeypatch):
     assert '<details><summary>Technische informatie' not in response.text
     assert "unexpected_&lt;code&gt;" in response.text
     assert "private internal detail" not in response.text
-    anonymous = _client(console).get("/ingest")
+    anonymous = _client(console, production_app=production_app).get("/ingest")
     assert anonymous.status_code == 401
     assert "Meld je aan" in anonymous.text
 
 
-def test_ingest_pending_prevents_repeat_and_restores_on_pageshow(tmp_path):
+def test_ingest_pending_prevents_repeat_and_restores_on_pageshow(tmp_path, *, production_app, production_console):
     node = shutil.which("node")
     if not node:
         pytest.skip("Node required to execute the rendered submission handlers")
-    console, _, _, _ = _system(tmp_path)
-    client = _client(console)
+    console, _, _, _ = _system(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
     _login(client, "researcher.anne")
     html = client.get("/ingest").text
     script = next(s for s in re.findall(r"<script>(.*?)</script>", html, re.S) if 'ingest-submit' in s)

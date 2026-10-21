@@ -1,4 +1,4 @@
-"""VSA Slice 7: one meaningful derived document status across workflow rooms.
+"""VSA Slice 7: conservative PG lists and full selected-publication readiness.
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: toegang
@@ -14,17 +14,14 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from src.document_status_ui_v1 import install_document_status_ui
 from src.document_status_v1 import (
     DocumentStatusReadinessMixin,
     derive_document_status,
 )
 from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, review_lane
 from src.passage_register_v1 import passage_register_of
-from src.publish_readiness_ui_v1 import install_publish_readiness_ui
 from src.review_disposition_v1 import definitive_review_disposition
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
 
@@ -57,11 +54,9 @@ class MemorySourceStore:
             raise G2SourceStoreError("canonical_source_missing") from exc
 
 
-def _system(
-    tmp_path: Path,
-) -> tuple[DurablePublicationConsole, dict[str, dict[str, Any]], dict[str, Any], MemorySourceStore]:
+def _system(tmp_path: Path, *, production_console) -> tuple[DurablePublicationConsole, dict[str, dict[str, Any]], dict[str, Any], MemorySourceStore]:
     source = MemorySourceStore()
-    console = DurablePublicationConsole(
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime",
@@ -158,10 +153,8 @@ def _complete_review(
         )
 
 
-def _client(console: DurablePublicationConsole) -> TestClient:
-    app = create_console_app(console)
-    install_publish_readiness_ui(app, console)
-    install_document_status_ui(app, console)
+def _client(console: DurablePublicationConsole, *, production_app) -> TestClient:
+    app = production_app(console)
     return TestClient(app, base_url="https://testserver", raise_server_exceptions=False)
 
 
@@ -189,14 +182,16 @@ def _assert_room_statuses(
     researcher_username: str,
     publisher_username: str,
     expected_label: str,
+    expected_list_label: str | None = None,
 ) -> None:
+    list_label = expected_list_label or expected_label
     _login(client, researcher_username)
     tree = client.get("/tree")
     review = client.get("/review")
     assert tree.status_code == 200
     assert review.status_code == 200
-    assert f"status <b>{expected_label}</b>" in tree.text
-    assert f"status <b>{expected_label}</b>" in review.text
+    assert f"status <b>{list_label}</b>" in tree.text
+    assert f"status <b>{list_label}</b>" in review.text
 
     _login(client, publisher_username)
     publish = _selected_publish(client)
@@ -227,8 +222,8 @@ def test_status_precedence_is_deterministic_and_fail_closed() -> None:
     ) == "processing"
 
 
-def test_read_only_status_does_not_widen_publisher_authority(tmp_path: Path) -> None:
-    console, accounts, receipt, _source = _system(tmp_path)
+def test_read_only_status_does_not_widen_publisher_authority(tmp_path: Path, *, production_console) -> None:
+    console, accounts, receipt, _source = _system(tmp_path, production_console=production_console)
     snapshot_id = str(receipt["snapshot_id"])
 
     assert console.document_status(snapshot_id) == "in_review"
@@ -239,9 +234,9 @@ def test_read_only_status_does_not_widen_publisher_authority(tmp_path: Path) -> 
         )
 
 
-def test_open_review_has_same_meaningful_status_in_all_three_rooms(tmp_path: Path) -> None:
-    console, _accounts, _receipt, _source = _system(tmp_path)
-    client = _client(console)
+def test_open_review_has_same_meaningful_status_in_all_three_rooms(tmp_path: Path, *, production_app, production_console) -> None:
+    console, _accounts, _receipt, _source = _system(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
 
     _assert_room_statuses(
         client,
@@ -252,10 +247,8 @@ def test_open_review_has_same_meaningful_status_in_all_three_rooms(tmp_path: Pat
     assert "captured_not_published" not in _selected_publish(client).text
 
 
-def test_complete_review_moves_from_blocked_to_ready_without_persisting_status(
-    tmp_path: Path,
-) -> None:
-    console, accounts, receipt, source = _system(tmp_path)
+def test_complete_review_moves_from_blocked_to_ready_without_persisting_status(tmp_path: Path, *, production_console) -> None:
+    console, accounts, receipt, source = _system(tmp_path, production_console=production_console)
     snapshot_id = str(receipt["snapshot_id"])
     _complete_review(console, accounts, receipt)
 
@@ -269,17 +262,18 @@ def test_complete_review_moves_from_blocked_to_ready_without_persisting_status(
     assert console._envelope(snapshot_id)["state"] == "captured_not_published"
 
 
-def test_ready_blocked_and_published_labels_are_shared_across_rooms(tmp_path: Path) -> None:
-    console, accounts, receipt, source = _system(tmp_path)
+def test_fast_lists_stay_conservative_while_publication_checks_current_readiness(tmp_path: Path, *, production_app, production_console) -> None:
+    console, accounts, receipt, source = _system(tmp_path, production_console=production_console)
     snapshot_id = str(receipt["snapshot_id"])
     _complete_review(console, accounts, receipt)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
 
     _assert_room_statuses(
         client,
         researcher_username="researcher.anne",
         publisher_username="publisher.carla",
         expected_label="klaar voor publicatie",
+        expected_list_label="in review",
     )
 
     locator = str(receipt["immutable_storage_locator"])
@@ -289,6 +283,7 @@ def test_ready_blocked_and_published_labels_are_shared_across_rooms(tmp_path: Pa
         researcher_username="researcher.anne",
         publisher_username="publisher.carla",
         expected_label="geblokkeerd",
+        expected_list_label="in review",
     )
 
     source.blobs[locator] = HTML_FIXTURE.read_bytes()
@@ -310,8 +305,8 @@ def test_postgres_workflow_console_inherits_same_derived_status_policy() -> None
     assert issubclass(PostgresWorkflowDurablePublicationConsole, DocumentStatusReadinessMixin)
 
 
-def test_publish_evaluates_readiness_once_per_document_and_refreshes_next_request(tmp_path, monkeypatch):
-    console, accounts, receipt, source = _system(tmp_path)
+def test_publish_evaluates_readiness_once_per_document_and_refreshes_next_request(tmp_path, monkeypatch, *, production_app, production_console):
+    console, accounts, receipt, source = _system(tmp_path, production_console=production_console)
     _complete_review(console, accounts, receipt)
     original = console.publication_readiness
     calls = []
@@ -319,7 +314,7 @@ def test_publish_evaluates_readiness_once_per_document_and_refreshes_next_reques
         calls.append(snapshot_id)
         return original(snapshot_id)
     monkeypatch.setattr(console, "publication_readiness", measured)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     _login(client, "publisher.carla")
     calls.clear()
     first = client.get("/publish", params={"document": receipt["snapshot_id"]})

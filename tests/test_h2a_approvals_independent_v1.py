@@ -277,11 +277,11 @@ def test_contract_reports_authorization_blockers_without_locator():
     assert contract["authorization_ok"] is False
 
 
-def test_extra_contract_blocker_with_valid_locator_blocks_publication(tmp_path, monkeypatch):
+def test_extra_contract_blocker_with_valid_locator_blocks_publication(tmp_path, monkeypatch, *, production_console):
     from tests import test_vsa_publish_readiness_ui_v1 as ready
     import src.four_eyes_v1 as four_eyes
     import src.operations_console_v1 as kernel
-    console, accounts, receipt, _source = ready._console_with_document(tmp_path)
+    console, accounts, receipt, _source = ready._console_with_document(tmp_path, production_console=production_console)
     ready._complete_review(console, accounts, receipt)
     sid = receipt["snapshot_id"]
     assert console.publication_readiness(sid)["publish_allowed"] is True

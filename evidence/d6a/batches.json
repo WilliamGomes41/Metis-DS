@@ -496,5 +496,48 @@
     ],
     "full_suite_status": "pending",
     "ci_status": "not run: push approval pending"
+  },
+  {
+    "batch": "14",
+    "base": "b3be159",
+    "commit": "codex/d6a-14-workboards",
+    "test_files": [
+      "tests/test_console_cleanup_v1.py",
+      "tests/test_console_feedback_v1.py",
+      "tests/test_console_withdrawal_v1.py",
+      "tests/test_execution_workspace_separation_v1.py",
+      "tests/test_metis_mcp_v1.py",
+      "tests/test_review_passage_coverage_v1.py",
+      "tests/test_vsa_meaningful_document_status_v1.py",
+      "tests/test_vsa_publish_readiness_ui_v1.py",
+      "tests/test_vsa_review_workboard_v1.py"
+    ],
+    "executed_unique_cases": 74,
+    "failures": 0,
+    "skipped": 0,
+    "renamed_cases": {
+      "test_ready_blocked_and_published_labels_are_shared_across_rooms": "test_fast_lists_stay_conservative_while_publication_checks_current_readiness"
+    },
+    "verification": "Workboard/publication/withdrawal/MCP targeted run plus repaired cases. Real PostgreSQL withdrawal, successor supersession and MCP account/deny authority; pre-existing conservative PG list policy preserved.",
+    "junit": [
+      {
+        "file": "d6a14.xml",
+        "sha256": "ff2102ccb0c501eab1b1af7da924705a9669774fcd46eaffd129ee3896321962"
+      },
+      {
+        "file": "d6a14-fixed.xml",
+        "sha256": "34d61e655b1f1acbb05e19410c09b46f6b05ba4e8006a970541633b839b620ec"
+      },
+      {
+        "file": "d6a14-superseded.xml",
+        "sha256": "bdd8773e9d10062c68aca1de51a1ffe69be76a5497f27c215bfbda8864af4e69"
+      },
+      {
+        "file": "d6a14-superseded-final.xml",
+        "sha256": "f1550862d64a810a38936ba40e48170047b6053fc64fa4b8558488c72d6894a2"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending"
   }
 ]

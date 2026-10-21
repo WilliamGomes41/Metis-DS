@@ -263,3 +263,29 @@ installeren de diagnostiek niet nogmaals.
 De expliciete weigering van Entra op een bestandsconsole en de observability-
 proef van de oude `serve-console`-CLI zijn `file_topology`: beide oude starts
 verdwijnen in D6b. De Entra- en uitgeversrechten zijn niet gewijzigd.
+
+Een nieuwe lokale run van de ongewijzigde baseline `9fa2004` is volledig groen:
+5.641 passed, 27 gewone skips, 6 xfails, nul PG-skips, 1.043,807 s. Dezelfde
+synthetische DNS-hostnamen staan nu in `NO_PROXY` als in de latere portieruns.
+`evidence/d6a/local-baseline-clean.json` bewaart deze meting; de eerste meting
+met drie proxyfouten blijft als historisch bewijs beschikbaar. Dit is een
+herhaalmeting van oude code, uitgevoerd ná de eerste porties, geen achteraf
+geclaimde CI-run vóór de migratie.
+
+Portie 14 migreert de publicatie-/workboardmodules en hun afnemers. Intrekking
+publiceert eerst echt naar PostgreSQL, gebruikt de echte withdrawal-transactie
+en controleert teller/idempotentie als observatie van die adapter. Supersession
+wordt met een echte successor, review en publicatie voorbereid; de historische
+kaart verliest haar formulieren terwijl de actieve opvolger haar eigen kaart
+houdt. Het legacy-geval bereidt expliciet pre-lineage-metadata in de eigen
+wegwerpdatabase voor.
+
+De bestaande PG-lijstproef verbiedt `ready_for_publication` als lijstbelofte
+zonder volledige gereedheidscontrole. De overgezette UI-proef volgt datzelfde
+contract: lijsten blijven conservatief, de gekozen publicatiepagina toetst
+actuele gereedheid en Blob-beschikbaarheid, canonical publicatiestatus blijft
+gedeeld. Geen runtime-statusregel is aangepast.
+
+De geïntegreerde MCP-proef leest accountrollen en blokkades nu eveneens uit
+PostgreSQL; alleen de ondertekende JWT/JWKS-transportfixture blijft gecontroleerd.
+Gehad-codeerd lege canonical stores en extra route-installaties zijn verwijderd.

@@ -15,14 +15,11 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from src.document_status_ui_v1 import install_document_status_ui
 from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import review_stacks
 from src.proportionate_review_v1 import ProportionateReviewConsole
-from src.publish_readiness_ui_v1 import install_publish_readiness_ui
-from src.review_workboard_v1 import install_review_workboard, review_work_item
+from src.review_workboard_v1 import review_work_item
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
@@ -204,11 +201,9 @@ class MemorySourceStore:
             raise G2SourceStoreError("canonical_source_missing") from exc
 
 
-def _system(
-    tmp_path: Path,
-) -> tuple[DurablePublicationConsole, dict[str, dict[str, Any]], dict[str, Any], dict[str, Any]]:
+def _system(tmp_path: Path, *, production_console) -> tuple[DurablePublicationConsole, dict[str, dict[str, Any]], dict[str, Any], dict[str, Any]]:
     source = MemorySourceStore()
-    console = DurablePublicationConsole(
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime",
@@ -262,11 +257,8 @@ def _system(
     return console, accounts, first, second
 
 
-def _client(console: DurablePublicationConsole) -> TestClient:
-    app = create_console_app(console)
-    install_publish_readiness_ui(app, console)
-    install_document_status_ui(app, console)
-    install_review_workboard(app, console)
+def _client(console: DurablePublicationConsole, *, production_app) -> TestClient:
+    app = production_app(console)
     return TestClient(app, base_url="https://testserver", raise_server_exceptions=False)
 
 
@@ -279,9 +271,9 @@ def _login(client: TestClient, username: str) -> None:
     assert response.status_code == 303
 
 
-def test_review_landing_is_assignment_scoped_workboard(tmp_path: Path) -> None:
-    console, _accounts, first, second = _system(tmp_path)
-    client = _client(console)
+def test_review_landing_is_assignment_scoped_workboard(tmp_path: Path, *, production_app, production_console) -> None:
+    console, _accounts, first, second = _system(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
     _login(client, "reviewer.a")
 
     page = client.get("/review")
@@ -297,9 +289,9 @@ def test_review_landing_is_assignment_scoped_workboard(tmp_path: Path) -> None:
     assert "Ga verder" in page.text
 
 
-def test_selected_document_keeps_existing_review_dashboard(tmp_path: Path) -> None:
-    console, _accounts, first, _second = _system(tmp_path)
-    client = _client(console)
+def test_selected_document_keeps_existing_review_dashboard(tmp_path: Path, *, production_app, production_console) -> None:
+    console, _accounts, first, _second = _system(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
     _login(client, "reviewer.a")
 
     page = client.get(f"/review?document={first['snapshot_id']}")
@@ -310,8 +302,8 @@ def test_selected_document_keeps_existing_review_dashboard(tmp_path: Path) -> No
     assert "Document A" in page.text
 
 
-def test_heading_batch_success_returns_to_live_document_dashboard(tmp_path: Path) -> None:
-    console, _accounts, first, _second = _system(tmp_path)
+def test_heading_batch_success_returns_to_live_document_dashboard(tmp_path: Path, *, production_app, production_console) -> None:
+    console, _accounts, first, _second = _system(tmp_path, production_console=production_console)
     snapshot_id = str(first["snapshot_id"])
     objects = console.snapshot_objects(snapshot_id)
     headings, _ = review_stacks(objects, review_path="richtlijn")
@@ -323,7 +315,7 @@ def test_heading_batch_success_returns_to_live_document_dashboard(tmp_path: Path
     ]
     assert heading_ids
 
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     _login(client, "reviewer.a")
     response = client.post(
         "/review/headings/batch-confirm",
@@ -348,12 +340,12 @@ def test_heading_batch_success_returns_to_live_document_dashboard(tmp_path: Path
     )
 
 
-def test_workboard_read_does_not_persist_progress_or_change_objects(tmp_path: Path) -> None:
-    console, _accounts, first, _second = _system(tmp_path)
+def test_workboard_read_does_not_persist_progress_or_change_objects(tmp_path: Path, *, production_app, production_console) -> None:
+    console, _accounts, first, _second = _system(tmp_path, production_console=production_console)
     snapshot_id = str(first["snapshot_id"])
     before_envelopes = deepcopy(console.list_envelopes())
     before_revision = console.objects_revision(snapshot_id)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     _login(client, "reviewer.a")
 
     page = client.get("/review")
@@ -364,9 +356,9 @@ def test_workboard_read_does_not_persist_progress_or_change_objects(tmp_path: Pa
     assert all("review_progress" not in row for row in console.list_envelopes())
 
 
-def test_publisher_can_open_readonly_team_workboard(tmp_path: Path) -> None:
-    console, _accounts, _first, _second = _system(tmp_path)
-    client = _client(console)
+def test_publisher_can_open_readonly_team_workboard(tmp_path: Path, *, production_app, production_console) -> None:
+    console, _accounts, _first, _second = _system(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
     _login(client, "publisher.carla")
 
     page = client.get("/review")
@@ -375,4 +367,3 @@ def test_publisher_can_open_readonly_team_workboard(tmp_path: Path) -> None:
     assert "Alle reviewtrajecten" in page.text
     assert "Alleen lezen" in page.text
     assert "reviewer_role_required" not in page.text
-

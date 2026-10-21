@@ -29,9 +29,9 @@ class Tags(HTMLParser):
                 and "document-disclosure" in attrs.get("class", "")]
 
 
-def test_ingest_is_focused_and_documents_are_searchable_disclosures(tmp_path):
-    console, _, _, _ = _system(tmp_path)
-    client = _client(console)
+def test_ingest_is_focused_and_documents_are_searchable_disclosures(tmp_path, *, production_app, production_console):
+    console, _, _, _ = _system(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
     _login(client, "researcher.anne")
     ingest = client.get("/ingest")
     assert ingest.status_code == 200
@@ -62,10 +62,10 @@ def test_search_reaches_later_pages_is_bounded_and_escapes_input():
     assert "<script>" not in html
 
 
-def test_review_read_is_collapsed_and_only_human_decisions_start_review(tmp_path):
-    console, _, first, _ = _system(tmp_path)
+def test_review_read_is_collapsed_and_only_human_decisions_start_review(tmp_path, *, production_app, production_console):
+    console, _, first, _ = _system(tmp_path, production_console=production_console)
     snapshot = first["snapshot_id"]
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     _login(client, "reviewer.a")
     before = read_events(console._ledger_path)
     revision = console.objects_revision(snapshot)
@@ -105,9 +105,9 @@ def test_automatic_progress_is_not_human_start_and_waiting_is_not_complete():
     assert _review_activity_status(item, {"s"}) == "Gestart"
 
 
-def test_exports_and_technical_repair_preserve_document_authorization(tmp_path):
-    console, _, first, second = _system(tmp_path)
-    client = _client(console)
+def test_exports_and_technical_repair_preserve_document_authorization(tmp_path, *, production_app, production_console):
+    console, _, first, second = _system(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
     assert client.get("/settings/technical/exports").status_code == 401
     _login(client, "reviewer.a")
     snapshot = first["snapshot_id"]
@@ -143,9 +143,9 @@ def test_exports_and_technical_repair_preserve_document_authorization(tmp_path):
     assert "/inzicht/document/passages?" not in publisher_diagnosis.text
 
 
-def test_task_back_link_keeps_selected_document_and_search(tmp_path):
-    console, _, first, _ = _system(tmp_path)
-    client = _client(console)
+def test_task_back_link_keeps_selected_document_and_search(tmp_path, *, production_app, production_console):
+    console, _, first, _ = _system(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
     _login(client, "reviewer.a")
     response = client.get("/review", params={"document": first["snapshot_id"],
                           "task": "structure", "q": "Document A", "page": 2})

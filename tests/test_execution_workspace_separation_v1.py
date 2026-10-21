@@ -14,10 +14,6 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.console_navigation_simplify_v1 import install_navigation_simplification
-from src.operations_console_app import create_console_app
-from src.publish_readiness_ui_v1 import install_publish_readiness_ui
-from src.review_workboard_v1 import install_review_workboard
 from tests.test_vsa_publish_readiness_ui_v1 import _console_with_document, TEST_PASSWORD
 
 pytestmark = [pytest.mark.release_control_scope_belofte, pytest.mark.release_control_toegang,
@@ -46,11 +42,8 @@ class Surface(HTMLParser):
             self.text.append(text)
 
 
-def client_for(console):
-    app = create_console_app(console)
-    install_publish_readiness_ui(app, console)
-    install_review_workboard(app, console)
-    install_navigation_simplification(app)
+def client_for(console, *, production_app):
+    app = production_app(console)
     return TestClient(app, base_url='https://testserver')
 
 
@@ -59,11 +52,11 @@ def login(client, username):
     assert response.status_code == 200
 
 
-def test_task_help_and_management_are_separate_readonly_destinations(tmp_path):
-    console, accounts, receipt, _ = _console_with_document(tmp_path)
+def test_task_help_and_management_are_separate_readonly_destinations(tmp_path, *, production_app, production_console):
+    console, accounts, receipt, _ = _console_with_document(tmp_path, production_console=production_console)
     sid = receipt['snapshot_id']
     before = deepcopy(console.snapshot_objects(sid)), deepcopy(console._envelope(sid))
-    client = client_for(console)
+    client = client_for(console, production_app=production_app)
     assert client.get('/help/review').status_code == 401
     assert client.get('/settings/technical/processing', params={'document': sid}).status_code == 401
     login(client, 'researcher.anne')
@@ -98,10 +91,10 @@ def test_task_help_and_management_are_separate_readonly_destinations(tmp_path):
     assert client.get('/settings/technical', params={'document': sid}).status_code == 400
 
 
-def test_review_exposes_source_and_explicit_choices_without_embedded_manual(tmp_path):
-    console, _, receipt, _ = _console_with_document(tmp_path)
+def test_review_exposes_source_and_explicit_choices_without_embedded_manual(tmp_path, *, production_app, production_console):
+    console, _, receipt, _ = _console_with_document(tmp_path, production_console=production_console)
     sid = receipt['snapshot_id']
-    client = client_for(console)
+    client = client_for(console, production_app=production_app)
     login(client, 'reviewer.bert')
     dashboard = client.get('/review', params={'document': sid}).text
     assert 'review-next-step' in dashboard  # Production middleware must preserve the primary action.
@@ -121,10 +114,10 @@ def test_review_exposes_source_and_explicit_choices_without_embedded_manual(tmp_
     assert '<summary>Broncontext' not in page.text
 
 
-def test_blocked_processing_opens_explicit_source_selection_from_management(tmp_path, monkeypatch):
-    console, accounts, receipt, _ = _console_with_document(tmp_path)
+def test_blocked_processing_opens_explicit_source_selection_from_management(tmp_path, monkeypatch, *, production_app, production_console):
+    console, accounts, receipt, _ = _console_with_document(tmp_path, production_console=production_console)
     sid = receipt['snapshot_id']
-    client = client_for(console)
+    client = client_for(console, production_app=production_app)
     login(client, 'researcher.anne')
     monkeypatch.setattr(console, 'processing_status', lambda document, actor_id=None: {
         'retry_allowed': True, 'error_code': 'pre_review_llm_provider_unavailable',
@@ -142,14 +135,14 @@ def test_blocked_processing_opens_explicit_source_selection_from_management(tmp_
     assert commands == []
 
 
-def test_publish_keeps_review_recovery_and_hides_technical_diagnosis(tmp_path, monkeypatch):
-    console, _, receipt, _ = _console_with_document(tmp_path)
+def test_publish_keeps_review_recovery_and_hides_technical_diagnosis(tmp_path, monkeypatch, *, production_app, production_console):
+    console, _, receipt, _ = _console_with_document(tmp_path, production_console=production_console)
     sid = receipt['snapshot_id']
     monkeypatch.setattr(console, 'consider_publish', lambda **kw: {
         'state': 'captured_not_published', 'publication_ready': False, 'technical_ready': False,
         'curation_ready': True, 'technical_blockers': ['four_eyes_required', 'private_provider_error'],
         'blockers': ['four_eyes_required', 'private_provider_error']})
-    client = client_for(console)
+    client = client_for(console, production_app=production_app)
     login(client, 'publisher.carla')
     page = client.get('/publish', params={'document': sid})
     assert page.status_code == 200
@@ -160,9 +153,9 @@ def test_publish_keeps_review_recovery_and_hides_technical_diagnosis(tmp_path, m
 
 
 @pytest.mark.parametrize('username', ['researcher.anne', 'reviewer.bert'])
-def test_mijn_werk_keeps_shared_layout_with_neutral_navigation(tmp_path, username):
-    console, _, _, _ = _console_with_document(tmp_path)
-    client = client_for(console)
+def test_mijn_werk_keeps_shared_layout_with_neutral_navigation(tmp_path, username, *, production_app, production_console):
+    console, _, _, _ = _console_with_document(tmp_path, production_console=production_console)
+    client = client_for(console, production_app=production_app)
     login(client, username)
     response = client.get('/')
     assert response.status_code == 200
