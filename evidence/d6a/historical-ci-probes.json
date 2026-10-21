@@ -38,7 +38,14 @@
     }
   ],
   "runtime_changes": false,
-  "ci_rerun": "pending; existing full suite measurement is allowed to finish before pushing this workflow-only correction",
+  "ci_rerun": {
+    "status": "success",
+    "run_id": 39540968905,
+    "head": "68350e3aae28865a710500943008f117f20997c1",
+    "native_passed": 206,
+    "browser_passed": 1,
+    "skipped": 0
+  },
   "native_acceptance_after_repair": {
     "commit": "68350e3",
     "tests": 206,

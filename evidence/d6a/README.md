@@ -5,7 +5,9 @@ De lokale migratie naar de productiecompositie op PostgreSQL is voorbereid in
 voorgestelde PR raakt maximaal twintig testbestanden. Alle branches en
 [PR-teksten](prs/) zijn voorbereid; alle 22 branches zijn gepusht. De eerste
 [draft-PR #791](https://github.com/WilliamGomes41/Metis-DS/pull/791) draait CI;
-de overige PRs worden opeenvolgend geopend.
+de overige PRs worden opeenvolgend geopend. De herstelde historische
+roodproeven, 206 native cases en de browserproef zijn groen in CI; de volledige
+tijdmeting loopt nog. Zie [gepubliceerde status](publication-status.json).
 D6a is nog niet formeel afgerond en D6b is niet gestart. #695 houdt voorrang
 bij capaciteitsgebrek; GNC is niet gestart.
 

@@ -1,0 +1,43 @@
+{
+  "observed_at": "2026-10-21T03:58:13Z",
+  "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/791",
+  "head": "68350e3aae28865a710500943008f117f20997c1",
+  "draft": true,
+  "source_processing": {
+    "run_id": 39540968905,
+    "status": "success",
+    "native_tests": 206,
+    "browser_tests": 1,
+    "skipped": 0,
+    "regression_probes": "Expected original assertion failures reproduced; no fixture setup error"
+  },
+  "main_ci": {
+    "run_id": 39540968976,
+    "status": "in_progress",
+    "passed": [
+      "architecture-boundaries",
+      "change-contract",
+      "characterization-evidence"
+    ],
+    "pending": [
+      "complete suite Python3.12",
+      "pinned baseline then complete suite Python3.13"
+    ]
+  },
+  "other_workflows": {
+    "shared_agent_skills": "success",
+    "bend_experiment_proof": "success",
+    "workflow_topology": "in_progress",
+    "docling_acceptance": "in_progress"
+  },
+  "initial_main_ci": {
+    "run_id": 39539031210,
+    "status": "cancelled by the corrected head",
+    "complete_timing_proof": false
+  },
+  "completion": {
+    "D6a": false,
+    "D6b_started": false,
+    "reason": "Required complete CI comparisons per portion and environment proofs remain open; the last complete local suite exceeded twice its local baseline."
+  }
+}

@@ -25,9 +25,10 @@
     "status": "22 branches pushed to the existing origin with explicit user destination approval",
     "first_pr": "https://github.com/WilliamGomes41/Metis-DS/pull/791",
     "first_pr_draft": true,
-    "ci_run": "rerun pending on the historical-probe correction",
+    "ci_run": "https://github.com/WilliamGomes41/Metis-DS/actions/runs/39540968976",
     "remaining_prs": "not opened; sequential CI preserves #695 capacity priority",
-    "initial_ci_run": "https://github.com/WilliamGomes41/Metis-DS/actions/runs/39539031210"
+    "initial_ci_run": "https://github.com/WilliamGomes41/Metis-DS/actions/runs/39539031210",
+    "status_evidence": "publication-status.json"
   },
   "fixture_speedup": "fixture-prefetch-benchmark.json",
   "environment_isolation": "fixture-environment-isolation.json",
@@ -39,5 +40,6 @@
   "final_checks": "final-checks.json",
   "review_stack_validation": "review-stack-validation.json",
   "post_measurement_ci_integration": "main-ci-integration.json",
-  "historical_ci_probe_repair": "historical-ci-probes.json"
+  "historical_ci_probe_repair": "historical-ci-probes.json",
+  "current_ci_status": "publication-status.json"
 }
