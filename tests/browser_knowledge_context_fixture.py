@@ -2,19 +2,23 @@
 
 Model proposals are deterministic test doubles, not semantic validation evidence.
 """
-import json, tempfile
+import json
 from pathlib import Path
 from fastapi.responses import HTMLResponse, JSONResponse
-from src.operations_console_app import create_console_app, _knowledge_review_html, _decision_paths_html, _page
-from src.operations_console_v1 import OperationsConsole
+from src.operations_console_app import _knowledge_review_html, _decision_paths_html, _page
 PASSWORD="browser-fixture-secret"
 from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 from src.source_bound_fields_v2 import MODE, FIELDS
 from tests.context_test_support import bind_detected_context
 from tests.test_decision_graph_structure import structure
 from tests.test_decision_graph_chain import _console as graph_console
-root=Path(tempfile.mkdtemp(prefix='metis-browser-'))
-console=OperationsConsole(root=root/'prose',source_store=root/'prose/sources',runtime=root/'prose/runtime')
+from tests.browser_postgres_support import browser_application
+from tests.production_support import production_application
+app=browser_application('knowledge-browser', processing_binder=lambda console: None)
+console=app.state.operations_kernel
+root=console.root
+def graph_factory(**options):
+    return production_application(config=console.workflow_document_store.config, **options).state.operations_kernel
 accounts={key:console.create_account(username=key,password=PASSWORD,roles=roles)
           for key,roles in [('researcher',('researcher',)),('reviewer_a',('reviewer',)),('reviewer_b',('reviewer',))]}
 def provider(url,headers,payload,timeout):
@@ -38,12 +42,12 @@ receipt=console.ingest(actor_id=accounts['researcher']['account_id'],filename='c
 sid=receipt['snapshot_id']
 bind_detected_context(console,sid,accounts['reviewer_a']['account_id'])
 obj=next(o for o in console.snapshot_objects(sid) if 'systematische waarneming' in o['content']['clean_text'])
-graph, nodes, inventory=structure(root/'graph','single')
-gc=graph_console(root/'graph'); graph_sid=gc.list_envelopes()[0]['snapshot_id']
+graph, nodes, inventory=structure(root/'graph','single', production_console=graph_factory)
+gc=graph_console(root/'graph', production_console=graph_factory); graph_sid=next(row['snapshot_id'] for row in gc.list_envelopes() if row['class']=='beslisboom')
 # Fixture supplies an explicit reviewer reconstruction; it does not assert PDF geometry.
-gc._envelopes[graph_sid]['decision_graph']=graph; gc._save_envelopes()
+envelope=gc._envelope(graph_sid); envelope['decision_graph']=graph
+gc.workflow_document_store.write_bundle(envelope=envelope)
 outcome=next(o for o in nodes if o['object_id']==graph['edges'][0]['to'])
-app=create_console_app(console)
 manifest={'first':f'/review?document={sid}&object={obj["object_id"]}','second':f'/review?document={sid}&object={obj["object_id"]}&task=second_review','paths':'/browser-paths','core':core.strip(),'condition':condition,'exception':exception,'password':PASSWORD,'first_user':accounts['reviewer_a']['username'],'second_user':accounts['reviewer_b']['username']}
 @app.get('/browser-manifest')
 def meta(): return JSONResponse(manifest)

@@ -44,7 +44,6 @@ from src.object_taxonomy_v1 import (
     locator_of,
     published_object_type,
 )
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import (
     ALLOWED_CLASSES,
     ConsoleError,
@@ -60,9 +59,9 @@ HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
 STORY_FIXTURE = ROOT / "data/fixtures/story_html_boom_player_fixture.html"
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
     from tests.decision_tree_test_support import install_fragment_proposer
-    return install_fragment_proposer(OperationsConsole(
+    return install_fragment_proposer(production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -195,8 +194,8 @@ def test_klasse_closed_set_includes_beslisboom_and_selects_review_path() -> None
         review_path_for_klasse("path")
 
 
-def test_ingest_accepts_beslisboom_and_rejects_invented_klasse(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_ingest_accepts_beslisboom_and_rejects_invented_klasse(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_boom(console, accounts)
     assert receipt["class"] == "beslisboom"
@@ -205,10 +204,10 @@ def test_ingest_accepts_beslisboom_and_rejects_invented_klasse(tmp_path: Path) -
         _ingest_boom(console, accounts, class_="scorelist", title="Bad")
 
 
-def test_inleveren_has_no_second_path_chooser(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_inleveren_has_no_second_path_chooser(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     login = client.post(
         "/login",
         data={"username": "researcher.anne", "password": "anne-secret"},
@@ -241,8 +240,8 @@ def test_beslisboom_uses_path_node_outcome_only_scorelist_is_node_flag() -> None
     assert set(CLOSED_BOOM_TYPES).isdisjoint(set(RICHTLIJN_PATH_TYPES))
 
 
-def test_other_klassen_do_not_get_boom_types(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_other_klassen_do_not_get_boom_types(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
     objects = console.snapshot_objects(receipt["snapshot_id"])
@@ -280,8 +279,8 @@ def test_other_klassen_do_not_get_boom_types(tmp_path: Path) -> None:
     )
 
 
-def test_beslisboom_review_uses_path_node_outcome_stacks(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_beslisboom_review_uses_path_node_outcome_stacks(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_boom(console, accounts)
     objects = console.snapshot_objects(receipt["snapshot_id"])
@@ -382,8 +381,8 @@ def test_outcome_must_bind_applies_if_and_rejects_fused_empty_multibullet() -> N
     assert "multi_bullet_outcome" in multi_errors
 
 
-def test_console_rejects_invalid_outcomes_on_review(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_console_rejects_invalid_outcomes_on_review(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_boom(console, accounts)
     objects = console.snapshot_objects(receipt["snapshot_id"])
@@ -448,8 +447,8 @@ def test_doen_overweeg_niet_doen_geen_actie_and_four_eyes() -> None:
     assert not requires_four_eyes(ordinary, confirmed_type="outcome")
 
 
-def test_console_stamps_actionable_outcome_and_maps_geen_actie(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_console_stamps_actionable_outcome_and_maps_geen_actie(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_boom(console, accounts)
     objects = console.snapshot_objects(receipt["snapshot_id"])
@@ -510,7 +509,7 @@ def test_console_stamps_actionable_outcome_and_maps_geen_actie(tmp_path: Path) -
     assert row.get("no_action") is True or (row.get("metadata") or {}).get("no_action") is True
 
 
-def test_boom_freeze_locator_sha256_rejects_live_rest_and_story_html(tmp_path: Path) -> None:
+def test_boom_freeze_locator_sha256_rejects_live_rest_and_story_html(tmp_path: Path, *, production_console) -> None:
     freeze = _boom_freeze_bytes()
     digest = hashlib.sha256(freeze).hexdigest()
     assert boom_freeze_errors(
@@ -540,7 +539,7 @@ def test_boom_freeze_locator_sha256_rejects_live_rest_and_story_html(tmp_path: P
         live_url="",
     )
 
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_boom(console, accounts)
     assert receipt["sha256"] == digest
@@ -621,23 +620,27 @@ def test_class_axis_richtlijn_recommendation_outranks_boom_outcome() -> None:
     assert missing_richtlijn is None or missing_richtlijn.get("fills_missing_richtlijn") is False
 
 
-def test_select_for_question_does_not_fill_richtlijn_with_boom(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_select_for_question_does_not_fill_richtlijn_with_boom(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     _ingest_boom(console, accounts)
-    selected = console.select_for_question(family="valrisico", asked_class="richtlijn")
+    # This case isolates the existing family/class projection; production also
+    # filters pending review, which is asserted before invoking its owner.
+    assert console.select_for_question(family="valrisico", asked_class="beslisboom") == []
+    select = lambda **query: OperationsConsole.select_for_question(console, **query)
+    selected = select(family="valrisico", asked_class="richtlijn")
     assert selected == []
-    boom_selected = console.select_for_question(family="valrisico", asked_class="beslisboom")
+    boom_selected = select(family="valrisico", asked_class="beslisboom")
     assert boom_selected
     assert all(item["class"] == "beslisboom" for item in boom_selected)
     _ingest_richtlijn(console, accounts)
-    selected = console.select_for_question(family="valrisico", asked_class="richtlijn")
+    selected = select(family="valrisico", asked_class="richtlijn")
     assert selected
     assert all(item["class"] == "richtlijn" for item in selected)
 
 
-def test_g2_still_blocks_publish_for_boom_and_richtlijn(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_g2_still_blocks_publish_for_boom_and_richtlijn(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     boom = _ingest_boom(console, accounts)
     richtlijn = _ingest_richtlijn(console, accounts, family="continentie", title="Richtlijn")
@@ -717,8 +720,8 @@ def test_answerability_does_not_support_boom_when_richtlijn_exists() -> None:
     assert published_object_type(boom) == "unclassified"
 
 
-def test_path_confinement_rejects_dotdot_and_uses_basename_on_boom_ingest(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_path_confinement_rejects_dotdot_and_uses_basename_on_boom_ingest(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     with pytest.raises(ConsoleError, match="invalid_store_path"):
         _ingest_boom(console, accounts, filename="../escape.json", title="Escape")
@@ -745,9 +748,9 @@ def _locator_value(obj: dict) -> str:
     return str(loc.get("locator_value") or "")
 
 
-def test_approve_does_not_auto_confirm_proposed_applies_if(tmp_path: Path) -> None:
+def test_approve_does_not_auto_confirm_proposed_applies_if(tmp_path: Path, *, production_console) -> None:
     """Codex P1: machine-proposed applies_if must not bind on approve."""
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_boom(console, accounts)
     outcome = next(
@@ -777,7 +780,7 @@ def test_approve_does_not_auto_confirm_proposed_applies_if(tmp_path: Path) -> No
     assert stored.get("confirmed_relations") in (None, [], {})
 
 
-def test_vitamine_d_extract_preserves_high_risk_fields(tmp_path: Path) -> None:
+def test_vitamine_d_extract_preserves_high_risk_fields(tmp_path: Path, *, production_console) -> None:
     """Codex P1: four-eyes must fire after boom extract of high-risk advice."""
     freeze = _boom_freeze_bytes()
     payload = json.loads(freeze.decode("utf-8"))
@@ -797,7 +800,7 @@ def test_vitamine_d_extract_preserves_high_risk_fields(tmp_path: Path) -> None:
     assert "dosage" in (vit_frag.get("risk_fields") or [])
     assert (vit_frag.get("risk_metadata") or {}).get("dosage") == "800"
 
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_boom(
         console,
@@ -816,13 +819,13 @@ def test_vitamine_d_extract_preserves_high_risk_fields(tmp_path: Path) -> None:
     assert requires_four_eyes(outcomes[0]) is True
 
 
-def test_compact_json_freeze_uses_byte_span_locators(tmp_path: Path) -> None:
+def test_compact_json_freeze_uses_byte_span_locators(tmp_path: Path, *, production_console) -> None:
     """Codex P1: locators must point into original freeze bytes, not whole-file 1-1."""
     payload = json.loads(_boom_freeze_bytes().decode("utf-8"))
     payload["outcomes"][0]["text"] = 'Zeg "valpoli".'
     compact = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     assert compact.count(b"\n") == 0
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_boom(
         console,
@@ -880,9 +883,9 @@ def test_canonical_review_hash_includes_no_action_and_metadata() -> None:
     assert compute_canonical_object_hash(with_flag) != compute_canonical_object_hash(without_flag)
 
 
-def test_actionable_outcome_approve_requires_strength(tmp_path: Path) -> None:
+def test_actionable_outcome_approve_requires_strength(tmp_path: Path, *, production_console) -> None:
     """Codex P2: actionable outcomes cannot approve with a blank strength."""
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_boom(console, accounts)
     objects = console.snapshot_objects(receipt["snapshot_id"])
@@ -912,13 +915,13 @@ def test_actionable_outcome_approve_requires_strength(tmp_path: Path) -> None:
         )
 
 
-def test_empty_local_boom_freeze_is_rejected(tmp_path: Path) -> None:
+def test_empty_local_boom_freeze_is_rejected(tmp_path: Path, *, production_console) -> None:
     """Codex P2: a local freeze without nodes+outcomes is not a valid boom source."""
     empty = json.dumps({"kind": "beslisboom-freeze"}, ensure_ascii=False).encode("utf-8")
     errors = boom_freeze_errors(data=empty, filename="empty-boom.json", live_url="")
     assert errors
     assert any("empty_boom_freeze" in err for err in errors)
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     with pytest.raises(ConsoleError, match="empty_boom_freeze|invalid_boom_freeze"):
         _ingest_boom(

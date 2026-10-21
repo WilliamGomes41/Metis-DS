@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 from src.console_entra_routes_v1 import (
     DEFAULT_FLOW_STARTS_PER_MINUTE, _denied_path, flow_starts_per_minute, install_entra_routes,
 )
-from src.operations_console_app import _page, create_console_app
+from src.operations_console_app import _page
 from src.operations_console_v1 import ConsoleError
 from src.request_diagnostics_v1 import RequestDiagnostics, _LOGGER
 from tests.test_console_duty_first_home import _console
@@ -188,11 +188,11 @@ def test_protected_routes_still_redirect_to_sign_in(monkeypatch, events):
 
 
 @pytest.mark.parametrize('path', ['/settings', '/review', '/accounts'])
-def test_registered_metis_routes_still_require_sign_in(tmp_path, monkeypatch, path):
+def test_registered_metis_routes_still_require_sign_in(tmp_path, monkeypatch, path, *, production_app, production_console):
     def renew_session(token):
         raise ConsoleError('workflow_session_required')
     monkeypatch.setattr('src.console_entra_routes_v1.MicrosoftLogin', lambda config: None)
-    app = create_console_app(_console(tmp_path))
+    app = production_app(_console(tmp_path, production_console=production_console))
     install_entra_routes(app, None, SimpleNamespace(config=None, renew_session=renew_session), render_page=_page)
     response = TestClient(app, base_url='https://testserver').get(path, follow_redirects=False)
     assert response.status_code == 303

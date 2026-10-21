@@ -28,8 +28,8 @@ PASSWORD = "d54-secret"
 HTML = b"""<!doctype html><html><body><h1>Advies</h1><p>Interventie A is een behandeling.</p></body></html>"""
 
 
-def _system(tmp_path: Path) -> tuple[OperationsConsole, dict[str, dict], str, str]:
-    console = OperationsConsole(
+def _system(tmp_path: Path, *, production_console) -> tuple[OperationsConsole, dict[str, dict], str, str]:
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime" / "console",
@@ -251,10 +251,8 @@ def test_interaction_id_cannot_move_between_reviewer_snapshot_or_task() -> None:
         )
 
 
-def test_contextual_review_commits_interaction_evidence_with_existing_decision_event(
-    tmp_path: Path,
-) -> None:
-    console, accounts, snapshot_id, object_id = _system(tmp_path)
+def test_contextual_review_commits_interaction_evidence_with_existing_decision_event(tmp_path: Path, *, production_console) -> None:
+    console, accounts, snapshot_id, object_id = _system(tmp_path, production_console=production_console)
     objects = console.snapshot_objects(snapshot_id)
     focal = next(row for row in objects if row["object_id"] == object_id)
     evidence = build_review_interaction_evidence(
@@ -295,10 +293,8 @@ def test_contextual_review_commits_interaction_evidence_with_existing_decision_e
     assert burden["object_decisions"] == 1
 
 
-def test_second_review_uses_same_evidence_store_without_changing_object_tuple(
-    tmp_path: Path,
-) -> None:
-    console, accounts, snapshot_id, object_id = _system(tmp_path)
+def test_second_review_uses_same_evidence_store_without_changing_object_tuple(tmp_path: Path, *, production_console) -> None:
+    console, accounts, snapshot_id, object_id = _system(tmp_path, production_console=production_console)
     rows = console._load_objects(snapshot_id)
     target = next(row for row in rows if row["object_id"] == object_id)
     target["object_type"] = "recommendation"

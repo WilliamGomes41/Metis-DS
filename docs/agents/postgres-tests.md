@@ -246,3 +246,76 @@ De echte Docling-acceptancemodule is eveneens omgezet, maar de twaalf bestaande
 acceptancegevallen blijven zichtbaar overgeslagen zolang de officiële
 ML-omgeving niet is ingeschakeld. Dat is geen uitgevoerd Docling-bewijs en geen
 PG-skip; normale consoletests blijven zonder PostgreSQL falen.
+
+Portie 13 migreert Home/navigatie, Entra, review-interactie-evidence,
+Inzicht/kwaliteit en consoletelemetrie. Expliciete HTTP-configuratie loopt via
+dezelfde `build_console_app`-installatie op de reeds door de factory gemaakte
+PG-console. Entra gebruikt echte accounts/sessies; alleen de externe Microsoft-
+uitwisseling of een expliciete uitvalgrens wordt geïnjecteerd.
+
+De navigatieproef volgt de bestaande productievereenvoudiging: het merklinkje
+brengt de gebruiker naar Home, Home heeft de procestegels en de overige pagina's
+behouden de werkruimtenavigatie. Publicatie blijft voor de gewone researcher
+geweigerd; een bestaande aparte publisher-proef leest die route wel. Lock- en
+telemetrieproeven voegen alleen hun probe-endpoint toe aan de echte app en
+installeren de diagnostiek niet nogmaals.
+
+De expliciete weigering van Entra op een bestandsconsole en de observability-
+proef van de oude `serve-console`-CLI zijn `file_topology`: beide oude starts
+verdwijnen in D6b. De Entra- en uitgeversrechten zijn niet gewijzigd.
+
+Een nieuwe lokale run van de ongewijzigde baseline `9fa2004` is volledig groen:
+5.641 passed, 27 gewone skips, 6 xfails, nul PG-skips, 1.043,807 s. Dezelfde
+synthetische DNS-hostnamen staan nu in `NO_PROXY` als in de latere portieruns.
+`evidence/d6a/local-baseline-clean.json` bewaart deze meting; de eerste meting
+met drie proxyfouten blijft als historisch bewijs beschikbaar. Dit is een
+herhaalmeting van oude code, uitgevoerd ná de eerste porties, geen achteraf
+geclaimde CI-run vóór de migratie.
+
+Portie 14 migreert de publicatie-/workboardmodules en hun afnemers. Intrekking
+publiceert eerst echt naar PostgreSQL, gebruikt de echte withdrawal-transactie
+en controleert teller/idempotentie als observatie van die adapter. Supersession
+wordt met een echte successor, review en publicatie voorbereid; de historische
+kaart verliest haar formulieren terwijl de actieve opvolger haar eigen kaart
+houdt. Het legacy-geval bereidt expliciet pre-lineage-metadata in de eigen
+wegwerpdatabase voor.
+
+De bestaande PG-lijstproef verbiedt `ready_for_publication` als lijstbelofte
+zonder volledige gereedheidscontrole. De overgezette UI-proef volgt datzelfde
+contract: lijsten blijven conservatief, de gekozen publicatiepagina toetst
+actuele gereedheid en Blob-beschikbaarheid, canonical publicatiestatus blijft
+gedeeld. Geen runtime-statusregel is aangepast.
+
+De geïntegreerde MCP-proef leest accountrollen en blokkades nu eveneens uit
+PostgreSQL; alleen de ondertekende JWT/JWKS-transportfixture blijft gecontroleerd.
+Gehardcodeerd lege canonical stores en extra route-installaties zijn verwijderd.
+
+
+Portie 15 zet de beslisboom-, participatie-, heading-batch- en bronreparatieproeven
+over op dezelfde productiecompositie. Ook de zelfstandige kenniscontext-browserfixture
+gebruikt PostgreSQL; een aangemelde HTTP-proef opent de kenniskaart en beslisboompaden.
+De oude fixturevarianten blijven als afzonderlijke cases bestaan, maar delen nu
+dezelfde PG-authority. De Azure-bronreparatieproeven houden alleen het Blob-transport
+synthetisch en gebruiken de echte AzureBlobSourceStore en Azure-consoleklasse.
+
+Grafpublicatie, herstart en intrekking gebruiken de echte canonical adapter. De
+vervalsingsproef wijzigt uitsluitend de eigen PG-auditfixture en controleert nog
+steeds tekst, span, grafmodus en reviewbewijs. Accountmutaties gebruiken de
+identity store en de bestaande retirement-operatie. Pure controles op de drie
+onbeschikbaarheidsvlaggen blijven afzonderlijke functieproeven. De familie/klasse-
+projectie wordt expliciet bij haar bestaande owner geïsoleerd; de productiepoort
+blijft daarnaast ongereviewde objecten weren.
+
+Een geweigerd heading-commando moet vóór herstart alle zes statecomponenten exact
+behouden. Alleen de reeds bestaande startup-reconciliatie van een expliciet
+voorbereide historische publicatie mag daarna de opslagrevision één verhogen;
+de objecten, envelope, bindings, objectrevision en events blijven exact gelijk.
+
+De volledige lokale herhaalmeting van portie 3 op de vastgepinde commit is groen:
+5.647 passed, 27 niet-PG skips, 6 xfails, nul PG-skips, 1.061,821 seconden. Dat
+blijft binnen tweemaal beide vastgelegde baselines. De JSON behoudt de oorspronkelijke
+vergelijking met de eerste lokale baseline. CI blijft afzonderlijk vereist.
+
+Portie 15: 296 unieke cases groen (220 + 76), inclusief drie aanvullende pure
+vlagproeven; geen skips. De T12-proef toetst zowel de productie-dispatch als de
+bestaande basisowner op dezelfde PG-console.

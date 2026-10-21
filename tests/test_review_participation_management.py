@@ -22,12 +22,12 @@ from tests.test_decision_graph_chain import _console, _accounts, ingest, finish,
 
 
 @pytest.fixture(params=['local', 'postgres'])
-def setup(request, tmp_path):
+def setup(request, tmp_path, *, production_console):
     if request.param == 'postgres':
         from tests.decision_graph_native_support import native_state
         state, store, source = native_state(tmp_path, config=request.getfixturevalue("complete_postgres"))
     else:
-        state = lambda node='default': _console(tmp_path)
+        state = lambda node='default': _console(tmp_path, production_console=production_console)
         store = None
     console = state()
     accounts = _accounts(console)
@@ -128,11 +128,9 @@ def test_command_permissions_replay_and_no_policy_editor_bypass(setup):
         change(console,accounts,sid,'archive',primary)
 
 
-def test_http_all_mine_theme_readonly_and_escalation(tmp_path):
-    from src.operations_console_app import create_console_app
-    from src.review_workboard_v1 import install_review_workboard
-    console=_console(tmp_path);accounts=_accounts(console);sid=ingest(console,accounts)['snapshot_id']
-    app=create_console_app(console);install_review_workboard(app,console)
+def test_http_all_mine_theme_readonly_and_escalation(tmp_path, *, production_app, production_console):
+    console=_console(tmp_path, production_console=production_console);accounts=_accounts(console);sid=ingest(console,accounts)['snapshot_id']
+    app=production_app(console)
     with TestClient(app,base_url='https://testserver') as client:
         client.post('/login',data={'username':'reviewer.bert','password':'bert-secret'})
         assert console._envelope(sid)['title'] not in client.get('/review').text
@@ -231,9 +229,9 @@ def test_native_concurrent_roster_changes_and_late_extraction(tmp_path, monkeypa
     assert target in state('after')._envelope(sid)['named_reviewers']
 
 
-def test_legacy_requires_explicit_publisher_and_preserves_exact_old_approvals(tmp_path):
+def test_legacy_requires_explicit_publisher_and_preserves_exact_old_approvals(tmp_path, *, production_console):
     from tests.test_v225_beslisboom_path import _ingest_boom
-    console=_console(tmp_path);accounts=_accounts(console)
+    console=_console(tmp_path, production_console=production_console);accounts=_accounts(console)
     sid=_ingest_boom(console,accounts)['snapshot_id']
     extra=person(console)
     before=[canonical_object_payload(o) for o in passages(console,sid)]
@@ -281,9 +279,8 @@ def _participant_forms(html):
     return [f for f in parser.forms if 'action' in f['inputs']]
 
 
-def test_participant_forms_offer_only_available_allowed_choices(tmp_path):
-    from src.operations_console_app import create_console_app
-    console=_console(tmp_path); accounts=_accounts(console); sid=ingest(console,accounts)['snapshot_id']
+def test_participant_forms_offer_only_available_allowed_choices(tmp_path, *, production_app, production_console):
+    console=_console(tmp_path, production_console=production_console); accounts=_accounts(console); sid=ingest(console,accounts)['snapshot_id']
     primary=accounts['researcher']['account_id']; secondary=accounts['reviewer']['account_id']
     change(console,accounts,sid,'add_required',secondary)
     change(console,accounts,sid,'archive',secondary)
@@ -293,9 +290,13 @@ def test_participant_forms_offer_only_available_allowed_choices(tmp_path):
     available=person(console,'available')
     unavailable=[]
     for flag in ('retirement','blocked','disabled'):
-        actor=person(console,flag);console._accounts[actor][flag]=True;unavailable.append(actor)
-    console._save_accounts()
-    with TestClient(create_console_app(console),base_url='https://testserver') as client:
+        actor=person(console,flag)
+        from src.workflows.account_retirement_v1 import retire_account
+        with console.workflow_identity_store._connect() as connection:
+            retire_account(connection, account_id=actor, actor_id=accounts['publisher']['account_id'],
+                           reason='Unavailable fixture account', apply=True)
+        unavailable.append(actor)
+    with TestClient(production_app(console),base_url='https://testserver') as client:
         client.post('/login',data={'username':'publisher.carla','password':'carla-secret'})
         page=client.get('/review/participants',params={'document':sid})
         forms=_participant_forms(page.text)
@@ -320,16 +321,15 @@ def test_participant_forms_offer_only_available_allowed_choices(tmp_path):
         assert [f['inputs']['action'] for f in mine]==['add_optional']
 
 
-def test_trajectory_readable_history_navigation_and_archive_error(tmp_path):
-    from src.operations_console_app import create_console_app
-    console=_console(tmp_path);accounts=_accounts(console);sid=ingest(console,accounts)['snapshot_id'];finish(console,accounts,sid)
+def test_trajectory_readable_history_navigation_and_archive_error(tmp_path, *, production_app, production_console):
+    console=_console(tmp_path, production_console=production_console);accounts=_accounts(console);sid=ingest(console,accounts)['snapshot_id'];finish(console,accounts,sid)
     primary=accounts['researcher']['account_id']; secondary=accounts['reviewer']['account_id']
     change(console,accounts,sid,'add_required',secondary);approve_all(console,accounts,sid,secondary)
     change(console,accounts,sid,'archive',secondary)
     replacement=person(console,'Daan Vervanger')
     change(console,accounts,sid,'replace',secondary,replacement_id=replacement)
     before=deepcopy(console._envelope(sid));bindings=deepcopy(console.object_review_bindings(sid))
-    with TestClient(create_console_app(console),base_url='https://testserver') as client:
+    with TestClient(production_app(console),base_url='https://testserver') as client:
         client.post('/login',data={'username':'publisher.carla','password':'carla-secret'})
         trajectory=client.get('/review/trajectory',params={'document':sid})
         assert trajectory.status_code==200
@@ -351,14 +351,24 @@ def test_trajectory_readable_history_navigation_and_archive_error(tmp_path):
         assert console._envelope(sid)==before and console.object_review_bindings(sid)==bindings
 
 
-def test_participant_page_has_no_submit_when_no_candidate_available(tmp_path):
-    from src.operations_console_app import create_console_app
-    console=_console(tmp_path);accounts=_accounts(console);sid=ingest(console,accounts)['snapshot_id']
+def test_participant_page_has_no_submit_when_no_candidate_available(tmp_path, *, production_app, production_console):
+    console=_console(tmp_path, production_console=production_console);accounts=_accounts(console);sid=ingest(console,accounts)['snapshot_id']
     change(console,accounts,sid,'add_required',accounts['reviewer']['account_id'])
-    with TestClient(create_console_app(console),base_url='https://testserver') as client:
+    with TestClient(production_app(console),base_url='https://testserver') as client:
         client.post('/login',data={'username':'publisher.carla','password':'carla-secret'})
         page=client.get('/review/participants',params={'document':sid})
         forms=_participant_forms(page.text)
         assert [f['inputs']['action'] for f in forms]==['archive']
         assert forms[0]['choices']['reviewer_id']==[accounts['reviewer']['account_id']]
         assert 'Geen beschikbare reviewers voor deze handeling.' in page.text
+
+
+@pytest.mark.pure_function
+@pytest.mark.parametrize('flag', ['retirement', 'blocked', 'disabled'])
+def test_participation_unavailable_flag_guard(flag):
+    from types import SimpleNamespace
+    from src.review_participation_v1 import _reviewer
+    account = {'account_id': 'fixture-reviewer', 'roles': ['reviewer'], flag: True}
+    subject = SimpleNamespace(_require_role=lambda actor_id, role: account)
+    with pytest.raises(ConsoleError, match='reviewer_unavailable'):
+        _reviewer(subject, 'fixture-reviewer')

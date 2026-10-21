@@ -14,14 +14,12 @@ from fastapi.testclient import TestClient
 
 from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
-from src.operations_console_app import create_console_app
 from src.review_ledger import read_events
-from src.review_workboard_v1 import install_review_workboard
 from tests.test_v219_review_duty_queue import _console, _accounts, _ingest
 
 
-def _setup(root, factory=_console):
-    console = factory(root)
+def _setup(root, factory=None, *, production_console):
+    console = factory(root) if factory is not None else _console(root, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     sid = receipt["snapshot_id"]
@@ -30,9 +28,8 @@ def _setup(root, factory=_console):
     return console, accounts, sid, ids
 
 
-def _client(console):
-    app = create_console_app(console)
-    install_review_workboard(app, console)
+def _client(console, *, production_app):
+    app = production_app(console)
     client = TestClient(app, raise_server_exceptions=False)
     assert client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"}, follow_redirects=False).status_code == 303
     return client
@@ -62,14 +59,11 @@ from pathlib import Path
 from tests.test_a08_heading_batch_atomic import _state
 from tests.test_v219_review_duty_queue import _console
 root, sid, mode = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
-if mode != "local":
-    from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
-    config = PostgresCanonicalConfig(dsn=os.environ["METIS_TEST_POSTGRES_DSN"])
-    assert mode == "postgres", mode
-    from tests.test_review_batch_atomic_postgres import _console as native
-    console = native(root, config)
-else:
-    console = _console(root)
+from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+config = PostgresCanonicalConfig(dsn=os.environ["METIS_TEST_POSTGRES_DSN"])
+assert mode == "postgres", mode
+from tests.test_review_batch_atomic_postgres import _console as native
+console = native(root, config)
 print(json.dumps(_state(console, sid)))
 '''
     completed = subprocess.run([sys.executable, "-c", code, str(root), sid, mode],
@@ -77,9 +71,9 @@ print(json.dumps(_state(console, sid)))
     return json.loads(completed.stdout)
 
 
-def test_http_later_binding_failure_is_atomic_after_restart(tmp_path, monkeypatch):
-    console, accounts, sid, ids = _setup(tmp_path)
-    client = _client(console)
+def test_http_later_binding_failure_is_atomic_after_restart(tmp_path, monkeypatch, *, production_app, production_console):
+    console, accounts, sid, ids = _setup(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
     before = _state(console, sid)
     save = console._save_bindings
     calls = 0
@@ -96,16 +90,16 @@ def test_http_later_binding_failure_is_atomic_after_restart(tmp_path, monkeypatc
         "snapshot_id": sid, "snapshot_revision": before[3], "object_ids": ids,
     }, follow_redirects=False)
     assert response.status_code == 500
-    restarted = _console(tmp_path)
+    restarted = _console(tmp_path, production_console=production_console)
     after = _state(restarted, sid)
     statuses = [row["governance"]["validation_status"] for row in after[0] if row["object_id"] in ids]
     assert after == before, f"HTTP {response.status_code}; durable statuses after restart: {statuses}"
 
 
 @pytest.fixture(params=["local", "postgres"])
-def storage(request):
+def storage(request, production_console):
     if request.param == "local":
-        return _console
+        return lambda root: _console(root, production_console=production_console)
     config = request.getfixturevalue("workflow_postgres")
     from tests.test_review_batch_atomic_postgres import _console as native
     return lambda root: native(root, config)
@@ -139,9 +133,9 @@ def _post(client, sid, ids, revision):
 
 @pytest.mark.parametrize("position", [1, 2])
 @pytest.mark.parametrize("write", ["objects", "bindings", "envelope", "audit"])
-def test_write_failure_preserves_complete_state(storage, tmp_path, monkeypatch, position, write):
-    console, accounts, sid, ids = _setup(tmp_path, storage)
-    client = _client(console)
+def test_write_failure_preserves_complete_state(storage, tmp_path, monkeypatch, position, write, *, production_app, production_console):
+    console, accounts, sid, ids = _setup(tmp_path, storage, production_console=production_console)
+    client = _client(console, production_app=production_app)
     before = _state(console, sid)
     native = hasattr(console, "workflow_document_store")
     review_native = hasattr(console, "workflow_review_store")
@@ -175,8 +169,8 @@ def test_write_failure_preserves_complete_state(storage, tmp_path, monkeypatch, 
     assert _state(storage(tmp_path), sid) == before
 
 
-def test_late_conflict_discards_own_first_member(storage, tmp_path, monkeypatch):
-    console, accounts, sid, ids = _setup(tmp_path, storage)
+def test_late_conflict_discards_own_first_member(storage, tmp_path, monkeypatch, *, production_app, production_console):
+    console, accounts, sid, ids = _setup(tmp_path, storage, production_console=production_console)
     before = _state(console, sid)
     original = console.review_object
     calls = 0
@@ -189,13 +183,13 @@ def test_late_conflict_discards_own_first_member(storage, tmp_path, monkeypatch)
         return original(**command)
 
     monkeypatch.setattr(console, "review_object", conflict_second)
-    assert _post(_client(console), sid, ids, before[3]).status_code == 409
+    assert _post(_client(console, production_app=production_app), sid, ids, before[3]).status_code == 409
     assert _state(storage(tmp_path), sid) == before
 
 
-def test_success_duplicates_repeat_and_stale(storage, tmp_path):
-    console, accounts, sid, ids = _setup(tmp_path, storage)
-    client = _client(console)
+def test_success_duplicates_repeat_and_stale(storage, tmp_path, *, production_app, production_console):
+    console, accounts, sid, ids = _setup(tmp_path, storage, production_console=production_console)
+    client = _client(console, production_app=production_app)
     revision = console.objects_revision(sid)
     assert _post(client, sid, ids + ids, revision).status_code == 303
     restarted = storage(tmp_path)
@@ -210,8 +204,8 @@ def test_success_duplicates_repeat_and_stale(storage, tmp_path):
 
 
 @pytest.mark.parametrize("rejection", ["role", "not_named", "unsuitable", "unknown", "empty", "published"])
-def test_direct_rejections_make_no_writes(storage, tmp_path, rejection):
-    console, accounts, sid, ids = _setup(tmp_path, storage)
+def test_direct_rejections_make_no_writes(storage, tmp_path, rejection, *, production_console):
+    console, accounts, sid, ids = _setup(tmp_path, storage, production_console=production_console)
     actor = accounts["reviewer"]["account_id"]
     selected = ids
     if rejection == "role":
@@ -225,33 +219,28 @@ def test_direct_rejections_make_no_writes(storage, tmp_path, rejection):
     elif rejection == "published":
         envelope = deepcopy(console._envelope(sid))
         envelope["state"] = "published"
-        if hasattr(console, "workflow_document_store"):
-            console.workflow_document_store.write_bundle(envelope=envelope)
-            # R+ publication truth is the canonical release history, not the
-            # envelope flag. Seed that same authority before testing refusal.
-            from tests.complete_workflow_support import seed_canonical_release
-            seed_canonical_release(console.canonical_publication_store, snapshot_id=sid, token="a08-" + sid)
-        else:
-            console._envelopes[sid] = envelope
-            console._save_envelopes()
+        console.workflow_document_store.write_bundle(envelope=envelope)
+        from tests.complete_workflow_support import seed_canonical_release
+        seed_canonical_release(console.canonical_publication_store, snapshot_id=sid, token="a08-" + sid)
         console = storage(tmp_path)
     else:
         selected = []
     before = _state(console, sid)
     with pytest.raises(ConsoleError):
         console.batch_confirm_headings(actor_id=actor, snapshot_id=sid, object_ids=selected, expected_revision=before[3])
-    # Check refusal before production startup reconciles the published envelope.
+    # Observe the failed command before startup reconciliation can rewrite the
+    # legacy seeded envelope. Every persisted field must still match exactly.
     assert _state(console, sid) == before
     after = _state(storage(tmp_path), sid)
-    if rejection == "published" and hasattr(console, "workflow_document_store"):
+    if rejection == "published":
         assert after[:-1] == before[:-1]
         assert after[-1] == before[-1] + 1  # Existing startup reconciliation.
     else:
         assert after == before
 
 
-def test_direct_command_success_and_late_failure(storage, tmp_path, monkeypatch):
-    console, accounts, sid, ids = _setup(tmp_path, storage)
+def test_direct_command_success_and_late_failure(storage, tmp_path, monkeypatch, *, production_console):
+    console, accounts, sid, ids = _setup(tmp_path, storage, production_console=production_console)
     actor = accounts["reviewer"]["account_id"]
     before = _state(console, sid)
     original = console.review_object
@@ -271,16 +260,16 @@ def test_direct_command_success_and_late_failure(storage, tmp_path, monkeypatch)
     assert console.objects_revision(sid) != before[3]
 
 
-def test_concurrent_same_revision_preserves_winner(storage, tmp_path, monkeypatch):
+def test_concurrent_same_revision_preserves_winner(storage, tmp_path, monkeypatch, *, production_app, production_console):
     from concurrent.futures import ThreadPoolExecutor
     from contextlib import contextmanager
     from threading import Event
 
-    first, accounts, sid, ids = _setup(tmp_path, storage)
+    first, accounts, sid, ids = _setup(tmp_path, storage, production_console=production_console)
     # Independent runtimes also prove the native row lock, not just flock.
     second_root = tmp_path / "worker2" if hasattr(first, "workflow_review_store") else tmp_path
     second = storage(second_root)
-    clients = [_client(first), _client(second)]
+    clients = [_client(first, production_app=production_app), _client(second, production_app=production_app)]
     revision = first.objects_revision(sid)
     first_has_written, second_has_entered = Event(), Event()
     original_review = first.review_object
@@ -319,13 +308,13 @@ def test_native_final_commit_failure_without_review_authority_is_refused(workflo
 
 
 @pytest.mark.parametrize("refresh_failure", [False, True])
-def test_native_final_commit_failure_preserves_fresh_state(workflow_postgres, tmp_path, monkeypatch, refresh_failure):
+def test_native_final_commit_failure_preserves_fresh_state(workflow_postgres, tmp_path, monkeypatch, refresh_failure, *, production_app, production_console):
     import psycopg
     from tests.test_review_batch_atomic_postgres import _console as native
 
     factory = lambda root: native(root, workflow_postgres)
-    console, accounts, sid, ids = _setup(tmp_path, factory)
-    client = _client(console)
+    console, accounts, sid, ids = _setup(tmp_path, factory, production_console=production_console)
+    client = _client(console, production_app=production_app)
     before = _state(console, sid)
     from contextlib import contextmanager
     from src.workflows import workflow_documents_cutover_v1 as documents
@@ -382,12 +371,12 @@ def test_native_final_commit_failure_preserves_fresh_state(workflow_postgres, tm
 
 
 @pytest.mark.parametrize("first_kind", ["batch", "single"])
-def test_batch_and_single_review_overlap_preserves_winner(storage, tmp_path, monkeypatch, first_kind):
+def test_batch_and_single_review_overlap_preserves_winner(storage, tmp_path, monkeypatch, first_kind, *, production_console):
     from concurrent.futures import ThreadPoolExecutor
     from contextlib import contextmanager
     from threading import Event
 
-    first, accounts, sid, ids = _setup(tmp_path, storage)
+    first, accounts, sid, ids = _setup(tmp_path, storage, production_console=production_console)
     second = storage(tmp_path)
     content_id = next(row["object_id"] for row in first.snapshot_objects(sid)
                       if row["object_type"] == "unclassified")
@@ -454,9 +443,7 @@ def test_native_post_commit_refresh_failure_without_review_authority_is_refused(
     "_reload_store_locked", "refresh_objects_expected_revision", "_refresh_review_runtime",
 ])
 @pytest.mark.parametrize("entry", ["http", "direct"])
-def test_native_post_commit_refresh_failure_preserves_success(
-    workflow_postgres, tmp_path, monkeypatch, refresh, entry,
-):
+def test_native_post_commit_refresh_failure_preserves_success(workflow_postgres, tmp_path, monkeypatch, refresh, entry, *, production_app, production_console):
     from contextlib import contextmanager
     from src.workflows import workflow_documents_cutover_v1 as documents
     from tests.test_review_batch_atomic_postgres import _console as native
@@ -464,8 +451,8 @@ def test_native_post_commit_refresh_failure_preserves_success(
     def factory(root):
         return native(root, workflow_postgres)
 
-    console, accounts, sid, ids = _setup(tmp_path, factory)
-    client = _client(console)
+    console, accounts, sid, ids = _setup(tmp_path, factory, production_console=production_console)
+    client = _client(console, production_app=production_app)
     before = _state(console, sid)
     committed, injected = [], []
     transaction = documents.workflow_transaction
@@ -613,9 +600,9 @@ def test_native_batch_and_single_review_use_consistent_lock_order(workflow_postg
     assert len([event for event in after[4] if event.get("object_id") in ids + [content_id]]) == 1
 
 
-def test_second_object_storage_conflict_rolls_back_batch(storage, tmp_path, monkeypatch):
-    console, accounts, sid, ids = _setup(tmp_path, storage)
-    client = _client(console)
+def test_second_object_storage_conflict_rolls_back_batch(storage, tmp_path, monkeypatch, *, production_app, production_console):
+    console, accounts, sid, ids = _setup(tmp_path, storage, production_console=production_console)
+    client = _client(console, production_app=production_app)
     before = _state(console, sid)
     if hasattr(console, "workflow_document_store"):
         target, name = console.workflow_document_store, "write_bundle"
@@ -640,22 +627,21 @@ def test_second_object_storage_conflict_rolls_back_batch(storage, tmp_path, monk
     assert _state(storage(tmp_path), sid) == before
 
 
-def test_stale_local_account_roles_are_rechecked(tmp_path):
-    console, accounts, sid, ids = _setup(tmp_path)
-    other = _console(tmp_path)
+def test_stale_account_roles_are_rechecked(tmp_path, *, production_console):
+    console, accounts, sid, ids = _setup(tmp_path, production_console=production_console)
+    other = _console(tmp_path, production_console=production_console)
     account = accounts["reviewer"]["account_id"]
-    other._accounts[account]["roles"] = ["publisher"]
-    other._save_accounts()
+    other.workflow_identity_store.update_roles(account, ["publisher"])
     before = _state(console, sid)
     with pytest.raises(ConsoleError, match="reviewer_role_required"):
         console.batch_confirm_headings(actor_id=account, snapshot_id=sid, object_ids=ids, expected_revision=before[3])
-    assert _state(_console(tmp_path), sid) == before
+    assert _state(_console(tmp_path, production_console=production_console), sid) == before
 
 
 @pytest.mark.parametrize("rejection", ["role", "unsuitable"])
-def test_http_rejection_does_not_write(storage, tmp_path, rejection):
-    console, accounts, sid, ids = _setup(tmp_path, storage)
-    client = _client(console)
+def test_http_rejection_does_not_write(storage, tmp_path, rejection, *, production_app, production_console):
+    console, accounts, sid, ids = _setup(tmp_path, storage, production_console=production_console)
+    client = _client(console, production_app=production_app)
     if rejection == "role":
         assert client.post("/login", data={"username": "publisher.carla", "password": "carla-secret"}, follow_redirects=False).status_code == 303
     else:
@@ -666,11 +652,11 @@ def test_http_rejection_does_not_write(storage, tmp_path, rejection):
     assert _state(storage(tmp_path), sid) == before
 
 
-def test_new_process_restart_preserves_failed_and_committed_batch(storage, tmp_path, monkeypatch):
+def test_new_process_restart_preserves_failed_and_committed_batch(storage, tmp_path, monkeypatch, *, production_console):
     import json
 
-    console, accounts, sid, ids = _setup(tmp_path, storage)
-    mode = "postgres" if hasattr(console, "workflow_review_store") else "local"
+    console, accounts, sid, ids = _setup(tmp_path, storage, production_console=production_console)
+    mode = "postgres"
     before = _state(console, sid)
     original = console.review_object
 
@@ -693,15 +679,15 @@ def test_new_process_restart_preserves_failed_and_committed_batch(storage, tmp_p
 
 @pytest.mark.parametrize("table", ["documents", "document_objects", "publish_authorizations", "review_events"])
 @pytest.mark.parametrize("member", [0, 1])
-def test_native_sql_write_failure_rolls_back_batch(workflow_postgres, tmp_path, monkeypatch, table, member):
+def test_native_sql_write_failure_rolls_back_batch(workflow_postgres, tmp_path, monkeypatch, table, member, *, production_app, production_console):
     from contextlib import contextmanager
     import psycopg
     from psycopg import sql
     from tests.test_review_batch_atomic_postgres import _console as native
 
     factory = lambda root: native(root, workflow_postgres)
-    console, accounts, sid, ids = _setup(tmp_path, factory)
-    client = _client(console)
+    console, accounts, sid, ids = _setup(tmp_path, factory, production_console=production_console)
+    client = _client(console, production_app=production_app)
     before = _state(console, sid)
     failures = []
     original_boundary = console._heading_batch_mutation

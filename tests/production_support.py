@@ -61,9 +61,20 @@ def production_application(root, config, *, azure=False,
         return app
 
 
-def application_for(console):
-    """Return the actual ASGI composition created by this shared factory."""
-    return console._metis_test_application
+def application_for(console, *, environment=None, trusted_origin=None):
+    """The production app, optionally reinstalled with explicit HTTP configuration."""
+    previous = console._metis_test_application  # Only consoles from the shared factory.
+    if environment is None and trusted_origin is None:
+        return previous
+    from src import console_asgi
+    with pytest.MonkeyPatch.context() as patch:
+        configure_production(patch, console.root, console.workflow_document_store.config)
+        for name, value in (environment or {}).items():
+            patch.setenv(name, str(value))
+        app = console_asgi.build_console_app(console, trusted_origin=trusted_origin,
+                                             topology=previous.state.console_topology)
+    console._metis_test_application = app
+    return app
 
 
 def restart_production(console):

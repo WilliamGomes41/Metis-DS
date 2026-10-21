@@ -87,8 +87,8 @@ def test_open_second_review_is_not_reclassified_as_missing_disposition():
 
 
 @pytest.mark.parametrize("gate,task", [(None, "disposition"), ("blocked", "repair")])
-def test_http_followup_is_reachable_and_can_be_resolved_without_losing_history(tmp_path, gate, task):
-    console, accounts, receipt, _ = _system(tmp_path)
+def test_http_followup_is_reachable_and_can_be_resolved_without_losing_history(tmp_path, gate, task, *, production_app, production_console):
+    console, accounts, receipt, _ = _system(tmp_path, production_console=production_console)
     sid = receipt["snapshot_id"]
     objects = console._load_objects(sid)
     target = next(o for o in objects if o["object_type"] not in {"document", "heading"})
@@ -101,7 +101,7 @@ def test_http_followup_is_reachable_and_can_be_resolved_without_losing_history(t
     target["metadata"]["passage_register"] = {"status": "not_yet_assessed", "source": "extract"}
     console._save_objects(sid, objects)
     before = console.objects_revision(sid)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     _login(client, accounts["reviewer_a"]["username"])
     response = client.get(f"/review?document={sid}&task={task}")
     assert response.status_code == 200

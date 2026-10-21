@@ -18,8 +18,8 @@ def policy(accounts, participation=None):
 
 
 @pytest.mark.parametrize("participation", [None, "optional", "required"])
-def test_explicit_participation_survives_restart_and_drives_exact_review(tmp_path, participation):
-    console = _console(tmp_path)
+def test_explicit_participation_survives_restart_and_drives_exact_review(tmp_path, participation, *, production_console):
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     payload = json.loads(_boom_freeze_bytes())
     payload["nodes"][1]["score_points"] = 2
@@ -33,7 +33,7 @@ def test_explicit_participation_survives_restart_and_drives_exact_review(tmp_pat
     assert requires_four_eyes(obj) == (participation == "required")
     console.review_object(actor_id=primary, snapshot_id=sid, object_id=obj["object_id"],
                           decision="approve", confirmed_object_type="node")
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     obj = next(o for o in console.snapshot_objects(sid) if o.get("scorelist"))
     assert console._envelope(sid)["review_policy"] == policy(accounts, participation)
     bindings = console.object_review_bindings(sid)
@@ -49,8 +49,8 @@ def test_explicit_participation_survives_restart_and_drives_exact_review(tmp_pat
         assert review_stage(obj, review_path="boom", bindings=console.object_review_bindings(sid)) is None
 
 
-def test_policy_rejects_duplicate_and_unprivileged_reviewers(tmp_path):
-    console = _console(tmp_path)
+def test_policy_rejects_duplicate_and_unprivileged_reviewers(tmp_path, *, production_console):
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     p = policy(accounts, "required")
     p["assignments"][0]["reviewer_id"] = p["primary"]
@@ -62,8 +62,8 @@ def test_policy_rejects_duplicate_and_unprivileged_reviewers(tmp_path):
         _ingest_boom(console, accounts, named_reviewers=[], review_policy=p)
 
 
-def test_every_required_reviewer_is_needed_optional_cannot_substitute(tmp_path):
-    console = _console(tmp_path)
+def test_every_required_reviewer_is_needed_optional_cannot_substitute(tmp_path, *, production_console):
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     extra = console.create_account(username="reviewer.extra", password="extra-secret", roles=("reviewer",))
     optional = console.create_account(username="reviewer.optional", password="optional-secret", roles=("reviewer",))

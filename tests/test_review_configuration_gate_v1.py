@@ -105,9 +105,9 @@ def test_missing_uploader_id_fails_closed_with_own_code(uploader_id):
     assert contract["authorization_ok"] is False
 
 
-def _ready_with_envelope(tmp_path, monkeypatch, mutate):
+def _ready_with_envelope(tmp_path, monkeypatch, mutate, *, production_console):
     from tests import test_vsa_publish_readiness_ui_v1 as ready
-    console, accounts, receipt, _source = ready._console_with_document(tmp_path)
+    console, accounts, receipt, _source = ready._console_with_document(tmp_path, production_console=production_console)
     ready._complete_review(console, accounts, receipt)
     sid = receipt["snapshot_id"]
     assert console.publication_readiness(sid)["publish_allowed"] is True
@@ -122,37 +122,37 @@ def _ready_with_envelope(tmp_path, monkeypatch, mutate):
     return console.publication_readiness(sid)
 
 
-def test_gate_reads_stored_chosen_configuration(tmp_path, monkeypatch):
+def test_gate_reads_stored_chosen_configuration(tmp_path, monkeypatch, *, production_console):
     def mutate(envelope, accounts):
         envelope["review_configuration"] = _config("one_other", ["rev-elsewhere"])
-    readiness = _ready_with_envelope(tmp_path, monkeypatch, mutate)
+    readiness = _ready_with_envelope(tmp_path, monkeypatch, mutate, production_console=production_console)
     assert readiness["publish_allowed"] is False
     assert "review_configuration_approval_missing" in readiness["blockers"]
 
 
-def test_gate_refuses_invalid_stored_configuration(tmp_path, monkeypatch):
+def test_gate_refuses_invalid_stored_configuration(tmp_path, monkeypatch, *, production_console):
     def mutate(envelope, accounts):
         envelope["review_configuration"] = {"contract": CONTRACT, "option": "everyone"}
-    readiness = _ready_with_envelope(tmp_path, monkeypatch, mutate)
+    readiness = _ready_with_envelope(tmp_path, monkeypatch, mutate, production_console=production_console)
     assert readiness["publish_allowed"] is False
     assert "review_configuration_invalid" in readiness["blockers"]
 
 
 @pytest.mark.parametrize("value", ["", None])
-def test_gate_missing_uploader_id_fails_closed(tmp_path, monkeypatch, value):
+def test_gate_missing_uploader_id_fails_closed(tmp_path, monkeypatch, value, *, production_console):
     def mutate(envelope, accounts):
         envelope["uploader_account_id"] = value
-    readiness = _ready_with_envelope(tmp_path, monkeypatch, mutate)
+    readiness = _ready_with_envelope(tmp_path, monkeypatch, mutate, production_console=production_console)
     assert readiness["publish_allowed"] is False
     assert "uploader_identity_missing" in readiness["blockers"]
 
 
 # --- Review #631 ---------------------------------------------------------------
 
-def _readiness_with_bindings(tmp_path, configuration, rows):
+def _readiness_with_bindings(tmp_path, configuration, rows, *, production_console):
     """A: console-onafhankelijkheid zonder goedgekeurd object (alleen de console-poort beslist)."""
     from tests import test_vsa_publish_readiness_ui_v1 as ready
-    console, accounts, receipt, _source = ready._console_with_document(tmp_path)
+    console, accounts, receipt, _source = ready._console_with_document(tmp_path, production_console=production_console)
     sid = receipt["snapshot_id"]
     envelope = console._envelope(sid)
     bert = accounts["reviewer"]["account_id"]
@@ -171,16 +171,15 @@ def _readiness_with_bindings(tmp_path, configuration, rows):
     ("invalid_binding", lambda bert: _config("one_other", [bert]), [{"valid": False}]),
     ("unknown_object", lambda bert: _config("one_other", [bert]), [{"object_id": "elders"}]),
 ])
-def test_console_independence_uses_configured_approval_over_eligible_reviewers(tmp_path, name, configuration, rows):
-    readiness = _readiness_with_bindings(tmp_path, configuration, rows)
+def test_console_independence_uses_configured_approval_over_eligible_reviewers(tmp_path, name, configuration, rows, *, production_console):
+    readiness = _readiness_with_bindings(tmp_path, configuration, rows, production_console=production_console)
     assert readiness["independence_satisfied"] is False, name
     assert readiness["publish_allowed"] is False, name
     assert "second_named_reviewer_required" in readiness["blockers"], name
 
 
-def test_console_independence_not_met_with_open_objects_or_without_source_text(tmp_path):
-    # A2 (Metis optie b): open objecten tellen mee; zonder brontekst MOET de check dicht.
-    readiness = _readiness_with_bindings(tmp_path, lambda bert: _config("one_other", [bert]), [{}])
+def test_console_independence_not_met_with_open_objects_or_without_source_text(tmp_path, *, production_console):
+    readiness = _readiness_with_bindings(tmp_path, lambda bert: _config("one_other", [bert]), [{}], production_console=production_console)
     assert readiness["independence_satisfied"] is False
 
 
@@ -206,14 +205,14 @@ def test_validate_configuration_refuses_blank_uploader(uploader_id):
 
 # --- Review #631 A2 (Metis optie b) en punt 2 --------------------------------------
 
-def _harness(tmp_path):
+def _harness(tmp_path, *, production_console):
     from tests import test_vsa_publish_readiness_ui_v1 as ready
-    console, accounts, receipt, _source = ready._console_with_document(tmp_path)
+    console, accounts, receipt, _source = ready._console_with_document(tmp_path, production_console=production_console)
     return ready, console, accounts, receipt["snapshot_id"], receipt
 
 
-def test_console_independence_counts_open_content_object(tmp_path):
-    ready, console, accounts, sid, _ = _harness(tmp_path)
+def test_console_independence_counts_open_content_object(tmp_path, *, production_console):
+    ready, console, accounts, sid, _ = _harness(tmp_path, production_console=production_console)
     bert = accounts["reviewer"]["account_id"]
     first, second = [o for o in console.snapshot_objects(sid) if o.get("object_type") == "unclassified"][:2]
     console.review_object(actor_id=bert, snapshot_id=sid, object_id=first["object_id"], decision="approve",
@@ -226,10 +225,10 @@ def test_console_independence_counts_open_content_object(tmp_path):
     assert readiness["publish_allowed"] is False
 
 
-def test_fully_reviewed_fixture_with_chosen_configuration_stays_publishable(tmp_path, monkeypatch):
+def test_fully_reviewed_fixture_with_chosen_configuration_stays_publishable(tmp_path, monkeypatch, *, production_console):
     def mutate(envelope, accounts):
         envelope["review_configuration"] = _config("one_other", [accounts["reviewer"]["account_id"]])
-    readiness = _ready_with_envelope(tmp_path, monkeypatch, mutate)
+    readiness = _ready_with_envelope(tmp_path, monkeypatch, mutate, production_console=production_console)
     assert readiness["independence_satisfied"] is True
     assert readiness["publish_allowed"] is True, readiness["blockers"]
 
@@ -242,9 +241,9 @@ def _participation(console, accounts, sid, reviewer_id):
 
 
 @pytest.mark.parametrize("option", ["uploader_sole", "one_other"])
-def test_chosen_configuration_wins_over_participation_policy(tmp_path, monkeypatch, option):
+def test_chosen_configuration_wins_over_participation_policy(tmp_path, monkeypatch, option, *, production_console):
     from src.operations_console_v1 import ConsoleError
-    ready, console, accounts, sid, receipt = _harness(tmp_path)
+    ready, console, accounts, sid, receipt = _harness(tmp_path, production_console=production_console)
     ready._complete_review(console, accounts, receipt)
     extra = console.create_account(username="extra.dirk", password=ready.TEST_PASSWORD, roles=("reviewer",))["account_id"]
     bert = accounts["reviewer"]["account_id"]
@@ -263,8 +262,8 @@ def test_chosen_configuration_wins_over_participation_policy(tmp_path, monkeypat
     assert console._envelope(sid).get("review_policy") is None
 
 
-def test_legacy_document_participation_unchanged(tmp_path):
-    ready, console, accounts, sid, receipt = _harness(tmp_path)
+def test_legacy_document_participation_unchanged(tmp_path, *, production_console):
+    ready, console, accounts, sid, receipt = _harness(tmp_path, production_console=production_console)
     ready._complete_review(console, accounts, receipt)
     assert console._envelope(sid)["review_configuration"]["source"] == "legacy_default"
     extra = console.create_account(username="extra.dirk", password=ready.TEST_PASSWORD, roles=("reviewer",))["account_id"]
@@ -273,9 +272,8 @@ def test_legacy_document_participation_unchanged(tmp_path):
     assert console._envelope(sid)["review_policy"] is not None
 
 
-def test_sherlock_chosen_one_approved_one_open_blocks_total_readiness(tmp_path, monkeypatch):
-    # Bewaking (Sherlock): de readiness-blocker blijft gelden naast de console-check.
-    ready, console, accounts, sid, _ = _harness(tmp_path)
+def test_sherlock_chosen_one_approved_one_open_blocks_total_readiness(tmp_path, monkeypatch, *, production_console):
+    ready, console, accounts, sid, _ = _harness(tmp_path, production_console=production_console)
     bert = accounts["reviewer"]["account_id"]
     first = next(o for o in console.snapshot_objects(sid) if o.get("object_type") == "unclassified")
     console.review_object(actor_id=bert, snapshot_id=sid, object_id=first["object_id"], decision="approve",
@@ -294,12 +292,11 @@ def test_sherlock_chosen_one_approved_one_open_blocks_total_readiness(tmp_path, 
     assert readiness["independence_satisfied"] is False
 
 
-def test_chosen_without_loadable_source_text_blocks_with_own_code(tmp_path, monkeypatch):
-    # Metis: fail-closed zonder brontekst MOET een eigen code en Nederlandse melding geven.
+def test_chosen_without_loadable_source_text_blocks_with_own_code(tmp_path, monkeypatch, *, production_console):
     import src.source_preparation_context_v1 as context
     from src.operations_console_app import BLOCKER_LABELS
     from src.operations_console_v1 import ConsoleError
-    ready, console, accounts, sid, _ = _harness(tmp_path)
+    ready, console, accounts, sid, _ = _harness(tmp_path, production_console=production_console)
     envelope = console._envelope(sid)
     envelope["review_configuration"] = _config("one_other", [accounts["reviewer"]["account_id"]])
 

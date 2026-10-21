@@ -11,7 +11,7 @@ from src.decision_graph_v1 import graph_issues
 from tests.test_decision_graph_chain import _console, _accounts, _ingest_boom, policy
 
 
-def structure(tmp_path, mode):
+def structure(tmp_path, mode, *, production_console):
     with fitz.open() as doc:
         page = doc.new_page()
         for y, text in [(80, "Hoe vaak?"), (130, "Vaak"), (180, "Soms"),
@@ -21,7 +21,7 @@ def structure(tmp_path, mode):
         page = doc.new_page()
         page.insert_text((70, 80), "Maak een vervolgafspraak.")
         data = doc.tobytes()
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     sid = _ingest_boom(console, accounts, data=data, filename="shared.pdf", content_type="application/pdf",
         named_reviewers=[], review_policy=policy(accounts))["snapshot_id"]
@@ -46,8 +46,8 @@ def structure(tmp_path, mode):
 
 
 @pytest.mark.parametrize("mode", ["single", "multiple"])
-def test_shared_cross_page_outcome_and_non_boolean_choices(tmp_path, mode):
-    graph, objects, evidence = structure(tmp_path, mode)
+def test_shared_cross_page_outcome_and_non_boolean_choices(tmp_path, mode, *, production_console):
+    graph, objects, evidence = structure(tmp_path, mode, production_console=production_console)
     assert graph_issues(graph, objects, evidence) == []
     missing = deepcopy(graph)
     missing["edges"].pop(1)

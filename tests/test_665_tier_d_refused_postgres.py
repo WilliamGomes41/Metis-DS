@@ -681,7 +681,10 @@ def _scenario_heading_batch(request, tmp_path, monkeypatch):
     config = request.getfixturevalue("workflow_postgres")
     from tests import test_a08_heading_batch_atomic as a08
     from tests.test_review_batch_atomic_postgres import _console as native
-    a08.test_success_duplicates_repeat_and_stale(lambda root: native(root, config), tmp_path)
+    a08.test_success_duplicates_repeat_and_stale(
+        lambda root: native(root, config), tmp_path,
+        production_app=request.getfixturevalue("production_app"),
+        production_console=request.getfixturevalue("production_console"))
     return config
 
 
@@ -691,7 +694,9 @@ def _scenario_source_repair(request, tmp_path, monkeypatch):
     state, _canonical, _source = native_state(tmp_path, config=request.getfixturevalue("complete_postgres"))
     counter = iter(range(100))
     a09.test_old_approval_is_retained_and_invalidated(
-        lambda **kwargs: a09.setup_repair(tmp_path, factory=lambda: state(f"t13-{next(counter)}"), **kwargs))
+        lambda **kwargs: a09.setup_repair(tmp_path, factory=lambda: state(f"t13-{next(counter)}"), **kwargs),
+        production_app=request.getfixturevalue("production_app"),
+        production_console=request.getfixturevalue("production_console"))
     return PostgresCanonicalConfig(dsn=os.environ["METIS_TEST_POSTGRES_DSN"])
 
 

@@ -13,8 +13,8 @@ from src.operations_console_v1 import ConsoleError
 from tests.test_decision_graph_chain import _console, _accounts, ingest, finish, policy
 
 
-def test_successor_keeps_source_and_prior_graph_with_new_object_identity(tmp_path):
-    console = _console(tmp_path)
+def test_successor_keeps_source_and_prior_graph_with_new_object_identity(tmp_path, *, production_console):
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     sid = ingest(console, accounts)["snapshot_id"]
     before = deepcopy(console._envelope(sid))
@@ -43,13 +43,12 @@ def test_successor_keeps_source_and_prior_graph_with_new_object_identity(tmp_pat
     assert back["sha256"] == before["sha256"]
 
 
-def test_successor_form_uses_kernel_command_and_requires_reason(tmp_path):
+def test_successor_form_uses_kernel_command_and_requires_reason(tmp_path, *, production_app, production_console):
     from fastapi.testclient import TestClient
-    from src.operations_console_app import create_console_app
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     sid = ingest(console, accounts)["snapshot_id"]
-    with TestClient(create_console_app(console), base_url="https://testserver") as client:
+    with TestClient(production_app(console), base_url="https://testserver") as client:
         client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
         form = client.get("/review/policy", params={"document": sid})
         assert 'formaction="/review/successor"' in form.text

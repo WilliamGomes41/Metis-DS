@@ -25,7 +25,6 @@ from src.g2_source_store import AzureBlobSourceStore, build_g2_locator
 from src.metis_mcp_auth_v1 import McpAuthenticator, McpConfig
 from src.metis_mcp_queries_v1 import McpQueries, McpQueryError
 from src.metis_mcp_v1 import TOOLS, redact
-from src.operations_console_app import create_console_app
 from src.processing_evidence_export_v1 import processing_evidence_tables
 from src.review_ledger import read_events
 from test_vsa_review_workboard_v1 import _system, _login
@@ -105,13 +104,20 @@ def test_stale_token_cannot_override_block_or_current_roles(signed):
 
 
 @pytest.fixture
-def connection(tmp_path, monkeypatch, signed):
-    console, accounts, first, second = _system(tmp_path)
-    auth, identity_store, token = authenticator(accounts['reviewer_a'], signed)
+def connection(tmp_path, monkeypatch, signed, *, production_app, production_console):
+    console, accounts, first, second = _system(tmp_path, production_console=production_console)
+    identity_store = console.workflow_identity_store
+    with identity_store._connect() as connection:
+        connection.execute("INSERT INTO workflow.entra_identities(tenant_id,object_id,account_id,evidence) "
+                           "VALUES(%s,%s,%s,'[]'::jsonb)", (TENANT, OID, accounts['reviewer_a']['account_id']))
+    key, claims = signed
+    auth = McpAuthenticator(CONFIG, SimpleNamespace(store=identity_store))
+    auth.keys = SimpleNamespace(get_signing_key_from_jwt=lambda token: SimpleNamespace(key=key.public_key()))
+    token = jwt.encode(claims, key, algorithm='RS256')
     import src.metis_mcp_v1 as mcp
     monkeypatch.setattr(mcp, 'configuration', lambda identity, origin: (CONFIG, 'Geconfigureerd; verbinding met ChatGPT nog testen'))
     monkeypatch.setattr(mcp, 'McpAuthenticator', lambda config, identity: auth)
-    client = TestClient(create_console_app(console, trusted_origin='https://testserver'), base_url='https://testserver')
+    client = TestClient(production_app(console, trusted_origin='https://testserver'), base_url='https://testserver')
     def call(name, args=None):
         return client.post('/mcp', headers={'Authorization': 'Bearer '+token, 'MCP-Protocol-Version': '2025-11-25'},
                            json={'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': name, 'arguments': args or {}}})
@@ -151,7 +157,9 @@ def test_protocol_auth_settings_and_unchanged_csrf(connection):
     assert settings.status_code == 200 and CONFIG.resource in settings.text
     assert 'Configuratie voor de beheerder' not in settings.text
     assert client.post('/mcp', json={}).status_code == 401
-    store.blocked = True
+    with store._connect() as connection:
+        connection.execute('UPDATE workflow.entra_identities SET blocked=true WHERE tenant_id=%s AND object_id=%s',
+                           (TENANT, OID))
     assert call('search_documents').status_code == 403
 
 
@@ -178,17 +186,19 @@ def test_scope_export_equivalence_and_no_domain_writes(connection):
     assert before == (console._envelopes, console._bindings, read_events(console._ledger_path))
     assert objects_before == {s: console.snapshot_objects(s, include_blocked=True) for s in console._envelopes}
     # Grant removed between requests: no cached document entitlement.
-    console._envelopes[sid]['named_reviewers'] = []
+    envelope = deepcopy(console._envelope(sid))
+    envelope['named_reviewers'] = []
+    console.workflow_document_store.write_bundle(envelope=envelope)
     assert call('get_document', {'snapshot_id': sid}).json()['result']['isError']
 
 
-def test_disabled_endpoint_and_config_fail_closed(tmp_path, monkeypatch):
-    console, _, _, _ = _system(tmp_path)
+def test_disabled_endpoint_and_config_fail_closed(tmp_path, monkeypatch, *, production_app, production_console):
+    console, _, _, _ = _system(tmp_path, production_console=production_console)
     monkeypatch.delenv('METIS_MCP_ENABLED', raising=False)
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     assert client.post('/mcp', json={}).status_code == 503
     monkeypatch.setenv('METIS_MCP_ENABLED', '1')
-    assert TestClient(create_console_app(console)).post('/mcp', json={}).status_code == 503
+    assert TestClient(production_app(console)).post('/mcp', json={}).status_code == 503
     _login(client, 'publisher.carla')
     settings = client.get('/settings/chatgpt').text
     assert 'Configuratie voor de beheerder' in settings
@@ -233,16 +243,14 @@ def test_concurrent_probe_reads_and_safe_dependency_failure(monkeypatch):
     assert store.probe('https://evil.example/') == {'status': 'invalid_locator'}
 
 
-def test_publisher_compare_publication_and_deletion_evidence(tmp_path):
-    console, accounts, first, second = _system(tmp_path)
+def test_publisher_compare_publication_and_deletion_evidence(tmp_path, *, production_console):
+    console, accounts, first, second = _system(tmp_path, production_console=production_console)
     queries = McpQueries(console, 'https://testserver')
     account, sid = accounts['publisher'], first['snapshot_id']
     result = queries.read(account, 'compare_versions', {'snapshot_id': sid, 'other_snapshot_id': second['snapshot_id']})
     assert result['objects_revision'] and result['other_objects_revision']
-    console.canonical_publication_store = SimpleNamespace(active_publication_rows=lambda: [])
     assert queries.read(account, 'get_publication_status', {'snapshot_id': sid})['active_registry_object_count'] == 0
     assert queries.read(account, 'get_storage_status', {'snapshot_id': sid})['remote_source']['status'] == 'not_checked'
-    console.canonical_publication_store = None
     console.delete_unpublished_snapshot(actor_id=accounts['researcher']['account_id'], snapshot_id=sid, confirmed=True, confirm_title='Document A')
     deleted = queries.read(account, 'get_storage_status', {'snapshot_id': sid})
     assert deleted['document_registered'] is False
@@ -294,11 +302,11 @@ def test_native_identity_read_and_block_survive_new_authenticator(recovery_postg
     assert error.value.status_code == 403
 
 
-def test_entra_navigation_does_not_intercept_mcp_discovery(tmp_path, monkeypatch):
+def test_entra_navigation_does_not_intercept_mcp_discovery(tmp_path, monkeypatch, *, production_app, production_console):
     from src.console_entra_v1 import EntraConfig
     from src.operations_console_v1 import ConsoleError
     import src.console_entra_v1 as entra
-    console, _, _, _ = _system(tmp_path)
+    console, _, _, _ = _system(tmp_path, production_console=production_console)
     def deny(token):
         raise ConsoleError('not_authenticated')
     identity = SimpleNamespace(config=EntraConfig(TENANT, AUDIENCE, 'test-only-secret', 'https://testserver'), session_account=deny, renew_session=deny)
@@ -306,7 +314,7 @@ def test_entra_navigation_does_not_intercept_mcp_discovery(tmp_path, monkeypatch
     monkeypatch.setenv('METIS_MCP_ENABLED', '1')
     monkeypatch.setenv('METIS_MCP_AUDIENCE', AUDIENCE)
     monkeypatch.setenv('METIS_MCP_CLIENT_ID', CLIENT)
-    client = TestClient(create_console_app(console, trusted_origin='https://testserver'), base_url='https://testserver')
+    client = TestClient(production_app(console, trusted_origin='https://testserver'), base_url='https://testserver')
     assert client.get('/.well-known/oauth-protected-resource/mcp', follow_redirects=False).status_code == 200
     assert client.get('/.well-known/oauth-protected-resource', follow_redirects=False).status_code == 200
     assert client.get('/mcp', follow_redirects=False).status_code == 401
