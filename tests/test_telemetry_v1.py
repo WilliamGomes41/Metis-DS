@@ -578,19 +578,29 @@ def test_concurrent_store_lock_wait_is_measured_and_stale_request_is_aborted(tmp
 
     thread = threading.Thread(target=holder)
     thread.start()
-    holding.wait(5)
     app = production_app(console)
 
     @app.post('/write')
     def write():
-        with console._store_write_lock():
-            return {'ok': True}
-
-    with TestClient(app) as client:
+        # Start the hold interval only once the request reaches the writer;
+        # client/middleware startup can otherwise outlast the entire interval.
         timer = threading.Timer(0.15, release.set)
         timer.start()
-        assert client.post('/write').status_code == 200
-    thread.join(5)
+        try:
+            with console._store_write_lock():
+                return {'ok': True}
+        finally:
+            timer.cancel()
+            timer.join(5)
+
+    try:
+        assert holding.wait(5)
+        with TestClient(app) as client:
+            assert client.post('/write').status_code == 200
+    finally:
+        release.set()
+        thread.join(5)
+    assert not thread.is_alive()
     wait = [e for e in events if e['event'] == 'request_finished'][-1]['phases']['store_lock_wait']
     assert wait['calls'] == 1 and wait['inclusive_ms'] >= 100
     now = time.time()
