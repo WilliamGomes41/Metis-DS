@@ -21,8 +21,8 @@ HTML = b"<html><body><h1>Bron</h1><p>Bespreek als verpleegkundige de sociale con
 
 
 @pytest.fixture
-def system(tmp_path):
-    console = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources" / "private", runtime=tmp_path / "runtime")
+def system(tmp_path, *, production_console):
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources" / "private", runtime=tmp_path / "runtime")
     password = token_urlsafe(24)
     uploader = console.create_account("uploader", password, roles=("researcher", "reviewer"), display_name="Onderzoeker")
     first = console.create_account("eerste", token_urlsafe(24), roles=("reviewer",), display_name="Eerste")
@@ -44,8 +44,8 @@ def _kernel(console, ids, title, **extra):
     return console.receive_source(**command)["snapshot_id"]
 
 
-def _client(console, password):
-    client = TestClient(create_console_app(console), base_url="https://testserver")
+def _client(console, password, *, production_app):
+    client = TestClient(production_app(console), base_url="https://testserver")
     assert client.post("/login", data={"username": "uploader", "password": password}).status_code == 200
     return client
 
@@ -150,27 +150,27 @@ def test_kernel_invalid_choice_is_refused_before_any_write(system, choice, code)
     assert console.list_envelopes() == []
 
 
-def test_http_form_requires_choice_next_to_old_fields(system):
+def test_http_form_requires_choice_next_to_old_fields(system, *, production_app):
     console, password, _ = system
-    page = _client(console, password).get("/ingest").text
+    page = _client(console, password, production_app=production_app).get("/ingest").text
     assert 'name="review_mode"' in page and 'name="primary_reviewer"' in page
     for option in ("uploader_sole", "two_others", "one_other"):
         assert f'name="review_option" value="{option}" required' in page
     assert 'name="four_eyes"' in page and 'name="review_reviewers"' in page and 'name="review_readers"' in page
 
 
-def test_http_upload_without_choice_is_refused(system):
+def test_http_upload_without_choice_is_refused(system, *, production_app):
     console, password, ids = system
-    response = _client(console, password).post("/ingest", data=_form(ids),
+    response = _client(console, password, production_app=production_app).post("/ingest", data=_form(ids),
                                                files={"file": ("bron.html", HTML, "text/html")})
     assert response.status_code == 400
     assert "review_configuration_required" in response.text
     assert console.list_envelopes() == []
 
 
-def test_http_upload_with_choice_stores_chosen(system):
+def test_http_upload_with_choice_stores_chosen(system, *, production_app):
     console, password, ids = system
-    response = _client(console, password).post("/ingest", data=_form(
+    response = _client(console, password, production_app=production_app).post("/ingest", data=_form(
         ids, review_option="one_other", four_eyes="yes", review_reviewers=[ids["first"]],
         review_readers=[ids["reader"]]), files={"file": ("bron.html", HTML, "text/html")}, follow_redirects=False)
     assert response.status_code == 303, response.text
@@ -181,9 +181,9 @@ def test_http_upload_with_choice_stores_chosen(system):
     assert console._envelope(sid)["named_reviewers"] == [ids["first"]]
 
 
-def test_http_non_legacy_mode_disagreeing_with_choice_is_refused(system):
+def test_http_non_legacy_mode_disagreeing_with_choice_is_refused(system, *, production_app):
     console, password, ids = system
-    response = _client(console, password).post("/ingest", data=_form(
+    response = _client(console, password, production_app=production_app).post("/ingest", data=_form(
         ids, named_reviewers=[], review_mode="single", primary_reviewer=ids["first"],
         review_option="one_other", review_reviewers=[ids["second"]]),
         files={"file": ("bron.html", HTML, "text/html")})
@@ -250,10 +250,9 @@ def test_same_command_with_changed_choice_is_an_idempotency_conflict(system):
     assert len(console.list_envelopes()) == 1
 
 
-def test_legacy_mode_uploader_sole_without_reviewers_is_stored(system):
-    # 2b-3: uploader_sole MAG NIET meer met named_reviewers_required worden geweigerd.
+def test_legacy_mode_uploader_sole_without_reviewers_is_stored(system, *, production_app):
     console, password, ids = system
-    response = _client(console, password).post("/ingest", data=_form(ids, named_reviewers=[], review_option="uploader_sole"),
+    response = _client(console, password, production_app=production_app).post("/ingest", data=_form(ids, named_reviewers=[], review_option="uploader_sole"),
                                                files={"file": ("bron.html", HTML, "text/html")}, follow_redirects=False)
     assert response.status_code == 303, response.text
     sid = response.headers["location"].split("document=")[1].split("&")[0]
@@ -371,11 +370,22 @@ def test_uploader_sole_overview_shows_uploader_as_reviewer(system):
     participation_choices(console, envelope)
 
 
-def test_uploader_sole_workboard_lists_document_for_uploader(system):
+def test_uploader_sole_workboard_lists_document_for_uploader(system, *, production_app):
     console, password, ids = system
     _uploader_sole(console, ids)
-    response = _client(console, password).get("/review?work=all")
+    response = _client(console, password, production_app=production_app).get("/review?work=all")
     assert response.status_code == 200
     assert "Alleen uploader" in response.text
     assert "wacht op reviewer" not in response.text.lower()
     assert "wacht op andere reviewer" not in response.text.lower()
+
+
+def test_stale_local_account_cannot_legitimize_an_unknown_reader(system):
+    console, _, ids = system
+    console._accounts['stale-reader'] = {'account_id': 'stale-reader', 'roles': ['reviewer']}
+    with pytest.raises(ConsoleError, match='^unknown_reader$'):
+        _kernel(console, ids, 'Stale reader', review_choice={
+            'option': 'one_other', 'four_eyes_required': False,
+            'reviewers': [ids['first']], 'readers': ['stale-reader'],
+        })
+    assert console.list_envelopes() == []

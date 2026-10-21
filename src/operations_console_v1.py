@@ -1304,7 +1304,8 @@ class OperationsConsole:
             value = validate_configuration(value, uploader_id=uploader_id)
         except ValueError as exc:
             raise ConsoleError(str(exc)) from None
-        if any(reader not in self._accounts for reader in value["readers"]):
+        account_ids = {account["account_id"] for account in self.list_accounts()}
+        if any(reader not in account_ids for reader in value["readers"]):
             raise ConsoleError("unknown_reader")
         return value
 
