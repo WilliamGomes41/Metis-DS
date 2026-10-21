@@ -1,6 +1,6 @@
 {
   "main_commit": "8059c67d758b81290757c059b122ab4f3d6db543",
-  "first_pr_head": "79d053e089730a13a45fcafa57081b96ee58b2a6",
+  "first_pr_head": "68350e3aae28865a710500943008f117f20997c1",
   "change": "Preserve #790 deduplication by executing the complete measured suite once, then export existing native proof artifacts from its JUnit; all previous semantic/no-skip validators remain.",
   "ci_contracts": {
     "tests": 34,

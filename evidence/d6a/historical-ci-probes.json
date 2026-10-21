@@ -38,5 +38,15 @@
     }
   ],
   "runtime_changes": false,
-  "ci_rerun": "pending; existing full suite measurement is allowed to finish before pushing this workflow-only correction"
+  "ci_rerun": "pending; existing full suite measurement is allowed to finish before pushing this workflow-only correction",
+  "native_acceptance_after_repair": {
+    "commit": "68350e3",
+    "tests": 206,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "junit": "d6a-first-native-acceptance.xml",
+    "sha256": "8ee3b6a0baefdb8d029b52b911ea3fe108b32240fdc9e6585324963b88171c9e",
+    "seconds": 131.616
+  }
 }

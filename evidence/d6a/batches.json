@@ -55,9 +55,9 @@
     "current_delivery": {
       "portion": "02",
       "head": "codex/d6a-02-native-fixtures",
-      "head_commit": "0119bbb68cb607ef0478abbc3360727a7025857f",
+      "head_commit": "a9f6758a37369e20add78284acda67923a8ba0e0",
       "base": "codex/d6a-postgres-tests",
-      "base_commit": "79d053e089730a13a45fcafa57081b96ee58b2a6",
+      "base_commit": "68350e3aae28865a710500943008f117f20997c1",
       "test_files": [
         "tests/test_api_access_lifecycle_v1.py",
         "tests/test_api_access_postgres_v1.py",
@@ -108,9 +108,9 @@
     "current_delivery": {
       "portion": "03",
       "head": "codex/d6a-03-reader-authority",
-      "head_commit": "cb76b4838b6b14f0efc97e119d151a5038c163ed",
+      "head_commit": "df33c1c4ba5f57d9048a43e38d795cf2edc7d6d0",
       "base": "codex/d6a-02-native-fixtures",
-      "base_commit": "0119bbb68cb607ef0478abbc3360727a7025857f",
+      "base_commit": "a9f6758a37369e20add78284acda67923a8ba0e0",
       "test_files": [
         "tests/test_review_configuration_upload_v1.py"
       ],
@@ -167,9 +167,9 @@
     "current_delivery": {
       "portion": "04",
       "head": "codex/d6a-04-console-pages",
-      "head_commit": "7dd093e6d449d8e0f51a70c68c46bef2073405b2",
+      "head_commit": "fe0f1a3af38478b711783ab6ef0f5be1b52f39ce",
       "base": "codex/d6a-03-reader-authority",
-      "base_commit": "cb76b4838b6b14f0efc97e119d151a5038c163ed",
+      "base_commit": "df33c1c4ba5f57d9048a43e38d795cf2edc7d6d0",
       "test_files": [
         "tests/test_console_metis_dictionary.py",
         "tests/test_console_review_card_two_column.py",
@@ -240,9 +240,9 @@
     "current_delivery": {
       "portion": "05",
       "head": "codex/d6a-05-console-workflows",
-      "head_commit": "8f54a6944deb17bbefd748e2c503fd5ba4bf2a98",
+      "head_commit": "9edf7b8cc6b989613aac8f4aa3ad57886169d397",
       "base": "codex/d6a-04-console-pages",
-      "base_commit": "7dd093e6d449d8e0f51a70c68c46bef2073405b2",
+      "base_commit": "fe0f1a3af38478b711783ab6ef0f5be1b52f39ce",
       "test_files": [
         "tests/test_a1_instrumentation.py",
         "tests/test_bounded_processing_lifecycle.py",
@@ -318,9 +318,9 @@
     "current_delivery": {
       "portion": "06",
       "head": "codex/d6a-06-native-graphs",
-      "head_commit": "8ac653d4037ce90ffdd3187143384de23f104207",
+      "head_commit": "647d8d7e89256cf6849eaa0da743974c93a0f0db",
       "base": "codex/d6a-05-console-workflows",
-      "base_commit": "8f54a6944deb17bbefd748e2c503fd5ba4bf2a98",
+      "base_commit": "9edf7b8cc6b989613aac8f4aa3ad57886169d397",
       "test_files": [
         "tests/test_665_tier_d_refused_postgres.py",
         "tests/test_a09_source_repair.py",
@@ -415,9 +415,9 @@
     "current_delivery": {
       "portion": "07",
       "head": "codex/d6a-07-production-review",
-      "head_commit": "f348e079850dbebc8938c46390821bb6ad46d308",
+      "head_commit": "00e2028f7281e4f2759b63180b855971037d0331",
       "base": "codex/d6a-06-native-graphs",
-      "base_commit": "8ac653d4037ce90ffdd3187143384de23f104207",
+      "base_commit": "647d8d7e89256cf6849eaa0da743974c93a0f0db",
       "test_files": [
         "tests/test_closed_review_loop_http_negative.py",
         "tests/test_closed_review_loop_v1.py",
@@ -475,9 +475,9 @@
     "current_delivery": {
       "portion": "08",
       "head": "codex/d6a-08-key-list",
-      "head_commit": "26b16091842e3a0e82e00d473e39db98d3a79196",
+      "head_commit": "39127a5206e913d27af1e5e3b62fc30758d2e2d0",
       "base": "codex/d6a-07-production-review",
-      "base_commit": "f348e079850dbebc8938c46390821bb6ad46d308",
+      "base_commit": "00e2028f7281e4f2759b63180b855971037d0331",
       "test_files": [
         "tests/test_postgres_key_list_receipts.py"
       ],
@@ -538,9 +538,9 @@
     "current_delivery": {
       "portion": "09",
       "head": "codex/d6a-09-source-formation",
-      "head_commit": "b0a3c21512447171d7ecbe01c2b524dce5780a53",
+      "head_commit": "54ab77721f40e7a83420bce2320989dca594e310",
       "base": "codex/d6a-08-key-list",
-      "base_commit": "26b16091842e3a0e82e00d473e39db98d3a79196",
+      "base_commit": "39127a5206e913d27af1e5e3b62fc30758d2e2d0",
       "test_files": [
         "tests/test_a3_attempt_correctness.py",
         "tests/test_admission_language_variation.py",
@@ -613,9 +613,9 @@
     "current_delivery": {
       "portion": "10",
       "head": "codex/d6a-10-processing-routes",
-      "head_commit": "6ce3f52bfd46acd2be635622c2fc281753d13702",
+      "head_commit": "c69d44383ea0ab16b76aed6343d3b877aeaa12c7",
       "base": "codex/d6a-09-source-formation",
-      "base_commit": "b0a3c21512447171d7ecbe01c2b524dce5780a53",
+      "base_commit": "54ab77721f40e7a83420bce2320989dca594e310",
       "test_files": [
         "tests/test_a04_session_availability.py",
         "tests/test_availability_repair.py",
@@ -674,9 +674,9 @@
     "current_delivery": {
       "portion": "11",
       "head": "codex/d6a-11-native-composition",
-      "head_commit": "acbd9c3830f5e7bc7524af98db95868346712ff5",
+      "head_commit": "008e8403cfaab8bc34cdfd6cff503ba3ec8e3be0",
       "base": "codex/fix-pg-command-review-evidence",
-      "base_commit": "1a2badaaf405304de876938e4d77649492f1b8ef",
+      "base_commit": "c4cbe75dced2988ecf57a681bf05bc08a9716ca2",
       "test_files": [
         "tests/test_678_store_command_postgres.py",
         "tests/test_a03_formation_coverage.py",
@@ -743,9 +743,9 @@
     "current_delivery": {
       "portion": "12",
       "head": "codex/d6a-12-source-context",
-      "head_commit": "fe9d186ae335565bf10a9bb7b22af4bea5562f07",
+      "head_commit": "9761719f0a7104e396352f01bc45f0ed4e5a72ed",
       "base": "codex/d6a-11-native-composition",
-      "base_commit": "acbd9c3830f5e7bc7524af98db95868346712ff5",
+      "base_commit": "008e8403cfaab8bc34cdfd6cff503ba3ec8e3be0",
       "test_files": [
         "tests/test_a06_selected_occurrence_relations.py",
         "tests/test_a07_strength_binding.py",
@@ -809,9 +809,9 @@
     "current_delivery": {
       "portion": "13",
       "head": "codex/d6a-13-navigation-auth",
-      "head_commit": "be50496f30a4c538292f2f4dfb9ba7be62d0bfe2",
+      "head_commit": "0e9dfabd246f2340783128c95acb2ad1dabbdd7e",
       "base": "codex/d6a-12-source-context",
-      "base_commit": "fe9d186ae335565bf10a9bb7b22af4bea5562f07",
+      "base_commit": "9761719f0a7104e396352f01bc45f0ed4e5a72ed",
       "test_files": [
         "tests/test_account_retirement_v1.py",
         "tests/test_console_access_availability.py",
@@ -885,9 +885,9 @@
     "current_delivery": {
       "portion": "14",
       "head": "codex/d6a-14-workboards",
-      "head_commit": "b65c4182c56982404f758d8fd4962af3f3ecd1a2",
+      "head_commit": "0b387078f4789389d16883db7121837168d943c1",
       "base": "codex/d6a-13-navigation-auth",
-      "base_commit": "be50496f30a4c538292f2f4dfb9ba7be62d0bfe2",
+      "base_commit": "0e9dfabd246f2340783128c95acb2ad1dabbdd7e",
       "test_files": [
         "tests/test_console_cleanup_v1.py",
         "tests/test_console_feedback_v1.py",
@@ -964,9 +964,9 @@
     "current_delivery": {
       "portion": "15",
       "head": "codex/d6a-15-decision-console",
-      "head_commit": "8b892bc9fcf0dd04c034e39df343d8b759e53025",
+      "head_commit": "608ad97d855439b55a65003e7f2e079c0c1e0ce7",
       "base": "codex/d6a-14-workboards",
-      "base_commit": "b65c4182c56982404f758d8fd4962af3f3ecd1a2",
+      "base_commit": "0b387078f4789389d16883db7121837168d943c1",
       "test_files": [
         "tests/test_665_tier_d_refused_postgres.py",
         "tests/test_a08_heading_batch_atomic.py",
@@ -1045,9 +1045,9 @@
     "current_delivery": {
       "portion": "16",
       "head": "codex/d6a-16-semantics-reservations",
-      "head_commit": "daa3ee2a3476c233bb9d00e4b8b7d48613f12277",
+      "head_commit": "2ed0bf416ba8e59f4b9e7ed8e3a2c00e5c0d8d85",
       "base": "codex/d6a-15-decision-console",
-      "base_commit": "8b892bc9fcf0dd04c034e39df343d8b759e53025",
+      "base_commit": "608ad97d855439b55a65003e7f2e079c0c1e0ce7",
       "test_files": [
         "tests/test_attempt_diagnostics_v1.py",
         "tests/test_c2_pinned_configuration_fence.py",
@@ -1120,9 +1120,9 @@
     "current_delivery": {
       "portion": "17",
       "head": "codex/d6a-17-publication-authority",
-      "head_commit": "595ee5de91d0cec23452e3f4335d76bd1da47133",
+      "head_commit": "fffcf08cc3e1885d1b22dad1612f7b9f9e4553fb",
       "base": "codex/d6a-16-semantics-reservations",
-      "base_commit": "daa3ee2a3476c233bb9d00e4b8b7d48613f12277",
+      "base_commit": "2ed0bf416ba8e59f4b9e7ed8e3a2c00e5c0d8d85",
       "test_files": [
         "tests/test_azure_blob_publication_authority_v1.py",
         "tests/test_console_publication_c5.py",
@@ -1184,9 +1184,9 @@
     "current_delivery": {
       "portion": "18",
       "head": "codex/d6a-18-review-surfaces",
-      "head_commit": "683f7cc32be522496df753a3c6c1804ff102b0b5",
+      "head_commit": "13c46f723072fd50503ec3c26f9f2221dec743f0",
       "base": "codex/d6a-17-publication-authority",
-      "base_commit": "595ee5de91d0cec23452e3f4335d76bd1da47133",
+      "base_commit": "fffcf08cc3e1885d1b22dad1612f7b9f9e4553fb",
       "test_files": [
         "tests/test_deterministic_review_repair_v1.py",
         "tests/test_ingest_beschikbaarheid.py",
@@ -1257,9 +1257,9 @@
     "current_delivery": {
       "portion": "19",
       "head": "codex/d6a-19-runtime-boundaries",
-      "head_commit": "3b74ba873294e07a45e0c1586edce9edbdec8040",
+      "head_commit": "37cb1520d7456f61a078d45213b67cc22557ac36",
       "base": "codex/d6a-18-review-surfaces",
-      "base_commit": "683f7cc32be522496df753a3c6c1804ff102b0b5",
+      "base_commit": "13c46f723072fd50503ec3c26f9f2221dec743f0",
       "test_files": [
         "tests/test_665_tier_d_refused_postgres.py",
         "tests/test_718_workflow_topology.py",
@@ -1364,9 +1364,9 @@
     "current_delivery": {
       "portion": "21",
       "head": "codex/d6a-21-characterization",
-      "head_commit": "29c708426a6febd1b4c06da0905274921b3adba6",
+      "head_commit": "ec984703d6a11005cffe5a6b3e0d62abc90d8645",
       "base": "codex/d6a-19-runtime-boundaries",
-      "base_commit": "3b74ba873294e07a45e0c1586edce9edbdec8040",
+      "base_commit": "37cb1520d7456f61a078d45213b67cc22557ac36",
       "test_files": [
         "tests/characterization/test_ingest.py",
         "tests/characterization/test_ingest_boundaries.py",
@@ -1416,9 +1416,9 @@
     "current_delivery": {
       "portion": "22",
       "head": "codex/d6a-22-batch-authority",
-      "head_commit": "318a0558db865f297d10892b790f3b62693218d3",
+      "head_commit": "03c1c55070c3378dbab0c92e26c42a38a7328c5e",
       "base": "codex/d6a-21-characterization",
-      "base_commit": "29c708426a6febd1b4c06da0905274921b3adba6",
+      "base_commit": "ec984703d6a11005cffe5a6b3e0d62abc90d8645",
       "test_files": [
         "tests/test_v233_product_proportionate_review.py"
       ],
