@@ -1,0 +1,275 @@
+{
+  "date": "2026-08-19",
+  "clinical_review": {
+    "first_review": "20/20 approved",
+    "second_review": "12/12 approved",
+    "second_reviewer": "recorded_in_controlled_audit_store",
+    "complete": true
+  },
+  "prepublication": {
+    "status": "BLOCKED",
+    "input_objects": 21,
+    "active_objects": 21,
+    "eligible_objects": 0,
+    "excluded_objects": [],
+    "verified_source_count": 0,
+    "errors": [
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-document",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_integrity_not_verified",
+          "unresolved_uncertainty"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-glucocorticoids-40plus-01",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-condition-screening-60plus",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-03",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-table-risk-score",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-01",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-02",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-03",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-04",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-05",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-06",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-07",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-08",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      },
+      {
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-background-score-footnote",
+        "errors": [
+          "source_checksum_not_in_verified_registry",
+          "source_checksum_not_sha256",
+          "source_fragment_coordinates_unavailable",
+          "source_integrity_not_verified"
+        ]
+      }
+    ]
+  },
+  "holdout": {
+    "holdout_id": "fractuurpreventie-page15-holdout-v1.1",
+    "acceptance_status": "FAIL",
+    "metrics": {
+      "published_corpus_questions": 24,
+      "retrieve_questions": 18,
+      "retrieve_any_hit_at_5": 0.944444,
+      "micro_expected_object_recall_at_5": 0.9,
+      "abstain_questions": 6,
+      "abstention_accuracy": 0.833333,
+      "projection_content_integrity": 1.0,
+      "content_checks": {
+        "passed": 25,
+        "total": 25
+      }
+    },
+    "false_answer_cases": [
+      {
+        "id": "FP-H-N03",
+        "question": "Hoe vaak moet een DXA-meting worden herhaald tijdens behandeling?",
+        "returned_object_ids": [
+          "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus",
+          "vvn-osteoporose-fractuurpreventie-2024-p015-rec-glucocorticoids-40plus-01",
+          "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02",
+          "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01",
+          "vvn-osteoporose-fractuurpreventie-2024-p015-score-08"
+        ],
+        "reason": "at_least_one_child_engine_passed_then_rrf_fused"
+      }
+    ],
+    "retrieval_misses": [
+      {
+        "id": "FP-H-S02",
+        "question": "Wat is het puntenaantal dat bij 70 jaar of ouder hoort?",
+        "expected_object_ids": [
+          "vvn-osteoporose-fractuurpreventie-2024-p015-score-02"
+        ],
+        "returned_object_ids": [],
+        "actual_behavior": "abstain"
+      }
+    ],
+    "policy": "No engine tuning is performed on this locked holdout. A future retrieval change requires a new independent holdout, preferably on a second guideline."
+  },
+  "tests": {
+    "passed": 100
+  },
+  "rag_acceptance": "BLOCKED_PENDING_SOURCE_INTEGRITY_AND_NEW_INDEPENDENT_ACCEPTANCE",
+  "retrieval_safety_v2_1": {
+    "status": "DEVELOPMENT_PASS",
+    "engine": "safe-retrieval-v1.0.0",
+    "product_api_service_version": "product-api-v1.1.0",
+    "development_metrics": {
+      "retrieve_any_hit_at_5": 1.0,
+      "abstention_accuracy": 1.0,
+      "false_answer_rate": 0.0,
+      "retrieve_questions": 16,
+      "no_answer_questions": 6
+    },
+    "independent_acceptance": "PENDING_NEW_HOLDOUT_B",
+    "holdout_v1_1_status_preserved": "FAIL",
+    "policy": "Locked holdout v1.1 was not reused for tuning or re-acceptance.",
+    "targeted_coverage": {
+      "overall": 0.87,
+      "answerability_gate": 0.85,
+      "product_api": 0.9
+    }
+  }
+}

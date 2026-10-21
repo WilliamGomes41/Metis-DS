@@ -1,0 +1,25 @@
+{
+  "parser_version": "pdf-blocks-0.1.0",
+  "input": "/mnt/data/vvn-data-service-v0.1/data/raw/VVN-RL-Osteoporose-1.3.pdf",
+  "pages": [
+    15
+  ],
+  "object_count": 19,
+  "object_types": {
+    "section": 3,
+    "recommendation": 7,
+    "background": 8,
+    "score_rule": 1
+  },
+  "validation_statuses": {
+    "machine_processed": 11,
+    "needs_review": 8
+  },
+  "schema_valid": true,
+  "schema_errors": [],
+  "known_limitations": [
+    "Some mathematical/comparison glyphs in the PDF text layer are not extracted reliably.",
+    "Clinical conditions are not inferred when the source text layer is incomplete.",
+    "Tables are retained as score_rule blocks in v0.1; row-level parsing is a later step."
+  ]
+}

@@ -1,0 +1,169 @@
+{
+  "fragment": {
+    "bbox": [
+      71.06400299072266,
+      289.2362060546875,
+      483.0395202636719,
+      326.9815673828125
+    ],
+    "heading": null,
+    "raw_text": "Breng bij iedere patiënt de risicofactoren voor smetten in kaart, om te bepalen of preventieve \nmaatregelen nodig zijn. \nSterk – voor",
+    "sequence": 348,
+    "source_id": "src-62dfd76e0683a372",
+    "clean_text": "Breng bij iedere patiënt de risicofactoren voor smetten in kaart, om te bepalen of preventieve\nmaatregelen nodig zijn.\nSterk – voor",
+    "document_id": "console-smetten-richtlijn-smetten-1-62dfd76e",
+    "fragment_id": "console-smetten-richtlijn-smetten-1-62dfd76e-p018-f348",
+    "source_page": 18,
+    "section_path": [
+      "Smetten",
+      "Module 1: Risicofactoren",
+      "Aanbevelingen 520"
+    ],
+    "fragment_hash": "6652105ac5b65ed1021e78f443d14e93408d5090fa5271ebe08466b641deca8a",
+    "parser_version": "pdf-fragments-v2.3.1",
+    "source_locator": {
+      "locator_type": "page_bbox",
+      "locator_value": "page:18;bbox:71.064003,289.236206,483.039520,326.981567"
+    }
+  },
+  "request_block": {
+    "block_id": "semblock-342524c09027b04f4de2",
+    "position": 277,
+    "text": "Breng bij iedere patiënt de risicofactoren voor smetten in kaart, om te bepalen of preventieve maatregelen nodig zijn. Sterk – voor",
+    "source_fragment_ids": [
+      "console-smetten-richtlijn-smetten-1-62dfd76e-p018-f348"
+    ],
+    "section_path": [
+      "Smetten",
+      "Module 1: Risicofactoren",
+      "Aanbevelingen 520"
+    ],
+    "heading": null
+  },
+  "raw_object": {
+    "spans": [
+      {
+        "end": 133,
+        "start": 0,
+        "block_id": "semblock-342524c09027b04f4de2"
+      }
+    ],
+    "field_evidence": {
+      "defined_term": {
+        "span": null,
+        "missing_reason": "not_applicable"
+      },
+      "subject_span": {
+        "span": null,
+        "missing_reason": "not_stated"
+      },
+      "support_span": {
+        "span": null,
+        "missing_reason": "not_applicable"
+      },
+      "actor_of_scope": {
+        "span": {
+          "end": 24,
+          "start": 10,
+          "block_id": "semblock-342524c09027b04f4de2"
+        },
+        "missing_reason": null
+      },
+      "condition_span": {
+        "span": null,
+        "missing_reason": "not_applicable"
+      },
+      "definiens_span": {
+        "span": null,
+        "missing_reason": "not_applicable"
+      },
+      "exception_span": {
+        "span": null,
+        "missing_reason": "not_applicable"
+      },
+      "predicate_span": {
+        "span": {
+          "end": 120,
+          "start": 0,
+          "block_id": "semblock-342524c09027b04f4de2"
+        },
+        "missing_reason": null
+      },
+      "condition_target": {
+        "span": null,
+        "missing_reason": "not_applicable"
+      },
+      "exception_target": {
+        "span": null,
+        "missing_reason": "not_applicable"
+      },
+      "supported_object": {
+        "span": null,
+        "missing_reason": "not_applicable"
+      },
+      "factual_claim_span": {
+        "span": null,
+        "missing_reason": "not_applicable"
+      },
+      "recommended_action": {
+        "span": {
+          "end": 66,
+          "start": 0,
+          "block_id": "semblock-342524c09027b04f4de2"
+        },
+        "missing_reason": null
+      },
+      "type_evidence_spans": {
+        "span": {
+          "end": 120,
+          "start": 0,
+          "block_id": "semblock-342524c09027b04f4de2"
+        },
+        "missing_reason": null
+      },
+      "action_object_or_goal": {
+        "span": {
+          "end": 120,
+          "start": 67,
+          "block_id": "semblock-342524c09027b04f4de2"
+        },
+        "missing_reason": null
+      },
+      "recommendation_evidence_span": {
+        "span": {
+          "end": 120,
+          "start": 0,
+          "block_id": "semblock-342524c09027b04f4de2"
+        },
+        "missing_reason": null
+      }
+    },
+    "context_evidence": [
+      {
+        "role": "target_group",
+        "span": {
+          "end": 24,
+          "start": 10,
+          "block_id": "semblock-342524c09027b04f4de2"
+        },
+        "unresolved_reason": null
+      }
+    ],
+    "proposed_object_type": "recommendation",
+    "recommendation_semantics": {
+      "strength": "strong",
+      "direction": "for",
+      "strength_status": "explicit",
+      "strength_evidence": {
+        "end": 133,
+        "start": 121,
+        "block_id": "semblock-342524c09027b04f4de2"
+      },
+      "direction_evidence": {
+        "end": 120,
+        "start": 0,
+        "block_id": "semblock-342524c09027b04f4de2"
+      }
+    }
+  }
+}

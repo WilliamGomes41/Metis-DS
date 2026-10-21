@@ -1,0 +1,49 @@
+{
+  "object_id": "vvn-osteoporose-score-001",
+  "document_id": "vvn-osteoporose-fractuurpreventie",
+  "parent_object_id": null,
+  "object_type": "score_rule",
+  "source": {
+    "title": "Osteoporose en fractuurpreventie",
+    "publisher": "V&VN",
+    "source_url": "https://kennisplatform.venvn.nl/onderwerp/osteoporose-en-fractuurpreventie/",
+    "source_type": "web",
+    "publication_date": "2024-08-01",
+    "version": null,
+    "source_page": null
+  },
+  "structure": {
+    "section_path": ["Samenvatting", "Signalering", "Risicofactoren scorelijst"],
+    "heading": "Risicofactoren scorelijst",
+    "sequence": 1
+  },
+  "content": {
+    "raw_text": "Leeftijd >= 60 jaar | 1",
+    "clean_text": "Leeftijd >= 60 jaar levert 1 punt op in de risicofactoren-scorelijst.",
+    "context_text": "Scorecriterium voor het signaleren van een verhoogd fractuurrisico.",
+    "target_group": ["verpleegkundige", "verzorgende", "verpleegkundig specialist"],
+    "care_setting": ["eerste lijn"],
+    "topic": ["osteoporose", "fractuurrisico", "signalering"]
+  },
+  "logic": {
+    "condition": "leeftijd >= 60 jaar",
+    "operator": "gte",
+    "threshold": 60,
+    "unit": "jaar",
+    "branches": []
+  },
+  "governance": {
+    "validation_status": "needs_review",
+    "validated_by": null,
+    "validation_date": null,
+    "valid_from": null,
+    "valid_until": null
+  },
+  "technical": {
+    "parser_version": "0.1",
+    "chunk_method": "structure-first",
+    "content_hash": null,
+    "embedding_model": null,
+    "embedding_version": null
+  }
+}

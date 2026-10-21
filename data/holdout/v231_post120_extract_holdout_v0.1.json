@@ -1,0 +1,85 @@
+{
+  "golden_set_id": "v231-post120-extract-holdout-v0.1",
+  "kind": "extract_quality",
+  "version": "0.1",
+  "status": "independent_holdout",
+  "source_fixture": "data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl",
+  "scope": "Post-#120 independently selected extract-quality HOLDOUT. Osteoporose/fractuurpreventie page-15 document only. MUST NOT tune extract or admission on this set. Development v231_wave4 fixture holdout is not this evidence.",
+  "package": {
+    "lock_path": "data/golden/v231_post120_independent_extract_package.lock.json",
+    "train_path": "data/golden/v231_post120_independent_extract_gold_v0.1.json",
+    "split": "holdout"
+  },
+  "rules": {
+    "gold_required_before_quality_claim": true,
+    "soft_scores_must_not_claim_quality": true,
+    "single_guideline_without_gold_is_not_quality": true,
+    "no_duty_to_objectify_every_sentence": true,
+    "unknown_register_status_rejected": true,
+    "must_not_tune_on_this_set": true
+  },
+  "sources": [
+    {
+      "id": "fractuurpreventie-p15",
+      "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+      "source_id": "vvn-osteoporose-fractuurpreventie-2024-source-pdf",
+      "title": "V&VN Richtlijn Osteoporose en fractuurpreventie",
+      "publisher": "V&VN",
+      "version": "augustus 2024",
+      "material": "data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl",
+      "split": "holdout",
+      "family": "fractuurpreventie"
+    }
+  ],
+  "passages": [
+    {
+      "id": "P120-FP-R01",
+      "source_id": "vvn-osteoporose-fractuurpreventie-2024-source-pdf",
+      "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+      "class": "normative",
+      "role": "true_positive_expected",
+      "section": "Signalering / Aanbevelingen / DOEN",
+      "source_text": "Controleer of aanvullend onderzoek naar osteoporose is uitgevoerd. Dit bestaat uit DXA-VFA, aanvullend laboratoriumonderzoek en inschatting valrisico.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed",
+      "expected_context_before": "Bij een cliënt in zorg ≥ 50 jaar met een recente fractuur (≤ 2 jaar geleden)",
+      "expected_context_after": "Informeer de cliënt over het belang van aanvullend onderzoek en motiveer en stimuleer de cliënt om dit uit te laten voeren als dat nog niet gedaan is. De behandelaar van de fractuur kan dit aanvragen."
+    },
+    {
+      "id": "P120-FP-R02",
+      "source_id": "vvn-osteoporose-fractuurpreventie-2024-source-pdf",
+      "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+      "class": "normative",
+      "role": "true_positive_expected",
+      "section": "Signalering / Aanbevelingen / DOEN",
+      "source_text": "Gebruik de risicofactoren scorelijst (zie onderstaand kader) om een eventueel verhoogd fractuurrisico vast te stellen.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "P120-FP-M01",
+      "source_id": "vvn-osteoporose-fractuurpreventie-2024-source-pdf",
+      "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+      "class": "missed",
+      "role": "missed_knowledge",
+      "section": "Signalering / Aanbevelingen / DOEN",
+      "source_text": "Bij een cliënt in zorg ≥ 50 jaar met een recente fractuur (≤ 2 jaar geleden)",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "condition",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "P120-FP-FA01",
+      "source_id": "vvn-osteoporose-fractuurpreventie-2024-source-pdf",
+      "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+      "class": "false_admit",
+      "role": "false_admit",
+      "section": "Signalering / Aanbevelingen / DOEN",
+      "source_text": "Risicofactoren scorelijst",
+      "expected_register_status": "excluded_with_reason",
+      "expected_gate": "blocked"
+    }
+  ]
+}

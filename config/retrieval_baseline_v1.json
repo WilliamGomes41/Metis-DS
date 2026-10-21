@@ -1,0 +1,9 @@
+{
+  "top_k": 5,
+  "k1": 1.35,
+  "b": 0.72,
+  "bigram_bonus": 0.35,
+  "min_score": 2.0,
+  "min_query_coverage": 0.30,
+  "min_distinct_terms": 2
+}

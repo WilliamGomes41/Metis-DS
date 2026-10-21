@@ -1,0 +1,107 @@
+{
+  "golden_set_id": "v231-post120-independent-extract-gold-v0.1",
+  "kind": "extract_quality",
+  "version": "0.1",
+  "status": "independent_train",
+  "source_fixture": "data/fixtures/continentie_v221_wave_a_regression.html",
+  "scope": "Post-#120 independently selected extract-quality TRAIN gold. Continentie document only. Development v231_wave4 fixture gold is not this evidence. Not GD-03 clinical review. Not a publication claim.",
+  "package": {
+    "lock_path": "data/golden/v231_post120_independent_extract_package.lock.json",
+    "holdout_path": "data/holdout/v231_post120_extract_holdout_v0.1.json",
+    "split": "train"
+  },
+  "rules": {
+    "gold_required_before_quality_claim": true,
+    "soft_scores_must_not_claim_quality": true,
+    "single_guideline_without_gold_is_not_quality": true,
+    "no_duty_to_objectify_every_sentence": true,
+    "unknown_register_status_rejected": true
+  },
+  "sources": [
+    {
+      "id": "continentie",
+      "document_id": "vvn-continentie-kwetsbare-ouderen-2025",
+      "source_id": "vvn-continentie-kwetsbare-ouderen-2025-source-html",
+      "title": "V&VN Richtlijn Continentie bij (kwetsbare) ouderen",
+      "publisher": "V&VN",
+      "version": "april 2025",
+      "material": "data/fixtures/continentie_v221_wave_a_regression.html",
+      "split": "train",
+      "family": "continentie"
+    }
+  ],
+  "passages": [
+    {
+      "id": "P120-CON-R01",
+      "source_id": "vvn-continentie-kwetsbare-ouderen-2025-source-html",
+      "document_id": "vvn-continentie-kwetsbare-ouderen-2025",
+      "class": "normative",
+      "role": "true_positive_expected",
+      "section": "1.1 Inleiding",
+      "source_text": "Bespreek incontinentie met de cliënt en de mantelzorger.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed",
+      "expected_context_before": "Continentie is het vermogen om urine en ontlasting op te houden.",
+      "expected_context_after": "Overweeg om bij ouderen met urine-incontinentie én een cognitieve beperking het advies te geven om op vaste tijden te gaan plassen."
+    },
+    {
+      "id": "P120-CON-R02",
+      "source_id": "vvn-continentie-kwetsbare-ouderen-2025-source-html",
+      "document_id": "vvn-continentie-kwetsbare-ouderen-2025",
+      "class": "normative",
+      "role": "true_positive_expected",
+      "section": "1.1 Inleiding",
+      "source_text": "Overweeg om bij ouderen met urine-incontinentie én een cognitieve beperking het advies te geven om op vaste tijden te gaan plassen.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "P120-CON-M01",
+      "source_id": "vvn-continentie-kwetsbare-ouderen-2025-source-html",
+      "document_id": "vvn-continentie-kwetsbare-ouderen-2025",
+      "class": "missed",
+      "role": "missed_knowledge",
+      "section": "1.1 Inleiding",
+      "source_text": "Continentie is het vermogen om urine en ontlasting op te houden.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "definition",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "P120-CON-M02",
+      "source_id": "vvn-continentie-kwetsbare-ouderen-2025-source-html",
+      "document_id": "vvn-continentie-kwetsbare-ouderen-2025",
+      "class": "missed",
+      "role": "missed_knowledge",
+      "section": "1.1 Inleiding",
+      "source_text": "Gebruik een toiletdagboek. Bijvoorbeeld een toiletdagboek van drie dagen.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "P120-CON-FA01",
+      "source_id": "vvn-continentie-kwetsbare-ouderen-2025-source-html",
+      "document_id": "vvn-continentie-kwetsbare-ouderen-2025",
+      "class": "false_admit",
+      "role": "false_admit",
+      "section": "1.1 Inleiding",
+      "source_text": "Eventueel met hulp van de mantelzorger.",
+      "expected_register_status": "excluded_with_reason",
+      "expected_gate": "blocked"
+    },
+    {
+      "id": "P120-CON-X01",
+      "source_id": "vvn-continentie-kwetsbare-ouderen-2025-source-html",
+      "document_id": "vvn-continentie-kwetsbare-ouderen-2025",
+      "class": "excluded",
+      "role": "true_negative",
+      "section": "1.1 Inleiding",
+      "source_text": "Deze richtlijn gaat over continentiezorg in de wijkverpleging.",
+      "expected_register_status": "excluded_with_reason",
+      "expected_gate": "blocked"
+    }
+  ]
+}

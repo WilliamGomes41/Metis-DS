@@ -1,0 +1,64 @@
+{
+  "status": "BLOCKED",
+  "input_objects": 4,
+  "active_objects": 4,
+  "eligible_objects": 0,
+  "excluded_objects": [],
+  "verified_source_count": 0,
+  "errors": [
+    {
+      "object_id": "vvn-source2-factory-fixture-document",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-source2-factory-fixture-rec-01",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-source2-factory-fixture-rec-02",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "second_review_metadata_missing",
+        "second_review_not_approved",
+        "second_review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-source2-factory-fixture-rec-03",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "second_review_metadata_missing",
+        "second_review_not_approved",
+        "second_review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    }
+  ]
+}

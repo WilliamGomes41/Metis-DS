@@ -1,0 +1,34 @@
+{
+  "protocol": "2.0",
+  "transform_version": "semantic-v2.0.0",
+  "spec_version": "2.0",
+  "semantic_spec_sha256": "1aaefe852976876461992f83230d18c3e5f563478951576b6098de1b63eb732f",
+  "source_extract_sha256": "06436dd88505ed106fc97f909f90c00d4d4dd79cffb1372c83aa12d10161e57a",
+  "canonical_source_integrity_status": "binary_unavailable",
+  "canonical_source_checksum": null,
+  "object_count": 21,
+  "object_types": {
+    "document": 1,
+    "condition": 3,
+    "recommendation": 7,
+    "section": 1,
+    "score_rule": 8,
+    "definition": 1
+  },
+  "high_risk_objects": 12,
+  "schema_valid": true,
+  "schema_errors": [],
+  "integrity_checks": {
+    "unique_ids": true,
+    "parent_targets_exist": true,
+    "relation_targets_exist": true,
+    "closed_object_types": true,
+    "nothing_approved": true,
+    "nothing_published": true,
+    "risk_second_review_consistent": true,
+    "deterministic_only": true,
+    "no_ai_proposal_in_canonical": true
+  },
+  "integrity_valid": true,
+  "publication_status": "BLOCKED"
+}

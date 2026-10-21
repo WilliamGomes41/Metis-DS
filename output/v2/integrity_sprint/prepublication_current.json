@@ -1,0 +1,319 @@
+{
+  "status": "BLOCKED",
+  "input_objects": 21,
+  "active_objects": 21,
+  "eligible_objects": 0,
+  "excluded_objects": [],
+  "verified_source_count": 0,
+  "errors": [
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-document",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_integrity_not_verified",
+        "unresolved_uncertainty",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "second_review_metadata_missing",
+        "second_review_not_approved",
+        "second_review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "second_review_metadata_missing",
+        "second_review_not_approved",
+        "second_review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-glucocorticoids-40plus-01",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-condition-screening-60plus",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "second_review_metadata_missing",
+        "second_review_not_approved",
+        "second_review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "second_review_metadata_missing",
+        "second_review_not_approved",
+        "second_review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-03",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-table-risk-score",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-01",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "second_review_metadata_missing",
+        "second_review_not_approved",
+        "second_review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-02",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "second_review_metadata_missing",
+        "second_review_not_approved",
+        "second_review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-03",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "second_review_metadata_missing",
+        "second_review_not_approved",
+        "second_review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-04",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "second_review_metadata_missing",
+        "second_review_not_approved",
+        "second_review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-05",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "second_review_metadata_missing",
+        "second_review_not_approved",
+        "second_review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-06",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "second_review_metadata_missing",
+        "second_review_not_approved",
+        "second_review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-07",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "second_review_metadata_missing",
+        "second_review_not_approved",
+        "second_review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-08",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "second_review_metadata_missing",
+        "second_review_not_approved",
+        "second_review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    },
+    {
+      "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-background-score-footnote",
+      "errors": [
+        "review_snapshot_not_exact_object",
+        "source_checksum_not_in_verified_registry",
+        "source_checksum_not_sha256",
+        "source_fragment_coordinates_unavailable",
+        "source_integrity_not_verified",
+        "validated_by_missing",
+        "validation_date_missing",
+        "validation_status_not_approved"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "service_version": "inspection-service-v1.0.0",
+  "default_mode": "real",
+  "real_mode_policy": "published_only",
+  "fixture_mode_policy": "synthetic_fixture_only",
+  "read_only": true,
+  "max_top_k": 10,
+  "mutation_endpoints": false,
+  "rag_generation_enabled": false
+}

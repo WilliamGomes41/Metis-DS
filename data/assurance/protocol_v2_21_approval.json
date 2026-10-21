@@ -1,0 +1,13 @@
+{
+  "manifest_version": "1.0",
+  "protocol_version": "2.21.0",
+  "protocol_path": "docs/PROTOCOL_V2_21_CONTROLLED_USE_WAVES_DELTA.md",
+  "protocol_sha256": "e3675025034df4b6fdd1f675ac70b7604cf3b5a1e9c3dfabfce5005696cce613",
+  "repository": "WilliamGomes41/VENVN-DS",
+  "default_branch": "main",
+  "commit_sha": "pending_after_merge",
+  "approval_date": "2026-09-02",
+  "approval_authority": "project_owner",
+  "branch_protection_status": "temporary_procedural_control",
+  "conformance_effect": "does_not_override_gate_status"
+}

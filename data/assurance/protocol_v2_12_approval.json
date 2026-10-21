@@ -1,0 +1,13 @@
+{
+  "manifest_version": "1.0",
+  "protocol_version": "2.12.0",
+  "protocol_path": "docs/PROTOCOL_V2_12_OBJECT_TYPE_REVIEW_PROJECTION_DELTA.md",
+  "protocol_sha256": "88fa0c5ed546a0dd9dffe02925e1578babf7665cbcbaa9332188c2691132caf2",
+  "repository": "WilliamGomes41/VENVN-DS",
+  "default_branch": "main",
+  "commit_sha": "2f12c26fe20d8742b820ab8cc70014dd32d724aa",
+  "approval_date": "2026-08-28",
+  "approval_authority": "project_owner",
+  "branch_protection_status": "temporary_procedural_control",
+  "conformance_effect": "does_not_override_gate_status"
+}

@@ -1,0 +1,13 @@
+{
+  "manifest_version": "1.0",
+  "protocol_version": "2.3.0",
+  "protocol_path": "docs/PROTOCOL_V2_3_TECHNICAL_DELTA.md",
+  "protocol_sha256": "2902ce4f23b4662d37445685280e0ff14580d214a416f6b15c016b1b9610b910",
+  "repository": "WilliamGomes41/VENVN-DS",
+  "default_branch": "main",
+  "commit_sha": "8dbf7954238a8d4fe577a6c8fe05f2377f864d5f",
+  "approval_date": "2026-08-25",
+  "approval_authority": "project_owner",
+  "branch_protection_status": "temporary_procedural_control",
+  "conformance_effect": "does_not_override_gate_status"
+}

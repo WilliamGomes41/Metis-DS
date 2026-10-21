@@ -1,0 +1,16 @@
+**
+!requirements-console.txt
+!requirements.lock
+!requirements-dev.lock
+!requirements-retrieval.txt
+!.devcontainer/
+!.devcontainer/Dockerfile
+!.devcontainer/Dockerfile.dockerignore
+!.devcontainer/requirements-security.lock
+!.devcontainer/semgrep.yml
+!requirements-docling.txt
+!requirements-docling.lock
+!scripts/prepare_docling_models.py
+!src/__init__.py
+!src/docling_contract_v1.py
+!src/docling_render_fonts_v1.py

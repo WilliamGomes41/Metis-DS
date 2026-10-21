@@ -1,0 +1,146 @@
+{
+  "golden_set_id": "v231-wave4-independent-extract-gold-v0.1",
+  "kind": "extract_quality",
+  "version": "0.1",
+  "status": "independent_representative",
+  "source_fixture": "multi-source: continentie + fractuurpreventie phase2",
+  "scope": "ROADMAP wave 4 independent extract gold on two real richtlijn fixtures. Includes missed knowledge and falsely admitted candidates. Phase-4 register hooks are not this evidence.",
+  "independence": {
+    "independent": true,
+    "representative": true,
+    "phase4_hooks_are_not_this_evidence": true,
+    "not_fixture_gold": true
+  },
+  "rules": {
+    "gold_required_before_quality_claim": true,
+    "soft_scores_must_not_claim_quality": true,
+    "single_guideline_without_gold_is_not_quality": true,
+    "no_duty_to_objectify_every_sentence": true,
+    "unknown_register_status_rejected": true,
+    "independent_quality_claim": true,
+    "must_include_missed_knowledge": true,
+    "must_include_false_admits": true,
+    "phase4_fixture_is_not_independent": true
+  },
+  "sources": [
+    {
+      "id": "fractuurpreventie-phase2",
+      "fixture": "data/fixtures/v230_phase2_deep_context_regression.html",
+      "family": "fractuurpreventie"
+    },
+    {
+      "id": "continentie-wave-a",
+      "fixture": "data/fixtures/continentie_v221_wave_a_regression.html",
+      "family": "continentie"
+    }
+  ],
+  "passages": [
+    {
+      "id": "W4-FP-R01",
+      "source_id": "fractuurpreventie-phase2",
+      "class": "normative",
+      "role": "true_positive_expected",
+      "section": "2 Aanbevelingen",
+      "source_text": "De werkgroep adviseert de verpleegkundige de risicofactoren scorelijst te gebruiken bij iedere intake.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "W4-FP-R02",
+      "source_id": "fractuurpreventie-phase2",
+      "class": "normative",
+      "role": "true_positive_expected",
+      "section": "2 Aanbevelingen",
+      "source_text": "De werkgroep adviseert calcium te geven.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "W4-FP-R03",
+      "source_id": "fractuurpreventie-phase2",
+      "class": "normative",
+      "role": "true_positive_expected",
+      "section": "2 Aanbevelingen",
+      "source_text": "Overleg bij een vastgesteld verhoogd fractuurrisico met de cliënt over verwijzing.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "W4-FP-M01",
+      "source_id": "fractuurpreventie-phase2",
+      "class": "missed",
+      "role": "missed_knowledge",
+      "section": "2 Aanbevelingen",
+      "source_text": "Bij een cliënt van 60 jaar of ouder zonder recente fractuur geldt extra aandacht voor botgezondheid.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "condition",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "W4-FP-FA01",
+      "source_id": "fractuurpreventie-phase2",
+      "class": "false_admit",
+      "role": "false_admit",
+      "section": "2 Aanbevelingen",
+      "source_text": "Wanneer de cliënt 60 jaar of ouder is, geldt het volgende.",
+      "expected_register_status": "excluded_with_reason",
+      "expected_gate": "blocked"
+    },
+    {
+      "id": "W4-FP-FA02",
+      "source_id": "fractuurpreventie-phase2",
+      "class": "false_admit",
+      "role": "false_admit",
+      "section": "2 Aanbevelingen",
+      "source_text": "Tenzij er hypercalciëmie bestaat.",
+      "expected_register_status": "excluded_with_reason",
+      "expected_gate": "blocked"
+    },
+    {
+      "id": "W4-FP-X01",
+      "source_id": "fractuurpreventie-phase2",
+      "class": "excluded",
+      "role": "true_negative",
+      "section": "2 Aanbevelingen",
+      "source_text": "De dJG wordt in Nederland vaker gebruikt.",
+      "expected_register_status": "excluded_with_reason",
+      "expected_gate": "blocked"
+    },
+    {
+      "id": "W4-CON-R01",
+      "source_id": "continentie-wave-a",
+      "class": "normative",
+      "role": "true_positive_expected",
+      "section": "1.1 Inleiding",
+      "source_text": "Bespreek incontinentie met de cliënt en de mantelzorger.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "W4-CON-M01",
+      "source_id": "continentie-wave-a",
+      "class": "missed",
+      "role": "missed_knowledge",
+      "section": "1.1 Inleiding",
+      "source_text": "Continentie is het vermogen om urine en ontlasting op te houden.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "definition",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "W4-CON-M02",
+      "source_id": "continentie-wave-a",
+      "class": "missed",
+      "role": "missed_knowledge",
+      "section": "1.1 Inleiding",
+      "source_text": "Gebruik een toiletdagboek. Bijvoorbeeld een toiletdagboek van drie dagen.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed"
+    }
+  ]
+}

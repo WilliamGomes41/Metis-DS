@@ -1,0 +1,11 @@
+FROM python:3.13-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY requirements.lock ./
+RUN pip install --no-cache-dir setuptools==82.0.1 \
+ && pip install --no-cache-dir -r requirements.lock
+COPY . .
+RUN pip install --no-deps --no-build-isolation -e .
+EXPOSE 8080
+# Safe default: REAL corpus. Tenant registry is expected via VVN_TENANT_CONFIG.
+CMD ["vvn-data-service", "serve-api", "--mode", "real", "--host", "0.0.0.0", "--port", "8080"]

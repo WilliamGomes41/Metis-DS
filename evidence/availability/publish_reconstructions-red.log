@@ -1,0 +1,6 @@
+{"route": "/publish", "source_records": 20, "http": 200, "seconds": 0.115, "full_source_reconstructions": {"_selection_blocks": 3, "reconstruct": 20}}
+Traceback (most recent call last):
+  File "/workspace/scratch/3bac53626d42/metis/evidence/availability/probe_publish_reconstructions.py", line 72, in <module>
+    assert sum(calls.values())<=2,'RECONSTRUCTION_GROWS_WITH_SOURCE_RECORDS'
+           ^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: RECONSTRUCTION_GROWS_WITH_SOURCE_RECORDS

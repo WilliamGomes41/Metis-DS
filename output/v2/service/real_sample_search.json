@@ -1,0 +1,10 @@
+{
+  "engine_version": "hybrid-rrf-v1.0.0",
+  "index_signature": "dc2fe4c2688b496f4daccdea77131f64facb13ddb8491755a23ee58dbea1224d",
+  "query": "Welke score geldt vanaf 60 jaar bij fractuurrisico?",
+  "behavior": "abstain",
+  "reason": "empty_published_corpus",
+  "results": [],
+  "mode": "real",
+  "synthetic_fixture_mode": false
+}

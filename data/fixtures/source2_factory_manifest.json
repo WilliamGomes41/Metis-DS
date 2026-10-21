@@ -1,0 +1,18 @@
+{
+  "manifest_version": "2.1",
+  "document_id": "vvn-source2-factory-fixture",
+  "canonical_source": {
+    "source_id": "vvn-source2-factory-fixture-html",
+    "source_level": 1,
+    "canonicality": "canonical",
+    "source_type": "html",
+    "title": "Voorbeeldrichtlijn bron 2",
+    "publisher": "V&VN",
+    "source_url": "https://example.org/vvn-source2-fixture",
+    "publication_date": null,
+    "version": "fixture-1.0",
+    "source_checksum": null,
+    "checksum_algorithm": "sha256",
+    "integrity_status": "binary_unavailable"
+  }
+}

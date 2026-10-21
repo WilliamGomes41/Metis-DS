@@ -1,0 +1,6246 @@
+"""FastAPI HTML surface for the internal operations console.
+
+Task-oriented researcher door over the knowledge kernel (Protocol v2.9).
+Not the Product API, not a care-app frontend, and not a public website.
+Chat is not a room.
+"""
+from __future__ import annotations
+
+from src.request_diagnostics_v1 import diagnostic_phase
+
+import asyncio
+import hashlib
+import html
+import json
+import os
+import re
+import uuid
+from typing import Any
+from urllib.parse import quote, urlencode, urlsplit
+
+from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
+
+from src.document_status_v1 import DOCUMENT_STATUS_LABELS
+from src.four_eyes_v1 import requires_four_eyes
+from src.api_access_v1 import ApiAccessConflict, ApiAccessError, ApiAccessStoreError, PostgresApiAccessStore, VALID_SCOPES
+from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
+from src.klasse_wijzigen_v1 import is_cross_model_class_change
+from src.heading_parent_list_v1 import (
+    heading_visible_text,
+    is_heading_object,
+    parent_choice_list,
+    parent_proposal_may_bind,
+    parse_outline_number,
+)
+from src.object_taxonomy_v1 import (
+    CLOSED_OBJECT_TYPES,
+    CLOSED_RECOMMENDATION_STRENGTHS,
+    STRENGTH_STAMP_LABELS,
+    recommendation_strength_sentence,
+    recommendation_strength_ui_applies,
+    review_priority_rank,
+)
+from src.admission_gate_v1 import admission_of, is_admission_blocked
+from src.recommendation_semantics_v1 import (
+    confirmed_recommendation_semantics_of,
+    proposed_recommendation_semantics_of,
+)
+from src.knowledge_relations_v1 import (
+    confirmed_knowledge_relations_of,
+    proposed_knowledge_relations_of,
+)
+from src.knowledge_materialisation_v1 import source_reconstruction_scope
+from src.knowledge_relation_review_v1 import (
+    has_semantic_relation_review,
+    relation_choice_value,
+)
+from src.review_duty_v1 import authoritative_review_type, review_duty_for, review_duty_lane, reviewer_route_for
+from src.review_interaction_v1 import (
+    build_review_interaction_evidence,
+    new_review_interaction_id,
+)
+from src.review_context_v1 import (
+    AUTHORITY_CONFIRMED,
+    DIRECTION_INCOMING,
+    DIRECTION_OUTGOING,
+    RESOLUTION_CURRENT,
+    RESOLUTION_MISSING,
+    RESOLUTION_VERSION_MISMATCH,
+    review_context,
+)
+from src.domain_dimensions_v1 import processing_issue_objects
+from src.processing_diagnostics_v1 import (
+    passage_export_rows,
+    passage_export_csv,
+    processing_diagnostic_rows,
+    processing_diagnostics,
+)
+from src.processing_evidence_export_v1 import processing_evidence_zip
+from src.source_label_hint_v1 import source_label_hint
+from src.source_context_review_v1 import projections as source_context_projections, role_of, links_of
+from src.extract_coverage_v1 import coverage_panel_rows
+from src.review_cockpit_v1 import (
+    SUITABILITY_VALUES,
+    broncontext_parts,
+    confirmable_proposed_type,
+    found_under_path,
+    map_eindoordeel,
+    proposed_type_of,
+    why_selected,
+)
+from src.ingest_limits_v1 import (
+    INGEST_PAYLOAD_TOO_LARGE,
+    URL_DESTINATION_NOT_ALLOWED,
+    install_ingest_limits,
+    read_upload_limited,
+)
+from src.llm_provider_v1 import load_llm_provider_config
+from src.passage_formation_policy_v1 import DETERMINISTIC_MODE, SEMANTIC_MODE, SEMANTIC_V2_MODE, SEMANTIC_V3_MODE
+from src.operations_console_v1 import (
+    ALLOWED_CLASSES,
+    ALLOWED_DELETE_NEXT,
+    CONSOLE_VERSION,
+    PRE_REVIEW_BLOCKED,
+    ConsoleError,
+    OperationsConsole,
+    REPO_ROOT,
+    SNAPSHOT_OBJECT_WRITE_CONFLICT,
+    review_card_sentence,
+    review_lane,
+    review_row_status,
+    review_row_title,
+    review_stacks,
+    slow_review_duty,
+)
+from src.open_original_v1 import OpenOriginalError, full_document_segments, parse_page_bbox, researcher_visible_prose
+from src.review_disposition_v1 import definitive_review_disposition
+from src.publication_readiness_v1 import review_followup_queues
+from src.product_security_v1 import SlidingWindowRateLimiter
+from src.proportionate_review_v1 import (
+    ProportionateReviewConsole,
+    normal_risk_batch_counts,
+    regular_individual_review_queue,
+    render_normal_risk_batch_panel,
+)
+from src.serving_relations_v1 import CLOSED_RELATION_TYPES, proposed_relations
+from src.metis_dictionary_ui import render as render_metis_dictionary
+
+SERVICE_VERSION = CONSOLE_VERSION
+COOKIE = "console_session"
+FILENAME_HINT = (
+    "Bestandsnaam: letters, cijfers, punt, streepje of underscore. "
+    "Spaties en accenten worden automatisch aangepast. "
+    "De titel hieronder mag wél spaties bevatten."
+)
+BRAND_DIR = REPO_ROOT / "assets" / "brand"
+CANONICAL_REVIEW_TASKS = frozenset({
+    "structure",
+    "contextual",
+    "batch",
+    "second_review",
+    "repair",
+    "history",
+    "disposition",
+    "inventory",
+    "waiting",
+})
+LEGACY_REVIEW_TASK_ALIASES = {
+    "headings": "structure",
+    "individual": "contextual",
+    "together": "batch",
+    "control": "repair",
+    "decisions": "history",
+    "closure": "disposition",
+}
+REVIEW_TASKS = frozenset({
+    *CANONICAL_REVIEW_TASKS,
+    *LEGACY_REVIEW_TASK_ALIASES,
+})
+
+
+def normalize_review_task(value: str) -> str:
+    task = str(value or "").strip()
+    return LEGACY_REVIEW_TASK_ALIASES.get(task, task if task in CANONICAL_REVIEW_TASKS else "")
+
+
+def _passage_formation_status_html(state: OperationsConsole) -> str:
+    reader = getattr(state, "_passage_formation_mode_reader", None)
+    mode = reader() if callable(reader) else DETERMINISTIC_MODE
+    if mode in {SEMANTIC_MODE, SEMANTIC_V2_MODE, SEMANTIC_V3_MODE}:
+        label = "Semantisch met bronbewijs" if mode in {SEMANTIC_V2_MODE, SEMANTIC_V3_MODE} else "Semantisch"
+        detail = (
+            "Nieuwe en opnieuw verwerkte passages worden momenteel brongebonden "
+            "semantisch gevormd. Review blijft verplicht."
+        )
+    elif mode == DETERMINISTIC_MODE:
+        label = "Deterministisch"
+        detail = (
+            "Nieuwe en opnieuw verwerkte passages worden momenteel zonder taalmodel "
+            "gevormd. Review blijft verplicht."
+        )
+    else:
+        label = "Configuratiefout"
+        detail = (
+            "De passage-formation configuratie is ongeldig. Nieuwe verwerking wordt "
+            "fail-closed geblokkeerd."
+        )
+    return (
+        '<div class="banner formation-mode-status" role="status">' 
+        f'<strong>Actieve verwerkingsmodus: {_esc(label)}</strong>'
+        f'<p class="field-help">{_esc(detail)}</p>'
+        "</div>"
+    )
+STATUS_LABELS = {
+    "captured_not_published": "ingevoerd, niet gepubliceerd",
+    "needs_review": "wacht op beoordeling",
+    "approved": "goedgekeurd",
+    "rejected": "afgewezen",
+    "published": "gepubliceerd",
+}
+STATUS_LABELS.update(DOCUMENT_STATUS_LABELS)
+OBJECT_TYPE_LABELS = {
+    "unclassified": "Nog niet geclassificeerd",
+    "factual_finding": "Feitelijke constatering",
+    "heading": "Kop",
+    "definition": "Definitie",
+    "explanation": "Toelichting",
+    "condition": "Voorwaarde",
+    "exception": "Uitzondering",
+    "recommendation": "Aanbeveling",
+    "path": "Pad — route of resultaatbundel",
+    "node": "Knoop — vraag of beslispunt",
+    "outcome": "Uitkomst — afsluitend advies",
+}
+BLOCKER_LABELS = {
+    "second_named_reviewer_required": "Nog een andere benoemde reviewer moet goedkeuren.",
+    "blocked_pending_immutable_locator": "Duurzame opslag ontbreekt; publicatie blijft geblokkeerd.",
+    "object_tuple_required": "Nog niet alle vereiste passagebeoordelingen zijn afgerond. Ga naar Review en rond de open beoordelingen af.",
+    "pre_review_processing_incomplete": "Pre-review is nog niet afgerond; verwerk het document eerst opnieuw vanuit Documenten.",
+    "four_eyes_required": "High-risk objecten vereisen four-eyes: een tweede benoemde reviewer op hetzelfde objecttupel.",
+    "review_configuration_source_text_unavailable": "De opgeslagen brontekst is niet te laden; daardoor is niet te controleren of alle passages volgens de reviewkeuze zijn beoordeeld. Publiceren is geblokkeerd. Meld dit bij de beheerder.",
+    "review_configuration_uploader_sole_high_risk": "Dit hoog-risico-object vereist een tweede benoemde reviewer. Met de reviewkeuze 'alleen de uploader' is publiceren daarom geblokkeerd.",
+    "already_published": "Dit document is al gepubliceerd.",
+    "g2_source_store_unavailable": "De bronopslag is niet bereikbaar. Publiceren is daarom geblokkeerd. Probeer later opnieuw; meld het bij de beheerder als dit blijft gebeuren.",
+    "g2_source_checksum_mismatch": "Het opgeslagen bronbestand wijkt af van de gecontroleerde versie. Publiceren is geblokkeerd. Laat de beheerder dit onderzoeken.",
+    "g2_source_verification_failed": "Metis kan het opgeslagen bronbestand niet betrouwbaar controleren. Publiceren is geblokkeerd. Meld dit bij de beheerder.",
+    "prepublication_schema_invalid": "Een goedgekeurde passage mist gegevens die nodig zijn voor publicatie. Laat de beheerder controleren welke passage moet worden hersteld.",
+    "prepublication_projection_failed": "Metis kon de publicatie niet voorbereiden. Controleer de publicatiestatus en meld dit bij de beheerder voordat je opnieuw probeert.",
+}
+ERROR_COPY = {
+    "docling_no_source_text": "Er is geen bruikbare brontekst vastgelegd. De verwerking is geblokkeerd. Controleer het bronbestand; lege en gescande pagina’s worden in deze route nog niet automatisch onderscheiden.",
+    "docling_page_text_unverified": "Voor één of meer pagina’s is geen bruikbare brontekst vastgelegd. De verwerking is geblokkeerd. Controleer het bronbestand; lege en gescande pagina’s worden in deze route nog niet automatisch onderscheiden.",
+    "processing_diagnostic_write_failed": "Het foutbewijs kon niet duurzaam worden opgeslagen. Laat de beheerder de opslag controleren voordat je opnieuw probeert.",
+    "processing_recovery_reason_required": "Geef een reden op voor deze eenmalige herstelpoging.",
+    "processing_recovery_not_required": "Eenmalig herstel is alleen beschikbaar voor een geblokkeerd document na het maximumaantal pogingen.",
+    "processing_recovery_already_authorized": "Voor dit document is al een eenmalige herstelpoging toegestaan of gebruikt.",
+    "pre_review_llm_proposal_rejected": "De voorcontrole heeft het modelvoorstel afgewezen omdat het niet aan de brongebonden controles voldoet. Er zijn geen nieuwe passages voor Review vrijgegeven. Meld de technische informatie hieronder bij de beheerder.",
+    "pre_review_llm_provider_unavailable": "De modeldienst kon de voorcontrole niet afronden. Meld de technische informatie bij de beheerder om de verbindingsfout te onderzoeken.",
+    "pre_review_llm_api_key_required": "De modeldienst is niet geconfigureerd. Laat de beheerder de configuratie van de voorcontrole controleren.",
+    "pre_review_llm_model_required": "Het model voor de voorcontrole is niet ingesteld. Laat de beheerder de configuratie controleren.",
+    "pre_review_llm_response_invalid": "De modeldienst gaf geen bruikbaar antwoord voor de voorcontrole. Meld dit bij de beheerder.",
+    "pre_review_llm_response_empty": "De modeldienst gaf geen voorstel terug. De voorcontrole kon daardoor niet worden afgerond.",
+    "pre_review_llm_refused": "De modeldienst heeft het verzoek geweigerd. Meld dit bij de beheerder.",
+    "pre_review_llm_abstained": "De modeldienst kon geen veilig voorstel op basis van de bron maken. Meld dit bij de beheerder.",
+    "account_fields_required": "Vul alle verplichte accountgegevens in en probeer opnieuw.",
+    "cannot_silently_mutate": "Deze wijziging vereist een nieuwe versie met vastgelegde reden. Gebruik de correctieactie bij de passage.",
+    "class_unchanged": "Het gekozen documenttype is al ingesteld. Kies een ander type als je het wilt wijzigen.",
+    "correction_role_required": "Je account heeft geen rechten om een correctie uit te voeren. Vraag de beheerder om de juiste rol.",
+    "curator_role_required": "Je account heeft geen rechten voor deze beheeractie. Vraag de beheerder om hulp.",
+    "document_not_unique": "Meerdere documenten passen bij deze keuze. Open het bedoelde document via Documenten en voer de actie daar uit.",
+    "immutable_source_recovery_failed": "Metis kan het oorspronkelijke bronbestand niet herstellen. Meld dit bij de beheerder voordat je verdergaat.",
+    "immutable_source_storage_failed": "Het bronbestand kon niet veilig worden opgeslagen. Controleer of het document bij Documenten staat en meld dit bij de beheerder voordat je opnieuw inlevert.",
+    "ingest_fields_required": "Vul de verplichte documentgegevens in: titel, versie, datum en onderwerp.",
+    "invalid_class": "Dit documenttype wordt niet herkend. Kies een type uit de keuzelijst Klasse.",
+    "invalid_ingest_kind": "Kies bij inleveren Nieuw document of Nieuwe versie van een bestaand document.",
+    "multiple_parents_not_allowed": "Een passage kan maar één bovenliggende kop hebben. Kies de kop waaronder deze passage hoort.",
+    "named_reviewer_must_have_reviewer_role": "Een gekozen beoordelaar heeft geen beoordelaarsrechten. Kies een andere beoordelaar of vraag de beheerder de rol te controleren.",
+    "pre_review_reprocess_not_required": "Dit document komt niet in aanmerking voor deze herstelactie. Controleer de huidige status bij Documenten.",
+    "pre_review_retry_requires_postgres": "Veilige herverwerking vereist de duurzame workflowopslag. Laat de beheerder de configuratie controleren.",
+    "pre_review_retry_existing_work": "Dit document bevat al passages of beoordelingen. Deze herstelactie vervangt die niet.",
+    "processing_attempt_in_progress": "Er loopt al een verwerkingspoging voor dit document. Bekijk de technische diagnose voor de voortgang.",
+    "processing_attempt_expired": "De vorige verwerkingspoging is onderbroken of verlopen. Start een nieuwe poging vanuit Documenten.",
+    "processing_attempt_not_active": "Deze verwerkingspoging is niet meer actief. Het resultaat is niet toegepast.",
+    "processing_command_id_invalid": "De verwerkingsopdracht is ongeldig. Open Documenten opnieuw en probeer het nogmaals.",
+    "processing_command_conflict": "Deze opdracht hoort bij een andere verwerkingspoging. Open Documenten opnieuw.",
+    "processing_dependency_failed": "De verwerking kon niet worden afgerond door een technische fout. Het bestaande werk is behouden.",
+    "pre_review_llm_connection_timeout": "De verbinding met de modeldienst kwam niet binnen de ingestelde tijd tot stand. Het document is bewaard.",
+    "pre_review_llm_connection_failed": "De verbinding met de modeldienst is mislukt. Het document is bewaard.",
+    "pre_review_llm_inactivity_timeout": "De modeldienst gaf binnen de ingestelde wachttijd geen transportantwoord meer. Dit zegt niets over de juistheid van het document.",
+    "pre_review_llm_processing_timeout": "De maximale duur van de modelaanroep is bereikt. Het document en bestaand reviewwerk zijn bewaard.",
+    "pre_review_llm_processing_in_progress": "Er loopt een verwerkingspoging. De kernel bewaakt de eindtijd; transportactiviteit is geen inhoudelijke voortgang.",
+    "pre_review_llm_limits_invalid": "De ingestelde verwerkingsgrenzen zijn ongeldig. Laat de beheerder de configuratie controleren.",
+    "pre_review_llm_transport_unsupported": "Deze verwerkingsroute vereist de ondersteunde Linux-runtime.",
+    "processing_retry_cooldown": "Een nieuwe poging is nog niet mogelijk vóór de vermelde herprobeertijd. Externe annulering van het eerdere verzoek is onbekend.",
+    "processing_attempt_limit_reached": "Het ingestelde maximumaantal pogingen is bereikt. Laat de beheerder de oorzaak onderzoeken.",
+    "processing_structural_limit": "Deze opdracht overschrijdt een invoer- of uitvoergrens. Herhalen zonder de oorzaak te wijzigen is geen herstel.",
+    "processing_timeout": "De verwerking is niet op tijd afgerond. Het bestaande werk is behouden; start zo nodig een nieuwe poging.",
+    "pre_review_no_reviewable_candidates": "De voorcontrole heeft geen passages vrijgegeven die de toelatingscontroles doorstaan. Bekijk de technische diagnose.",
+    "source_formation_incomplete": "Geldige voorstellen zijn bewaard. Er staat nog onopgelost vormingswerk open; publicatie is geblokkeerd.",
+    "public_signup_forbidden": "Je kunt zelf geen account aanmaken. Vraag de beheerder om toegang tot Metis.",
+    "replaces_snapshot_id_required": "Kies welk bestaand document deze nieuwe versie vervangt.",
+    "review_failed": "De beoordeling kon niet worden afgerond. Controleer de huidige passagestatus en meld dit bij de beheerder als de oorzaak niet zichtbaar is.",
+    "reviewer_not_named_on_snapshot": "Je bent niet aangewezen als beoordelaar voor dit document. Vraag de verantwoordelijke voor het document om je toe te wijzen.",
+    "primary_replacement_required": "Je kunt de primaire reviewer niet archiveren. Kies ‘Reviewer vervangen’ en wijs in dezelfde handeling een vervanger aan.",
+    "reviewer_already_assigned": "Deze reviewer neemt al deel aan dit traject. Kies een andere reviewer.",
+    "independent_replacement_required": "Kies een andere, beschikbare reviewer die nog geen actieve of verplichte plek in dit traject heeft.",
+    "required_participation_cannot_be_downgraded": "Deze reviewer heeft nog een verplichte plek. Heractiveer die als verplicht of wijs een vervanger aan.",
+    "active_participation_required": "Deze deelname is niet meer actief. Open het deelnemersbeheer opnieuw om de actuele mogelijkheden te zien.",
+    "participation_not_found": "Deze deelname is niet gevonden. Open het deelnemersbeheer opnieuw.",
+    "reviewer_unavailable": "Dit account is niet beschikbaar als reviewer. Kies een actieve menselijke reviewer.",
+    "participation_publisher_required": "Voor deze wijziging is een publisher nodig. Een toegewezen reviewer mag alleen een andere optionele reviewer toevoegen.",
+    "legacy_participation_activation_requires_publisher": "Een publisher moet het deelnemersbeheer voor dit bestaande traject eerst activeren.",
+    "snapshot_object_write_conflict": "Dit traject is intussen gewijzigd. Open de pagina opnieuw en controleer de actuele situatie voordat je de handeling herhaalt.",
+    "revision_schema_invalid": "De correctie levert een ongeldige passage op. Controleer je wijziging en meld dit bij de beheerder als opslaan blijft mislukken.",
+    "source_continuation_changed": "De bronaanvulling is tussentijds gewijzigd. Open de passage opnieuw en controleer de actuele aanvulling.",
+    "source_continuation_not_available": "Er is geen bronaanvulling beschikbaar voor deze passage. Open de passage opnieuw om de actuele mogelijkheden te zien.",
+    "source_continuation_not_literal": "De aanvulling komt niet letterlijk overeen met de bron. Controleer de oorspronkelijke tekst voordat je verdergaat.",
+    "unknown_account": "Dit account is niet gevonden. Open de accountlijst opnieuw en controleer je keuze.",
+    "unknown_document": "Dit document is niet gevonden. Kies het opnieuw via Documenten.",
+    "unknown_rereview_scope": "De gekozen omvang van de herbeoordeling wordt niet herkend. Kies een optie uit de keuzelijst.",
+    "unsupported_official_file": "Dit bestandstype wordt niet ondersteund. Lever een PDF, HTML-bestand of ondersteunde beslisboomexport in.",
+    "username_already_exists": "Deze gebruikersnaam bestaat al. Kies een andere naam of gebruik het bestaande account.",
+
+    "invalid_store_path": "De bestandsnaam kan niet veilig worden verwerkt. Hernoem het bestand, bijvoorbeeld naar eenzaamheid.pdf, en kies het opnieuw.",
+    "not_authenticated": "Je sessie is verlopen of je bent nog niet aangemeld. Meld je aan om verder te gaan.",
+    "invalid_credentials": "De gebruikersnaam en het wachtwoord komen niet overeen. Controleer beide en probeer opnieuw.",
+    "uploader_cannot_be_sole_required_reviewer": "Bij de expliciete policy kan een bevoegde uploader zelf afronden. Iedere verplicht gekozen reviewer moet onafhankelijk deelnemen. PDF-beslisbomen gebruiken de expliciete policy.",
+    "word_not_first_wave": "Dit Word-bestand kan niet worden verwerkt. Sla het op als PDF en lever die PDF in.",
+    "story_html_boom_player_out_of_first_wave": "Deze interactieve beslisboom kan niet als HTML-pagina worden ingeleverd. Vraag de beheerder om een ondersteunde export.",
+    "story_html_alone_insufficient": "Dit HTML-bestand bevat niet de volledige beslisboom. Vraag de beheerder om een volledige beslisboomexport.",
+    "live_rest_not_sole_source": "Deze koppeling levert geen vaste bronversie op. Vraag de beheerder om een volledige beslisboomexport.",
+    "live_rest_sole_source": "Deze koppeling levert geen vaste bronversie op. Vraag de beheerder om een volledige beslisboomexport.",
+    "outcome_review_failed": "De beslisboomuitkomst is nog niet compleet. Controleer de tekst, afzonderlijke adviezen en de koppeling met de bijbehorende voorwaarde.",
+    "outcome_relation_unconfirmed": "Koppel deze uitkomst eerst aan de bijbehorende voorwaarde met de relatie ‘geldt indien’.",
+    "outcome_strength_required": "Kies DOEN, OVERWEEG of NIET DOEN voor een handelingsuitkomst.",
+    "empty_boom_freeze": "De beslisboomexport bevat geen stappen en uitkomsten. Controleer de export of vraag een nieuwe aan.",
+    "invalid_boom_freeze": "Metis herkent dit bestand niet als beslisboomexport. Controleer of je het juiste bestand hebt gekozen.",
+    "condition_fused_into_outcome": "Leg de voorwaarde ook vast met de relatie ‘geldt indien’, zodat duidelijk is wanneer deze uitkomst geldt.",
+    "official_file_or_url_required": "Kies een HTML-, PDF- of boom-freezebestand, of een URL.",
+    "named_reviewers_required": "Kies minstens één andere reviewer dan jezelf.",
+    "review_configuration_required": "Kies een reviewkeuze: alleen jij, één andere reviewer of twee andere reviewers.",
+    "review_configuration_policy_conflict": "De reviewkeuze en de reviewdeelname noemen verschillende reviewers. Maak beide gelijk.",
+    "unknown_reader": "Een gekozen lezer is niet gevonden. Kies lezers uit de keuzelijst.",
+    "publisher_role_required": "Je account heeft geen rechten om te publiceren. Vraag een bevoegde publiceerder om deze stap uit te voeren.",
+    "reviewer_role_required": "Je account heeft geen rechten om te beoordelen. Vraag de beheerder om de juiste rol.",
+    "researcher_role_required": "Je account heeft geen rechten om documenten in te leveren. Vraag de beheerder om de juiste rol.",
+    "live_url_html_not_allowed": "Een live HTML-URL kan niet worden ingeleverd. Lever een HTML-bestand of een PDF-URL in.",
+    "unknown_object_type": "Het gekozen passagetype is niet beschikbaar. Kies een type uit de keuzelijst.",
+    "blocked_candidate_not_reviewable": "Deze passage voldoet nog niet aan de voorwaarden voor beoordeling. Bekijk de reden bij de passage en kies revisie of afwijzen.",
+    "object_type_not_confirmed": "Bevestig eerst het passagetype met een keuze uit de keuzelijst.",
+    "unknown_role": "Alleen researcher, reviewer of publisher zijn toegestaan.",
+    "forbidden_reviewer_identity": "Deze identiteit kan niet als beoordelaar worden gebruikt. Kies een persoonlijk account van de beoordelaar.",
+    "unknown_relation_type": "Deze relatie is niet beschikbaar. Kies een relatie uit de keuzelijst.",
+    "knowledge_relation_review_required": "Controleer en bevestig eerst de voorgestelde relaties.",
+    "knowledge_relation_target_stale": "Een gekoppeld kennisobject is gewijzigd. Controleer de relaties opnieuw.",
+    "knowledge_relation_target_missing": "Een gekoppelde passage bestaat niet meer in deze werkversie. Open de beoordeling opnieuw en controleer de koppelingen.",
+    "knowledge_relation_choice_not_available": "De gekozen koppeling is niet meer beschikbaar. Open de beoordeling opnieuw en controleer de huidige koppelingen.",
+    "knowledge_relation_source_version_stale": "Het bronobject is gewijzigd. Open de review opnieuw.",
+    "knowledge_relation_endpoint_type_invalid": "De koppeling past niet bij de typen van de twee passages. Controleer de passagetypen en kies daarna een passende relatie.",
+    "second_review_not_required": "Voor deze passage is geen tweede beoordeling nodig. Ga terug naar Mijn werk voor je open beoordelingen.",
+    "second_review_not_available": "Deze tweede beoordeling is niet meer actueel. Open Mijn werk opnieuw voor de huidige taken.",
+    "first_review_required": "De eerste beoordeling is nog niet afgerond. Laat die afronden voordat je de tweede beoordeling uitvoert.",
+    "independent_second_reviewer_required": "De tweede beoordeling moet door iemand anders dan de eerste beoordelaar worden uitgevoerd. Vraag een andere beoordelaar deze taak op te pakken.",
+    "second_review_command_required": "Open deze passage via de taak voor tweede beoordeling in Mijn werk.",
+    "open_original_required": "Open eerst de bronpassage. Type bevestigen zonder het origineel is niet toegestaan.",
+    "source_locator_missing": "De verwijzing naar de oorspronkelijke passage ontbreekt. Laat de beoordeling open en vraag de beheerder om de bronverwijzing te controleren.",
+    "freeze_bytes_missing": "Het oorspronkelijke bronbestand is niet beschikbaar. Laat de beoordeling open en meld dit bij de beheerder.",
+    "locator_kind_mismatch": "De bronverwijzing past niet bij het opgeslagen bestand. Meld dit bij de beheerder zodat de juiste passage kan worden geopend.",
+    "unsupported_locator": "Metis kan deze bronverwijzing niet openen. Laat de beoordeling open en meld dit bij de beheerder.",
+    "invalid_review_decision": "Kies een eindoordeel: goedkeuren, goedkeuren na correctie, afwijzen of later beoordelen.",
+    "suitability_required": "Kies of de passage geschikt is.",
+    "review_comment_required": "Geef een toelichting bij goedkeuren na correctie of afwijzen.",
+    "source_date_required": "Vul de publicatiedatum uit het colofon in.",
+    "invalid_source_date": "Gebruik een geldige kalenderdatum.",
+    "source_version_required": "Vul het versienummer van het brondocument in, bijvoorbeeld 1.0.",
+    "invalid_source_version": "Versie is alleen getallen met punten, bijvoorbeeld 1.0. Geen jaartal en geen v-voorvoegsel.",
+    "fast_lane_heading_required": "Je kunt alleen koppen in één keer bevestigen. Beoordeel andere passages afzonderlijk.",
+    "recommendation_strength_requires_recommendation": "Sterkte hoort alleen bij een aanbeveling.",
+    "source_context_role_invalid": "Kies of de brontekst een label of aanvullende context is.",
+    "source_context_reason_required": "Licht toe waarom deze bronrol en koppeling juist zijn.",
+    "source_context_command_required": "Het formulier is niet volledig. Open de passage opnieuw en vul de koppeling in.",
+    "source_context_command_conflict": "Deze opdracht is al opgeslagen met andere keuzes. Open de passage opnieuw voor een nieuwe opdracht.",
+    "source_context_target_required": "Selecteer minstens één passage die deze context nodig heeft. Gebruik de aparte actie om alle koppelingen te verwijderen.",
+    "source_context_target_invalid": "Kies een inhoudelijke passage uit dit document. Een kop, het label zelf of een ander contextfragment kan hier geen doel zijn.",
+    "source_context_evidence_required": "Het exacte bronbewijs ontbreekt. Laat de koppeling open en vraag de beheerder de bronverwijzing te controleren.",
+    "source_exclusion_not_proposed": "Deze selectie bevat inhoudelijk of gewijzigd bronwerk. Controleer de bronafhandeling opnieuw; er is niets uitgesloten.",
+    "source_context_not_knowledge": "Dit is bronbewijs, geen gevormd kennisobject. Verantwoord het brongebruik of herstel de kennisvorming; keur deze bronregel niet als kennisobject goed.",
+    "source_context_review_incomplete": "Een broncontextkoppeling verwijst naar gewijzigde of ontbrekende tekst. Controleer de koppeling en beoordeel de betrokken passages opnieuw.",
+    "source_context_check_required": "Controleer de bron en bevestig dit voordat je de koppeling opslaat.",
+    "source_context_independent_transaction_required": "De broncontext kon niet als zelfstandige opdracht worden opgeslagen. Er is niets bevestigd; laat de beheerder de workflowopslag controleren.",
+    "invalid_parent_structure": "Deze kop kan niet boven deze passage worden geplaatst. Kies een kop die hoger in de documentstructuur staat.",
+    "unknown_recommendation_strength": "Kies DOEN, OVERWEEG of NIET DOEN.",
+    "recommendation_direction_required": "Kies of de aanbeveling iets aanraadt of afraadt.",
+    "recommendation_strength_confirmation_required": "Kies sterk, zwak of niet vermeld in de bron.",
+    "recommendation_direction_evidence_missing": "Metis vindt geen bronbewijs voor de gekozen richting. Controleer de oorspronkelijke passage. Laat de beoordeling open als de bron onvoldoende duidelijk is.",
+    "recommendation_strength_evidence_required": "Metis herkent in de bron geen expliciete aanduiding die je keuze Sterk of Zwak ondersteunt. Controleer de oorspronkelijke passage en de context. Vermeldt de bron geen sterkte? Kies Niet vermeld in de bron. Staat de sterkte er wel expliciet? Laat de beoordeling open en meld dit bij de beheerder.",
+    "recommendation_strength_not_stated_conflict": "De bron bevat wel een expliciete sterkteaanduiding; kies sterk of zwak, of laat de beoordeling open als de herkende bronverwijzing niet klopt.",
+    "recommendation_semantics_confirmation_invalid": "De richting en sterkte konden niet samen worden bevestigd. Controleer beide keuzes aan de hand van de oorspronkelijke passage.",
+    "legacy_recommendation_strength_not_allowed": "DOEN, OVERWEEG en NIET DOEN zijn voor nieuwe richtlijnaanbevelingen vervangen door aparte richting en sterkte.",
+    "published_objects_must_not_be_rewritten": "Deze passage is al gepubliceerd. Lever een nieuwe documentversie in om een wijziging te laten beoordelen.",
+    "unknown_object": "Deze passage is niet meer beschikbaar. Open het document opnieuw via Review.",
+    "entra_access_denied": "Je account heeft geen toegang tot Metis. Vraag de beheerder om toegang.",
+    "entra_local_auth_disabled": "Aanmelden met een lokaal wachtwoord is uitgeschakeld. Gebruik de organisatieaanmelding.",
+    "unknown_snapshot": "Dit document is niet meer beschikbaar. Ga naar Documenten en kies het document opnieuw.",
+    "delete_confirmation_required": "Bevestig eerst dat je dit nog niet gepubliceerde document wilt verwijderen.",
+    "delete_title_confirmation_required": "Typ de exacte documenttitel om te bevestigen.",
+    "published_projection_must_not_be_deleted": "Dit document is gepubliceerd en kan hier niet worden verwijderd. Vraag de beheerder naar de procedure voor intrekken.",
+    "publish_confirmation_required": "Bevestig eerst dat je de gereviewde kennisobjecten wilt publiceren.",
+    "already_published": "Dit document is al gepubliceerd. Controleer de publicatiestatus; opnieuw publiceren is niet nodig.",
+    "g2_source_store_unavailable": "De bronopslag is niet bereikbaar. Publiceren is daarom geblokkeerd. Probeer later opnieuw; meld het bij de beheerder als dit blijft gebeuren.",
+    "g2_source_checksum_mismatch": "Het opgeslagen bronbestand wijkt af van de gecontroleerde versie. Publiceren is geblokkeerd. Laat de beheerder dit onderzoeken.",
+    "g2_source_verification_failed": "Metis kan het opgeslagen bronbestand niet betrouwbaar controleren. Publiceren is geblokkeerd. Meld dit bij de beheerder.",
+    "prepublication_schema_invalid": "Een goedgekeurde passage mist gegevens die nodig zijn voor publicatie. Laat de beheerder controleren welke passage moet worden hersteld.",
+    "prepublication_projection_failed": "Metis kon de publicatie niet voorbereiden. Controleer de publicatiestatus en meld dit bij de beheerder voordat je opnieuw probeert.",
+    "object_tuple_required": "Nog niet alle vereiste passagebeoordelingen zijn afgerond. Ga naar Review en rond de open beoordelingen af.",
+    "unpublished_delete_role_required": "Je account heeft geen rechten om dit document te verwijderen. Vraag een onderzoeker of beoordelaar om deze stap uit te voeren.",
+    "unpublished_delete_not_permitted": "Alleen de uploader van dit document of een publicatiebeheerder verwijdert een ongepubliceerd document.",
+    "hide_selected_objects_forbidden": "Losse passages kunnen niet worden verborgen terwijl dit document in beoordeling blijft. Rond de beoordeling van deze passages af.",
+    "cross_model_direct_change_blocked": "Omzetten tussen een beslisboom en een ander documenttype vereist opnieuw verwerken. Gebruik de actie voor opnieuw verwerken van dit document.",
+    "class_change_confirmation_required": "Bevestig eerst de consequentie van Klasse wijzigen.",
+    "published_class_change_blocked": "Van een gepubliceerd document kun je het documenttype niet wijzigen. Lever een nieuwe versie in.",
+    "cross_model_reextract_required": "Dit document moet opnieuw worden verwerkt om het naar het gekozen documenttype om te zetten.",
+    "source_identity_must_not_change": "Deze actie mag de oorspronkelijke brongegevens niet wijzigen. Lever een nieuw document of een nieuwe versie in.",
+    INGEST_PAYLOAD_TOO_LARGE: "Het bestand of de download is te groot. Lever een kleiner HTML- of PDF-bestand in.",
+    URL_DESTINATION_NOT_ALLOWED: "Deze URL wijst naar een interne bestemming en kan niet worden ingeleverd.",
+    SNAPSHOT_OBJECT_WRITE_CONFLICT: (
+        "Deze beoordeling is niet opgeslagen. Het document is tussentijds gewijzigd. "
+        "Je invoer staat nog in het formulier; sla opnieuw op."
+    ),
+    "pre_review_llm_response_not_completed": "De semantische verwerking is niet afgerond. Het onvolledige antwoord is niet toegepast. Probeer de verwerking opnieuw; blijft dit gebeuren, laat de beheerder de verwerkingsgegevens controleren.",
+    "unpublished_delete_requires_independent_transaction": "Het document is niet verwijderd. Rond de andere bewerking eerst af en probeer daarna opnieuw te verwijderen.",
+}
+RELATION_LABELS = {
+    "applies_if": "geldt indien",
+    "except_if": "geldt niet indien",
+    "defines": "definieert",
+    "explains": "licht toe",
+    "supported_by": "onderbouwd door",
+    "supersedes": "vervangt",
+    "parent": "bovenliggend",
+    "child": "onderliggend",
+}
+
+
+def _checked(selected: str, value: str) -> str:
+    return " checked" if selected == value else ""
+
+
+def _esc(value: Any) -> str:
+    return html.escape(str(value or ""), quote=True)
+
+
+def _status_label(state: str) -> str:
+    return STATUS_LABELS.get(state, state.replace("_", " "))
+
+
+def _object_type_label(value: str | None) -> str:
+    return OBJECT_TYPE_LABELS.get(value or "", (value or "").replace("_", " "))
+
+
+def _beeldmerk() -> str:
+    return (
+        '<img class="beeldmerk" src="/brand/venvn-beeldmerk.png" '
+        'width="94" height="32" alt="v&amp;vn">'
+    )
+
+
+def _metis_wordmark() -> str:
+    return (
+        '<img class="metis-wordmark" src="/brand/metis-wordmark.jpg" '
+        'width="1000" height="363" alt="Metis — V&amp;VN Data Services">'
+    )
+
+
+def _metis_mark() -> str:
+    return (
+        '<img class="metis-mark" src="/brand/metis-mark.jpg" '
+        'width="96" height="72" alt="">'
+    )
+
+
+def _login_brand() -> str:
+    return f"""
+    <div class="login-brand">
+      <a class="login-wordmark" href="/login" aria-label="Metis — V&amp;VN Data Services">
+        {_metis_wordmark()}
+      </a>
+      <div class="venvn-endorsement">
+        <span>Een dienst van</span>
+        {_beeldmerk()}
+      </div>
+    </div>
+    """
+
+
+def _page(body: str, *, title: str | None = None) -> str:
+    page_title = title or "V&amp;VN Data Services — Interne operations console"
+    stylesheet = BRAND_DIR / "console.css"
+    stylesheet_url = "/brand/console.css"
+    if stylesheet.is_file():
+        # ZIP entries have fixed mtimes; version by content, not Last-Modified.
+        version = hashlib.sha256(stylesheet.read_bytes()).hexdigest()[:16]
+        stylesheet_url += f"?v={version}"
+    return f"""<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{page_title}</title>
+<script>
+try {{
+  const saved = location.pathname === '/login' ? 'light' : localStorage.getItem('metis-theme');
+  document.documentElement.dataset.theme = saved === 'light' || saved === 'dark'
+    ? saved : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+}} catch (_) {{ document.documentElement.dataset.theme = 'light'; }}
+</script>
+<link rel="stylesheet" href="{stylesheet_url}">
+</head>
+<body>
+<div class="shell">
+<div class="canvas">
+{body}
+</div>
+</div>
+<script>
+const sessionWarning = document.querySelector('[data-session-warning]');
+const sessionWarningTitle = document.querySelector('#session-warning-title');
+const sessionWarningText = document.querySelector('[data-session-warning-text]');
+const sessionRenew = document.querySelector('[data-session-renew]');
+let sessionRemaining = null;
+let sessionReason = '';
+let sessionTimer = null;
+const sessionPath = location.pathname + location.search;
+
+const formatSessionRemaining = (seconds) => {{
+  const value = Math.max(0, Number(seconds) || 0);
+  const minutes = Math.floor(value / 60);
+  const secs = Math.floor(value % 60);
+  return minutes ? `${{minutes}} min ${{secs}} sec` : `${{secs}} sec`;
+}};
+
+const renderSessionWarning = () => {{
+  if (!sessionWarning || sessionRemaining === null) return;
+  if (sessionRemaining > 120) {{
+    sessionWarning.hidden = true;
+    return;
+  }}
+  sessionWarning.hidden = false;
+  if (sessionRemaining <= 0) {{
+    if (sessionWarningTitle) sessionWarningTitle.textContent = 'Je sessie is verlopen';
+    sessionWarningText.textContent = 'Je sessie is verlopen. Meld opnieuw aan om verder te gaan.';
+    if (sessionRenew) sessionRenew.textContent = 'Opnieuw aanmelden';
+    return;
+  }}
+  if (sessionWarningTitle) sessionWarningTitle.textContent = 'Je sessie verloopt bijna';
+  if (sessionReason === 'absolute') {{
+    sessionWarningText.textContent =
+      'Je maximale sessieduur is bijna bereikt. Meld opnieuw aan binnen ' +
+      formatSessionRemaining(sessionRemaining) + '.';
+    if (sessionRenew) sessionRenew.textContent = 'Opnieuw aanmelden';
+  }} else {{
+    sessionWarningText.textContent =
+      'Je wordt wegens inactiviteit automatisch uitgelogd over ' +
+      formatSessionRemaining(sessionRemaining) + '.';
+    if (sessionRenew) sessionRenew.textContent = 'Blijf ingelogd';
+  }}
+}};
+
+const applySessionStatus = (status) => {{
+  sessionRemaining = Number(status.remaining_seconds);
+  sessionReason = String(status.warning_reason || '');
+  renderSessionWarning();
+}};
+
+const pollSessionStatus = async () => {{
+  if (location.pathname === '/login' || location.pathname.startsWith('/auth/')) return;
+  try {{
+    const response = await fetch('/session/status', {{
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: {{'Accept': 'application/json'}}
+    }});
+    if (response.status === 404) return;
+    if (response.status === 401) {{
+      sessionRemaining = 0;
+      sessionReason = 'idle';
+      renderSessionWarning();
+      return;
+    }}
+    if (!response.ok) return;
+    applySessionStatus(await response.json());
+  }} catch (_) {{}}
+}};
+
+if (sessionRenew) sessionRenew.addEventListener('click', async () => {{
+  if (sessionReason === 'absolute' || sessionRemaining === 0) {{
+    location.href = '/auth/microsoft?next=' + encodeURIComponent(sessionPath);
+    return;
+  }}
+  try {{
+    const response = await fetch('/session/renew', {{
+      method: 'POST',
+      credentials: 'same-origin',
+      cache: 'no-store',
+      headers: {{'Accept': 'application/json'}}
+    }});
+    if (response.status === 401) {{
+      location.href = '/auth/microsoft?next=' + encodeURIComponent(sessionPath);
+      return;
+    }}
+    if (!response.ok) return;
+    applySessionStatus(await response.json());
+  }} catch (_) {{}}
+}});
+if (sessionWarning) {{
+  pollSessionStatus();
+  window.setInterval(pollSessionStatus, 30000);
+  sessionTimer = window.setInterval(() => {{
+    if (sessionRemaining === null || sessionRemaining <= 0) return;
+    sessionRemaining -= 1;
+    if (sessionRemaining <= 120) renderSessionWarning();
+  }}, 1000);
+}}
+
+document.querySelectorAll('[data-theme-toggle]').forEach((button) => {{
+  const sync = () => {{
+    const dark = document.documentElement.dataset.theme === 'dark';
+    button.textContent = dark ? 'Lichte modus' : 'Donkere modus';
+    button.setAttribute('aria-pressed', String(dark));
+  }};
+  button.addEventListener('click', () => {{
+    const dark = document.documentElement.dataset.theme === 'dark';
+    document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+    try {{ localStorage.setItem('metis-theme', document.documentElement.dataset.theme); }} catch (_) {{}}
+    sync();
+  }});
+  sync();
+}});
+document.querySelectorAll('[data-select-review-batch]').forEach((button) => {{
+  button.addEventListener('click', () => {{
+    button.closest('form').querySelectorAll('[name="object_ids"]').forEach((input) => {{
+      input.checked = true;
+    }});
+  }});
+}});
+document.querySelectorAll('[data-clear-review-batch]').forEach((button) => {{
+  button.addEventListener('click', () => {{
+    button.closest('form').querySelectorAll('[name="object_ids"]').forEach((input) => {{
+      input.checked = false;
+    }});
+  }});
+}});
+document.querySelectorAll('[data-review-form]').forEach((form) => {{
+  const decision = form.querySelector('[name="decision"]');
+  const eindoordeel = form.querySelectorAll('[name="eindoordeel"]');
+  const type = form.querySelector('[name="confirmed_object_type"]');
+  const typeAction = form.querySelectorAll('[name="type_action"]');
+  const typeChooser = form.querySelector('[data-type-chooser]');
+  const proposed = form.querySelector('[name="proposed_object_type"]');
+  const comment = form.querySelector('[name="comment"]');
+  const commentField = form.querySelector('[data-comment-field]');
+  const correctionField = form.querySelector('[data-correction-field]');
+  const hint = form.querySelector('[data-decision-hint]');
+  const submit = form.querySelector('[data-submit-review]');
+  const stamp = form.querySelector('[data-stamp-block]');
+  const strength = stamp ? stamp.querySelector('[name="recommendation_strength"]') : null;
+  const semantics = form.querySelector('[data-recommendation-semantics-block]');
+  const direction = form.querySelectorAll('[name="recommendation_direction"]');
+  const strengthLevel = form.querySelectorAll('[name="recommendation_strength_level"]');
+  const chooser = form.querySelector('[data-heading-chooser]');
+  const search = form.querySelector('[data-heading-search]');
+  const posAction = form.querySelectorAll('[name="documentpositie_action"]');
+  const suitability = form.querySelectorAll('[name="suitability"]');
+  const relationAck = form.querySelector('[name="relation_review_ack"]');
+  const strengthTypes = new Set(['recommendation', 'outcome']);
+  const selected = (nodes) => {{
+    const hit = Array.from(nodes || []).find((node) => node.checked);
+    return hit ? hit.value : '';
+  }};
+  const liveType = () => {{
+    const action = selected(typeAction);
+    if (action === 'dit_klopt' && proposed && proposed.value) return proposed.value;
+    return type ? type.value : '';
+  }};
+  const updateStamp = () => {{
+    const card = form.closest('[data-confirmed-type]');
+    const confirmedType = card ? (card.getAttribute('data-confirmed-type') || '') : '';
+    const changingType = selected(typeAction) === 'type_wijzigen';
+    const confirmingProposal = selected(typeAction) === 'dit_klopt';
+    const live = liveType();
+    const showLegacy = Boolean(stamp) && live === 'outcome' && (
+      confirmedType === 'outcome' || changingType || confirmingProposal
+    );
+    const showSemantics = Boolean(semantics) && live === 'recommendation' && (
+      confirmedType === 'recommendation' || changingType || confirmingProposal
+    );
+    if (stamp) stamp.hidden = !showLegacy;
+    if (strength) {{
+      strength.disabled = !showLegacy;
+      if (!showLegacy) strength.value = '';
+    }}
+    if (semantics) semantics.hidden = !showSemantics;
+    direction.forEach((node) => {{
+      node.disabled = !showSemantics;
+      if (!showSemantics) node.checked = false;
+    }});
+    strengthLevel.forEach((node) => {{
+      node.disabled = !showSemantics;
+      if (!showSemantics) node.checked = false;
+    }});
+  }};
+  const updateChooser = () => {{
+    if (chooser) chooser.hidden = selected(posAction) !== 'andere_kop';
+    if (typeChooser) typeChooser.hidden = selected(typeAction) !== 'type_wijzigen';
+    if (type) {{
+      if (selected(typeAction) === 'dit_klopt' && proposed && proposed.value) {{
+        type.value = proposed.value;
+      }}
+      type.hidden = selected(typeAction) !== 'type_wijzigen';
+    }}
+  }};
+  const update = () => {{
+    const value = selected(eindoordeel) || (decision ? decision.value : '');
+    if (decision && selected(eindoordeel)) {{
+      if (value === 'goedkeuren') decision.value = 'approve';
+      else if (value === 'goedkeuren_na_correctie') decision.value = 'revise';
+      else if (value === 'afwijzen') decision.value = 'reject';
+      else if (value === 'later_beoordelen') decision.value = 'later';
+    }}
+    const mapped = decision ? decision.value : value;
+    const needsComment = mapped === 'reject' || mapped === 'revise' || value === 'afwijzen' || value === 'goedkeuren_na_correctie';
+    const needsCorrection = mapped === 'revise' || value === 'goedkeuren_na_correctie';
+    const needsType = mapped === 'approve' || value === 'goedkeuren';
+    if (commentField) commentField.hidden = !needsComment;
+    if (correctionField) correctionField.hidden = !needsCorrection;
+    if (comment) comment.required = needsComment;
+    if (type) type.required = needsType && selected(typeAction) === 'type_wijzigen';
+    const hasType = !needsType || liveType();
+    const hasComment = !needsComment || (comment && comment.value.trim());
+    const hasSuitability = Boolean(selected(suitability));
+    const needsRecommendationSemantics = needsType && liveType() === 'recommendation' && Boolean(semantics);
+    const hasRecommendationSemantics = (
+      !needsRecommendationSemantics
+      || (Boolean(selected(direction)) && Boolean(selected(strengthLevel)))
+    );
+    const needsRelationReview = needsType && Boolean(relationAck);
+    const hasRelationReview = !needsRelationReview || Boolean(relationAck && relationAck.checked);
+    if (submit) {{
+      submit.disabled = !value || !hasType || !hasComment || !hasSuitability || !hasRecommendationSemantics || !hasRelationReview;
+      submit.textContent = mapped === 'revise' ? 'Correctie specificeren' : 'Review opslaan en volgende';
+    }}
+    if (hint) {{
+      if (!value) hint.textContent = 'Kies een eindoordeel.';
+      else if (!hasSuitability) hint.textContent = 'Kies of de passage geschikt is.';
+      else if (needsType && !liveType()) hint.textContent = 'Bevestig eerst het type.';
+      else if (needsRecommendationSemantics && !hasRecommendationSemantics) hint.textContent = 'Bevestig richting en sterkte van de aanbeveling.';
+      else if (needsRelationReview && !hasRelationReview) hint.textContent = 'Controleer en bevestig de voorgestelde relaties.';
+      else hint.textContent = '';
+    }}
+    updateChooser();
+    updateStamp();
+  }};
+  eindoordeel.forEach((node) => node.addEventListener('change', update));
+  typeAction.forEach((node) => node.addEventListener('change', update));
+  posAction.forEach((node) => node.addEventListener('change', update));
+  suitability.forEach((node) => node.addEventListener('change', update));
+  if (relationAck) relationAck.addEventListener('change', update);
+  if (type) type.addEventListener('change', update);
+  direction.forEach((node) => node.addEventListener('change', update));
+  strengthLevel.forEach((node) => node.addEventListener('change', update));
+  if (comment) comment.addEventListener('input', update);
+  if (decision) decision.addEventListener('change', update);
+  if (search && chooser) {{
+    search.addEventListener('input', () => {{
+      const query = search.value.trim().toLowerCase();
+      chooser.querySelectorAll('[data-parent-choice-list] li').forEach((item) => {{
+        item.hidden = Boolean(query) && !item.textContent.toLowerCase().includes(query);
+      }});
+    }});
+  }}
+  updateChooser();
+  updateStamp();
+  update();
+}});
+</script>
+</body>
+</html>
+"""
+
+
+def _session_warning() -> str:
+    """Only authenticated page navigation renders session controls."""
+    return '''<div data-session-warning hidden role="dialog" aria-live="assertive" aria-labelledby="session-warning-title"
+     style="position:fixed;inset:auto 1rem 1rem auto;z-index:1000;max-width:28rem;">
+  <div class="banner warn" style="box-shadow:0 8px 30px rgba(0,0,0,.18);">
+    <strong id="session-warning-title">Je sessie verloopt bijna</strong>
+    <p data-session-warning-text style="margin:.5rem 0;"></p>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+      <button class="btn-primary" type="button" data-session-renew>Blijf ingelogd</button>
+    </div>
+  </div>
+</div>'''
+
+
+def _nav(account: dict[str, Any] | None, current: str = "") -> str:
+    who = (
+        f'{_esc(account.get("display_name"))} · rollen: {", ".join(_esc(r) for r in account.get("roles") or [])}'
+        if account
+        else "niet aangemeld"
+    )
+    rooms = [
+        ("home", "/", "Mijn werk"),
+        ("ingest", "/ingest", "Inleveren"),
+        ("selection", "/source-selection", "Bronselectie"),
+        ("review", "/review", "Review"),
+        ("publish", "/publish", "Publicatie"),
+        ("tree", "/tree", "Documenten"),
+        ("settings", "/settings", "Instellingen"),
+    ]
+    links = []
+    for key, href, label in rooms:
+        current_key = "settings" if current in {"settings", "accounts", "llm-settings", "about", "audit"} else current
+        current_attr = ' aria-current="page"' if current_key == key else ""
+        links.append(f'<a href="{href}"{current_attr}>{label}</a>')
+    links.append('<form method="post" action="/logout"><button class="quiet" type="submit">Uitloggen</button></form>')
+    return f"""
+    <header class="topbar">
+      <a class="brand metis-brand" href="/" aria-label="Metis — V&amp;VN Data Services">
+        <span class="metis-mark-frame">{_metis_mark()}</span>
+        <span class="brand-copy">
+          <strong>Metis</strong>
+          <span>V&amp;VN Data Services</span>
+        </span>
+      </a>
+      <nav class="rooms">{"".join(links)}</nav>
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="Wissel tussen lichte en donkere modus">Donkere modus</button>
+      <div class="who">{who}</div>
+    </header>
+    {_session_warning() if account else ""}
+    """
+
+
+def _diagnosis_access(account: dict[str, Any], envelope: dict[str, Any]) -> bool:
+    """Who may open /inzicht/document: processing readers or publishers."""
+    roles = set(account.get("roles") or [])
+    return bool(roles & {"researcher", "publisher"}) or (
+        "reviewer" in roles and account.get("account_id") in (envelope.get("named_reviewers") or []))
+
+
+def _diagnosis_link(account: dict[str, Any], envelope: dict[str, Any] | None) -> str:
+    if not envelope or not _diagnosis_access(account, envelope):
+        return ""
+    query = _esc(urlencode({"document": envelope["snapshot_id"]}))
+    return f'<p><a href="/inzicht/document?{query}">Bekijk diagnose in Inzicht</a></p>'
+
+
+def _task_links(topic: str) -> str:
+    """Separate destinations, never embedded instructional or diagnostic UI."""
+    return (
+        '<nav class="task-secondary-nav" aria-label="Hulp en beheer">'
+        f'<a href="/help/{_esc(topic)}">Uitleg bij deze taak</a>'
+        '</nav>'
+    )
+
+
+def _review_validation_script() -> str:
+    """Task-local validation; no changes to the home page's shared script."""
+    return """<script>
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('[data-review-form]').forEach((form) => {
+        const button = form.querySelector('[data-submit-review]');
+        if (!button) return;
+        form.noValidate = true;
+        const selected = (name) => form.querySelector('[name="' + name + '"]:checked');
+        const errors = () => {
+          const missing = [];
+          const add = (name, message) => missing.push({name, message});
+          const decision = selected('eindoordeel');
+          if (!decision) add('eindoordeel', 'Kies een besluit.');
+          if (!selected('suitability')) add('suitability', 'Kies of de passage zelfstandig bruikbaar is.');
+          if (decision && decision.value === 'goedkeuren') {
+            const position = selected('documentpositie_action');
+            const type = selected('type_action');
+            if (!position) add('documentpositie_action', 'Bevestig de kop of kies een andere kop.');
+            if (position && position.value === 'andere_kop' && !selected('parent_choice'))
+              add('parent_choice', 'Kies een kop.');
+            if (!type) add('type_action', 'Bevestig het type of kies een ander type.');
+            const typeField = form.querySelector('[name="confirmed_object_type"]');
+            const proposal = form.querySelector('[name="proposed_object_type"]');
+            const kind = type && type.value === 'dit_klopt' ? proposal.value : typeField.value;
+            if (type && type.value === 'type_wijzigen' && !kind) add('confirmed_object_type', 'Kies een type.');
+            if (kind === 'recommendation' && form.querySelector('[data-recommendation-semantics-block]')) {
+              if (!selected('recommendation_direction')) add('recommendation_direction', 'Kies de richting van de aanbeveling.');
+              if (!selected('recommendation_strength_level')) add('recommendation_strength_level', 'Kies de sterkte die de bron vermeldt.');
+            }
+            const relation = form.querySelector('[name="relation_review_ack"]');
+            if (relation && !relation.checked) add('relation_review_ack', 'Bevestig de relaties.');
+          }
+          Array.from(form.elements).filter((field) => field.willValidate && !field.validity.valid)
+            .forEach((field) => { if (!missing.some((item) => item.name === field.name))
+              add(field.name, field.name === 'comment' ? 'Vul een toelichting in.' : 'Controleer dit veld.'); });
+          return missing;
+        };
+        const showErrors = (missing) => {
+          let summary = form.querySelector('[data-review-error-summary]');
+          if (!summary) {
+            summary = document.createElement('div');
+            summary.className = 'banner err'; summary.dataset.reviewErrorSummary = '';
+            summary.setAttribute('role', 'alert'); summary.tabIndex = -1;
+            form.prepend(summary);
+          }
+          form.querySelectorAll('[aria-invalid="true"]').forEach((field) => field.removeAttribute('aria-invalid'));
+          form.querySelectorAll('[data-review-field-error]').forEach((note) => note.remove());
+          form.querySelectorAll('[data-review-error-describedby]').forEach((field) => {
+            field.removeAttribute('aria-describedby'); delete field.dataset.reviewErrorDescribedby;
+          });
+          summary.replaceChildren(); summary.hidden = !missing.length;
+          if (!missing.length) return;
+          const title = document.createElement('p'); title.textContent = 'Er ontbreekt nog iets'; summary.append(title);
+          const list = document.createElement('ul'); summary.append(list);
+          missing.forEach((item, index) => {
+            const field = form.querySelector('[name="' + item.name + '"]');
+            const row = document.createElement('li'); const link = document.createElement('a');
+            link.textContent = item.message;
+            if (field) {
+              if (!field.id) field.id = 'review-required-' + form.querySelector('[name="object_id"]').value + '-' + index;
+              field.setAttribute('aria-invalid', 'true'); link.href = '#' + field.id;
+              const note = document.createElement('p'); note.className = 'field-error';
+              note.dataset.reviewFieldError = ''; note.id = field.id + '-error'; note.textContent = item.message;
+              field.closest('section, fieldset, label').append(note);
+              if (!field.hasAttribute('aria-describedby')) {
+                field.setAttribute('aria-describedby', note.id); field.dataset.reviewErrorDescribedby = '';
+              }
+              link.addEventListener('click', () => field.focus());
+            }
+            row.append(link); list.append(row);
+          });
+          summary.focus();
+        };
+        const enable = () => { button.disabled = false; };
+        form.addEventListener('input', enable); form.addEventListener('change', enable);
+        form.addEventListener('submit', (event) => {
+          // Source continuation is a separate existing command, not a review decision.
+          if (event.submitter && event.submitter.hasAttribute('formaction')) return;
+          const missing = errors();
+          if (missing.length) { event.preventDefault(); showErrors(missing); }
+        });
+        enable();
+      });
+    });
+    </script>"""
+
+
+def _home_tile(
+    *,
+    href: str,
+    icon: str,
+    title: str,
+    description: str,
+    badge: str,
+    priority: bool = False,
+) -> str:
+    priority_class = " home-tile-priority" if priority else ""
+    priority_label = '<span class="home-tile-now">Nu doen</span>' if priority else ""
+    return f"""
+    <a class="home-tile{priority_class}" href="{href}">
+      <span class="home-tile-icon" aria-hidden="true">{icon}</span>
+      <span class="home-tile-title">{title}</span>
+      <span class="home-tile-description">{description}</span>
+      <span class="home-tile-footer"><span class="home-tile-badge">{badge}</span>{priority_label}</span>
+    </a>
+    """
+
+
+def _class_options(selected: str = "richtlijn") -> str:
+    return "".join(
+        f'<option value="{_esc(name)}"{" selected" if name == selected else ""}>{_esc(name)}</option>'
+        for name in ALLOWED_CLASSES
+    )
+
+
+def _document_options(rows: list[dict[str, Any]], selected: str = "") -> str:
+    options = ['<option value="">Kies een document</option>']
+    for row in rows:
+        label = f'{row["title"]} · {row["version"]} · {row["family"]}'
+        snap = row["snapshot_id"]
+        options.append(
+            f'<option value="{_esc(snap)}"{" selected" if snap == selected else ""}>{_esc(label)}</option>'
+        )
+    return "".join(options)
+
+
+def _type_options(confirmed: str, *, review_path: str = "richtlijn", proposed: str = "") -> str:
+    shown = confirmed or proposed
+    placeholder_selected = " selected" if not shown else ""
+    options = [
+        f'<option value="" disabled{placeholder_selected}>nog niet bevestigd</option>'
+    ]
+    names = CLOSED_BOOM_TYPES if review_path == "boom" else CLOSED_OBJECT_TYPES
+    for name in names:
+        selected = " selected" if name == shown else ""
+        options.append(f'<option value="{name}"{selected}>{_esc(_object_type_label(name))}</option>')
+    return "".join(options)
+
+
+def _context_resolution_copy(endpoint: dict[str, Any]) -> str:
+    resolution = str(endpoint.get("resolution") or "")
+    expected = str(endpoint.get("expected_version") or "")
+    current = str(endpoint.get("current_version") or "")
+    if resolution == RESOLUTION_CURRENT:
+        return f"versie {expected}"
+    if resolution == RESOLUTION_VERSION_MISMATCH:
+        return (
+            f"verwacht versie {expected}; actuele versie {current}. "
+            "Deze relatie is niet automatisch aangepast."
+        )
+    if resolution == RESOLUTION_MISSING:
+        return f"verwacht versie {expected}; passage ontbreekt in deze werkversie"
+    return f"versie {expected}"
+
+
+def _review_context_block(
+    obj: dict[str, Any],
+    objects: list[dict[str, Any]],
+    *,
+    snapshot_id: str,
+    review_path: str,
+    bindings=(),
+    fragments=None,
+    task: str = "",
+) -> str:
+    context = review_context(
+        obj,
+        objects=objects,
+        review_path=review_path, bindings=bindings, fragments=fragments
+    )
+    links = context.get("links") or []
+    if not links:
+        return ""
+
+    snap = quote(str(snapshot_id), safe="")
+    normalized_task = normalize_review_task(task)
+    task_query = f"&task={quote(normalized_task, safe='')}" if normalized_task else ""
+    rows: list[str] = []
+    for link in links:
+        outgoing = link.get("direction") == DIRECTION_OUTGOING
+        related = link.get("target") if outgoing else link.get("source")
+        related = related if isinstance(related, dict) else {}
+        relation_type = str(link.get("relation_type") or "")
+        label = RELATION_LABELS.get(relation_type, relation_type)
+        authority = str(link.get("authority") or "")
+        authority_label = (
+            "Bevestigde relatie"
+            if authority == AUTHORITY_CONFIRMED
+            else "Voorstel van Metis"
+        )
+        direction_label = "uitgaand" if outgoing else "inkomend"
+        text = str(related.get("text") or related.get("object_id") or "")
+        object_id = str(related.get("object_id") or "")
+        object_type = _object_type_label(str(related.get("object_type") or ""))
+        resolution = str(link.get("resolution") or RESOLUTION_CURRENT)
+        stale_endpoint = (
+            link.get("stale_endpoint")
+            if isinstance(link.get("stale_endpoint"), dict)
+            else None
+        )
+        resolution_copy = _context_resolution_copy(
+            stale_endpoint if stale_endpoint is not None else related
+        )
+        stale_class = " relation-context-stale" if resolution != RESOLUTION_CURRENT else ""
+        warning = ""
+        if resolution != RESOLUTION_CURRENT:
+            warning = (
+                '<p class="banner warn relation-context-warning">'
+                f'{_esc(resolution_copy)}</p>'
+            )
+        duty = related.get("review_duty")
+        duty_copy = ""
+        if isinstance(duty, dict):
+            stage = str(duty.get("stage") or "")
+            duty_copy = (
+                "Tweede beoordeling open"
+                if stage == "second_review"
+                else "Nog te beoordelen"
+            )
+        else:
+            duty_copy = "Geen open reviewplicht"
+
+        open_link = ""
+        if object_id and resolution != RESOLUTION_MISSING:
+            open_link = (
+                f'<a class="btn-secondary relation-context-open" '
+                f'href="/review?document={snap}&object={quote(object_id, safe="")}{task_query}">'
+                "Open passage</a>"
+            )
+
+        rows.append(
+            f'<article class="relation-context-item{stale_class}" '
+            f'data-relation-authority="{_esc(authority)}" '
+            f'data-relation-direction="{_esc(direction_label)}" '
+            f'data-relation-resolution="{_esc(resolution)}">'
+            f'<p class="eyebrow">{_esc(authority_label)}</p>'
+            f'<p><b>{_esc(label)}</b> · {_esc(direction_label)}</p>'
+            f'<p>{_esc(text)}</p>'
+            f'<p class="meta"><span>type <b>{_esc(object_type)}</b></span> '
+            f'<span>{_esc(resolution_copy)}</span> '
+            f'<span>{_esc(duty_copy)}</span></p>'
+            f'{warning}{open_link}'
+            "</article>"
+        )
+
+    return f"""
+      <section class="review-card-context review-step" data-review-step="context" aria-label="Samenhang met andere kennisobjecten">
+        <h4>Samenhang met andere kennisobjecten</h4>
+        <div class="relation-context-list">{"".join(rows)}</div>
+      </section>
+    """
+
+
+def _knowledge_relation_review_block(
+    obj: dict[str, Any],
+    objects: list[dict[str, Any]],
+    *,
+    review_path: str,
+    bindings=(),
+    fragments=None,
+    draft: dict[str, Any] | None = None,
+) -> str:
+    if not has_semantic_relation_review(obj):
+        return ""
+
+    context = review_context(
+        obj,
+        objects=objects,
+        review_path=review_path,
+        stage="first_review", bindings=bindings, fragments=fragments
+    )
+    outgoing_by_key = {}
+    for link in context.get("links") or []:
+        if link.get("direction") != DIRECTION_OUTGOING:
+            continue
+        target = link.get("target") if isinstance(link.get("target"), dict) else {}
+        key = (
+            str(link.get("relation_type") or ""),
+            str(target.get("object_id") or ""),
+            str(target.get("expected_version") or ""),
+        )
+        outgoing_by_key[key] = link
+
+    proposed = proposed_knowledge_relations_of(obj)
+    confirmed = confirmed_knowledge_relations_of(obj)
+    basis = proposed if proposed else confirmed
+    confirmed_keys = {
+        (
+            str(row.get("relation_type") or ""),
+            str(row.get("target_object_id") or ""),
+            str(row.get("target_object_version") or ""),
+        )
+        for row in confirmed
+    }
+
+    submitted_choices = (draft or {}).get("relation_choice")
+    selected_choices = set(submitted_choices) if isinstance(submitted_choices, list) else None
+    rows: list[str] = []
+    for relation in basis:
+        relation_type = str(relation.get("relation_type") or "")
+        target_id = str(relation.get("target_object_id") or "")
+        target_version = str(relation.get("target_object_version") or "")
+        key = (relation_type, target_id, target_version)
+        link = outgoing_by_key.get(key) or {}
+        target = link.get("target") if isinstance(link.get("target"), dict) else {}
+        target_text = str(target.get("text") or target_id)
+        resolution = str(target.get("resolution") or RESOLUTION_MISSING)
+        resolution_copy = _context_resolution_copy(
+            target
+            if target
+            else {
+                "resolution": RESOLUTION_MISSING,
+                "expected_version": target_version,
+                "current_version": "",
+            }
+        )
+        selected = (
+            relation_choice_value(relation) in selected_choices
+            if selected_choices is not None else key in confirmed_keys
+        )
+        checked = " checked" if selected else ""
+        label = RELATION_LABELS.get(relation_type, relation_type)
+        stale_note = (
+            f' <span class="relation-review-stale">({_esc(resolution_copy)})</span>'
+            if resolution != RESOLUTION_CURRENT
+            else f' <span class="muted">(versie {_esc(target_version)})</span>'
+        )
+        rows.append(
+            '<label class="check relation-review-choice" '
+            f'data-relation-resolution="{_esc(resolution)}">'
+            f'<input type="checkbox" name="relation_choice" '
+            f'value="{_esc(relation_choice_value(relation))}"{checked}>'
+            f'<span><b>{_esc(label)}</b> → {_esc(target_text)}{stale_note}</span>'
+            "</label>"
+        )
+
+    return f"""
+      <section class="review-step review-knowledge-relations" data-review-step="relations">
+        <h4>Welke relaties kloppen?</h4>
+        <div class="relation-review-list">{"".join(rows)}</div>
+        <label class="check relation-review-ack">
+          <input type="checkbox" name="relation_review_ack" value="1"{_checked((draft or {}).get("relation_review_ack", ""), "1")}>
+          <span>Ik heb de voorgestelde relaties gecontroleerd.</span>
+        </label>
+      </section>
+    """
+
+
+def _review_location(
+    console: OperationsConsole,
+    snapshot_id: str,
+    object_id: str | None = None,
+    *,
+    task: str = "",
+) -> str:
+    """Redirect only to a stored snapshot (and optional object), never raw form bytes."""
+    envelope = console._envelope(snapshot_id)
+    snap = quote(str(envelope["snapshot_id"]), safe="")
+    task_query = f"&task={quote(task, safe='')}" if task in REVIEW_TASKS else ""
+    if not object_id:
+        return f"/review?document={snap}{task_query}"
+    known = next(
+        (
+            row["object_id"]
+            for row in console.snapshot_objects(envelope["snapshot_id"])
+            if row["object_id"] == object_id
+        ),
+        None,
+    )
+    if known is None:
+        raise ConsoleError("unknown_object")
+    return f"/review?document={snap}&object={quote(str(known), safe='')}{task_query}"
+
+
+def _coverage_panel(objects: list[dict[str, Any]]) -> str:
+    rows = coverage_panel_rows(objects)
+    if not rows:
+        return ""
+    items = []
+    for row in rows:
+        parts = [
+            f"{_esc(label)} {count}"
+            for label, count in (row.get("labels") or {}).items()
+            if count
+        ]
+        detail = ", ".join(parts) if parts else "geen passages"
+        items.append(
+            f"<li><b>{_esc(row['section'])}</b> — {detail}</li>"
+        )
+    return f"""
+      <details class="review-coverage" aria-label="Controleoverzicht per kop">
+        <summary>Controleoverzicht per kop <span class="info-tip" tabindex="0" aria-label="Dit overzicht laat zien wat al is afgehandeld en wat nog aandacht vraagt.">ⓘ<span class="info-tip-text">Dit overzicht laat zien wat al is afgehandeld en wat nog aandacht vraagt.</span></span></summary>
+        <p class="lead">Dit overzicht is bedoeld om de voortgang te controleren. Je hoeft hier geen extra stap uit te voeren.</p>
+        <ul>{"".join(items)}</ul>
+      </details>
+    """
+
+
+def _document_list_page(rows: list[dict[str, Any]], *, q: str, page: int, path: str) -> tuple[list[dict[str, Any]], str]:
+    """Bound rendered document lists; search the complete authorized collection."""
+    query = q.strip()
+    terms = query.casefold().split()
+    matches = [row for row in rows if all(term in (
+        str(row.get("title") or "") + " " + str(row.get("family") or "")
+    ).casefold() for term in terms)]
+    size = 25
+    pages = max(1, (len(matches) + size - 1) // size)
+    page = max(1, min(page, pages))
+    links = []
+    for number, label in ((page - 1, "Vorige"), (page + 1, "Volgende")):
+        if 1 <= number <= pages:
+            links.append(f'<a href="{path}?{_esc(urlencode({"q": query, "page": number}))}">{label}</a>')
+    controls = f'''<form method="get" action="{path}" class="document-search">
+      <label>Zoek documenten<input type="search" name="q" value="{_esc(query)}" placeholder="Titel of onderwerp"></label>
+      <button class="btn-secondary" type="submit">Zoeken</button>
+    </form><nav class="document-pagination" aria-label="Documentpagina’s">
+      <span>{len(matches)} documenten · pagina {page} van {pages}</span> {" · ".join(links)}</nav>'''
+    return matches[(page - 1) * size:page * size], controls
+
+
+def _document_summary(row: dict[str, Any]) -> str:
+    from src.document_status_ui_v1 import current_document_lifecycle_status
+    lifecycle = current_document_lifecycle_status(str(row.get("snapshot_id") or "")) or {}
+    status = row.get("meaningful_status") or lifecycle.get("presentation_status") or row.get("status") or row.get("state") or ""
+    return (f'<span class="doc-title">{_esc(row["title"])}</span>'
+            f'<span class="meta">Versie {_esc(row["version"])} · {_esc(row.get("family"))} · '
+            f'{_esc(row.get("class"))} · status <b>{_esc(_status_label(status))}</b></span>')
+
+
+def _document_card_heading(row: dict[str, Any]) -> str:
+    return f"""
+      <header>
+        <p class="doc-title">{_esc(row["title"])}</p>
+      </header>
+      <p class="meta">
+        <span>versie <b>{_esc(row["version"])}</b></span>
+        <span>onderwerp <b>{_esc(row["family"])}</b></span>
+        <span>klasse <b>{_esc(row["class"])}</b></span>
+        <span>status <b>{_esc(_status_label(row.get("status") or row.get("state") or ""))}</b></span>
+      </p>
+    """
+
+
+def _can_delete_unpublished(account: dict[str, Any] | None, row: dict[str, Any]) -> bool:
+    from src.operations_console_v1 import unpublished_delete_permitted
+    return unpublished_delete_permitted(account, row)
+
+
+def _unpublished_delete_control(
+    row: dict[str, Any],
+    *,
+    account: dict[str, Any] | None,
+    console: OperationsConsole,
+    next_path: str,
+    mutable: bool | None = None,
+) -> str:
+    """Researcher Dutch delete control. Documenten room (/tree) only. Type-to-confirm title."""
+    if next_path != "/tree":
+        return ""
+    snap = str(row.get("snapshot_id") or "")
+    if not snap:
+        return ""
+    if "uploader_account_id" not in row:
+        try:
+            row = {**row, "uploader_account_id": console._envelope(snap).get("uploader_account_id")}
+        except ConsoleError:
+            return ""
+    if not _can_delete_unpublished(account, row):
+        return ""
+    if mutable is False:
+        return ""
+    if mutable is None:
+        try:
+            if console.snapshot_is_published(snap):
+                return ""
+        except ConsoleError:
+            return ""
+    title = str(row.get("title") or "")
+    target = next_path if next_path in ALLOWED_DELETE_NEXT else "/tree"
+    return f"""
+      <form class="delete-unpublished" method="post" action="/documents/delete">
+        <input type="hidden" name="snapshot_id" value="{_esc(snap)}">
+        <input type="hidden" name="next" value="{_esc(target)}">
+        <p class="delete-title-confirm">
+          <span>Documenttitel</span>
+          <strong class="delete-title-shown">{_esc(title)}</strong>
+        </p>
+        <label>Typ de exacte documenttitel
+          <input name="confirm_title" autocomplete="off" required>
+        </label>
+        <label class="check">
+          <input type="checkbox" name="confirm" value="1">
+          <span>Ik bevestig dat ik dit unpublished document wil verwijderen</span>
+        </label>
+        <button class="btn-secondary" type="submit">Verwijder unpublished document</button>
+      </form>
+    """
+
+
+def _strength_options(selected: str | None) -> str:
+    options = ['<option value="">Nog niet vastgelegd</option>']
+    for name in CLOSED_RECOMMENDATION_STRENGTHS:
+        mark = " selected" if name == selected else ""
+        options.append(
+            f'<option value="{name}"{mark}>{_esc(STRENGTH_STAMP_LABELS[name])}</option>'
+        )
+    return "".join(options)
+
+
+def _stamp_block(obj: dict[str, Any], *, hidden: bool = False) -> str:
+    proposed = obj.get("proposed_recommendation_strength") or ""
+    confirmed = obj.get("confirmed_recommendation_strength") or ""
+    shown = confirmed or proposed
+    sentence = recommendation_strength_sentence(shown) if shown else (
+        "Sterkte van de aanbeveling: kies DOEN, OVERWEEG of NIET DOEN."
+    )
+    hidden_attr = " hidden" if hidden else ""
+    disabled_attr = " disabled" if hidden else ""
+    return f"""
+                    <section class="review-step review-stamp" data-stamp-block{hidden_attr}>
+                      <h4>Sterkte van de aanbeveling</h4>
+                      <p class="stamp-sentence">{_esc(sentence)}</p>
+                      <label for="strength-{_esc(obj["object_id"])}">Sterkte</label>
+                      <select id="strength-{_esc(obj["object_id"])}" name="recommendation_strength"{disabled_attr}>
+                        {_strength_options(shown or None)}
+                      </select>
+                    </section>
+    """
+
+
+def _recommendation_semantics_block(
+    obj: dict[str, Any],
+    draft: dict[str, Any],
+    *,
+    hidden: bool = False,
+) -> str:
+    proposed = proposed_recommendation_semantics_of(obj)
+    confirmed = confirmed_recommendation_semantics_of(obj)
+    direction = str(draft.get("recommendation_direction") or confirmed.get("direction") or "")
+    strength_level = str(draft.get("recommendation_strength_level") or "")
+    if not strength_level and confirmed:
+        strength_level = (
+            "not_stated"
+            if confirmed.get("strength_status") == "not_stated"
+            else str(confirmed.get("strength") or "")
+        )
+
+    proposed_direction = str(proposed.get("direction") or "")
+    if proposed.get("strength_status") == "not_stated":
+        proposed_strength = "niet vermeld in de bron"
+    elif proposed.get("strength_status") == "unmapped":
+        proposed_strength = "expliciete bronterm nog niet gemapt"
+    else:
+        proposed_strength = {
+            "strong": "sterk",
+            "weak": "zwak",
+        }.get(str(proposed.get("strength") or ""), "niet voorgesteld")
+    direction_label = {"for": "aanraden", "against": "afraden"}.get(
+        proposed_direction,
+        "niet voorgesteld",
+    )
+    direction_evidence = str(proposed.get("direction_evidence_span") or "")
+    strength_evidence = str(proposed.get("strength_evidence_span") or "")
+    evidence_html = (
+        '<div class="recommendation-semantics-evidence">'
+        f'<p><b>Metis stelt voor:</b> richting {_esc(direction_label)}; sterkte {_esc(proposed_strength)}.</p>'
+        + (
+            f'<p><b>Richting uit de bron:</b> {_esc(direction_evidence)}</p>'
+            if direction_evidence
+            else ""
+        )
+        + (
+            f'<p><b>Sterkte uit de bron:</b> {_esc(strength_evidence)}</p>'
+            if strength_evidence
+            else ""
+        )
+        + "</div>"
+    )
+    hidden_attr = " hidden" if hidden else ""
+    disabled_attr = " disabled" if hidden else ""
+    return f"""
+                    <section class="review-step review-recommendation-semantics" data-recommendation-semantics-block data-stamp-block{hidden_attr}>
+                      <h4>Sterkte van de aanbeveling</h4>
+                      {evidence_html}
+                      <fieldset>
+                        <legend>Richting</legend>
+                        <label class="check"><input type="radio" name="recommendation_direction" value="for"{disabled_attr}{_checked(direction, "for")}> Aanraden</label>
+                        <label class="check"><input type="radio" name="recommendation_direction" value="against"{disabled_attr}{_checked(direction, "against")}> Afraden</label>
+                      </fieldset>
+                      <fieldset>
+                        <legend>Welke sterkte vermeldt de bron?</legend>
+                        {('<div class="banner err" role="alert">' + _esc(ERROR_COPY.get(draft.get("validation_error", ""), "")) + '<p>Je beoordeling is niet opgeslagen. Je invoer staat hieronder nog klaar.</p></div>') if draft.get("validation_error") else ""}
+                        <label class="check"><input type="radio" name="recommendation_strength_level" value="strong"{disabled_attr}{_checked(strength_level, "strong")}> Sterk</label>
+                        <label class="check"><input type="radio" name="recommendation_strength_level" value="weak"{disabled_attr}{_checked(strength_level, "weak")}> Zwak</label>
+                        <label class="check"><input type="radio" name="recommendation_strength_level" value="not_stated"{disabled_attr}{_checked(strength_level, "not_stated")}> Niet vermeld in de bron</label>
+                      </fieldset>
+                      <select name="recommendation_strength" hidden disabled data-legacy-recommendation-strength-compat aria-hidden="true"></select>
+                    </section>
+    """
+
+
+def _heading_chooser(
+    obj: dict[str, Any],
+    objects: list[dict[str, Any]],
+    snapshot_id: str,
+    selected_parent: str = "",
+) -> str:
+    choice = parent_choice_list(objects)
+    snap = quote(str(snapshot_id), safe="")
+    choice_items = []
+    for row in choice:
+        text = heading_visible_text(row)
+        outline = parse_outline_number(text)
+        loc = (row.get("provenance") or {}).get("source_locator") or row.get("source_locator") or {}
+        page = loc.get("page") or loc.get("locator_value")
+        object_id = str(row.get("object_id") or "")
+        attrs = f' data-object-id="{_esc(object_id)}"' * bool(object_id)
+        if outline:
+            attrs = f' data-outline="{".".join(str(part) for part in outline)}"' + attrs
+        locator = f' <span class="muted">({_esc(page)})</span>' * bool(page)
+        blocked = (
+            is_heading_object(obj)
+            and is_heading_object(row)
+            and not parent_proposal_may_bind(obj, row, objects)
+        )
+        may_select = bool(object_id) and object_id != obj.get("object_id") and not blocked
+        radio = (
+            f'<label class="heading-select"><input type="radio" name="parent_choice" '
+            f'value="{_esc(object_id)}"{_checked(selected_parent, object_id)}> Kies</label>'
+        ) * may_select
+        choice_items.append(
+            f'<li data-heading-role="body"{attrs}>'
+            f'<a href="/review?document={snap}&object={quote(object_id, safe="")}">{_esc(text)}</a>'
+            f"{locator}{radio}</li>"
+        )
+    return f"""
+                    <div data-heading-chooser hidden>
+                      <p>Koppen in de hoofdtekst</p>
+                      <label>Zoek een kop
+                        <input type="search" data-heading-search autocomplete="off">
+                      </label>
+                      <div data-parent-choice-list>
+                        <ol class="parent-choice-rows">{"".join(choice_items)}</ol>
+                      </div>
+                    </div>
+    """
+
+
+def _semantic_selection_markup(source_text: str, selection_text: str) -> tuple[str, bool]:
+    tokens = (selection_text or "").split()
+    if not source_text or not tokens:
+        return _esc(source_text), False
+    pattern = re.compile(r"\s+".join(re.escape(token) for token in tokens))
+    matches = list(pattern.finditer(source_text))
+    if len(matches) != 1:
+        return _esc(source_text), False
+    match = matches[0]
+    return (
+        _esc(source_text[: match.start()])
+        + '<mark class="broncontext-marked">'
+        + _esc(source_text[match.start() : match.end()])
+        + "</mark>"
+        + _esc(source_text[match.end() :]),
+        True,
+    )
+
+
+def _source_bound_fields_html(obj: dict[str, Any]) -> str:
+    from src.source_bound_fields_v2 import KEY, FIELDS, bound_values
+    record = (obj.get("metadata") or {}).get(KEY)
+    if record is None:
+        return ""
+    if record.get("version") == "source-bound-fields-v3":
+        from src.source_bound_fields_v3 import FIELDS
+    labels = {
+        "actor_span": "Uitvoerder", "target_group_span": "Doelgroep", "scope_span": "Toepassingsbereik",
+        "subject_span": "Onderwerp", "predicate_span": "Gezegde",
+        "type_evidence_spans": "Bewijs voor type", "actor_of_scope": "Actor of doelgroep",
+        "recommended_action": "Handeling", "action_object_or_goal": "Doel of object",
+        "recommendation_evidence_span": "Aanbevelingsbewijs", "defined_term": "Gedefinieerde term",
+        "definiens_span": "Definitie", "condition_span": "Voorwaarde",
+        "condition_target": "Waarvoor geldt de voorwaarde", "exception_span": "Uitzondering",
+        "exception_target": "Waarop geldt de uitzondering", "support_span": "Onderbouwing",
+        "supported_object": "Onderbouwde uitspraak", "factual_claim_span": "Bevinding",
+    }
+    try:
+        values = bound_values(record, text=str((obj.get("content") or {}).get("clean_text") or ""),
+                              proposed_type=str(obj.get("proposed_object_type") or "unclassified"),
+                              context=((obj.get("metadata") or {}).get("source_bound_context") or {}).get("entries") or [])
+    except ValueError:
+        return '<p class="muted" data-source-bound-fields-invalid>Het veldbewijs past niet meer bij deze passage. Opnieuw controleren is nodig.</p>'
+    rows = []
+    reasons = {"not_stated": "Niet expliciet vermeld", "uncertain": "Onzeker", "not_applicable": "Niet van toepassing"}
+    for field in FIELDS:
+        entry = record["evidence"][field]
+        if entry.get("missing_reason") == "not_applicable" and field not in values:
+            continue
+        value = values.get(field)
+        text = " / ".join(value) if isinstance(value, list) else value
+        rows.append(f'<tr><th>{_esc(labels[field])}</th><td>{_esc(text or reasons.get(entry.get("missing_reason"), "Ontbreekt"))}</td></tr>')
+    return ('<section data-source-bound-fields><h4>Bronbewijs bij het voorstel</h4>'
+            '<table><tbody>' + ''.join(rows) + '</tbody></table></section>')
+
+
+def _broncontext_html(
+    obj: dict[str, Any],
+    snapshot_id: str,
+    object_id: str,
+    passage_ok: bool,
+    *,
+    task: str = "",
+) -> str:
+    parts = broncontext_parts(obj)
+    lines = []
+    hint = source_label_hint(obj)
+    if hint:
+        lines.append(f'<p data-source-label-hint><strong>{_esc(hint["label"])}</strong></p>')
+    for ancestor in parts["ancestor_headings"]:
+        lines.append(f'<p class="broncontext-heading">{_esc(ancestor)}</p>')
+    if parts["current_heading"]:
+        lines.append(f'<p class="broncontext-heading">{_esc(parts["current_heading"])}</p>')
+    if parts["previous_paragraph"]:
+        lines.append(f'<p class="broncontext-prev">{_esc(parts["previous_paragraph"])}</p>')
+
+    source_exact = str(parts["source_text_exact"] or "")
+    origin = str(parts.get("semantic_selection_origin") or "")
+    selection_text = str(parts.get("semantic_selection_text") or "")
+    spans = parts.get("semantic_spans") or []
+    selection_warning = ""
+    if source_exact and origin:
+        selection_label = (
+            "Door Metis voorgestelde bronselectie"
+            if origin == "proposal_selected"
+            else "Nog niet beoordeelde brontekst"
+        )
+        lines.append(f'<p class="eyebrow">{_esc(selection_label)}</p>')
+        source_markup, found = _semantic_selection_markup(source_exact, selection_text)
+        lines.append(
+            f'<p class="broncontext-source" data-semantic-origin="{_esc(origin)}" '
+            f'data-semantic-span-count="{len(spans)}">{source_markup}</p>'
+        )
+        if not found:
+            selection_warning = (
+                '<p class="muted" data-semantic-selection-unresolved>'
+                "De opgeslagen bronselectie kon niet eenduidig in deze context worden gemarkeerd. "
+                "Controleer daarom de volledige bron."
+                "</p>"
+            )
+    elif source_exact:
+        lines.append(
+            f'<p class="broncontext-marked"><mark class="broncontext-marked">{_esc(source_exact)}</mark></p>'
+        )
+    if parts["next_paragraph"]:
+        lines.append(f'<p class="broncontext-next">{_esc(parts["next_paragraph"])}</p>')
+    missing = ""
+    if not passage_ok:
+        missing = (
+            '<p class="muted">De exacte plaats in het origineel kan niet worden geopend; '
+            "goedkeuren blijft uitgeschakeld.</p>"
+        )
+    return f"""
+                  <section class="review-card-bronpassage review-broncontext" data-review-step="b" aria-label="Broncontext">
+                    <h4>Bronpassage en context</h4>
+                    <div class="broncontext-freeze">{"".join(lines)}</div>
+                    {selection_warning}
+                    {missing}
+                    {_source_bound_fields_html(obj)}
+                    <p><a class="btn-secondary" href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}{f'&amp;task={_esc(task)}' if task in REVIEW_TASKS else ''}">Open oorspronkelijke bron</a></p>
+                  </section>
+    """
+
+
+_REVIEW_DRAFT_SETS = {
+    "suitability": frozenset(SUITABILITY_VALUES),
+    "eindoordeel": frozenset(
+        {"goedkeuren", "goedkeuren_na_correctie", "afwijzen", "later_beoordelen"}
+    ),
+    "documentpositie_action": frozenset({"dit_klopt", "andere_kop"}),
+    "type_action": frozenset({"dit_klopt", "type_wijzigen"}),
+}
+_REVIEW_DRAFT_DEFAULTS: dict[str, str] = {}
+_RECOMMENDATION_DIRECTION_VALUES = frozenset({"for", "against"})
+_RECOMMENDATION_STRENGTH_LEVEL_VALUES = frozenset({"strong", "weak", "not_stated"})
+def _sanitize_review_draft(draft: dict[str, Any] | None) -> dict[str, Any]:
+    sanitized = {
+        key: str(value or "")
+        for key, value in (draft or {}).items()
+        if key != "relation_choice"
+    }
+    if draft is not None and "relation_choice" in draft:
+        choices = draft["relation_choice"]
+        sanitized["relation_choice"] = (
+            [str(value) for value in choices] if isinstance(choices, list) else []
+        )
+    closed_types = frozenset(CLOSED_OBJECT_TYPES) | frozenset(CLOSED_BOOM_TYPES)
+    for key, allowed in _REVIEW_DRAFT_SETS.items():
+        default = _REVIEW_DRAFT_DEFAULTS.get(key, "")
+        value = sanitized.get(key, "") or default
+        sanitized[key] = value if value in allowed else default
+    confirmed = sanitized.get("confirmed_object_type", "")
+    sanitized["confirmed_object_type"] = confirmed if confirmed in closed_types else ""
+    direction = sanitized.get("recommendation_direction", "")
+    sanitized["recommendation_direction"] = (
+        direction if direction in _RECOMMENDATION_DIRECTION_VALUES else ""
+    )
+    strength_level = sanitized.get("recommendation_strength_level", "")
+    sanitized["recommendation_strength_level"] = (
+        strength_level if strength_level in _RECOMMENDATION_STRENGTH_LEVEL_VALUES else ""
+    )
+    return sanitized
+
+
+def _review_conflict_html(
+    conflict: bool,
+    *,
+    current: dict[str, Any] | None = None,
+    draft: dict[str, Any] | None = None,
+) -> str:
+    if not conflict:
+        return ""
+    banner = (
+        f'<div class="banner err" data-stale-write-conflict '
+        f'data-error-code="{_esc(SNAPSHOT_OBJECT_WRITE_CONFLICT)}">'
+        f"{_esc(ERROR_COPY[SNAPSHOT_OBJECT_WRITE_CONFLICT])}</div>"
+    )
+    diffs: list[str] = []
+    if current is not None and draft is not None:
+        passage = (current.get("metadata") or {}).get("review_passage") or {}
+        current_suit = str(passage.get("suitability") or "")
+        draft_suit = str(draft.get("suitability") or "").strip()
+        if current_suit and current_suit != draft_suit:
+            diffs.append(
+                '<div data-diff-field="suitability">'
+                f"<dt>Huidige geschiktheid</dt><dd>{_esc(current_suit)}</dd>"
+                f"<dt>Jouw concept</dt><dd>{_esc(draft_suit)}</dd></div>"
+            )
+        current_eindoordeel = str(passage.get("eindoordeel") or "")
+        draft_eindoordeel = str(draft.get("eindoordeel") or "").strip()
+        if current_eindoordeel and current_eindoordeel != draft_eindoordeel:
+            diffs.append(
+                '<div data-diff-field="eindoordeel">'
+                f"<dt>Huidig eindoordeel</dt><dd>{_esc(current_eindoordeel)}</dd>"
+                f"<dt>Jouw concept</dt><dd>{_esc(draft_eindoordeel)}</dd></div>"
+            )
+    extra = ""
+    if diffs:
+        extra = (
+            '<aside data-stale-write-differences>'
+            "<p>Huidige verschillen ten opzichte van jouw concept:</p>"
+            f"<dl>{''.join(diffs)}</dl></aside>"
+        )
+    return banner + extra
+
+
+def _snapshot_revision_input(revision: str) -> str:
+    return f'<input type="hidden" name="snapshot_revision" value="{_esc(revision)}">'
+
+
+def _review_index_item(
+    obj: dict[str, Any],
+    snapshot_id: str,
+    *,
+    checkbox: bool = False,
+    reason: str = "",
+    task: str = "",
+) -> str:
+    title = review_row_title(obj)
+    status = review_row_status(obj)
+    task_query = f"&amp;task={_esc(task)}" if task in REVIEW_TASKS else ""
+    link = (
+        f'<a class="review-row-title" href="/review?document={_esc(snapshot_id)}&amp;object={_esc(obj["object_id"])}{task_query}">'
+        f"{_esc(title)}</a>"
+    )
+    status_html = f'<span class="review-row-status">{_esc(status)}</span>'
+    if checkbox:
+        return (
+            '<li class="review-row">'
+            f'<label class="review-select-target"><input type="checkbox" name="object_ids" '
+            f'value="{_esc(obj["object_id"])}"><span class="visually-hidden">Selecteer {_esc(title)}</span></label>'
+            f'{link}{status_html}'
+            "</li>"
+        )
+    return f'<li class="review-row">{link}{status_html}</li>'
+
+
+def _review_section_groups(
+    objects: list[dict[str, Any]],
+    snapshot_id: str,
+    *,
+    priority_ids: set[str] | None = None,
+    task: str = "contextual",
+    context_objects: list[dict[str, Any]] | None = None,
+    review_path: str = "richtlijn",
+    bindings=(),
+    fragments=None,
+) -> str:
+    """Presentation only: preserve exact source paths and existing object links."""
+    priority_ids = priority_ids or set()
+    groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+    for obj in objects:
+        raw_path = admission_of(obj).get("section_path") or (obj.get("structure") or {}).get("section_path") or []
+        key = tuple(str(part).strip() for part in raw_path if str(part).strip())
+        groups.setdefault(key, []).append(obj)
+    context_objects = objects if context_objects is None else context_objects
+
+    def passage_row(obj: dict[str, Any]) -> str:
+        item = _review_index_item(
+            obj, snapshot_id,
+            reason=_individual_review_reason(obj, priority=str(obj.get("object_id")) in priority_ids),
+            task=task,
+        )
+        context = _review_context_block(
+            obj, context_objects, snapshot_id=snapshot_id, review_path=review_path, task=task, bindings=bindings, fragments=fragments
+        )
+        if context:
+            item = item.removesuffix("</li>") + (
+                '<details class="review-queue-context"><summary>Bekijk verbonden passages</summary>'
+                + context + "</details></li>"
+            )
+        return item
+
+    panels = []
+    for index, (key, rows) in enumerate(groups.items()):
+        path = " › ".join(key)
+        title = key[-1] if key else "Brononderdeel nog te controleren"
+        panels.append(
+            f'<details class="review-section"{" open" if index == 0 else ""}>'
+            f'<summary>{_esc(title)} <span class="review-section-count">{len(rows)} passages</span></summary>'
+            f'<p class="review-source-path">{_esc(path or "Geen bronpad beschikbaar")}</p>'
+            '<ol class="object-index">'
+            + "".join(
+                passage_row(obj)
+                for obj in rows
+            )
+            + '</ol></details>'
+        )
+    return "".join(panels)
+
+
+def _individual_review_reason(obj: dict[str, Any], *, priority: bool = False) -> str:
+    if priority:
+        return "Deze passage vraagt een eigen oordeel, omdat zij advies, een voorwaarde, een uitzondering of mogelijk risico bevat."
+    uncertainty = obj.get("uncertainty") if isinstance(obj.get("uncertainty"), dict) else {}
+    if uncertainty.get("has_uncertainty"):
+        return "Deze passage vraagt een eigen beoordeling, omdat de betekenis of context nog niet zeker genoeg is."
+    return "Deze passage kan niet veilig samen met andere passages worden bevestigd. Beoordeel haar daarom afzonderlijk."
+
+
+def _review_lane_copy(review_path: str, koppen: list[dict[str, Any]]) -> dict[str, str]:
+    if review_path == "boom":
+        return {
+            "fast_title": f"Paden controleren ({len(koppen)})",
+            "fast_lead": "Paden helpen bij het plaatsen van onderdelen. Zij veranderen de inhoud niet.",
+            "fast_button": "Bevestig geselecteerde paden als structuur",
+        }
+    return {
+        "fast_title": f"Koppen controleren ({len(koppen)})",
+        "fast_lead": "Koppen helpen passages op de juiste plek te plaatsen. Zij veranderen de inhoud niet.",
+        "fast_button": "Bevestig geselecteerde koppen als structuur",
+    }
+
+
+def _review_is_final(obj: dict[str, Any]) -> bool:
+    return (obj.get("governance") or {}).get("validation_status") in {"approved", "rejected", "superseded"}
+
+
+def _review_was_revised(obj: dict[str, Any]) -> bool:
+    governance = obj.get("governance") if isinstance(obj.get("governance"), dict) else {}
+    provenance = obj.get("provenance") if isinstance(obj.get("provenance"), dict) else {}
+    return (
+        governance.get("validation_status") == "needs_review"
+        and bool(provenance.get("previous_object_version"))
+    )
+
+
+def _review_progress_summary(objects: list[dict[str, Any]]) -> dict[str, int]:
+    """Read-only projection over the existing definitive review disposition."""
+    rows = [obj for obj in objects if obj.get("object_type") != "document"]
+    counts = {
+        "total": len(rows),
+        "done": 0,
+        "approved": 0,
+        "rejected": 0,
+        "not_included": 0,
+        "context": 0,
+        "support": 0,
+        "superseded": 0,
+        "revised": 0,
+    }
+    for obj in rows:
+        disposition = definitive_review_disposition(obj)
+        if disposition["final"]:
+            counts["done"] += 1
+            review_status = str(disposition.get("review_status") or "")
+            outcome = str(disposition.get("outcome") or "")
+            if review_status == "rejected":
+                counts["rejected"] += 1
+            elif outcome == "approved":
+                counts["approved"] += 1
+            elif outcome == "excluded_with_reason":
+                counts["not_included"] += 1
+            elif outcome == "used_as_context":
+                counts["context"] += 1
+            elif outcome == "linked_as_support":
+                counts["support"] += 1
+            elif outcome == "superseded":
+                counts["superseded"] += 1
+        if _review_was_revised(obj):
+            counts["revised"] += 1
+    counts["open"] = counts["total"] - counts["done"]
+    return counts
+
+
+def _review_decision_label(obj: dict[str, Any]) -> str:
+    if _review_was_revised(obj):
+        return "Herzien na correctie"
+    disposition = definitive_review_disposition(obj)
+    review_status = str(disposition.get("review_status") or "")
+    outcome = str(disposition.get("outcome") or "")
+    if review_status == "rejected":
+        return "Afgewezen"
+    labels = {
+        "approved": "Goedgekeurd",
+        "linked_as_support": "Alleen onderbouwing",
+        "used_as_context": "Context",
+        "excluded_with_reason": "Niet opgenomen",
+        "superseded": "Vervangen",
+    }
+    return labels.get(outcome, review_row_status(obj))
+
+
+def _review_signals_for_object(
+    audit_signals: list[dict[str, Any]],
+    *,
+    snapshot_id: str,
+    object_id: str,
+) -> list[dict[str, Any]]:
+    return [
+        event
+        for event in audit_signals
+        if str(event.get("object_id") or "") == object_id
+        and str(
+            (event.get("details") if isinstance(event.get("details"), dict) else {}).get(
+                "snapshot_id"
+            )
+            or ""
+        )
+        == snapshot_id
+    ]
+
+
+def _review_signal_for_object(
+    audit_signals: list[dict[str, Any]],
+    *,
+    snapshot_id: str,
+    object_id: str,
+) -> dict[str, Any] | None:
+    signals = _review_signals_for_object(
+        audit_signals,
+        snapshot_id=snapshot_id,
+        object_id=object_id,
+    )
+    return signals[0] if signals else None
+
+
+def _current_review_objects(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    current: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        object_id = str(row.get("object_id") or "")
+        if object_id:
+            current[object_id] = row
+    return list(current.values())
+
+
+def _review_object_versions(
+    rows: list[dict[str, Any]],
+    object_id: str,
+) -> list[dict[str, Any]]:
+    return [row for row in rows if str(row.get("object_id") or "") == object_id]
+
+
+def _review_history_status(obj: dict[str, Any]) -> str:
+    status = str((obj.get("governance") or {}).get("validation_status") or "")
+    return {
+        "needs_review": "Te beoordelen",
+        "approved": "Goedgekeurd",
+        "rejected": "Afgewezen",
+        "revise": "Correctie gevraagd",
+        "superseded": "Vervangen",
+        "draft": "Concept",
+    }.get(status, status.replace("_", " ") or "Onbekend")
+
+
+def _review_version_changes(
+    previous: dict[str, Any],
+    current: dict[str, Any],
+) -> list[tuple[str, str, str]]:
+    def text(obj: dict[str, Any]) -> str:
+        content = obj.get("content") if isinstance(obj.get("content"), dict) else {}
+        return str(content.get("clean_text") or content.get("raw_text") or "").strip()
+
+    def object_type(obj: dict[str, Any]) -> str:
+        return str(obj.get("confirmed_object_type") or obj.get("object_type") or "").strip()
+
+    def status(obj: dict[str, Any]) -> str:
+        return _review_history_status(obj)
+
+    def section(obj: dict[str, Any]) -> str:
+        structure = obj.get("structure") if isinstance(obj.get("structure"), dict) else {}
+        return " › ".join(str(part) for part in structure.get("section_path") or [])
+
+    fields = (
+        ("Passagetekst", text),
+        ("Type", object_type),
+        ("Reviewstatus", status),
+        ("Bronpositie", section),
+    )
+    return [
+        (label, before, after)
+        for label, getter in fields
+        if (before := getter(previous)) != (after := getter(current))
+    ]
+
+
+def _review_object_history(
+    snapshot_id: str,
+    obj: dict[str, Any],
+    all_rows: list[dict[str, Any]],
+    audit_signals: list[dict[str, Any]],
+) -> str:
+    object_id = str(obj.get("object_id") or "")
+    versions = _review_object_versions(all_rows, object_id)
+    by_version = {
+        str(row.get("object_version") or ""): row
+        for row in versions
+        if str(row.get("object_version") or "")
+    }
+    provenance = obj.get("provenance") if isinstance(obj.get("provenance"), dict) else {}
+    previous_version = str(provenance.get("previous_object_version") or "")
+    previous = by_version.get(previous_version)
+    if previous is None and len(versions) > 1:
+        previous = versions[-2]
+
+    changes = _review_version_changes(previous, obj) if previous is not None else []
+    if changes:
+        change_html = "".join(
+            f'<div class="review-version-change"><dt>{_esc(label)}</dt>'
+            f'<dd><span class="review-version-before">{_esc(before or "—")}</span>'
+            f'<span aria-hidden="true">→</span>'
+            f'<span class="review-version-after">{_esc(after or "—")}</span></dd></div>'
+            for label, before, after in changes
+        )
+        diff_html = f"""
+          <section class="review-version-diff" aria-labelledby="review-version-diff-title">
+            <h3 id="review-version-diff-title">Verschil met vorige versie</h3>
+            <p class="muted">Alleen velden die aantoonbaar tussen de opgeslagen versies verschillen worden getoond.</p>
+            <dl>{change_html}</dl>
+          </section>
+        """
+    else:
+        diff_html = """
+          <section class="review-version-diff">
+            <h3>Verschil met vorige versie</h3>
+            <p class="muted">Voor deze versie is geen eerdere opgeslagen objectversie met aantoonbare verschillen beschikbaar.</p>
+          </section>
+        """
+
+    signals = _review_signals_for_object(
+        audit_signals,
+        snapshot_id=snapshot_id,
+        object_id=object_id,
+    )
+    signals_by_version: dict[str, list[dict[str, Any]]] = {}
+    for signal in signals:
+        signals_by_version.setdefault(str(signal.get("object_version") or ""), []).append(signal)
+
+    timeline = []
+    current_version = str(obj.get("object_version") or "")
+    for version in versions:
+        version_id = str(version.get("object_version") or "")
+        governance = version.get("governance") if isinstance(version.get("governance"), dict) else {}
+        version_provenance = (
+            version.get("provenance") if isinstance(version.get("provenance"), dict) else {}
+        )
+        version_signals = signals_by_version.get(version_id) or []
+        signal = version_signals[0] if version_signals else None
+        details = (
+            (signal or {}).get("details")
+            if isinstance((signal or {}).get("details"), dict)
+            else {}
+        )
+        actor = str(
+            (signal or {}).get("actor") or governance.get("validated_by") or ""
+        ).strip()
+        occurred_at = str(
+            (signal or {}).get("occurred_at") or governance.get("validation_date") or ""
+        ).strip()
+        reason = str(
+            details.get("comment") or version_provenance.get("revision_reason") or ""
+        ).strip()
+        metadata = []
+        if actor:
+            metadata.append(actor)
+        if occurred_at:
+            metadata.append(occurred_at)
+        meta_html = (
+            f'<p class="muted">{" · ".join(_esc(item) for item in metadata)}</p>'
+            if metadata
+            else ""
+        )
+        reason_html = f'<p>{_esc(reason)}</p>' if reason else ""
+        current_badge = (
+            '<span class="review-history-current">huidige versie</span>'
+            if version_id == current_version
+            else ""
+        )
+        timeline.append(
+            f"""
+            <li class="review-history-event">
+              <div class="review-history-event-heading">
+                <strong>Versie {_esc(version_id)}</strong>
+                <span class="review-row-status">{_esc(_review_history_status(version))}</span>
+                {current_badge}
+              </div>
+              {reason_html}
+              {meta_html}
+            </li>
+            """
+        )
+
+    return f"""
+      {_review_task_header(snapshot_id, "Objecthistorie", "Bekijk opgeslagen versies en reviewbesluiten zonder de reviewstatus te wijzigen")}
+      <section class="review-object-history" data-review-object-history="{_esc(object_id)}">
+        <h3>{_esc(review_row_title(obj))}</h3>
+        <p class="muted">Object {_esc(object_id)} · huidige versie {_esc(current_version)}</p>
+        {diff_html}
+        <section aria-labelledby="review-history-timeline-title">
+          <h3 id="review-history-timeline-title">Versiehistorie</h3>
+          <ol class="review-history-timeline">{"".join(timeline)}</ol>
+        </section>
+      </section>
+    """
+
+
+def _review_decision_row(
+    obj: dict[str, Any],
+    snapshot_id: str,
+    audit_signals: list[dict[str, Any]],
+) -> str:
+    signal = _review_signal_for_object(
+        audit_signals,
+        snapshot_id=snapshot_id,
+        object_id=str(obj.get("object_id") or ""),
+    )
+    details = (signal or {}).get("details") if isinstance((signal or {}).get("details"), dict) else {}
+    provenance = obj.get("provenance") if isinstance(obj.get("provenance"), dict) else {}
+    governance = obj.get("governance") if isinstance(obj.get("governance"), dict) else {}
+    comment = str(
+        details.get("comment")
+        or provenance.get("revision_reason")
+        or ""
+    ).strip()
+    actor = str((signal or {}).get("actor") or governance.get("validated_by") or "").strip()
+    occurred_at = str((signal or {}).get("occurred_at") or governance.get("validation_date") or "").strip()
+    previous = str(provenance.get("previous_object_version") or "").strip()
+    current_version = str(obj.get("object_version") or "").strip()
+    meta = []
+    if actor:
+        meta.append(actor)
+    if occurred_at:
+        meta.append(occurred_at)
+    if previous:
+        meta.append(f"vorige versie {previous}")
+    if current_version:
+        meta.append(f"versie {current_version}")
+    meta_html = f'<span class="muted">{" · ".join(_esc(item) for item in meta)}</span>' if meta else ""
+    comment_html = f'<p class="muted">{_esc(comment)}</p>' if comment else ""
+    object_id = str(obj.get("object_id") or "")
+    source_href = (
+        f"/review/bronpassage?document={quote(snapshot_id, safe='')}"
+        f"&amp;object={quote(object_id, safe='')}"
+        "&amp;task=history"
+    )
+    history_href = (
+        f"/review?document={quote(snapshot_id, safe='')}"
+        f"&amp;object={quote(object_id, safe='')}"
+        "&amp;task=history"
+    )
+    return f"""
+      <li class="review-row review-decision-row">
+        <div>
+          <span class="review-row-title">{_esc(review_row_title(obj))}</span>
+          {comment_html}
+          {meta_html}
+        </div>
+        <div>
+          <span class="review-row-status">{_esc(_review_decision_label(obj))}</span>
+          <a class="btn-secondary" href="{history_href}">Bekijk historie</a>
+          <a class="btn-secondary" href="{source_href}">Bekijk bron</a>
+        </div>
+      </li>
+    """
+
+
+def _review_progress_overview(
+    snapshot_id: str,
+    progress: dict[str, int],
+) -> str:
+    total = int(progress["total"])
+    done = int(progress["done"])
+    percent = round((done / total) * 100) if total else 100
+    extras = []
+    if progress["context"]:
+        extras.append(f'<strong>{progress["context"]}</strong> context')
+    if progress["support"]:
+        extras.append(f'<strong>{progress["support"]}</strong> onderbouwing')
+    if progress["superseded"]:
+        extras.append(f'<strong>{progress["superseded"]}</strong> vervangen')
+    if progress["revised"]:
+        extras.append(f'<strong>{progress["revised"]}</strong> herzien na correctie')
+    extras_html = '<p class="review-progress-extra">' + " · ".join(extras) + '</p>' if extras else ""
+    return f"""
+      <section class="review-progress-overview" aria-labelledby="review-progress-title">
+        <div class="review-task-heading">
+          <h2 id="review-progress-title">Reviewvoortgang</h2>
+          <p class="review-progress-number">{percent}<span>%</span></p>
+          <p>{done} van {total} bronpassages afgehandeld</p>
+        </div>
+        <progress aria-label="Afgehandelde bronpassages" value="{done}" max="{max(total, 1)}">{percent}%</progress>
+        <dl class="review-progress-counts">
+          <div><dt>Nog te beoordelen</dt><dd>{progress["open"]}</dd></div>
+          <div><dt>Goedgekeurd</dt><dd>{progress["approved"]}</dd></div>
+          <div><dt>Afgewezen</dt><dd>{progress["rejected"]}</dd></div>
+          <div><dt>Niet opgenomen</dt><dd>{progress["not_included"]}</dd></div>
+        </dl>
+        {extras_html}
+        <a class="review-history-link" href="/review?document={_esc(snapshot_id)}&amp;task=history">Besluiten en historie <span aria-hidden="true">→</span></a>
+      </section>
+    """
+
+
+def _review_task_card(
+    snapshot_id: str,
+    *,
+    task: str,
+    title: str,
+    description: str,
+    status: str,
+    recommended: bool = False,
+) -> str:
+    action = "Ga verder" if recommended else "Open taak"
+    return f'''
+      <a class="review-task-card" href="/review?document={_esc(snapshot_id)}&amp;task={_esc(task)}">
+        <span class="review-task-card-title">{_esc(title)}</span>
+        <span class="review-task-card-status">{_esc(status)}</span>
+        <span class="review-task-card-action">{action} <span aria-hidden="true">→</span></span>
+      </a>
+    '''
+
+
+def _review_task_dashboard(
+    snapshot_id: str,
+    *,
+    koppen: list[dict[str, Any]],
+    individual: list[dict[str, Any]],
+    normal_passages: int,
+    normal_batches: int,
+    blocked_count: int,
+    progress: dict[str, int],
+    heading_pending_override: int | None = None,
+    heading_total_override: int | None = None,
+    individual_pending_override: int | None = None,
+    individual_total_override: int | None = None,
+    second_review_pending: int = 0,
+    disposition_pending: int = 0,
+    waiting_pending: int = 0,
+    heading_done_override: int | None = None,
+    individual_done_override: int | None = None,
+    review_path: str = "richtlijn",
+    knowledge_open: int | None = None,
+    knowledge_progress: dict[str, int] | None = None,
+    count_scope: str = "",
+) -> str:
+    heading_pending = (
+        int(heading_pending_override)
+        if heading_pending_override is not None
+        else sum(not _review_is_final(obj) for obj in koppen)
+    )
+    heading_total = (
+        int(heading_total_override)
+        if heading_total_override is not None
+        else len(koppen)
+    )
+    heading_done = max(heading_total - heading_pending, 0) if heading_done_override is None else heading_done_override
+    individual_pending = (
+        int(individual_pending_override)
+        if individual_pending_override is not None
+        else sum(not _review_is_final(obj) for obj in individual)
+    )
+    individual_total = (
+        int(individual_total_override)
+        if individual_total_override is not None
+        else len(individual)
+    )
+    individual_done = max(individual_total - individual_pending, 0) if individual_done_override is None else individual_done_override
+    # Navigation is a projection of existing duties, never a second review policy.
+    tasks = [
+        ("structure", "Documentindeling controleren", "Controleer koppen en hun plaats in de bron", heading_pending),
+        ("contextual", "Passages afzonderlijk beoordelen", "Controleer inhoud, type en benodigde broncontext", individual_pending),
+        ("batch", "Passages selecteren en bevestigen", "Bekijk iedere passage; bevestig alleen geschikte selecties samen", normal_passages),
+        ("second_review", "Een onafhankelijke tweede beoordeling geven", "Beoordeel dezelfde versie zonder het eerdere besluit over te nemen", second_review_pending),
+        ("disposition", "Gebruik van bronpassages bepalen", "Bekijk per passage wat ontbreekt en welke afhandeling mogelijk is", disposition_pending),
+    ]
+    available = [row for row in tasks if row[3]]
+    recommended = available[0] if available else None
+    statuses = {
+        "structure": f"{heading_pending} te controleren · {heading_done} afgerond",
+        "contextual": f"{individual_pending} te beoordelen · {individual_done} afgerond",
+        "batch": f"{normal_passages} passages",
+        "second_review": f"{second_review_pending} te beoordelen",
+        "disposition": f"{disposition_pending} af te handelen",
+    }
+    if recommended:
+        next_step = f'''
+          <section class="review-next-step" aria-labelledby="review-next-title">
+            <p class="eyebrow">Volgende stap</p>
+            <h2 id="review-next-title">{_esc(recommended[1])}</h2>
+            <p>{_esc(statuses[recommended[0]])}</p>
+            <a class="btn-primary" href="/review?document={_esc(snapshot_id)}&amp;task={recommended[0]}">Ga verder met beoordelen</a>
+          </section>
+        '''
+    else:
+        next_step = '<p class="review-task-empty">Geen inhoudelijke beoordeling voor jou beschikbaar.</p>'
+    rows = "".join(
+        _review_task_card(
+            snapshot_id, task=task, title=title,
+            description="", status=statuses[task],
+            recommended=bool(recommended and task == recommended[0]),
+        )
+        for task, title, description, count in available
+        if recommended is None or task != recommended[0]
+    )
+    waiting = (
+        f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=waiting">'
+        f'{waiting_pending} wachten op een andere beoordelaar</a>. Jij kunt deze tweede beoordeling niet overnemen.</p>'
+        if waiting_pending else ''
+    )
+    scope_html = (f'<p class="review-count-scope" data-count-scope>{_esc(count_scope)}</p>'
+                  if count_scope else '')
+    if review_path == "boom" or knowledge_open is None:
+        # Beslisboom: no knowledge counter; the existing task list stays as is.
+        work_html = f'<div class="review-task-grid">{rows}</div>\n        {waiting}'
+    else:
+        cards = {
+            task: _review_task_card(
+                snapshot_id, task=task, title=title, description="", status=statuses[task],
+                recommended=False,
+            )
+            for task, title, description, count in available
+            if recommended is None or task != recommended[0]
+        }
+        work_html = _review_layers_html(
+            snapshot_id, cards=cards, waiting_html=waiting,
+            knowledge_open=int(knowledge_open), knowledge_progress=knowledge_progress,
+            second_review_pending=second_review_pending, heading_pending=heading_pending,
+            heading_done=heading_done, blocked_count=blocked_count,
+            disposition_pending=disposition_pending,
+        )
+    repair_notice = (
+        f'<p class="review-blocked-notice">{blocked_count} '
+        f'{"passage is" if blocked_count == 1 else "passages zijn"} nog niet beschikbaar voor goedkeuring. '
+        f'<a href="/review?document={_esc(snapshot_id)}&amp;task=repair">Passages corrigeren</a></p>'
+        if blocked_count else ''
+    )
+    return f'''
+      <section class="review-task-dashboard" aria-labelledby="review-task-title">
+        <div class="review-workspace-layout">
+        <div class="review-work-main">
+        {next_step}
+        <div class="review-work-header">
+          <div>
+            <h2 id="review-task-title">Jouw open werk</h2>
+          </div>
+          <a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a>
+        </div>
+        {scope_html}
+        {work_html}
+        </div>
+        <aside class="review-sidebar" aria-label="Reviewvoortgang">
+        {_review_progress_overview(snapshot_id, progress)}
+        {repair_notice}
+        </aside>
+        </div>
+      </section>
+    '''
+
+
+def _review_count(name: str, value: int) -> str:
+    return f'<p class="review-group-count" data-count="{_esc(name)}">{int(value)}</p>'
+
+
+def _review_layers_html(
+    snapshot_id: str,
+    *,
+    cards: dict[str, str],
+    waiting_html: str,
+    knowledge_open: int,
+    knowledge_progress: dict[str, int] | None,
+    second_review_pending: int,
+    heading_pending: int,
+    heading_done: int,
+    blocked_count: int,
+    disposition_pending: int,
+) -> str:
+    """Three presentation layers over existing task counts; no own selection or policy."""
+    doc = _esc(snapshot_id)
+    progress_html = ""
+    if knowledge_progress is not None:
+        total = int(knowledge_progress.get("total") or 0)
+        done = int(knowledge_progress.get("done") or 0)
+        superseded = int(knowledge_progress.get("superseded") or 0)
+        progress_html = (
+            f'<p class="review-knowledge-progress-text">{done} van {total} inhoudelijk beoordeelbare '
+            f'kennisvoorstellen afgehandeld</p>'
+            f'<progress data-knowledge-progress aria-label="Afgehandelde kennisvoorstellen" value="{done}" max="{total}">'
+            f'{done}/{total}</progress>'
+            + (f'<p class="muted">{superseded} vervangen door een opvolger; niet als afgehandeld geteld.</p>'
+               if superseded else '')
+        )
+    ratio_total = knowledge_open + disposition_pending
+    return f'''
+        <section class="review-layer review-layer-assess" data-review-layer="beoordelen" aria-label="Beoordelen">
+          <h3>Beoordelen</h3>
+          <div class="review-group" data-review-group="kennis">
+            <h4>Kennisvoorstellen</h4>
+            {_review_count("kennis", knowledge_open)}
+            <p class="review-group-lead">Open inhoudelijke beoordelingen voor jou. Wat beslist u hier: klopt dit voorstel inhoudelijk met de bron?</p>
+            {progress_html}
+            <div class="review-task-grid">{cards.get("contextual", "")}{cards.get("batch", "")}</div>
+          </div>
+          <div class="review-group" data-review-group="tweede">
+            <h4>Tweede review</h4>
+            {_review_count("tweede", second_review_pending)}
+            <p class="review-group-lead">Onafhankelijk dezelfde versie beoordelen.</p>
+            <div class="review-task-grid">{cards.get("second_review", "")}</div>
+            {waiting_html}
+          </div>
+          <div class="review-group" data-review-group="koppen">
+            <h4>Koppen</h4>
+            {_review_count("koppen", heading_pending)}
+            <p class="review-group-lead">Documentstructuur controleren; geen inhoudelijke goedkeuring. {heading_done} afgerond.</p>
+            <div class="review-task-grid">{cards.get("structure", "")}</div>
+          </div>
+        </section>
+        <details class="review-layer review-layer-source" data-review-layer="bronwerk">
+          <summary>Bronwerk en afhandeling · herstel {blocked_count} · bronafhandeling open {disposition_pending}</summary>
+          <div class="review-group" data-review-group="herstel">
+            <h4>Herstel</h4>
+            {_review_count("herstel", blocked_count)}
+            <p class="review-group-lead">Bron of verwerking herstellen; goedkeuren kan pas daarna.</p>
+            <p class="muted">{"Zie de herstelmelding bij de voortgang." if blocked_count else "Geen herstel open."}</p>
+          </div>
+          <div class="review-group" data-review-group="bronafhandeling">
+            <h4>Bronafhandeling open</h4>
+            {_review_count("bronafhandeling", disposition_pending)}
+            <p class="review-group-lead">Gebruik van bronregels bepalen. Beoordelingswerk en bronafhandeling zijn afzonderlijke controles; de aantallen mogen overlappen.</p>
+            <div class="review-task-grid">{cards.get("disposition", "")}</div>
+            <p class="review-filter-links"><a href="/review?document={doc}&amp;task=disposition">Onbeslist</a> · <a href="/review?document={doc}&amp;task=inventory">Alles</a></p>
+          </div>
+          <div class="review-open-work-ratio" data-open-work-ratio>
+            <p>Verhouding open werk: {knowledge_open} kennisvoorstellen · {disposition_pending} bronafhandeling open</p>
+            <progress aria-label="Aandeel kennisvoorstellen in open werk" value="{knowledge_open}" max="{ratio_total}">{knowledge_open}/{ratio_total}</progress>
+          </div>
+        </details>
+        <details class="review-layer review-layer-history" data-review-layer="inzage">
+          <summary>Ter inzage</summary>
+          <p><a href="/review?document={doc}&amp;task=history">Besluiten en historie</a> (alleen lezen)</p>
+        </details>
+    '''
+
+
+def knowledge_open_count(
+    objects: list[dict[str, Any]],
+    *,
+    review_path: str,
+    bindings: list[dict[str, Any]] | None,
+    reviewer_id: str,
+    fragments=None,
+) -> int | None:
+    """Open ReviewDuties in the contextual and batch lanes; never partition()['knowledge']."""
+    if review_path == "boom":
+        return None
+    from src.review_duty_v1 import review_duty_counts, reviewer_route_counts
+    if bindings is None:
+        counts = review_duty_counts(objects, review_path=review_path, bindings=None, fragments=fragments)
+        return int(counts["contextual_review_duties"]) + int(counts["batch_review_duties"])
+    counts = reviewer_route_counts(objects, review_path=review_path, reviewer_id=reviewer_id,
+                                   bindings=bindings, fragments=fragments)
+    return int(counts["actionable_contextual_duties"]) + int(counts["actionable_batch_duties"])
+
+
+def knowledge_progress(objects: list[dict[str, Any]], *, review_path: str) -> dict[str, int] | None:
+    """Denominator: current content_reviewable objects; superseded is shown apart."""
+    if review_path == "boom":
+        return None
+    from src.knowledge_path_v1 import content_reviewable
+    counts = {"total": 0, "done": 0, "superseded": 0}
+    for obj in objects:
+        if not content_reviewable(obj):
+            continue
+        counts["total"] += 1
+        disposition = definitive_review_disposition(obj)
+        if not disposition["final"]:
+            continue
+        if "superseded" in {str(disposition.get("outcome") or ""), str(disposition.get("review_status") or "")}:
+            counts["superseded"] += 1
+        else:
+            counts["done"] += 1
+    return counts
+
+
+def count_scope_label(version: Any, *, revision: str = "", observed_at: str = "") -> str:
+    """Counters belong to one read: document version plus revision, or the render instant."""
+    parts = [f"Tellers voor versie {version}"] if str(version or "").strip() else ["Tellers"]
+    if revision:
+        parts.append(f"revisie {str(revision)[:12]}")
+    elif observed_at:
+        from datetime import datetime, timezone
+        try:
+            instant = datetime.fromisoformat(str(observed_at).replace("Z", "+00:00")).astimezone(timezone.utc)
+            parts.append("peiltijd " + instant.strftime("%Y-%m-%d %H:%M UTC"))
+        except ValueError:
+            pass
+    return " · ".join(parts) if len(parts) > 1 or revision or observed_at else ""
+
+
+def _review_task_header(snapshot_id: str, title: str, description: str) -> str:
+    return f'''
+      <header class="review-task-workspace">
+        <a class="btn-secondary review-task-back" href="/review?document={_esc(snapshot_id)}">← Terug naar taken</a>
+        <h2>{_esc(title)}</h2>
+        {_task_links("review")}
+      </header>
+    '''
+
+
+_PROCESSING_FAMILY_LABELS = {
+    "source_binding": "Bronkoppeling",
+    "unit_completeness": "Zelfstandigheid van passage",
+    "semantic_contract": "Semantisch contract",
+    "dependency_resolution": "Ontbrekende afhankelijkheid of context",
+    "processing_completeness": "Verwerking niet volledig",
+    "unclassified": "Nog niet ingedeeld",
+}
+
+
+def _diagnostic_count_list(rows: dict[str, int]) -> str:
+    if not rows:
+        return '<p class="muted">Geen gegevens.</p>'
+    return (
+        '<ul class="processing-diagnostic-list">'
+        + "".join(
+            f'<li><code>{_esc(name)}</code>: <b>{int(count)}</b></li>'
+            for name, count in rows.items()
+        )
+        + "</ul>"
+    )
+
+
+def _processing_diagnostics_html(
+    snapshot_objects: list[dict[str, Any]],
+) -> str:
+    diagnostics = processing_diagnostics(snapshot_objects)
+    blocked_count = int(diagnostics["blocked_candidate_count"])
+    if not blocked_count:
+        return ""
+
+    issue_count = int(diagnostics["issue_occurrence_count"])
+    without_reason = int(diagnostics["blocked_without_reason_count"])
+    families = diagnostics["by_family"]
+    family_rows = "".join(
+        (
+            "<tr>"
+            f"<td>{_esc(_PROCESSING_FAMILY_LABELS.get(family, family))}</td>"
+            f"<td>{int(values['candidate_count'])}</td>"
+            f"<td>{int(values['issue_occurrence_count'])}</td>"
+            "</tr>"
+        )
+        for family, values in families.items()
+    )
+    reason_rows = "".join(
+        (
+            "<tr>"
+            f"<td><code>{_esc(code)}</code></td>"
+            f"<td>{int(values['candidate_count'])}</td>"
+            f"<td>{int(values['issue_occurrence_count'])}</td>"
+            "</tr>"
+        )
+        for code, values in diagnostics["by_reason_code"].items()
+    )
+    anomaly = (
+        f'<p class="banner-error"><b>{without_reason}</b> geblokkeerde '
+        "passage(s) hebben geen reason code. Dit is een diagnostische anomalie.</p>"
+        if without_reason
+        else ""
+    )
+    unknown = diagnostics["unknown_reason_codes"]
+    unknown_html = (
+        '<p class="field-help">Niet ingedeelde reason codes: '
+        + ", ".join(f"<code>{_esc(code)}</code>" for code in unknown)
+        + ".</p>"
+        if unknown
+        else ""
+    )
+    return f"""
+      <section class="processing-diagnostics" aria-labelledby="processing-diagnostics-title">
+        <h3 id="processing-diagnostics-title">Waarom passages technisch geblokkeerd zijn</h3>
+        <p class="lead">
+          <b>{blocked_count}</b> passages hebben samen <b>{issue_count}</b> technische signalen.
+          Een passage kan meerdere signalen hebben. Deze signalen tonen welk admission-contract niet is gehaald; ze bewijzen niet automatisch de onderliggende root cause en zijn geen inhoudelijke afwijzing door een reviewer.
+        </p>
+        {anomaly}
+        <h4>Signalen per diagnostische familie</h4>
+        <table>
+          <thead><tr><th>Familie</th><th>Passages</th><th>Signalen</th></tr></thead>
+          <tbody>{family_rows}</tbody>
+        </table>
+        {unknown_html}
+        <details>
+          <summary>Bekijk exacte reason codes</summary>
+          <table>
+            <thead><tr><th>Reason code</th><th>Passages</th><th>Voorkomens</th></tr></thead>
+            <tbody>{reason_rows}</tbody>
+          </table>
+        </details>
+        <details>
+          <summary>Bekijk diagnostische uitsplitsing</summary>
+          <div class="review-diagnostic-breakdowns">
+            <h4>Voorgesteld type</h4>
+            {_diagnostic_count_list(diagnostics["by_proposed_type"])}
+            <h4>Brononderdeel</h4>
+            {_diagnostic_count_list(diagnostics["by_section_role"])}
+            <h4>Passagevorming</h4>
+            {_diagnostic_count_list(diagnostics["by_formation_strategy"])}
+            <h4>Selectie-oorsprong</h4>
+            {_diagnostic_count_list(diagnostics["by_selection_origin"])}
+          </div>
+        </details>
+      </section>
+    """
+
+
+def _review_route_objects(
+    objects: list[dict[str, Any]],
+    *,
+    review_path: str,
+    bindings: list[dict[str, Any]] | None,
+    reviewer_id: str,
+    canonical_task: str,
+    fragments=None,
+) -> list[dict[str, Any]]:
+    if canonical_task == "structure" and review_path != "boom":
+        from src.knowledge_path_v1 import is_structural_projection
+        rows = [
+            obj
+            for obj in objects
+            if review_lane(obj, review_path=review_path) == "fast"
+            and is_structural_projection(obj)
+            and not _review_is_final(obj)
+        ]
+        return sorted(rows, key=review_priority_rank)
+    rows: list[dict[str, Any]] = []
+    for obj in objects:
+        if bindings is None:
+            duty = review_duty_for(
+                obj,
+                review_path=review_path,
+                bindings=None, fragments=fragments
+            )
+            if not duty:
+                continue
+            task = (
+                "second_review"
+                if duty.get("stage") == "second_review"
+                else str(duty.get("lane") or "")
+            )
+            if task == canonical_task:
+                rows.append(obj)
+            continue
+
+        route = reviewer_route_for(
+            obj,
+            review_path=review_path,
+            reviewer_id=reviewer_id,
+            bindings=bindings, fragments=fragments
+        )
+        if not route or not route.get("actionable"):
+            continue
+        if str(route.get("canonical_task") or "") != canonical_task:
+            continue
+        rows.append(obj)
+    return sorted(rows, key=review_priority_rank)
+
+
+def _decision_paths_html(console: OperationsConsole, snapshot_id: str, obj: dict[str, Any], objects: list[dict[str, Any]]) -> str:
+    from src.decision_graph_v1 import ordered_paths, publication_issues
+    envelope = console._envelope(snapshot_id)
+    if "decision_graph" not in envelope:
+        return ""
+    result = ordered_paths(envelope["decision_graph"], objects, envelope["decision_graph_evidence"], str(obj["object_id"]))
+    if result["issues"]:
+        return '<section data-decision-paths><h4>Beslispad</h4><p class="banner warn">Pad nog niet vastgesteld. Controleer de beslisroutes.</p></section>'
+    by_id = {row["object_id"]: row for row in objects}
+    paths = []
+    for index, path in enumerate(result["paths"], 1):
+        steps = ''.join('<li>' + _esc((by_id[step["object_id"]].get("content") or {}).get("clean_text"))
+                        + ('<p><b>Antwoord: ' + _esc(step["label"]) + '</b></p>' if step["label"] else '<p>Onvoorwaardelijke vervolgstap</p>')
+                        + '<p>Vervolg: ' + _esc((by_id[step["next_object_id"]].get("content") or {}).get("clean_text")) + '</p></li>'
+                        for step in path["steps"])
+        paths.append(f'<article data-path-alternative><h5>Pad {index}</h5><ol>{steps}</ol></article>')
+    unresolved = publication_issues(envelope, objects)
+    notice = '<p class="banner warn">Deze routes zijn nog niet door alle vereiste reviewers bevestigd.</p>' if unresolved else ''
+    return '<section data-decision-paths><h4>Afzonderlijke paden naar deze uitkomst</h4>' + notice + ''.join(paths) + '</section>'
+
+
+def _knowledge_review_html(obj: dict[str, Any], objects: list[dict[str, Any]]) -> str:
+    from src.review_cockpit_v1 import knowledge_review_projection
+    projected = knowledge_review_projection(obj, objects)
+    essential = "".join(
+        f'<li data-context-status="{_esc(row["status"])}"><b>{_esc({"condition": "Voorwaarde", "exception": "Uitzondering", "scope": "Toepassingsgebied", "support": "Onderbouwing"}.get(row["role"], _object_type_label(row["role"])))}</b>: '
+        f'{_esc(row["text"])} '
+        + ('<strong> — nog niet geldig verbonden</strong>' if row["status"] in {"unresolved", "stale"} else '')
+        + '</li>' for row in projected["essential_context"])
+    issues = ('<p class="banner warn" data-unresolved-meaning>Er staan nog controles open: '
+              + _esc("Betekeniscontext, bronbinding of verplichte velden vragen nog controle.") + '</p>'
+              if projected["unresolved_reasons"] else '')
+    proposal = ('<aside class="object-expand-merge" data-context-proposal><h4>Voorgestelde wijziging — nog niet opgeslagen</h4>'
+                f'<p>{_esc(projected["proposal"])}</p></aside>' if projected["proposal"] else '')
+    return f'''<section class="review-card-object review-step" data-review-step="a" aria-label="Geselecteerde passage"
+        data-reviewed-version="{_esc(projected['object_version'])}">
+      <p class="meta">type <b>{_esc(_object_type_label(str(projected['object_type'] or '')))}</b> ·
+        status <b>{_esc(review_row_status(obj))}</b> · versie <b>{_esc(projected['object_version'])}</b></p>
+      <p class="eyebrow">Te beoordelen passage</p><h3 data-full-knowledge-passage>{_esc(projected['text'])}</h3>
+      <section data-essential-context><h4>Voorwaarden, uitzonderingen en scope</h4>
+        {f'<ul>{essential}</ul>' if essential else '<p>Geen afzonderlijke betekeniscontext vastgelegd.</p>'}</section>
+      {issues}{proposal}
+    </section>'''
+
+
+def _render_second_review_card(
+    console: OperationsConsole,
+    snapshot_id: str,
+    obj: dict[str, Any],
+    snapshot_objects: list[dict[str, Any]],
+    review_path: str,
+    *,
+    reviewer_id: str,
+    snapshot_revision: str,
+) -> str:
+    bindings = console.object_review_bindings(snapshot_id, objects=snapshot_objects)
+    route = reviewer_route_for(
+        obj,
+        review_path=review_path,
+        reviewer_id=reviewer_id,
+        bindings=bindings, fragments=console.review_source_fragments(snapshot_id)
+    )
+    if not route or route.get("canonical_task") != "second_review":
+        raise ConsoleError("second_review_not_available")
+    if not route.get("actionable"):
+        raise ConsoleError("independent_second_reviewer_required")
+
+    semantics = confirmed_recommendation_semantics_of(obj)
+    semantics_html = ""
+    if semantics:
+        semantics_html = (
+            '<section class="review-step">'
+            '<h4>Bevestigde aanbevelingssemantiek</h4>'
+            f'<p>Richting: <b>{_esc(semantics.get("direction") or "")}</b> · '
+            f'Sterkte: <b>{_esc(semantics.get("strength") or semantics.get("strength_status") or "")}</b></p>'
+            '</section>'
+        )
+    relations = confirmed_knowledge_relations_of(obj)
+    relations_html = ""
+    if relations:
+        items = "".join(
+            f'<li><b>{_esc(RELATION_LABELS.get(str(row.get("relation_type") or ""), str(row.get("relation_type") or "")))}</b> '
+            f'→ {_esc(row.get("target_object_id") or "")} '
+            f'(versie {_esc(row.get("target_object_version") or "")})</li>'
+            for row in relations
+        )
+        relations_html = (
+            '<section class="review-step"><h4>Bevestigde relaties</h4>'
+            f'<ul>{items}</ul></section>'
+        )
+
+    first_reviewers = [
+        str(row.get("reviewer") or row.get("reviewer_id") or "")
+        for row in bindings
+        if row.get("valid")
+        and row.get("decision") == "approve"
+        and row.get("object_id") == obj.get("object_id")
+        and row.get("object_version") == obj.get("object_version")
+        and row.get("canonical_object_hash") == (obj.get("provenance") or {}).get("canonical_object_hash")
+        and row.get("confirmed_object_type") == obj.get("confirmed_object_type")
+    ]
+    first_copy = ", ".join(dict.fromkeys(first_reviewers)) or "eerste reviewer"
+    text = str((obj.get("content") or {}).get("clean_text") or "")
+    return f"""
+      <p><a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=second_review">← Terug naar tweede beoordelingen</a></p>
+      <article class="object review-card-two-column second-review-card" data-object-id="{_esc(obj.get("object_id"))}">
+        {_knowledge_review_html(obj, snapshot_objects)}
+        <div class="review-cockpit-copy">
+          <p class="eyebrow">Onafhankelijke tweede beoordeling</p>
+          <p>Versie {_esc(obj.get("object_version"))}</p>
+        </div>
+        {_decision_paths_html(console, snapshot_id, obj, snapshot_objects)}
+        {_broncontext_html(obj, snapshot_id, str(obj.get("object_id") or ""), True, task="second_review")}
+        {_review_context_block(
+            obj,
+            snapshot_objects,
+            snapshot_id=snapshot_id,
+            review_path=review_path,
+            task="second_review", bindings=console.object_review_bindings(snapshot_id, objects=snapshot_objects), fragments=console.review_source_fragments(snapshot_id)
+        )}
+        {semantics_html}
+        {relations_html}
+        <form method="post" action="/review/second-review" class="review-decision-form">
+          <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
+          <input type="hidden" name="object_id" value="{_esc(obj.get("object_id") or "")}">
+          <input type="hidden" name="interaction_id" value="{_esc(new_review_interaction_id())}">
+          {_snapshot_revision_input(snapshot_revision)}
+          <section class="review-step">
+            <h4>Tweede beoordeling</h4>
+            <button class="btn-primary" type="submit" name="action" value="approve">Tweede beoordeling goedkeuren</button>
+            <label for="second-review-comment-{_esc(obj.get("object_id") or "")}">Correctie nodig</label>
+            <textarea id="second-review-comment-{_esc(obj.get("object_id") or "")}" name="comment"></textarea>
+            <button class="btn-secondary" type="submit" name="action" value="revise">Correctie nodig</button>
+          </section>
+        </form>
+      </article>
+    """
+
+
+def _review_bindings(console: OperationsConsole, snapshot_id: str, *, objects=None) -> list[dict[str, Any]] | None:
+    """Actor routes when bindings exist; governance fallback for projection consoles."""
+    try:
+        return console.object_review_bindings(snapshot_id, objects=objects)
+    except AttributeError:
+        return None
+    except ConsoleError as exc:
+        if exc.code == "unknown_snapshot":
+            return None
+        raise
+
+
+def _lane_total(
+    objects: list[dict[str, Any]],
+    *,
+    review_path: str,
+    lane: str,
+    open_rows: list[dict[str, Any]],
+) -> int:
+    """Open duties plus already finished objects of the same lane.
+
+    The task list only contains open work. The dashboard still reports how
+    many objects of that lane are already afgerond. Only an approved or
+    rejected review decision counts (#672/#700): source records and source-role
+    decisions (label/context/excluded) are source handling; superseded is replaced.
+    """
+    from src.source_accountability_v1 import is_source_record
+    open_ids = {str(obj.get("object_id") or "") for obj in open_rows}
+    finished = 0
+    for obj in objects:
+        object_id = str(obj.get("object_id") or "")
+        if not object_id or object_id in open_ids:
+            continue
+        if str(obj.get("object_type") or "") == "document" or is_source_record(obj) or role_of(obj).get("role") in {"label", "context", "excluded"}:
+            continue
+        if (obj.get("governance") or {}).get("validation_status") not in {"approved", "rejected"}:
+            continue
+        if review_duty_lane(obj, review_path=review_path, stage="first_review") != lane:
+            continue
+        finished += 1
+    return len(open_rows) + finished
+
+
+_SOURCE_KIND_LABELS = {
+    "unresolved": "Brongebruik nog te bepalen", "invalid_evidence": "Bronbewijs herstellen",
+    "linked_context": "Gekoppelde context", "document_information": "Documentinformatie",
+    "reviewed": "Handmatig afgehandeld",
+}
+
+
+def _source_category_tiles(source_usage: dict[str, dict[str, Any]]) -> str:
+    """Counts per existing source-usage kind of the central projection; read-only."""
+    counts = {kind: 0 for kind in _SOURCE_KIND_LABELS}
+    for usage in source_usage.values():
+        if usage.get("kind") in counts:
+            counts[usage["kind"]] += 1
+    return ('<ul class="source-category-tiles" data-source-categories>'
+            + "".join(f'<li data-source-category="{kind}"><b>{count}</b> {_esc(_SOURCE_KIND_LABELS[kind])}</li>'
+                      for kind, count in counts.items())
+            + '</ul>')
+
+
+def _review_inventory(
+    snapshot_id: str,
+    objects: list[dict[str, Any]],
+    *,
+    review_path: str,
+    bindings: list[dict[str, Any]] | None,
+    reviewer_id: str,
+    task: str,
+    snapshot_revision: str = "",
+    fragments=None,
+) -> str:
+    """Every current passage remains reachable; no admission or finality writes."""
+    from src.source_containers_v1 import source_accountability, partition
+    projection = source_accountability(objects, review_path=review_path, bindings=bindings, fragments=fragments)
+    followups = review_followup_queues(objects, review_path=review_path, projection=projection)
+    followup_tasks = {
+        str(obj["object_id"]): name
+        for name, rows in followups.items() for obj in rows
+    }
+    labels = {
+        "structure": "Documentindeling controleren", "contextual": "Passage afzonderlijk beoordelen",
+        "batch": "Passages selecteren en bevestigen", "second_review": "Tweede beoordeling",
+        "waiting": "Wacht op andere reviewer", "repair": "Passages corrigeren",
+        "disposition": "Gebruik van bronpassage bepalen", "history": "Status en historie",
+    }
+    outcomes = {
+        "not_yet_assessed": "Nog niet afgehandeld", "candidate_review_open": "Kandidaat nog te beoordelen",
+        "review_open": "Afhandeling nog niet definitief", "approved": "Goedgekeurd",
+        "rejected": "Afgewezen", "superseded": "Vervangen door opvolger",
+        "used_as_context": "Als context gebruikt", "linked_as_support": "Als onderbouwing gebruikt",
+        "excluded_with_reason": "Gemotiveerd uitgesloten",
+        "invalid_register_status": "Afhandelingsstatus ontbreekt of is ongeldig",
+        "invalid_disposition_state": "Afhandeling moet worden uitgezocht",
+    }
+    items = []
+    source_items = []
+    metadata_items = []
+    source_groups = {}
+    containers = partition(objects, projection=projection)
+    source_usage = {row["record"]["object_id"]: row["usage"] for row in containers["source"]}
+    from src.source_accountability_v1 import is_source_record, evidence_of
+    for obj in objects:
+        if obj.get("object_type") == "document":
+            continue
+        if bindings is None:
+            duty = review_duty_for(obj, review_path=review_path, bindings=None, fragments=fragments)
+            route_task = ""
+            if duty:
+                route_task = "second_review" if duty["stage"] == "second_review" else str(duty["lane"])
+        else:
+            route = reviewer_route_for(obj, review_path=review_path, bindings=bindings, reviewer_id=reviewer_id, fragments=fragments)
+            route_task = ""
+            if route:
+                route_task = str(route["canonical_task"]) if route["actionable"] else "waiting"
+        object_id = str(obj.get("object_id") or "")
+        disposition = definitive_review_disposition(obj)
+        category = ("repair" if followup_tasks.get(object_id) == "repair" else
+                    route_task or followup_tasks.get(object_id) or "history")
+        if task != "inventory" and category != task:
+            continue
+        if is_source_record(obj) and (evidence_of(obj).get("version") == "source-accountability-v2" or projection[object_id]["human_action"] == "technical_repair"):
+            usage = source_usage[object_id]
+            kind = usage["kind"]
+            label = _SOURCE_KIND_LABELS[kind]
+            section = " / ".join((obj.get("structure") or {}).get("section_path") or
+                                  (obj.get("metadata") or {}).get("section_path") or []) or "Document"
+            group = source_groups.setdefault((label, section), [])
+            status = ("Technisch herstel nodig" if usage["human_action"] == "technical_repair" else
+                      "Handmatig afgehandeld" if kind == "reviewed" else
+                      "Automatisch als documentinformatie aangemerkt" if kind == "document_information" else
+                      "Context bij goedgekeurde kennis" if usage["accounted"] else
+                      "Wacht op kennisbeoordeling" if kind == "linked_context" else "Open")
+            usage_reason = {"document_metadata": "Documentversie of datum", "page_furniture": "Documentlabel met editie en paginanummer",
+                            "navigation": "Inhoudsopgave of navigatieregel", "uncertain_source_role": "Brongebruik nog niet vastgesteld",
+                            "unformed_meaning": "Niet geselecteerde broninhoud"}.get(usage["reason"], "Bronbesluit controleren")
+            targets = "".join(f'<a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(oid)}">Kennisvoorstel</a> '
+                              for oid in usage["target_ids"])
+            source_task = "repair" if usage["human_action"] == "technical_repair" else "disposition"
+            source_link = "Bronbewijs herstellen" if source_task == "repair" else "Bronbesluit bekijken of wijzigen"
+            group.append(f'<li data-source-record="{_esc(object_id)}"><p>{_esc((obj.get("content") or {}).get("clean_text"))}</p>'
+                f'<p>{_esc(status)} · {_esc(usage_reason)}</p>{targets}'
+                f'<a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={source_task}">{source_link}</a></li>')
+            continue
+        if is_source_record(obj):
+            evidence = evidence_of(obj)
+            text = str((obj.get("content") or {}).get("clean_text") or "")
+            reason = {
+                "document_metadata": "Voorgestelde documentmetadata",
+                "page_furniture": "Voorgestelde kop- of voettekst",
+                "navigation": "Voorgestelde navigatie of inhoudsopgave",
+                "document_structure": "Voorgestelde documentstructuur",
+                "unformed_meaning": "Niet geselecteerde broninhoud; bepaal het gebruik",
+                "uncertain_source_role": "Bronrol onzeker; bepaal kennis, context of onderbouwing",
+            }.get(evidence.get("reason"), "Bronverantwoording ongeldig; herstel de verwerking")
+            link = f'/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task=disposition'
+            content = (f'<p>{_esc(text)}</p><p>{_esc(reason)}</p>'
+                       f'<a href="{link}">Bekijk bronpassage</a> · '
+                       f'<a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task=disposition">Brongebruik bepalen of herstellen</a>')
+            if evidence.get("proposed_role") in {"metadata", "structure"} and not role_of(obj):
+                metadata_items.append(f'<li data-source-record="{_esc(object_id)}"><label>'
+                    f'<input type="checkbox" name="source_object_ids" value="{_esc(object_id)}" checked>'
+                    f' Opnemen in mijn bronbesluit</label>{content}</li>')
+            else:
+                source_items.append(f'<li data-source-record="{_esc(object_id)}">{content}</li>')
+            continue
+        gate = str(admission_of(obj).get("gate_result") or "")
+        outcome = outcomes.get(str(disposition.get("outcome") or ""), "Afhandeling controleren")
+        register = (obj.get("metadata") or {}).get("passage_register") or {}
+        origin = "Vastgelegd door een beoordelaar" if register.get("source") == "review" else "Voorstel uit de bron"
+        target_task = "second_review" if category == "waiting" else category
+        next_action = "Open de passage en controleer het voorstel met de bron."
+        if category == "waiting":
+            next_action = "Een andere bevoegde reviewer moet deze versie onafhankelijk beoordelen."
+        elif category == "repair":
+            next_action = "Controleer de bron en herstel het verwerkingsprobleem voordat je goedkeurt."
+        elif category == "history":
+            next_action = "Bekijk het vastgelegde besluit; dit is geen nieuwe beoordelingsopdracht."
+        elif category == "disposition":
+            if not disposition.get("valid"):
+                next_action = "De opgeslagen afhandeling is ongeldig. Open de passage om het conflict te onderzoeken; keur niet automatisch goed."
+            elif gate != "allowed":
+                next_action = "Metis heeft nog niet vastgesteld of deze passage inhoudelijk beoordeelbaar is. Open de bron en bepaal het gebruik of herstel de verwerking."
+            else:
+                next_action = "Er ontbreekt een definitieve afhandeling. Open de passage en bepaal of zij kennis, context, onderbouwing of niet op te nemen tekst is."
+        hint = source_label_hint(obj)
+        hint_html = f'<p data-source-label-hint>{_esc(hint["label"])}</p>' if hint else ''
+        source_role = role_of(obj)
+        if source_role:
+            role_label = {"label": "Bevestigd bronlabel", "context": "Bevestigd contextfragment", "excluded": "Niet opgenomen met reden"}.get(source_role.get("role"), "Bronrol controleren")
+            hint_html += f'<p data-confirmed-source-role>{_esc(role_label)} · {_esc(source_role.get("reason"))}</p>'
+        items.append(
+            f'<li data-passage-id="{_esc(object_id)}" data-passage-category="{_esc(category)}">'
+            f'<a class="review-row-title" href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">{_esc(review_card_sentence(obj))}</a>'
+            f'{hint_html}'
+            f'<p>{_esc(labels[category])} · {_esc(outcome)}</p>'
+            f'<p class="review-next-action">{_esc(next_action)}</p>'
+            f'<a href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">Bekijk bronpassage</a>'
+            f'<p class="muted">{_esc(origin)}</p></li>'
+        )
+    source_html = ""
+    if metadata_items or source_items or source_groups:
+        source_html = ('<section data-source-accountability><h3>Bronverantwoording</h3>'
+            '<p>Deze bronregels zijn geen gevormde kennisobjecten. De bron blijft behouden. '
+            'Open inhoudelijke bronafhandeling blokkeert publicatie.</p>'
+            + _source_category_tiles(source_usage))
+        for (label, section), group in source_groups.items():
+            source_html += (f'<details data-source-group><summary>{_esc(label)} · {_esc(section)} ({len(group)} bronregels)</summary>'
+                            + '<ol>' + "".join(group) + '</ol></details>')
+        if metadata_items:
+            source_html += ('<form method="post" action="/review/source-exclusions">'
+                f'<input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">'
+                + _snapshot_revision_input(snapshot_revision)
+                + f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
+                + f'<h4>Voorgestelde metadata en structuur ({len(metadata_items)})</h4>'
+                + '<p>Controleer de bron en de selectie. Dit modelvoorstel is nog geen uitsluiting.</p><ol>'
+                + "".join(metadata_items) + '</ol>'
+                + '<label>Reden voor mijn bronbesluit<input name="reason" required maxlength="4000"></label>'
+                + '<label><input type="checkbox" name="source_checked" value="1" required>'
+                + ' Ik heb de geselecteerde bronregels gecontroleerd; zij bevatten geen op te nemen kennis.</label>'
+                + '<button type="submit">Geselecteerde bronregels gemotiveerd uitsluiten</button></form>')
+        if source_items:
+            source_html += (f'<h4>Brongebruik nog te bepalen ({len(source_items)})</h4><ol>'
+                            + "".join(source_items) + '</ol>')
+        source_html += '</section>'
+    title = ("Kennisvoorstellen en bronverantwoording" if source_groups else "Alle passages en hun afhandeling") if task == "inventory" else labels[task]
+    if task == "repair":
+        title += f" ({len(items)})"
+    panel_class = "review-blocked-audit" if task == "repair" else "review-passage-inventory"
+    return (
+        f'<section class="{panel_class}">'
+        + _review_task_header(snapshot_id, title, "Beoordelingswerk en bronafhandeling zijn afzonderlijke controles; de aantallen mogen overlappen")
+        + f'<p>{len(items)} beoordelings- of historieregels; {len(metadata_items) + len(source_items) + sum(len(g) for g in source_groups.values())} bronregels.</p>'
+        + f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p>'
+        + (f'<nav class="review-filter" data-review-filter aria-label="Filter bronafhandeling">'
+           f'<a{" aria-current=\"page\"" if task == "disposition" else ""} '
+           f'href="/review?document={_esc(snapshot_id)}&amp;task=disposition">Onbeslist</a> · '
+           f'<a{" aria-current=\"page\"" if task == "inventory" else ""} '
+           f'href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alles</a></nav>'
+           if task in {"inventory", "disposition"} else '')
+        + '<ol data-knowledge-proposals class="object-index review-passage-inventory">' + "".join(items) + '</ol>' + source_html
+        + ('<p class="review-task-empty">Deze lijst is leeg. Controleer het volledige passage-overzicht voor ander werk.</p>' if not items and not source_html else '')
+        + '</section>'
+    )
+
+
+def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], snapshot_id: str,
+                          snapshot_revision: str, *, context_target: str = "",
+                          source_mode: bool = False, draft: dict[str, Any] | None = None,
+                          error: str = "", projection=None) -> str:
+    """Present existing context decisions; navigation never confirms a relation."""
+    if obj.get("object_type") in {"document", "heading", "path"}:
+        return ""
+    from src.source_accountability_v1 import is_source_record
+    from src.source_containers_v1 import source_accountability
+    if projection is None:
+        projection = source_accountability(objects)
+    state = projection.get(str(obj.get("object_id") or ""), {})
+    if state.get("role") == "invalid_evidence":
+        return ('<section data-source-repair><h3>Bronbewijs herstellen</h3>'
+                '<p>De opgeslagen bronverwijzing of contextkoppeling is ongeldig. '
+                'Laat de verwerking of koppeling herstellen voordat je een bronbesluit neemt.</p>'
+                f'<a href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(obj["object_id"])}">Bekijk oorspronkelijke bron</a></section>')
+    evidence = source_context_projections(objects)
+    oid = str(obj["object_id"])
+    current = evidence[oid]
+    by_id = {str(row["object_id"]): row for row in objects}
+    target = by_id.get(context_target) if context_target else None
+    if context_target and (not target or context_target == oid
+            or target.get("object_type") in {"document", "heading", "path"} or role_of(target)):
+        raise ConsoleError("source_context_target_invalid")
+
+    def review_url(row_id: str, *, pair_target: str = "", edit_source: bool = False) -> str:
+        url = f"/review?document={quote(snapshot_id, safe='')}&object={quote(row_id, safe='')}"
+        if pair_target:
+            url += f"&context_target={quote(pair_target, safe='')}"
+        if edit_source:
+            url += "&context_mode=source"
+        return _esc(url + "#passage-context")
+
+    def source_link(row: dict[str, Any]) -> str:
+        return (f'<a href="/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(row["object_id"])}" '
+                'target="_blank" rel="noopener">Open oorspronkelijke bron (nieuw tabblad)</a>')
+
+    def full_text(row: dict[str, Any]) -> str:
+        return f'<p class="context-literal">{_esc((row.get("content") or {}).get("clean_text") or "")}</p>'
+
+    role = current["role"]
+    is_source = bool(is_source_record(obj) or role or source_label_hint(obj) or target or source_mode)
+    parts = ['<section class="review-step passage-context" id="passage-context" data-passage-context>',
+             '<h3>Controleer de passage en de bijbehorende context</h3>',
+             '<p>Staat in de bron een doelgroep, voorwaarde, uitzondering of label die nodig is om deze passage '
+             'juist te begrijpen? Controleer de bijbehorende brontekst voordat je de passage goedkeurt.</p>']
+    if error:
+        parts.append(f'<p class="banner err" role="alert">{_esc(error)} Je keuzes zijn niet opgeslagen. '
+                     'Controleer de actuele teksten en je selectie voordat je opnieuw opslaat.</p>')
+    if current["issues"]:
+        parts.append('<p class="banner warn">Een koppeling verwijst naar gewijzigde of ontbrekende tekst. '
+                     'Controleer de koppeling opnieuw; deze telt nu niet als geldig contextbewijs.</p>')
+    if current["links"]:
+        parts.append('<section data-confirmed-source-context><h4>Context die bij deze passage is vastgelegd</h4>')
+        for link in current["links"]:
+            source = by_id.get(str(link.get("source_object_id")))
+            label = "Bronlabel" if link.get("role") == "label" else "Contextfragment"
+            parts.append(f'<div class="context-choice"><p><strong>{label}</strong></p>'
+                         f'<p class="context-literal">{_esc(link.get("text"))}</p><p>{_esc(link.get("reason"))}</p>')
+            if source:
+                parts.append(source_link(source) + ' · ' +
+                             f'<a href="{review_url(str(source["object_id"]), pair_target=oid, edit_source=True)}">Koppeling aanpassen of verwijderen</a>')
+            else:
+                parts.append('<p>De contextbron ontbreekt. Laat de beheerder de bronverwijzing controleren.</p>')
+            parts.append('</div>')
+        parts.append('</section>')
+    if not is_source:
+        candidates = [row for row in objects if row["object_id"] != oid
+                      and row.get("object_type") not in {"document", "heading", "path"}
+                      and not links_of(row) and (row.get("content") or {}).get("clean_text")]
+        path = (obj.get("structure") or {}).get("section_path") or []
+        nearby = [row for row in candidates if path and (row.get("structure") or {}).get("section_path") == path]
+        other = [row for row in candidates if row not in nearby]
+        parts.append('<details data-context-picker><summary>Context toevoegen uit de bron</summary>'
+                     '<p>Kies eerst de volledige brontekst. Op het volgende scherm controleer je waarvoor die tekst geldt. '
+                     'Er wordt pas een koppeling vastgelegd als je die opslaat. De gekozen tekst wordt daarna als context gebruikt '
+                     'en niet als zelfstandig kennisobject gepubliceerd.</p>')
+        for title, rows, opened in [("Uit hetzelfde brononderdeel", nearby, True), ("Andere teksten uit dit document", other, not nearby)]:
+            if not rows:
+                continue
+            parts.append(f'<details{" open" if opened else ""}><summary>{title} ({len(rows)})</summary>'
+                         '<p>De plaats in het document helpt bij zoeken; controleer zelf of de tekst inhoudelijk bij de passage hoort.</p>')
+            for row in rows:
+                parts.append('<div class="context-choice">' + full_text(row) + source_link(row) +
+                             f'<p><a class="btn-secondary" href="{review_url(str(row["object_id"]), pair_target=oid, edit_source=True)}">Kies deze tekst als context</a></p></div>')
+            parts.append('</details>')
+        if not candidates:
+            parts.append('<p>Er zijn geen andere bruikbare bronfragmenten beschikbaar. Open de oorspronkelijke bron '
+                         'en gebruik passageherstel wanneer de benodigde tekst ontbreekt.</p>')
+        parts.append('</details>')
+        if not current["links"]:
+            parts.append(f'<details><summary>Dit fragment hoort bij een andere passage</summary><p>Gebruik dit alleen als '
+                         'de geopende tekst een label of contextfragment is, in plaats van zelfstandig te publiceren kennis.</p>'
+                         f'<a href="{review_url(oid, edit_source=True)}">Koppel dit fragment aan een passage</a></details>')
+        return ''.join(parts) + '</section>'
+    if current["links"]:
+        return ''.join(parts) + '<p>Dit fragment heeft zelf gekoppelde context. Beoordeel de passage met die context.</p></section>'
+    if target:
+        parts.append('<h4>Passage waarvoor je context kiest</h4>' + full_text(target) + source_link(target) +
+                     f'<p><a href="{review_url(context_target)}">Terug naar deze passage zonder op te slaan</a></p>')
+    title = 'Bij welke passage hoort dit label?' if source_label_hint(obj) or role.get('role') == 'label' else 'Bij welke passage hoort deze brontekst?'
+    parts.append(f'<h4>{title}</h4><p><strong>Te koppelen brontekst</strong></p>' + full_text(obj) + source_link(obj))
+    if role:
+        role_label = {"label": "bronlabel", "context": "contextfragment", "excluded": "niet opnemen"}.get(role.get("role"), "bronfragment")
+        parts.append(f'<p data-confirmed-source-role>Vastgelegd als {_esc(role_label)}: {_esc(role.get("reason"))}</p>')
+    choices = [row for row in objects if row["object_id"] != oid
+               and row.get("object_type") not in {"document", "heading", "path"} and not role_of(row)]
+    selected = set(current["target_object_ids"])
+    if target:
+        selected.add(context_target)
+    if draft is not None:
+        selected = set(draft.get("target_object_ids") or [])
+    selected_role = str((draft or {}).get("role", role.get("role", "")))
+    reason = str((draft or {}).get("reason", role.get("reason", "")))
+    choices.sort(key=lambda row: str(row["object_id"]) not in selected)
+
+    def command_fields(command_role: str = "") -> str:
+        return (f'<input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">'
+                f'<input type="hidden" name="source_object_id" value="{_esc(oid)}">'
+                f'<input type="hidden" name="snapshot_revision" value="{_esc(snapshot_revision)}">'
+                f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
+                f'<input type="hidden" name="return_object_id" value="{_esc(context_target or oid)}">'
+                + (f'<input type="hidden" name="role" value="{command_role}">' if command_role else ''))
+
+    parts.append('<form method="post" action="/review/source-context" data-source-context-form>' + command_fields() +
+                 '<fieldset><legend>Welke functie heeft deze brontekst?</legend>')
+    for value, label in [('label', 'Een label bij de passage, bijvoorbeeld DOEN of NIET DOEN'),
+                         ('context', 'Aanvullende context, bijvoorbeeld een doelgroep, voorwaarde of uitzondering')]:
+        checked = ' checked' if selected_role == value else ''
+        parts.append(f'<label class="check"><input type="radio" name="role" value="{value}" required{checked}> {label}</label>')
+    parts.append('</fieldset><fieldset><legend>Selecteer de passages waarvoor deze tekst geldt</legend>'
+                 '<p>De aangevinkte passages krijgen deze brontekst als context. Bestaande koppelingen zijn aangevinkt; '
+                 'vink een passage uit om die koppeling te verwijderen.</p><div class="source-context-targets">')
+    selected_choices = [row for row in choices if str(row["object_id"]) in selected]
+    source_path = (obj.get("structure") or {}).get("section_path") or []
+    nearby_choices = [row for row in choices if row not in selected_choices and source_path
+                      and (row.get("structure") or {}).get("section_path") == source_path]
+    other_choices = [row for row in choices if row not in selected_choices and row not in nearby_choices]
+    for title, rows, opened in [("Geselecteerde passages", selected_choices, True),
+                                ("Andere passages uit hetzelfde brononderdeel", nearby_choices, not selected_choices),
+                                ("Andere passages uit dit document", other_choices, not selected_choices and not nearby_choices)]:
+        if not rows:
+            continue
+        parts.append(f'<details{" open" if opened else ""}><summary>{title} ({len(rows)})</summary>')
+        for row in rows:
+            checked = ' checked' if str(row['object_id']) in selected else ''
+            parts.append(f'<div class="context-choice"><label class="check"><input type="checkbox" name="target_object_ids" '
+                         f'value="{_esc(row["object_id"])}"{checked}><span class="context-literal">{_esc((row.get("content") or {}).get("clean_text"))}</span></label>'
+                         + source_link(row) + '</div>')
+        parts.append('</details>')
+    parts.append('</div></fieldset>'
+                 f'<label>Waarom hoort deze brontekst bij de geselecteerde passages?<textarea name="reason" required maxlength="4000">{_esc(reason)}</textarea></label>'
+                 '<label class="check"><input type="checkbox" name="source_checked" value="1" required> '
+                 'Ik heb de oorspronkelijke bron en de geselecteerde passages gecontroleerd.</label>'
+                 '<aside class="banner warn"><strong>Na opslaan opnieuw beoordelen</strong><p>Deze brontekst wordt als context '
+                 'bewaard en niet zelfstandig als kennis gepubliceerd. Alle passages die deze context krijgen of verliezen, '
+                 'of waarvoor je de context wijzigt, moeten opnieuw beoordeeld worden. Eerdere goedkeuringen vervallen. '
+                 'Je bevestigt hier geen type, richting of sterkte van een aanbeveling.</p></aside>'
+                 '<button type="submit" class="btn-primary">Contextkoppeling opslaan</button></form>')
+    actions = [('excluded', 'Dit bronfragment niet gebruiken', 'Fragment niet opnemen')]
+    if role:
+        actions.append(('reset', 'Eerder contextbesluit terugdraaien', 'Besluit terugdraaien en opnieuw beoordelen'))
+    for value, title, button in actions:
+        action_reason = reason if draft is not None and selected_role == value else ''
+        parts.append(f'<details data-context-action="{value}"{" open" if draft is not None and selected_role == value else ""}><summary>{title}</summary>'
+                     '<p>Alle koppelingen vanuit dit fragment worden verwijderd. De eerder gekoppelde passages moeten '
+                     'opnieuw worden beoordeeld; hun eerdere goedkeuringen vervallen. De historie blijft bewaard.</p>'
+                     + ('<p>Het fragment wordt uitgesloten van kennis en context.</p>' if value == 'excluded' else
+                        '<p>Het fragment moet zelf opnieuw worden beoordeeld. Een eerdere goedkeuring wordt niet hersteld.</p>') +
+                     '<form method="post" action="/review/source-context">' + command_fields(value) +
+                     f'<label>Waarom neem je dit besluit?<textarea name="reason" required maxlength="4000">{_esc(action_reason)}</textarea></label>'
+                     '<label class="check"><input type="checkbox" name="source_checked" value="1" required> '
+                     'Ik heb de bron en de gevolgen voor de gekoppelde passages gecontroleerd.</label>'
+                     f'<button type="submit" class="btn-secondary">{button}</button></form></details>')
+    return ''.join(parts) + '</section>'
+
+
+@diagnostic_phase("review_index")
+def _render_review_index(
+    snapshot_id: str,
+    snapshot_objects: list[dict[str, Any]],
+    review_path: str,
+    snapshot_revision: str = "",
+    normal_content_html: str = "",
+    task: str = "",
+    normal_review_enabled: bool = True,
+    audit_signals: list[dict[str, Any]] | None = None,
+    bindings: list[dict[str, Any]] | None = None,
+    reviewer_id: str = "",
+    fragments=None,
+    document_version: object = "",
+) -> str:
+    task = normalize_review_task(task)
+    bindings = list(bindings) if bindings is not None else None
+    if task in {"inventory", "disposition", "waiting"}:
+        return _review_inventory(snapshot_id, snapshot_objects, review_path=review_path,
+                                 bindings=bindings, reviewer_id=reviewer_id, task=task,
+                                 snapshot_revision=snapshot_revision, fragments=fragments)
+    followups = review_followup_queues(snapshot_objects, review_path=review_path, bindings=bindings, fragments=fragments)
+    koppen = _review_route_objects(
+        snapshot_objects,
+        review_path=review_path,
+        bindings=bindings,
+        reviewer_id=reviewer_id,
+        canonical_task="structure", fragments=fragments
+    )
+    individual = _review_route_objects(
+        snapshot_objects,
+        review_path=review_path,
+        bindings=bindings,
+        reviewer_id=reviewer_id,
+        canonical_task="contextual", fragments=fragments
+    )
+    second_review = _review_route_objects(
+        snapshot_objects,
+        review_path=review_path,
+        bindings=bindings,
+        reviewer_id=reviewer_id,
+        canonical_task="second_review", fragments=fragments
+    )
+    blocked = followups["repair"]
+    normal_passages, normal_batches = (0, 0)
+    if normal_review_enabled:
+        normal_passages, normal_batches = normal_risk_batch_counts(
+            snapshot_objects,
+            review_path=review_path,
+            bindings=bindings, fragments=fragments
+        )
+    copy = _review_lane_copy(review_path, koppen)
+    progress = _review_progress_summary(snapshot_objects)
+    if task == "history":
+        decision_rows = [
+            obj
+            for obj in snapshot_objects
+            if obj.get("object_type") != "document"
+            and (_review_is_final(obj) or _review_was_revised(obj))
+        ]
+        return f'''
+          {_review_task_header(snapshot_id, "Besluiten en historie", "Bekijk read-only welke passages zijn afgehandeld en welke na correctie opnieuw ter beoordeling staan")}
+          {_review_progress_overview(snapshot_id, progress)}
+          <section class="review-decision-history">
+            <ol class="object-index">
+              {"".join(_review_decision_row(obj, snapshot_id, audit_signals or []) for obj in decision_rows) if decision_rows else '<li class="review-task-empty">Nog geen besluiten of correcties vastgelegd.</li>'}
+            </ol>
+          </section>
+        '''
+    if task == "contextual":
+        return f'''
+          {_review_task_header(snapshot_id, "Passages afzonderlijk beoordelen", "Controleer iedere passage met de bron; passages staan hieronder per brononderdeel, niet per inhoudelijke relatie")}
+          <section class="review-lane-slow">
+            {_review_section_groups(
+                individual,
+                snapshot_id,
+                priority_ids={str(obj.get("object_id")) for obj in individual},
+                task="contextual",
+                context_objects=snapshot_objects,
+                review_path=review_path,
+                bindings=bindings, fragments=fragments,
+            ) if individual else '<p class="review-task-empty">Deze beoordelingslijst is leeg. Bekijk alle passages voor resterend werk.</p>'}
+            <p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p>
+          </section>
+        '''
+    if task == "batch":
+        return f'''
+          {_review_task_header(snapshot_id, "Passages selecteren en bevestigen", "Selecteer alleen passages die je hebt gecontroleerd; hetzelfde brononderdeel en type betekenen niet dezelfde inhoud")}
+          {normal_content_html or '<p class="review-task-empty">Deze taak is afgerond.</p>'}
+        '''
+    if task == "structure":
+        return f'''
+          {_review_task_header(snapshot_id, copy["fast_title"], copy["fast_lead"])}
+          <section class="review-lane-fast">
+            <form method="post" action="/review/headings/batch-confirm">
+              <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
+              <input type="hidden" name="interaction_id" value="{_esc(new_review_interaction_id())}">
+              {_snapshot_revision_input(snapshot_revision)}
+              <div class="review-batch-tools">
+                <span>Selecteer alleen koppen die je hebt gecontroleerd.</span>
+                <button class="btn-secondary" type="button" data-select-review-batch>Selecteer alles</button>
+                <button class="btn-secondary" type="button" data-clear-review-batch>Selectie wissen</button>
+              </div>
+              <ol class="object-index review-heading-list">{"".join(_review_index_item(obj, snapshot_id, checkbox=True, task="structure") for obj in koppen)}</ol>
+              <button class="btn-primary" type="submit">{copy["fast_button"]}</button>
+            </form>
+          </section>
+        '''
+    if task == "second_review":
+        return f'''
+          {_review_task_header(snapshot_id, "Tweede beoordelingen", "Beoordeel onafhankelijk exact dezelfde goedgekeurde objectversie")}
+          <section class="review-lane-second">
+            {_review_section_groups(
+                second_review,
+                snapshot_id,
+                priority_ids=set(),
+                task="second_review",
+                context_objects=snapshot_objects,
+                review_path=review_path,
+                bindings=bindings, fragments=fragments,
+            ) if second_review else '<p class="review-task-empty">Deze taak is afgerond of wacht op een andere reviewer.</p>'}
+          </section>
+        '''
+    if task == "repair":
+        return f'''
+          {_review_task_header(snapshot_id, "Geblokkeerde passages herstellen", "Controleer de bron en handel verwerkingsproblemen af voordat je inhoudelijk beoordeelt")}
+          {_review_inventory(snapshot_id, snapshot_objects, review_path=review_path, bindings=bindings, reviewer_id=reviewer_id, task="repair", fragments=fragments)}
+
+        '''
+    return _review_task_dashboard(
+        snapshot_id,
+        koppen=koppen,
+        individual=individual,
+        normal_passages=normal_passages,
+        normal_batches=normal_batches,
+        blocked_count=len(blocked),
+        progress=progress,
+        heading_pending_override=len(koppen),
+        heading_total_override=_lane_total(
+            snapshot_objects,
+            review_path=review_path,
+            lane="structure",
+            open_rows=koppen,
+        ),
+        individual_pending_override=len(individual),
+        individual_total_override=_lane_total(
+            snapshot_objects,
+            review_path=review_path,
+            lane="contextual",
+            open_rows=individual,
+        ),
+        second_review_pending=len(second_review),
+        disposition_pending=len(followups["disposition"]),
+        waiting_pending=sum(
+            bool(route and route.get("waiting_for_other_reviewer"))
+            for obj in snapshot_objects
+            for route in [reviewer_route_for(obj, review_path=review_path, reviewer_id=reviewer_id, bindings=bindings, fragments=fragments)]
+        ) if bindings is not None else 0,
+        review_path=review_path,
+        knowledge_open=knowledge_open_count(snapshot_objects, review_path=review_path, bindings=bindings,
+                                            reviewer_id=reviewer_id, fragments=fragments),
+        knowledge_progress=knowledge_progress(snapshot_objects, review_path=review_path),
+        count_scope=count_scope_label(str(document_version or ""), revision=snapshot_revision),
+    )
+
+
+def _render_review_card(
+    console: OperationsConsole,
+    snapshot_id: str,
+    obj: dict[str, Any],
+    snapshot_objects: list[dict[str, Any]],
+    review_path: str,
+    draft: dict[str, Any],
+    conflict_html: str,
+    snapshot_revision: str = "",
+    task: str = "",
+    context_html: str = "",
+) -> str:
+    heading = review_card_sentence(obj)
+    obj_text = (obj.get("content") or {}).get("clean_text") or ""
+    heading_norm = " ".join(heading.split())
+    body_norm = " ".join(str(obj_text).split())
+    object_text_html = ""
+    expand_merge = admission_of(obj).get("expand_merge") or {}
+    merged_text = str(expand_merge.get("merged_text") or "").strip()
+    merged_norm = " ".join(merged_text.split())
+    merge_adds_text = bool(
+        merged_norm
+        and merged_norm != heading_norm
+        and merged_norm != body_norm
+    )
+    if (
+        expand_merge.get("kind") == "sentence_continuation"
+        and merge_adds_text
+    ):
+        parts = list(expand_merge.get("parts") or [])
+        missing = str(parts[1] if len(parts) > 1 else "").strip()
+        object_text_html += f'''
+          <aside class="source-continuation-proposal" aria-label="Voorstel om afgebroken zin te herstellen">
+            <h4>Voorstel: afgebroken zin aanvullen</h4>
+            <p><b>Ontbrekende brontekst:</b> {_esc(missing)}</p>
+            <p><b>Herstelde passage:</b> {_esc(merged_text)}</p>
+            <p class="field-help">Na aanvullen ontstaat een nieuwe versie. Die versie is nog niet goedgekeurd en moet opnieuw worden beoordeeld.</p>
+            <button class="btn-secondary" type="submit" form="review-form-{_esc(obj["object_id"])}" formaction="/review/context/accept" formmethod="post">Passage aanvullen met brontekst</button>
+          </aside>
+        '''
+    proposed = proposed_type_of(obj)
+    confirmable = confirmable_proposed_type(obj)
+    confirmed = obj.get("confirmed_object_type") or ""
+    type_options = _type_options(
+        draft.get("confirmed_object_type") or confirmed,
+        review_path=review_path,
+        proposed=confirmable,
+    )
+    try:
+        console.open_source_passage(snapshot_id=snapshot_id, object_id=obj["object_id"])
+        passage_ok = True
+    except ConsoleError:
+        passage_ok = False
+    disabled = "" if passage_ok else " disabled"
+    gate = str(admission_of(obj).get("gate_result") or "")
+    admission_notice = ""
+    if is_admission_blocked(obj, review_path=review_path) or (review_path != "boom" and gate != "allowed" and authoritative_review_type(obj) != "heading"):
+        admission_notice = (
+            "Deze passage kan nog niet worden goedgekeurd. Een correctie of gemotiveerde afhandeling is nodig."
+            if gate == "blocked" else
+            "Deze passage is nog niet beschikbaar voor goedkeuring."
+        )
+    current_duty = review_duty_for(
+        obj, review_path=review_path,
+        bindings=console.object_review_bindings(snapshot_id, objects=snapshot_objects),
+        fragments=console.review_source_fragments(snapshot_id),
+    )
+    approval_disabled = disabled or (" disabled" if current_duty is None else "")
+    repair_guidance = (
+        '<aside class="banner warn"><b>Eerst de passage herstellen.</b> '
+        'Kies hieronder wat ontbreekt en vervolgens <b>Correctie specificeren</b>. '
+        'Je kiest daarna de oorspronkelijke bronfragmenten of de passende structurele correctie. '
+        'De herstelde passage wordt een nieuw voorstel dat opnieuw beoordeeld moet worden.</aside>'
+        if is_admission_blocked(obj, review_path=review_path) else ""
+    )
+    if review_path == "boom" and "decision_unit_graph_unresolved" in admission_of(obj).get("reason_codes", []):
+        repair_guidance = (
+            '<aside class="banner warn"><b>Eerst de beslisstructuur controleren.</b> '
+            'Controleer vragen, antwoordlabels en verbindingen tegen de bron. '
+            f'<a href="/review/decision-graph?document={_esc(snapshot_id)}">Open beslisroutes</a>. '
+            'Onvolledige bronpassages blijven daarna afzonderlijk herstelwerk.</aside>'
+        )
+    four_eyes_html = ""
+    if requires_four_eyes(obj, confirmed_type=confirmed or None):
+        four_eyes_html = (
+            '<div class="banner warn">Voor deze passage is een '
+            "<b>onafhankelijke tweede beoordeling nodig</b>.</div>"
+        )
+    path_text = found_under_path(obj)
+    proposed_label = _object_type_label(proposed or confirmable)
+    classification_note = (
+        f'Eerder bevestigd type: <b>{_esc(_object_type_label(str(confirmed)))}</b>. '
+        f'Oorspronkelijk voorstel van Metis: {_esc(proposed_label)}.'
+        if confirmed else
+        f'Metis stelt voor: <b>{_esc(proposed_label)}</b>. Dit type is nog niet door jou bevestigd.'
+    )
+    if review_path == "boom":
+        classification_note = (
+            f'Eerder bevestigd type: <b>{_esc(_object_type_label(str(confirmed)))}</b>.'
+            if confirmed else
+            f'Huidige indeling: <b>{_esc(proposed_label)}</b>. Dit type is nog niet door jou bevestigd.'
+        )
+    return f"""
+                <p><a class="btn-secondary" href="{_review_location(console, snapshot_id, task=task)}">← Terug naar taken</a></p>
+                <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
+                    <div class="review-decision-layout">
+                    <div class="review-source-column">
+                    {_knowledge_review_html(obj, snapshot_objects)}
+                    {_decision_paths_html(console, snapshot_id, obj, snapshot_objects)}
+                    {object_text_html}
+                    {_broncontext_html(obj, snapshot_id, obj["object_id"], passage_ok, task=task)}
+                    {_review_context_block(
+                        obj,
+                        snapshot_objects,
+                        snapshot_id=snapshot_id,
+                        review_path=review_path,
+                        task=task, bindings=console.object_review_bindings(snapshot_id, objects=snapshot_objects), fragments=console.review_source_fragments(snapshot_id)
+                    )}
+                    {context_html}
+                    </div>
+                    <div class="review-choices-column">
+                  <form id="review-form-{_esc(obj["object_id"])}" class="review-decision-form" method="post" action="/review" data-review-form>
+                    <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
+                    <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
+                    <input type="hidden" name="return_task" value="{_esc(task if task in REVIEW_TASKS else '')}">
+                    <input type="hidden" name="interaction_id" value="{_esc(new_review_interaction_id())}">
+                    {_snapshot_revision_input(snapshot_revision)}
+                    <input type="hidden" name="proposed_object_type" value="{_esc(confirmable)}">
+                    <input type="hidden" name="found_under" value="{_esc(path_text)}">
+                    <input type="hidden" name="decision" value="">
+                    {four_eyes_html}
+                    {conflict_html}
+
+                    {f'<p>{_esc(admission_notice)}</p>' if admission_notice else ''}{repair_guidance}
+                    <section class="review-step" data-review-step="c">
+                      <h4>Is deze passage op zichzelf bruikbaar?</h4>
+                      <label class="check"><input type="radio" name="suitability" value="ja"{_checked(draft.get("suitability", ""), "ja")}> Ja, als zelfstandig stukje kennis</label>
+                      <label class="check"><input type="radio" name="suitability" value="mist_context"{_checked(draft.get("suitability", ""), "mist_context")}> Nee, ik mis uitleg eromheen</label>
+                      <label class="check"><input type="radio" name="suitability" value="samenvoegen"{_checked(draft.get("suitability", ""), "samenvoegen")}> Nee, deze hoort samen met een andere passage</label>
+                      <label class="check"><input type="radio" name="suitability" value="alleen_onderbouwing"{_checked(draft.get("suitability", ""), "alleen_onderbouwing")}> Alleen als onderbouwing van een andere passage</label>
+                      <label class="check"><input type="radio" name="suitability" value="geen_kenniseenheid"{_checked(draft.get("suitability", ""), "geen_kenniseenheid")}> Geen zelfstandig stukje kennis</label>
+                    </section>
+                    <section class="review-step" data-review-step="d">
+                      <h4>Staat de passage onder de juiste kop?</h4>
+                      <p>Gevonden onder: <b>{_esc(path_text or "het document")}</b></p>
+                      <label class="check"><input type="radio" name="documentpositie_action" value="dit_klopt"{_checked(draft.get("documentpositie_action", ""), "dit_klopt")}> Dit klopt</label>
+                      <label class="check"><input type="radio" name="documentpositie_action" value="andere_kop"{_checked(draft.get("documentpositie_action", ""), "andere_kop")}> Andere kop kiezen</label>
+                      {_heading_chooser(obj, snapshot_objects, snapshot_id, draft.get("parent_choice", ""))}
+                    </section>
+                    <section class="review-step" data-review-step="e" id="classification-{_esc(obj["object_id"])}">
+                      <h4>Wat voor informatie is dit?</h4>
+                      <p>{classification_note}</p>
+                      <label class="check"><input type="radio" name="type_action" value="dit_klopt"{_checked(draft.get("type_action", ""), "dit_klopt")}> Dit klopt</label>
+                      <label class="check"><input type="radio" name="type_action" value="type_wijzigen"{_checked(draft.get("type_action", ""), "type_wijzigen")}> Type wijzigen</label>
+                      <div data-type-chooser hidden>
+                        <label for="type-{_esc(obj["object_id"])}">Ander type</label>
+                        <select id="type-{_esc(obj["object_id"])}" name="confirmed_object_type" hidden{disabled}>{type_options}</select>
+                      </div>
+                    </section>
+                    {(
+                        _stamp_block(obj, hidden=not recommendation_strength_ui_applies(obj))
+                        if review_path == "boom"
+                        else _recommendation_semantics_block(
+                            obj,
+                            draft,
+                            hidden=not (
+                                draft.get("validation_error")
+                                or (obj.get("confirmed_object_type") or obj.get("object_type"))
+                                == "recommendation"
+                            ),
+                        )
+                    )}
+                    {_knowledge_relation_review_block(
+                        obj,
+                        snapshot_objects,
+                        review_path=review_path,
+                        draft=draft, bindings=console.object_review_bindings(snapshot_id, objects=snapshot_objects), fragments=console.review_source_fragments(snapshot_id)
+                    )}
+                    <section class="review-step" data-review-step="f">
+                      <h4>Wat is je besluit?</h4>
+                      <fieldset id="decision-{_esc(obj["object_id"])}">
+                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren"{approval_disabled}{_checked(draft.get("eindoordeel", ""), "goedkeuren")}> Goedkeuren — inhoud en indeling kloppen</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren_na_correctie"{_checked(draft.get("eindoordeel", ""), "goedkeuren_na_correctie")}> Correctie specificeren — maak een nieuw voorstel voor beoordeling</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="afwijzen"{_checked(draft.get("eindoordeel", ""), "afwijzen")}> Afwijzen — niet gebruiken als kennisobject</label>
+                      <label class="check"><input type="radio" name="eindoordeel" value="later_beoordelen"{_checked(draft.get("eindoordeel", ""), "later_beoordelen")}> Later beoordelen — nog geen besluit</label>
+                      </fieldset>
+                      <p class="field-help" data-decision-hint>Kies een eindoordeel.</p>
+                      <div class="decision-comment" data-comment-field hidden>
+                        <label for="comment-{_esc(obj["object_id"])}">Toelichting (verplicht)</label>
+                        <textarea id="comment-{_esc(obj["object_id"])}" name="comment">{html.escape(draft.get("comment", ""), quote=True)}</textarea>
+                      </div>
+                      <div class="decision-correction" data-correction-field hidden>
+                        <label for="correction-{_esc(obj["object_id"])}">Voorgestelde correctie</label>
+                        <textarea id="correction-{_esc(obj["object_id"])}" name="proposed_correction">{html.escape(draft.get("proposed_correction", ""), quote=True)}</textarea>
+                      </div>
+                      <button class="btn-primary" type="submit" data-submit-review>Review opslaan en volgende</button>
+                    </section>
+                  </form>
+                    </div></div>
+                </article>
+                {_review_validation_script()}
+                """
+
+
+def _source_context_card(console: OperationsConsole, snapshot_id: str, obj: dict[str, Any],
+                         panel: str, *, context_target: str, context_mode: str, task: str) -> str:
+    """Keep fragment handling separate from approval of independent knowledge."""
+    if "data-source-repair" in panel:
+        return panel
+    from src.source_accountability_v1 import is_source_record
+    if not (is_source_record(obj) or role_of(obj) or (panel and (context_target or context_mode == "source" or
+            (source_label_hint(obj) and context_mode != "review")))):
+        return ""
+    try:
+        console.open_source_passage(snapshot_id=snapshot_id, object_id=obj["object_id"])
+        passage_ok = True
+    except ConsoleError:
+        passage_ok = False
+    parts = ['<section data-source-role-card><h3>Brontekst koppelen of afhandelen</h3>',
+             _broncontext_html(obj, snapshot_id, obj["object_id"], passage_ok, task=task)]
+    if source_label_hint(obj) and not role_of(obj) and not is_source_record(obj):
+        parts.append('<p>Metis herkent een mogelijk los label. Dit is nog geen bevestigd besluit.</p>'
+                     f'<p><a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(obj["object_id"])}&amp;context_mode=review">Dit is zelfstandig te beoordelen tekst</a></p>')
+    return ''.join(parts) + panel + '</section>'
+
+
+def _formation_incomplete_banner(console, snapshot_id: str, objects: list[dict[str, Any]]) -> str:
+    """Point to recovery when formation left no knowledge candidate at all.
+
+    Read-only: reuses the deep processing status (#516), so review closure of
+    the pending ranges or an unavailable resume hides this guidance.
+    """
+    from src.source_accountability_v1 import is_source_record
+    if any(obj.get("object_type") not in {"document", "heading"} and not is_source_record(obj) for obj in objects):
+        return ""
+    try:
+        status = console.processing_status(snapshot_id)
+    except ConsoleError:
+        return ""
+    if not (status.get("formation_incomplete") and status.get("resume_allowed")):
+        return ""
+    link = f'/source-selection?{urlencode({"document": snapshot_id})}'
+    return ('<div class="banner warn" role="alert" data-formation-incomplete>'
+            '<p><strong>Kennisvorming onvolledig.</strong> Metis heeft voor dit document nog geen kennisvoorstellen '
+            'gevormd; de afgewezen voorstellen en de bron zijn bewaard. Hervat eerst de verwerking. '
+            'Handel bronregels pas af nadat de kennisvorming is hersteld.</p>'
+            f'<p><a class="btn-primary" href="{_esc(link)}">Naar Bronselectie om te hervatten</a></p></div>')
+
+
+@source_reconstruction_scope(reuse_existing=True)
+@diagnostic_phase("review_render")
+def _render_review_room(
+    console: OperationsConsole,
+    account: dict[str, Any],
+    document: str = "",
+    object: str = "",
+    *,
+    task: str = "",
+    context_target: str = "",
+    context_mode: str = "",
+    context_draft: dict[str, Any] | None = None,
+    context_error: str = "",
+    context_saved: bool = False,
+    draft: dict[str, Any] | None = None,
+    conflict: bool = False,
+    batch_selection: list[str] | None = None,
+    batch_completed: int = 0,
+    snapshot: tuple[list[dict[str, Any]], str] | None = None,
+) -> str:
+    chosen = document.strip()
+    chosen_object_id = object.strip()
+    chosen_task = normalize_review_task(task)
+    draft = _sanitize_review_draft(draft)
+    conflict_html = _review_conflict_html(conflict)
+    if conflict and batch_completed:
+        conflict_html = (
+            f'<div class="banner warn" data-partial-batch-conflict>'
+            f'{batch_completed} geselecteerde passage'
+            f'{" is" if batch_completed == 1 else "s zijn"} al opgeslagen. '
+            'Het document is tussentijds gewijzigd; controleer de resterende selectie en probeer die opnieuw.'
+            '</div>'
+        )
+    snapshot_revision = ""
+    envelopes = console.list_envelopes()
+    chosen_row = next((row for row in envelopes if row["snapshot_id"] == chosen), None)
+    cards = []
+    if not chosen:
+        for row in envelopes:
+            cards.append(
+                f"""
+                    <article class="doc-card review-document-card">
+                      {_document_card_heading({**row, "status": row["state"]})}
+                      <p class="lead">Beoordeel passages stap voor stap, met de oorspronkelijke bron als uitgangspunt.</p>
+                      <p><a class="btn-primary" href="/review?document={_esc(row["snapshot_id"])}">Beoordeel</a></p>
+                    </article>
+                    """
+            )
+    objects_html = ""
+    if chosen_row:
+        objects_html = (
+            f'<div class="doc-card review-document-card">'
+            '<div class="review-document-card-top"><span class="review-document-kicker">Document in review</span>'
+            '<a class="btn-secondary" href="/review">Ander document kiezen</a></div>'
+            f'{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}'
+            "</div>"
+        )
+        history_enabled = chosen_task == "history"
+        if history_enabled:
+            loaded_objects, snapshot_revision = console.snapshot_objects_and_revision(
+                chosen,
+                include_blocked=True,
+            )
+            all_object_versions = loaded_objects
+            snapshot_objects = _current_review_objects(loaded_objects)
+        else:
+            snapshot_objects, snapshot_revision = (
+                snapshot if snapshot is not None else console.snapshot_objects_and_revision(chosen)
+            )
+            all_object_versions = []
+        review_path = review_path_for_klasse(chosen_row["class"])
+        objects_html += _formation_incomplete_banner(console, chosen, snapshot_objects)
+        audit_signals: list[dict[str, Any]] = []
+        if history_enabled:
+            audit_reader = getattr(console, "audit_review_signals", None)
+            if callable(audit_reader):
+                audit_signals = list(audit_reader())
+        if not chosen_object_id:
+            normal_content_html = ""
+            if isinstance(console, ProportionateReviewConsole) and chosen_task == "batch":
+                normal_content_html = render_normal_risk_batch_panel(
+                    console, chosen,
+                    snapshot=(snapshot_objects, snapshot_revision),
+                    selected_ids=batch_selection or (),
+                    include_individual=False,
+                )
+            try:
+                bindings = _review_bindings(console, chosen, objects=snapshot_objects)
+            except AttributeError:
+                bindings = None
+            objects_html += _render_review_index(
+                chosen,
+                snapshot_objects,
+                review_path,
+                snapshot_revision,
+                normal_content_html=normal_content_html,
+                task=chosen_task,
+                normal_review_enabled=isinstance(console, ProportionateReviewConsole),
+                audit_signals=audit_signals,
+                bindings=bindings,
+                reviewer_id=str(account.get("account_id") or ""), fragments=console.review_source_fragments(chosen),
+                document_version=chosen_row.get("version"),
+            )
+        else:
+            obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
+            if obj is None:
+                raise ConsoleError("unknown_object")
+            if history_enabled:
+                objects_html += _review_object_history(
+                    chosen,
+                    obj,
+                    all_object_versions,
+                    audit_signals,
+                )
+            else:
+                from src.source_containers_v1 import source_accountability
+                detail_projection = source_accountability(snapshot_objects, review_path=review_path,
+                    bindings=_review_bindings(console, chosen, objects=snapshot_objects),
+                    fragments=console.review_source_fragments(chosen))
+                context_html = ""
+                if ('reviewer' in (account.get('roles') or [])
+                        and str(account.get('account_id') or '') in chosen_row.get('named_reviewers', [])
+                        and not console.snapshot_is_published(chosen)):
+                    context_html = _source_context_panel(obj, snapshot_objects, chosen, snapshot_revision,
+                        context_target=context_target, source_mode=context_mode == "source",
+                        draft=context_draft, error=context_error, projection=detail_projection)
+                if context_saved:
+                    objects_html += '<p class="banner ok" role="status">Het contextbesluit is opgeslagen. Beoordeel de betrokken passages opnieuw.</p>'
+                conflict_html = _review_conflict_html(conflict, current=obj, draft=draft)
+                try:
+                    current_bindings = _review_bindings(console, chosen, objects=snapshot_objects)
+                except AttributeError:
+                    current_bindings = None
+                route = (
+                    reviewer_route_for(
+                        obj,
+                        review_path=review_path,
+                        reviewer_id=str(account.get("account_id") or ""),
+                        bindings=current_bindings, fragments=console.review_source_fragments(chosen)
+                    )
+                    if current_bindings is not None
+                    else None
+                )
+                source_card = _source_context_card(console, chosen, obj, context_html,
+                    context_target=context_target, context_mode=context_mode, task=chosen_task)
+                if source_card:
+                    objects_html += conflict_html + source_card
+                    if conflict:
+                        for field, label in (("comment", "Niet opgeslagen toelichting"),
+                                             ("proposed_correction", "Niet opgeslagen correctie")):
+                            if draft.get(field):
+                                objects_html += (f'<aside data-unsaved-review-draft><h3>{label}</h3>'
+                                                 f'<p>{_esc(draft[field])}</p></aside>')
+                elif route and route.get("canonical_task") == "second_review":
+                    if route.get("actionable"):
+                        objects_html += _render_second_review_card(
+                            console,
+                            chosen,
+                            obj,
+                            snapshot_objects,
+                            review_path,
+                            reviewer_id=str(account.get("account_id") or ""),
+                            snapshot_revision=snapshot_revision,
+                        )
+                    else:
+                        objects_html += f"""
+                          <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">← Terug naar taken</a></p>
+                          <div class="banner warn">Deze tweede beoordeling moet door een andere onafhankelijke reviewer worden uitgevoerd.</div>
+                        """
+                elif chosen_task == "second_review":
+                    objects_html += _render_second_review_card(
+                        console,
+                        chosen,
+                        obj,
+                        snapshot_objects,
+                        review_path,
+                        reviewer_id=str(account.get("account_id") or ""),
+                        snapshot_revision=snapshot_revision,
+                    )
+                else:
+                    objects_html += _render_review_card(
+                        console,
+                        chosen,
+                        obj,
+                        snapshot_objects,
+                        review_path,
+                        draft,
+                        conflict_html,
+                        snapshot_revision,
+                        chosen_task,
+                        context_html=context_html,
+                    )
+
+    empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
+    return _page(
+        f"""
+            {_nav(account, "review")}
+            <section class="room review-room">
+              <h1>Review</h1>
+              {_task_links("review")}
+              {conflict_html if not chosen_object_id else ""}
+              {"".join(cards) if not chosen else ""}
+              {objects_html or empty}
+              {_diagnosis_link(account, chosen_row)}
+            </section>
+            """
+    )
+
+
+def _refusal_records(state, snapshot_id, issues=None):
+    """Refusal store records for the evidence export.
+
+    Corrupt records and an unreadable store MOETEN be reported (issues list + one
+    `publication_refusal_export_issue` warning each); they are NOOIT silently dropped.
+    An unreadable store returns None (manifest: unreadable).
+    """
+    import json as _json
+    import logging as _logging
+    issues = [] if issues is None else issues
+    logger = _logging.getLogger('metis.evidence_export')
+
+    def report(code):
+        issues.append(code)
+        logger.warning(_json.dumps({'event': 'publication_refusal_export_issue', 'snapshot_id': str(snapshot_id),
+                                    'issue': code}, sort_keys=True))
+    from src import publication_refusal_store_v1 as refusal_store
+    try:
+        pg = refusal_store.postgres_store(state)
+        if pg is not None:  # live: PostgreSQL table, bounded per document
+            return pg.records_for(snapshot_id)
+        return refusal_store.read_records(refusal_store.store_path(state),
+                                          on_corrupt=lambda name: report(f'corrupt_record:{name}'))
+    except Exception as error:  # reported with the type only (no message: it can carry secrets)
+        report(f'store_unreadable:{type(error).__name__}')
+        return None
+
+
+def create_console_app(
+    console: OperationsConsole | None = None,
+    *,
+    trusted_origin: str | None = None,
+    api_access_store: Any | None = None,
+) -> FastAPI:
+    state = console or OperationsConsole(root=REPO_ROOT)
+    install_ingest_limits(state)
+    from src.console_entra_v1 import install_entra
+    entra = install_entra(state, trusted_origin)
+    access_store = api_access_store
+    access_store_error = ""
+    selected_access_mode = str(os.getenv("METIS_API_ACCESS_STORE", "legacy") or "legacy").strip().lower()
+    if access_store is None and selected_access_mode == "postgres":
+        try:
+            access_store = PostgresApiAccessStore()
+            access_store.verify_schema()
+        except ApiAccessStoreError as exc:
+            access_store_error = str(exc)
+    app = FastAPI(
+        title="V&VN Data Services Internal Operations Console",
+        version=SERVICE_VERSION,
+        description="Internal researcher/reviewer console. Not the Product API. Chat is not a room.",
+    )
+    if BRAND_DIR.is_dir():
+        app.mount("/brand", StaticFiles(directory=str(BRAND_DIR)), name="brand")
+
+    expected_origin = ""
+    if trusted_origin is not None:
+        parsed = urlsplit(str(trusted_origin).strip())
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("console_trusted_origin_invalid")
+        expected_origin = f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+
+    @app.middleware("http")
+    async def require_same_origin(request: Request, call_next):
+        if expected_origin and request.url.path != "/mcp" and request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+            supplied = str(request.headers.get("origin") or "").strip().lower().rstrip("/")
+            if supplied != expected_origin:
+                return HTMLResponse(
+                    "Cross-origin request blocked.",
+                    status_code=403,
+                )
+        return await call_next(request)
+
+    if entra is not None:
+        from src.console_entra_routes_v1 import install_entra_routes
+        install_entra_routes(app, state, entra, render_page=_page)
+
+    login_limiter = SlidingWindowRateLimiter()
+    login_attempts_per_minute = 10
+
+    def _current(request: Request) -> dict[str, Any] | None:
+        scoped = getattr(request.state, 'view_check_account', None)
+        if scoped is not None:
+            return scoped
+        token = request.cookies.get(COOKIE)
+        try:
+            return state.session_account(token)
+        except ConsoleError as exc:
+            if exc.code == "workflow_identity_unavailable":
+                raise
+            return None
+
+    def _require(request: Request) -> dict[str, Any]:
+        account = _current(request)
+        if not account:
+            raise ConsoleError("not_authenticated")
+        return account
+
+    @app.middleware("http")
+    async def source_read_calculation(request: Request, call_next):
+        if request.method == "GET":
+            with source_reconstruction_scope(reuse_existing=True):
+                return await call_next(request)
+        return await call_next(request)
+
+    from src.source_selection_ui_v1 import install as install_source_selection
+    install_source_selection(app, state, _require, _page, _nav, _esc)
+
+    from src.metis_mcp_v1 import install_mcp
+    install_mcp(app, state, entra, expected_origin, require_account=_require, render_page=_page, nav=_nav)
+    from src.telemetry.routes import install_telemetry_routes
+    install_telemetry_routes(app, require_account=_require)
+    from src.insight_v1 import install_insight_routes
+    install_insight_routes(app, state, require_account=_require, render_page=_page, nav=_nav)
+    from src.view_check import install as install_view_checks
+    install_view_checks(app, state, _require, _page, _nav)
+
+    @app.exception_handler(ConsoleError)
+    async def console_errors(_request: Request, exc: ConsoleError) -> HTMLResponse:
+        from src.console_entra_routes_v1 import identity_unavailable_response
+        from src.request_diagnostics_v1 import note_handled_error
+        note_handled_error(exc.code)
+        if exc.code == "workflow_identity_unavailable":
+            return identity_unavailable_response(_page)
+        try:
+            account = _current(_request)
+        except ConsoleError:
+            return identity_unavailable_response(_page)
+        status = 401 if exc.code in {"not_authenticated", "invalid_credentials"} else 403 if "role_required" in exc.code or exc.code in {"entra_access_denied", "entra_local_auth_disabled"} else 400
+        message = ERROR_COPY.get(exc.code, "Metis kon deze actie niet afronden. Controleer de huidige status voordat je opnieuw probeert. Blijft dit gebeuren? Meld het bij de beheerder.")
+        filename_error = exc.code == "invalid_store_path" and _request.url.path == "/ingest"
+        hint = f'<p class="field-help">{_esc(FILENAME_HINT)}</p>' if filename_error else ""
+        processing_details = ""
+        if account and exc.code.startswith("pre_review_llm_"):
+            diagnostic = getattr(exc, "pre_review_diagnostics", {})
+            reason = str(diagnostic.get("reason_code") or "")
+            reference = str(diagnostic.get("reference") or "")
+            if re.fullmatch(r"(?:semantic|recommendation|source_bound)_[a-z_]{1,100}", reason):
+                processing_details += f'<p>Validatiereden: <code>{_esc(reason)}</code></p>'
+            if re.fullmatch(r"[a-f0-9]{32}", reference):
+                processing_details += f'<p>Verwerkingsreferentie: <code>{reference}</code></p>'
+        back = (
+            '<p><a href="/ingest">Terug naar Inleveren</a></p>'
+            if _request.url.path == "/ingest" and account
+            else '<p><a href="/">Naar Mijn werk</a></p>' if account
+            else '<p><a href="/login">Naar aanmelden</a></p>'
+        )
+        if account and _request.url.path == "/review/participants":
+            document = _request.query_params.get("document") or getattr(_request.state, "review_participation_document", "")
+            back = '<p><a href="/review?work=all">Terug naar reviewoverzicht</a></p>'
+            if document:
+                back += f'<p><a href="/review/participants?{_esc(urlencode({"document": document}))}">Terug naar deelnemersbeheer</a></p>'
+        technical_details = (
+            f'<details><summary>Technische informatie voor de beheerder</summary><code>{_esc(exc.code)}</code>{processing_details}</details>'
+            if _request.url.path.startswith("/inzicht") else ""
+        )
+        if not technical_details and (exc.code.startswith(("pre_review_", "processing_"))):
+            message = "De verwerking is niet beschikbaar. Deze taak kan nu niet worden uitgevoerd."
+        body = _page(
+            f"""
+            {_nav(account)}
+            <section class="room">
+              <h1>Actie niet uitgevoerd</h1>
+              <div class="banner err" data-error-code="{_esc(exc.code)}">{_esc(message)}</div>
+              {hint}
+              {technical_details}
+              {back}
+            </section>
+            """
+        )
+        return HTMLResponse(body, status_code=status)
+
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    def home(request: Request) -> str:
+        account = _current(request)
+        if not account:
+            return _page(
+                f"""
+                <section class="room login-card">
+                  {_login_brand()}
+                  <h1>Interne operations console</h1>
+                  <p class="lead">Meld je aan om documenten in te leveren, te reviewen of te publiceren.</p>
+                  <p><a class="btn-primary" href="/login" style="display:inline-block;text-decoration:none;">Aanmelden</a></p>
+                </section>
+                """
+            )
+        tiles = "".join(
+            (
+                _home_tile(
+                    href="/ingest",
+                    icon="⇧",
+                    title="Inleveren",
+                    description="Nieuwe bron toevoegen",
+                    badge="Bron inleveren",
+                ),
+                _home_tile(
+                    href="/source-selection",
+                    icon="▤",
+                    title="Bronselectie",
+                    description="Start of hervat verwerking per document",
+                    badge="Bronselectie openen",
+                ),
+                _home_tile(
+                    href="/review",
+                    icon="✓",
+                    title="Review",
+                    description="Beoordeel aangeleverde bronnen",
+                    badge="Review openen",
+                ),
+                _home_tile(
+                    href="/publish",
+                    icon="⇧",
+                    title="Publicatie",
+                    description="Goedgekeurde stukken publiceren",
+                    badge="Publicatieoverzicht openen",
+                ),
+                _home_tile(
+                    href="/tree",
+                    icon="▰",
+                    title="Documenten",
+                    description="Zoeken, openen of beheren",
+                    badge="Documenten openen",
+                ),
+            )
+        )
+        return _page(
+            f"""
+            {_nav(account, "home")}
+            <section class="room home-room">
+              <h1>Mijn werk</h1>
+              <p class="lead">Kies de volgende stap in het proces.</p>
+              <div class="home-tiles">{tiles}</div>
+            </section>
+            """
+        )
+
+    @app.get("/help/{topic}", response_class=HTMLResponse)
+    def task_instructions(request: Request, topic: str) -> str:
+        account = _require(request)
+        topics = {
+            "ingest": ("Document inleveren", "/ingest", """
+              <h2>Documentgegevens</h2><p>Lever HTML, PDF of een vastgelegde beslisboom aan.
+              Gebruik het versienummer van het brondocument en de publicatiedatum uit het colofon.
+              Kies bij een opvolgende bronversie het bestaande document.</p>
+              <h2>Beoordelaars</h2><p>De verantwoordelijke beoordelaar kan de uploader zijn als die bevoegd is.
+              De gekozen reviewvorm bepaalt de aanvullende deelname; bestaande onafhankelijke
+              controles blijven gelden. Bij bestaande reviewregels mag de uploader niet de enige reviewer zijn.</p>
+              <h2>Verwerking</h2><p>Metis maakt voorstellen; een voorstel is geen inhoudelijk besluit.
+              De verwerking kan worden geblokkeerd. Diagnose staat in Inzicht; starten en hervatten doe je in Bronselectie.</p>"""),
+            "review": ("Beoordelen", "/review", """
+              <h2>Bron en betekenis</h2><p>Controleer de passage met de oorspronkelijke bron en de relevante context.
+              Metis doet een voorstel; jij bepaalt wat met de passage gebeurt.
+              Een zelfstandige passage is begrijpelijk zonder de rest van het document.
+              Een definitie legt een begrip uit; een toelichting beschrijft of verklaart iets;
+              een advies zegt wat iemand zou moeten doen. Kop en type zijn voorstellen totdat ze zijn bevestigd.</p>
+              <h2>Richting en sterkte</h2><p>Neem de sterkte over uit de oorspronkelijke richtlijn.
+              Kies Sterk of Zwak alleen als de bron dit expliciet vermeldt.
+              ‘De werkgroep adviseert’ is geen sterkteaanduiding. Een klinische voorwaarde maakt een advies
+              niet automatisch zwak. Kies Niet vermeld in de bron wanneer geen sterkte wordt genoemd.</p>
+              <h2>Beslisboom</h2><p>Een pad beschrijft de route of resultaatbundel. Een pad is zelf geen advies. Een knoop is een vraag, beslispunt of scorelijstitem;
+              een uitkomst is het afsluitende advies. Een route bestaat uit opeenvolgende stappen: een verbinding legt één stap van een onderdeel naar het volgende vast. Controleer de voorwaarden en verbindingen met de bron.</p>
+              <h2>Voortgang en selecties</h2><p>Afwijzen, context, onderbouwing en gemotiveerd niet opnemen
+              tellen als afhandeling. Passageaantallen en aantallen handelingen kunnen overlappen.
+              Controleer iedere passage voordat je een selectie bevestigt; dezelfde kop of hetzelfde type
+              betekent niet dat passages hetzelfde zeggen. Geen beschikbaar werk betekent niet dat publicatie mogelijk is.</p>
+              <h2>Voorstellen uit verwerking</h2><p>PDF-fragmenten kunnen standaard het type Knoop hebben gekregen bij het inlezen. Dit is geen inhoudelijke classificatie. Opsommingen kunnen automatisch gegroepeerd zijn als resultaatbundel, met afzonderlijk afgesplitste uitkomsten. Bepaal het juiste type aan de hand van de bron.</p>
+              <h2>Broncontrole</h2><p>Bronbinding bewijst niet dat alle noodzakelijke context is herkend. Controleer ook de oorspronkelijke bron.</p>
+              <h2>Reviewdeelname</h2><p>Archiveren bewaart historie. Een verplichte plek blijft open tot vervanging. De vervanger beoordeelt zelf; geldig werk van anderen blijft behouden. Vervang de primaire reviewer in één handeling.</p>
+              <h2>Correctie en bronrol</h2><p>Een correctie maakt een nieuw voorstel voor beoordeling.
+              Kies aaneengesloten bronzinnen; samengevoegde passages worden vervangen door het nieuwe voorstel.
+              Alleen de geselecteerde passage wordt met het beoordelingsformulier beoordeeld. Metis doet relationele voorstellen; bevestig alleen relaties die volgens de bron bij deze passage horen. Een voorwaarde verandert de sterkte van een aanbeveling niet.
+              Koppel een bronlabel of context alleen aan passages waarvoor het aantoonbaar geldt.
+              Controleer daarbij ook tabellen en kolommen. Nabijheid alleen is onvoldoende.</p>"""),
+            "publish": ("Publiceren", "/publish", """
+              <h2>Publicatiebesluit</h2><p>De review, bronafhandeling en publicatiecontroles moeten gereed zijn.
+              Metis controleert deze voorwaarden opnieuw bij het besluit. Afgeronde review betekent
+              niet automatisch dat het document gepubliceerd kan worden.</p>
+              <h2>Beschikbaarheid</h2><p>Een historische publicatie kan vervangen, ingetrokken of niet actief zijn.
+              Na intrekking wordt een oudere versie niet automatisch opnieuw actief.</p>"""),
+            "documents": ("Documenten", "/tree", """
+              <h2>Documentbeheer</h2><p>Zoek een document en open de beschikbare taak.
+              Gepubliceerde versies blijven ongewijzigd. Een wijziging van documenttype kan een nieuwe
+              beoordeling of verwerking vereisen. Documentdiagnostiek staat in Inzicht; starten en hervatten doe je in Bronselectie.</p>"""),
+        }
+        if topic not in topics:
+            raise ConsoleError("unknown_document")
+        title, back, content = topics[topic]
+        return _page(f'{_nav(account, "settings")}<section class="room">'
+                     f'<h1>Uitleg: {_esc(title)}</h1>{content}'
+                     f'<p><a href="{back}">Terug naar {_esc(title)}</a></p></section>',
+                     title=f'Uitleg: {_esc(title)} — Metis')
+
+    @app.get("/settings", response_class=HTMLResponse)
+    def settings_home(request: Request) -> str:
+        account = _require(request)
+        cards = """
+          <h2>Inzicht</h2>
+          <p class="field-help">Eén plek met vier tabbladen: wat er gebeurt, waar werk blijft liggen en wat de volgende stap is.</p>
+          <div class="doc-list">
+            <a class="doc-card" href="/inzicht?tab=systeem" style="text-decoration:none;"><p class="doc-title">Systeem</p><p>Verzoeken, fouten, fasen en deploys, tot op de milliseconde.</p></a>
+            <a class="doc-card" href="/inzicht?tab=kwaliteit" style="text-decoration:none;"><p class="doc-title">Kwaliteit &amp; werkproces</p><p>Bruikbaarheid van voorstellen, herstelwerk en open werk.</p></a>
+            <a class="doc-card" href="/inzicht?tab=documenten" style="text-decoration:none;"><p class="doc-title">Documenten</p><p>Verwerking, blokkades en systeemfouten per document.</p></a>
+            <a class="doc-card" href="/inzicht?tab=controles" style="text-decoration:none;"><p class="doc-title">Controles</p><p>Veiligheidstests, routevergelijking en reviewsignalen.</p></a>
+          </div>
+          <div style="height:18px" aria-hidden="true"></div>
+          <h2>Beheer</h2>
+          <div class="doc-list">
+            <a class="doc-card" href="/accounts" style="text-decoration:none;">
+              <p class="doc-title">Accounts</p>
+              <p>Beheer interne gebruikers en rollen.</p>
+            </a>
+            <a class="doc-card" href="/settings/technical" style="text-decoration:none;">
+              <p class="doc-title">Technisch beheer</p>
+              <p>Modelconfiguratie en API-toegang.</p>
+            </a>
+            <a class="doc-card" href="/settings/chatgpt" style="text-decoration:none;"><p class="doc-title">ChatGPT-koppeling</p><p>Verbindingsstatus en toegang tot alleen-lezen onderzoek vanuit ChatGPT.</p></a>
+          </div>
+          <div style="height:18px" aria-hidden="true"></div>
+          <h2>Uitleg</h2>
+          <div class="doc-list">
+            <a class="doc-card" href="/over-console" style="text-decoration:none;">
+              <p class="doc-title">Over Metis</p>
+              <p>Lees hoe Metis werkt, welke begrippen het gebruikt en waar de grenzen liggen.</p>
+            </a>
+          </div>
+        """
+        return _page(
+            f"""
+            {_nav(account, "settings")}
+            <section class="room">
+              <p class="eyebrow">Beheer</p>
+              <h1>Instellingen</h1>
+              <p class="lead">Inzicht in systeem en werk, beheer van accounts en techniek, en uitleg over Metis.</p>
+              {cards}
+            </section>
+            """,
+            title="Instellingen — Metis",
+        )
+
+    @app.get("/settings/technical", response_class=HTMLResponse)
+    def technical_management(request: Request, document: str = "", q: str = "", page: int = 1):
+        account = _require(request)
+        if document:
+            return RedirectResponse("/inzicht/document?" + request.url.query, status_code=303, headers={"Cache-Control": "no-store"})
+        return _page(f'''{_nav(account, "settings")}<section class="room">
+          <h1>Technisch beheer</h1>{_passage_formation_status_html(state)}
+          <p class="lead">Configuratie en toegangsbeheer.</p>
+          <div class="doc-list">
+            <a class="doc-card" href="/settings/llm"><p class="doc-title">Modelconfiguratie</p><p>Bekijk de ingestelde provider en het model.</p></a>
+            <a class="doc-card" href="/settings/api-access"><p class="doc-title">API-toegang</p><p>Beheer koppelingen en toegangsgegevens.</p></a>
+          </div></section>''', title="Technisch beheer — Metis")
+
+    @app.get("/settings/api-access", response_class=HTMLResponse)
+    def settings_api_access(request: Request) -> str:
+        account = _require(request)
+        if access_store is None:
+            reason = access_store_error or "API Access is nog niet geactiveerd voor deze omgeving."
+            return _page(
+                f"""
+                {_nav(account, "settings")}
+                <section class="room">
+                  <p><a href="/settings/technical">← Terug naar Technisch beheer</a></p>
+                  <p class="eyebrow">Instellingen · API Access</p>
+                  <h1>API Access</h1>
+                  <div class="banner warn">{_esc(reason)}</div>
+                </section>
+                """,
+                title="API Access — Metis",
+            )
+
+        try:
+            consumers = access_store.list_consumers()
+        except ApiAccessStoreError:
+            return HTMLResponse(
+                _page(
+                    f"""
+                    {_nav(account, "settings")}
+                    <section class="room">
+                      <p><a href="/settings/technical">← Terug naar Technisch beheer</a></p>
+                      <h1>API Access</h1>
+                      <div class="banner err">De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.</div>
+                    </section>
+                    """,
+                    title="API Access — Metis",
+                ),
+                status_code=503,
+            )
+
+        def _scope_boxes(name: str, selected: list[str]) -> str:
+            chosen = set(selected or [])
+            return "".join(
+                f'<label class="check"><input type="checkbox" name="{_esc(name)}" value="{_esc(scope)}"'
+                + (" checked" if scope in chosen else "")
+                + f'> {_esc(scope)}</label>'
+                for scope in sorted(VALID_SCOPES)
+            )
+
+        def _scope_option(current: str, value: str, label: str) -> str:
+            selected = " selected" if current == value else ""
+            return f'<option value="{value}"{selected}>{_esc(label)}</option>'
+
+        cards = ""
+        for row in consumers:
+            credentials = row.get("credentials") or []
+            credential_rows = "".join(
+                f"""
+                <div class="meta">
+                  <span><b>{_esc(item.get("credential_id"))}</b></span>
+                  <span>{_esc(item.get("state"))}</span>
+                  {
+                    f'<form method="post" action="/settings/api-access/tenants/{_esc(row.get("tenant_id"))}/applications/{_esc(row.get("application_id"))}/credentials/{_esc(item.get("credential_id"))}/revoke" style="display:inline"><button type="submit">Revoken</button></form>'
+                    if "publisher" in account["roles"] and item.get("state") == "ACTIVE"
+                    else ""
+                  }
+                </div>
+                """
+                for item in credentials
+            ) or '<p class="muted">Geen credentials.</p>'
+
+            publisher_controls = ""
+            if "publisher" in account["roles"]:
+                tenant_docs = "\n".join(row.get("tenant_document_ids") or [])
+                app_docs = "\n".join(row.get("application_document_ids") or [])
+                tenant_state_button = (
+                    "SUSPEND"
+                    if row.get("tenant_state") == "ACTIVE"
+                    else "ACTIVATE"
+                )
+                app_state = str(row.get("application_state") or "")
+                application_buttons = ""
+                if app_state != "RETIRED":
+                    app_toggle = "SUSPEND" if app_state == "ACTIVE" else "ACTIVATE"
+                    application_buttons = f"""
+                      <form method="post" action="/settings/api-access/tenants/{_esc(row.get("tenant_id"))}/applications/{_esc(row.get("application_id"))}/state">
+                        <input type="hidden" name="expected_version" value="{int(row.get("application_policy_version") or 0)}">
+                        <input type="hidden" name="target_state" value="{app_toggle}">
+                        <button type="submit">{"Pauzeren" if app_toggle == "SUSPEND" else "Heractiveren"}</button>
+                      </form>
+                      <form method="post" action="/settings/api-access/tenants/{_esc(row.get("tenant_id"))}/applications/{_esc(row.get("application_id"))}/state">
+                        <input type="hidden" name="expected_version" value="{int(row.get("application_policy_version") or 0)}">
+                        <input type="hidden" name="target_state" value="RETIRE">
+                        <button type="submit">Definitief retireren</button>
+                      </form>
+                    """
+
+                publisher_controls = f"""
+                  <details>
+                    <summary>Klanttoegang wijzigen</summary>
+                    <form method="post" action="/settings/api-access/tenants/{_esc(row.get("tenant_id"))}/policy" class="stack">
+                      <input type="hidden" name="expected_version" value="{int(row.get("tenant_policy_version") or 0)}">
+                      <label>Content scope</label>
+                      <select name="content_scope">
+                        {_scope_option(str(row.get("tenant_content_scope")), "ALL_PUBLISHED", "Alle gepubliceerde kennis")}
+                        {_scope_option(str(row.get("tenant_content_scope")), "RESOURCE_SET", "Specifieke documenten")}
+                      </select>
+                      <label>Document-id's</label>
+                      <textarea name="document_ids">{_esc(tenant_docs)}</textarea>
+                      <fieldset><legend>Capabilities</legend>{_scope_boxes("scopes", row.get("tenant_scopes") or [])}</fieldset>
+                      <label>Requests per minuut</label>
+                      <input type="number" name="requests_per_minute" min="1" value="{int(row.get("tenant_requests_per_minute") or 1)}" required>
+                      <label>Max top_k</label>
+                      <input type="number" name="max_top_k" min="1" value="{int(row.get("tenant_max_top_k") or 1)}" required>
+                      <button type="submit">Klanttoegang opslaan</button>
+                    </form>
+                    <form method="post" action="/settings/api-access/tenants/{_esc(row.get("tenant_id"))}/state">
+                      <input type="hidden" name="expected_version" value="{int(row.get("tenant_policy_version") or 0)}">
+                      <input type="hidden" name="target_state" value="{tenant_state_button}">
+                      <button type="submit">{"Klant pauzeren" if tenant_state_button == "SUSPEND" else "Klant heractiveren"}</button>
+                    </form>
+                  </details>
+
+                  <details>
+                    <summary>Applicatietoegang wijzigen</summary>
+                    <form method="post" action="/settings/api-access/tenants/{_esc(row.get("tenant_id"))}/applications/{_esc(row.get("application_id"))}/grant" class="stack">
+                      <input type="hidden" name="expected_version" value="{int(row.get("application_policy_version") or 0)}">
+                      <label>Content scope</label>
+                      <select name="content_scope">
+                        {_scope_option(str(row.get("application_content_scope")), "ALL_PUBLISHED", "Volledige klanttoegang")}
+                        {_scope_option(str(row.get("application_content_scope")), "RESOURCE_SET", "Specifieke documenten")}
+                      </select>
+                      <label>Document-id's</label>
+                      <textarea name="document_ids">{_esc(app_docs)}</textarea>
+                      <fieldset><legend>Capabilities</legend>{_scope_boxes("scopes", row.get("application_scopes") or [])}</fieldset>
+                      <label>Requests per minuut</label>
+                      <input type="number" name="requests_per_minute" min="1" value="{int(row.get("application_requests_per_minute") or 1)}" required>
+                      <label>Max top_k</label>
+                      <input type="number" name="max_top_k" min="1" value="{int(row.get("application_max_top_k") or 1)}" required>
+                      <button type="submit">Applicatietoegang opslaan</button>
+                    </form>
+                    <div class="actions">{application_buttons}</div>
+                  </details>
+
+                  <form method="post" action="/settings/api-access/tenants/{_esc(row.get("tenant_id"))}/applications/{_esc(row.get("application_id"))}/credentials">
+                    <button type="submit"{" disabled" if app_state != "ACTIVE" or row.get("tenant_state") != "ACTIVE" else ""}>Nieuwe credential genereren</button>
+                  </form>
+                """
+
+            cards += f"""
+              <article class="doc-card">
+                <p class="doc-title">{_esc(row.get("tenant_name"))} · {_esc(row.get("application_name"))}</p>
+                <p class="meta">
+                  <span>omgeving <b>{_esc(row.get("environment"))}</b></span>
+                  <span>tenant <b>{_esc(row.get("tenant_state"))}</b> · v{int(row.get("tenant_policy_version") or 0)}</span>
+                  <span>app <b>{_esc(row.get("application_state"))}</b> · v{int(row.get("application_policy_version") or 0)}</span>
+                  <span>actieve credentials <b>{int(row.get("active_credentials") or 0)}</b></span>
+                </p>
+                {publisher_controls}
+                <h4>Credentials</h4>
+                {credential_rows}
+              </article>
+            """
+        cards = cards or '<p class="muted">Nog geen API-consumers.</p>'
+
+        form = ""
+        if "publisher" in account["roles"]:
+            scope_boxes = "".join(
+                f'<label class="check"><input type="checkbox" name="application_scopes" value="{_esc(scope)}" checked> {_esc(scope)}</label>'
+                for scope in sorted(VALID_SCOPES)
+            )
+            tenant_scope_boxes = "".join(
+                f'<label class="check"><input type="checkbox" name="tenant_scopes" value="{_esc(scope)}" checked> {_esc(scope)}</label>'
+                for scope in sorted(VALID_SCOPES)
+            )
+            form = f"""
+              <form method="post" action="/settings/api-access/provision" class="stack">
+                <div class="sections">
+                  <div class="section">
+                    <h3>Klant en maximale toegang</h3>
+                    <label>Klantnaam</label>
+                    <input name="tenant_name" required>
+                    <label>Content scope</label>
+                    <select name="tenant_content_scope">
+                      <option value="ALL_PUBLISHED">Alle gepubliceerde kennis</option>
+                      <option value="RESOURCE_SET">Specifieke documenten</option>
+                    </select>
+                    <label>Document-id's (één per regel, alleen bij specifieke documenten)</label>
+                    <textarea name="tenant_document_ids"></textarea>
+                    <fieldset><legend>Maximale API-capabilities</legend>{tenant_scope_boxes}</fieldset>
+                    <label>Requests per minuut</label>
+                    <input type="number" name="tenant_requests_per_minute" value="600" min="1" required>
+                    <label>Max top_k</label>
+                    <input type="number" name="tenant_max_top_k" value="20" min="1" required>
+                  </div>
+                  <div class="section">
+                    <h3>Consumer-applicatie</h3>
+                    <label>Naam</label>
+                    <input name="application_name" required>
+                    <label>Omgeving</label>
+                    <input name="environment" value="PRODUCTION" required>
+                    <label>Content scope</label>
+                    <select name="application_content_scope">
+                      <option value="ALL_PUBLISHED">Binnen de volledige klanttoegang</option>
+                      <option value="RESOURCE_SET">Specifieke documenten</option>
+                    </select>
+                    <label>Document-id's (één per regel)</label>
+                    <textarea name="application_document_ids"></textarea>
+                    <fieldset><legend>API-capabilities</legend>{scope_boxes}</fieldset>
+                    <label>Requests per minuut</label>
+                    <input type="number" name="application_requests_per_minute" value="600" min="1" required>
+                    <label>Max top_k</label>
+                    <input type="number" name="application_max_top_k" value="20" min="1" required>
+                    <button class="btn-primary" type="submit">Consumer aanmaken en key genereren</button>
+                  </div>
+                </div>
+              </form>
+            """
+
+        return _page(
+            f"""
+            {_nav(account, "settings")}
+            <section class="room">
+              <p><a href="/settings/technical">← Terug naar Technisch beheer</a></p>
+              <p class="eyebrow">Instellingen · API Access</p>
+              <h1>API Access</h1>
+              <p class="lead">Een credential identificeert een consumer-applicatie; tenant- en applicatiebeleid bepalen de effectieve toegang.</p>
+              {form}
+              <div class="doc-list">{cards}</div>
+            </section>
+            """,
+            title="API Access — Metis",
+        )
+
+    @app.post("/settings/api-access/provision", response_class=HTMLResponse)
+    def settings_api_access_provision(
+        request: Request,
+        tenant_name: str = Form(...),
+        tenant_content_scope: str = Form(...),
+        tenant_document_ids: str = Form(""),
+        tenant_scopes: list[str] = Form(default=[]),
+        tenant_requests_per_minute: int = Form(...),
+        tenant_max_top_k: int = Form(...),
+        application_name: str = Form(...),
+        environment: str = Form(...),
+        application_content_scope: str = Form(...),
+        application_document_ids: str = Form(""),
+        application_scopes: list[str] = Form(default=[]),
+        application_requests_per_minute: int = Form(...),
+        application_max_top_k: int = Form(...),
+    ) -> HTMLResponse:
+        account = _require(request)
+        if "publisher" not in account["roles"]:
+            raise ConsoleError("publisher_role_required")
+        if access_store is None:
+            return HTMLResponse(
+                _page(
+                    f"""
+                    {_nav(account, "settings")}
+                    <section class="room">
+                      <h1>API Access</h1>
+                      <div class="banner err">API Access is in deze omgeving niet beschikbaar. Er is niets gewijzigd.</div>
+                    </section>
+                    """
+                ),
+                status_code=503,
+            )
+
+        parse_ids = lambda raw: [part.strip() for line in raw.splitlines() for part in line.split(",") if part.strip()]
+        try:
+            result = access_store.provision_consumer(
+                actor_id=str(account["account_id"]),
+                tenant_name=tenant_name,
+                tenant_content_scope=tenant_content_scope,
+                tenant_document_ids=parse_ids(tenant_document_ids),
+                tenant_scopes=tenant_scopes,
+                tenant_requests_per_minute=tenant_requests_per_minute,
+                tenant_max_top_k=tenant_max_top_k,
+                application_name=application_name,
+                environment=environment,
+                application_content_scope=application_content_scope,
+                application_document_ids=parse_ids(application_document_ids),
+                application_scopes=application_scopes,
+                application_requests_per_minute=application_requests_per_minute,
+                application_max_top_k=application_max_top_k,
+            )
+        except ApiAccessError:
+            return HTMLResponse(
+                _page(
+                    f"""
+                    {_nav(account, "settings")}
+                    <section class="room">
+                      <h1>API Access</h1>
+                      <div class="banner err">De toegang kon niet worden aangemaakt. Controleer de ingevulde grenzen en probeer opnieuw.</div>
+                      <p><a href="/settings/api-access">Terug</a></p>
+                    </section>
+                    """
+                ),
+                status_code=400,
+            )
+        except ApiAccessStoreError:
+            return HTMLResponse(
+                _page(
+                    f"""
+                    {_nav(account, "settings")}
+                    <section class="room">
+                      <h1>API Access</h1>
+                      <div class="banner err">De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.</div>
+                    </section>
+                    """
+                ),
+                status_code=503,
+            )
+
+        return HTMLResponse(
+            _page(
+                f"""
+                {_nav(account, "settings")}
+                <section class="room">
+                  <p><a href="/settings/api-access">← Terug naar API Access</a></p>
+                  <p class="eyebrow">Credential uitgegeven</p>
+                  <h1>Bewaar deze API-key nu</h1>
+                  <div class="banner warn">Deze plaintext key wordt na deze pagina niet opnieuw getoond.</div>
+                  <article class="doc-card">
+                    <p>Tenant <b>{_esc(result.tenant_id)}</b></p>
+                    <p>Applicatie <b>{_esc(result.application_id)}</b></p>
+                    <p>Credential <b>{_esc(result.credential_id)}</b></p>
+                    <label>API-key</label>
+                    <input value="{_esc(result.credential)}" readonly>
+                  </article>
+                </section>
+                """,
+                title="API-key uitgegeven — Metis",
+            ),
+            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+        )
+
+    def _api_access_parse_ids(raw: str) -> list[str]:
+        return [
+            part.strip()
+            for line in str(raw or "").splitlines()
+            for part in line.split(",")
+            if part.strip()
+        ]
+
+    def _api_access_publisher(request: Request) -> dict[str, Any]:
+        account = _require(request)
+        if "publisher" not in account["roles"]:
+            raise ConsoleError("publisher_role_required")
+        return account
+
+    def _api_access_error_response(
+        account: dict[str, Any],
+        message: str,
+        *,
+        status_code: int,
+    ) -> HTMLResponse:
+        return HTMLResponse(
+            _page(
+                f"""
+                {_nav(account, "settings")}
+                <section class="room">
+                  <p><a href="/settings/api-access">← Terug naar API Access</a></p>
+                  <h1>API Access</h1>
+                  <div class="banner err">{_esc(message)}</div>
+                </section>
+                """,
+                title="API Access — Metis",
+            ),
+            status_code=status_code,
+        )
+
+    @app.post("/settings/api-access/tenants/{tenant_id}/policy")
+    def settings_api_access_tenant_policy(
+        tenant_id: str,
+        request: Request,
+        expected_version: int = Form(...),
+        content_scope: str = Form(...),
+        document_ids: str = Form(""),
+        scopes: list[str] = Form(default=[]),
+        requests_per_minute: int = Form(...),
+        max_top_k: int = Form(...),
+    ):
+        account = _api_access_publisher(request)
+        if access_store is None:
+            return _api_access_error_response(account, "API Access is niet beschikbaar.", status_code=503)
+        try:
+            access_store.set_tenant_entitlement(
+                actor_id=str(account["account_id"]),
+                tenant_id=tenant_id,
+                expected_version=expected_version,
+                content_scope=content_scope,
+                document_ids=_api_access_parse_ids(document_ids),
+                scopes=scopes,
+                requests_per_minute=requests_per_minute,
+                max_top_k=max_top_k,
+            )
+        except ApiAccessConflict:
+            return _api_access_error_response(
+                account,
+                "De klanttoegang is intussen gewijzigd. Herlaad de pagina en probeer opnieuw.",
+                status_code=409,
+            )
+        except ApiAccessError:
+            return _api_access_error_response(
+                account,
+                "De klanttoegang kan niet zo worden gewijzigd. Bestaande applicatiegrants moeten binnen de nieuwe grens blijven.",
+                status_code=400,
+            )
+        except ApiAccessStoreError:
+            return _api_access_error_response(account, "De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.", status_code=503)
+        return RedirectResponse("/settings/api-access", status_code=303)
+
+    @app.post("/settings/api-access/tenants/{tenant_id}/applications/{application_id}/grant")
+    def settings_api_access_application_grant(
+        tenant_id: str,
+        application_id: str,
+        request: Request,
+        expected_version: int = Form(...),
+        content_scope: str = Form(...),
+        document_ids: str = Form(""),
+        scopes: list[str] = Form(default=[]),
+        requests_per_minute: int = Form(...),
+        max_top_k: int = Form(...),
+    ):
+        account = _api_access_publisher(request)
+        if access_store is None:
+            return _api_access_error_response(account, "API Access is niet beschikbaar.", status_code=503)
+        try:
+            access_store.set_application_grant(
+                actor_id=str(account["account_id"]),
+                tenant_id=tenant_id,
+                application_id=application_id,
+                expected_version=expected_version,
+                content_scope=content_scope,
+                document_ids=_api_access_parse_ids(document_ids),
+                scopes=scopes,
+                requests_per_minute=requests_per_minute,
+                max_top_k=max_top_k,
+            )
+        except ApiAccessConflict:
+            return _api_access_error_response(
+                account,
+                "De applicatietoegang is intussen gewijzigd. Herlaad de pagina en probeer opnieuw.",
+                status_code=409,
+            )
+        except ApiAccessError:
+            return _api_access_error_response(
+                account,
+                "De applicatietoegang moet volledig binnen de klanttoegang blijven.",
+                status_code=400,
+            )
+        except ApiAccessStoreError:
+            return _api_access_error_response(account, "De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.", status_code=503)
+        return RedirectResponse("/settings/api-access", status_code=303)
+
+    @app.post("/settings/api-access/tenants/{tenant_id}/state")
+    def settings_api_access_tenant_state(
+        tenant_id: str,
+        request: Request,
+        expected_version: int = Form(...),
+        target_state: str = Form(...),
+    ):
+        account = _api_access_publisher(request)
+        if access_store is None:
+            return _api_access_error_response(account, "API Access is niet beschikbaar.", status_code=503)
+        target = {"SUSPEND": "SUSPENDED", "ACTIVATE": "ACTIVE"}.get(str(target_state).upper())
+        if target is None:
+            return _api_access_error_response(account, "Ongeldige tenanttransitie.", status_code=400)
+        try:
+            access_store.set_tenant_state(
+                actor_id=str(account["account_id"]),
+                tenant_id=tenant_id,
+                expected_version=expected_version,
+                target_state=target,
+            )
+        except ApiAccessConflict:
+            return _api_access_error_response(account, "De tenant is intussen gewijzigd. Herlaad de pagina.", status_code=409)
+        except ApiAccessError:
+            return _api_access_error_response(account, "Deze tenanttransitie is niet toegestaan.", status_code=400)
+        except ApiAccessStoreError:
+            return _api_access_error_response(account, "De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.", status_code=503)
+        return RedirectResponse("/settings/api-access", status_code=303)
+
+    @app.post("/settings/api-access/tenants/{tenant_id}/applications/{application_id}/state")
+    def settings_api_access_application_state(
+        tenant_id: str,
+        application_id: str,
+        request: Request,
+        expected_version: int = Form(...),
+        target_state: str = Form(...),
+    ):
+        account = _api_access_publisher(request)
+        if access_store is None:
+            return _api_access_error_response(account, "API Access is niet beschikbaar.", status_code=503)
+        target = {
+            "SUSPEND": "SUSPENDED",
+            "ACTIVATE": "ACTIVE",
+            "RETIRE": "RETIRED",
+        }.get(str(target_state).upper())
+        if target is None:
+            return _api_access_error_response(account, "Ongeldige applicatietransitie.", status_code=400)
+        try:
+            access_store.set_application_state(
+                actor_id=str(account["account_id"]),
+                tenant_id=tenant_id,
+                application_id=application_id,
+                expected_version=expected_version,
+                target_state=target,
+            )
+        except ApiAccessConflict:
+            return _api_access_error_response(account, "De applicatie is intussen gewijzigd. Herlaad de pagina.", status_code=409)
+        except ApiAccessError:
+            return _api_access_error_response(account, "Deze applicatietransitie is niet toegestaan.", status_code=400)
+        except ApiAccessStoreError:
+            return _api_access_error_response(account, "De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.", status_code=503)
+        return RedirectResponse("/settings/api-access", status_code=303)
+
+    @app.post("/settings/api-access/tenants/{tenant_id}/applications/{application_id}/credentials")
+    def settings_api_access_issue_credential(
+        tenant_id: str,
+        application_id: str,
+        request: Request,
+    ):
+        account = _api_access_publisher(request)
+        if access_store is None:
+            return _api_access_error_response(account, "API Access is niet beschikbaar.", status_code=503)
+        try:
+            result = access_store.issue_credential(
+                actor_id=str(account["account_id"]),
+                tenant_id=tenant_id,
+                application_id=application_id,
+            )
+        except ApiAccessError:
+            return _api_access_error_response(
+                account,
+                "Een nieuwe credential kan alleen voor een actieve tenant en actieve applicatie worden uitgegeven.",
+                status_code=400,
+            )
+        except ApiAccessStoreError:
+            return _api_access_error_response(account, "De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.", status_code=503)
+        return HTMLResponse(
+            _page(
+                f"""
+                {_nav(account, "settings")}
+                <section class="room">
+                  <p><a href="/settings/api-access">← Terug naar API Access</a></p>
+                  <p class="eyebrow">Credential uitgegeven</p>
+                  <h1>Bewaar deze API-key nu</h1>
+                  <div class="banner warn">Deze plaintext key wordt na deze pagina niet opnieuw getoond.</div>
+                  <article class="doc-card">
+                    <p>Tenant <b>{_esc(result.tenant_id)}</b></p>
+                    <p>Applicatie <b>{_esc(result.application_id)}</b></p>
+                    <p>Credential <b>{_esc(result.credential_id)}</b></p>
+                    <label>API-key</label>
+                    <input value="{_esc(result.credential)}" readonly>
+                  </article>
+                </section>
+                """,
+                title="API-key uitgegeven — Metis",
+            ),
+            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+        )
+
+    @app.post("/settings/api-access/tenants/{tenant_id}/applications/{application_id}/credentials/{credential_id}/revoke")
+    def settings_api_access_revoke_credential(
+        tenant_id: str,
+        application_id: str,
+        credential_id: str,
+        request: Request,
+    ):
+        account = _api_access_publisher(request)
+        if access_store is None:
+            return _api_access_error_response(account, "API Access is niet beschikbaar.", status_code=503)
+        try:
+            access_store.revoke_credential(
+                actor_id=str(account["account_id"]),
+                tenant_id=tenant_id,
+                application_id=application_id,
+                credential_id=credential_id,
+            )
+        except ApiAccessError:
+            return _api_access_error_response(account, "Credential niet gevonden binnen deze tenant/applicatie.", status_code=404)
+        except ApiAccessStoreError:
+            return _api_access_error_response(account, "De API Access-opslag is niet bereikbaar. Er is niets gewijzigd.", status_code=503)
+        return RedirectResponse("/settings/api-access", status_code=303)
+
+    @app.get("/settings/llm", response_class=HTMLResponse)
+    def settings_llm(request: Request) -> str:
+        account = _require(request)
+        provider = load_llm_provider_config()
+        key_status = "Geconfigureerd" if provider.api_key else "Niet geconfigureerd"
+        model = provider.model or "Niet geconfigureerd"
+        return _page(
+            f"""
+            {_nav(account, "llm-settings")}
+            <section class="room">
+              <p><a href="/settings/technical">← Terug naar Technisch beheer</a></p>
+              <p class="eyebrow">Instellingen · LLM</p>
+              <h1>LLM-instellingen</h1>
+              <p class="lead">Metis gebruikt één gedeelde deploymentconfiguratie voor alle toegestane LLM-capabilities.</p>
+              <div class="doc-list">
+                <article class="doc-card">
+                  <p class="doc-title">Model</p>
+                  <p><b>{_esc(model)}</b></p>
+                </article>
+                <article class="doc-card">
+                  <p class="doc-title">API-key</p>
+                  <p><b>{key_status}</b></p>
+                  <p class="muted">De sleutel wordt nooit in de console getoond.</p>
+                </article>
+              </div>
+              <div class="banner warn">Wijzigingen aan providercredential of model worden buiten de console als deploymentconfiguratie beheerd.</div>
+            </section>
+            """,
+            title="LLM-instellingen — Metis",
+        )
+
+    @app.get("/over-console", response_class=HTMLResponse)
+    def about_console(request: Request) -> str:
+        account = _require(request)
+        return _page(
+            f"""
+            {_nav(account, "about")}
+            {render_metis_dictionary(_esc)}
+            """,
+            title="Metis uitgelegd — V&amp;VN Data Services",
+        )
+
+    @app.get("/login", response_class=HTMLResponse)
+    def login_form() -> str:
+        if entra is not None:
+            return _page(f"""
+                <section class="room login-card">{_login_brand()}
+                <h1>Aanmelden bij Metis</h1>
+                <p>Gebruik je werkaccount. Je organisatie bepaalt of je toegang hebt.</p>
+                <a class="btn-primary" href="/auth/microsoft">Inloggen met Microsoft</a>
+                <p>Je hebt geen apart Metis-wachtwoord nodig. Geen toegang? Neem contact op met je Metis-beheerder.</p>
+                </section>""")
+        return _page(
+            f"""
+            <section class="room login-card">
+              {_login_brand()}
+              <h1>Aanmelden</h1>
+              <p class="lead">Interne account. Geen open registratie.</p>
+              <form method="post" action="/login">
+                <label for="gebruikersnaam">Gebruikersnaam</label>
+                <input id="gebruikersnaam" name="username" autocomplete="username" required>
+                <label for="wachtwoord">Wachtwoord</label>
+                <input id="wachtwoord" type="password" name="password" autocomplete="current-password" required>
+                <button class="btn-primary" type="submit">Aanmelden</button>
+              </form>
+            </section>
+            """
+        )
+
+    @app.post("/login")
+    def login(username: str = Form(...), password: str = Form(...)):
+        if entra is not None:
+            raise ConsoleError("entra_local_auth_disabled")
+        login_key = str(username or "").strip()
+        allowed, retry_after = login_limiter.allow(login_key, login_attempts_per_minute)
+        if not allowed:
+            body = _page(
+                """
+                <section class="room login-card">
+                  <h1>Aanmelden tijdelijk begrensd</h1>
+                  <div class="banner err">Te veel aanmeldpogingen. Probeer het later opnieuw.</div>
+                  <p><a href="/login">Terug naar aanmelden</a></p>
+                </section>
+                """
+            )
+            return HTMLResponse(
+                body,
+                status_code=429,
+                headers={"Retry-After": str(retry_after)},
+            )
+        session = state.authenticate(username, password)
+        response = RedirectResponse("/", status_code=303)
+        response.set_cookie(COOKIE, session["token"], httponly=True, samesite="lax", secure=True)
+        return response
+
+    @app.post("/logout")
+    def logout(request: Request) -> RedirectResponse:
+        state.logout(request.cookies.get(COOKIE))
+        destination = "/login"
+        if entra is not None:
+            from urllib.parse import urlencode
+            destination = entra.config.authority + "/oauth2/v2.0/logout?" + urlencode({"post_logout_redirect_uri": entra.config.origin + "/login"})
+        response = RedirectResponse(destination, status_code=303)
+        response.delete_cookie(COOKIE, httponly=True, samesite="lax", secure=True)
+        return response
+
+    @app.get("/ingest", response_class=HTMLResponse)
+    def ingest_get(request: Request) -> str:
+        account = _require(request)
+        reviewers = state.list_reviewer_accounts()
+        options = "".join(
+            f'<option value="{_esc(row["account_id"])}">{_esc(row["display_name"])} ({_esc(row["username"])})</option>'
+            for row in reviewers
+        )
+        documents = state.list_envelopes()
+        family_options = "".join(
+            f'<option value="{_esc(family)}"></option>'
+            for family in sorted({str(row.get("family") or "") for row in documents if row.get("family")}, key=str.casefold)
+        )
+        return _page(
+            f"""
+            {_nav(account, "ingest")}
+            <section class="room">
+              <h1>Document inleveren</h1>
+              <p class="lead">Voeg een document toe voor beoordeling.</p>
+              {_task_links("ingest")}
+              <form method="post" action="/ingest" enctype="multipart/form-data">
+                <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
+                <div class="sections">
+                  <div class="section">
+                    <h3>Bron</h3>
+                    <label for="file">Bronbestand (HTML, PDF of beslisboom)</label>
+                    <input id="file" type="file" name="file" aria-describedby="filename-help">
+                    <p id="filename-help" class="field-help">{_esc(FILENAME_HINT)}</p>
+                    <label for="url">Of een link naar het PDF-bestand</label>
+                    <input id="url" name="url" placeholder="https://...">
+                  </div>
+                  <div class="section">
+                    <h3>Document</h3>
+                    <div class="field-row">
+                      <div>
+                        <label for="title">Titel</label>
+                        <input id="title" name="title" required>
+                      </div>
+                      <div>
+                        <label for="version">Versienummer van het brondocument</label>
+                        <input id="version" name="version" required pattern="[0-9]+(\\.[0-9]+)*" inputmode="numeric" placeholder="bijv. 2.13" autocomplete="off">
+                        <p class="field-help">Alleen getallen met punten, bijvoorbeeld 1.0 of 2.13. Geen jaartal.</p>
+                      </div>
+                    </div>
+                    <div class="field-row">
+                      <div>
+                        <label for="date">Publicatiedatum (colofon)</label>
+                        <div class="date-nl-wrap">
+                          <input id="date" name="date" type="date" required lang="nl" autocomplete="off">
+                          <p class="date-nl-display" data-date-nl aria-live="polite">dd-mm-jjjj</p>
+                        </div>
+                        <p class="field-help">Datum uit het colofon / publicatiedatum, weergave dd-mm-jjjj. Leeg is niet toegestaan.</p>
+                      </div>
+                      <div>
+                        <label for="class_">Documenttype</label>
+                        <select id="class_" name="class_">{_class_options()}</select>
+                      </div>
+                    </div>
+                    <label for="family">Onderwerp</label>
+                    <input id="family" name="family" required autocomplete="off" list="family-options" placeholder="Kies bestaand of typ nieuw onderwerp">
+                    <datalist id="family-options">{family_options}</datalist>
+
+                    <label for="ingest_kind">Nieuw of nieuwe versie</label>
+                    <select id="ingest_kind" name="ingest_kind">
+                      <option value="new">Nieuw document</option>
+                      <option value="new_version">Nieuwe versie van een bestaand document</option>
+                    </select>
+                    <div id="replaces-row" hidden>
+                      <label for="replaces_document">Bestaand document</label>
+                      <select id="replaces_document" name="replaces_document">{_document_options(documents)}</select>
+                    </div>
+                    <label for="live_url">Link naar de online bron (optioneel)</label>
+                    <input id="live_url" name="live_url">
+                  </div>
+                  <div class="section">
+                    <h3>Reviewers</h3>
+                    <label for="review_mode">Reviewdeelname</label>
+                    <select id="review_mode" name="review_mode">
+                      <option value="legacy">Bestaande reviewregels</option>
+                      <option value="single">Eén beoordelaar</option>
+                      <option value="optional">Aanvullende beoordeling mogelijk</option>
+                      <option value="required">Onafhankelijke aanvullende beoordeling verplicht</option>
+                    </select>
+                    <label for="primary_reviewer">Verantwoordelijke beoordelaar</label>
+                    <select id="primary_reviewer" name="primary_reviewer"><option value="">Uploader</option>{options}</select>
+                    <label for="source_status">Vaststellingsstatus volgens de bron</label>
+                    <select id="source_status" name="source_status"><option value="unknown">Niet opgegeven</option><option value="established">Vastgesteld</option><option value="draft">Concept</option></select>
+                    <label for="named_reviewers">Aanvullende beoordelaars</label>
+                    <select id="named_reviewers" name="named_reviewers" multiple size="6">{options}</select>
+                    <fieldset id="review-configuration">
+                      <legend>Reviewkeuze (verplicht)</legend>
+                      <label><input type="radio" name="review_option" value="uploader_sole" required> Alleen ik als uploader</label>
+                      <label><input type="radio" name="review_option" value="one_other" required> Eén andere reviewer</label>
+                      <label><input type="radio" name="review_option" value="two_others" required> Twee andere reviewers</label>
+                      <label><input type="checkbox" name="four_eyes" value="yes"> Vier ogen verplicht</label>
+                      <label for="review_reviewers">Reviewers voor deze keuze</label>
+                      <select id="review_reviewers" name="review_reviewers" multiple size="6">{options}</select>
+                      <label for="review_readers">Lezers (tellen NOOIT mee voor goedkeuring)</label>
+                      <select id="review_readers" name="review_readers" multiple size="6">{options}</select>
+                    </fieldset>
+
+                  </div>
+                </div>
+                <button class="btn-primary" type="submit" id="ingest-submit">Inleveren</button>
+                <p id="ingest-status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+              </form>
+            </section>
+            <script>
+            (function () {{
+              var button = document.getElementById("ingest-submit");
+              var form = button.form;
+              var status = document.getElementById("ingest-status");
+              var submitting = false;
+              form.addEventListener("submit", function (event) {{
+                if (submitting) {{ event.preventDefault(); return; }}
+                submitting = true;
+                form.setAttribute("aria-busy", "true");
+                button.disabled = true;
+                button.textContent = "Bezig met inleveren…";
+                status.hidden = false;
+                status.textContent = "Je document wordt veilig opgeslagen. Daarna opent Bronselectie met je document geselecteerd. Bronselectie start pas wanneer je op Starten klikt.";
+              }});
+              window.addEventListener("pageshow", function () {{
+                submitting = false;
+                form.removeAttribute("aria-busy");
+                button.disabled = false;
+                button.textContent = "Inleveren";
+                status.hidden = true;
+                status.textContent = "";
+              }});
+              var kind = document.getElementById("ingest_kind");
+              var row = document.getElementById("replaces-row");
+              function sync() {{ row.hidden = kind.value !== "new_version"; }}
+              kind.addEventListener("change", sync);
+              sync();
+              var date = document.getElementById("date");
+              var out = document.querySelector("[data-date-nl]");
+              function showNl() {{
+                if (!date || !out) return;
+                if (!date.value) {{ out.textContent = "dd-mm-jjjj"; return; }}
+                var parts = date.value.split("-");
+                if (parts.length !== 3) {{ out.textContent = "dd-mm-jjjj"; return; }}
+                out.textContent = parts[2] + "-" + parts[1] + "-" + parts[0];
+              }}
+              if (date) {{
+                date.addEventListener("input", showNl);
+                date.addEventListener("change", showNl);
+                showNl();
+              }}
+            }})();
+            </script>
+            """
+        )
+
+    @app.post("/ingest", response_class=HTMLResponse)
+    async def ingest_post(
+        request: Request,
+        ingest_kind: str = Form(...),
+        title: str = Form(...),
+        version: str = Form(...),
+        date: str = Form(...),
+        live_url: str = Form(""),
+        class_: str = Form(...),
+        family: str = Form(...),
+        url: str = Form("") ,
+        replaces_document: str = Form(""),
+        named_reviewers: list[str] = Form(default=[]),
+        review_mode: str = Form("legacy"),
+        primary_reviewer: str = Form(""),
+        review_option: str = Form(""),
+        four_eyes: str = Form(""),
+        review_reviewers: list[str] = Form(default=[]),
+        review_readers: list[str] = Form(default=[]),
+        source_status: str = Form("unknown"),
+        command_id: str = Form(""),
+        file: UploadFile | None = File(None),
+    ) -> str:
+        account = _require(request)
+        filename = None
+        data = None
+        content_type = None
+        if file is not None and file.filename:
+            filename = file.filename
+            data = await read_upload_limited(file)
+            content_type = file.content_type
+        if isinstance(named_reviewers, str):
+            named_reviewers = [named_reviewers] if named_reviewers.strip() else []
+        # H2-7 (a): het HTTP-uploadformulier MOET een B10-keuze meekrijgen.
+        if not review_option.strip():
+            raise ConsoleError("review_configuration_required")
+        review_choice = {"option": review_option.strip(), "four_eyes_required": four_eyes == "yes",
+                         "reviewers": [i for i in review_reviewers if i.strip()],
+                         "readers": [i for i in review_readers if i.strip()]}
+        policy = None
+        if review_mode != "legacy":
+            if review_mode not in {"single", "optional", "required"}:
+                raise ConsoleError("invalid_review_policy")
+            primary = primary_reviewer.strip() or account["account_id"]
+            extras = [i for i in named_reviewers if i != primary]
+            if (review_mode == "single" and extras) or (review_mode == "required" and not extras):
+                raise ConsoleError("invalid_review_assignment")
+            from src.review_policy_v1 import CONTRACT
+            policy = {"contract": CONTRACT, "revision": 1, "primary": primary,
+                      "assignments": [{"reviewer_id": i, "participation": review_mode} for i in extras]}
+        receipt = await asyncio.to_thread(
+            state.receive_source,
+            actor_id=account["account_id"],
+            filename=filename,
+            data=data or None,
+            content_type=content_type,
+            url=url.strip() or None,
+            ingest_kind=ingest_kind,
+            title=title,
+            version=version,
+            date=date,
+            live_url=live_url,
+            class_=class_,
+            family=family,
+            named_reviewers=[] if policy else named_reviewers,
+            review_policy=policy,
+            review_choice=review_choice,
+            source_status=source_status,
+            command_id=command_id or None,
+            replaces_snapshot_id=replaces_document.strip() or None,
+        )
+        return RedirectResponse("/source-selection?" + urlencode({"document": receipt["snapshot_id"], "received": "yes"}), status_code=303)
+
+    @app.get("/tree", response_class=HTMLResponse)
+    def tree(request: Request, q: str = "", page: int = 1) -> str:
+        account = _require(request)
+        can_move = "researcher" in account["roles"] or "publisher" in account["roles"]
+        can_promote = "reviewer" in account["roles"]
+        payload = state.family_tree()
+        named_on = ({row["snapshot_id"] for row in state.list_envelopes()
+                     if account["account_id"] in (row.get("named_reviewers") or [])}
+                    if can_promote and not can_move else set())
+        move_family_options = "".join(
+            f'<option value="{_esc(family)}"></option>'
+            for family in sorted(payload["families"], key=str.casefold)
+        )
+        visible, list_controls = _document_list_page(
+            [child for node in payload["families"].values() for child in node["children"]],
+            q=q, page=page, path="/tree",
+        )
+        visible_ids = {row["snapshot_id"] for row in visible}
+        blocks: list[str] = []
+        for family, node in payload["families"].items():
+            cards = []
+            for child in node["children"]:
+                if child["snapshot_id"] not in visible_ids:
+                    continue
+                actions = []
+                pre_review_notice = ""
+                try:
+                    mutable = not state.snapshot_is_published(child["snapshot_id"])
+                except ConsoleError:
+                    mutable = False
+                if not mutable:
+                    actions.append('<p class="muted">Voor deze versie zijn wijzigacties niet beschikbaar. Gepubliceerde versies blijven ongewijzigd.</p>')
+                    if "researcher" in account["roles"]:
+                        actions.append('<a class="btn-secondary" href="/ingest">Nieuwe bronversie inleveren</a>')
+                if mutable and child.get("publication_eligibility") == PRE_REVIEW_BLOCKED:
+                    pre_review_notice = '<p class="banner warn">Verwerking niet afgerond. Beoordelen is nog niet beschikbaar.</p>'
+                if can_move and mutable:
+                    actions.append(
+                        f"""
+                        <form method="post" action="/tree/move">
+                          <input type="hidden" name="snapshot_id" value="{_esc(child["snapshot_id"])}">
+                          <input type="hidden" name="title" value="{_esc(child["title"])}">
+                          <input type="hidden" name="version" value="{_esc(child["version"])}">
+                          <input type="hidden" name="family" value="{_esc(child["family"])}">
+                          <label>Onderwerp
+                            <input name="new_family" required list="move-family-options" placeholder="Kies bestaand of typ nieuw onderwerp" autocomplete="off">
+                          </label>
+                          <button class="btn-secondary" type="submit">Verplaatsen</button>
+                        </form>
+                        """
+                    )
+                if can_promote and mutable:
+                    actions.append(
+                        f"""
+                        <form method="post" action="/tree/promote">
+                          <input type="hidden" name="snapshot_id" value="{_esc(child["snapshot_id"])}">
+                          <input type="hidden" name="title" value="{_esc(child["title"])}">
+                          <input type="hidden" name="version" value="{_esc(child["version"])}">
+                          <input type="hidden" name="family" value="{_esc(child["family"])}">
+                          <label>Nieuwe klasse
+                            <select name="new_class">{_class_options(child["class"])}</select>
+                          </label>
+                          <div class="klasse-wijzigen-consequence">
+                            <p>De bron blijft ongewijzigd. Deze wijziging vereist een nieuwe beoordeling.
+                            Bij een overstap van of naar een beslisboom wordt de bron opnieuw verwerkt.</p>
+                          </div>
+                          <label class="check">
+                            <input type="checkbox" name="confirm" value="1">
+                            <span>Ik bevestig de consequentie van Klasse wijzigen</span>
+                          </label>
+                          <button class="btn-secondary" type="submit">Klasse wijzigen</button>
+                        </form>
+                        """
+                    )
+                cards.append(
+                    f"""
+                    <details class="doc-card document-disclosure">
+                      <summary>{_document_summary(child)}</summary>
+                      {pre_review_notice}
+                      <div class="doc-actions">{"".join(actions)}</div>
+                      {f'<p><a href="/inzicht/document?{_esc(urlencode({"document": child["snapshot_id"]}))}">Bekijk diagnose in Inzicht</a></p>' if can_move or child['snapshot_id'] in named_on else ''}
+                      {_unpublished_delete_control(child, account=account, console=state, next_path="/tree", mutable=mutable)}
+                    </details>
+                    """
+                )
+            if not cards:
+                continue
+            blocks.append(
+                f'<h2>Onderwerp {_esc(family)}</h2><div class="doc-list">{"".join(cards)}</div>'
+            )
+        empty = '<p class="muted">Nog geen documenten. Lever eerst een document in.</p>'
+        return _page(
+            f"""
+            {_nav(account, "tree")}
+            <section class="room">
+              <h1>Documenten</h1>
+              {_task_links("documents")}
+              <datalist id="move-family-options">{move_family_options}</datalist>
+              {list_controls}
+              {"".join(blocks) or ('<p>Geen documenten gevonden.</p>' if q else empty)}
+            </section>
+            """,
+            title="Documenten — V&amp;VN Data Services",
+        )
+
+    @app.post("/tree/processing-recovery")
+    def tree_processing_recovery(request: Request, snapshot_id: str = Form(...), reason: str = Form(...)):
+        account = _require(request)
+        state.authorize_processing_recovery(actor_id=account["account_id"], snapshot_id=snapshot_id, reason=reason)
+        return RedirectResponse("/inzicht/document?" + urlencode({"document": snapshot_id}), status_code=303)
+
+    @app.get("/inzicht/document/poging", response_class=JSONResponse)
+    def review_processing_diagnostic_replay(request: Request, document: str, attempt_id: str):
+        account = _require(request)
+        if "reviewer" not in set(account.get("roles") or []):
+            raise ConsoleError("reviewer_role_required")
+        envelope = state._envelope(document)
+        if account["account_id"] not in (envelope.get("named_reviewers") or []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        attempt = next((a for a in envelope.get("processing_attempts", []) if a["attempt_id"] == attempt_id), None)
+        if attempt is None:
+            raise ConsoleError("processing_attempt_not_active")
+        from src.attempt_diagnostics_v1 import replay_diagnostic
+        return JSONResponse(replay_diagnostic(attempt), headers={"Cache-Control": "no-store"})
+
+    @app.post("/tree/reprocess")
+    @app.post("/tree/resume-formation")
+    def tree_source_selection(request: Request, snapshot_id: str = Form(...)) -> RedirectResponse:
+        account = _require(request)
+        if state.snapshot_is_published(snapshot_id):
+            raise ConsoleError("published_objects_must_not_be_rewritten")
+        state.processing_status(snapshot_id, actor_id=account["account_id"])
+        # Compatibility URLs navigate only. The current revision and operation
+        # are authorized by the existing explicit Starten/Hervatten command.
+        return RedirectResponse("/source-selection?" + urlencode({"document": snapshot_id}), status_code=303)
+
+    @app.post("/tree/move")
+    def tree_move(
+        request: Request,
+        new_family: str = Form(...),
+        snapshot_id: str = Form(""),
+        title: str = Form(""),
+        version: str = Form(""),
+        family: str = Form(""),
+    ) -> RedirectResponse:
+        account = _require(request)
+        if snapshot_id.strip():
+            state.move_family(actor_id=account["account_id"], snapshot_id=snapshot_id, new_family=new_family)
+        else:
+            state.move_family_document(
+                actor_id=account["account_id"],
+                title=title,
+                version=version,
+                family=family,
+                new_family=new_family,
+            )
+        return RedirectResponse("/tree", status_code=303)
+
+    @app.post("/tree/promote")
+    def tree_promote(
+        request: Request,
+        new_class: str = Form(...),
+        snapshot_id: str = Form(""),
+        title: str = Form(""),
+        version: str = Form(""),
+        family: str = Form(""),
+        confirm: str = Form(""),
+    ) -> RedirectResponse:
+        account = _require(request)
+        confirmed = str(confirm or "").strip().lower() in {"1", "on", "true", "yes", "ja"}
+        if not confirmed:
+            raise ConsoleError("class_change_confirmation_required")
+        if snapshot_id.strip():
+            current = next(
+                (row for row in state.list_envelopes() if row["snapshot_id"] == snapshot_id),
+                None,
+            )
+            if current is None:
+                raise ConsoleError("unknown_snapshot")
+            state.promote_class(
+                actor_id=account["account_id"],
+                snapshot_id=snapshot_id,
+                new_class=new_class,
+                reextract=is_cross_model_class_change(current["class"], new_class),
+            )
+        else:
+            document = state.resolve_document(title=title, version=version, family=family)
+            state.promote_class_document(
+                actor_id=account["account_id"],
+                title=title,
+                version=version,
+                family=family,
+                new_class=new_class,
+                reextract=is_cross_model_class_change(document["class"], new_class),
+            )
+        return RedirectResponse("/tree", status_code=303)
+
+    @app.post("/documents/delete")
+    def documents_delete(
+        request: Request,
+        snapshot_id: str = Form(...),
+        confirm: str = Form(""),
+        confirm_title: str = Form(""),
+        next_path: str = Form("/tree", alias="next"),
+        object_ids: list[str] = Form(default=[]),
+    ) -> RedirectResponse:
+        account = _require(request)
+        chosen: list[str] = []
+        if isinstance(object_ids, str):
+            chosen = [object_ids] if object_ids.strip() else []
+        elif object_ids:
+            chosen = [str(item).strip() for item in object_ids if str(item).strip()]
+        if chosen:
+            raise ConsoleError("hide_selected_objects_forbidden")
+        confirmed = str(confirm or "").strip().lower() in {"1", "on", "true", "yes", "ja"}
+        state.delete_unpublished_snapshot(
+            actor_id=account["account_id"],
+            snapshot_id=snapshot_id,
+            confirmed=confirmed,
+            confirm_title=confirm_title,
+        )
+        target = (next_path or "").strip() or "/tree"
+        if target not in ALLOWED_DELETE_NEXT:
+            target = "/tree"
+        return RedirectResponse(target, status_code=303)
+
+    @app.get("/review", response_class=HTMLResponse)
+    @state.source_selection_read_scope()
+    def review_get(request: Request, document: str = "", object: str = "", task: str = "",
+                   context_target: str = "", context_mode: str = "", context_saved: str = "") -> str:
+        with diagnostic_phase("authorization"):
+            account = _require(request)
+        return _render_review_room(
+            state,
+            account,
+            html.escape(document, quote=True),
+            html.escape(object, quote=True),
+            task=html.escape(task, quote=True),
+            context_target=context_target, context_mode=context_mode, context_saved=context_saved == "yes",
+        )
+
+    @app.get("/inzicht/document/passages")
+    def review_passages_export(request: Request, document: str = "", format: str = "json") -> Response:
+        account = _require(request)
+        if "reviewer" not in set(account.get("roles") or []):
+            raise ConsoleError("reviewer_role_required")
+        snapshot_id = document.strip()
+        envelope = state._envelope(snapshot_id)
+        if account["account_id"] not in (envelope.get("named_reviewers") or []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        if format not in {"json", "csv"}:
+            return JSONResponse({"error": "unsupported_export_format"}, status_code=400)
+        objects, revision = state.snapshot_objects_and_revision(snapshot_id)
+        rows = passage_export_rows(objects)
+        filename = re.sub(r"[^A-Za-z0-9_-]", "_", snapshot_id)
+        headers = {
+            "Content-Disposition": f'attachment; filename="{filename}-passages.{format}"',
+            "Cache-Control": "no-store",
+        }
+        if format == "csv":
+            return Response(passage_export_csv(rows), media_type="text/csv", headers=headers)
+        return JSONResponse({
+            "schema_version": "passage-export-v1",
+            "snapshot_id": snapshot_id,
+            "document_id": str(envelope.get("document_id") or ""),
+            "title": str(envelope.get("title") or ""),
+            "version": str(envelope.get("version") or ""),
+            "objects_revision": revision,
+            "passage_count": len(rows),
+            "rows": rows,
+        }, headers=headers)
+
+    @app.get("/inzicht/document/verwerkingsbewijs")
+    def review_processing_evidence_export(request: Request, document: str = "") -> Response:
+        account = _require(request)
+        if "reviewer" not in set(account.get("roles") or []):
+            raise ConsoleError("reviewer_role_required")
+        snapshot_id = document.strip()
+        envelope = state._envelope(snapshot_id)
+        if account["account_id"] not in (envelope.get("named_reviewers") or []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        objects, revision = state.snapshot_objects_and_revision(snapshot_id)
+        refusal_issues: list[str] = []
+        payload = processing_evidence_zip(snapshot_id=snapshot_id, revision=revision,
+                                          envelope=envelope, objects=objects,
+                                          bindings=state.object_review_bindings(snapshot_id, objects=objects),
+                                          refusals=_refusal_records(state, snapshot_id, issues=refusal_issues),
+                                          refusal_issues=refusal_issues)
+        filename = re.sub(r"[^A-Za-z0-9_-]", "_", snapshot_id)
+        return Response(payload, media_type="application/zip", headers={
+            "Content-Disposition": f'attachment; filename="{filename}-processing-evidence.zip"',
+            "Cache-Control": "no-store",
+        })
+
+    @app.get("/inzicht/document/diagnostiek", response_class=JSONResponse)
+    def review_processing_diagnostics(request: Request, document: str = "") -> JSONResponse:
+        account = _require(request)
+        if "reviewer" not in set(account.get("roles") or []):
+            raise ConsoleError("reviewer_role_required")
+        snapshot_id = document.strip()
+        if not snapshot_id:
+            raise ConsoleError("unknown_snapshot")
+        envelope = state._envelope(snapshot_id)
+        if account["account_id"] not in (envelope.get("named_reviewers") or []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        objects = state.snapshot_objects(snapshot_id)
+        pre_review_blocked = envelope.get("publication_eligibility") == PRE_REVIEW_BLOCKED
+        processing = state.processing_status(snapshot_id, actor_id=account["account_id"])
+        blocker = processing.get("error_code") or processing.get("reason_code") or str(envelope.get("processing_blocker") or "")
+        blocker = blocker if blocker in ERROR_COPY else None
+        payload = {
+            "snapshot_id": snapshot_id,
+            "document_id": str(envelope.get("document_id") or ""),
+            "title": str(envelope.get("title") or ""),
+            "version": str(envelope.get("version") or ""),
+            "objects_revision": state.objects_revision(snapshot_id),
+            "processing_attempts": envelope.get("processing_attempts", []),
+            "processing_recovery": envelope.get("processing_recovery"),
+            "processing": processing,
+            "diagnostics": processing_diagnostics(objects),
+            "pre_review": {
+                "blocked": pre_review_blocked,
+                "reason_code": blocker if pre_review_blocked else None,
+                "message": (ERROR_COPY.get(blocker, "De voorcontrole is geblokkeerd; laat de beheerder de oorzaak onderzoeken.")
+                            if pre_review_blocked else "Geen opgeslagen voorcontroleblokkade. Dit is geen bewijs van geslaagde verwerking."),
+                "object_count": len(objects),
+                "diagnostics_scope": "stored_objects_only",
+                "note": "De kandidaattellers beschrijven alleen opgeslagen objecten. Nul kandidaten betekent niet dat de voorcontrole is geslaagd. Nieuwe herstelpogingen bewaren hun uitkomst, veilige foutcode en eventuele validatiereden en verwerkingsreferentie. Historische ontbrekende gegevens worden niet achteraf ingevuld.",
+            },
+        }
+        return JSONResponse(payload, headers={"Cache-Control": "no-store"})
+
+
+    @app.get("/inzicht/document/detaildiagnostiek", response_class=JSONResponse)
+    def review_processing_diagnostics_detail(request: Request, document: str = "") -> JSONResponse:
+        account = _require(request)
+        if "reviewer" not in set(account.get("roles") or []):
+            raise ConsoleError("reviewer_role_required")
+        snapshot_id = document.strip()
+        if not snapshot_id:
+            raise ConsoleError("unknown_snapshot")
+        envelope = state._envelope(snapshot_id)
+        if account["account_id"] not in (envelope.get("named_reviewers") or []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        objects = state.snapshot_objects(snapshot_id)
+        payload = {
+            "snapshot_id": snapshot_id,
+            "document_id": str(envelope.get("document_id") or ""),
+            "title": str(envelope.get("title") or ""),
+            "version": str(envelope.get("version") or ""),
+            "objects_revision": state.objects_revision(snapshot_id),
+            "rows": processing_diagnostic_rows(objects),
+        }
+        return JSONResponse(payload)
+
+
+    @app.get("/review/bronpassage", response_class=HTMLResponse)
+    def review_bronpassage(request: Request, document: str = "", object: str = "", task: str = "") -> str:
+        account = _require(request)
+        chosen = document.strip()
+        object_id = object.strip()
+        safe_task = normalize_review_task(task)
+        if not chosen or not object_id:
+            raise ConsoleError("unknown_object")
+        opened = state.open_source_passage(
+            snapshot_id=chosen, object_id=object_id, include_document=True,
+        )
+        source_url = (
+            f"/review/brondocument?document={quote(chosen, safe='')}"
+            f"&amp;object={quote(object_id, safe='')}"
+        )
+        passage = researcher_visible_prose(opened.get("passage") or "")
+        if opened["content_kind"] == "pdf":
+            page, _ = parse_page_bbox(opened["locator_value"])
+            document_html = (
+                f'<p>De PDF opent op pagina {page}. Alle bronfragmenten van de geselecteerde passage zijn gemarkeerd.</p>'
+                f'<object data="{source_url}#page={page}" type="application/pdf" '
+                'style="width:100%;height:80vh" aria-label="Volledige richtlijn">'
+                '<p>De PDF kan hier niet worden weergegeven. Gebruik de downloadlink hieronder.</p>'
+                '</object>'
+            )
+        else:
+            try:
+                segments = full_document_segments(
+                    opened["freeze_bytes"], opened["content_kind"],
+                    opened.get("locators") or [{"locator_type": opened["locator_type"], "locator_value": opened["locator_value"]}],
+                )
+            except OpenOriginalError as exc:
+                raise ConsoleError(exc.code) from exc
+            found = any(selected and text.strip() for text, selected in segments)
+            marked = "".join(
+                '<mark class="broncontext-marked">' + _esc(text) + '</mark>'
+                if selected else _esc(text)
+                for text, selected in segments
+            )
+            warning = "" if found else (
+                '<p class="muted">De geselecteerde passage staat hierboven; '
+                'deze kon niet eenduidig in de volledige tekst worden gemarkeerd.</p>'
+            )
+            document_html = (
+                '<p class="muted">Veilige tekstweergave van het volledige brondocument. Afbeeldingen en oorspronkelijke opmaak staan in de download.</p>' + warning + '<div class="full-source-text" style="white-space:pre-wrap">'
+                + marked + '</div>'
+            )
+        return _page(
+            f"""
+            {_nav(account, "review")}
+            <section class="room">
+              <h1>Volledige richtlijn</h1>
+              <p class="lead">Het vastgelegde origineel dat bij deze bronpassage hoort.</p>
+              <article class="object">
+                <h2>Geselecteerde bronpassage</h2>
+                <p class="bronpassage-prose">{_esc(passage)}</p>
+              </article>
+              <section aria-label="Volledig brondocument" data-full-source>
+                {document_html}
+              </section>
+              <p><a class="btn-secondary" href="{source_url}&amp;download=true">Download volledig origineel</a></p>
+              <p><a class="btn-secondary" href="/review?document={_esc(chosen)}&amp;object={_esc(object_id)}{f'&amp;task={_esc(safe_task)}' if safe_task else ''}">Terug naar review</a></p>
+            </section>
+            """
+        )
+
+    @app.get("/review/brondocument")
+    def review_brondocument(
+        request: Request, document: str = "", object: str = "", download: bool = False,
+    ) -> Response:
+        _require(request)
+        opened = state.open_source_passage(
+            snapshot_id=document.strip(), object_id=object.strip(), include_document=True,
+        )
+        kind = opened["content_kind"]
+        # Only PDF is displayed inline. Uploaded HTML is always an attachment;
+        # the console displays an escaped, inert text projection instead.
+        extension = {"pdf": "pdf", "html": "html", "boom": "json", "json": "json"}.get(kind, "txt")
+        inline_pdf = kind == "pdf" and not download
+        disposition = "inline" if inline_pdf else "attachment"
+        display_bytes = opened["freeze_bytes"]
+        if inline_pdf:
+            import fitz
+
+            # Highlight every contributing fragment on a disposable display
+            # copy; the immutable source and original download are unchanged.
+            locators = opened.get("locators") or [{"locator_value": opened["locator_value"]}]
+            with fitz.open(stream=display_bytes, filetype="pdf") as pdf:
+                for locator in locators:
+                    page, bbox = parse_page_bbox(locator["locator_value"])
+                    pdf_page = pdf[page - 1]
+                    pdf_page.draw_rect(
+                        fitz.Rect(bbox), color=(1, 0.55, 0), fill=(1, 1, 0),
+                        fill_opacity=0.25, overlay=True,
+                    )
+                display_bytes = pdf.tobytes()
+        return Response(
+            display_bytes,
+            media_type="application/pdf" if inline_pdf else "application/octet-stream",
+            headers={
+                "Content-Disposition": f'{disposition}; filename="richtlijn.{extension}"',
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": "default-src 'none'; frame-ancestors 'self'",
+            },
+        )
+
+    @app.post("/review")
+    def review_post(
+        request: Request,
+        snapshot_id: str = Form(...),
+        object_id: str = Form(...),
+        decision: str = Form(""),
+        comment: str = Form(""),
+        proposed_correction: str = Form(""),
+        confirmed_object_type: str = Form(""),
+        recommendation_strength: str = Form(""),
+        recommendation_direction: str = Form(""),
+        recommendation_strength_level: str = Form(""),
+        relation_choice: list[str] = Form(default=[]),
+        relation_review_ack: str = Form(""),
+        suitability: str = Form(""),
+        eindoordeel: str = Form(""),
+        documentpositie_action: str = Form(""),
+        found_under: str = Form(""),
+        parent_choice: str = Form(""),
+        type_action: str = Form(""),
+        proposed_object_type: str = Form(""),
+        snapshot_revision: str = Form(""),
+        return_task: str = Form(""),
+        interaction_id: str = Form(""),
+    ) -> RedirectResponse:
+        account = _require(request)
+        mapped = map_eindoordeel(eindoordeel, decision)
+        if eindoordeel == "later_beoordelen" or mapped == "later":
+            mapped = "later"
+        elif mapped not in {"approve", "revise", "reject"}:
+            raise ConsoleError("invalid_review_decision")
+        if mapped in {"revise", "reject"} and not comment.strip():
+            raise ConsoleError("review_comment_required")
+        if (suitability or "").strip() not in SUITABILITY_VALUES:
+            raise ConsoleError("suitability_required")
+        if not snapshot_revision.strip():
+            raise ConsoleError("snapshot_revision_required")
+        if type_action == "dit_klopt" and not confirmed_object_type.strip():
+            confirmed_object_type = proposed_object_type
+        current_rows = state.snapshot_objects(snapshot_id)
+        focal = next(
+            (row for row in current_rows if row.get("object_id") == object_id),
+            None,
+        )
+        if focal is None:
+            raise ConsoleError("unknown_object")
+        review_path = review_path_for_klasse(state._envelope(snapshot_id)["class"])
+        bindings = state.object_review_bindings(snapshot_id)
+        duty = review_duty_for(
+            focal,
+            review_path=review_path,
+            bindings=bindings, fragments=state.review_source_fragments(snapshot_id)
+        )
+        evidence = (
+            build_review_interaction_evidence(
+                interaction_id=interaction_id,
+                interaction_kind="contextual",
+                reviewer_account_id=str(account["account_id"]),
+                snapshot_id=snapshot_id,
+                review_stage=str((duty or {}).get("stage") or "first_review"),
+                focal=focal,
+                objects=current_rows,
+                review_path=review_path,
+            )
+            if interaction_id.strip() and mapped != "later"
+            else None
+        )
+        try:
+            state.review_object(
+                actor_id=account["account_id"],
+                snapshot_id=snapshot_id,
+                object_id=object_id,
+                decision=mapped,
+                comment=comment,
+                proposed_correction=proposed_correction,
+                confirmed_object_type=confirmed_object_type.strip() or None,
+                recommendation_strength=recommendation_strength.strip() or None,
+                recommendation_direction=recommendation_direction.strip() or None,
+                recommendation_strength_level=recommendation_strength_level.strip() or None,
+                relation_choices=(
+                    [relation_choice]
+                    if isinstance(relation_choice, str)
+                    else list(relation_choice or [])
+                ),
+                relation_review_ack=relation_review_ack == "1",
+                suitability=suitability.strip() or None,
+                eindoordeel=eindoordeel.strip() or None,
+                documentpositie_action=documentpositie_action.strip() or None,
+                found_under=found_under.strip() or None,
+                parent_choice=parent_choice.strip() or None,
+                type_action=type_action.strip() or None,
+                expected_revision=snapshot_revision.strip() or None,
+                interaction_evidence=evidence,
+            )
+        except ConsoleError as exc:
+            semantic_error = exc.code in {
+                "recommendation_direction_required",
+                "recommendation_strength_confirmation_required",
+                "recommendation_direction_evidence_missing",
+                "recommendation_strength_evidence_required",
+                "recommendation_strength_not_stated_conflict",
+                "recommendation_semantics_confirmation_invalid",
+            }
+            if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT and not semantic_error:
+                raise
+            # Render the same object set and revision that we compare here. A
+            # second read could silently replace the posted revision after a
+            # semantic validation error, hiding another reviewer's change.
+            review_snapshot = state.snapshot_objects_and_revision(snapshot_id)
+            if semantic_error and snapshot_revision.strip() and snapshot_revision.strip() != review_snapshot[1]:
+                semantic_error = False
+            if not semantic_error:
+                state.refresh_objects_expected_revision(snapshot_id, review_snapshot[1])
+            return HTMLResponse(
+                _render_review_room(
+                    state,
+                    account,
+                    snapshot_id,
+                    object_id,
+                    task=return_task,
+                    draft={
+                        "suitability": suitability,
+                        "documentpositie_action": documentpositie_action,
+                        "found_under": found_under,
+                        "parent_choice": parent_choice,
+                        "type_action": type_action,
+                        "confirmed_object_type": confirmed_object_type,
+                        "recommendation_strength": recommendation_strength,
+                        "recommendation_direction": recommendation_direction,
+                        "recommendation_strength_level": recommendation_strength_level,
+                        "relation_choice": ([relation_choice] if isinstance(relation_choice, str) else list(relation_choice or [])),
+                        "relation_review_ack": relation_review_ack,
+                        "validation_error": exc.code if semantic_error else "",
+                        "eindoordeel": eindoordeel,
+                        "decision": decision,
+                        "comment": comment,
+                        "proposed_correction": proposed_correction,
+                        "proposed_object_type": proposed_object_type,
+                    },
+                    conflict=not semantic_error,
+                    snapshot=review_snapshot,
+                ),
+                status_code=400 if semantic_error else 409,
+            )
+        if mapped == "revise" and proposed_correction.strip():
+            state.correct_object(
+                actor_id=account["account_id"],
+                snapshot_id=snapshot_id,
+                object_id=object_id,
+                patch={
+                    "reason": comment or "reviewer correction",
+                    "operations": [{"op": "set", "path": "content.clean_text", "value": proposed_correction.strip()}],
+                },
+            )
+        safe_task = normalize_review_task(return_task)
+        if safe_task in {"contextual", "structure", "batch", "second_review"}:
+            current = state.snapshot_objects(snapshot_id)
+            path = review_path_for_klasse(state._envelope(snapshot_id)["class"])
+            bindings = state.object_review_bindings(snapshot_id)
+            nxt = next(
+                (
+                    str(row.get("object_id") or "")
+                    for row in current
+                    if str(row.get("object_id") or "") != object_id
+                    and (
+                        route := reviewer_route_for(
+                            row,
+                            review_path=path,
+                            reviewer_id=str(account.get("account_id") or ""),
+                            bindings=bindings, fragments=state.review_source_fragments(snapshot_id)
+                        )
+                    )
+                    and route.get("actionable")
+                    and route.get("canonical_task") == safe_task
+                ),
+                "",
+            )
+            if nxt:
+                return RedirectResponse(
+                    _review_location(
+                        state,
+                        snapshot_id,
+                        nxt,
+                        task=safe_task,
+                    ),
+                    status_code=303,
+                )
+            return RedirectResponse(
+                _review_location(state, snapshot_id),
+                status_code=303,
+            )
+        if not safe_task:
+            nxt = state.next_review_object_id(snapshot_id, object_id)
+            if nxt:
+                return RedirectResponse(
+                    _review_location(state, snapshot_id, nxt),
+                    status_code=303,
+                )
+        return RedirectResponse(
+            _review_location(state, snapshot_id, task=safe_task),
+            status_code=303,
+        )
+
+    @app.post("/review/source-exclusions")
+    def review_source_exclusions(request: Request, snapshot_id: str = Form(...),
+            source_object_ids: list[str] = Form(default=[]), reason: str = Form(""),
+            command_id: str = Form(""), snapshot_revision: str = Form(""),
+            source_checked: str = Form("")) -> Response:
+        account = _require(request)
+        if source_checked != "1":
+            raise ConsoleError("source_context_check_required")
+        from src.source_context_review_v1 import confirm_source_exclusions
+        confirm_source_exclusions(state, actor_id=account["account_id"], snapshot_id=snapshot_id,
+            source_object_ids=source_object_ids, reason=reason, command_id=command_id,
+            expected_revision=snapshot_revision)
+        return RedirectResponse(_review_location(state, snapshot_id, task="disposition"), status_code=303)
+
+    @app.post("/review/source-context")
+    def review_source_context(request: Request, snapshot_id: str = Form(...), source_object_id: str = Form(...),
+                              role: str = Form(""), target_object_ids: list[str] = Form(default=[]),
+                              reason: str = Form(""), command_id: str = Form(""), snapshot_revision: str = Form(""),
+                              source_checked: str = Form(""), return_object_id: str = Form("")) -> Response:
+        account = _require(request)
+        objects = state.snapshot_objects(snapshot_id)
+        return_id = return_object_id if any(row["object_id"] == return_object_id for row in objects) else source_object_id
+        pair_target = return_id if return_id != source_object_id else ""
+        try:
+            if source_checked != "1":
+                raise ConsoleError("source_context_check_required")
+            state.confirm_source_context(actor_id=account['account_id'], snapshot_id=snapshot_id,
+                source_object_id=source_object_id, role=role, target_object_ids=target_object_ids,
+                reason=reason, command_id=command_id, expected_revision=snapshot_revision)
+        except ConsoleError as exc:
+            if exc.code not in {"source_context_role_invalid", "source_context_reason_required",
+                    "source_context_target_required", "source_context_check_required", "open_original_required",
+                    "source_context_command_required", SNAPSHOT_OBJECT_WRITE_CONFLICT}:
+                raise
+            if pair_target and any(row["object_id"] == pair_target and role_of(row) for row in state.snapshot_objects(snapshot_id)):
+                pair_target = ""
+            return HTMLResponse(_render_review_room(state, account, snapshot_id, source_object_id,
+                context_target=pair_target, context_mode="source",
+                context_draft={"role": role, "reason": reason, "target_object_ids": target_object_ids},
+                context_error=ERROR_COPY.get(exc.code, "Het document is gewijzigd. Controleer je keuzes opnieuw."),
+                ), status_code=409 if exc.code == SNAPSHOT_OBJECT_WRITE_CONFLICT else 400)
+        location = _review_location(state, snapshot_id, return_id)
+        return RedirectResponse(location + "&context_saved=yes#passage-context", status_code=303)
+
+    @app.post("/review/context/accept")
+    def review_context_accept(
+        request: Request,
+        snapshot_id: str = Form(...),
+        object_id: str = Form(...),
+        snapshot_revision: str = Form(""),
+        return_task: str = Form(""),
+    ) -> RedirectResponse:
+        account = _require(request)
+        state.accept_source_continuation(
+            actor_id=account["account_id"],
+            snapshot_id=snapshot_id,
+            object_id=object_id,
+            expected_revision=snapshot_revision.strip() or None,
+        )
+        safe_task = normalize_review_task(return_task)
+        return RedirectResponse(
+            _review_location(
+                state,
+                snapshot_id,
+                object_id,
+                task=safe_task,
+            ),
+            status_code=303,
+        )
+
+    @app.post("/review/headings/batch-confirm")
+    def review_headings_batch_confirm(
+        request: Request,
+        snapshot_id: str = Form(...),
+        object_ids: list[str] = Form(default=[]),
+        snapshot_revision: str = Form(""),
+        interaction_id: str = Form(""),
+    ) -> RedirectResponse:
+        account = _require(request)
+        raw = [object_ids] if isinstance(object_ids, str) else list(object_ids or [])
+        try:
+            current_rows = state.snapshot_objects(snapshot_id)
+            by_id = {
+                str(row.get("object_id") or ""): row
+                for row in current_rows
+            }
+            members = [by_id[oid] for oid in raw if oid in by_id]
+            evidence = (
+                build_review_interaction_evidence(
+                    interaction_id=interaction_id,
+                    interaction_kind="structure",
+                    reviewer_account_id=str(account["account_id"]),
+                    snapshot_id=snapshot_id,
+                    review_stage="first_review",
+                    members=members,
+                )
+                if interaction_id.strip()
+                else None
+            )
+            state.batch_confirm_headings(
+                actor_id=account["account_id"],
+                snapshot_id=snapshot_id,
+                object_ids=raw,
+                expected_revision=snapshot_revision.strip() or None,
+                interaction_evidence=evidence,
+            )
+        except ConsoleError as exc:
+            if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT:
+                raise
+            return HTMLResponse(
+                _render_review_room(
+                    state,
+                    account,
+                    html.escape(snapshot_id, quote=True),
+                    task="structure",
+                    conflict=True,
+                ),
+                status_code=409,
+            )
+        return RedirectResponse(_review_location(state, snapshot_id, task="structure"), status_code=303)
+
+    @app.post("/review/relations")
+    def review_relations_post(
+        request: Request,
+        snapshot_id: str = Form(...),
+        object_id: str = Form(...),
+        relation: list[str] = Form(default=[]),
+        parent_choice: str = Form(default=""),
+        snapshot_revision: str = Form(""),
+    ) -> RedirectResponse:
+        account = _require(request)
+        raw = [relation] if isinstance(relation, str) else list(relation or [])
+        rows = []
+        for item in raw:
+            rel_type, sep, target = item.partition(":")
+            if not sep or not rel_type or not target:
+                raise ConsoleError("unknown_relation_type")
+            rows.append({"relation_type": rel_type, "target_object_id": target})
+        chosen_parent = (parent_choice or "").strip()
+        if chosen_parent and chosen_parent != object_id:
+            already = any(
+                row.get("relation_type") == "child" and row.get("target_object_id") == chosen_parent
+                for row in rows
+            )
+            if not already:
+                rows.append({"relation_type": "child", "target_object_id": chosen_parent})
+        state.confirm_relations(
+            actor_id=account["account_id"],
+            snapshot_id=snapshot_id,
+            object_id=object_id,
+            relations=rows,
+            expected_revision=snapshot_revision.strip() or None,
+        )
+        return RedirectResponse(_review_location(state, snapshot_id, object_id), status_code=303)
+
+    @app.post("/review/second-review")
+    def second_review_post(
+        request: Request,
+        snapshot_id: str = Form(...),
+        object_id: str = Form(...),
+        snapshot_revision: str = Form(""),
+        action: str = Form(...),
+        comment: str = Form(""),
+        interaction_id: str = Form(""),
+    ) -> RedirectResponse:
+        account = _require(request)
+        if not snapshot_revision.strip():
+            raise ConsoleError("snapshot_revision_required")
+        current_rows = state.snapshot_objects(snapshot_id)
+        focal = next(
+            (row for row in current_rows if row.get("object_id") == object_id),
+            None,
+        )
+        if focal is None:
+            raise ConsoleError("unknown_object")
+        review_path = review_path_for_klasse(state._envelope(snapshot_id)["class"])
+        evidence = (
+            build_review_interaction_evidence(
+                interaction_id=interaction_id,
+                interaction_kind="second_review",
+                reviewer_account_id=str(account["account_id"]),
+                snapshot_id=snapshot_id,
+                review_stage="second_review",
+                focal=focal,
+                objects=current_rows,
+                review_path=review_path,
+            )
+            if interaction_id.strip()
+            else None
+        )
+        if action == "approve":
+            state.approve_second_review(
+                actor_id=account["account_id"],
+                snapshot_id=snapshot_id,
+                object_id=object_id,
+                expected_revision=snapshot_revision.strip() or None,
+                interaction_evidence=evidence,
+            )
+        elif action == "revise":
+            if not comment.strip():
+                raise ConsoleError("review_comment_required")
+            state.review_object(
+                actor_id=account["account_id"],
+                snapshot_id=snapshot_id,
+                object_id=object_id,
+                decision="revise",
+                comment=comment.strip(),
+                expected_revision=snapshot_revision.strip() or None,
+                interaction_evidence=evidence,
+            )
+        else:
+            raise ConsoleError("invalid_review_decision")
+
+        current = state.snapshot_objects(snapshot_id)
+        review_path = review_path_for_klasse(state._envelope(snapshot_id)["class"])
+        bindings = state.object_review_bindings(snapshot_id)
+        nxt = next(
+            (
+                str(row.get("object_id") or "")
+                for row in current
+                if str(row.get("object_id") or "") != object_id
+                and (
+                    route := reviewer_route_for(
+                        row,
+                        review_path=review_path,
+                        reviewer_id=str(account.get("account_id") or ""),
+                        bindings=bindings, fragments=state.review_source_fragments(snapshot_id)
+                    )
+                )
+                and route.get("actionable")
+                and route.get("canonical_task") == "second_review"
+            ),
+            "",
+        )
+        if nxt:
+            return RedirectResponse(
+                _review_location(state, snapshot_id, nxt, task="second_review"),
+                status_code=303,
+            )
+        return RedirectResponse(
+            _review_location(state, snapshot_id),
+            status_code=303,
+        )
+
+    @app.get("/publish", response_class=HTMLResponse)
+    def publish_get(request: Request) -> str:
+        account = _require(request)
+        rows = []
+        for envelope in state.list_envelopes():
+            considered = None
+            try:
+                considered = state.consider_publish(actor_id=account["account_id"], snapshot_id=envelope["snapshot_id"])
+            except ConsoleError as exc:
+                considered = {"blockers": [exc.code], "publish_allowed": False}
+            blockers = considered.get("blockers") or []
+            blocker_text = " ".join(BLOCKER_LABELS.get(code, code) for code in blockers) or "Geen extra blockers in deze kamer."
+            if considered.get("state") == "published" or state.snapshot_is_published(envelope["snapshot_id"]):
+                action = '<div class="banner ok">Gepubliceerd. Dit document staat in de publicatieprojectie.</div>'
+            elif considered.get("publish_allowed"):
+                count = int(considered.get("publishable_object_count") or 0)
+                noun = "kennisobject" if count == 1 else "kennisobjecten"
+                reviewed = "gereviewd" if count == 1 else "gereviewde"
+                action = f'''
+                  <div class="banner ok">Klaar voor publicatie: {count} {reviewed} {noun}. De bron en controles zijn geverifieerd.</div>
+                  <form method="post" action="/publish" class="stack">
+                    <input type="hidden" name="snapshot_id" value="{_esc(envelope['snapshot_id'])}">
+                    <label class="check"><input type="checkbox" name="publish_confirmed" value="yes" required>
+                      Ik bevestig publicatie van deze gereviewde kennisobjecten.</label>
+                    <button type="submit">Publiceer document</button>
+                  </form>
+                '''
+            else:
+                action = f'<div class="banner warn">{_esc(blocker_text)}</div>'
+            rows.append(
+                f"""
+                <article class="doc-card">
+                  {_document_card_heading({**envelope, "status": envelope["state"]})}
+                  {action}
+                </article>
+                """
+            )
+        success = ""
+        if request.query_params.get("published") == "yes":
+            success = '<div class="banner ok">Publicatie voltooid en zichtbaar gemaakt in de publicatieprojectie.</div>'
+        return _page(
+            f"""
+            {_nav(account, "publish")}
+            <section class="room">
+              <h1>Publiceren</h1>
+              <p class="lead">Neem hier het afzonderlijke publicatiebesluit. Alleen gereviewde kennisobjecten met een geverifieerde bron worden gepubliceerd; anders blijft publicatie geblokkeerd.</p>
+              {success}
+              <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen documenten.</p>'}</div>
+            </section>
+            """
+        )
+
+    @app.post("/publish")
+    def publish_post(
+        request: Request,
+        snapshot_id: str = Form(...),
+        publish_confirmed: str = Form(""),
+    ) -> RedirectResponse:
+        account = _require(request)
+        if publish_confirmed != "yes":
+            raise ConsoleError("publish_confirmation_required")
+        result = state.publish(actor_id=account["account_id"], snapshot_id=snapshot_id)
+        if result.get("status") != "PASS":
+            blockers = result.get("blockers") or ["object_tuple_required"]
+            raise ConsoleError(str(blockers[0]))
+        return RedirectResponse("/publish?published=yes", status_code=303)
+
+    @app.get("/accounts", response_class=HTMLResponse)
+    def accounts_get(request: Request) -> str:
+        account = _require(request)
+        rows = []
+        access_rows = entra.access_rows() if entra is not None else {}
+        for public in sorted(state.list_accounts(), key=lambda item: item["username"]):
+            role_boxes = "".join(
+                f'<label class="check"><input type="checkbox" name="roles" value="{name}"'
+                f'{" checked" if name in public["roles"] else ""}>{name}</label>'
+                for name in ("researcher", "reviewer", "publisher")
+            )
+            role_form = ""
+            if "publisher" in account["roles"] and entra is None:
+                role_form = f"""
+                  <form method="post" action="/accounts/roles">
+                    <input type="hidden" name="account_id" value="{_esc(public["account_id"])}">
+                    <p>Rollen wijzigen</p>
+                    {role_boxes}
+                    <button class="btn-secondary" type="submit">Rollen wijzigen</button>
+                  </form>
+                """
+            if entra is not None:
+                blocked = access_rows.get(public["account_id"], True)
+                role_form = '<p>' + ('Geblokkeerd in Metis' if blocked else 'Microsoft-aanmelding vereist') + '</p>'
+                if "publisher" in account["roles"] and public["account_id"] != account["account_id"]:
+                    role_form += f"""<form method="post" action="/accounts/access">
+                    <input type="hidden" name="account_id" value="{_esc(public['account_id'])}">
+                    <input type="hidden" name="blocked" value="{'false' if blocked else 'true'}">
+                    <button class="btn-secondary" type="submit">{'Blokkering opheffen' if blocked else 'Toegang direct blokkeren'}</button></form>"""
+            if public.get("retirement"):
+                role_form = '<p><b>Historisch account — aanmelden uitgeschakeld</b></p><p>Behouden voor eerdere beoordelingen en auditgegevens. Niet beschikbaar voor nieuwe reviewertoewijzingen.</p>'
+            rows.append(
+                f"""
+                <article class="doc-card">
+                  <p class="doc-title">{_esc(public["display_name"])}</p>
+                  <p class="meta">
+                    <span>{"Microsoft-werkaccount" if entra is not None else "gebruikersnaam " + _esc(public["username"])}</span>
+                    <span>rollen <b>{", ".join(_esc(r) for r in public["roles"])}</b></span>
+                  </p>
+                  {role_form}
+                </article>
+                """
+            )
+        form = ""
+        if "publisher" in account["roles"] and entra is None:
+            form = """
+              <form method="post" action="/accounts">
+                <div class="sections">
+                  <div class="section">
+                    <h3>Nieuwe gebruiker</h3>
+                    <label for="username">Gebruikersnaam</label>
+                    <input id="username" name="username" required>
+                    <label for="display_name">Weergavenaam</label>
+                    <input id="display_name" name="display_name" required>
+                    <label for="password">Wachtwoord</label>
+                    <input id="password" type="password" name="password" required>
+                    <label for="roles">Rol</label>
+                    <select id="roles" name="roles">
+                      <option value="researcher">researcher</option>
+                      <option value="reviewer">reviewer</option>
+                      <option value="publisher">publisher</option>
+                    </select>
+                    <button class="btn-primary" type="submit">Gebruiker aanmaken</button>
+                  </div>
+                </div>
+              </form>
+            """
+        account_lead = (
+            "Toegang en rollen worden toegekend in Microsoft Entra. Gebruikers verschijnen hier na hun eerste aanmelding. "
+            "Een blokkering in Metis beëindigt hun toegang direct; opheffen geeft alleen toegang als Microsoft die nog toestaat. "
+            "Rollen hieronder zijn laatst gecontroleerd bij aanmelding; Microsoft-toegang wordt na maximaal vijf minuten opnieuw gecontroleerd."
+            if entra is not None else "Interne gebruikers. Alleen een publisher maakt accounts en wijzigt rollen."
+        )
+        return _page(
+            f"""
+            {_nav(account, "accounts")}
+            <section class="room">
+              <h1>Accounts</h1>
+              <p class="lead">{account_lead}</p>
+              {form}
+              <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen accounts.</p>'}</div>
+            </section>
+            """
+        )
+
+    @app.post("/accounts", response_class=HTMLResponse)
+    def accounts_post(
+        request: Request,
+        username: str = Form(...),
+        display_name: str = Form(...),
+        password: str = Form(...),
+        roles: str = Form(...),
+    ) -> HTMLResponse:
+        account = _require(request)
+        state.create_managed_account(
+            actor_id=account["account_id"],
+            username=username,
+            display_name=display_name,
+            password=password,
+            roles=[item.strip() for item in roles.split(",") if item.strip()],
+        )
+        return RedirectResponse("/accounts", status_code=303)
+
+    @app.post("/accounts/roles")
+    def accounts_roles_post(
+        request: Request,
+        account_id: str = Form(...),
+        roles: list[str] = Form(default=[]),
+    ) -> RedirectResponse:
+        account = _require(request)
+        chosen: list[str] = []
+        if isinstance(roles, str):
+            chosen = [roles]
+        elif roles:
+            chosen = list(roles)
+        if not chosen:
+            raise ConsoleError("unknown_role")
+        state.assign_roles(
+            actor_id=account["account_id"],
+            account_id=account_id,
+            roles=chosen,
+        )
+        return RedirectResponse("/accounts", status_code=303)
+
+    from src.request_diagnostics_v1 import deployed_commit as _deployed_commit
+
+    @app.get("/health")
+    def health() -> dict[str, Any]:
+        return {
+            "status": "ok",
+            "service": "operations-console",
+            "version": SERVICE_VERSION,
+            "deployed_commit": _deployed_commit() or "not_recorded",
+            "product_api": False,
+            "chat_room": False,
+            "nurse_frontend": False,
+        }
+
+    from src.quality_metrics_app_v1 import install_quality_routes
+    from src.insight_v1 import insight_tabs
+    install_quality_routes(app, state, _require, _page, tabs=insight_tabs)
+    from src.route_comparison_app_v1 import install_route_comparison_routes
+    install_route_comparison_routes(app, state, _require, _page)
+    from src.decision_review_ui_v1 import install_decision_review_routes
+    install_decision_review_routes(app, state, _require, _page)
+    from src.review_participation_ui_v1 import install_routes as install_participation_routes
+    install_participation_routes(app, state, _require, _page)
+    from src.insight_v1 import install_insight_legacy_routes
+    install_insight_legacy_routes(app, _require)
+    return app
+
+
+def create_app() -> FastAPI:
+    return create_console_app()

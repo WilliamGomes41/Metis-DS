@@ -1,0 +1,14 @@
+{
+  "status": "PASS",
+  "questions": 24,
+  "class_counts": {
+    "fact": 6,
+    "condition_score": 6,
+    "exception": 4,
+    "version_conflict": 2,
+    "no_answer": 6
+  },
+  "no_answer_share": 0.25,
+  "errors": [],
+  "warnings": []
+}

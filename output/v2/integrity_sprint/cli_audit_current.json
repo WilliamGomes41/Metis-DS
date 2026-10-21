@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "integrity_ok": true,
+  "object_count": 21,
+  "object_errors": [],
+  "relation_errors": [],
+  "publication_gate": "BLOCKED",
+  "publication_blocker_count": 21
+}

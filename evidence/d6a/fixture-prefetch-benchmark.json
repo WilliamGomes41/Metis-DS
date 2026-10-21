@@ -1,0 +1,31 @@
+{
+  "portion": [
+    "test_console_asgi",
+    "test_console_workspace_layout",
+    "test_console_settings_hub_v1",
+    "test_console_ingest_names_review_labels",
+    "test_review_batch_atomic_postgres",
+    "test_navigation_reads_postgres",
+    "test_review_workboard_heading_advance_postgres_v1"
+  ],
+  "methods": {
+    "synchronous_template": {
+      "commit": "5481dfb06c46011cbafb8de5585162274e79044d",
+      "seconds": 17.036,
+      "exit_code": 0,
+      "tests": 37,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "prefetched_template": {
+      "commit": "bafa24395e8fe1a32e2dd5ab0a7afa34fca9978a",
+      "seconds": 15.096,
+      "exit_code": 0,
+      "tests": 37,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    }
+  }
+}

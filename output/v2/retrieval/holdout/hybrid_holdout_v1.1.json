@@ -1,0 +1,1227 @@
+{
+  "evaluator_version": "hybrid-retrieval-eval-v1.0.0",
+  "engine_version": "hybrid-rrf-v1.0.0",
+  "index_signature": "5e0f3e28030d70df61d5632278488c060b94be0800f1fe15310d41315168cda3",
+  "golden_set_id": "fractuurpreventie-page15-holdout-v1.1",
+  "evaluation_status": "preliminary_same_set_child_thresholds_not_independent_holdout",
+  "corpus_records": 19,
+  "hybrid_config": {
+    "top_k": 5,
+    "candidate_k": 10,
+    "rrf_k": 60,
+    "lexical_weight": 1.0,
+    "vector_weight": 1.0
+  },
+  "metrics": {
+    "published_corpus_questions": 24,
+    "retrieve_questions": 18,
+    "retrieve_any_hit_at_5": 0.944444,
+    "micro_expected_object_recall_at_5": 0.9,
+    "abstain_questions": 6,
+    "abstention_accuracy": 0.833333,
+    "projection_content_integrity": 1.0,
+    "content_checks": {
+      "passed": 25,
+      "total": 25
+    }
+  },
+  "details": [
+    {
+      "id": "FP-H-F01",
+      "class": "fact",
+      "question": "Welke onderdelen horen volgens deze kennisset bij het aanvullende onderzoek na een recente fractuur?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "recommendation",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.016393442623,
+        "lexical_rank": null,
+        "vector_rank": 1,
+        "lexical_score": null,
+        "vector_score": 0.410762123,
+        "projection_hash": "62e958c7a78bbbdb79d527b2418d0300245e88ee16edf1041886cfee24b07a71"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "phrase",
+          "expected": "DXA-VFA",
+          "pass": true
+        },
+        {
+          "type": "phrase",
+          "expected": "laboratoriumonderzoek",
+          "pass": true
+        },
+        {
+          "type": "phrase",
+          "expected": "valrisico",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-F02",
+      "class": "fact",
+      "question": "Een cliënt met een recente breuk is nog niet aanvullend onderzocht. Wie kan dat onderzoek aanvragen?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "retrieve",
+          "reason": "thresholds_passed"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "recommendation",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.032786885246,
+        "lexical_rank": 1,
+        "vector_rank": 1,
+        "lexical_score": 9.284901,
+        "vector_score": 0.503483641,
+        "projection_hash": "4463ddde82aa0777375a4a22b6fdc56bb5b1a8f54b9ea1293b1d7a99316e2e92"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "phrase",
+          "expected": "behandelaar van de fractuur",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-F03",
+      "class": "fact",
+      "question": "Wat hoort besproken te worden wanneer bij een cliënt een verhoogd fractuurrisico is vastgesteld?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-03"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "retrieve",
+          "reason": "thresholds_passed"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "recommendation",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.032786885246,
+        "lexical_rank": 1,
+        "vector_rank": 1,
+        "lexical_score": 8.095478,
+        "vector_score": 0.414822441,
+        "projection_hash": "2077bd08a4ef267d11ff660d28bc12b4e851c9b43f6e840d8c57e2d55497a298"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-03"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "phrase",
+          "expected": "preventieve maatregelen",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-C01",
+      "class": "condition_score",
+      "question": "Vanaf welke leeftijd geldt in deze set de signaleringssituatie bij gebruik van prednison of dexamethason?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-glucocorticoids-40plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-03"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-glucocorticoids-40plus-01@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-glucocorticoids-40plus-01",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "recommendation",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.016393442623,
+        "lexical_rank": null,
+        "vector_rank": 1,
+        "lexical_score": null,
+        "vector_score": 0.369809968,
+        "projection_hash": "8aed64bf3aa3e97dd18c095dcec8f9cc98414bb4aeefb2697ec376f2e6f1a844"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "logic",
+          "expected": {
+            "field": "age",
+            "operator": "gte",
+            "threshold": 40,
+            "unit": "year"
+          },
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-C02",
+      "class": "condition_score",
+      "question": "Voor welke 60-plus cliënt zonder twee specifieke risicosituaties is de risicofactorenscore bedoeld?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-screening-60plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-01"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-screening-60plus"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "recommendation",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.016393442623,
+        "lexical_rank": null,
+        "vector_rank": 1,
+        "lexical_score": null,
+        "vector_score": 0.275161659,
+        "projection_hash": "9cf3a2c20d1e32b6aeb4a79e0d63cddafe6f8c5666f11f05ab157fc664227ad5"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-screening-60plus"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "phrase",
+          "expected": "zonder recente fractuur",
+          "pass": true
+        },
+        {
+          "type": "phrase",
+          "expected": "zonder gebruik van glucocorticoïden",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-C03",
+      "class": "condition_score",
+      "question": "Bij welke totaalscore uit de risicofactorenlijst wordt verwijzing naar de huisarts genoemd?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-03"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold+too_few_distinct_terms"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "recommendation",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.016393442623,
+        "lexical_rank": null,
+        "vector_rank": 1,
+        "lexical_score": null,
+        "vector_score": 0.411137077,
+        "projection_hash": "3f4424403bf897c72b2952a5052c8110b1cf116f1ef2dc0815958ba4f2fad3ac"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "phrase",
+          "expected": "huisarts",
+          "pass": true
+        },
+        {
+          "type": "logic",
+          "expected": {
+            "operator": "gte",
+            "threshold": 4,
+            "unit": "punten"
+          },
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-S01",
+      "class": "condition_score",
+      "question": "Hoeveel punten telt leeftijd 60 jaar mee in deze scorelijst?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-04"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-01"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-02@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-02",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "score_rule",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.016393442623,
+        "lexical_rank": null,
+        "vector_rank": 1,
+        "lexical_score": null,
+        "vector_score": 0.554839118,
+        "projection_hash": "9f2772cb814b6f76372910786ec22326d91ea48dc7de8902183bf547024b9c0f"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-01"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "logic",
+          "expected": {
+            "field": "score_factor",
+            "operator": "gte",
+            "threshold": 60,
+            "unit": "jaar",
+            "score_points": 1
+          },
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-S02",
+      "class": "condition_score",
+      "question": "Wat is het puntenaantal dat bij 70 jaar of ouder hoort?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "abstain",
+      "returned_object_ids": [],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-02"
+      ],
+      "reason": "all_child_engines_abstained",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold"
+        },
+        "vector": {
+          "behavior": "abstain",
+          "reason": "similarity_below_threshold"
+        }
+      },
+      "any_expected_in_top_k": false,
+      "expected_found": [],
+      "content_integrity_checks": [
+        {
+          "type": "logic",
+          "expected": {
+            "field": "score_factor",
+            "operator": "gte",
+            "threshold": 70,
+            "unit": "jaar",
+            "score_points": 2
+          },
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-S03",
+      "class": "condition_score",
+      "question": "Welke score krijgt een BMI van 19 kg per vierkante meter?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-07",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-03"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-03@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-03",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "score_rule",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.016393442623,
+        "lexical_rank": null,
+        "vector_rank": 1,
+        "lexical_score": null,
+        "vector_score": 0.255271219,
+        "projection_hash": "0dab59dc1e9c1234e6e8f70a361b9b3995d625d7ff3ca2e13328afae9ae9cc70"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-03"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "logic",
+          "expected": {
+            "field": "score_factor",
+            "operator": "lt",
+            "threshold": 20,
+            "unit": "kg/m²",
+            "score_points": 1
+          },
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-S04",
+      "class": "condition_score",
+      "question": "Hoe telt een breuk na het vijftigste levensjaar mee als die langer dan twee jaar geleden was?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-04",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-screening-60plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-04"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-04@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-04",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "score_rule",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.016393442623,
+        "lexical_rank": null,
+        "vector_rank": 1,
+        "lexical_score": null,
+        "vector_score": 0.396238742,
+        "projection_hash": "fb6064099f8fe14eb24f7f2e1472ea93b0397792a1b939b2b2e5e74f766d5f5a"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-04"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "phrase",
+          "expected": "1 punt",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-S05",
+      "class": "condition_score",
+      "question": "Welke bijdrage aan de score heeft een heupfractuur bij vader of moeder?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-05",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-05"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "retrieve",
+          "reason": "thresholds_passed"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-05@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-05",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "score_rule",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.032786885246,
+        "lexical_rank": 1,
+        "vector_rank": 1,
+        "lexical_score": 12.894818,
+        "vector_score": 0.475041007,
+        "projection_hash": "e1a0755cdab65c88aed6f0e13fb182afe224a49df1bea768032b169642d0a316"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-05"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "phrase",
+          "expected": "1 punt",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-S06",
+      "class": "condition_score",
+      "question": "Hoeveel punten levert meer dan één val in het afgelopen jaar of beperkte mobiliteit op?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-06",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-04",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-06"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-06@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-06",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "score_rule",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.016393442623,
+        "lexical_rank": null,
+        "vector_rank": 1,
+        "lexical_score": null,
+        "vector_score": 0.477980502,
+        "projection_hash": "bc51c308d68f1ed8c68283eff5ee26865ef739813a7d39ce1d140ef35ae43e88"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-06"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "phrase",
+          "expected": "1 punt",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-S07",
+      "class": "condition_score",
+      "question": "Hoe wordt dagelijks gebruik van drie of meer eenheden alcohol in de risicoscore gewaardeerd?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-07",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-screening-60plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-07"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-07@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-07",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "score_rule",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.016393442623,
+        "lexical_rank": null,
+        "vector_rank": 1,
+        "lexical_score": null,
+        "vector_score": 0.492416865,
+        "projection_hash": "30d68a1223d2d5d2e173a53e16d72fca87970b24fa47464352b80340e80d13de"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-07"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "logic",
+          "expected": {
+            "field": "score_factor",
+            "operator": "gte",
+            "threshold": 3,
+            "unit": "eenheden alcohol per dag",
+            "score_points": 1
+          },
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-S08",
+      "class": "condition_score",
+      "question": "Wat is de scorebijdrage van medicatie of een ernstige onderliggende aandoening die onvoldoende onder controle is?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-08",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-03"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-08"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "retrieve",
+          "reason": "thresholds_passed"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-08@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-08",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "score_rule",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.032786885246,
+        "lexical_rank": 1,
+        "vector_rank": 1,
+        "lexical_score": 27.135191,
+        "vector_score": 0.7740206,
+        "projection_hash": "b47e5878bfe487e8d3c8b30bc31c0374431f7b30622a9bac810ac2cead13ed35"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-08"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "phrase",
+          "expected": "1 punt",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-X01",
+      "class": "exception",
+      "question": "Welke uitzondering wordt genoemd bij verwijzen vanaf vier punten?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-screening-60plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold+too_few_distinct_terms"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "recommendation",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.016393442623,
+        "lexical_rank": null,
+        "vector_rank": 1,
+        "lexical_score": null,
+        "vector_score": 0.323283443,
+        "projection_hash": "3f4424403bf897c72b2952a5052c8110b1cf116f1ef2dc0815958ba4f2fad3ac"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "phrase",
+          "expected": "tenzij samen met de cliënt",
+          "pass": true
+        },
+        {
+          "type": "phrase",
+          "expected": "overleg met de huisarts",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-X02",
+      "class": "exception",
+      "question": "Welke twee voorbeelden van inflammatoire darmziekten staan in de toelichting bij de risicofactoren?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-background-score-footnote",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-glucocorticoids-40plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-background-score-footnote"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-background-score-footnote@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-background-score-footnote",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "definition",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.016393442623,
+        "lexical_rank": null,
+        "vector_rank": 1,
+        "lexical_score": null,
+        "vector_score": 0.283619602,
+        "projection_hash": "71e15a127c89b7095a6720bf1a005baf661dedd1d07871b9db959e014ef06c86"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-background-score-footnote"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "phrase",
+          "expected": "Ziekte van Crohn",
+          "pass": true
+        },
+        {
+          "type": "phrase",
+          "expected": "colitis ulcerosa",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-X03",
+      "class": "exception",
+      "question": "Hoe oud moet een cliënt minimaal zijn in de recente-fractuursituatie, en hoe recent is recent?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-screening-60plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-03"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "condition",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.016393442623,
+        "lexical_rank": null,
+        "vector_rank": 1,
+        "lexical_score": null,
+        "vector_score": 0.314363099,
+        "projection_hash": "6b55b8d133046a462ff0460bbb6e017544b53f7248c8bf148537b8677cc5efb6"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-recent-fracture-50plus"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "logic",
+          "expected": {
+            "field": "age",
+            "operator": "gte",
+            "threshold": 50,
+            "unit": "year"
+          },
+          "pass": true
+        },
+        {
+          "type": "logic",
+          "expected": {
+            "field": "recent_fracture_age",
+            "operator": "lte",
+            "threshold": 2,
+            "unit": "year"
+          },
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-F04",
+      "class": "fact",
+      "question": "Welk instrument wordt gebruikt om bij de geselecteerde 60-plus groep een eventueel verhoogd fractuurrisico vast te stellen?",
+      "expected_behavior": "retrieve",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-03",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-screening-60plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-02"
+      ],
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-table-risk-score"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "retrieve",
+          "reason": "thresholds_passed"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "recommendation",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.032786885246,
+        "lexical_rank": 1,
+        "vector_rank": 1,
+        "lexical_score": 14.099469,
+        "vector_score": 0.537768953,
+        "projection_hash": "9cf3a2c20d1e32b6aeb4a79e0d63cddafe6f8c5666f11f05ab157fc664227ad5"
+      },
+      "any_expected_in_top_k": true,
+      "expected_found": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-screening-60plus-01"
+      ],
+      "content_integrity_checks": [
+        {
+          "type": "phrase",
+          "expected": "risicofactoren scorelijst",
+          "pass": true
+        }
+      ]
+    },
+    {
+      "id": "FP-H-N01",
+      "class": "no_answer",
+      "question": "Welke T-score op de DXA-scan bevestigt volgens deze kennisset de diagnose osteoporose?",
+      "expected_behavior": "abstain",
+      "actual_behavior": "abstain",
+      "returned_object_ids": [],
+      "expected_object_ids": [],
+      "reason": "all_child_engines_abstained",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold"
+        },
+        "vector": {
+          "behavior": "abstain",
+          "reason": "similarity_below_threshold"
+        }
+      },
+      "abstention_correct": true
+    },
+    {
+      "id": "FP-H-N02",
+      "class": "no_answer",
+      "question": "Welke dosis alendronine moet een patiënt volgens deze kennisset per week innemen?",
+      "expected_behavior": "abstain",
+      "actual_behavior": "abstain",
+      "returned_object_ids": [],
+      "expected_object_ids": [],
+      "reason": "all_child_engines_abstained",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold+too_few_distinct_terms"
+        },
+        "vector": {
+          "behavior": "abstain",
+          "reason": "similarity_below_threshold"
+        }
+      },
+      "abstention_correct": true
+    },
+    {
+      "id": "FP-H-N03",
+      "class": "no_answer",
+      "question": "Hoe vaak moet een DXA-meting worden herhaald tijdens behandeling?",
+      "expected_behavior": "abstain",
+      "actual_behavior": "retrieve",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-glucocorticoids-40plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-08"
+      ],
+      "expected_object_ids": [],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold+too_few_distinct_terms"
+        },
+        "vector": {
+          "behavior": "retrieve",
+          "reason": "threshold_passed"
+        }
+      },
+      "top_candidate": {
+        "retrieval_id": "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus@1.0",
+        "object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus",
+        "object_version": "1.0",
+        "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+        "object_type": "condition",
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "rrf_score": 0.016393442623,
+        "lexical_rank": null,
+        "vector_rank": 1,
+        "lexical_score": null,
+        "vector_score": 0.256265232,
+        "projection_hash": "34fd836dfd4c7463b533d902634adad8fe37218f093a130ba458459a4342e8f0"
+      },
+      "abstention_correct": false
+    },
+    {
+      "id": "FP-H-N04",
+      "class": "no_answer",
+      "question": "Wat is de aanbevolen calciumtablet-dosering bij chronische nierinsufficiëntie?",
+      "expected_behavior": "abstain",
+      "actual_behavior": "abstain",
+      "returned_object_ids": [],
+      "expected_object_ids": [],
+      "reason": "all_child_engines_abstained",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold+too_few_distinct_terms"
+        },
+        "vector": {
+          "behavior": "abstain",
+          "reason": "similarity_below_threshold"
+        }
+      },
+      "abstention_correct": true
+    },
+    {
+      "id": "FP-H-N05",
+      "class": "no_answer",
+      "question": "Welke bisfosfonaatbehandeling heeft de voorkeur bij een eGFR van 25?",
+      "expected_behavior": "abstain",
+      "actual_behavior": "abstain",
+      "returned_object_ids": [],
+      "expected_object_ids": [],
+      "reason": "all_child_engines_abstained",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "no_lexical_match"
+        },
+        "vector": {
+          "behavior": "abstain",
+          "reason": "similarity_below_threshold"
+        }
+      },
+      "abstention_correct": true
+    },
+    {
+      "id": "FP-H-N06",
+      "class": "no_answer",
+      "question": "Welke laboratoriumwaarde voor vitamine D is volgens deze set de streefwaarde in nmol per liter?",
+      "expected_behavior": "abstain",
+      "actual_behavior": "abstain",
+      "returned_object_ids": [],
+      "expected_object_ids": [],
+      "reason": "all_child_engines_abstained",
+      "child_decisions": {
+        "lexical": {
+          "behavior": "abstain",
+          "reason": "query_coverage_below_threshold+too_few_distinct_terms"
+        },
+        "vector": {
+          "behavior": "abstain",
+          "reason": "similarity_below_threshold"
+        }
+      },
+      "abstention_correct": true
+    }
+  ],
+  "comparison": {
+    "hybrid": {
+      "published_corpus_questions": 24,
+      "retrieve_questions": 18,
+      "retrieve_any_hit_at_5": 0.944444,
+      "micro_expected_object_recall_at_5": 0.9,
+      "abstain_questions": 6,
+      "abstention_accuracy": 0.833333,
+      "projection_content_integrity": 1.0,
+      "content_checks": {
+        "passed": 25,
+        "total": 25
+      }
+    },
+    "lexical_retrieve_any_hit_at_5": 0.277778,
+    "vector_retrieve_any_hit_at_5": 0.944444,
+    "hybrid_delta_vs_lexical": 0.666666,
+    "hybrid_delta_vs_vector": 0.0,
+    "safety_preserved_vs_both": false
+  }
+}

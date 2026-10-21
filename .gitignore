@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets / local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Runtime state (new generated output stays untracked; historical tracked artefacts under output/ remain)
+output/runtime/
+*.sqlite
+*.sqlite3
+*.log
+
+# Local canonical source binaries and reviewer workbooks
+sources/private/
+runtime/private/
+*.pdf
+*.docx
+*.xlsx
+*.xls
+
+# Licensed brand fonts are supplied out of band; never commit binaries
+assets/brand/fonts/**
+!assets/brand/fonts/README.md
+
+# Build artifacts
+build/
+dist/
+.python_packages/
+*.azure-deploy.zip
+
+# Human review returns / audit exports belong in controlled data storage, not source control
+output/v2/review_return/
+output/*_review.csv
+output/*_validation_form.csv

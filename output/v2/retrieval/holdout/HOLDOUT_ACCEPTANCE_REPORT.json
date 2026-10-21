@@ -1,0 +1,43 @@
+{
+  "holdout_id": "fractuurpreventie-page15-holdout-v1.1",
+  "acceptance_status": "FAIL",
+  "metrics": {
+    "published_corpus_questions": 24,
+    "retrieve_questions": 18,
+    "retrieve_any_hit_at_5": 0.944444,
+    "micro_expected_object_recall_at_5": 0.9,
+    "abstain_questions": 6,
+    "abstention_accuracy": 0.833333,
+    "projection_content_integrity": 1.0,
+    "content_checks": {
+      "passed": 25,
+      "total": 25
+    }
+  },
+  "false_answer_cases": [
+    {
+      "id": "FP-H-N03",
+      "question": "Hoe vaak moet een DXA-meting worden herhaald tijdens behandeling?",
+      "returned_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-condition-glucocorticoids-40plus",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-glucocorticoids-40plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-02",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-rec-recent-fracture-50plus-01",
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-08"
+      ],
+      "reason": "at_least_one_child_engine_passed_then_rrf_fused"
+    }
+  ],
+  "retrieval_misses": [
+    {
+      "id": "FP-H-S02",
+      "question": "Wat is het puntenaantal dat bij 70 jaar of ouder hoort?",
+      "expected_object_ids": [
+        "vvn-osteoporose-fractuurpreventie-2024-p015-score-02"
+      ],
+      "returned_object_ids": [],
+      "actual_behavior": "abstain"
+    }
+  ],
+  "policy": "No engine tuning is performed on this locked holdout. A future retrieval change requires a new independent holdout, preferably on a second guideline."
+}

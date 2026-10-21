@@ -1,0 +1,13 @@
+{
+  "manifest_version": "1.0",
+  "protocol_version": "2.27.0",
+  "protocol_path": "docs/PROTOCOL_V2_27_UNPUBLISHED_DELETE_DOCUMENTENHIERARCHIE_TYPE_CONFIRM_DELTA.md",
+  "protocol_sha256": "9627927dbebb9de0bde67a18ea3363bd2e99423c471aabf7cead3d6a2fb3abea",
+  "repository": "WilliamGomes41/VENVN-DS",
+  "default_branch": "main",
+  "commit_sha": "pending_after_merge",
+  "approval_date": "2026-09-05",
+  "approval_authority": "project_owner",
+  "branch_protection_status": "temporary_procedural_control",
+  "conformance_effect": "does_not_override_gate_status"
+}

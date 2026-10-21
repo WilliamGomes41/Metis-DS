@@ -1,0 +1,13 @@
+{
+  "manifest_version": "1.0",
+  "protocol_version": "2.18.0",
+  "protocol_path": "docs/PROTOCOL_V2_18_REVIEW_CARD_EXTRACT_DEDUP_DELTA.md",
+  "protocol_sha256": "413e70045d770a3077f4e514692de7d843b589118fd3ab02d417e04a83dd579a",
+  "repository": "WilliamGomes41/VENVN-DS",
+  "default_branch": "main",
+  "commit_sha": "pending_after_merge",
+  "approval_date": "2026-09-02",
+  "approval_authority": "project_owner",
+  "branch_protection_status": "temporary_procedural_control",
+  "conformance_effect": "does_not_override_gate_status"
+}

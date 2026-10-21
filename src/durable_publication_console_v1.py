@@ -1,0 +1,340 @@
+"""Durable-first console publication boundary.
+
+For Azure publication the PostgreSQL canonical store is the authority. Publication
+is committed there first in one transaction. Only after that succeeds are the
+console envelope, release manifest, local ledger and Product API JSONL projection
+updated as rebuildable local copies.
+"""
+from __future__ import annotations
+
+import json
+import uuid
+from contextlib import suppress
+from copy import deepcopy
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
+from src.document_status_v1 import DocumentStatusReadinessMixin
+from src.operations_console_v1 import PUBLICATION_PROTOCOL_VERSION, RELEASE_MANIFEST_DIRNAME, ConsoleError, _atomic_replace_bytes, _atomic_write
+from src.published_projection_v1 import atomic_replace_projection
+from src.publication_evidence_v1 import observe_publication
+from src.retrieval.retrieval_projection_v2 import build_projection
+from src.review_closure_v1 import ReviewClosureConsole
+from src.review_ledger import append_event
+from src import publish_refusal_audit_v1 as _publish_refusal_audit
+
+
+_HISTORICAL_RELEASE_STATES = frozenset({"superseded", "withdrawn"})
+
+
+class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConsole):
+    """Review console whose successful publication is PostgreSQL-first."""
+
+    def __init__(self, *args: Any, canonical_publication_store: PostgresCanonicalPublicationStore | None = None, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.canonical_publication_store = canonical_publication_store
+
+    @staticmethod
+    def _read_optional(path: Path) -> bytes | None:
+        return path.read_bytes() if path.exists() else None
+
+    @staticmethod
+    def _restore_optional(path: Path, prior: bytes | None) -> None:
+        if prior is None:
+            with suppress(OSError): path.unlink()
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _atomic_replace_bytes(path, prior)
+
+    @staticmethod
+    def _manifest_from_release(release: dict[str, Any]) -> dict[str, Any]:
+        return {"release_id": str(release["release_id"]), "release_version": str(release["release_version"]), "release_owner": str(release["release_owner"]), "published_at": str(release["published_at"]), "protocol_version": PUBLICATION_PROTOCOL_VERSION, "snapshot_id": str(release["snapshot_id"]), "source_sha256": str(release["source_sha256"]), "immutable_storage_locator": str(release["source_locator"]), "objects": deepcopy(release["objects"]), **({"decision_graph_release": deepcopy(release["decision_graph_release"])} if "decision_graph_release" in release else {})}
+
+    def _projection_from_authority(self) -> list[dict[str, Any]]:
+        store = self.canonical_publication_store
+        if store is None: raise ConsoleError("durable_publication_store_required")
+        try: authority_rows = store.active_publication_rows()
+        except CanonicalPublicationStoreError as exc: raise ConsoleError("durable_publication_projection_read_failed", str(exc)) from exc
+        authority_rows = [row for row in authority_rows if
+            (row["knowledge_object"].get("metadata") or {}).get("decision_graph_contract") != "source-decision-graph-v1"]
+        projected, blocked = build_projection([{"knowledge_object": deepcopy(row["knowledge_object"]), "publication": deepcopy(row["publication"])} for row in authority_rows])
+        if blocked: raise ConsoleError("durable_publication_projection_invalid", json.dumps(blocked, sort_keys=True))
+        if len(projected) != len(authority_rows): raise ConsoleError("durable_publication_projection_incomplete")
+        for projected_row, authority_row in zip(projected, authority_rows, strict=True): projected_row.setdefault("metadata", {})["snapshot_id"] = str(authority_row["snapshot_id"])
+        return projected
+
+    def _verify_publication_sources(self) -> None:
+        """Source-authority validation hook; Azure requires fresh Blob readback."""
+
+    def _validate_publication_state(self) -> list[dict[str, Any]]:
+        self._verify_publication_sources()
+        return self._projection_from_authority()
+
+    def _release_envelope(self, release: dict[str, Any]) -> dict[str, Any]:
+        current = deepcopy(self._envelope(str(release["snapshot_id"])))
+        current_state = str(current.get("state") or "")
+        authority_state = str(release.get("release_status") or "")
+        release_state = authority_state if authority_state in _HISTORICAL_RELEASE_STATES else current_state if current_state in _HISTORICAL_RELEASE_STATES else "published"
+        current.update({"state": release_state, "published": True,
+            "release_id": str(release["release_id"]), "release_version": str(release["release_version"]),
+            "published_at": str(release["published_at"]), "published_by": str(release["release_owner"])})
+        return current
+
+    def _record_release_publication(self, release: dict[str, Any], current: dict[str, Any]) -> None:
+        if not self._local_ledger_has_release(str(release["release_id"])):
+            append_event(self._ledger_path, event_type="release_published", object_id=str(release["snapshot_id"]),
+                object_version=str(current.get("version") or ""), actor=str(release["release_owner"]),
+                details={"release_id": str(release["release_id"]), "release_version": str(release["release_version"]),
+                    "published_object_ids": sorted(str(row["object_id"]) for row in release["objects"]),
+                    "source_sha256": str(release["source_sha256"]), "authority": "postgres"})
+
+    def _apply_release_state(self, release: dict[str, Any], projection: list[dict[str, Any]]) -> None:
+        """File-topology compatibility; the full PG mixin owns its durable view."""
+        self._apply_local_release_copy(release, projection)
+
+    def _local_ledger_has_release(self, release_id: str) -> bool:
+        if not self._ledger_path.is_file(): return False
+        for line in self._ledger_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip(): continue
+            try: event = json.loads(line)
+            except json.JSONDecodeError: continue
+            if event.get("event_type") == "release_published" and str((event.get("details") or {}).get("release_id") or "") == release_id: return True
+        return False
+
+    def _apply_local_release_copy(self, release: dict[str, Any], projection: list[dict[str, Any]]) -> None:
+        if not self._startup_local_mirror_is_authority(self._envelopes_path):
+            # Legacy private callers must use the PG authority path as well.
+            return self._apply_release_state(release, projection)
+        snapshot_id, release_id = str(release["snapshot_id"]), str(release["release_id"])
+        projection_path = self._published_projection_path(); manifest_path = self.runtime / RELEASE_MANIFEST_DIRNAME / f"{release_id}.json"
+        prior_projection = self._read_optional(projection_path); prior_manifest = self._read_optional(manifest_path); prior_envelopes = self._read_optional(self._envelopes_path); prior_ledger = self._read_optional(self._ledger_path); prior_envelope_map = deepcopy(self._envelopes)
+        try:
+            _atomic_write(manifest_path, self._manifest_from_release(release)); atomic_replace_projection(projection_path, projection)
+            current = self._release_envelope(release)
+            self._envelopes[snapshot_id] = current; _atomic_write(self._envelopes_path, self._envelopes)
+            self._record_release_publication(release, current)
+        except Exception:
+            self._restore_optional(projection_path, prior_projection); self._restore_optional(manifest_path, prior_manifest); self._restore_optional(self._envelopes_path, prior_envelopes); self._restore_optional(self._ledger_path, prior_ledger); self._envelopes = prior_envelope_map; raise
+
+    def _durable_release_for_snapshot(self, snapshot_id: str) -> dict[str, Any] | None:
+        store = self.canonical_publication_store
+        if store is None: return None
+        try:
+            release = store.release_for_snapshot(snapshot_id)
+            if release is not None and isinstance(store, PostgresCanonicalPublicationStore):
+                release = deepcopy(release)
+                release["release_status"] = self.document_release_serving_status(snapshot_id)["release_status"]
+            return release
+        except CanonicalPublicationStoreError as exc: raise ConsoleError("durable_publication_lookup_failed", str(exc)) from exc
+
+    def document_release_serving_status(
+        self,
+        snapshot_id: str,
+        *,
+        envelope: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """Derive release history and serving eligibility from canonical tables only."""
+        store = self.canonical_publication_store
+        if store is None:
+            return super().document_release_serving_status(
+                snapshot_id,
+                envelope=envelope,
+            )
+        if not snapshot_id:
+            raise ConsoleError("canonical_snapshot_id_required")
+        try:
+            with store._connect() as con:
+                release = con.execute(
+                    """
+                    SELECT rel.release_id, rel.status, rel.published_at,
+                           ev.details->>'logical_document_id' AS logical_document_id
+                    FROM audit_events ev
+                    JOIN publication_releases rel ON rel.release_id=ev.entity_id
+                    WHERE ev.entity_type='release'
+                      AND ev.event_type='release_published'
+                      AND ev.details->>'snapshot_id'=%s
+                    ORDER BY rel.published_at DESC
+                    LIMIT 1
+                    """,
+                    (snapshot_id,),
+                ).fetchone()
+                if not release:
+                    return {"release_status": "none", "serving_status": "inactive"}
+
+                release_id = str(release["release_id"])
+                release_status = str(release["status"] or "")
+                release_published_at = release["published_at"]
+                logical_document_id = str(release.get("logical_document_id") or "")
+                if release_status == "withdrawn":
+                    return {"release_status": "withdrawn", "serving_status": "inactive"}
+                if release_status != "published":
+                    raise CanonicalPublicationStoreError("canonical_release_status_invalid")
+
+                counts = con.execute(
+                    """
+                    SELECT COUNT(*) AS item_count,
+                           COUNT(*) FILTER (
+                               WHERE r.state='active'
+                                 AND r.release_id=i.release_id
+                                 AND r.object_version=i.object_version
+                           ) AS active_same_release,
+                           COUNT(*) FILTER (
+                               WHERE r.state='active'
+                                 AND r.release_id<>i.release_id
+                           ) AS active_other_release
+                    FROM publication_release_items i
+                    LEFT JOIN publication_registry r ON r.object_id=i.object_id
+                    WHERE i.release_id=%s
+                    """,
+                    (release_id,),
+                ).fetchone()
+                if not counts or int(counts["item_count"] or 0) <= 0:
+                    raise CanonicalPublicationStoreError("canonical_release_items_missing")
+                item_count = int(counts["item_count"])
+                active_same = int(counts["active_same_release"] or 0)
+                active_other = int(counts["active_other_release"] or 0)
+                if active_same == item_count:
+                    return {"release_status": "published", "serving_status": "active"}
+                if active_same == 0 and logical_document_id:
+                    later_release = con.execute(
+                        """
+                        SELECT 1
+                        FROM audit_events ev
+                        JOIN publication_releases rel ON rel.release_id=ev.entity_id
+                        WHERE ev.entity_type='release'
+                          AND ev.event_type='release_published'
+                          AND rel.release_id<>%s
+                          AND ev.details->>'logical_document_id'=%s
+                          AND rel.published_at>%s
+                        LIMIT 1
+                        """,
+                        (release_id, logical_document_id, release_published_at),
+                    ).fetchone()
+                    if later_release:
+                        return {"release_status": "superseded", "serving_status": "inactive"}
+                if active_same == 0 and active_other == item_count:
+                    return {"release_status": "superseded", "serving_status": "inactive"}
+                return {"release_status": "published", "serving_status": "inactive"}
+        except CanonicalPublicationStoreError as exc:
+            raise ConsoleError("durable_lifecycle_status_read_failed", str(exc)) from exc
+        except Exception as exc:
+            raise ConsoleError("durable_lifecycle_status_read_failed", str(exc)) from exc
+
+    def snapshot_is_published(self, snapshot_id: str) -> bool:
+        """Return durable publication history from the configured authority.
+
+        When the canonical PostgreSQL store is configured, it is the exclusive
+        publication authority. Stale local envelope/object/projection state may
+        not manufacture publication truth when the authority has no release.
+        """
+        if self.canonical_publication_store is not None:
+            return self._durable_release_for_snapshot(snapshot_id) is not None
+        return super().snapshot_is_published(snapshot_id)
+
+    def _sync_snapshot_from_authority(self, snapshot_id: str) -> dict[str, Any] | None:
+        release = self._durable_release_for_snapshot(snapshot_id)
+        if release is None: return None
+        self._apply_release_state(release, self._validate_publication_state()); return release
+
+    def withdraw_document(
+        self, *, actor_id: str, snapshot_id: str, expected_release_id: str, reason: str,
+    ) -> dict[str, Any]:
+        """Commit withdrawal first; a failed projection cannot undo that decision."""
+        with self._store_write_lock():
+            self._reload_store_locked()
+            account = self._require_role(actor_id, "publisher")
+            store = self.canonical_publication_store
+            if store is None:
+                raise ConsoleError("durable_publication_store_required")
+            if not str(expected_release_id or "").strip():
+                raise ConsoleError("canonical_expected_release_required")
+            release = self._durable_release_for_snapshot(snapshot_id)
+            if release is None or release["release_id"] != expected_release_id:
+                raise ConsoleError("canonical_expected_release_changed")
+            try:
+                result = store.withdraw_logical_document(
+                    logical_document_id=str(release.get("logical_document_id") or ""),
+                    expected_release_id=expected_release_id,
+                    actor=str(account["username"]),
+                    reason=reason,
+                    withdrawn_at=datetime.now(timezone.utc).isoformat(),
+                )
+            except CanonicalPublicationStoreError as exc:
+                raise ConsoleError(str(exc)) from exc
+            try:
+                self._sync_snapshot_from_authority(snapshot_id)
+            except Exception:
+                return {**result, "projection_status": "pending"}
+            return {**result, "projection_status": "current"}
+
+    def _publish_locked(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
+        store = self.canonical_publication_store
+        if store is None: return super()._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id)
+        self._require_role(actor_id, "publisher")
+        existing = self._sync_snapshot_from_authority(snapshot_id)
+        if existing is not None:
+            release_status = str(existing.get("release_status") or "")
+            if release_status in _HISTORICAL_RELEASE_STATES:
+                return {
+                    "status": "BLOCKED",
+                    "state": release_status,
+                    "snapshot_id": snapshot_id,
+                    "release_id": str(existing["release_id"]),
+                    "release_version": str(existing["release_version"]),
+                    "blockers": [f"release_{release_status}"],
+                    "g2": "PASS",
+                    "cutover": False,
+                    "canonical_authority": "postgres",
+                    "local_projection": "reconciled",
+                }
+            return {"status":"PASS","state":"published","snapshot_id":snapshot_id,"release_id":str(existing["release_id"]),"release_version":str(existing["release_version"]),"published_items":len(existing["objects"]),"g2":"PASS","cutover":True,"canonical_authority":"postgres","local_projection":"reconciled"}
+        considered = self.consider_publish(actor_id=actor_id, snapshot_id=snapshot_id); envelope = self._envelope(snapshot_id)
+        # Capture the existing gate result under the existing publication lock.
+        # Optional telemetry is never a commit or a second readiness authority.
+        try: evidence_revision = self.objects_revision(snapshot_id)
+        except Exception: evidence_revision = None
+        observe_publication('publication_checked', snapshot_id=snapshot_id, envelope=envelope,
+                            revision=evidence_revision, readiness=considered)
+        _publish_refusal_audit.record_publish_refusal(self, actor_id=actor_id, snapshot_id=snapshot_id, verdict=considered, revision=evidence_revision)
+        if not considered.get("publish_allowed"): return {"status":"BLOCKED","state":envelope["state"],"snapshot_id":snapshot_id,"blockers":considered.get("blockers") or ["object_tuple_required"],"g2":considered.get("g2","BLOCKED"),"cutover":False}
+        account = self._require_role(actor_id, "publisher"); publish_ids = set(considered["publishable_object_ids"]); objects = [deepcopy(obj) for obj in self.snapshot_objects(snapshot_id) if obj.get("object_id") in publish_ids]
+        logical_document_id = str(envelope.get("logical_document_id") or "")
+        working_revision_id = str(envelope.get("working_revision_id") or "")
+        # Preserve enough precision that two valid releases in one wall-clock second remain ordered.
+        published_at = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+        release_id = f"release-{uuid.uuid4().hex}"; release_version = f"{envelope['version']}-{release_id[-8:]}"
+        _candidate_projection, blocked = build_projection([{"knowledge_object":deepcopy(obj),"publication":{"release_id":release_id,"release_version":release_version,"published_at":published_at}} for obj in objects])
+        if blocked: return {"status":"BLOCKED","state":envelope["state"],"snapshot_id":snapshot_id,"blockers":["prepublication_projection_failed"],"projection_errors":blocked,"g2":"PASS","cutover":False}
+        from src.decision_graph_v1 import release_graph
+        graph_args = {"decision_graph_release": release_graph(envelope, self.snapshot_objects(snapshot_id))} if "decision_graph" in envelope else {}
+        observe_publication('publication_submitted', snapshot_id=snapshot_id, envelope=envelope,
+                            revision=evidence_revision, release_id=release_id, objects=objects)
+        try: store.persist_published_release(**graph_args,logical_document_id=logical_document_id,working_revision_id=working_revision_id,snapshot_id=snapshot_id,source_sha256=str(envelope.get("sha256") or ""),source_locator=str(envelope.get("immutable_storage_locator") or ""),release_id=release_id,release_version=release_version,release_owner=str(account["username"]),published_at=published_at,objects=objects)
+        except CanonicalPublicationStoreError as exc: raise ConsoleError("durable_publication_store_failed", str(exc)) from exc
+        release = self._durable_release_for_snapshot(snapshot_id)
+        if release is None or str(release.get("release_id") or "") != release_id: raise ConsoleError("durable_publication_commit_not_readable")
+        observe_publication('publication_committed', snapshot_id=snapshot_id, envelope=envelope,
+                            revision=evidence_revision, release_id=release_id)
+        try: projection = self._validate_publication_state(); self._apply_release_state(release, projection)
+        except Exception as exc: raise ConsoleError("durable_publication_local_copy_failed", str(exc)) from exc
+        observe_publication('publication_completed', snapshot_id=snapshot_id, envelope=envelope,
+                            revision=evidence_revision, release_id=release_id)
+        return {"status":"PASS","state":"published","snapshot_id":snapshot_id,"release_id":release_id,"release_version":release_version,"published_items":len(objects),"g2":"PASS","cutover":True,"canonical_authority":"postgres","local_projection":"derived"}
+
+    def reconcile_durable_publications(self) -> dict[str, int]:
+        store = self.canonical_publication_store
+        if store is None: return {"checked":0,"reconciled":0}
+        checked = 0; releases: list[dict[str, Any]] = []
+        for envelope in self.list_envelopes():
+            checked += 1; release = self._durable_release_for_snapshot(str(envelope["snapshot_id"]));
+            if release is not None: releases.append(release)
+        projection = self._validate_publication_state()
+        if not releases:
+            if self._startup_local_mirror_is_authority(self._envelopes_path):
+                atomic_replace_projection(self._published_projection_path(), projection)
+            return {"checked": checked, "reconciled": 0}
+        releases.sort(key=lambda row: str(row.get("published_at") or ""))
+        for release in releases: self._apply_release_state(release, projection)
+        return {"checked":checked,"reconciled":len(releases)}

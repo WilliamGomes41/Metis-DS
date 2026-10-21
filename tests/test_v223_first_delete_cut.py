@@ -1,0 +1,91 @@
+"""Code-surface cleanup: obsolete zero-caller modules stay deleted; fixtures remain."""
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+from __future__ import annotations
+
+import hashlib
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+DELETED = (
+    "extract_pdf.py",
+    "semantic_transform.py",
+    "validation_workflow.py",
+    "build_second_review_queue.py",
+    "pre_step5_gate.py",
+    "import_expert_validation.py",
+    "reconcile_legacy_review.py",
+    "evaluate_safe_retrieval.py",
+    "build_retrieval_document.py",
+    "semantic_transform_v2.py",
+    "semantic_transform_v21.py",
+    "prepublication_gate_v2.py",
+    "validation_workflow_v2.py",
+    "apply_second_review.py",
+)
+
+KEPT = (
+    "canonical_store.py",
+    "service_app.py",
+    "product_api_v1.py",
+    "semantic_transform_generic_v1.py",
+    "extract_pdf_v2.py",
+    "extract_html_v1.py",
+    "prepublication_gate_v3.py",
+    "operations_console_v1.py",
+    "operations_console_app.py",
+    "context_aware_split_v1.py",
+    "object_taxonomy_v1.py",
+    "four_eyes_v1.py",
+    "serving_relations_v1.py",
+    "g2_source_store.py",
+    "integrity_kernel.py",
+    "build_review_queue_v3.py",
+)
+
+FIXTURE = ROOT / "data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl"
+RAW = ROOT / "data/fixtures/baseline_v0_1/fractuurpreventie_page15_raw.jsonl"
+SPRINT = ROOT / "scripts/run_integrity_sprint.sh"
+
+
+def test_obsolete_zero_caller_modules_are_gone() -> None:
+    for name in DELETED:
+        assert not (ROOT / "src" / name).exists(), name
+
+
+def test_v223_keep_list_and_live_ingest_remain() -> None:
+    for name in KEPT:
+        assert (ROOT / "src" / name).is_file(), name
+
+
+def test_v223_integrity_sprint_uses_committed_fixtures_not_v21() -> None:
+    text = SPRINT.read_text(encoding="utf-8")
+    assert "python -m src.semantic_transform_v21" not in text
+    assert "python -m src.semantic_transform_v2" not in text
+    assert "python -m src.semantic_transform_generic_v1" not in text
+    assert "data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl" in text
+    assert "data/fixtures/baseline_v0_1/fractuurpreventie_page15_raw.jsonl" in text
+    assert FIXTURE.is_file() and FIXTURE.stat().st_size > 0
+    assert RAW.is_file() and RAW.stat().st_size > 0
+    assert "Do not merge v2/v21/generic" in text
+
+
+def test_v223_does_not_recreate_handoff() -> None:
+    assert not (ROOT / "HANDOFF.md").exists()
+
+
+def test_step10_archives_exact_source_without_active_entrypoints() -> None:
+    archived = {
+        "build_synthetic_fixture.py.txt": "badc507fbb42668a24b0b1cf771af322c42bec1c",
+        "run_step10_checks.sh.txt": "04510f6f10460e344818f85dde353933669d37d8",
+    }
+    for name, expected_blob_sha in archived.items():
+        payload = (ROOT / "docs/history/step10-code" / name).read_bytes()
+        git_blob = b"blob " + str(len(payload)).encode("ascii") + bytes([0]) + payload
+        assert hashlib.sha1(git_blob).hexdigest() == expected_blob_sha
+
+    assert not (ROOT / "src/build_synthetic_fixture.py").exists()
+    assert not (ROOT / "scripts/run_step10_checks.sh").exists()

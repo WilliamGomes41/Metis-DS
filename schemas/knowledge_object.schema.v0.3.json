@@ -1,0 +1,338 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://venvn.nl/schemas/knowledge_object.schema.v0.3.json",
+  "title": "V&VN Knowledge Object v0.3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "object_id",
+    "document_id",
+    "object_type",
+    "source",
+    "structure",
+    "content",
+    "governance"
+  ],
+  "properties": {
+    "object_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "document_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "parent_object_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "object_type": {
+      "type": "string",
+      "enum": [
+        "section",
+        "recommendation",
+        "decision",
+        "action",
+        "condition",
+        "definition",
+        "score_rule",
+        "table",
+        "background",
+        "patient_information"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "publisher",
+        "source_url",
+        "source_type"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "web",
+            "pdf",
+            "docx",
+            "interactive_tree"
+          ]
+        },
+        "publication_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_page": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      }
+    },
+    "structure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "section_path"
+      ],
+      "properties": {
+        "section_path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "heading": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sequence": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "content": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "raw_text",
+        "clean_text"
+      ],
+      "properties": {
+        "raw_text": {
+          "type": "string"
+        },
+        "clean_text": {
+          "type": "string"
+        },
+        "context_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target_group": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "care_setting": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "topic": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "logic": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "condition": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "operator": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "eq",
+            "neq",
+            "gt",
+            "gte",
+            "lt",
+            "lte",
+            "in",
+            "and",
+            "or",
+            null
+          ]
+        },
+        "threshold": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ]
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "score_points": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "branches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "label",
+              "target_object_id"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "target_object_id": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "validation_status"
+      ],
+      "properties": {
+        "validation_status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "machine_processed",
+            "needs_review",
+            "approved",
+            "rejected",
+            "superseded"
+          ]
+        },
+        "validated_by": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "validation_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "valid_from": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "valid_until": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        }
+      }
+    },
+    "technical": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "parser_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "chunk_method": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "embedding_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "embedding_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_spec_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_extract_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "transform_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

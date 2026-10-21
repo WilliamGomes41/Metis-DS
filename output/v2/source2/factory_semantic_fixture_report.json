@@ -1,0 +1,6 @@
+{
+  "status": "PASS",
+  "object_count": 4,
+  "schema_errors": [],
+  "out": "output/v2/source2/factory_semantic_fixture.jsonl"
+}

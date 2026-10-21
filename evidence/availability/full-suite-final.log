@@ -1,0 +1,434 @@
+...ssss...................................sssssssssssssss............... [  2%]
+......................................ss................................ [  4%]
+.........................................s.s.s.s..s..................... [  6%]
+................F......ssssss.ss...ss................................... [  8%]
+............ss...............s..........sssss.sss....................... [ 10%]
+...........sssss........................................................ [ 13%]
+........................................................................ [ 15%]
+........................................................................ [ 17%]
+......................................................s....sss......ssss [ 19%]
+s...s..ss...............s..sss.....s.................................... [ 21%]
+............ssssssssssss................................................ [ 24%]
+........................................................................ [ 26%]
+........................................................................ [ 28%]
+................sss................ssssssss.........ss.................. [ 30%]
+.........s........ss.................................................... [ 32%]
+..............ss...........................................sssssssssssss [ 35%]
+ss..s................................................................... [ 37%]
+........................................................................ [ 39%]
+........................................................................ [ 41%]
+........................................................................ [ 43%]
+........................................................................ [ 46%]
+........................................................................ [ 48%]
+........................................................................ [ 50%]
+................................................................s.s..... [ 52%]
+.s.s........................s........................................... [ 54%]
+....................s...........s..............................s.s.s..ss [ 57%]
+s..s...............ss......................s............................ [ 59%]
+....................FFF....................s............................ [ 61%]
+..........s............................................................. [ 63%]
+.....ss.............s..........sss...s.................................. [ 65%]
+........................................................................ [ 67%]
+........................................................................ [ 70%]
+sssss........................................................ss.ssssss.. [ 72%]
+........................................................................ [ 74%]
+.......................................................s................ [ 76%]
+........................................................................ [ 78%]
+........................................................................ [ 81%]
+........................................................................ [ 83%]
+........................................................................ [ 85%]
+........................................................................ [ 87%]
+........................................................................ [ 89%]
+........................................................................ [ 92%]
+........................................................................ [ 94%]
+...............ssss.s................................................... [ 96%]
+.....sssssssssssssssss......ssss.ssssssss...............s............... [ 98%]
+.ssssssss........................sssss.ssss                              [100%]
+=================================== FAILURES ===================================
+____________ test_parent_process_death_terminates_transport_worker _____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f307e235250>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-20/test_parent_process_death_term0')
+
+    def test_parent_process_death_terminates_transport_worker(monkeypatch,tmp_path):
+        env={**os.environ,'NO_PROXY':'127.0.0.1'}
+        with peer(delay=5) as (url,received):
+            code='from src.bounded_model_call_v1 import *;post_json('+repr(url)+',{}, {},ModelCallLimits(connect=2,idle=30,total=30))'
+            process=subprocess.Popen([sys.executable,'-c',code],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            try:
+                assert received.wait(5)
+                assert process.poll() is None, "transport parent exited before test kill"
+                children=[]
+                for stat in Path("/proc").glob("[0-9]*/stat"):
+                    try:
+                        fields=stat.read_text().rsplit(") ",1)[1].split()
+                        if int(fields[1])==process.pid:children.append(stat.parent.name)
+                    except (FileNotFoundError,ProcessLookupError):pass
+>               assert len(children)==1
+E               assert 0 == 1
+E                +  where 0 = len([])
+
+tests/test_bounded_model_transport.py:73: AssertionError
+_________ test_ssrf_https_sni_stays_original_hostname_when_dns_rebinds _________
+
+self = <src.ingest_limits_v1._PinnedHTTPSHandler object at 0x7f307d7723c0>
+http_class = <function _PinnedHTTPSHandler.https_open.<locals>.https_class at 0x7f307ddaf060>
+req = <urllib.request.Request object at 0x7f307d771ee0>
+http_conn_args = {'context': <ssl.SSLContext object at 0x7f307ff38e50>}
+host = '127.0.0.1:37113'
+h = <src.ingest_limits_v1._PinnedHTTPSConnection object at 0x7f307d770b90>
+headers = {'Connection': 'close', 'Host': 'rebind.example.test:43467', 'User-Agent': 'vvn-operations-console/1.0'}
+
+    def do_open(self, http_class, req, **http_conn_args):
+        """Return an HTTPResponse object for the request, using http_class.
+
+        http_class must implement the HTTPConnection API from http.client.
+        """
+        host = req.host
+        if not host:
+            raise URLError('no host given')
+
+        # will parse host:port
+        h = http_class(host, timeout=req.timeout, **http_conn_args)
+        h.set_debuglevel(self._debuglevel)
+
+        headers = dict(req.unredirected_hdrs)
+        headers.update({k: v for k, v in req.headers.items()
+                        if k not in headers})
+
+        # TODO(jhylton): Should this be redesigned to handle
+        # persistent connections?
+
+        # We want to make an HTTP/1.1 request, but the addinfourl
+        # class isn't prepared to deal with a persistent connection.
+        # It will try to read all remaining data from the socket,
+        # which will block while the server waits for the next request.
+        # So make sure the connection gets closed after the (only)
+        # request.
+        headers["Connection"] = "close"
+        headers = {name.title(): val for name, val in headers.items()}
+
+        if req._tunnel_host:
+            tunnel_headers = {}
+            proxy_auth_hdr = "Proxy-Authorization"
+            if proxy_auth_hdr in headers:
+                tunnel_headers[proxy_auth_hdr] = headers[proxy_auth_hdr]
+                # Proxy-Authorization should not be sent to origin
+                # server.
+                del headers[proxy_auth_hdr]
+            h.set_tunnel(req._tunnel_host, headers=tunnel_headers)
+
+        try:
+            try:
+>               h.request(req.get_method(), req.selector, req.data, headers,
+                          encode_chunked=req.has_header('Transfer-encoding'))
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/urllib/request.py:1344:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/http/client.py:1386: in request
+    self._send_request(method, url, body, headers, encode_chunked)
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/http/client.py:1432: in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/http/client.py:1381: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/http/client.py:1141: in _send_output
+    self.send(msg)
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/http/client.py:1085: in send
+    self.connect()
+src/ingest_limits_v1.py:201: in connect
+    self._tunnel()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <src.ingest_limits_v1._PinnedHTTPSConnection object at 0x7f307d770b90>
+
+    def _tunnel(self):
+        if _contains_disallowed_url_pchar_re.search(self._tunnel_host):
+            raise ValueError('Tunnel host can\'t contain control characters %r'
+                             % (self._tunnel_host,))
+        connect = b"CONNECT %s:%d %s\r\n" % (
+            self._wrap_ipv6(self._tunnel_host.encode("idna")),
+            self._tunnel_port,
+            self._http_vsn_str.encode("ascii"))
+        headers = [connect]
+        for header, value in self._tunnel_headers.items():
+            header_bytes = header.encode("latin-1")
+            value_bytes = value.encode("latin-1")
+            if not _is_legal_header_name(header_bytes):
+                raise ValueError('Invalid header name %r' % (header_bytes,))
+            if _is_illegal_header_value(value_bytes):
+                raise ValueError('Invalid header value %r' % (value_bytes,))
+            headers.append(b"%s: %s\r\n" % (header_bytes, value_bytes))
+        headers.append(b"\r\n")
+        # Making a single send() call instead of one per line encourages
+        # the host OS to use a more optimal packet size instead of
+        # potentially emitting a series of small packets.
+        self.send(b"".join(headers))
+        del headers
+
+        response = self.response_class(self.sock, method=self._method)
+        try:
+            (version, code, message) = response._read_status()
+
+            self._raw_proxy_headers = _read_headers(response.fp)
+
+            if self.debuglevel > 0:
+                for header in self._raw_proxy_headers:
+                    print('header:', header.decode())
+
+            if code != http.HTTPStatus.OK:
+                self.close()
+>               raise OSError(f"Tunnel connection failed: {code} {message.strip()}")
+E               OSError: Tunnel connection failed: 501 Unsupported method ('CONNECT')
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/http/client.py:1029: OSError
+
+During handling of the above exception, another exception occurred:
+
+url = 'https://rebind.example.test:43467/doc.pdf'
+
+    def fetch_url_limited(url: str) -> tuple[bytes, str, str]:
+        """GET ``url`` after SSRF checks, with Content-Length and streamed-body size checks."""
+        pin = _DestinationPin(pin_url_destination(url))
+        parsed = urllib.parse.urlparse(url)
+        limit = ingest_max_bytes()
+        request = urllib.request.Request(
+            url,
+            method="GET",
+            headers={"User-Agent": "vvn-operations-console/1.0"},
+        )
+        opener = urllib.request.build_opener(
+            IngestRedirectHandler(pin),
+            _PinnedHTTPHandler(pin),
+            _PinnedHTTPSHandler(pin),
+        )
+        try:
+>           with opener.open(request, timeout=30) as response:
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+src/ingest_limits_v1.py:276:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/urllib/request.py:515: in open
+    response = self._open(req, data)
+               ^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/urllib/request.py:532: in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/urllib/request.py:492: in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+src/ingest_limits_v1.py:243: in https_open
+    return self.do_open(https_class, req, context=self._context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <src.ingest_limits_v1._PinnedHTTPSHandler object at 0x7f307d7723c0>
+http_class = <function _PinnedHTTPSHandler.https_open.<locals>.https_class at 0x7f307ddaf060>
+req = <urllib.request.Request object at 0x7f307d771ee0>
+http_conn_args = {'context': <ssl.SSLContext object at 0x7f307ff38e50>}
+host = '127.0.0.1:37113'
+h = <src.ingest_limits_v1._PinnedHTTPSConnection object at 0x7f307d770b90>
+headers = {'Connection': 'close', 'Host': 'rebind.example.test:43467', 'User-Agent': 'vvn-operations-console/1.0'}
+
+    def do_open(self, http_class, req, **http_conn_args):
+        """Return an HTTPResponse object for the request, using http_class.
+
+        http_class must implement the HTTPConnection API from http.client.
+        """
+        host = req.host
+        if not host:
+            raise URLError('no host given')
+
+        # will parse host:port
+        h = http_class(host, timeout=req.timeout, **http_conn_args)
+        h.set_debuglevel(self._debuglevel)
+
+        headers = dict(req.unredirected_hdrs)
+        headers.update({k: v for k, v in req.headers.items()
+                        if k not in headers})
+
+        # TODO(jhylton): Should this be redesigned to handle
+        # persistent connections?
+
+        # We want to make an HTTP/1.1 request, but the addinfourl
+        # class isn't prepared to deal with a persistent connection.
+        # It will try to read all remaining data from the socket,
+        # which will block while the server waits for the next request.
+        # So make sure the connection gets closed after the (only)
+        # request.
+        headers["Connection"] = "close"
+        headers = {name.title(): val for name, val in headers.items()}
+
+        if req._tunnel_host:
+            tunnel_headers = {}
+            proxy_auth_hdr = "Proxy-Authorization"
+            if proxy_auth_hdr in headers:
+                tunnel_headers[proxy_auth_hdr] = headers[proxy_auth_hdr]
+                # Proxy-Authorization should not be sent to origin
+                # server.
+                del headers[proxy_auth_hdr]
+            h.set_tunnel(req._tunnel_host, headers=tunnel_headers)
+
+        try:
+            try:
+                h.request(req.get_method(), req.selector, req.data, headers,
+                          encode_chunked=req.has_header('Transfer-encoding'))
+            except OSError as err: # timeout error
+>               raise URLError(err)
+E               urllib.error.URLError: <urlopen error Tunnel connection failed: 501 Unsupported method ('CONNECT')>
+
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/urllib/request.py:1347: URLError
+
+The above exception was the direct cause of the following exception:
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f307d56d220>
+
+    def test_ssrf_https_sni_stays_original_hostname_when_dns_rebinds(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """TLS hostname/SNI MUST stay the original name, not the pinned IP."""
+        recorded_sni: list[str | None] = []
+
+        def spy_wrap(self, sock, *args, server_hostname=None, **kwargs):  # noqa: ANN001
+            recorded_sni.append(server_hostname)
+            return sock
+
+        monkeypatch.setattr(ssl.SSLContext, "wrap_socket", spy_wrap)
+        server, handler = _serve_pdf()
+        connect_log: list[str] = []
+        try:
+            port = server.server_port
+            _install_alternating_dns(
+                monkeypatch,
+                answers={REBIND_HOST: [PUBLIC_PIN_A, PRIVATE_REBIND]},
+                connect_log=connect_log,
+                local_port=port,
+            )
+>           data, content_type, _filename = default_url_fetcher(
+                f"https://{REBIND_HOST}:{port}/doc.pdf"
+            )
+
+tests/test_security_harden_wave3.py:654:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/operations_console_v1.py:591: in default_url_fetcher
+    return fetch_url_limited(url)
+           ^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+url = 'https://rebind.example.test:43467/doc.pdf'
+
+    def fetch_url_limited(url: str) -> tuple[bytes, str, str]:
+        """GET ``url`` after SSRF checks, with Content-Length and streamed-body size checks."""
+        pin = _DestinationPin(pin_url_destination(url))
+        parsed = urllib.parse.urlparse(url)
+        limit = ingest_max_bytes()
+        request = urllib.request.Request(
+            url,
+            method="GET",
+            headers={"User-Agent": "vvn-operations-console/1.0"},
+        )
+        opener = urllib.request.build_opener(
+            IngestRedirectHandler(pin),
+            _PinnedHTTPHandler(pin),
+            _PinnedHTTPSHandler(pin),
+        )
+        try:
+            with opener.open(request, timeout=30) as response:
+                declared = response.headers.get("Content-Length")
+                if declared is not None and str(declared).strip():
+                    try:
+                        enforce_ingest_payload_size(int(declared), limit=limit)
+                    except ValueError:
+                        pass
+                chunks: list[bytes] = []
+                total = 0
+                while True:
+                    chunk = response.read(_READ_CHUNK)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    enforce_ingest_payload_size(total, limit=limit)
+                    chunks.append(chunk)
+                data = b"".join(chunks)
+                content_type = str(response.headers.get("Content-Type") or "")
+        except ConsoleError:
+            raise
+        except (urllib.error.URLError, TimeoutError, ValueError, OSError) as exc:
+>           raise ConsoleError("url_snapshot_failed") from exc
+E           src.operations_console_v1.ConsoleError: url_snapshot_failed
+
+src/ingest_limits_v1.py:297: ConsoleError
+________________ test_ssrf_redirect_hop_revalidates_and_rebinds ________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f307dfa5f10>
+
+    def test_ssrf_redirect_hop_revalidates_and_rebinds(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Each redirect hop is resolved, validated, and bound again."""
+        server, handler = _serve_pdf()
+        connect_log: list[str] = []
+        try:
+            port = server.server_port
+            handler.redirect_to = f"http://{HOP_HOST}:{port}/doc.pdf"
+            _install_alternating_dns(
+                monkeypatch,
+                answers={
+                    REBIND_HOST: [PUBLIC_PIN_A],
+                    HOP_HOST: [PUBLIC_PIN_B, PRIVATE_REBIND],
+                },
+                connect_log=connect_log,
+                local_port=port,
+            )
+            data, _content_type, _filename = default_url_fetcher(
+                f"http://{REBIND_HOST}:{port}/start"
+            )
+            assert data == PDF_BODY
+            assert PUBLIC_PIN_A in connect_log
+>           assert PUBLIC_PIN_B in connect_log
+E           AssertionError: assert '1.1.1.1' in ['8.8.8.8']
+
+tests/test_security_harden_wave3.py:693: AssertionError
+________ test_ssrf_redirect_from_pinned_public_to_metadata_is_rejected _________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f307d772f30>
+
+    def test_ssrf_redirect_from_pinned_public_to_metadata_is_rejected(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A hop whose Location is metadata/private MUST fail closed."""
+        server, handler = _serve_pdf()
+        connect_log: list[str] = []
+        try:
+            port = server.server_port
+            handler.redirect_to = "http://169.254.169.254/latest/meta-data"
+            _install_alternating_dns(
+                monkeypatch,
+                answers={REBIND_HOST: [PUBLIC_PIN_A]},
+                connect_log=connect_log,
+                local_port=port,
+            )
+>           with pytest.raises(ConsoleError) as caught:
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE <class 'src.operations_console_v1.ConsoleError'>
+
+tests/test_security_harden_wave3.py:719: Failed
+=============================== warnings summary ===============================
+../../fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/testclient.py:45
+  /workspace/scratch/fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/starlette/testclient.py:45: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/test_product_api_consumer_contract_v1.py:16
+tests/test_product_api_consumer_contract_v1.py:16
+  /workspace/scratch/3bac53626d42/metis/tests/test_product_api_consumer_contract_v1.py:16: DeprecationWarning: jsonschema.RefResolver is deprecated as of v4.18.0, in favor of the https://github.com/python-jsonschema/referencing library, which provides more compliant referencing behavior as well as more flexible APIs for customization. A future release will remove RefResolver. Please file a feature request (on referencing) if you are missing an API for the kind of customization you need.
+    from jsonschema import Draft202012Validator, RefResolver
+
+tests/test_console_entra_v1.py::test_real_msal_code_exchange_binds_nonce_state_and_pkce
+  /workspace/scratch/fd3afbf63d85/implementation-venv/lib/python3.12/site-packages/msal/oauth2cli/oauth2.py:453: UserWarning: response_mode='form_post' is recommended for better security. See https://www.rfc-editor.org/rfc/rfc9700.html#section-4.3.1
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_bounded_model_transport.py::test_parent_process_death_terminates_transport_worker
+FAILED tests/test_security_harden_wave3.py::test_ssrf_https_sni_stays_original_hostname_when_dns_rebinds
+FAILED tests/test_security_harden_wave3.py::test_ssrf_redirect_hop_revalidates_and_rebinds
+FAILED tests/test_security_harden_wave3.py::test_ssrf_redirect_from_pinned_public_to_metadata_is_rejected
+4 failed, 3072 passed, 207 skipped, 4 warnings in 232.03s (0:03:52)

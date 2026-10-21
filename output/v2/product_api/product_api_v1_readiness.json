@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "product_api_version": "v1",
+  "service_version": "product-api-v1.0.0",
+  "regression_tests": 89,
+  "aggregate_coverage_percent": 84,
+  "auth": "tenant bearer API key; SHA-256 hash at rest",
+  "entitlement_enforcement": "before retrieval",
+  "query_plaintext_logged": false,
+  "rate_limiting": "in-process sliding window pilot",
+  "usage_metering": "SQLite pilot ledger",
+  "generation_enabled": false,
+  "real_mode_published_records": 0,
+  "real_mode_expected_behavior": "abstain until published corpus exists",
+  "fixture_mode_requires_explicit_override": true,
+  "external_endpoints": [
+    "GET /v1/health",
+    "POST /v1/retrieve",
+    "GET /v1/knowledge/{object_id}",
+    "GET /v1/documents",
+    "GET /v1/documents/{document_id}",
+    "GET /v1/updates",
+    "GET /v1/usage"
+  ],
+  "production_blockers": [
+    "clinical/source publication gate not complete",
+    "distributed auth/rate-limit backend not deployed",
+    "Azure deployment not yet implemented"
+  ]
+}

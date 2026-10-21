@@ -1,0 +1,53 @@
+{
+  "api_version": "v1",
+  "service_version": "product-api-v1.1.0",
+  "synthetic_fixture": true,
+  "status": "retrieve",
+  "answerability": "supported",
+  "reason": "evidence_gate_passed",
+  "false_positive_class": null,
+  "results": [
+    {
+      "knowledge_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-score-01",
+      "object_version": "1.0",
+      "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+      "object_type": "score_rule",
+      "content": "Bron: V&VN Richtlijn Osteoporose en fractuurpreventie\nSectie: Signalering > Aanbevelingen > DOEN\nContext: Signalering > Aanbevelingen > DOEN\nGekoppelde context: Risicofactoren scorelijst\nLeeftijd ≥ 60 jaar -> 1 punt\nVoorwaarde: Leeftijd ≥ 60 jaar\nScore: 1 punt(en)",
+      "structured_logic": {
+        "predicates": [
+          {
+            "field": "score_factor",
+            "operator": "gte",
+            "source_text": "Leeftijd ≥ 60 jaar",
+            "threshold": 60,
+            "unit": "jaar"
+          }
+        ],
+        "result_action": null,
+        "result_threshold": null,
+        "score_points": 1
+      },
+      "source": {
+        "title": "V&VN Richtlijn Osteoporose en fractuurpreventie",
+        "url": "https://kennisplatform.venvn.nl/wp-content/uploads/richtlijnen/VVN-RL-Osteoporose-1.3.pdf",
+        "page": 15,
+        "version": "augustus 2024"
+      },
+      "release": {
+        "release_id": "SYNTHETIC-TEST-ONLY",
+        "release_version": "fixture-v2",
+        "published_at": "2026-08-19T00:00:00Z"
+      },
+      "scores": {
+        "hybrid_rrf": 0.016129032258,
+        "lexical": null,
+        "vector": 0.472680344
+      },
+      "content_hash": "40b346195f6f6da4a63af7067ea70b22e7d67dd35e3ab3ff0a833063b2e00018",
+      "projection_hash": "519247eb99021d120fa42bc80d0524fd85db91b8050bfe71e33f45eaa199dee3"
+    }
+  ],
+  "result_count": 1,
+  "request_id": "7f139d50-377e-4c25-8271-16cf5cfe27f9",
+  "tenant_id": "step12a-smoke"
+}

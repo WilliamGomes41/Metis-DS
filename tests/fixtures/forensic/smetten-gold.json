@@ -1,0 +1,21 @@
+{
+  "gold_version": "forensic-gold-v1",
+  "expected_identity": {
+    "passage_formation_mode": "semantic-source-bound-v3",
+    "deployed_commit": "8007b11d1f662f0151551b6647280d21d0ae9603"
+  },
+  "cases": [
+    {
+      "case_id": "SMETTEN-BG-QUIZ",
+      "source_sha256": "minimal-repro-source-not-production",
+      "source_reconstruction_hash": "minimal-repro-reconstruction-not-production",
+      "source_fragment_ids": ["smetten-quiz"],
+      "start": 0,
+      "end": 111,
+      "expected_source_function": "background",
+      "expected_answer_bearing": false,
+      "expected_object_type": null,
+      "notes": "Known V3 defect. The diagnostic baseline stays RED: background was recorded as explanation. Do not change V3 semantics to make this case PASS."
+    }
+  ]
+}

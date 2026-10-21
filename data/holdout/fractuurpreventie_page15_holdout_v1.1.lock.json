@@ -1,0 +1,12 @@
+{
+  "holdout_file": "data/holdout/fractuurpreventie_page15_holdout_v1.1.json",
+  "sha256": "11070115f3491de8d040f4615f7b2b1facbcd5fd90c92ca8ee0318a60e0b0990",
+  "locked_at": "2026-08-19T18:39:00+02:00",
+  "rule": "No retrieval thresholds, fusion weights, tokenization rules, or query-specific logic may be changed based on this holdout before a new independent holdout is created.",
+  "supersedes_invalid_spec": "v1.0",
+  "engine_configs_frozen": [
+    "config/retrieval_baseline_v1.json",
+    "config/vector_retrieval_v1.json",
+    "config/hybrid_retrieval_v1.json"
+  ]
+}

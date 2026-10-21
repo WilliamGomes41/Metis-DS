@@ -1,0 +1,120 @@
+{
+  "golden_set_id": "v231-wave4-extract-holdout-v0.1",
+  "kind": "extract_quality",
+  "version": "0.1",
+  "status": "locked_holdout",
+  "source_fixture": "multi-source: phase1 admission + source2 + language variation",
+  "scope": "Locked extract holdout beyond retrieval Holdout A/B and Phase-4 fixture gold. Real richtlijn sentences plus language-variation cases. Includes missed knowledge and false admits. MUST NOT tune extract/admission on this set.",
+  "independence": {
+    "independent": true,
+    "representative": true,
+    "phase4_hooks_are_not_this_evidence": true,
+    "not_fixture_gold": true
+  },
+  "rules": {
+    "gold_required_before_quality_claim": true,
+    "soft_scores_must_not_claim_quality": true,
+    "single_guideline_without_gold_is_not_quality": true,
+    "no_duty_to_objectify_every_sentence": true,
+    "unknown_register_status_rejected": true,
+    "must_not_tune_on_this_set": true,
+    "locked_before_first_evaluation": true,
+    "independent_quality_claim": true,
+    "must_include_missed_knowledge": true,
+    "must_include_false_admits": true
+  },
+  "sources": [
+    {
+      "id": "fractuurpreventie-phase1",
+      "fixture": "data/fixtures/v230_phase1_admission_regression.html",
+      "family": "fractuurpreventie"
+    },
+    {
+      "id": "source2-factory",
+      "fixture": "data/fixtures/source2_html_factory_fixture.html",
+      "family": "continentie"
+    },
+    {
+      "id": "language-variation",
+      "fixture": "data/fixtures/v231_wave4_language_variation.html",
+      "family": "fractuurpreventie"
+    }
+  ],
+  "passages": [
+    {
+      "id": "H4-FP-R01",
+      "source_id": "fractuurpreventie-phase1",
+      "class": "normative",
+      "role": "true_positive_expected",
+      "section": "2 Aanbevelingen",
+      "source_text": "De werkgroep adviseert de verpleegkundige de risicofactoren scorelijst te gebruiken bij iedere intake.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "H4-FP-R02",
+      "source_id": "fractuurpreventie-phase1",
+      "class": "normative",
+      "role": "true_positive_expected",
+      "section": "2 Aanbevelingen",
+      "source_text": "De werkgroep adviseert calcium te geven tenzij er hypercalciëmie bestaat.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "H4-FP-X01",
+      "source_id": "fractuurpreventie-phase1",
+      "class": "excluded",
+      "role": "true_negative",
+      "section": "2 Aanbevelingen",
+      "source_text": "De dJG wordt in Nederland vaker gebruikt.",
+      "expected_register_status": "excluded_with_reason",
+      "expected_gate": "blocked"
+    },
+    {
+      "id": "H4-S2-R01",
+      "source_id": "source2-factory",
+      "class": "normative",
+      "role": "true_positive_expected",
+      "section": "Aanbevelingen",
+      "source_text": "Bespreek het onderwerp met de zorgvrager.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "H4-S2-M01",
+      "source_id": "source2-factory",
+      "class": "missed",
+      "role": "missed_knowledge",
+      "section": "Doorverwijzen",
+      "source_text": "Verwijs bij een alarmsignaal naar de bevoegde behandelaar.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "H4-LV-FA01",
+      "source_id": "language-variation",
+      "class": "false_admit",
+      "role": "false_admit",
+      "section": "2 Aanbevelingen",
+      "source_text": "De werkgroep adviseert de lezer eerst de inleiding te lezen.",
+      "expected_register_status": "excluded_with_reason",
+      "expected_gate": "blocked"
+    },
+    {
+      "id": "H4-LV-M01",
+      "source_id": "language-variation",
+      "class": "missed",
+      "role": "missed_knowledge",
+      "section": "2 Aanbevelingen",
+      "source_text": "Het wordt aanbevolen de risicofactoren scorelijst te gebruiken bij iedere intake.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed"
+    }
+  ]
+}

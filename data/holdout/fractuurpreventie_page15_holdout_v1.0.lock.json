@@ -1,0 +1,6 @@
+{
+  "holdout_file": "data/holdout/fractuurpreventie_page15_holdout_v1.0.json",
+  "sha256": "0d5961f837100783229cd1a49d951f5d7c7aea07810028595924d1c2d3d58889",
+  "locked_at": "2026-08-19T18:39:00+02:00",
+  "rule": "No retrieval thresholds, fusion weights, tokenization rules, or query-specific logic may be changed based on this holdout before a new version is created."
+}

@@ -1,0 +1,35 @@
+{
+  "envelopes": {},
+  "files": {
+    "runtime/accounts.json": {
+      "author": {
+        "account_id": "author",
+        "display_name": "Author",
+        "roles": [
+          "researcher",
+          "reviewer"
+        ],
+        "username": "author"
+      },
+      "other": {
+        "account_id": "other",
+        "display_name": "Other",
+        "roles": [
+          "reviewer"
+        ],
+        "username": "other"
+      },
+      "reviewer": {
+        "account_id": "reviewer",
+        "display_name": "Reviewer",
+        "roles": [
+          "reviewer"
+        ],
+        "username": "reviewer"
+      }
+    }
+  },
+  "outcome": {
+    "error": "invalid_boom_freeze"
+  }
+}

@@ -1,0 +1,471 @@
+{
+  "envelopes": {
+    "snap-b4c78674299010ed-c9b2e882": {
+      "acquired_at": "2026-10-17T08:00:00+00:00",
+      "binary_path": "<TMP>/sources/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html",
+      "class": "richtlijn",
+      "clinical_rereview_required": false,
+      "console_version": "operations-console-v1.0.0",
+      "content_kind": "html",
+      "date": "2026-10-17",
+      "document_id": "console-fixture-voorbeeld-bron-1-0-f9cfbd74",
+      "family": "fixture",
+      "immutable_storage_locator": null,
+      "ingest_command": {
+        "actor_id": "author",
+        "id": "fixture-command",
+        "payload_hash": "f2f38c860d4ea3db735f8a06076f9d366e676b54660988a51da557ee4ba0485b"
+      },
+      "ingest_kind": "new",
+      "is_live_capture": true,
+      "live_url": "",
+      "locator": "g0-local:sources/private/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html",
+      "named_reviewers": [
+        "reviewer"
+      ],
+      "object_diff": null,
+      "prepared_source_extraction": {
+        "extractor_contract": "html-visible-text-v1.1.0",
+        "fragments": [
+          {
+            "bbox": null,
+            "clean_text": "Voorbeeld",
+            "document_id": "console-fixture-voorbeeld-bron-1-0-f9cfbd74",
+            "fragment_hash": "048067027dd365d788fb99a90985b69a53aca44c7741852f667ce742ec27ba59",
+            "fragment_id": "console-fixture-voorbeeld-bron-1-0-f9cfbd74-html-f0001",
+            "heading": "Voorbeeld",
+            "parser_version": "html-visible-text-v1.1.0",
+            "raw_text": "Voorbeeld",
+            "section_path": [
+              "Voorbeeld"
+            ],
+            "sequence": 1,
+            "source_id": "src-f9cfbd741781c763",
+            "source_locator": {
+              "locator_type": "web_line_range",
+              "locator_value": "lines:1-1;h1:1"
+            },
+            "source_page": null
+          },
+          {
+            "bbox": null,
+            "clean_text": "Een waarneming is een beschrijving.",
+            "document_id": "console-fixture-voorbeeld-bron-1-0-f9cfbd74",
+            "fragment_hash": "f1dc909d8fc02b0a18a13058e29342e8b2ec6fbc4e43f90ad717cf4fb7ca4d93",
+            "fragment_id": "console-fixture-voorbeeld-bron-1-0-f9cfbd74-html-f0002",
+            "heading": "Voorbeeld",
+            "parser_version": "html-visible-text-v1.1.0",
+            "raw_text": "Een waarneming is een beschrijving.",
+            "section_path": [
+              "Voorbeeld"
+            ],
+            "sequence": 2,
+            "source_id": "src-f9cfbd741781c763",
+            "source_locator": {
+              "locator_type": "web_line_range",
+              "locator_value": "lines:1-1;p:1"
+            },
+            "source_page": null
+          }
+        ],
+        "fragments_hash": "d5cfb4611b14a5fd66af0c18bde13529577a2b9390743ce05facdde62cdf8168",
+        "record_hash": "4ebbc9edd3e75b3daa70d370b5eea2f3d975a0b7cadc55b7672e38ae7b23e6c1",
+        "source": {
+          "content_kind": "html",
+          "document_id": "console-fixture-voorbeeld-bron-1-0-f9cfbd74",
+          "sha256": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+          "snapshot_id": "snap-b4c78674299010ed-c9b2e882",
+          "source_id": "src-f9cfbd741781c763",
+          "version": "1.0"
+        },
+        "version": "prepared-source-extraction-v1"
+      },
+      "processing_attempts": [
+        {
+          "actor_id": "author",
+          "attempt_id": "pa_00000000000000000000000000000001",
+          "command_id": "00000000000000000000000000000001",
+          "diagnostic": {
+            "actor_id": "author",
+            "category": "unknown",
+            "checkpoints": [
+              {
+                "at": "2026-10-17T08:00:00+00:00",
+                "phase": "reserved"
+              },
+              {
+                "at": "2026-10-17T08:00:00+00:00",
+                "phase": "extraction_started"
+              },
+              {
+                "at": "2026-10-17T08:00:00+00:00",
+                "phase": "extraction_checkpoint"
+              }
+            ],
+            "deployed_commit": "characterization-main",
+            "evidence_availability": "not_recorded",
+            "expected_revision": "",
+            "extraction_checkpoint": {
+              "fragments_hash": "d5cfb4611b14a5fd66af0c18bde13529577a2b9390743ce05facdde62cdf8168",
+              "record_hash": "4ebbc9edd3e75b3daa70d370b5eea2f3d975a0b7cadc55b7672e38ae7b23e6c1"
+            },
+            "origin_request_id": null,
+            "origin_runtime": {
+              "instance": "local",
+              "pid": 1,
+              "runtime_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "outcome": "failed",
+            "phase": "extraction_checkpoint",
+            "processing_reference": "00000000000000000000000000000001",
+            "reason_code": "fixture_commit_failed",
+            "recovery_advice": "inspect_failure_phase_no_automatic_retry",
+            "source_hash": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+            "source_version": "1.0",
+            "version": "attempt-diagnostics-v1"
+          },
+          "error_code": "fixture_commit_failed",
+          "expected_revision": "",
+          "expires_at": "2026-10-17T08:30:00+00:00",
+          "finished_at": "2026-10-17T08:00:00+00:00",
+          "kind": "ingest",
+          "limits": {
+            "attempt": 1800.0,
+            "automatic_retries": 0,
+            "cleanup": 2.0,
+            "connect": 10.0,
+            "idle": 600.0,
+            "max_attempts": 4,
+            "total": 900.0,
+            "version": "bounded-model-call-v1"
+          },
+          "phase": "stopped",
+          "processing_configuration": {
+            "deployment": "characterization-main",
+            "docling": false,
+            "mode": "unbound",
+            "model": null
+          },
+          "processing_reference": "00000000000000000000000000000001",
+          "reserved_semantic_contract_version": null,
+          "retry_not_before": null,
+          "retry_of": null,
+          "semantic_contract_version": null,
+          "source_hash": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+          "source_version": "1.0",
+          "started_at": "2026-10-17T08:00:00+00:00",
+          "state": "failed",
+          "stop_reason": "error",
+          "transport": null,
+          "validation_code": null,
+          "version": "source-reprocessing-v3"
+        }
+      ],
+      "processing_blocker": "fixture_commit_failed",
+      "processing_configuration": {
+        "deployment": "characterization-main",
+        "docling": false,
+        "mode": "unbound",
+        "model": null
+      },
+      "publication_eligibility": "blocked_pending_pre_review",
+      "quality_processing_runs": [
+        {
+          "candidates": [],
+          "execution": null,
+          "extractor_versions": [],
+          "finished_at": "2026-10-17T08:00:00+00:00",
+          "outcome": "blocked",
+          "reason": "fixture_commit_failed",
+          "run_id": "qp_00000000000000000000000000000002",
+          "semantic_identity": null,
+          "source_fragments": [],
+          "source_hash": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+          "started_at": "2026-10-17T08:00:00+00:00",
+          "version": "quality-evidence-v1"
+        }
+      ],
+      "replaces_snapshot_id": null,
+      "review_configuration": {
+        "contract": "review-configuration-v1",
+        "four_eyes_required": false,
+        "locked_at": null,
+        "option": "one_other",
+        "readers": [],
+        "reviewers": [
+          "reviewer"
+        ],
+        "revision": 0,
+        "source": "legacy_default"
+      },
+      "review_passes": {},
+      "revision_reason": "",
+      "sha256": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+      "snapshot_id": "snap-b4c78674299010ed-c9b2e882",
+      "source_declaration": {
+        "declared_at": "2026-10-17T08:00:00+00:00",
+        "declared_by": "author",
+        "status": "unknown"
+      },
+      "source_id": "src-f9cfbd741781c763",
+      "state": "captured_not_published",
+      "title": "Voorbeeld & bron",
+      "uploader_account_id": "author",
+      "version": "1.0"
+    }
+  },
+  "files": {
+    "runtime/accounts.json": {
+      "author": {
+        "account_id": "author",
+        "display_name": "Author",
+        "roles": [
+          "researcher",
+          "reviewer"
+        ],
+        "username": "author"
+      },
+      "other": {
+        "account_id": "other",
+        "display_name": "Other",
+        "roles": [
+          "reviewer"
+        ],
+        "username": "other"
+      },
+      "reviewer": {
+        "account_id": "reviewer",
+        "display_name": "Reviewer",
+        "roles": [
+          "reviewer"
+        ],
+        "username": "reviewer"
+      }
+    },
+    "runtime/envelopes.json": {
+      "snap-b4c78674299010ed-c9b2e882": {
+        "acquired_at": "2026-10-17T08:00:00+00:00",
+        "binary_path": "<TMP>/sources/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html",
+        "class": "richtlijn",
+        "clinical_rereview_required": false,
+        "console_version": "operations-console-v1.0.0",
+        "content_kind": "html",
+        "date": "2026-10-17",
+        "document_id": "console-fixture-voorbeeld-bron-1-0-f9cfbd74",
+        "family": "fixture",
+        "immutable_storage_locator": null,
+        "ingest_command": {
+          "actor_id": "author",
+          "id": "fixture-command",
+          "payload_hash": "f2f38c860d4ea3db735f8a06076f9d366e676b54660988a51da557ee4ba0485b"
+        },
+        "ingest_kind": "new",
+        "is_live_capture": true,
+        "live_url": "",
+        "locator": "g0-local:sources/private/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html",
+        "named_reviewers": [
+          "reviewer"
+        ],
+        "object_diff": null,
+        "prepared_source_extraction": {
+          "extractor_contract": "html-visible-text-v1.1.0",
+          "fragments": [
+            {
+              "bbox": null,
+              "clean_text": "Voorbeeld",
+              "document_id": "console-fixture-voorbeeld-bron-1-0-f9cfbd74",
+              "fragment_hash": "048067027dd365d788fb99a90985b69a53aca44c7741852f667ce742ec27ba59",
+              "fragment_id": "console-fixture-voorbeeld-bron-1-0-f9cfbd74-html-f0001",
+              "heading": "Voorbeeld",
+              "parser_version": "html-visible-text-v1.1.0",
+              "raw_text": "Voorbeeld",
+              "section_path": [
+                "Voorbeeld"
+              ],
+              "sequence": 1,
+              "source_id": "src-f9cfbd741781c763",
+              "source_locator": {
+                "locator_type": "web_line_range",
+                "locator_value": "lines:1-1;h1:1"
+              },
+              "source_page": null
+            },
+            {
+              "bbox": null,
+              "clean_text": "Een waarneming is een beschrijving.",
+              "document_id": "console-fixture-voorbeeld-bron-1-0-f9cfbd74",
+              "fragment_hash": "f1dc909d8fc02b0a18a13058e29342e8b2ec6fbc4e43f90ad717cf4fb7ca4d93",
+              "fragment_id": "console-fixture-voorbeeld-bron-1-0-f9cfbd74-html-f0002",
+              "heading": "Voorbeeld",
+              "parser_version": "html-visible-text-v1.1.0",
+              "raw_text": "Een waarneming is een beschrijving.",
+              "section_path": [
+                "Voorbeeld"
+              ],
+              "sequence": 2,
+              "source_id": "src-f9cfbd741781c763",
+              "source_locator": {
+                "locator_type": "web_line_range",
+                "locator_value": "lines:1-1;p:1"
+              },
+              "source_page": null
+            }
+          ],
+          "fragments_hash": "d5cfb4611b14a5fd66af0c18bde13529577a2b9390743ce05facdde62cdf8168",
+          "record_hash": "4ebbc9edd3e75b3daa70d370b5eea2f3d975a0b7cadc55b7672e38ae7b23e6c1",
+          "source": {
+            "content_kind": "html",
+            "document_id": "console-fixture-voorbeeld-bron-1-0-f9cfbd74",
+            "sha256": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+            "snapshot_id": "snap-b4c78674299010ed-c9b2e882",
+            "source_id": "src-f9cfbd741781c763",
+            "version": "1.0"
+          },
+          "version": "prepared-source-extraction-v1"
+        },
+        "processing_attempts": [
+          {
+            "actor_id": "author",
+            "attempt_id": "pa_00000000000000000000000000000001",
+            "command_id": "00000000000000000000000000000001",
+            "diagnostic": {
+              "actor_id": "author",
+              "category": "unknown",
+              "checkpoints": [
+                {
+                  "at": "2026-10-17T08:00:00+00:00",
+                  "phase": "reserved"
+                },
+                {
+                  "at": "2026-10-17T08:00:00+00:00",
+                  "phase": "extraction_started"
+                },
+                {
+                  "at": "2026-10-17T08:00:00+00:00",
+                  "phase": "extraction_checkpoint"
+                }
+              ],
+              "deployed_commit": "characterization-main",
+              "evidence_availability": "not_recorded",
+              "expected_revision": "",
+              "extraction_checkpoint": {
+                "fragments_hash": "d5cfb4611b14a5fd66af0c18bde13529577a2b9390743ce05facdde62cdf8168",
+                "record_hash": "4ebbc9edd3e75b3daa70d370b5eea2f3d975a0b7cadc55b7672e38ae7b23e6c1"
+              },
+              "origin_request_id": null,
+              "origin_runtime": {
+                "instance": "local",
+                "pid": 1,
+                "runtime_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "outcome": "failed",
+              "phase": "extraction_checkpoint",
+              "processing_reference": "00000000000000000000000000000001",
+              "reason_code": "fixture_commit_failed",
+              "recovery_advice": "inspect_failure_phase_no_automatic_retry",
+              "source_hash": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+              "source_version": "1.0",
+              "version": "attempt-diagnostics-v1"
+            },
+            "error_code": "fixture_commit_failed",
+            "expected_revision": "",
+            "expires_at": "2026-10-17T08:30:00+00:00",
+            "finished_at": "2026-10-17T08:00:00+00:00",
+            "kind": "ingest",
+            "limits": {
+              "attempt": 1800.0,
+              "automatic_retries": 0,
+              "cleanup": 2.0,
+              "connect": 10.0,
+              "idle": 600.0,
+              "max_attempts": 4,
+              "total": 900.0,
+              "version": "bounded-model-call-v1"
+            },
+            "phase": "stopped",
+            "processing_configuration": {
+              "deployment": "characterization-main",
+              "docling": false,
+              "mode": "unbound",
+              "model": null
+            },
+            "processing_reference": "00000000000000000000000000000001",
+            "reserved_semantic_contract_version": null,
+            "retry_not_before": null,
+            "retry_of": null,
+            "semantic_contract_version": null,
+            "source_hash": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+            "source_version": "1.0",
+            "started_at": "2026-10-17T08:00:00+00:00",
+            "state": "failed",
+            "stop_reason": "error",
+            "transport": null,
+            "validation_code": null,
+            "version": "source-reprocessing-v3"
+          }
+        ],
+        "processing_blocker": "fixture_commit_failed",
+        "processing_configuration": {
+          "deployment": "characterization-main",
+          "docling": false,
+          "mode": "unbound",
+          "model": null
+        },
+        "publication_eligibility": "blocked_pending_pre_review",
+        "quality_processing_runs": [
+          {
+            "candidates": [],
+            "execution": null,
+            "extractor_versions": [],
+            "finished_at": "2026-10-17T08:00:00+00:00",
+            "outcome": "blocked",
+            "reason": "fixture_commit_failed",
+            "run_id": "qp_00000000000000000000000000000002",
+            "semantic_identity": null,
+            "source_fragments": [],
+            "source_hash": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+            "started_at": "2026-10-17T08:00:00+00:00",
+            "version": "quality-evidence-v1"
+          }
+        ],
+        "replaces_snapshot_id": null,
+        "review_configuration": {
+          "contract": "review-configuration-v1",
+          "four_eyes_required": false,
+          "locked_at": null,
+          "option": "one_other",
+          "readers": [],
+          "reviewers": [
+            "reviewer"
+          ],
+          "revision": 0,
+          "source": "legacy_default"
+        },
+        "review_passes": {},
+        "revision_reason": "",
+        "sha256": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2",
+        "snapshot_id": "snap-b4c78674299010ed-c9b2e882",
+        "source_declaration": {
+          "declared_at": "2026-10-17T08:00:00+00:00",
+          "declared_by": "author",
+          "status": "unknown"
+        },
+        "source_id": "src-f9cfbd741781c763",
+        "state": "captured_not_published",
+        "title": "Voorbeeld & bron",
+        "uploader_account_id": "author",
+        "version": "1.0"
+      }
+    },
+    "runtime/objects/snap-b4c78674299010ed-c9b2e882.jsonl": [],
+    "sources/f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2/source.html": {
+      "bytes": 101,
+      "sha256": "f9cfbd741781c763235702872fb105e183331ce8c12e4d72e2d234fc998c10e2"
+    }
+  },
+  "outcome": {
+    "error": "fixture_commit_failed"
+  }
+}

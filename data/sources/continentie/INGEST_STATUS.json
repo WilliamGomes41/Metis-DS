@@ -1,0 +1,10 @@
+{
+  "source2": "Continentie bij (kwetsbare) ouderen",
+  "status": "ONBOARDED_BLOCKED_ON_BINARY",
+  "adapter": "extract_html_v1.py",
+  "canonical_transform": "semantic_transform_generic_v1.py",
+  "schema": "knowledge_object.schema.v1.2.json",
+  "next_required_input": "Exact HTML response body or generated official PDF downloaded from the V&VN guideline page",
+  "holdout_b_status": "NOT_CREATED",
+  "reason": "Holdout B is created only after exact source ingestion, to avoid validating against paraphrased or reconstructed source content."
+}

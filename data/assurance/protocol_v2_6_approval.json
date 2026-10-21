@@ -1,0 +1,13 @@
+{
+  "manifest_version": "1.0",
+  "protocol_version": "2.6.0",
+  "protocol_path": "docs/PROTOCOL_V2_6_INTERNAL_OPERATIONS_CONSOLE_DELTA.md",
+  "protocol_sha256": "e58f49cfebbe6e977471dd659a22ffca5cd909b4d4c9e477a288da891f544508",
+  "repository": "WilliamGomes41/VENVN-DS",
+  "default_branch": "main",
+  "commit_sha": "9614c4deec708933a5be87527e3c2e1c2679cd93",
+  "approval_date": "2026-08-28",
+  "approval_authority": "project_owner",
+  "branch_protection_status": "temporary_procedural_control",
+  "conformance_effect": "does_not_override_gate_status"
+}

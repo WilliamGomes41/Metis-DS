@@ -1,0 +1,559 @@
+{
+  "spec_version": "2.1",
+  "previous_spec_version": "2.0",
+  "document_id": "vvn-osteoporose-fractuurpreventie-2024",
+  "document_object_id": "vvn-osteoporose-fractuurpreventie-2024-document",
+  "object_version": "1.0",
+  "title": "V&VN Richtlijn Osteoporose en fractuurpreventie",
+  "source_manifest": "data/source_manifest.v2.json",
+  "source_url": "https://kennisplatform.venvn.nl/wp-content/uploads/richtlijnen/VVN-RL-Osteoporose-1.3.pdf",
+  "source_web_url": "https://kennisplatform.venvn.nl/richtlijn/osteoporose-en-fractuurpreventie/signalering",
+  "version": "augustus 2024",
+  "page": 15,
+  "section": "Signalering > Aanbevelingen > DOEN",
+  "source_extract": "output/fractuurpreventie_page15_raw.jsonl",
+  "created_by": "technical_pipeline",
+  "reviewed_by": null,
+  "change_note": "Integrity sprint: explicit raw source-fragment lineage for every semantic object; coordinates marked unavailable for legacy extraction.",
+  "source_verification": {
+    "status": "official_web_crosscheck",
+    "checked_on": "2026-08-19",
+    "notes": [
+      "Comparison symbols in the PDF text layer are known to be unreliable.",
+      "The public V&VN Knowledge Platform signalering page was used to cross-check thresholds and operators.",
+      "No clinical ambiguity is silently resolved; unresolved semantics remain needs_review."
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "recent-fracture-50plus",
+      "condition": "Bij een cliënt in zorg ≥ 50 jaar met een recente fractuur (≤ 2 jaar geleden)",
+      "predicates": [
+        {
+          "field": "age",
+          "operator": "gte",
+          "threshold": 50,
+          "unit": "year",
+          "source_text": "≥ 50 jaar"
+        },
+        {
+          "field": "recent_fracture_age",
+          "operator": "lte",
+          "threshold": 2,
+          "unit": "year",
+          "source_text": "recente fractuur (≤ 2 jaar geleden)"
+        }
+      ],
+      "risk_fields": [
+        "age_boundary",
+        "operator"
+      ],
+      "recommendations": [
+        {
+          "text": "Controleer of aanvullend onderzoek naar osteoporose is uitgevoerd. Dit bestaat uit DXA-VFA, aanvullend laboratoriumonderzoek en inschatting valrisico.",
+          "risk_fields": [],
+          "result_threshold": null,
+          "result_action": null,
+          "source_fragments": [
+            {
+              "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o004",
+              "page": 15,
+              "raw_content_hash": "15719c83d6be822a69bdeb6015d8e06a5e847b4cb0486ec528be37e6f05b9834",
+              "bbox": null,
+              "coordinate_status": "not_captured_legacy_extract"
+            },
+            {
+              "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o005",
+              "page": 15,
+              "raw_content_hash": "8e03240c71a2c510de5af2c52c92c44ad932200c37de51c753910e180677e24b",
+              "bbox": null,
+              "coordinate_status": "not_captured_legacy_extract"
+            }
+          ]
+        },
+        {
+          "text": "Informeer de cliënt over het belang van aanvullend onderzoek en motiveer en stimuleer de cliënt om dit uit te laten voeren als dat nog niet gedaan is. De behandelaar van de fractuur kan dit aanvragen.",
+          "risk_fields": [],
+          "result_threshold": null,
+          "result_action": null,
+          "source_fragments": [
+            {
+              "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o005",
+              "page": 15,
+              "raw_content_hash": "8e03240c71a2c510de5af2c52c92c44ad932200c37de51c753910e180677e24b",
+              "bbox": null,
+              "coordinate_status": "not_captured_legacy_extract"
+            },
+            {
+              "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o006",
+              "page": 15,
+              "raw_content_hash": "f13a60f23a468159af9135701f07af32759cd13ed5ae65931e418f33f7caa2c6",
+              "bbox": null,
+              "coordinate_status": "not_captured_legacy_extract"
+            }
+          ]
+        },
+        {
+          "text": "Overleg bij een vastgesteld verhoogd fractuurrisico met de cliënt over het starten van preventieve maatregelen om nieuwe fracturen te voorkomen (zie de overige modules van deze richtlijn).",
+          "risk_fields": [],
+          "result_threshold": null,
+          "result_action": null,
+          "source_fragments": [
+            {
+              "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o006",
+              "page": 15,
+              "raw_content_hash": "f13a60f23a468159af9135701f07af32759cd13ed5ae65931e418f33f7caa2c6",
+              "bbox": null,
+              "coordinate_status": "not_captured_legacy_extract"
+            },
+            {
+              "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o007",
+              "page": 15,
+              "raw_content_hash": "411c3577f6fa4733bf4e900f13cf1bbeffb39d9a87bbbe4329fbcb88a91913b0",
+              "bbox": null,
+              "coordinate_status": "not_captured_legacy_extract"
+            }
+          ]
+        }
+      ],
+      "source_fragments": [
+        {
+          "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o004",
+          "page": 15,
+          "raw_content_hash": "15719c83d6be822a69bdeb6015d8e06a5e847b4cb0486ec528be37e6f05b9834",
+          "bbox": null,
+          "coordinate_status": "not_captured_legacy_extract"
+        }
+      ]
+    },
+    {
+      "id": "glucocorticoids-40plus",
+      "condition": "Bij een cliënt in zorg ≥ 40 jaar die behandeld wordt met systemische glucocorticoïden (bijvoorbeeld prednison en dexamethason)",
+      "predicates": [
+        {
+          "field": "age",
+          "operator": "gte",
+          "threshold": 40,
+          "unit": "year",
+          "source_text": "≥ 40 jaar"
+        },
+        {
+          "field": "systemic_glucocorticoids",
+          "operator": "present",
+          "threshold": null,
+          "unit": null,
+          "source_text": "behandeld wordt met systemische glucocorticoïden"
+        }
+      ],
+      "risk_fields": [
+        "age_boundary",
+        "operator"
+      ],
+      "recommendations": [
+        {
+          "text": "Overleg met de cliënt over het starten van preventieve maatregelen om fracturen te voorkomen (zie de overige modules van deze richtlijn).",
+          "risk_fields": [],
+          "result_threshold": null,
+          "result_action": null,
+          "source_fragments": [
+            {
+              "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o008",
+              "page": 15,
+              "raw_content_hash": "6f46d95167da5bf738d3517b9009a54dc43811fc826c8da77c005129d9f26dc9",
+              "bbox": null,
+              "coordinate_status": "not_captured_legacy_extract"
+            },
+            {
+              "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o009",
+              "page": 15,
+              "raw_content_hash": "6e174ccca41311cdd9550ab783292e54ee52c973f704c1fd958a1c6696cac93e",
+              "bbox": null,
+              "coordinate_status": "not_captured_legacy_extract"
+            }
+          ]
+        }
+      ],
+      "source_fragments": [
+        {
+          "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o008",
+          "page": 15,
+          "raw_content_hash": "6f46d95167da5bf738d3517b9009a54dc43811fc826c8da77c005129d9f26dc9",
+          "bbox": null,
+          "coordinate_status": "not_captured_legacy_extract"
+        }
+      ]
+    },
+    {
+      "id": "screening-60plus",
+      "condition": "Bij een cliënt ≥ 60 jaar zónder recente fractuur (≤ 2 jaar geleden) en zónder gebruik van glucocorticoïden",
+      "predicates": [
+        {
+          "field": "age",
+          "operator": "gte",
+          "threshold": 60,
+          "unit": "year",
+          "source_text": "≥ 60 jaar"
+        },
+        {
+          "field": "recent_fracture_within_2_years",
+          "operator": "absent",
+          "threshold": null,
+          "unit": null,
+          "source_text": "zónder recente fractuur (≤ 2 jaar geleden)"
+        },
+        {
+          "field": "systemic_glucocorticoids",
+          "operator": "absent",
+          "threshold": null,
+          "unit": null,
+          "source_text": "zónder gebruik van glucocorticoïden"
+        }
+      ],
+      "risk_fields": [
+        "age_boundary",
+        "operator"
+      ],
+      "recommendations": [
+        {
+          "text": "Gebruik de risicofactoren scorelijst (zie onderstaand kader) om een eventueel verhoogd fractuurrisico vast te stellen.",
+          "risk_fields": [],
+          "result_threshold": null,
+          "result_action": null,
+          "source_fragments": [
+            {
+              "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o010",
+              "page": 15,
+              "raw_content_hash": "03ee1e7e0bd0c792734ebee37b82ae9f7e32579db51f2d4f87d58aa2897816a3",
+              "bbox": null,
+              "coordinate_status": "not_captured_legacy_extract"
+            },
+            {
+              "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o011",
+              "page": 15,
+              "raw_content_hash": "443385035010364e3c9e692ed15c0f073686a1d661632569f0905a7025b89bcd",
+              "bbox": null,
+              "coordinate_status": "not_captured_legacy_extract"
+            }
+          ]
+        },
+        {
+          "text": "Verwijs de cliënt bij een score van ≥ 4 punten naar de huisarts voor aanvullend onderzoek tenzij samen met de cliënt en zo nodig in overleg met de huisarts wordt besloten hiervan af te zien. Het aanvullend onderzoek bestaat uit DXA-VFA, aanvullend laboratoriumonderzoek en inschatting valrisico.",
+          "risk_fields": [
+            "score_threshold",
+            "operator",
+            "escalation_decision"
+          ],
+          "result_threshold": {
+            "operator": "gte",
+            "threshold": 4,
+            "unit": "punten"
+          },
+          "result_action": "Verwijs de cliënt naar de huisarts voor aanvullend onderzoek, tenzij in overleg anders besloten.",
+          "source_fragments": [
+            {
+              "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o011",
+              "page": 15,
+              "raw_content_hash": "443385035010364e3c9e692ed15c0f073686a1d661632569f0905a7025b89bcd",
+              "bbox": null,
+              "coordinate_status": "not_captured_legacy_extract"
+            },
+            {
+              "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o012",
+              "page": 15,
+              "raw_content_hash": "8eac19125295e517c1d4cb1d9fb0775d9eb270ab5003246cd2a7191a6b576cc1",
+              "bbox": null,
+              "coordinate_status": "not_captured_legacy_extract"
+            }
+          ]
+        },
+        {
+          "text": "Overleg bij een vastgesteld verhoogd fractuurrisico met de cliënt over het starten van preventieve maatregelen om (nieuwe) fracturen te voorkomen (zie de overige modules van deze richtlijn).",
+          "risk_fields": [],
+          "result_threshold": null,
+          "result_action": null,
+          "source_fragments": [
+            {
+              "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o012",
+              "page": 15,
+              "raw_content_hash": "8eac19125295e517c1d4cb1d9fb0775d9eb270ab5003246cd2a7191a6b576cc1",
+              "bbox": null,
+              "coordinate_status": "not_captured_legacy_extract"
+            },
+            {
+              "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o013",
+              "page": 15,
+              "raw_content_hash": "6c82ed1cb1d9127ed0ae098a78acdf5119117af20cff57ee666e34a1a95de63f",
+              "bbox": null,
+              "coordinate_status": "not_captured_legacy_extract"
+            }
+          ]
+        }
+      ],
+      "source_fragments": [
+        {
+          "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o010",
+          "page": 15,
+          "raw_content_hash": "03ee1e7e0bd0c792734ebee37b82ae9f7e32579db51f2d4f87d58aa2897816a3",
+          "bbox": null,
+          "coordinate_status": "not_captured_legacy_extract"
+        }
+      ]
+    }
+  ],
+  "score_table": {
+    "title": "Risicofactoren scorelijst",
+    "rules": [
+      {
+        "condition": "Leeftijd ≥ 60 jaar",
+        "operator": "gte",
+        "threshold": 60,
+        "unit": "jaar",
+        "score_points": 1,
+        "risk_fields": [
+          "age_boundary",
+          "unit",
+          "score_points",
+          "operator"
+        ],
+        "source_fragments": [
+          {
+            "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o014",
+            "page": 15,
+            "raw_content_hash": "332597019e13c67e6cea35d52f121ccf6383f7fc8be257a8dd5f4c04505abb24",
+            "bbox": null,
+            "coordinate_status": "not_captured_legacy_extract"
+          },
+          {
+            "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o015",
+            "page": 15,
+            "raw_content_hash": "80c8b81481e7307ec33e54b4854e6a0a3b7554982c7fe998ce4aac3e9eaec672",
+            "bbox": null,
+            "coordinate_status": "not_captured_legacy_extract"
+          }
+        ]
+      },
+      {
+        "condition": "Leeftijd ≥ 70 jaar",
+        "operator": "gte",
+        "threshold": 70,
+        "unit": "jaar",
+        "score_points": 2,
+        "risk_fields": [
+          "age_boundary",
+          "unit",
+          "score_points",
+          "operator"
+        ],
+        "source_fragments": [
+          {
+            "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o015",
+            "page": 15,
+            "raw_content_hash": "80c8b81481e7307ec33e54b4854e6a0a3b7554982c7fe998ce4aac3e9eaec672",
+            "bbox": null,
+            "coordinate_status": "not_captured_legacy_extract"
+          },
+          {
+            "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o016",
+            "page": 15,
+            "raw_content_hash": "68850b375a57c35baa8906fc8b8a154829988526bdd1fc97b809118a1028e7b0",
+            "bbox": null,
+            "coordinate_status": "not_captured_legacy_extract"
+          }
+        ]
+      },
+      {
+        "condition": "BMI < 20 kg/m²",
+        "operator": "lt",
+        "threshold": 20,
+        "unit": "kg/m²",
+        "score_points": 1,
+        "risk_fields": [
+          "unit",
+          "score_points",
+          "operator"
+        ],
+        "source_fragments": [
+          {
+            "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o016",
+            "page": 15,
+            "raw_content_hash": "68850b375a57c35baa8906fc8b8a154829988526bdd1fc97b809118a1028e7b0",
+            "bbox": null,
+            "coordinate_status": "not_captured_legacy_extract"
+          }
+        ]
+      },
+      {
+        "condition": "Eerdere, niet recente, fractuur na 50e levensjaar, > 2 jaar geleden",
+        "operator": "gt",
+        "threshold": 2,
+        "unit": "jaar geleden",
+        "score_points": 1,
+        "risk_fields": [
+          "age_boundary",
+          "unit",
+          "score_points",
+          "operator"
+        ],
+        "source_fragments": [
+          {
+            "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o016",
+            "page": 15,
+            "raw_content_hash": "68850b375a57c35baa8906fc8b8a154829988526bdd1fc97b809118a1028e7b0",
+            "bbox": null,
+            "coordinate_status": "not_captured_legacy_extract"
+          }
+        ]
+      },
+      {
+        "condition": "Ouder (vader/moeder) met heupfractuur",
+        "operator": "eq",
+        "threshold": "aanwezig",
+        "unit": null,
+        "score_points": 1,
+        "risk_fields": [
+          "score_points"
+        ],
+        "source_fragments": [
+          {
+            "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o016",
+            "page": 15,
+            "raw_content_hash": "68850b375a57c35baa8906fc8b8a154829988526bdd1fc97b809118a1028e7b0",
+            "bbox": null,
+            "coordinate_status": "not_captured_legacy_extract"
+          }
+        ]
+      },
+      {
+        "condition": "Vallen > 1x laatste jaar en/of beperking mobiliteit",
+        "operator": "gt",
+        "threshold": 1,
+        "unit": "val in laatste jaar",
+        "score_points": 1,
+        "risk_fields": [
+          "unit",
+          "score_points",
+          "operator"
+        ],
+        "source_fragments": [
+          {
+            "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o016",
+            "page": 15,
+            "raw_content_hash": "68850b375a57c35baa8906fc8b8a154829988526bdd1fc97b809118a1028e7b0",
+            "bbox": null,
+            "coordinate_status": "not_captured_legacy_extract"
+          }
+        ]
+      },
+      {
+        "condition": "Roken en/of alcohol ≥ 3 eenheden per dag",
+        "operator": "gte",
+        "threshold": 3,
+        "unit": "eenheden alcohol per dag",
+        "score_points": 1,
+        "risk_fields": [
+          "unit",
+          "score_points",
+          "operator"
+        ],
+        "source_fragments": [
+          {
+            "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o016",
+            "page": 15,
+            "raw_content_hash": "68850b375a57c35baa8906fc8b8a154829988526bdd1fc97b809118a1028e7b0",
+            "bbox": null,
+            "coordinate_status": "not_captured_legacy_extract"
+          },
+          {
+            "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o017",
+            "page": 15,
+            "raw_content_hash": "a62ae7eb475038d7ab086cba447f45470ee59036bbdd93d0c687655a749b00d9",
+            "bbox": null,
+            "coordinate_status": "not_captured_legacy_extract"
+          }
+        ]
+      },
+      {
+        "condition": "Gebruik van medicatie en/of ernstige onderliggende aandoening die onvoldoende onder controle is (in overleg met behandelend arts)",
+        "operator": "eq",
+        "threshold": "aanwezig",
+        "unit": null,
+        "score_points": 1,
+        "risk_fields": [
+          "score_points",
+          "escalation_decision"
+        ],
+        "source_fragments": [
+          {
+            "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o017",
+            "page": 15,
+            "raw_content_hash": "a62ae7eb475038d7ab086cba447f45470ee59036bbdd93d0c687655a749b00d9",
+            "bbox": null,
+            "coordinate_status": "not_captured_legacy_extract"
+          },
+          {
+            "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o018",
+            "page": 15,
+            "raw_content_hash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+            "bbox": null,
+            "coordinate_status": "not_captured_legacy_extract"
+          }
+        ]
+      }
+    ],
+    "footnote": "Inflammatoire darmziekten: Ziekte van Crohn en colitis ulcerosa, chronische malnutritie, malabsorptie, coeliakie, reumatoïde artritis, andere chronische inflammatoire aandoeningen zoals spondylartropathie (Ziekte van Bechterew), SLE, sarcoïdose, onbehandeld hypogonadisme bij mannen en vrouwen: bilaterale orchidectomie en ovariëctomie, anorexia nervosa, in het kader van behandeling van borstkanker en prostaatcarcinoom, hypopituïtarisme, COPD, orgaantransplantatie, type I Diabetes Mellitus, type II Diabetes Mellitus met insuline behandeling, schildklieraandoeningen: onbehandelde hyperthyreoïdie of chronisch overgesubstitueerde hypothyreoïdie, onbehandelde primaire hyperparathyreoïdie, M. Cushing, gebruik van anti-epileptica",
+    "footnote_object_type": "definition",
+    "container_object_type": "section",
+    "source_fragments": [
+      {
+        "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o014",
+        "page": 15,
+        "raw_content_hash": "332597019e13c67e6cea35d52f121ccf6383f7fc8be257a8dd5f4c04505abb24",
+        "bbox": null,
+        "coordinate_status": "not_captured_legacy_extract"
+      },
+      {
+        "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o015",
+        "page": 15,
+        "raw_content_hash": "80c8b81481e7307ec33e54b4854e6a0a3b7554982c7fe998ce4aac3e9eaec672",
+        "bbox": null,
+        "coordinate_status": "not_captured_legacy_extract"
+      },
+      {
+        "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o016",
+        "page": 15,
+        "raw_content_hash": "68850b375a57c35baa8906fc8b8a154829988526bdd1fc97b809118a1028e7b0",
+        "bbox": null,
+        "coordinate_status": "not_captured_legacy_extract"
+      },
+      {
+        "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o017",
+        "page": 15,
+        "raw_content_hash": "a62ae7eb475038d7ab086cba447f45470ee59036bbdd93d0c687655a749b00d9",
+        "bbox": null,
+        "coordinate_status": "not_captured_legacy_extract"
+      },
+      {
+        "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o018",
+        "page": 15,
+        "raw_content_hash": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+        "bbox": null,
+        "coordinate_status": "not_captured_legacy_extract"
+      }
+    ],
+    "footnote_source_fragments": [
+      {
+        "raw_object_id": "vvn-osteoporose-fractuurpreventie-2024-p015-o019",
+        "page": 15,
+        "raw_content_hash": "9627f9676312c359ffe49dab34504be818b6a0060c10293a8326aaba3ed0d60e",
+        "bbox": null,
+        "coordinate_status": "not_captured_legacy_extract"
+      }
+    ]
+  },
+  "ai_policy": {
+    "canonical_transform": "deterministic_only",
+    "ai_output_status": "proposal",
+    "proposal_schema": "schemas/proposal.schema.v1.0.json"
+  },
+  "document_source_fragments": []
+}

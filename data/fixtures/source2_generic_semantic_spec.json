@@ -1,0 +1,82 @@
+{
+  "spec_version": "generic-fixture-1.0",
+  "document_id": "vvn-source2-factory-fixture",
+  "object_version": "1.0",
+  "target_group": [
+    "verpleegkundige"
+  ],
+  "care_setting": [
+    "wijkzorg"
+  ],
+  "topic": [
+    "factory-test"
+  ],
+  "objects": [
+    {
+      "object_id": "vvn-source2-factory-fixture-document",
+      "object_type": "document",
+      "text": "Voorbeeldrichtlijn bron 2",
+      "review_track": "technical"
+    },
+    {
+      "object_id": "vvn-source2-factory-fixture-rec-01",
+      "object_type": "recommendation",
+      "text": "Bespreek het onderwerp met de zorgvrager.",
+      "source_fragment_ids": [
+        "vvn-source2-factory-fixture-html-f0004"
+      ],
+      "section_path": [
+        "Voorbeeldrichtlijn bron 2",
+        "Samenvatting",
+        "Aanbevelingen"
+      ]
+    },
+    {
+      "object_id": "vvn-source2-factory-fixture-rec-02",
+      "object_type": "recommendation",
+      "text": "Gebruik gedurende minimaal drie dagen een dagboek.",
+      "source_fragment_ids": [
+        "vvn-source2-factory-fixture-html-f0005"
+      ],
+      "section_path": [
+        "Voorbeeldrichtlijn bron 2",
+        "Samenvatting",
+        "Aanbevelingen"
+      ],
+      "logic": {
+        "predicates": [
+          {
+            "field": "duration",
+            "operator": "gte",
+            "threshold": 3,
+            "unit": "day",
+            "source_text": "minimaal drie dagen"
+          }
+        ],
+        "score_points": null,
+        "result_threshold": null,
+        "result_action": null
+      },
+      "risk_fields": [
+        "operator",
+        "unit"
+      ]
+    },
+    {
+      "object_id": "vvn-source2-factory-fixture-rec-03",
+      "object_type": "recommendation",
+      "text": "Verwijs bij een alarmsignaal naar de bevoegde behandelaar.",
+      "source_fragment_ids": [
+        "vvn-source2-factory-fixture-html-f0007"
+      ],
+      "section_path": [
+        "Voorbeeldrichtlijn bron 2",
+        "Samenvatting",
+        "Doorverwijzen"
+      ],
+      "risk_fields": [
+        "escalation_decision"
+      ]
+    }
+  ]
+}

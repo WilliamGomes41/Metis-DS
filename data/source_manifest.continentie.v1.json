@@ -1,0 +1,28 @@
+{
+  "manifest_version": "2.1",
+  "document_id": "vvn-continentie-kwetsbare-ouderen-2025",
+  "canonical_source": {
+    "source_id": "vvn-continentie-kwetsbare-ouderen-2025-source-html",
+    "source_level": 1,
+    "canonicality": "canonical",
+    "source_type": "html",
+    "title": "V&VN Richtlijn Continentie bij (kwetsbare) ouderen",
+    "publisher": "V&VN",
+    "source_url": "https://kennisplatform.venvn.nl/richtlijn/continentie-bij-kwetsbare-ouderen/samenvatting",
+    "publication_date": "2025-04-01",
+    "version": "april 2025",
+    "binary_path": null,
+    "checksum_algorithm": "sha256",
+    "source_checksum": null,
+    "integrity_status": "binary_unavailable",
+    "publication_eligibility": "blocked_until_exact_html_or_generated_pdf_binary_is_captured_and_sha256_verified"
+  },
+  "scope": {
+    "pilot_scope": "Samenvatting en aanbevelingen; bron 2 voor source-neutral HTML pipeline validation",
+    "publication_allowed": false,
+    "reason": "Runtime kan de remote HTML/PDF niet als exacte bronbinary materialiseren; parsed web content is niet voldoende voor source-integrity approval."
+  },
+  "derived_sources": [],
+  "conflict_rule": "canonical_guideline_wins_unless_clinical_reviewer_records_formal_operationalisation",
+  "approval_rule": "no publication without hashable verified source binary"
+}

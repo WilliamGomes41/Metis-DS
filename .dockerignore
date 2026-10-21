@@ -1,0 +1,7 @@
+__pycache__/
+.pytest_cache/
+.coverage
+*.pyc
+*.db
+.git/
+output/v2/integrity_sprint/*.db

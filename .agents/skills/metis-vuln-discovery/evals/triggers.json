@@ -1,0 +1,25 @@
+{
+  "skill": "metis-vuln-discovery",
+  "test_cases": [
+    {
+      "input": "Security review the Metis knowledge object API for zero-days",
+      "should_trigger": true
+    },
+    {
+      "input": "Find vulnerabilities in Athena auth middleware",
+      "should_trigger": true
+    },
+    {
+      "input": "Threat model the Metis data services write path",
+      "should_trigger": true
+    },
+    {
+      "input": "How do I deploy Metis to production?",
+      "should_trigger": false
+    },
+    {
+      "input": "Write a new feature for the Metis console",
+      "should_trigger": false
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+history/protocol-v2/PROTOCOL_V2_11_HTML_FREEZE_LOCATOR_DELTA.md

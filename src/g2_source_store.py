@@ -1,0 +1,216 @@
+"""G2 canonical source-store coordinates and verified Azure Blob adapter.
+
+The adapter authenticates with Microsoft Entra ID through
+``DefaultAzureCredential``. Storage keys, connection strings and SAS tokens are
+deliberately unsupported.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+from pathlib import Path
+from typing import Any, Protocol
+
+ROOT = Path(__file__).resolve().parents[1]
+CONFIG_PATH = ROOT / "config" / "g2_source_store.v1.json"
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+FILENAME_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+ACCOUNT_RE = re.compile(r"^[a-z0-9]{3,24}$")
+CONTAINER_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$")
+LOCATOR_RE = re.compile(
+    r"^azure://(?P<account>[a-z0-9]+)/(?P<container>[a-z0-9-]+)"
+    r"/(?P<sha256>[0-9a-f]{64})/(?P<filename>[A-Za-z0-9._-]+)$"
+)
+
+
+def load_g2_store() -> dict[str, Any]:
+    return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+
+
+def effective_g2_store() -> dict[str, Any]:
+    """Runtime coordinates from app settings. Git baseline stays in the JSON file.
+
+    Storage account/container MAY come from environment. ``g2_status`` MUST stay
+    BLOCKED: an app-setting MUST NOT open the publication gate.
+    """
+    store = dict(load_g2_store())
+    account = os.environ.get("G2_STORAGE_ACCOUNT", "").strip()
+    container = os.environ.get("G2_BLOB_CONTAINER", "").strip()
+    if account:
+        if ACCOUNT_RE.fullmatch(account) is None:
+            raise ValueError("g2_storage_account_invalid")
+        store["storage_account"] = account
+    if container:
+        if CONTAINER_RE.fullmatch(container) is None:
+            raise ValueError("g2_blob_container_invalid")
+        store["container"] = container
+    store["g2_status"] = "BLOCKED"
+    return store
+
+
+def g2_gate_status() -> str:
+    store = effective_g2_store()
+    status = str(store.get("g2_status") or "BLOCKED")
+    return status if status == "BLOCKED" else "BLOCKED"
+
+
+def azure_blob_sdk_available() -> bool:
+    try:
+        import azure.identity  # noqa: F401
+        import azure.storage.blob  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def load_azure_blob_sdk() -> tuple[Any, Any]:
+    try:
+        from azure.identity import DefaultAzureCredential
+        from azure.storage.blob import BlobServiceClient
+    except ImportError as exc:
+        raise G2SourceStoreError("azure_blob_sdk_missing") from exc
+    return DefaultAzureCredential, BlobServiceClient
+
+
+def build_g2_locator(*, sha256: str, filename: str) -> str:
+    digest = sha256.strip().lower()
+    raw = filename.replace("\\", "/")
+    name = Path(raw).name
+    if not SHA256_RE.fullmatch(digest):
+        raise ValueError("g2_locator_checksum_invalid")
+    if raw != name or not FILENAME_RE.fullmatch(name):
+        raise ValueError("g2_locator_filename_invalid")
+    store = effective_g2_store()
+    return f"azure://{store['storage_account']}/{store['container']}/{digest}/{name}"
+
+
+def parse_g2_locator(locator: str | None) -> dict[str, str] | None:
+    if not locator or not str(locator).strip():
+        return None
+    match = LOCATOR_RE.fullmatch(str(locator).strip())
+    if match is None:
+        return None
+    parts = match.groupdict()
+    store = effective_g2_store()
+    if parts["account"] != store["storage_account"]:
+        return None
+    if parts["container"] != store["container"]:
+        return None
+    return parts
+
+
+def is_g2_locator(locator: str | None) -> bool:
+    return parse_g2_locator(locator) is not None
+
+
+class G2SourceStoreError(RuntimeError):
+    """Fail-closed error raised when canonical bytes cannot be verified."""
+
+
+class ImmutableSourceStore(Protocol):
+    def store_verified(self, *, data: bytes, sha256: str, filename: str) -> str: ...
+
+    def load_verified(self, locator: str) -> bytes: ...
+
+    def delete_verified(self, locator: str) -> bool: ...
+
+
+class AzureBlobSourceStore:
+    """Content-addressed canonical source storage backed by Azure Blob."""
+
+    def __init__(self, *, blob_service_client: Any | None = None) -> None:
+        store = effective_g2_store()
+        self.account = str(store["storage_account"])
+        self.container = str(store["container"])
+        if blob_service_client is None:
+            DefaultAzureCredential, BlobServiceClient = load_azure_blob_sdk()
+            credential = DefaultAzureCredential()
+            blob_service_client = BlobServiceClient(
+                account_url=f"https://{self.account}.blob.core.windows.net",
+                credential=credential,
+            )
+        self._service = blob_service_client
+
+    @staticmethod
+    def _verify(data: bytes, expected_sha256: str) -> None:
+        actual = hashlib.sha256(data).hexdigest()
+        if actual != expected_sha256:
+            raise G2SourceStoreError("canonical_source_checksum_mismatch")
+
+    def _blob_client(self, *, sha256: str, filename: str) -> Any:
+        locator = build_g2_locator(sha256=sha256, filename=filename)
+        parsed = parse_g2_locator(locator)
+        if parsed is None:  # defensive: build and parse must stay symmetric
+            raise G2SourceStoreError("canonical_source_locator_invalid")
+        return self._service.get_blob_client(
+            container=self.container,
+            blob=f"{parsed['sha256']}/{parsed['filename']}",
+        )
+
+    def store_verified(self, *, data: bytes, sha256: str, filename: str) -> str:
+        locator = build_g2_locator(sha256=sha256, filename=filename)
+        parsed = parse_g2_locator(locator)
+        if parsed is None:  # defensive: build and parse must stay symmetric
+            raise G2SourceStoreError("canonical_source_locator_invalid")
+        name = parsed["filename"]
+        self._verify(data, sha256)
+        blob = self._blob_client(sha256=sha256, filename=name)
+        try:
+            blob.upload_blob(
+                data,
+                overwrite=False,
+                metadata={"sha256": sha256},
+            )
+        except Exception as exc:
+            # A content-addressed object may already exist. In every case the
+            # authoritative read-back below decides whether it is acceptable.
+            if exc.__class__.__name__ != "ResourceExistsError":
+                raise G2SourceStoreError("canonical_source_upload_failed") from exc
+        try:
+            stored = bytes(blob.download_blob().readall())
+        except Exception as exc:
+            raise G2SourceStoreError("canonical_source_readback_failed") from exc
+        self._verify(stored, sha256)
+        return locator
+
+    def load_verified(self, locator: str) -> bytes:
+        parsed = parse_g2_locator(locator)
+        if parsed is None:
+            raise G2SourceStoreError("canonical_source_locator_invalid")
+        blob = self._blob_client(sha256=parsed["sha256"], filename=parsed["filename"])
+        try:
+            data = bytes(blob.download_blob().readall())
+        except Exception as exc:
+            raise G2SourceStoreError("canonical_source_download_failed") from exc
+        self._verify(data, parsed["sha256"])
+        return data
+
+    def probe(self, locator: str) -> dict[str, Any]:
+        """Read blob properties only. Existence is not checksum verification."""
+        parsed = parse_g2_locator(locator)
+        if parsed is None:
+            return {"status": "invalid_locator"}
+        try:
+            props = self._blob_client(sha256=parsed["sha256"], filename=parsed["filename"]).get_blob_properties(timeout=5)
+            return {"status": "present", "size_bytes": props.size}
+        except Exception as exc:
+            return {"status": "absent" if exc.__class__.__name__ == "ResourceNotFoundError" else "unavailable"}
+
+    def delete_verified(self, locator: str) -> bool:
+        """Delete one canonical Blob addressed by a validated locator.
+
+        Missing is idempotent. Callers own reference-count / publication checks.
+        """
+        parsed = parse_g2_locator(locator)
+        if parsed is None:
+            raise G2SourceStoreError("canonical_source_locator_invalid")
+        blob = self._blob_client(sha256=parsed["sha256"], filename=parsed["filename"])
+        try:
+            blob.delete_blob(delete_snapshots="include")
+        except Exception as exc:
+            if exc.__class__.__name__ == "ResourceNotFoundError":
+                return False
+            raise G2SourceStoreError("canonical_source_delete_failed") from exc
+        return True

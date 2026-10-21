@@ -1,0 +1,6 @@
+{"during_formation": {"snapshot_saved": true, "attempt_state": "running", "eligibility": "blocked_pending_pre_review", "health_http": 200, "receipt_returned_while_provider_pending": false}, "after_formation": {"http": 200, "attempt_state": "succeeded"}}
+Traceback (most recent call last):
+  File "/workspace/scratch/3bac53626d42/metis/evidence/availability/probe_upload_response_lifetime.py", line 48, in <module>
+    assert before['receipt_returned_while_provider_pending'],'UPLOAD_RECEIPT_WAITS_FOR_FULL_FORMATION'
+           ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: UPLOAD_RECEIPT_WAITS_FOR_FULL_FORMATION

@@ -1,0 +1,79 @@
+{
+  "golden_set_id": "v230-phase4-extract-gold-v0.1",
+  "kind": "extract_quality",
+  "version": "0.1",
+  "status": "fixture_gold",
+  "source_fixture": "data/fixtures/v230_phase2_deep_context_regression.html",
+  "scope": "Protocol v2.30 Phase 4 extract-quality gold for the Phase 2 deep-context freeze. Duty is normative and application-critical knowledge, not every sentence.",
+  "rules": {
+    "gold_required_before_quality_claim": true,
+    "soft_scores_must_not_claim_quality": true,
+    "single_guideline_without_gold_is_not_quality": true,
+    "no_duty_to_objectify_every_sentence": true,
+    "unknown_register_status_rejected": true
+  },
+  "passages": [
+    {
+      "id": "P4-R01",
+      "class": "normative",
+      "section": "2 Aanbevelingen",
+      "source_text": "De werkgroep adviseert de verpleegkundige de risicofactoren scorelijst te gebruiken bij iedere intake.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "P4-R02",
+      "class": "normative",
+      "section": "2 Aanbevelingen",
+      "source_text": "De werkgroep adviseert calcium te geven.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "recommendation",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "P4-C01",
+      "class": "normative",
+      "section": "2 Aanbevelingen",
+      "source_text": "Bij een cliënt van 60 jaar of ouder zonder recente fractuur geldt extra aandacht voor botgezondheid.",
+      "expected_register_status": "selected_as_candidate",
+      "expected_type": "condition",
+      "expected_gate": "allowed"
+    },
+    {
+      "id": "P4-S01",
+      "class": "support",
+      "section": "2 Aanbevelingen",
+      "source_text": "Tenzij er hypercalciëmie bestaat.",
+      "expected_register_status": "linked_as_support",
+      "allowed_register_statuses": ["linked_as_support", "selected_as_candidate", "used_as_context"],
+      "expected_type": "exception"
+    },
+    {
+      "id": "P4-X01",
+      "class": "excluded",
+      "section": "2 Aanbevelingen",
+      "source_text": "De dJG wordt in Nederland vaker gebruikt.",
+      "expected_register_status": "excluded_with_reason",
+      "expected_gate": "blocked",
+      "must_contain_reason_codes": ["recommendation_evidence_missing"],
+      "must_not_enter_ordinary_queue_as": "recommendation"
+    },
+    {
+      "id": "P4-X02",
+      "class": "excluded",
+      "section": "2 Aanbevelingen",
+      "source_text": "Zie tabel 4 voor de cutoff van het risico.",
+      "expected_register_status": "excluded_with_reason",
+      "expected_gate": "blocked"
+    },
+    {
+      "id": "P4-X03",
+      "class": "excluded",
+      "section": "2 Aanbevelingen",
+      "source_text": "Deze methode is vaker effectief.",
+      "expected_register_status": "excluded_with_reason",
+      "expected_gate": "blocked"
+    }
+  ]
+}

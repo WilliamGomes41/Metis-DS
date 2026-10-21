@@ -1,0 +1,28 @@
+{
+  "transform_version": "semantic-0.1.0",
+  "source_spec": "/mnt/data/vvn-data-service-v0.1/data/semantic_page15_spec.json",
+  "object_count": 20,
+  "object_types": {
+    "condition": 3,
+    "recommendation": 7,
+    "table": 1,
+    "score_rule": 8,
+    "background": 1
+  },
+  "schema_valid": true,
+  "schema_errors": [],
+  "all_clinical_objects_status": "needs_review",
+  "quality_gates": {
+    "scenario_grouping": true,
+    "score_rules": true,
+    "referral_threshold_present": true,
+    "source_traceability": true,
+    "no_embeddings": true
+  },
+  "known_limitations": [
+    "The page-15 semantic specification was visually checked against the rendered PDF because the PDF text layer drops some comparison symbols/text.",
+    "Clinical correctness is not approved; all objects remain needs_review.",
+    "Age score rows are represented independently; whether age bands are mutually exclusive/cumulative is not inferred.",
+    "The footnote is preserved as contextual background and is not decomposed into separate clinical conditions in this pilot."
+  ]
+}

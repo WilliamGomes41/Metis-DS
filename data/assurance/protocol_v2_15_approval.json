@@ -1,0 +1,13 @@
+{
+  "manifest_version": "1.0",
+  "protocol_version": "2.15.0",
+  "protocol_path": "docs/PROTOCOL_V2_15_INGEST_DATE_VERSION_REVIEW_LANES_DELTA.md",
+  "protocol_sha256": "f3ae713cd8ef1ca9edab22a54e449ab0b27006cc54475a172bbf7e1901ceaf37",
+  "repository": "WilliamGomes41/VENVN-DS",
+  "default_branch": "main",
+  "commit_sha": "pending_after_merge",
+  "approval_date": "2026-09-01",
+  "approval_authority": "project_owner",
+  "branch_protection_status": "temporary_procedural_control",
+  "conformance_effect": "does_not_override_gate_status"
+}

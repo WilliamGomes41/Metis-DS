@@ -1,0 +1,19 @@
+{
+  "step": "12B",
+  "source": "V&VN Richtlijn Continentie bij (kwetsbare) ouderen",
+  "source_manifest": "data/source_manifest.continentie.v1.json",
+  "source_type": "html",
+  "adapter_status": "PASS",
+  "generic_transform_status": "PASS",
+  "source_neutral_provenance_status": "PASS",
+  "legacy_hash_compatibility_status": "PASS",
+  "real_source_binary_status": "BLOCKED",
+  "real_source_sha256_status": "BLOCKED",
+  "real_canonical_transform_status": "BLOCKED",
+  "holdout_b_status": "NOT_CREATED",
+  "reason": "Exact remote source bytes cannot be materialized in this runtime; fail-closed until an official HTML or generated PDF is supplied.",
+  "regression_tests": {
+    "passed": 105,
+    "failed": 0
+  }
+}

@@ -1,0 +1,602 @@
+........................................................................ [ 72%]
+............................                                             [100%]
+=============================== warnings summary ===============================
+tests/test_product_api_v1.py::test_product_api_requires_auth
+  /opt/pyvenv/lib/python3.13/site-packages/pydantic/_internal/_schema_generation_shared.py:72: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6419940310>
+    def __init__(
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_invalid_key_rejected
+  /usr/lib/python3.13/inspect.py:3089: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64199e8040>
+    params = OrderedDict((param.name, param) for param in parameters)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_fixture_retrieve_contract_and_source
+  /opt/pyvenv/lib/python3.13/site-packages/pydantic/_internal/_schema_generation_shared.py:72: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6419772e30>
+    def __init__(
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_no_answer_abstains
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f643d4772e0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_no_answer_abstains
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f641ba7ff10>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_explicit_unauthorized_document_filter_is_403
+  /opt/pyvenv/lib/python3.13/site-packages/pydantic/_internal/_config.py:333: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f643d477f10>
+    return ConfigDict()
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_explicit_unauthorized_document_filter_is_403
+  /opt/pyvenv/lib/python3.13/site-packages/pydantic/_internal/_config.py:333: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64197735b0>
+    return ConfigDict()
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_explicit_unauthorized_document_filter_is_403
+  /opt/pyvenv/lib/python3.13/site-packages/pydantic/_internal/_config.py:333: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64166ed3f0>
+    return ConfigDict()
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_explicit_unauthorized_document_filter_is_403
+  /opt/pyvenv/lib/python3.13/site-packages/pydantic/_internal/_config.py:333: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6416fb7a60>
+    return ConfigDict()
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_knowledge_outside_entitlement_is_not_disclosed
+  /opt/pyvenv/lib/python3.13/site-packages/pydantic/_internal/_generate_schema.py:997: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6416fb5b70>
+    args = tuple(self._resolve_forward_ref(a) if isinstance(a, ForwardRef) else a for a in args)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_top_k_tenant_limit
+  <frozen os>:794: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6416fb5c60>
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_usage_ledger_hashes_query_not_plaintext
+  /usr/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f643d4775b0>
+    obj, end = self.scan_once(s, idx)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_usage_ledger_hashes_query_not_plaintext
+  /usr/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64166edb70>
+    obj, end = self.scan_once(s, idx)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_usage_summary
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f641ba7fd30>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_usage_summary
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6416fb63e0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_usage_summary
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6416fb5990>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_real_mode_is_fail_closed_even_with_valid_tenant
+  /usr/lib/python3.13/inspect.py:2487: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f643d477a60>
+    def _signature_from_callable(obj, *,
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_real_mode_is_fail_closed_even_with_valid_tenant
+  /usr/lib/python3.13/inspect.py:2487: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64166eff10>
+    def _signature_from_callable(obj, *,
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_real_mode_is_fail_closed_even_with_valid_tenant
+  /usr/lib/python3.13/inspect.py:2487: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64166ec9a0>
+    def _signature_from_callable(obj, *,
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_real_mode_is_fail_closed_even_with_valid_tenant
+  /usr/lib/python3.13/inspect.py:2487: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f643d476980>
+    def _signature_from_callable(obj, *,
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_real_mode_is_fail_closed_even_with_valid_tenant
+  /usr/lib/python3.13/inspect.py:2487: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417190b80>
+    def _signature_from_callable(obj, *,
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_real_mode_is_fail_closed_even_with_valid_tenant
+  /usr/lib/python3.13/inspect.py:2487: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417191210>
+    def _signature_from_callable(obj, *,
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_real_mode_is_fail_closed_even_with_valid_tenant
+  /usr/lib/python3.13/inspect.py:2487: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64166ee110>
+    def _signature_from_callable(obj, *,
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_request_id_is_returned
+  /usr/lib/python3.13/asyncio/tasks.py:691: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64166eda80>
+    @types.coroutine
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_request_id_is_returned
+  /usr/lib/python3.13/asyncio/tasks.py:691: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6416fb73d0>
+    @types.coroutine
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_specific_topic_entitlement_does_not_include_untagged_records
+  /usr/lib/python3.13/typing.py:1295: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64166ec8b0>
+    return attr.startswith('__') and attr.endswith('__')
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_specific_topic_entitlement_does_not_include_untagged_records
+  /usr/lib/python3.13/typing.py:1295: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f643d476e30>
+    return attr.startswith('__') and attr.endswith('__')
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_specific_topic_entitlement_does_not_include_untagged_records
+  /usr/lib/python3.13/typing.py:1295: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64171909a0>
+    return attr.startswith('__') and attr.endswith('__')
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_specific_topic_entitlement_does_not_include_untagged_records
+  /usr/lib/python3.13/typing.py:1295: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64166efc40>
+    return attr.startswith('__') and attr.endswith('__')
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_product_state_reloads_changed_retrieval_file
+  /usr/lib/python3.13/asyncio/base_events.py:423: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64166efe20>
+    self._ready = collections.deque()
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_product_api_v1.py::test_product_state_reloads_changed_retrieval_file
+  /usr/lib/python3.13/asyncio/base_events.py:423: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64199eb1f0>
+    self._ready = collections.deque()
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_service_api_v1.py::test_real_mode_is_default_fail_closed
+  /usr/lib/python3.13/asyncio/base_events.py:554: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417192200>
+    def _check_closed(self):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_storage_publication_v2.py::test_real_unreviewed_dataset_cannot_enter_canonical_store
+  /usr/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64171913f0>
+    obj, end = self.scan_once(s, idx)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64166ee980>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64166ee200>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64171932e0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417190f40>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417192d40>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64171934c0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64171927a0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417192980>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417191b70>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417192020>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417193790>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417192b60>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417193c40>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417193b50>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417193970>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417192c50>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64171924d0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64171933d0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417193880>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417193e20>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f64171936a0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417190130>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417193d30>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6417193f10>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff68040>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff68130>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff68220>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6419773790>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f6419772200>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff685e0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff686d0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff68310>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff68400>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff687c0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff688b0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff684f0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff689a0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff68a90>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff68d60>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff68e50>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff68f40>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff69030>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff69120>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff69210>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff69300>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff693f0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff68b80>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff68c70>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff694e0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff695d0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff696c0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff697b0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff698a0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff69990>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff69c60>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff69d50>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff69a80>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff69b70>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff69e40>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff6a110>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff6a200>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff6a2f0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff6a3e0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff6a4d0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_vector_retrieval_v1.py::test_index_signature_is_deterministic
+  /opt/pyvenv/lib/python3.13/site-packages/sklearn/feature_extraction/text.py:1244: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f640ff6a5c0>
+    for term, old_index in list(vocabulary.items()):
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.13.5-final-0 ________________
+
+Name                           Stmts   Miss  Cover   Missing
+------------------------------------------------------------
+src/answerability_gate_v1.py     307     47    85%   119, 121, 142, 148, 151-161, 171, 195, 209, 226, 248, 251, 257, 259, 262-272, 293, 296, 306, 308, 310, 312, 422, 470-476
+src/product_api_v1.py            251     24    90%   81, 87, 97, 131-132, 172-174, 184, 186, 201, 246, 251, 274, 294, 398-401, 413-419
+src/safe_retrieval_v1.py          24      5    79%   12-16
+------------------------------------------------------------
+TOTAL                            582     76    87%
+100 passed, 98 warnings in 15.34s
