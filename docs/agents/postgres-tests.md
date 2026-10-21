@@ -401,3 +401,22 @@ De bronreparatie-rollbackproef gebruikt nu het bestaande gestructureerde command
 het foutbewijs en de exacte raw-PG/herstartvergelijking blijven behouden. Een
 legacy vrije revise zou bij productie-start juist terecht worden heropend.
 De aanroepers van gemigreerde helpers worden aansluitend afzonderlijk gecontroleerd.
+
+### Publicatie van porties 17–19 op de actuele main
+
+PR 809 mergeerde portie 16 in de oude portie-15-branch. Portie 17 neemt daarom
+ook die nog ontbrekende portie mee naar `main`; 18 en 19 bouwen daarop voort.
+Alle drie PR's richten op `main` en worden in de volgorde 17, 18, 19 beoordeeld.
+Dit is testonderhoud (Class C, Rewrite risk: none); productiecode en schema's
+blijven ongewijzigd.
+
+De eerste brede uitvoering van portie 19 stopte doordat de nieuwe constructorguard
+terecht de nog niet gemigreerde characterization-helper weigerde. De bestaande
+PG-migratie van die helpers en hun afnemers is daarom naar deze portie gehaald.
+De guard blijft ongewijzigd; er komt geen uitzondering voor deze proeven.
+Dezelfde characterization-contracten draaien op de productiecompositie. De
+routegolden behoudt ook de vier weergavecontroleroutes uit PR 808. De 135 betrokken
+characterization/overzicht/lane-proeven slagen; dit is geen volledige suiteclaim.
+Een AST-controle van gewijzigde helperargumenten vindt op porties 17, 18 en 19
+respectievelijk 111, 223 en 267 aanroepen zonder ontbrekende nieuwe argumenten.
+De volledige suites en CI-tijdmeting blijven afzonderlijk vereist.

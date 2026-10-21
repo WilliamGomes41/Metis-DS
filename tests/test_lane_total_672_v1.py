@@ -35,23 +35,23 @@ def _with_status(row, status):
     return row
 
 
-def test_excluded_v1_source_record_is_not_a_finished_knowledge_review(tmp_path):
-    console, sid, _ = guideline_document(tmp_path)
+def test_excluded_v1_source_record_is_not_a_finished_knowledge_review(tmp_path, *, production_console):
+    console, sid, _ = guideline_document(tmp_path, production_console=production_console)
     rows = _exclude_legacy(console, sid)
     excluded = next(row for row in rows if is_source_record(row) and row["governance"]["validation_status"] == "rejected")
     assert excluded  # the real V1 command rejected the record
     assert _lane_total(rows, review_path="richtlijn", lane="contextual", open_rows=[]) == 0
 
 
-def test_workboard_object_path_individual_total_ignores_excluded_source_record(tmp_path):
-    console, sid, account = guideline_document(tmp_path)
+def test_workboard_object_path_individual_total_ignores_excluded_source_record(tmp_path, *, production_console):
+    console, sid, account = guideline_document(tmp_path, production_console=production_console)
     _exclude_legacy(console, sid)
     item = review_work_item(console, account=account, envelope=console._envelope(sid))
     assert item is not None and item["individual_total"] == 0
 
 
-def test_superseded_candidate_is_not_finished_but_approved_and_rejected_still_count(tmp_path):
-    console, sid, _ = guideline_document(tmp_path)
+def test_superseded_candidate_is_not_finished_but_approved_and_rejected_still_count(tmp_path, *, production_console):
+    console, sid, _ = guideline_document(tmp_path, production_console=production_console)
     rows = console.snapshot_objects(sid)
     candidate = next(row for row in rows if content_reviewable(row))
     lane_rows = [row for row in rows if row is not candidate]
@@ -61,8 +61,8 @@ def test_superseded_candidate_is_not_finished_but_approved_and_rejected_still_co
         assert _lane_total(variant, review_path="richtlijn", lane="batch", open_rows=[]) == base + delta, status
 
 
-def test_finished_heading_still_counts_in_structure_lane(tmp_path):
-    console, sid, _ = guideline_document(tmp_path)
+def test_finished_heading_still_counts_in_structure_lane(tmp_path, *, production_console):
+    console, sid, _ = guideline_document(tmp_path, production_console=production_console)
     rows = console.snapshot_objects(sid)
     heading = next(row for row in rows if row.get("object_type") == "heading")
     variant = [row for row in rows if row is not heading] + [_with_status(heading, "approved")]
@@ -73,9 +73,9 @@ LANES = ("structure", "contextual", "batch")
 
 
 @pytest.mark.parametrize("role", ["excluded", "label", "context"])
-def test_candidate_reclassified_as_source_role_is_not_finished(tmp_path, role):
+def test_candidate_reclassified_as_source_role_is_not_finished(tmp_path, role, *, production_console):
     """#700: confirm_source_context stamps rejected, but it is source handling, not a review decision."""
-    console, sid, _ = guideline_document(tmp_path)
+    console, sid, _ = guideline_document(tmp_path, production_console=production_console)
     rows = console.snapshot_objects(sid)
     before = {lane: _lane_total(rows, review_path="richtlijn", lane=lane, open_rows=[]) for lane in LANES}
     candidate = next(row for row in rows if content_reviewable(row))
