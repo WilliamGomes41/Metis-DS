@@ -8,11 +8,19 @@ Alle zes workflows van [draft-PR #791](https://github.com/WilliamGomes41/Metis-D
 zijn groen. [D6a/02, draft-PR #792](https://github.com/WilliamGomes41/Metis-DS/pull/792)
 is nu ook geopend, tegen de branch van #791: 16 testbestanden, CI gestart.
 Zie [publicatiebewijs van portie02](portion02-publication.json).
-Ook [03 — #793](https://github.com/WilliamGomes41/Metis-DS/pull/793),
-[04 — #794](https://github.com/WilliamGomes41/Metis-DS/pull/794) en
-[05 — #795](https://github.com/WilliamGomes41/Metis-DS/pull/795) zijn als draft geopend.
-Hun workflows zijn gestart of staan in de wachtrij: vijf PRs geopend, zeventien
-nog te openen. Zie [publicatiebewijs van porties03–05](portions03-05-publication.json).
+Ook porties03 tot en met10 zijn als draft geopend:
+[#793](https://github.com/WilliamGomes41/Metis-DS/pull/793),
+[#794](https://github.com/WilliamGomes41/Metis-DS/pull/794),
+[#795](https://github.com/WilliamGomes41/Metis-DS/pull/795),
+[#796](https://github.com/WilliamGomes41/Metis-DS/pull/796),
+[#797](https://github.com/WilliamGomes41/Metis-DS/pull/797),
+[#798](https://github.com/WilliamGomes41/Metis-DS/pull/798),
+[#799](https://github.com/WilliamGomes41/Metis-DS/pull/799) en
+[#800](https://github.com/WilliamGomes41/Metis-DS/pull/800).
+Tien PRs zijn geopend; twaalf moeten nog worden geopend.
+De workflows van06 tot en met10 zijn gestart of staan in de wachtrij.
+Zie [publicatiebewijs van porties03–05](portions03-05-publication.json) en
+[porties06–10](portions06-10-publication.json).
 
 D6a is nog niet formeel afgerond en D6b is niet gestart. #695 houdt voorrang
 bij capaciteitsgebrek; GNC is niet gestart.

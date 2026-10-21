@@ -347,8 +347,10 @@
         "tests/decision_graph_native_support.py",
         "tests/production_support.py"
       ],
-      "ci_status": "not started; branch pushed, no PR opened",
-      "delivery": "published reviewable branch"
+      "ci_status": "CI workflows started/queued; outcome pending",
+      "delivery": "published reviewable branch",
+      "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/796",
+      "publication_evidence": "portions06-10-publication.json"
     }
   },
   {
@@ -451,8 +453,10 @@
         "tests/complete_workflow_support.py",
         "tests/conftest.py"
       ],
-      "ci_status": "not started; branch pushed, no PR opened",
-      "delivery": "published reviewable branch"
+      "ci_status": "CI workflows started/queued; outcome pending",
+      "delivery": "published reviewable branch",
+      "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/797",
+      "publication_evidence": "portions06-10-publication.json"
     },
     "introducing_portion_consumer_proof": [
       {
@@ -490,8 +494,10 @@
       ],
       "changed_test_files": 1,
       "support_files": [],
-      "ci_status": "not started; branch pushed, no PR opened",
-      "delivery": "published reviewable branch"
+      "ci_status": "CI workflows started/queued; outcome pending",
+      "delivery": "published reviewable branch",
+      "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/798",
+      "publication_evidence": "portions06-10-publication.json"
     }
   },
   {
@@ -572,8 +578,10 @@
       ],
       "changed_test_files": 20,
       "support_files": [],
-      "ci_status": "not started; branch pushed, no PR opened",
-      "delivery": "published reviewable branch"
+      "ci_status": "CI workflows started/queued; outcome pending",
+      "delivery": "published reviewable branch",
+      "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/799",
+      "publication_evidence": "portions06-10-publication.json"
     },
     "introducing_portion_consumer_proof": [
       {
@@ -641,8 +649,10 @@
         "tests/conftest.py",
         "tests/production_support.py"
       ],
-      "ci_status": "not started; branch pushed, no PR opened",
-      "delivery": "published reviewable branch"
+      "ci_status": "CI workflows started/queued; outcome pending",
+      "delivery": "published reviewable branch",
+      "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/800",
+      "publication_evidence": "portions06-10-publication.json"
     }
   },
   {

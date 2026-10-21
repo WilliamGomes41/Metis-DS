@@ -6,7 +6,7 @@
     "first_pr": "https://github.com/WilliamGomes41/Metis-DS/pull/791",
     "first_pr_draft": true,
     "ci_run": "https://github.com/WilliamGomes41/Metis-DS/actions/runs/39540968976",
-    "remaining_prs": "17 prepared branches have no PR yet",
+    "remaining_prs": "12 prepared branches have no PR yet",
     "initial_ci_run": "https://github.com/WilliamGomes41/Metis-DS/actions/runs/39539031210",
     "status_evidence": "publication-status.json",
     "second_pr": "https://github.com/WilliamGomes41/Metis-DS/pull/792",
@@ -32,9 +32,30 @@
       {
         "portion": "05",
         "url": "https://github.com/WilliamGomes41/Metis-DS/pull/795"
+      },
+      {
+        "portion": "06",
+        "url": "https://github.com/WilliamGomes41/Metis-DS/pull/796"
+      },
+      {
+        "portion": "07",
+        "url": "https://github.com/WilliamGomes41/Metis-DS/pull/797"
+      },
+      {
+        "portion": "08",
+        "url": "https://github.com/WilliamGomes41/Metis-DS/pull/798"
+      },
+      {
+        "portion": "09",
+        "url": "https://github.com/WilliamGomes41/Metis-DS/pull/799"
+      },
+      {
+        "portion": "10",
+        "url": "https://github.com/WilliamGomes41/Metis-DS/pull/800"
       }
     ],
-    "portions03_05_evidence": "portions03-05-publication.json"
+    "portions03_05_evidence": "portions03-05-publication.json",
+    "portions06_10_evidence": "portions06-10-publication.json"
   },
   "order": [
     {
@@ -197,8 +218,10 @@
         "tests/decision_graph_native_support.py",
         "tests/production_support.py"
       ],
-      "ci_status": "not started; branch pushed, no PR opened",
-      "delivery": "published reviewable branch"
+      "ci_status": "CI workflows started/queued; outcome pending",
+      "delivery": "published reviewable branch",
+      "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/796",
+      "publication_evidence": "portions06-10-publication.json"
     },
     {
       "portion": "07",
@@ -232,8 +255,10 @@
         "tests/complete_workflow_support.py",
         "tests/conftest.py"
       ],
-      "ci_status": "not started; branch pushed, no PR opened",
-      "delivery": "published reviewable branch"
+      "ci_status": "CI workflows started/queued; outcome pending",
+      "delivery": "published reviewable branch",
+      "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/797",
+      "publication_evidence": "portions06-10-publication.json"
     },
     {
       "portion": "08",
@@ -246,8 +271,10 @@
       ],
       "changed_test_files": 1,
       "support_files": [],
-      "ci_status": "not started; branch pushed, no PR opened",
-      "delivery": "published reviewable branch"
+      "ci_status": "CI workflows started/queued; outcome pending",
+      "delivery": "published reviewable branch",
+      "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/798",
+      "publication_evidence": "portions06-10-publication.json"
     },
     {
       "portion": "09",
@@ -279,8 +306,10 @@
       ],
       "changed_test_files": 20,
       "support_files": [],
-      "ci_status": "not started; branch pushed, no PR opened",
-      "delivery": "published reviewable branch"
+      "ci_status": "CI workflows started/queued; outcome pending",
+      "delivery": "published reviewable branch",
+      "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/799",
+      "publication_evidence": "portions06-10-publication.json"
     },
     {
       "portion": "10",
@@ -306,8 +335,10 @@
         "tests/conftest.py",
         "tests/production_support.py"
       ],
-      "ci_status": "not started; branch pushed, no PR opened",
-      "delivery": "published reviewable branch"
+      "ci_status": "CI workflows started/queued; outcome pending",
+      "delivery": "published reviewable branch",
+      "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/800",
+      "publication_evidence": "portions06-10-publication.json"
     },
     {
       "portion": "review-evidence-prerequisite",
