@@ -15,7 +15,7 @@ import json
 import hashlib
 import sys
 import time
-from threading import Thread, Barrier
+from threading import Thread, Barrier, Event
 from types import SimpleNamespace
 
 import pytest
@@ -65,22 +65,40 @@ def setup(root, config):
 
 
 def test_native_stall_reserves_before_call_and_recovers_same_source(workflow_postgres,tmp_path,monkeypatch):
+    import src.pre_review_semantic_v1 as semantic
+
     console,actor,reviewer=setup(tmp_path,workflow_postgres)
     outcomes=[]
+    call_ready, reservation_checked = Event(), Event()
+    real_transport = semantic.bounded_post_json
+
+    def after_reservation_check(*args, **kwargs):
+        # Observe the durable reservation before starting the real transport's
+        # 0.4-second idle deadline. Console startup can exceed it on busy CI.
+        call_ready.set()
+        assert reservation_checked.wait(10)
+        return real_transport(*args, **kwargs)
+
+    monkeypatch.setattr(semantic, 'bounded_post_json', after_reservation_check)
     with peer(delay=3) as (url,received):
         bind(console,monkeypatch,url)
         worker=Thread(target=lambda:outcomes.append(console.ingest(**command(actor,reviewer))))
         worker.start()
         try:
-            assert received.wait(5)
+            assert call_ready.wait(5)
             restarted=_console(tmp_path/'reader',workflow_postgres)
             envelope=restarted.list_envelopes()[0]
             sid=envelope['snapshot_id']
             assert envelope['processing_attempts'][-1]['state']=='running'
             assert restarted.snapshot_objects(sid)==[]
             assert restarted.processing_status(sid)['retry_allowed'] is False
-        finally:worker.join(5)
+        finally:
+            reservation_checked.set()
+            worker.join(5)
         assert not worker.is_alive()
+        assert received.is_set()
+        assert len(outcomes)==1 and outcomes[0]['snapshot_id']==sid
+    monkeypatch.setattr(semantic, 'bounded_post_json', real_transport)
     envelope=_console(tmp_path,workflow_postgres)._envelope(sid)
     attempt=envelope['processing_attempts'][-1]
     assert attempt['state']=='failed'

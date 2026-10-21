@@ -68,8 +68,10 @@ def installed(root, cache, backend, patch):
     return app, app.state.operations_kernel
 
 
-@pytest.fixture(params=["local", "postgres"])
+@pytest.fixture(params=["postgres"])
 def backend(request, complete_postgres):
+    # installed() uses the same production PG/Blob composition for both former
+    # labels. Retain the native evidence IDs without executing each case twice.
     return request.param
 
 
