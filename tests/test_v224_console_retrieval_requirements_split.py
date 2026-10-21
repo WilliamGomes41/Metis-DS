@@ -193,7 +193,7 @@ def test_v224_shared_kernel_modules_must_not_import_sklearn_stack() -> None:
         assert hits == [], f"shared kernel {path.name} imported forbidden packages: {hits}"
 
 
-def test_v224_console_process_start_does_not_load_sklearn_or_retrieval(tmp_path: Path) -> None:
+def test_v224_console_process_start_does_not_load_sklearn_or_retrieval(tmp_path: Path, production_environment) -> None:
     probe = tmp_path / "probe_console_asgi.py"
     probe.write_text(
         "\n".join(
@@ -224,7 +224,6 @@ def test_v224_console_process_start_does_not_load_sklearn_or_retrieval(tmp_path:
     }
     env.pop("CONSOLE_IMMUTABLE_SOURCE_STORE", None)
     env.pop("WEBSITE_SITE_NAME", None)
-    env.pop("METIS_CANONICAL_STORE", None)
     result = subprocess.run(
         [sys.executable, str(probe)],
         cwd=ROOT,

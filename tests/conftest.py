@@ -99,6 +99,11 @@ def pytest_unconfigure(config):
 def _require_production_console_class(request, monkeypatch):
     """Catch runtime constructors missed by inventories, including helper aliases."""
     if request.node.get_closest_marker("file_topology"):
+        # A retiring-topology proof must select that topology explicitly, even
+        # when the developer shell is configured for production PostgreSQL.
+        from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
+        for name in (*POSTGRES_STORE_SETTINGS, "WEBSITE_SITE_NAME"):
+            monkeypatch.delenv(name, raising=False)
         return
     from src.operations_console_v1 import OperationsConsole
     from src.workflows.workflow_badge_counts_postgres_v1 import (
