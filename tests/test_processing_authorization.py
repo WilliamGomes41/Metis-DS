@@ -279,10 +279,10 @@ def test_other_authorized_actor_cannot_claim_or_fail_another_attempt(console):
         assert snapshot(restart(console), sid) == before
 
 
-def test_actual_resume_preserves_completed_work_and_denies_outsider(console, monkeypatch):
+def test_actual_resume_preserves_completed_work_and_denies_outsider(console, monkeypatch, *, production_console):
     from tests.test_recoverable_formation_v1 import system
     first, sid, author, reviewer, calls, mode, make, attach = system(
-        console.root, make_console=lambda: console)
+        console.root, make_console=lambda: console, production_console=production_console)
     outsider = first.create_account(username="outsider", password="fixture-only", roles=("reviewer",))["account_id"]
     before = snapshot(first, sid)
     prior_calls = len(calls)

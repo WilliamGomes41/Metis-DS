@@ -377,10 +377,10 @@ def test_estimates_require_comparable_complete_observations_and_config(tmp_path)
     assert estimate({**env,'processing_configuration':{'mode':'v4'}},docs)['range_seconds'] is None
 
 
-def test_http_partial_attempt_success_is_not_complete_then_resume_only_open_ranges(tmp_path):
+def test_http_partial_attempt_success_is_not_complete_then_resume_only_open_ranges(tmp_path, *, production_console):
     from tests.test_recoverable_formation_v1 import system
     from tests.test_recommendation_coverage_v1 import FIRST,SECOND
-    console,sid,actor,reviewer,calls,mode,make,rebind=system(tmp_path)
+    console,sid,actor,reviewer,calls,mode,make,rebind=system(tmp_path, production_console=production_console)
     before=deepcopy(console.snapshot_objects(sid))
     first=next(o for o in before if o['content']['clean_text']==FIRST)
     restarted=make();rebind(restarted);app=installed_app(restarted)
@@ -401,10 +401,10 @@ def test_http_partial_attempt_success_is_not_complete_then_resume_only_open_rang
         assert not restarted.publication_readiness(sid)['publish_allowed']
 
 
-def test_next_http_read_observes_tampered_source_and_new_review_decision(tmp_path):
+def test_next_http_read_observes_tampered_source_and_new_review_decision(tmp_path, *, production_console):
     from tests.test_recoverable_formation_v1 import system
     from tests.test_recommendation_coverage_v1 import FIRST
-    console,sid,actor,reviewer,_,mode,_,_=system(tmp_path,broken=False)
+    console,sid,actor,reviewer,_,mode,_,_=system(tmp_path,broken=False, production_console=production_console)
     candidate=next(o for o in console.snapshot_objects(sid) if o['content']['clean_text']==FIRST)
     app=installed_app(console)
     with TestClient(app,base_url='https://testserver') as client:

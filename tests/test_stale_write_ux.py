@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
 from src.review_ledger import read_events
 
@@ -46,8 +47,8 @@ pytestmark = [
 ]
 
 
-def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+def _console(tmp_path: Path) -> OperationsConsole:
+    return OperationsConsole(
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -100,8 +101,8 @@ def _content_rows(console: OperationsConsole, snapshot_id: str) -> list[dict]:
     return rows
 
 
-def _client(console: OperationsConsole, username: str='researcher.anne', *, production_app) -> TestClient:
-    client = TestClient(production_app(console))
+def _client(console: OperationsConsole, username: str = "researcher.anne") -> TestClient:
+    client = TestClient(create_console_app(console))
     passwords = {
         "researcher.anne": "anne-secret",
         "reviewer.bert": "bert-secret",
@@ -148,20 +149,26 @@ def _review_payload(snapshot_id: str, object_id: str, revision: str) -> dict[str
         "suitability": UNIQUE_SUITABILITY,
         "documentpositie_action": "dit_klopt",
         "type_action": "dit_klopt",
-        "eindoordeel": "afwijzen",
+        "eindoordeel": "later_beoordelen",
         "comment": UNIQUE_COMMENT,
         "proposed_correction": UNIQUE_CORRECTION,
     }
 
 
-def _install_concurrent_winner(console: OperationsConsole, snapshot_id: str, other_object_id: str, *, marker: str='concurrent-winner', production_console) -> None:
+def _install_concurrent_winner(
+    console: OperationsConsole,
+    snapshot_id: str,
+    other_object_id: str,
+    *,
+    marker: str = "concurrent-winner",
+) -> None:
     """Commit a real competing writer after form read, before review takes its lock.
 
     A second console cannot synchronously acquire the same store lock from inside
     the first console's save callback. The submitted form retains its old revision,
     so this exercises the real stale-request path and preserves the winning write.
     """
-    other = production_console(processing_binder=lambda console: None,
+    other = OperationsConsole(
         root=console.root, source_store=console.source_store, runtime=console.runtime)
     other_rows = other._load_objects(snapshot_id)
     for row in other_rows:
@@ -170,17 +177,17 @@ def _install_concurrent_winner(console: OperationsConsole, snapshot_id: str, oth
     other._save_objects(snapshot_id, other_rows)
 
 
-def _stale_review_post(tmp_path: Path, *, production_app, production_console) -> tuple[TestClient, dict, str, object]:
-    console = _console(tmp_path, production_console=production_console)
+def _stale_review_post(tmp_path: Path) -> tuple[TestClient, dict, str, object]:
+    console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
     first, second = _content_rows(console, snapshot_id)[:2]
-    client = _client(console, production_app=production_app)
+    client = _client(console)
     opened = client.get(f"/review?document={snapshot_id}&object={first['object_id']}")
     assert opened.status_code == 200
     assert 'data-review-form' in opened.text
-    _install_concurrent_winner(console, snapshot_id, second["object_id"], production_console=production_console)
+    _install_concurrent_winner(console, snapshot_id, second["object_id"])
     posted = client.post(
         "/review",
         data=_review_payload(snapshot_id, first["object_id"], _form_revision(opened.text)),
@@ -189,8 +196,8 @@ def _stale_review_post(tmp_path: Path, *, production_app, production_console) ->
     return client, receipt, first["object_id"], posted
 
 
-def test_stale_review_save_does_not_show_success_or_redirect_next(tmp_path: Path, *, production_app, production_console) -> None:
-    _client, receipt, object_id, posted = _stale_review_post(tmp_path, production_app=production_app, production_console=production_console)
+def test_stale_review_save_does_not_show_success_or_redirect_next(tmp_path: Path) -> None:
+    _client, receipt, object_id, posted = _stale_review_post(tmp_path)
     location = posted.headers.get("location") or ""
     body = posted.text
     assert posted.status_code != 303, "stale write MUST NOT follow the success redirect"
@@ -205,7 +212,7 @@ def test_stale_review_save_does_not_show_success_or_redirect_next(tmp_path: Path
     assert f'name="object_id" value="{object_id}"' in body
     live = next(
         row
-        for row in production_console(processing_binder=lambda console: None,
+        for row in OperationsConsole(
             root=tmp_path,
             source_store=tmp_path / "sources" / "private",
             runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -216,21 +223,21 @@ def test_stale_review_save_does_not_show_success_or_redirect_next(tmp_path: Path
     assert UNIQUE_COMMENT not in str(live)
 
 
-def test_stale_review_save_keeps_submitted_input_in_the_form(tmp_path: Path, *, production_app, production_console) -> None:
-    _client, _receipt, object_id, posted = _stale_review_post(tmp_path, production_app=production_app, production_console=production_console)
+def test_stale_review_save_keeps_submitted_input_in_the_form(tmp_path: Path) -> None:
+    _client, _receipt, object_id, posted = _stale_review_post(tmp_path)
     body = posted.text
     assert posted.status_code != 303
     assert 'data-review-form' in body
     assert UNIQUE_COMMENT in _textarea_value(body, "comment")
     assert UNIQUE_CORRECTION in _textarea_value(body, "proposed_correction")
     assert _radio_checked(body, "suitability", UNIQUE_SUITABILITY)
-    assert _radio_checked(body, "eindoordeel", "afwijzen")
+    assert _radio_checked(body, "eindoordeel", "later_beoordelen")
     assert f'name="object_id" value="{object_id}"' in body
     assert "Actie niet uitgevoerd" not in body
 
 
-def test_stale_review_save_retry_applies_input_after_fresh_revision(tmp_path: Path, *, production_app, production_console) -> None:
-    client, receipt, object_id, posted = _stale_review_post(tmp_path, production_app=production_app, production_console=production_console)
+def test_stale_review_save_retry_applies_input_after_fresh_revision(tmp_path: Path) -> None:
+    client, receipt, object_id, posted = _stale_review_post(tmp_path)
     assert posted.status_code != 303
     assert UNIQUE_COMMENT in posted.text
     retried = client.post(
@@ -242,7 +249,7 @@ def test_stale_review_save_retry_applies_input_after_fresh_revision(tmp_path: Pa
     location = retried.headers.get("location") or ""
     if retried.status_code == 303:
         assert "/review" in location
-    console = production_console(processing_binder=lambda console: None,
+    console = OperationsConsole(
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -257,13 +264,13 @@ def test_stale_review_save_retry_applies_input_after_fresh_revision(tmp_path: Pa
     assert any(row.get("reliability_marker") == "concurrent-winner" for row in stored.values())
 
 
-def test_stale_review_conflicts_preserve_special_characters_exactly(tmp_path: Path, *, production_app, production_console) -> None:
-    console = _console(tmp_path, production_console=production_console)
+def test_stale_review_conflicts_preserve_special_characters_exactly(tmp_path: Path) -> None:
+    console = _console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
     first, second = _content_rows(console, snapshot_id)[:2]
-    client = _client(console, production_app=production_app)
+    client = _client(console)
     opened = client.get(f"/review?document={snapshot_id}&object={first['object_id']}")
     assert opened.status_code == 200
 
@@ -275,7 +282,7 @@ def test_stale_review_conflicts_preserve_special_characters_exactly(tmp_path: Pa
 
     _install_concurrent_winner(
         console, snapshot_id, second["object_id"], marker="concurrent-winner-1"
-    , production_console=production_console)
+    )
     first_conflict = client.post("/review", data=payload, follow_redirects=False)
 
     assert first_conflict.status_code == 409
@@ -293,7 +300,7 @@ def test_stale_review_conflicts_preserve_special_characters_exactly(tmp_path: Pa
 
     _install_concurrent_winner(
         console, snapshot_id, second["object_id"], marker="concurrent-winner-2"
-    , production_console=production_console)
+    )
     second_conflict = client.post("/review", data=retry_payload, follow_redirects=False)
 
     assert second_conflict.status_code == 409
