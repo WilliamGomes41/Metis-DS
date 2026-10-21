@@ -7,7 +7,8 @@ import pytest
 from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 
 
-# Configuration/composition touches process globals; console commands stay concurrent.
+# Only configuration/composition touches process globals. Commands issued by
+# separate test consoles remain concurrent, with independent PG connections.
 _configuration_lock = RLock()
 
 
@@ -67,7 +68,7 @@ def application_for(console, *, environment=None, trusted_origin=None):
     if environment is None and trusted_origin is None:
         return previous
     from src import console_asgi
-    with pytest.MonkeyPatch.context() as patch:
+    with _configuration_lock, pytest.MonkeyPatch.context() as patch:
         configure_production(patch, console.root, console.workflow_document_store.config)
         for name, value in (environment or {}).items():
             patch.setenv(name, str(value))
