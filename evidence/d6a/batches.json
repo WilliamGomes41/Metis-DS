@@ -453,5 +453,48 @@
     ],
     "full_suite_status": "pending",
     "ci_status": "not run: push approval pending"
+  },
+  {
+    "batch": "13",
+    "base": "87f74b4",
+    "commit": "codex/d6a-13-navigation-auth",
+    "test_files": [
+      "tests/conftest.py",
+      "tests/production_support.py",
+      "tests/test_console_access_availability.py",
+      "tests/test_console_duty_first_home.py",
+      "tests/test_console_entra_auth_evidence.py",
+      "tests/test_console_entra_v1.py",
+      "tests/test_d5_4_review_interaction_evidence.py",
+      "tests/test_insight_diagnostics_navigation_v1.py",
+      "tests/test_insight_v1.py",
+      "tests/test_quality_metrics_v1.py",
+      "tests/test_route_comparison_http_v1.py",
+      "tests/test_telemetry_v1.py"
+    ],
+    "executed_unique_cases": 169,
+    "failures": 0,
+    "skipped": 0,
+    "renamed_cases": {
+      "test_nav_home_is_first_room_and_current_on_home": "test_home_uses_brand_and_tiles_as_workflow_doors",
+      "test_home_must_not_mark_inleveren_current": "test_home_does_not_mark_ingest_tile_as_current_navigation"
+    },
+    "verification": "Navigation/authentication/insight/quality/telemetry targeted run plus repaired navigation cases and actual middleware/factory probes. Two obsolete base-navigation names now describe the current production navigation.",
+    "junit": [
+      {
+        "file": "d6a13.xml",
+        "sha256": "5e7791870bd4f607daa2949fe4d7dec9cc9d002b7a78331f767cad47cc09f654"
+      },
+      {
+        "file": "d6a13-fixed.xml",
+        "sha256": "547b8b1c245251593f0cdbb53a39b43a20346a167e068753439c455062d34e3a"
+      },
+      {
+        "file": "d6a13-middleware.xml",
+        "sha256": "cb967583a38f98c0aac21daf1bc1abd5a883bcefda17ecb000e5b162dcc16d67"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending"
   }
 ]

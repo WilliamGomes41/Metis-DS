@@ -17,7 +17,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.integrity_kernel import stable_hash
-from src.operations_console_app import create_console_app
 from src.quality_evidence_v1 import record_processing, review_evidence, route_of
 from src.quality_metrics_v1 import build_report
 from src.quality_metrics_store_v1 import QualityReportStore, QualityStoreError
@@ -106,13 +105,13 @@ def test_history_scope_revocation_and_immutable_data_boundary(tmp_path):
     assert len(store.history(owner='a', allowed_scope={'private'})) == 1
 
 
-def test_settings_and_capture_do_not_expand_document_access(tmp_path):
-    console, users, sid, oid = _system(tmp_path)
+def test_settings_and_capture_do_not_expand_document_access(tmp_path, *, production_app, production_console):
+    console, users, sid, oid = _system(tmp_path, production_console=production_console)
     own = capture(console, users['researcher'])
     assert [d['envelope']['snapshot_id'] for d in own['documents']] == [sid]
     outsider = console.create_account(username='outsider', password=PASSWORD, roles=('researcher',))
     assert capture(console, outsider)['documents'] == []
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     assert client.get('/settings/quality').status_code == 401
     response = client.post('/login', data={'username': users['researcher']['username'], 'password': PASSWORD})
     assert response.status_code == 200
@@ -125,10 +124,10 @@ def test_settings_and_capture_do_not_expand_document_access(tmp_path):
     assert client.get('/settings/quality?from=invalid').status_code == 400
 
 
-def test_real_review_carries_evidence_atomically_and_reading_does_not_change_authority(tmp_path):
+def test_real_review_carries_evidence_atomically_and_reading_does_not_change_authority(tmp_path, *, production_console):
     from src.review_interaction_v1 import build_review_interaction_evidence
     from src.review_ledger import read_events
-    console, users, sid, oid = _system(tmp_path)
+    console, users, sid, oid = _system(tmp_path, production_console=production_console)
     objects = console.snapshot_objects(sid)
     focal = next(o for o in objects if o['object_id'] == oid)
     interaction = build_review_interaction_evidence(

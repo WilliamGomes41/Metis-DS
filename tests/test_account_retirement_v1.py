@@ -25,9 +25,9 @@ from tests.test_console_entra_v1 import config, claims, console, ADMIN, USER
 from tests.test_workflow_chain_recovery_v1 import recovery_postgres, _install_schema, _seed_workflow  # noqa: F401
 
 
-def test_retirement_cutover_restart_and_recovery(recovery_postgres, tmp_path):
+def test_retirement_cutover_restart_and_recovery(recovery_postgres, tmp_path, *, production_console):
     _seed_workflow(recovery_postgres)
-    state = console(tmp_path, recovery_postgres)
+    state = console(tmp_path, recovery_postgres, production_console=production_console)
     store = state.workflow_identity_store
     adapter = PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(recovery_postgres))
     before = adapter.export_state()
@@ -51,7 +51,7 @@ def test_retirement_cutover_restart_and_recovery(recovery_postgres, tmp_path):
         if table != 'accounts':
             assert after['workflow_tables'][table] == before['workflow_tables'][table]
     assert after['tables'] == before['tables']
-    fresh = console(tmp_path / 'restart', recovery_postgres)
+    fresh = console(tmp_path / 'restart', recovery_postgres, production_console=production_console)
     assert any(a.get('retirement') for a in fresh.list_accounts())
     identity = EntraIdentity(store, config({ADMIN: 'acc-uploader'}))
     identity.prepare()
@@ -73,8 +73,8 @@ def test_retirement_cutover_restart_and_recovery(recovery_postgres, tmp_path):
         fresh.sign_in(claims(USER))
 
 
-def test_password_sessions_ui_and_database_bypass(recovery_postgres, tmp_path):
-    state = console(tmp_path, recovery_postgres)
+def test_password_sessions_ui_and_database_bypass(recovery_postgres, tmp_path, *, production_app, production_console):
+    state = console(tmp_path, recovery_postgres, production_console=production_console)
     actor = state.create_account('owner', 'owner-password', ['publisher'])
     target = state.create_account('historical', 'old-password', ['reviewer'])
     token = state.authenticate('historical', 'old-password')['token']
@@ -86,7 +86,7 @@ def test_password_sessions_ui_and_database_bypass(recovery_postgres, tmp_path):
         state.authenticate('historical', 'old-password')
     with pytest.raises(ConsoleError, match='not_authenticated'):
         state.session_account(token)
-    client = TestClient(create_console_app(state))
+    client = TestClient(production_app(state))
     # The existing application cookie name is console_session.
     client.cookies.set('console_session', admin_token)
     response = client.get('/accounts')
@@ -105,8 +105,8 @@ def test_password_sessions_ui_and_database_bypass(recovery_postgres, tmp_path):
     assert store.update_roles(target['account_id'], ['publisher']) is None
 
 
-def test_invalid_actor_and_failed_transaction_leave_account_active(recovery_postgres, tmp_path):
-    state = console(tmp_path, recovery_postgres)
+def test_invalid_actor_and_failed_transaction_leave_account_active(recovery_postgres, tmp_path, *, production_console):
+    state = console(tmp_path, recovery_postgres, production_console=production_console)
     actor = state.create_account('owner', 'password', ['publisher'])
     target = state.create_account('reviewer', 'password', ['reviewer'])
     store = state.workflow_identity_store
@@ -121,8 +121,8 @@ def test_invalid_actor_and_failed_transaction_leave_account_active(recovery_post
     assert state.authenticate('reviewer', 'password')['token']
 
 
-def test_session_creation_waits_for_concurrent_retirement(recovery_postgres, tmp_path):
-    state = console(tmp_path, recovery_postgres)
+def test_session_creation_waits_for_concurrent_retirement(recovery_postgres, tmp_path, *, production_console):
+    state = console(tmp_path, recovery_postgres, production_console=production_console)
     actor = state.create_account('owner', 'password', ['publisher'])
     target = state.create_account('reviewer', 'password', ['reviewer'])
     store = state.workflow_identity_store
@@ -153,24 +153,23 @@ def test_operator_apply_requires_exact_confirmation_before_connection(monkeypatc
     assert 'account_retirement_confirmation_required' in capsys.readouterr().out
 
 
-def test_historical_account_presentation_and_console_denial(tmp_path):
-    # UI/console proof only; the tests above cover real database enforcement.
-    from tests.test_workflow_identity_postgres_v1 import SharedIdentityStore, _console
-    shared = SharedIdentityStore()
-    state = _console(tmp_path, shared, 'ui')
+def test_historical_account_presentation_and_console_denial(tmp_path, *, production_app, production_console):
+    state = production_console(root=tmp_path, processing_binder=lambda console: None)
     owner = state.create_account('owner', 'password', ['publisher'])
     historical = state.create_account('historical', 'password', ['reviewer'])
     old_token = state.authenticate('historical', 'password')['token']
     owner_token = state.authenticate('owner', 'password')['token']
-    shared.accounts[historical['account_id']]['retirement'] = {
-        'actor': owner['account_id'], 'reason': 'Test completed', 'at': '2026-09-30T12:00:00Z'}
+    with state.workflow_identity_store._connect() as connection:
+        result = retire_account(connection, account_id=historical['account_id'],
+            actor_id=owner['account_id'], reason='Test completed', apply=True)
+    assert result['status'] == 'RETIRED'
     for action in [lambda: state.authenticate('historical', 'password'),
                    lambda: state.session_account(old_token),
                    lambda: state._require_role(historical['account_id'], 'reviewer')]:
         with pytest.raises(ConsoleError):
             action()
     assert state.list_reviewer_accounts() == []
-    client = TestClient(create_console_app(state))
+    client = TestClient(production_app(state))
     client.cookies.set('console_session', owner_token)
     response = client.get('/accounts')
     assert response.status_code == 200

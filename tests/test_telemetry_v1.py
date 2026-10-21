@@ -123,6 +123,7 @@ def test_prune_keeps_other_workers_current_files_and_unusable_storage_falls_back
     assert failing.directory is None and [e['event'] for e in failing.events()] == ['after_disk_full']
 
 
+@pytest.mark.file_topology
 def test_serve_console_uses_the_same_observability_composition(tmp_path, monkeypatch):
     import argparse
     import uvicorn
@@ -192,10 +193,10 @@ def test_write_routes_errors_and_correlation_are_captured(events):
     assert not any(e.get('route') == '/session/status' for e in events)
 
 
-def test_store_lock_wait_and_hold_are_phases(tmp_path, events):
+def test_store_lock_wait_and_hold_are_phases(tmp_path, events, *, production_console, production_app):
     from src.operations_console_v1 import OperationsConsole
-    console = OperationsConsole(root=tmp_path, runtime=tmp_path / 'runtime')
-    app = FastAPI()
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, runtime=tmp_path / 'runtime')
+    app = production_app(console)
 
     @app.post('/lock')
     def lock():
@@ -204,7 +205,6 @@ def test_store_lock_wait_and_hold_are_phases(tmp_path, events):
                 time.sleep(0.01)
         return {'ok': True}
 
-    app.add_middleware(RequestDiagnostics)
     with TestClient(app) as client:
         assert client.post('/lock').status_code == 200
     phases = [e for e in events if e['event'] == 'request_finished'][-1]['phases']
@@ -498,16 +498,14 @@ def test_analysis_finds_aborts_groups_regressions_and_correlations():
     assert detail['request']['state'] == 'aborted' and detail['request']['last_phase'] == 'store_transaction'
 
 
-def test_page_and_api_require_login_and_render(hub):
-    from src.operations_console_app import create_console_app
+def test_page_and_api_require_login_and_render(hub, *, production_app, production_console):
     from src.operations_console_v1 import OperationsConsole
     import tempfile
     from pathlib import Path
     root = Path(tempfile.mkdtemp())
-    console = OperationsConsole(root=root, runtime=root / 'runtime')
+    console = production_console(processing_binder=lambda console: None, root=root, runtime=root / 'runtime')
     console.create_account(username='beheer', password='fixture-only', roles=('reviewer',))
-    app = create_console_app(console)
-    app.add_middleware(RequestDiagnostics)
+    app = production_app(console)
     with TestClient(app, base_url='https://testserver') as client:
         assert client.get('/telemetry/api/summary').status_code == 401
         assert client.get('/telemetry', follow_redirects=False).status_code == 401
@@ -565,12 +563,12 @@ def test_every_http_middleware_is_excluded_from_error_frames():
     assert names and names <= MIDDLEWARE_FUNCTIONS, names - MIDDLEWARE_FUNCTIONS
 
 
-def test_concurrent_store_lock_wait_is_measured_and_stale_request_is_aborted(tmp_path, events):
+def test_concurrent_store_lock_wait_is_measured_and_stale_request_is_aborted(tmp_path, events, *, production_console, production_app):
     """opslag: a concurrent writer waits on the store lock and the wait is visible;
     a request whose heartbeats went stale is reported as aborted, not as running."""
     import threading
     from src.operations_console_v1 import OperationsConsole
-    console = OperationsConsole(root=tmp_path, runtime=tmp_path / 'runtime')
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, runtime=tmp_path / 'runtime')
     holding, release = threading.Event(), threading.Event()
 
     def holder():
@@ -580,20 +578,29 @@ def test_concurrent_store_lock_wait_is_measured_and_stale_request_is_aborted(tmp
 
     thread = threading.Thread(target=holder)
     thread.start()
-    holding.wait(5)
-    app = FastAPI()
+    app = production_app(console)
 
     @app.post('/write')
     def write():
-        with console._store_write_lock():
-            return {'ok': True}
-
-    app.add_middleware(RequestDiagnostics)
-    with TestClient(app) as client:
+        # Start the hold interval only once the request reaches the writer;
+        # client/middleware startup can otherwise outlast the entire interval.
         timer = threading.Timer(0.15, release.set)
         timer.start()
-        assert client.post('/write').status_code == 200
-    thread.join(5)
+        try:
+            with console._store_write_lock():
+                return {'ok': True}
+        finally:
+            timer.cancel()
+            timer.join(5)
+
+    try:
+        assert holding.wait(5)
+        with TestClient(app) as client:
+            assert client.post('/write').status_code == 200
+    finally:
+        release.set()
+        thread.join(5)
+    assert not thread.is_alive()
     wait = [e for e in events if e['event'] == 'request_finished'][-1]['phases']['store_lock_wait']
     assert wait['calls'] == 1 and wait['inclusive_ms'] >= 100
     now = time.time()

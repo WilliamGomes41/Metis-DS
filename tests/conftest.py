@@ -149,12 +149,12 @@ def production_console(tmp_path, complete_postgres):
 
 @pytest.fixture
 def production_app(production_console):
-    def factory(console=None, **options):
+    def factory(console=None, *, environment=None, trusted_origin=None, **options):
         if console is not None and options:
             raise TypeError("Configure the production console before requesting its ASGI application")
         console = console if console is not None else production_console(**options)
         from tests.production_support import application_for
-        return application_for(console)
+        return application_for(console, environment=environment, trusted_origin=trusted_origin)
     return factory
 
 
