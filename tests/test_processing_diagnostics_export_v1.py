@@ -16,7 +16,6 @@ import json
 from fastapi.testclient import TestClient
 
 from src.integrity_kernel import stamp_canonical_hashes
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
 from src.processing_diagnostics_v1 import (
     processing_diagnostic_rows,
@@ -27,8 +26,8 @@ from src.processing_diagnostics_v1 import (
 PASSWORD = "d2a1-secret"
 
 
-def _system(tmp_path):
-    console = OperationsConsole(
+def _system(tmp_path, *, production_console):
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime",
@@ -119,9 +118,9 @@ def _system(tmp_path):
     return console, reviewer, other, publisher, snapshot_id
 
 
-def _client(console: OperationsConsole) -> TestClient:
+def _client(console: OperationsConsole, *, production_app) -> TestClient:
     return TestClient(
-        create_console_app(console),
+        production_app(console),
         base_url="https://testserver",
         raise_server_exceptions=False,
     )
@@ -136,9 +135,9 @@ def _login(client: TestClient, username: str) -> None:
     assert response.status_code == 303
 
 
-def test_export_matches_pure_projection_and_does_not_mutate_state(tmp_path) -> None:
-    console, _reviewer, _other, _publisher, snapshot_id = _system(tmp_path)
-    client = _client(console)
+def test_export_matches_pure_projection_and_does_not_mutate_state(tmp_path, *, production_app, production_console) -> None:
+    console, _reviewer, _other, _publisher, snapshot_id = _system(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
     _login(client, "reviewer.d2a1")
 
     before_objects = deepcopy(console.snapshot_objects(snapshot_id))
@@ -167,9 +166,9 @@ def test_export_matches_pure_projection_and_does_not_mutate_state(tmp_path) -> N
     assert console.objects_revision(snapshot_id) == before_revision
 
 
-def test_detail_export_preserves_candidate_combinations_and_does_not_mutate_state(tmp_path) -> None:
-    console, _reviewer, _other, _publisher, snapshot_id = _system(tmp_path)
-    client = _client(console)
+def test_detail_export_preserves_candidate_combinations_and_does_not_mutate_state(tmp_path, *, production_app, production_console) -> None:
+    console, _reviewer, _other, _publisher, snapshot_id = _system(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
     _login(client, "reviewer.d2a1")
 
     before_objects = deepcopy(console.snapshot_objects(snapshot_id))
@@ -215,8 +214,8 @@ def test_detail_export_preserves_candidate_combinations_and_does_not_mutate_stat
     assert console.objects_revision(snapshot_id) == before_revision
 
 
-def test_export_requires_authentication_reviewer_role_and_assignment(tmp_path) -> None:
-    console, _reviewer, _other, _publisher, snapshot_id = _system(tmp_path)
+def test_export_requires_authentication_reviewer_role_and_assignment(tmp_path, *, production_app, production_console) -> None:
+    console, _reviewer, _other, _publisher, snapshot_id = _system(tmp_path, production_console=production_console)
     paths = (
         "/review/passages-export",
         "/review/processing-evidence-export",
@@ -225,27 +224,27 @@ def test_export_requires_authentication_reviewer_role_and_assignment(tmp_path) -
     )
 
     for path in paths:
-        anonymous = _client(console)
+        anonymous = _client(console, production_app=production_app)
         response = anonymous.get(f"{path}?document={snapshot_id}")
         assert response.status_code == 401
         assert "not_authenticated" in response.text
 
-        publisher_client = _client(console)
+        publisher_client = _client(console, production_app=production_app)
         _login(publisher_client, "publisher.d2a1")
         response = publisher_client.get(f"{path}?document={snapshot_id}")
         assert response.status_code == 403
         assert "reviewer_role_required" in response.text
 
-        other_client = _client(console)
+        other_client = _client(console, production_app=production_app)
         _login(other_client, "reviewer.other")
         response = other_client.get(f"{path}?document={snapshot_id}")
         assert response.status_code == 400
         assert "reviewer_not_named_on_snapshot" in response.text
 
 
-def test_export_unknown_snapshot_fails_and_control_page_links_to_export(tmp_path) -> None:
-    console, _reviewer, _other, _publisher, snapshot_id = _system(tmp_path)
-    client = _client(console)
+def test_export_unknown_snapshot_fails_and_control_page_links_to_export(tmp_path, *, production_app, production_console) -> None:
+    console, _reviewer, _other, _publisher, snapshot_id = _system(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
     _login(client, "reviewer.d2a1")
 
     for path in (
@@ -273,9 +272,9 @@ def test_export_unknown_snapshot_fails_and_control_page_links_to_export(tmp_path
     assert "Detaildiagnostiek (JSON)" in control.text
 
 
-def test_all_passages_export_includes_every_current_passage_and_evidence(tmp_path):
-    console, _, _, _, snapshot_id = _system(tmp_path)
-    client = _client(console)
+def test_all_passages_export_includes_every_current_passage_and_evidence(tmp_path, *, production_app, production_console):
+    console, _, _, _, snapshot_id = _system(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
     _login(client, "reviewer.d2a1")
     objects = deepcopy(console.snapshot_objects(snapshot_id))
     envelope = deepcopy(console._envelope(snapshot_id))
@@ -311,8 +310,8 @@ def test_all_passages_export_includes_every_current_passage_and_evidence(tmp_pat
     assert console.object_review_bindings(snapshot_id) == bindings
 
 
-def test_source_label_guidance_http_and_export_preserve_review_state(tmp_path):
-    console, _, _, _, sid = _system(tmp_path)
+def test_source_label_guidance_http_and_export_preserve_review_state(tmp_path, *, production_app, production_console):
+    console, _, _, _, sid = _system(tmp_path, production_console=production_console)
     # Reproduce an already stored standalone label from the reported PDF run.
     objects = console._load_objects(sid)
     target = next(o for o in objects if (o.get('metadata') or {}).get('admission', {}).get('gate_result') == 'blocked')
@@ -322,7 +321,7 @@ def test_source_label_guidance_http_and_export_preserve_review_state(tmp_path):
     stamp_canonical_hashes(target)
     from tests.semantic_fixture_support import install_fixture_history
     install_fixture_history(console, sid, objects)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     _login(client, 'reviewer.d2a1')
     before = deepcopy(console.snapshot_objects(sid, include_blocked=True))
     revision = console.objects_revision(sid)
@@ -368,11 +367,11 @@ def test_csv_preserves_quotes_newlines_unicode_and_neutralizes_formulas():
     assert [row["candidate_text"] for row in exported[1:]] == ["'" + text for text in texts[1:]]
 
 
-def test_processing_evidence_download_preserves_recorded_and_missing_evidence(tmp_path, monkeypatch):
+def test_processing_evidence_download_preserves_recorded_and_missing_evidence(tmp_path, monkeypatch, *, production_app, production_console):
     from zipfile import ZipFile
     from src.processing_evidence_export_v1 import SCHEMAS
 
-    console, _, _, _, snapshot_id = _system(tmp_path)
+    console, _, _, _, snapshot_id = _system(tmp_path, production_console=production_console)
     envelope = console._envelope(snapshot_id)
     envelope["semantic_replay"] = {
         "proposal_hash": "proposal-1", "validation": "passed",
@@ -380,6 +379,7 @@ def test_processing_evidence_download_preserves_recorded_and_missing_evidence(tm
         "identity": {"components": {"model_id": "recorded-model", "prompt_hash": "original-prompt"}},
         "proposal": {"objects": [{"spans": [{"block_id": "block-1", "start": 0, "end": 8}]}]},
     }
+    console.workflow_document_store.write_bundle(envelope=envelope, objects=None)
     objects = console.snapshot_objects(snapshot_id)
     target = next(o for o in objects if o.get("proposed_object_type") == "recommendation")
     target["metadata"]["semantic_passage"] = {
@@ -394,9 +394,10 @@ def test_processing_evidence_download_preserves_recorded_and_missing_evidence(tm
     from tests.semantic_fixture_support import install_fixture_history
     install_fixture_history(console, snapshot_id, objects)
     envelope["private_configuration"] = "must-not-be-exported"
+    console.workflow_document_store.write_bundle(envelope=envelope, objects=None)
     before = deepcopy((console.snapshot_objects(snapshot_id), envelope, console.object_review_bindings(snapshot_id)))
     monkeypatch.setattr(console, "_extract", lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not reextract")))
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     _login(client, "reviewer.d2a1")
     response = client.get(f"/review/processing-evidence-export?document={snapshot_id}")
     assert response.status_code == 200
@@ -482,9 +483,9 @@ def test_long_revision_is_stored_once_and_resolvable_for_every_dataset():
         assert all(r['schema_version'] == VERSION for r in manifest)
 
 
-def test_configuration_excludes_diagnostics_and_review_links_to_insight(tmp_path):
-    console, _, _, _, snapshot_id = _system(tmp_path)
-    client = _client(console)
+def test_configuration_excludes_diagnostics_and_review_links_to_insight(tmp_path, *, production_app, production_console):
+    console, _, _, _, snapshot_id = _system(tmp_path, production_console=production_console)
+    client = _client(console, production_app=production_app)
     _login(client, "reviewer.d2a1")
     settings = client.get("/settings")
     assert 'href="/settings/technical"' in settings.text
@@ -504,6 +505,6 @@ def test_configuration_excludes_diagnostics_and_review_links_to_insight(tmp_path
     assert 'href="/settings/technical"' not in repair.text
     assert "Signalen per diagnostische familie" not in repair.text
     assert "Exporteer detaildiagnostiek" not in repair.text
-    other = _client(console)
+    other = _client(console, production_app=production_app)
     _login(other, "reviewer.other")
     assert snapshot_id not in other.get("/settings/technical").text

@@ -22,7 +22,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.open_original_v1 import researcher_visible_prose
-from src.operations_console_app import _esc, _render_review_index, create_console_app
+from src.operations_console_app import _esc, _render_review_index
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 
 
@@ -33,8 +33,8 @@ OBJECT_COL = "review-card-object"
 PASSAGE_COL = "review-card-bronpassage"
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -86,8 +86,8 @@ def _ingest(console: OperationsConsole, accounts: dict, data: bytes | None = Non
     )
 
 
-def _review_page(console: OperationsConsole, snapshot_id: str, object_id: str | None = None) -> str:
-    client = TestClient(create_console_app(console))
+def _review_page(console: OperationsConsole, snapshot_id: str, object_id: str | None=None, *, production_app) -> str:
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     url = f"/review?document={snapshot_id}"
     if object_id:
@@ -95,13 +95,11 @@ def _review_page(console: OperationsConsole, snapshot_id: str, object_id: str | 
     return client.get(url).text
 
 
-def _review_html(
-    tmp_path: Path, data: bytes | None = None, object_id: str | None = None
-) -> tuple[str, dict, OperationsConsole]:
-    console = _console(tmp_path)
+def _review_html(tmp_path: Path, data: bytes | None=None, object_id: str | None=None, *, production_app, production_console) -> tuple[str, dict, OperationsConsole]:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=data)
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     url = f"/review?document={receipt['snapshot_id']}"
     if object_id:
@@ -130,8 +128,8 @@ def _strip_locator(console: OperationsConsole, snapshot_id: str, object_id: str)
     console._save_objects(snapshot_id, rows)
 
 
-def test_review_document_index_does_not_open_passages(tmp_path: Path) -> None:
-    html, receipt, console = _review_html(tmp_path)
+def test_review_document_index_does_not_open_passages(tmp_path: Path, *, production_app, production_console) -> None:
+    html, receipt, console = _review_html(tmp_path, production_app=production_app, production_console=production_console)
     objects = [
         obj
         for obj in console.snapshot_objects(receipt["snapshot_id"])
@@ -151,8 +149,8 @@ def test_review_document_index_does_not_open_passages(tmp_path: Path) -> None:
     assert "graaf-editor" not in html.lower()
 
 
-def test_review_card_has_two_column_class(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_review_card_has_two_column_class(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     target = next(
@@ -160,7 +158,7 @@ def test_review_card_has_two_column_class(tmp_path: Path) -> None:
         for obj in console.snapshot_objects(receipt["snapshot_id"])
         if obj["object_type"] != "document"
     )
-    html = _review_page(console, receipt["snapshot_id"], target["object_id"])
+    html = _review_page(console, receipt["snapshot_id"], target["object_id"], production_app=production_app)
     cards = _cards(html)
     assert cards, "review card must carry the two-column class"
     assert len(cards) == 1
@@ -170,8 +168,8 @@ def test_review_card_has_two_column_class(tmp_path: Path) -> None:
     assert "graaf-editor" not in html.lower()
 
 
-def test_review_card_object_left_bronpassage_right(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_review_card_object_left_bronpassage_right(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = [
@@ -180,7 +178,7 @@ def test_review_card_object_left_bronpassage_right(tmp_path: Path) -> None:
         if obj["object_type"] != "document"
     ]
     rec = next(obj for obj in objects if "Verwijs" in ((obj.get("content") or {}).get("clean_text") or ""))
-    html = _review_page(console, receipt["snapshot_id"], rec["object_id"])
+    html = _review_page(console, receipt["snapshot_id"], rec["object_id"], production_app=production_app)
     opened = console.open_source_passage(
         snapshot_id=receipt["snapshot_id"],
         object_id=rec["object_id"],
@@ -209,8 +207,8 @@ def test_review_card_object_left_bronpassage_right(tmp_path: Path) -> None:
     assert "Wat is je besluit over dit kennisobject?" not in right
 
 
-def test_review_card_uses_clear_labels_and_requires_an_explicit_decision(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_review_card_uses_clear_labels_and_requires_an_explicit_decision(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     target = next(
@@ -218,7 +216,7 @@ def test_review_card_uses_clear_labels_and_requires_an_explicit_decision(tmp_pat
         for obj in console.snapshot_objects(receipt["snapshot_id"])
         if obj["object_type"] != "document"
     )
-    html = _review_page(console, receipt["snapshot_id"], target["object_id"])
+    html = _review_page(console, receipt["snapshot_id"], target["object_id"], production_app=production_app)
     card = next(block for block in _cards(html) if target["object_id"] in block)
     assert "Geselecteerde passage" in card
     assert "Metis stelt voor:" in card
@@ -233,8 +231,8 @@ def test_review_card_uses_clear_labels_and_requires_an_explicit_decision(tmp_pat
     assert 'data-submit-review' in card
 
 
-def test_review_post_requires_explicit_decision_and_comment_when_needed(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_review_post_requires_explicit_decision_and_comment_when_needed(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     target = next(
@@ -242,7 +240,7 @@ def test_review_post_requires_explicit_decision_and_comment_when_needed(tmp_path
         for obj in console.snapshot_objects(receipt["snapshot_id"])
         if obj["object_type"] != "document"
     )
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     base = {"snapshot_id": receipt["snapshot_id"], "object_id": target["object_id"]}
     no_decision = client.post("/review", data={**base, "decision": "", "eindoordeel": ""})
@@ -330,8 +328,8 @@ def test_review_card_css_two_column_and_stacks_on_narrow() -> None:
     )
 
 
-def test_type_and_approve_still_disabled_when_passage_cannot_open(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_type_and_approve_still_disabled_when_passage_cannot_open(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     target = next(
@@ -343,9 +341,9 @@ def test_type_and_approve_still_disabled_when_passage_cannot_open(tmp_path: Path
     with pytest.raises(ConsoleError):
         console.open_source_passage(snapshot_id=receipt["snapshot_id"], object_id=target["object_id"])
 
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
-    html = _review_page(console, receipt["snapshot_id"], target["object_id"])
+    html = _review_page(console, receipt["snapshot_id"], target["object_id"], production_app=production_app)
     assert TWO_COLUMN_CLASS in html
     card = next(block for block in _cards(html) if target["object_id"] in block)
     assert PASSAGE_COL in card

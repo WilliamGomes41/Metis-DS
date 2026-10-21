@@ -10,8 +10,6 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
-from src.operations_console_v1 import OperationsConsole
 
 
 pytestmark = [
@@ -22,8 +20,8 @@ pytestmark = [
 ]
 
 
-def test_metis_dictionary_requires_login_and_renders_read_only_explanations(tmp_path: Path) -> None:
-    console = OperationsConsole(
+def test_metis_dictionary_requires_login_and_renders_read_only_explanations(tmp_path: Path, *, production_app, production_console) -> None:
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -34,7 +32,7 @@ def test_metis_dictionary_requires_login_and_renders_read_only_explanations(tmp_
         roles=("researcher",),
         display_name="Anne Onderzoeker",
     )
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
 
     assert client.get("/over-console").status_code == 401
 

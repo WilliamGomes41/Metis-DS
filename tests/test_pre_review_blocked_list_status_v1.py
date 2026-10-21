@@ -12,7 +12,6 @@ from pathlib import Path
 
 import pytest
 
-from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.operations_console_v1 import CAPTURED, PRE_REVIEW_BLOCKED, ConsoleError
 from src.workflows.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin
 
@@ -69,8 +68,8 @@ def test_pre_review_block_cannot_override_canonical_release_or_serving(release, 
     assert status["serving_status"] == ("active" if expected == "published" else "inactive")
 
 
-def test_blocked_empty_capture_has_same_local_and_postgres_list_status_after_restart(tmp_path: Path):
-    console = DurablePublicationConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+def test_blocked_empty_capture_has_same_local_and_postgres_list_status_after_restart(tmp_path: Path, *, production_console):
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     actor = console.create_account(username="researcher", password="test-researcher-secret", roles=("researcher",))
     reviewer = console.create_account(username="reviewer", password="test-reviewer-secret", roles=("reviewer",))
 
@@ -84,7 +83,7 @@ def test_blocked_empty_capture_has_same_local_and_postgres_list_status_after_res
         live_url="", class_="richtlijn", family="test", named_reviewers=[reviewer["account_id"]],
     )
     snapshot_id = receipt["snapshot_id"]
-    restarted = DurablePublicationConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted.snapshot_objects(snapshot_id) == []
     assert restarted.waiting_task_counts(reviewer["account_id"])["review"] == 0
     row = {**restarted._envelope(snapshot_id), "has_open_review": False}
