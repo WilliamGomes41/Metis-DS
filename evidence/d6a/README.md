@@ -101,3 +101,5 @@ beslissing over bestaande lokale JSON-toestand. De bestandsruntime, vijf
 storevariabelen en lokale CLI-start zijn daarom nog aanwezig.
 
 PR10: een gedeelde lockteller veroorzaakte een wisselende testuitkomst. De voorbereidingsproeven meten nu lockeigenaarschap per thread; bestaande rode/groene proef en alle 206 native acceptatiegevallen zijn vastgelegd in [het herstelbewijs](portion10-lock-observation-repair.json). Nieuwe volledige CI en tijdmeting zijn nog open.
+
+PR09/10: de volledige CI toonde één gemiste aanbevelingshelper-afnemer. De fixture- en consolefabriek zijn naar de introducerende portie verplaatst, met behoud van alle bestaande verwachtingen. Zie [het herstelbewijs](portion09-10-recommendation-boundary-repair.json); de nieuwe volledige CI-uitkomsten zijn nog open.

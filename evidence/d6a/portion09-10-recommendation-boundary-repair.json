@@ -1,0 +1,233 @@
+{
+  "change_class": "C",
+  "rewrite_risk": "none",
+  "runtime_changes": false,
+  "promise": "Native recommendation restart/replay/export/failed replacement uses the production app and console fixtures from the same portion as its shared helper.",
+  "cause": "console_v3_story gained required production_app in09; its separate native consumer was updated only in16, after later application composition support. The native consumer now uses the production_console factory and passes production_app in09.",
+  "assertions_changed": false,
+  "test_cases_removed": false,
+  "portion_rebalance": {
+    "deferred_from09_to10": "tests/test_source_bound_fields_v2.py",
+    "shared_exports": "Only one console test migration is deferred; exported pure fragment/proposal helpers are unchanged.",
+    "changed_test_files": {
+      "portion09": 20,
+      "portion10": 14
+    }
+  },
+  "reported_ci": [
+    {
+      "pr": 799,
+      "run": 39559979524,
+      "jobs": [
+        119089190140,
+        119089190152
+      ],
+      "failures": 1,
+      "passed": 5657,
+      "postgres_skips": 0,
+      "seconds": 1465.229,
+      "baseline_seconds": 1080.818,
+      "ratio": 1.3557
+    },
+    {
+      "pr": 800,
+      "run": 39564144847,
+      "jobs": [
+        119102843407,
+        119102843389
+      ],
+      "failures": 1,
+      "passed": 5657,
+      "postgres_skips": 0,
+      "seconds": 2206.318,
+      "baseline_seconds": 1458.792,
+      "ratio": 1.5124
+    }
+  ],
+  "checks": [
+    {
+      "name": "original missing fixture red",
+      "junit": "d6a09-context-red.xml",
+      "sha256": "a8dd5ef0213ceaa78129c03280e7d7d1a94a695da5765a10424b3c9ebeb4d0a7",
+      "tests": 1,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.107
+    },
+    {
+      "name": "fixture forwarding alone still rejects unregistered app",
+      "junit": "d6a09-context-green.xml",
+      "sha256": "2b890462b5858994143fc020ac220a367f6225a9a4ac2ad6341c9d88d5886610",
+      "tests": 26,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 8.57
+    },
+    {
+      "name": "portion09 helper and consumer with deferred v2 module",
+      "junit": "d6a09-context-fixed.xml",
+      "sha256": "5cb7f18f907885bb641d107c8f27cbfa664557afa6b74bfe74e7f875ce1f98ac",
+      "tests": 26,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 12.702
+    },
+    {
+      "name": "portion10 helper and consumer with migrated v2 module",
+      "junit": "d6a10-context-fixed.xml",
+      "sha256": "d5a5e630c4d347a6d23db707cae902ce21772e5f51fb73a100592993405002ec",
+      "tests": 26,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 17.731
+    }
+  ],
+  "helper_audit": [
+    {
+      "worktree": "/workspace/d6a09-fix",
+      "helpers": 49,
+      "direct_calls": 420,
+      "missing": [],
+      "scope": "Direct helper imports/local calls; dynamic/attribute dispatch and **kwargs excluded"
+    },
+    {
+      "worktree": "/workspace/d6a10-fix",
+      "helpers": 58,
+      "direct_calls": 472,
+      "missing": [],
+      "scope": "Direct helper imports/local calls; dynamic/attribute dispatch and **kwargs excluded"
+    }
+  ],
+  "source_propagation": [
+    {
+      "portion": "09",
+      "before": "be1f72e8c255a12a4289822ada520298e6cbf3fa",
+      "after": "0920b990905adc5527d1e0de8d84febf058cb3ac",
+      "changed_source_files": [
+        "tests/test_recommendation_context_postgres.py",
+        "tests/test_source_bound_fields_v2.py"
+      ]
+    },
+    {
+      "portion": "10",
+      "before": "6eff0d623cb7a48a87b5f1d7c8333917b9a44d37",
+      "after": "adf783bdf762abfce63f7bc9a3504571f13131ad",
+      "changed_source_files": [
+        "tests/test_recommendation_context_postgres.py"
+      ]
+    },
+    {
+      "portion": "review-evidence-prerequisite",
+      "before": "45205d5aad1f3baeadc09437eb7015e88fb618c0",
+      "after": "35d7abbf2d77630c5cc0fab1e9952ca378b83a94",
+      "changed_source_files": [
+        "tests/test_recommendation_context_postgres.py"
+      ]
+    },
+    {
+      "portion": "11",
+      "before": "eeb601ec0c39959aaac8ccc3238ec8c55cefd465",
+      "after": "4408f28cbc1219f0d43a6af72795b84721858753",
+      "changed_source_files": [
+        "tests/test_recommendation_context_postgres.py"
+      ]
+    },
+    {
+      "portion": "12",
+      "before": "ed53a0411e1b10836b15c9e3a22da67aec3161f3",
+      "after": "8ce5e7d4e0fc403676d93c2ce69a74d1a81a5b20",
+      "changed_source_files": [
+        "tests/test_recommendation_context_postgres.py"
+      ]
+    },
+    {
+      "portion": "13",
+      "before": "308cbd6228dacfe6f896124eb14d9ef8fe5855dc",
+      "after": "0c33ce622aea96cfc0e7e230d1d3766b82d37904",
+      "changed_source_files": [
+        "tests/test_recommendation_context_postgres.py"
+      ]
+    },
+    {
+      "portion": "14",
+      "before": "09f4d02706b66d9798d58fec2c9fd40ccd94ed4a",
+      "after": "c33c129d39cc9dc3307d063e0fafc200b0e4aeb4",
+      "changed_source_files": [
+        "tests/test_recommendation_context_postgres.py"
+      ]
+    },
+    {
+      "portion": "15",
+      "before": "7a00f73519102a13d26e15cfd8fcddf6081fe57a",
+      "after": "3887f8635e905539f1e2cf3335360175afe3615d",
+      "changed_source_files": [
+        "tests/test_recommendation_context_postgres.py"
+      ]
+    },
+    {
+      "portion": "16",
+      "before": "ed8aed045c88d501924628ce1ba9b8edf2414bc4",
+      "after": "3ca7417eab1e6212ecba91bf6cfef5304d26ba98",
+      "changed_source_files": [
+        "tests/test_recommendation_context_postgres.py"
+      ]
+    },
+    {
+      "portion": "17",
+      "before": "7965e1a5ad17ed63c13d065d94f83d493530a18e",
+      "after": "b9ca8b2f1908bf69349409631241568be5fdb298",
+      "changed_source_files": [
+        "tests/test_recommendation_context_postgres.py"
+      ]
+    },
+    {
+      "portion": "18",
+      "before": "a6ee0537601faf4bcd72767e13031790fb47736f",
+      "after": "2ec8b7031009a38b430c76dbe69fa71f43598f25",
+      "changed_source_files": [
+        "tests/test_recommendation_context_postgres.py"
+      ]
+    },
+    {
+      "portion": "19",
+      "before": "437d8012a0d568d97742f63ee8847d650101cdd4",
+      "after": "8291e49d2e694454f45c77ec7a89b98f8c6358e8",
+      "changed_source_files": [
+        "tests/test_recommendation_context_postgres.py"
+      ]
+    },
+    {
+      "portion": "21",
+      "before": "04e0bade682d360973587b986a3330655386f3cf",
+      "after": "7acc1dbd85a51f040716f5d77e4d990a11fb5481",
+      "changed_source_files": [
+        "tests/test_recommendation_context_postgres.py"
+      ]
+    },
+    {
+      "portion": "22",
+      "before": "7b7555934543741eed0483355270f50f3d57f264",
+      "after": "f9a378edde9b30d18a55e96a122f87b768b0e652",
+      "changed_source_files": [
+        "tests/test_recommendation_context_postgres.py"
+      ]
+    }
+  ],
+  "regression": "Existing native story test reproduced the exact failure; same node now executes all unchanged restart, replay, authenticated export, and failed-replacement atomicity assertions.",
+  "verification_limit": "Earlier 206-case acceptance runs did not cover this consumer. Historical final suite is not proof that every intermediate branch passes.",
+  "new_ci": {
+    "portion09": 39576308383,
+    "portion10": 39576306888,
+    "status": "running; no completion claim"
+  },
+  "repository_checks": [
+    "preflight PASS on09 and10",
+    "architecture boundaries PASS",
+    "release control against each immediate base PASS",
+    "diff check PASS"
+  ]
+}
