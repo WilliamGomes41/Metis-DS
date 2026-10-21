@@ -17,7 +17,12 @@ from tests.semantic_fixture_support import bind_fixture_selections
 
 
 @pytest.fixture
-def review_client(tmp_path, request, *, production_app, production_console):
+def review_client(tmp_path, request, monkeypatch, *, production_app, production_console):
+    import src.review_workboard_v1 as workboard
+
+    # Compare cached and uncached HTML at the same observation instant, including
+    # the visible counter timestamp; CI requests can cross a minute boundary.
+    monkeypatch.setattr(workboard, "_observed_at", lambda: "2026-10-21T12:34:59+00:00")
     console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "source",
                                    runtime=tmp_path / "runtime")
     author = console.create_account(username="author", password="fixture-only", roles=("researcher",))
