@@ -93,14 +93,14 @@ def test_boundary_ratios_are_identical():
     assert estimate(env, docs)['sample_count'] == 3
 
 
-def test_source_selection_list_reads_attempts_once_per_request(tmp_path, monkeypatch):
+def test_source_selection_list_reads_attempts_once_per_request(tmp_path, monkeypatch, *, production_app, production_console):
     """Fail-first: the old route scanned every document's attempts once per listed document."""
     from fastapi.testclient import TestClient
     from tests.test_recoverable_formation_v1 import system
-    console, sid, author, reviewer, *_ = system(tmp_path)
+    console, sid, author, reviewer, *_ = system(tmp_path, production_console=production_console)
     envelopes = [console._envelope(sid)]
     from src.operations_console_app import create_console_app
-    app = create_console_app(console)
+    app = production_app(console)
     calls = []
     real = selection.comparable_observations
     monkeypatch.setattr(selection, 'comparable_observations', lambda docs: calls.append(len(docs)) or real(docs))

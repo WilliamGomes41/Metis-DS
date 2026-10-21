@@ -59,9 +59,9 @@ def test_reservation_only_reads_configuration():
     assert envelope['processing_configuration'] == before
 
 
-def test_resume_reservation_equals_contract_of_the_stored_replay(tmp_path):
+def test_resume_reservation_equals_contract_of_the_stored_replay(tmp_path, *, production_console):
     from tests.test_recoverable_formation_v1 import system
-    state, sid, actor, *_ = system(tmp_path)
+    state, sid, actor, *_ = system(tmp_path, production_console=production_console)
     produced = state._envelope(sid)['semantic_replay']['identity']['components']['semantic_contract_version']
     assert produced == _expected(v3=True)  # helper output identical to pre_review_semantic_v1:585
     try:
@@ -76,10 +76,9 @@ def test_resume_reservation_equals_contract_of_the_stored_replay(tmp_path):
 # --- RESV-2: legacy retry path refreshes configuration before reserving -----
 
 @pytest.fixture
-def blocked(tmp_path):
-    from src.operations_console_v1 import OperationsConsole
+def blocked(tmp_path, *, production_console):
     from tests.test_attempt_diagnostics_postgres import bound, ingest
-    console = OperationsConsole(root=tmp_path, source_store=tmp_path / 'sources' / 'private',
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / 'sources' / 'private',
                                 runtime=tmp_path / 'output' / 'runtime' / 'operations-console')
     bound(console)  # provider rejects: ingest leaves an empty, blocked document
     sid, actor, _ = ingest(console)
@@ -118,6 +117,7 @@ def test_retry_replaces_stale_stored_configuration(blocked):
     console, sid, actor = blocked
     envelope = console._envelope(sid)
     envelope['processing_configuration'] = {'mode': 'stale-mode'}
+    console.workflow_document_store.write_bundle(envelope=envelope, objects=None)
     assert console._envelope(sid)['processing_configuration'] == {'mode': 'stale-mode'}  # live state
     try:
         console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id='retry-stale')

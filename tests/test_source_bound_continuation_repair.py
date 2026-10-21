@@ -26,7 +26,6 @@ from src.admission_gate_v1 import (
 )
 from src.context_scan_v1 import propose_expand_merge
 from src.integrity_kernel import compute_canonical_object_hash, stamp_canonical_hashes
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
 from src.object_taxonomy_v1 import has_terminal_sentence_boundary, is_truncated_sentence
 
@@ -52,8 +51,8 @@ CONTINUATION = "versie voor wijkverpleegkundigen het meest geschikte instrument 
 MERGED = f"{FIRST} {CONTINUATION}"
 
 
-def _console(tmp_path: Path) -> tuple[OperationsConsole, dict, dict]:
-    console = OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> tuple[OperationsConsole, dict, dict]:
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -197,8 +196,8 @@ def test_sentence_boundary_rule_covers_the_reported_break() -> None:
     assert is_truncated_sentence(MERGED) is False
 
 
-def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: Path) -> None:
-    console, researcher, reviewer = _console(tmp_path)
+def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: Path, *, production_app, production_console) -> None:
+    console, researcher, reviewer = _console(tmp_path, production_console=production_console)
     source = f"<html><body><h1>Eenzaamheid</h1><p>{FIRST}</p><p>{CONTINUATION}</p></body></html>"
     receipt = console.ingest(
         actor_id=researcher["account_id"],
@@ -224,7 +223,7 @@ def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: P
     assert admission_of(target)["gate_result"] == GATE_BLOCKED
     assert "incomplete_sentence" in admission_of(target)["reason_codes"]
 
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     page = client.get(f"/review?document={snapshot_id}&object={object_id}")
     assert page.status_code == 200
@@ -281,8 +280,8 @@ def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: P
     assert len(history) == 2
 
 
-def test_source_bound_repair_reopens_only_changed_candidate_and_survives_restart(tmp_path: Path) -> None:
-    console, researcher, reviewer = _console(tmp_path)
+def test_source_bound_repair_reopens_only_changed_candidate_and_survives_restart(tmp_path: Path, *, production_console) -> None:
+    console, researcher, reviewer = _console(tmp_path, production_console=production_console)
     stable_text = "Eenzaamheid is een gevoel van gemis."
     source = (
         f"<html><body><h1>Eenzaamheid</h1><p>{FIRST}</p>"
@@ -375,7 +374,7 @@ def test_source_bound_repair_reopens_only_changed_candidate_and_survives_restart
     assert (console._envelope(snapshot_id).get("review_passes") or {}) == envelope_review_passes
     assert console._envelope(snapshot_id).get("clinical_rereview_required") == envelope_rereview
 
-    restarted = OperationsConsole(
+    restarted = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -403,8 +402,8 @@ def test_source_bound_repair_reopens_only_changed_candidate_and_survives_restart
     assert repaired_object_id not in restarted_bindings
 
 
-def test_legacy_generic_correction_keeps_document_scoped_rereview_default(tmp_path: Path) -> None:
-    console, researcher, reviewer = _console(tmp_path)
+def test_legacy_generic_correction_keeps_document_scoped_rereview_default(tmp_path: Path, *, production_console) -> None:
+    console, researcher, reviewer = _console(tmp_path, production_console=production_console)
     source = (
         "<html><body><h1>Richtlijn</h1>"
         "<p>Eenzaamheid is een gevoel van gemis.</p>"

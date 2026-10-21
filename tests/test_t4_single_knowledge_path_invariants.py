@@ -15,7 +15,6 @@ import pytest
 from src.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED
 from src.build_review_queue_v3 import build as build_review_queue
 from src.candidate_eligibility_v1 import assess_candidate_eligibility
-from src.closed_review_loop_v1 import ClosedLoopReviewConsole
 from src.four_eyes_v1 import publish_authorization_contract
 from src.integrity_kernel import exact_review_snapshot_hash
 from src.operations_console_v1 import ConsoleError
@@ -424,8 +423,8 @@ def test_changed_spans_do_not_inherit_review_authority():
     assert exact_current_approver_ids(shifted, [binding]) == ()
 
 
-def _console(tmp_path):
-    console = ClosedLoopReviewConsole(
+def _console(tmp_path, *, production_console):
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",
@@ -484,8 +483,8 @@ def _approve(console, reviewer, snapshot_id: str, object_id: str) -> str | None:
     return None
 
 
-def test_console_post_cannot_review_without_an_open_content_duty(tmp_path):
-    console, reviewer, snapshot_id = _console(tmp_path)
+def test_console_post_cannot_review_without_an_open_content_duty(tmp_path, *, production_console):
+    console, reviewer, snapshot_id = _console(tmp_path, production_console=production_console)
     blocked = _blocked()
     no_duty = _no_duty_definition()
     _append(console, snapshot_id, blocked)
@@ -512,8 +511,8 @@ def test_console_post_cannot_review_without_an_open_content_duty(tmp_path):
     assert problems == []
 
 
-def test_approve_of_blocked_candidate_does_not_commit(tmp_path):
-    console, reviewer, snapshot_id = _console(tmp_path)
+def test_approve_of_blocked_candidate_does_not_commit(tmp_path, *, production_console):
+    console, reviewer, snapshot_id = _console(tmp_path, production_console=production_console)
     blocked = _blocked()
     _append(console, snapshot_id, blocked)
     before = _canonical(next(

@@ -14,7 +14,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.object_taxonomy_v1 import published_object_type
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.product_api_v1 import ProductPaths, create_product_app
 from src.product_security_v1 import TenantPolicy, TenantRegistry, hash_api_key
@@ -28,8 +27,8 @@ ROOT = Path(__file__).resolve().parents[1]
 HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -194,8 +193,8 @@ def _fused_html() -> bytes:
 # ---------------------------------------------------------------------------
 
 
-def test_review_card_posts_relation_checkboxes_to_confirm_relations(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_review_card_posts_relation_checkboxes_to_confirm_relations(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts, data=_fused_html(), filename="rel.html")
     objects = [
@@ -213,7 +212,7 @@ def test_review_card_posts_relation_checkboxes_to_confirm_relations(tmp_path: Pa
     assert proposed
     assert binding_relations(rec) == []
 
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     html = client.get(f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}").text
     assert "nursing_tip" not in html
@@ -244,8 +243,8 @@ def test_review_card_posts_relation_checkboxes_to_confirm_relations(tmp_path: Pa
     )
 
 
-def test_unconfirmed_relation_checkboxes_do_not_bind(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_unconfirmed_relation_checkboxes_do_not_bind(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts, data=_fused_html(), filename="rel.html")
     objects = [
@@ -260,7 +259,7 @@ def test_unconfirmed_relation_checkboxes_do_not_bind(tmp_path: Path) -> None:
         for row in (rec.get("relations") or [])
     )
 
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     client.post(
         "/review/relations",
@@ -281,8 +280,8 @@ def test_unconfirmed_relation_checkboxes_do_not_bind(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_type_select_does_not_silently_submit_heading(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_type_select_does_not_silently_submit_heading(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts)
     heading = next(
@@ -290,7 +289,7 @@ def test_type_select_does_not_silently_submit_heading(tmp_path: Path) -> None:
         for obj in console.snapshot_objects(receipt["snapshot_id"])
         if obj["object_type"] == "heading" and not obj.get("confirmed_object_type")
     )
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     html = client.get(f"/review?document={receipt['snapshot_id']}&object={heading['object_id']}").text
     assert 'disabled' in html
@@ -305,8 +304,8 @@ def test_type_select_does_not_silently_submit_heading(tmp_path: Path) -> None:
     assert 'data-submit-review' in html
 
 
-def test_approve_without_explicit_closed_type_fails(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_approve_without_explicit_closed_type_fails(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts)
     heading = next(
@@ -329,7 +328,7 @@ def test_approve_without_explicit_closed_type_fails(tmp_path: Path) -> None:
     assert still.get("confirmed_object_type") in (None, "")
     assert still["object_type"] == "heading"
 
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     posted = client.post(
         "/review",
@@ -356,8 +355,8 @@ def test_approve_without_explicit_closed_type_fails(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_type_and_approve_disabled_when_open_source_passage_fails(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_type_and_approve_disabled_when_open_source_passage_fails(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts)
     target = next(
@@ -369,7 +368,7 @@ def test_type_and_approve_disabled_when_open_source_passage_fails(tmp_path: Path
     with pytest.raises(ConsoleError):
         console.open_source_passage(snapshot_id=receipt["snapshot_id"], object_id=target["object_id"])
 
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     html = client.get(f"/review?document={receipt['snapshot_id']}&object={target['object_id']}").text
     type_block = html[html.find(f'id="type-{target["object_id"]}"') : html.find(f'id="decision-{target["object_id"]}"') + 800]
@@ -396,8 +395,8 @@ def test_type_and_approve_disabled_when_open_source_passage_fails(tmp_path: Path
         )
 
 
-def test_type_confirm_succeeds_after_open_original(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_type_confirm_succeeds_after_open_original(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
@@ -415,7 +414,7 @@ def test_type_confirm_succeeds_after_open_original(tmp_path: Path) -> None:
     assert opened["reserialized"] is False
     assert opened.get("passage")
 
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     html = client.get(f"/review?document={receipt['snapshot_id']}&object={target['object_id']}").text
     type_block = html[html.find(f'id="type-{target["object_id"]}"') : html.find(f'id="decision-{target["object_id"]}"')]
@@ -572,8 +571,8 @@ def test_knowledge_get_abstains_without_locator_or_unclassified_or_historical(tm
     assert hist_status == 404 or hist.get("reason") in {"historical_type_not_served", "unclassified_object"}
 
 
-def test_four_eyes_copy_visible_when_required(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_four_eyes_copy_visible_when_required(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     html = (
         "<!doctype html><html lang=\"nl\"><body>"
@@ -599,17 +598,17 @@ def test_four_eyes_copy_visible_when_required(tmp_path: Path) -> None:
         if obj["object_id"] == target["object_id"]
     )
     assert requires_four_eyes(refreshed, confirmed_type="exception") is True
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     page = client.get(f"/review?document={receipt['snapshot_id']}&object={target['object_id']}").text
     assert "onafhankelijke tweede beoordeling nodig" in page
     assert "envelope" not in page.lower()
 
 
-def test_accounts_can_change_roles_on_existing_user(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_accounts_can_change_roles_on_existing_user(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "publisher.carla", "password": "carla-secret"})
     page = client.get("/accounts").text
     assert "Rollen wijzigen" in page or "rollen wijzigen" in page.lower()

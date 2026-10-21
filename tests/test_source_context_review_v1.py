@@ -13,9 +13,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
-from src.review_closure_v1 import ReviewClosureConsole
 from src.review_ledger import read_events
 from src.source_context_review_v1 import context_issues, projection, EVENT, LINKS_KEY
 from src.processing_diagnostics_v1 import passage_export_rows
@@ -39,8 +37,8 @@ def _bind_semantic_fixture(state):
         post_json=provider_fixture)
 
 
-def _system(tmp_path, console=None):
-    state = console or ReviewClosureConsole(root=tmp_path, source_store=tmp_path / 'sources', runtime=tmp_path / 'runtime')
+def _system(tmp_path, console=None, *, production_console=None):
+    state = console or production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / 'sources', runtime=tmp_path / 'runtime')
     researcher = state.create_account(username='anne', password='anne-secret', roles=('researcher',))
     reviewer = state.create_account(username='bert', password='bert-secret', roles=('reviewer',))
     _bind_semantic_fixture(state)
@@ -58,8 +56,8 @@ def _system(tmp_path, console=None):
     return state, researcher, reviewer, source, target, command
 
 
-def test_context_retains_exact_source_restarts_and_invalidates_changed_text(tmp_path):
-    state, _, _, source, target, command = _system(tmp_path)
+def test_context_retains_exact_source_restarts_and_invalidates_changed_text(tmp_path, *, production_console):
+    state, _, _, source, target, command = _system(tmp_path, production_console=production_console)
     before = deepcopy(state.snapshot_objects(command['snapshot_id']))
     result = state.confirm_source_context(**command)
     assert result['role'] == 'label'
@@ -79,7 +77,7 @@ def test_context_retains_exact_source_restarts_and_invalidates_changed_text(tmp_
                           if row['object_id'] == target['object_id'] and row.get('source_context_review'))
     assert context_export['source_context_review'] == export['source_context_review']
     assert not linked.get('confirmed_recommendation_strength')
-    restarted = ReviewClosureConsole(root=tmp_path, source_store=tmp_path / 'sources', runtime=tmp_path / 'runtime')
+    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / 'sources', runtime=tmp_path / 'runtime')
     assert restarted.snapshot_objects(command['snapshot_id']) == rows
     assert restarted.confirm_source_context(**command)['idempotent'] is True
     assert len([event for event in read_events(state._ledger_path) if event['event_type'] == EVENT]) == 1
@@ -92,8 +90,8 @@ def test_context_retains_exact_source_restarts_and_invalidates_changed_text(tmp_
     assert target['object_id'] in source_passage_closure(modified)['unresolved_source_passage_ids']
 
 
-def test_context_failure_stale_id_reuse_and_published_work_do_not_mutate(tmp_path, monkeypatch):
-    state, researcher, _, source, _, command = _system(tmp_path)
+def test_context_failure_stale_id_reuse_and_published_work_do_not_mutate(tmp_path, monkeypatch, *, production_console):
+    state, researcher, _, source, _, command = _system(tmp_path, production_console=production_console)
     sid = command['snapshot_id']
     before = deepcopy(state.snapshot_objects(sid))
     events = read_events(state._ledger_path)
@@ -116,9 +114,9 @@ def test_context_failure_stale_id_reuse_and_published_work_do_not_mutate(tmp_pat
         state.confirm_source_context(**command)
 
 
-def test_context_http_projection_and_command(tmp_path):
-    state, _, reviewer, source, target, command = _system(tmp_path)
-    client = TestClient(create_console_app(state))
+def test_context_http_projection_and_command(tmp_path, *, production_app, production_console):
+    state, _, reviewer, source, target, command = _system(tmp_path, production_console=production_console)
+    client = TestClient(production_app(state), headers={"Origin": "https://testserver"})
     assert client.post('/login', data={'username': reviewer['username'], 'password': 'bert-secret'}, follow_redirects=False).status_code == 303
     before = client.get('/review', params={'document': command['snapshot_id'], 'object': source['object_id']})
     assert 'Bij welke passage hoort dit label?' in before.text
@@ -135,8 +133,8 @@ def test_context_http_projection_and_command(tmp_path):
     assert 'data-source-role-card' in label_page.text
 
 
-def test_replacing_context_reopens_approval_and_preserves_unmodified_review_type(tmp_path):
-    state, _, reviewer, source, target, command = _system(tmp_path)
+def test_replacing_context_reopens_approval_and_preserves_unmodified_review_type(tmp_path, *, production_console):
+    state, _, reviewer, source, target, command = _system(tmp_path, production_console=production_console)
     sid = command['snapshot_id']
     state.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=target['object_id'],
                         decision='approve', confirmed_object_type='definition', relation_review_ack=True)
@@ -155,7 +153,7 @@ def test_replacing_context_reopens_approval_and_preserves_unmodified_review_type
     assert linked['governance']['validation_status'] == 'needs_review'
 
 
-def test_native_context_commit_failure_restart_csv_mcp_and_stale_worker(recovery_postgres, tmp_path):
+def test_native_context_commit_failure_restart_csv_mcp_and_stale_worker(recovery_postgres, tmp_path, *, production_console):
     import psycopg
     from tests.test_lifecycle_withdrawal_recovery_v1 import _console
     from tests.test_publication_chain_recovery_v1 import FakeBlobStore
@@ -164,8 +162,8 @@ def test_native_context_commit_failure_restart_csv_mcp_and_stale_worker(recovery
     source_store = FakeBlobStore()
     root = tmp_path / 'native'
     root.mkdir()
-    state = _console(root, recovery_postgres, source_store)
-    state, _, reviewer, source, target, command = _system(root, state)
+    state = production_console(root=root, processing_binder=lambda console: None, azure=True, immutable_source_store=source_store, environment={"CONSOLE_PUBLIC_ORIGIN": "https://testserver"})
+    state, _, reviewer, source, target, command = _system(root, state, production_console=production_console)
     sid = command['snapshot_id']
     before = deepcopy(state.snapshot_objects(sid))
     with psycopg.connect(recovery_postgres.dsn) as connection:
@@ -185,7 +183,7 @@ def test_native_context_commit_failure_restart_csv_mcp_and_stale_worker(recovery
             connection.execute('DROP FUNCTION workflow.fail_context_commit_test()')
     other_root = tmp_path / 'second-worker'
     other_root.mkdir()
-    other = _console(other_root, recovery_postgres, source_store)
+    other = production_console(root=other_root, processing_binder=lambda console: None, azure=True, immutable_source_store=source_store, environment={"CONSOLE_PUBLIC_ORIGIN": "https://testserver"})
     state.confirm_source_context(**command)
     committed = deepcopy(state.snapshot_objects(sid))
     with pytest.raises(ConsoleError, match='snapshot_object_write_conflict'):
@@ -193,7 +191,7 @@ def test_native_context_commit_failure_restart_csv_mcp_and_stale_worker(recovery
     assert state.snapshot_objects(sid) == committed
     fresh_root = tmp_path / 'restart'
     fresh_root.mkdir()
-    fresh = _console(fresh_root, recovery_postgres, source_store)
+    fresh = production_console(root=fresh_root, processing_binder=lambda console: None, azure=True, immutable_source_store=source_store, environment={"CONSOLE_PUBLIC_ORIGIN": "https://testserver"})
     assert fresh.snapshot_objects(sid) == committed
     assert fresh.confirm_source_context(**command)['idempotent'] is True
     export = passage_export_rows(fresh.snapshot_objects(sid))
@@ -217,7 +215,7 @@ def _close_context_review(state, reviewer, sid, target_id):
                                 comment='Testfixture: geen zelfstandig kennisobject.')
 
 
-def test_native_context_publication_successor_withdrawal_and_restart(recovery_postgres, tmp_path):
+def test_native_context_publication_successor_withdrawal_and_restart(recovery_postgres, tmp_path, *, production_app, production_console):
     from tests.test_lifecycle_withdrawal_recovery_v1 import _console, _api, _documents
     from tests.test_publication_chain_recovery_v1 import FakeBlobStore
     from tests.test_api_access_lifecycle_v1 import _provision
@@ -227,17 +225,17 @@ def test_native_context_publication_successor_withdrawal_and_restart(recovery_po
     blobs = FakeBlobStore()
     root = tmp_path / 'full-chain'
     root.mkdir()
-    state = _console(root, recovery_postgres, blobs)
-    state, researcher, reviewer, source, target, command = _system(root, state)
+    state = production_console(root=root, processing_binder=lambda console: None, azure=True, immutable_source_store=blobs, environment={"CONSOLE_PUBLIC_ORIGIN": "https://testserver"})
+    state, researcher, reviewer, source, target, command = _system(root, state, production_console=production_console)
     publisher = state.create_account(username='carla', password='carla-secret', roles=('publisher',))
     sid = command['snapshot_id']
     state.confirm_source_context(**command)
     restart_root = tmp_path / 'review-restart'
     restart_root.mkdir()
-    state = _console(restart_root, recovery_postgres, blobs)
+    state = production_console(root=restart_root, processing_binder=lambda console: None, azure=True, immutable_source_store=blobs, environment={"CONSOLE_PUBLIC_ORIGIN": "https://testserver"})
     _bind_semantic_fixture(state)
     _close_context_review(state, reviewer, sid, target['object_id'])
-    client = TestClient(create_console_app(state))
+    client = TestClient(production_app(state), headers={"Origin": "https://testserver"})
     assert client.post('/login', data={'username': 'carla', 'password': 'carla-secret'}, follow_redirects=False).status_code == 303
     assert client.post('/publish', data={'snapshot_id': sid, 'publish_confirmed': 'yes'}, follow_redirects=False).status_code == 303
     r1 = state.canonical_publication_store.release_for_snapshot(sid)
@@ -292,14 +290,14 @@ def test_native_context_publication_successor_withdrawal_and_restart(recovery_po
     assert result['status'] == 'PASS'
     fresh_root = tmp_path / 'withdrawal-restart'
     fresh_root.mkdir()
-    fresh = _console(fresh_root, recovery_postgres, blobs)
+    fresh = production_console(root=fresh_root, processing_binder=lambda console: None, azure=True, immutable_source_store=blobs, environment={"CONSOLE_PUBLIC_ORIGIN": "https://testserver"})
     assert not fresh.canonical_publication_store.active_publication_rows()
     assert fresh.snapshot_objects(sid) == old_objects
     assert fresh.document_release_serving_status(sid2) == {'release_status': 'withdrawn', 'serving_status': 'inactive'}
     assert _documents(_api(tmp_path / 'api-restarted', recovery_postgres, blobs), consumer) == (200, [])
 
 
-def test_native_context_and_publication_serialize_before_authority_read(recovery_postgres, tmp_path, monkeypatch):
+def test_native_context_and_publication_serialize_before_authority_read(recovery_postgres, tmp_path, monkeypatch, *, production_console):
     from concurrent.futures import ThreadPoolExecutor, TimeoutError
     from threading import Event
     from tests.test_lifecycle_withdrawal_recovery_v1 import _console
@@ -308,14 +306,14 @@ def test_native_context_and_publication_serialize_before_authority_read(recovery
     blobs = FakeBlobStore()
     root = tmp_path / 'context-worker'
     root.mkdir()
-    state, _, reviewer, _, target, command = _system(root, _console(root, recovery_postgres, blobs))
+    state, _, reviewer, _, target, command = _system(root, production_console(root=root, processing_binder=lambda console: None, azure=True, immutable_source_store=blobs, environment={"CONSOLE_PUBLIC_ORIGIN": "https://testserver"}), production_console=production_console)
     publisher = state.create_account(username='carla', password='carla-secret', roles=('publisher',))
     sid = command['snapshot_id']
     _close_context_review(state, reviewer, sid, target['object_id'])
     command['expected_revision'] = state.objects_revision(sid)
     peer_root = tmp_path / 'publisher-worker'
     peer_root.mkdir()
-    peer = _console(peer_root, recovery_postgres, blobs)
+    peer = production_console(root=peer_root, processing_binder=lambda console: None, azure=True, immutable_source_store=blobs, environment={"CONSOLE_PUBLIC_ORIGIN": "https://testserver"})
     committed, proceed = Event(), Event()
     original = state._commit_prepared_store
 
@@ -364,8 +362,8 @@ def test_native_context_and_publication_serialize_before_authority_read(recovery
     assert state.canonical_publication_store.release_for_snapshot(sid) is not None
 
 
-def test_reviewer_can_correct_a_wrong_source_role_without_restoring_old_approval(tmp_path):
-    state, _, reviewer, source, target, command = _system(tmp_path)
+def test_reviewer_can_correct_a_wrong_source_role_without_restoring_old_approval(tmp_path, *, production_console):
+    state, _, reviewer, source, target, command = _system(tmp_path, production_console=production_console)
     sid = command['snapshot_id']
     state.confirm_source_context(**command)
     state.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=target['object_id'],
@@ -387,8 +385,8 @@ def test_reviewer_can_correct_a_wrong_source_role_without_restoring_old_approval
     assert all(row in history for row in previous)
 
 
-def test_context_closure_helper_and_nonknowledge_approve_guard(tmp_path):
-    state, _, reviewer, source, target, command = _system(tmp_path)
+def test_context_closure_helper_and_nonknowledge_approve_guard(tmp_path, *, production_console):
+    state, _, reviewer, source, target, command = _system(tmp_path, production_console=production_console)
     state.confirm_source_context(**command)
     with pytest.raises(ConsoleError, match='source_context_not_knowledge'):
         state.review_object(actor_id=reviewer['account_id'], snapshot_id=command['snapshot_id'], object_id=source['object_id'],
@@ -399,8 +397,8 @@ def test_context_closure_helper_and_nonknowledge_approve_guard(tmp_path):
         fragments=state.review_source_fragments(command['snapshot_id']))['source_passage_review_complete']
 
 
-def test_named_reviewer_and_source_readback_are_required_before_context_write(tmp_path, monkeypatch):
-    state, _, _, _, _, command = _system(tmp_path)
+def test_named_reviewer_and_source_readback_are_required_before_context_write(tmp_path, monkeypatch, *, production_console):
+    state, _, _, _, _, command = _system(tmp_path, production_console=production_console)
     third = state.create_account(username='other-reviewer', password='fixture-secret', roles=('reviewer',))
     before = deepcopy(state.snapshot_objects(command['snapshot_id']))
     with pytest.raises(ConsoleError, match='reviewer_not_named_on_snapshot'):
@@ -414,12 +412,12 @@ def test_named_reviewer_and_source_readback_are_required_before_context_write(tm
     assert not [event for event in read_events(state._ledger_path) if event['event_type'] == EVENT]
 
 
-def test_native_correction_deferred_commit_failure_preserves_revision_reviews_and_audit(recovery_postgres, tmp_path):
+def test_native_correction_deferred_commit_failure_preserves_revision_reviews_and_audit(recovery_postgres, tmp_path, *, production_console):
     import psycopg
     from tests.test_lifecycle_withdrawal_recovery_v1 import _console
     from tests.test_publication_chain_recovery_v1 import FakeBlobStore
     root=tmp_path/'native-correction'; root.mkdir()
-    state, _, reviewer, _, target, command = _system(root, _console(root, recovery_postgres, FakeBlobStore()))
+    state, _, reviewer, _, target, command = _system(root, production_console(root=root, processing_binder=lambda console: None, azure=True, immutable_source_store=FakeBlobStore(), environment={"CONSOLE_PUBLIC_ORIGIN": "https://testserver"}), production_console=production_console)
     sid=command['snapshot_id']
     state.review_object(actor_id=reviewer['account_id'],snapshot_id=sid,object_id=target['object_id'],
                         decision='revise',comment='Controleer broncontext.')

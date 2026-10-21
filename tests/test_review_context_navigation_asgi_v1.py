@@ -1,4 +1,4 @@
-"""A15: navigation through the complete installed application, with local stores.
+"""A15: navigation through the actual production PostgreSQL application.
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: toegang
@@ -14,7 +14,6 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from fastapi.testclient import TestClient
 
-from src.console_asgi import build_app
 from src.operations_console_app import _source_context_panel
 from src.source_context_review_v1 import links_of
 from tests.test_source_context_review_v1 import _system
@@ -36,17 +35,11 @@ class Links(HTMLParser):
 
 
 @pytest.fixture
-def installed(tmp_path, monkeypatch):
-    # Isolate infrastructure config, without replacing any installer/route/backend.
-    for key in list(os.environ):
-        if key.startswith(('METIS_', 'CONSOLE_', 'WEBSITE_')):
-            monkeypatch.delenv(key)
-    _, researcher, reviewer, source, target, command = _system(tmp_path)
-    monkeypatch.setenv('CONSOLE_DATA_ROOT', str(tmp_path))
-    monkeypatch.setenv('CONSOLE_SOURCE_STORE', str(tmp_path / 'sources'))
-    monkeypatch.setenv('CONSOLE_RUNTIME', str(tmp_path / 'runtime'))
-    app = build_app()
-    state = app.state.operations_kernel
+def installed(tmp_path, production_console, production_app):
+    initial = production_console(root=tmp_path, processing_binder=lambda console: None)
+    _, researcher, reviewer, source, target, command = _system(tmp_path, console=initial)
+    state = production_console(root=tmp_path, processing_binder=lambda console: None)
+    app = production_app(state)
     client = TestClient(app, base_url='https://testserver')
     assert client.post('/login', data={'username': 'bert', 'password': 'bert-secret'},
                        follow_redirects=False).status_code == 303

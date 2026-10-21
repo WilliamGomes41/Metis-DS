@@ -39,7 +39,10 @@ def _refusals(rows):
 
 
 def _blocked_base(tmp_path):
-    console, sid, actor, reviewer, *_ = system(tmp_path)  # partial formation: gate MOET refuse
+    from src.review_closure_v1 import ReviewClosureConsole
+    console, sid, actor, reviewer, *_ = system(tmp_path,
+        make_console=lambda: ReviewClosureConsole(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime'),
+        production_console=None)  # partial formation: gate MOET refuse
     return console, sid, reviewer
 
 

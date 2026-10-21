@@ -36,9 +36,9 @@ def test_actual_inline_source_inclusion_is_proof_and_preserves_negation():
     assert 'context_necessary_unresolved' in result['reason_codes']
 
 
-def test_existing_binding_is_verified_not_inferred_from_proposal(tmp_path):
+def test_existing_binding_is_verified_not_inferred_from_proposal(tmp_path, *, production_console):
     from tests.test_source_context_review_v1 import _system
-    state, _, _, source, target, command = _system(tmp_path)
+    state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
     state.confirm_source_context(**command)
     rows = state.snapshot_objects(command['snapshot_id'])
     target = next(r for r in rows if r['object_id'] == target['object_id'])
@@ -64,11 +64,11 @@ def test_existing_binding_is_verified_not_inferred_from_proposal(tmp_path):
         assert context_realization(candidate, obj=target, objects=rows, fragments=fragments)['unresolved']
 
 
-def test_direct_reextract_cannot_destroy_review_or_context(tmp_path):
+def test_direct_reextract_cannot_destroy_review_or_context(tmp_path, *, production_console):
     from tests.test_source_context_review_v1 import _system
     from src.operations_console_v1 import ConsoleError
     from src.review_ledger import read_events
-    state, researcher, _, _, _, command = _system(tmp_path)
+    state, researcher, _, _, _, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
     state.confirm_source_context(**command)
     before = deepcopy(state._load_objects(command['snapshot_id'], remember=False))
     events = read_events(state._ledger_path)
@@ -78,10 +78,10 @@ def test_direct_reextract_cannot_destroy_review_or_context(tmp_path):
     assert read_events(state._ledger_path) == events
 
 
-def test_partial_audit_failure_rolls_back_object_bindings_and_all_new_events(tmp_path, monkeypatch):
+def test_partial_audit_failure_rolls_back_object_bindings_and_all_new_events(tmp_path, monkeypatch, *, production_console):
     from tests.test_source_context_review_v1 import _system
     from src.review_ledger import read_events, append_event
-    state, _, _, source, target, command = _system(tmp_path)
+    state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
     sid = command['snapshot_id']
     rows = deepcopy(state._load_objects(sid, remember=False))
     events = read_events(state._ledger_path)
@@ -100,12 +100,12 @@ def test_partial_audit_failure_rolls_back_object_bindings_and_all_new_events(tmp
     assert state.object_review_bindings(sid) == bindings
 
 
-def test_real_neighbor_bindings_resolve_only_after_both_source_contexts(tmp_path):
+def test_real_neighbor_bindings_resolve_only_after_both_source_contexts(tmp_path, *, production_console):
     from tests.test_source_context_review_v1 import _bind_semantic_fixture
     from src.operations_console_v1 import OperationsConsole, ConsoleError
     from src.admission_gate_v1 import admission_of
     from src.review_ledger import read_events
-    state = OperationsConsole(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
+    state = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
     researcher = state.create_account(username='researcher',password='test-only-secret',roles=('researcher',))
     reviewer = state.create_account(username='reviewer',password='test-only-secret',roles=('reviewer',))
     _bind_semantic_fixture(state)

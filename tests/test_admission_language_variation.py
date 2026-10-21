@@ -148,8 +148,8 @@ pytestmark = [
 ]
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -228,8 +228,8 @@ def test_language_variation_gold_and_fixture_exist() -> None:
         assert any(item["id"] == row["id"] for item in gold["passages"])
 
 
-def test_extract_path_language_variation_measures_false_admits_and_misses(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_extract_path_language_variation_measures_false_admits_and_misses(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = console.ingest(
         actor_id=accounts["researcher"]["account_id"],

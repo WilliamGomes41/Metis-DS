@@ -107,12 +107,11 @@ def test_dedup_never_transfers_a_binding_from_the_other_candidate():
 
 
 @pytest.mark.parametrize("both", [False, True])
-def test_real_ingest_review_and_restart_keep_selected_identity_and_source(tmp_path, both):
-    from src.operations_console_v1 import OperationsConsole
+def test_real_ingest_review_and_restart_keep_selected_identity_and_source(tmp_path, both, *, production_console):
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
     from src.object_taxonomy_v1 import extract_object_type
     def console():
-        return OperationsConsole(root=tmp_path, source_store=tmp_path / "sources",
+        return production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources",
                                  runtime=tmp_path / "runtime")
     state = console()
     author = state.create_account(username="anne", password="anne-secret", roles=("researcher",))

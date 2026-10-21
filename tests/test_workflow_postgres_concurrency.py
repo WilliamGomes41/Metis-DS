@@ -47,25 +47,9 @@ def _migration_statements(text: str) -> list[str]:
 
 
 @pytest.fixture(autouse=True)
-def workflow_postgres() -> PostgresCanonicalConfig:
-    dsn = os.environ.get("METIS_TEST_POSTGRES_DSN", "").strip()
-    if not dsn:
-        pytest.skip("METIS_TEST_POSTGRES_DSN is required for PostgreSQL concurrency evidence")
-
-    import psycopg
-
-    with psycopg.connect(dsn, autocommit=True) as con:
-        con.execute("DROP SCHEMA IF EXISTS workflow CASCADE")
-        for migration in MIGRATIONS:
-            text = (ROOT / "db" / "migrations" / migration).read_text(encoding="utf-8")
-            for statement in _migration_statements(text):
-                con.execute(statement)
-
-    config = PostgresCanonicalConfig(dsn=dsn)
-    yield config
-
-    with psycopg.connect(dsn, autocommit=True) as con:
-        con.execute("DROP SCHEMA IF EXISTS workflow CASCADE")
+def workflow_postgres(complete_postgres) -> PostgresCanonicalConfig:
+    """Use the session schema template and an owned database per test."""
+    return complete_postgres
 
 
 def _account_record(account_id: str, username: str, *, roles: list[str] | None = None) -> dict[str, Any]:

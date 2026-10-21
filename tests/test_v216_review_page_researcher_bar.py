@@ -26,7 +26,6 @@ from src.object_taxonomy_v1 import (
     recommendation_strength_sentence,
     stamp_value,
 )
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import (
     ConsoleError,
     OperationsConsole,
@@ -54,8 +53,8 @@ TYPE_NAMES = {
 }
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -116,8 +115,8 @@ def _ingest(
     return receipt
 
 
-def _client(console: OperationsConsole, username: str = "reviewer.bert") -> TestClient:
-    client = TestClient(create_console_app(console))
+def _client(console: OperationsConsole, username: str='reviewer.bert', *, production_app) -> TestClient:
+    client = TestClient(production_app(console))
     passwords = {
         "reviewer.bert": "bert-secret",
         "researcher.anne": "anne-secret",
@@ -257,26 +256,26 @@ def _eval(query: str, records: list[dict]) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def test_beoordeel_is_the_single_door_openen_and_reviewen_are_gone(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_beoordeel_is_the_single_door_openen_and_reviewen_are_gone(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
-    html = _client(console).get("/review").text
-    assert re.search(r">\s*Beoordeel\s*<", html)
+    html = _client(console, production_app=production_app).get("/review").text
+    assert re.search(r">\s*Ga verder met beoordelen\s*<", html)
     assert f'/review?document={receipt["snapshot_id"]}' in html
     assert 'class="btn-primary"' in html
     assert re.search(
-        rf'<a[^>]*class="[^"]*btn-primary[^"]*"[^>]*href="/review\?document={re.escape(receipt["snapshot_id"])}"',
+        rf'<a[^>]*class="[^"]*btn-primary[^"]*"[^>]*href="/review\?document={re.escape(receipt["snapshot_id"])}[^"]*"',
         html,
     ) or re.search(
-        rf'<a[^>]*href="/review\?document={re.escape(receipt["snapshot_id"])}"[^>]*class="[^"]*btn-primary',
+        rf'<a[^>]*href="/review\?document={re.escape(receipt["snapshot_id"])}[^"]*"[^>]*class="[^"]*btn-primary',
         html,
     )
     assert not re.search(r">\s*Openen\s*<", html)
     assert not re.search(r">\s*Reviewen\s*<", html)
     assert "Openen" not in html
     assert "Reviewen" not in html
-    assert html.lower().count("beoordeel") >= 1
+    assert html.lower().count("ga verder") >= 1
     assert "envelope" not in html.lower()
     assert "Documenten" in html
     assert "Documentenhiërarchie" not in html
@@ -286,18 +285,18 @@ def test_beoordeel_is_the_single_door_openen_and_reviewen_are_gone(tmp_path: Pat
     assert "Beoordeel" in source
 
 
-def test_first_review_screen_names_document_task_and_why(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_first_review_screen_names_document_task_and_why(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     _ingest(console, accounts, title="Continentie fixture")
-    html = _client(console).get("/review").text
+    html = _client(console, production_app=production_app).get("/review").text
     assert "Continentie fixture" in html
     assert "richtlijn" in html.lower()
     assert "continentie" in html.lower()
-    assert "Beoordeel" in html
+    assert "Ga verder" in html
     assert "Dit wordt wat een EPD MAG zeggen." not in html
     assert "wat een EPD MAG zeggen" not in html
-    first = _client(console).get("/review").text
+    first = _client(console, production_app=production_app).get("/review").text
     assert first.count('href="/review?document=') >= 1
 
 
@@ -306,7 +305,7 @@ def test_first_review_screen_names_document_task_and_why(tmp_path: Path) -> None
 # ---------------------------------------------------------------------------
 
 
-def test_koppen_and_inhoud_stacks_show_counts(tmp_path: Path) -> None:
+def test_koppen_and_inhoud_stacks_show_counts(tmp_path: Path, *, production_app, production_console) -> None:
     html_src = (
         "<!doctype html><html lang=\"nl\"><body>"
         "<h1>Richtlijn Continentie</h1>"
@@ -315,7 +314,7 @@ def test_koppen_and_inhoud_stacks_show_counts(tmp_path: Path) -> None:
         "<p>Dit is gewone toelichtende tekst zonder kopmarkering.</p>"
         "</body></html>"
     ).encode("utf-8")
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=html_src, filename="stacks.html", title="Stacks")
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
@@ -325,7 +324,7 @@ def test_koppen_and_inhoud_stacks_show_counts(tmp_path: Path) -> None:
     assert inhoud
     assert all(review_lane(obj) == "fast" for obj in koppen)
     assert all(review_lane(obj) == "slow" for obj in inhoud)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
     headings = client.get(f"/review?document={receipt['snapshot_id']}&task=headings").text
     individual = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
@@ -351,12 +350,12 @@ def test_koppen_and_inhoud_stacks_show_counts(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_compact_rows_are_source_text_plus_status_not_three_column(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_compact_rows_are_source_text_plus_status_not_three_column(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     html = "".join(
         client.get(f"/review?document={receipt['snapshot_id']}&task={task}").text
         for task in ("headings", "individual", "together", "control")
@@ -417,8 +416,8 @@ def test_row_title_is_not_type_name_or_kernel_id() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_stamps_bind_to_recommendation_not_objects_or_koppen(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_stamps_bind_to_recommendation_not_objects_or_koppen(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=_stamp_html(), filename="stamps.html", title="Stempels")
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
@@ -439,7 +438,7 @@ def test_stamps_bind_to_recommendation_not_objects_or_koppen(tmp_path: Path) -> 
     advice_heading = next(obj for obj in objects if "Overweeg verwijzing" in _text_of(obj))
     assert advice_heading["object_type"] == "heading"
     assert advice_heading.get("proposed_recommendation_strength") in {None, ""}
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&task=individual"
     ).text
     assert "DOEN" not in _index_link_titles(html) or all(
@@ -448,7 +447,7 @@ def test_stamps_bind_to_recommendation_not_objects_or_koppen(tmp_path: Path) -> 
     assert all(title not in {"DOEN", "OVERWEEG", "NIET DOEN"} for title in _index_link_titles(html))
     slow = re.search(r'class="review-lane-slow".*?</section>', html, flags=re.S)
     assert slow
-    card = _client(console).get(
+    card = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={bespreek['object_id']}"
     ).text
     # D3.3 supersedes the legacy guideline stamp picker: the source stamp
@@ -471,8 +470,8 @@ def test_stamps_bind_to_recommendation_not_objects_or_koppen(tmp_path: Path) -> 
     )
 
 
-def test_human_confirms_strength_on_recommendation_not_heading(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_human_confirms_strength_on_recommendation_not_heading(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
@@ -507,7 +506,7 @@ def test_human_confirms_strength_on_recommendation_not_heading(tmp_path: Path) -
 # ---------------------------------------------------------------------------
 
 
-def test_extract_does_not_propose_heading_for_stamps_even_if_tagged(tmp_path: Path) -> None:
+def test_extract_does_not_propose_heading_for_stamps_even_if_tagged(tmp_path: Path, *, production_console) -> None:
     assert is_strength_stamp("DOEN") is True
     assert is_strength_stamp("OVERWEEG") is True
     assert is_strength_stamp("NIET DOEN") is True
@@ -521,7 +520,7 @@ def test_extract_does_not_propose_heading_for_stamps_even_if_tagged(tmp_path: Pa
     object_type, proposed = extract_object_type(fragment)
     assert object_type != "heading"
     assert proposed != "heading"
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=_stamp_html(), filename="stamps.html", title="Stempels")
     headings = [
@@ -540,7 +539,7 @@ def test_extract_does_not_propose_heading_for_stamps_even_if_tagged(tmp_path: Pa
 # ---------------------------------------------------------------------------
 
 
-def test_extract_does_not_emit_list_number_stamp_or_truncated_objects(tmp_path: Path) -> None:
+def test_extract_does_not_emit_list_number_stamp_or_truncated_objects(tmp_path: Path, *, production_app, production_console) -> None:
     assert is_list_number_only("1.") is True
     assert is_list_number_only("1") is True
     assert is_tiny_confirmable_text("1.") is True
@@ -548,7 +547,7 @@ def test_extract_does_not_emit_list_number_stamp_or_truncated_objects(tmp_path: 
     assert is_tiny_confirmable_text("problemen.") is True
     assert is_tiny_confirmable_text("Gemaakt op 31-08-2026 19:52:55") is True
     assert is_tiny_confirmable_text("Bespreek het onderwerp met de zorgvrager.") is False
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=_tiny_html(), filename="tiny.html", title="Tiny")
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
@@ -562,7 +561,7 @@ def test_extract_does_not_emit_list_number_stamp_or_truncated_objects(tmp_path: 
     assert "specifieke problemen" in _text_of(merged)
     assert "Hoelang de cliënt" in _text_of(merged)
     assert any("Bespreek het onderwerp" in text for text in texts)
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    html = _client(console, production_app=production_app).get(f"/review?document={receipt['snapshot_id']}").text
     titles = _index_link_titles(html)
     assert "1." not in titles
     assert "problemen." not in titles
@@ -574,10 +573,10 @@ def test_extract_does_not_emit_list_number_stamp_or_truncated_objects(tmp_path: 
 # ---------------------------------------------------------------------------
 
 
-def test_unpublished_continentie_new_extract_keeps_source_hash(tmp_path: Path) -> None:
+def test_unpublished_continentie_new_extract_keeps_source_hash(tmp_path: Path, *, production_app, production_console) -> None:
     freeze = HTML_FIXTURE.read_bytes()
     expected = sha256_bytes(freeze)
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
@@ -593,7 +592,7 @@ def test_unpublished_continentie_new_extract_keeps_source_hash(tmp_path: Path) -
     objects = _non_document(console.snapshot_objects(again["snapshot_id"]))
     assert objects
     assert all(not is_tiny_confirmable_text(_text_of(obj)) for obj in objects)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     html = "".join(
         client.get(f"/review?document={receipt['snapshot_id']}&task={task}").text
         for task in ("headings", "individual", "together", "control")
@@ -602,8 +601,8 @@ def test_unpublished_continentie_new_extract_keeps_source_hash(tmp_path: Path) -
         assert _text_of(obj)[:40] in html or obj["object_id"] in html
 
 
-def test_ui_must_not_hide_stored_fragments_without_extract(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_ui_must_not_hide_stored_fragments_without_extract(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=_tiny_html(), filename="tiny.html", title="Tiny")
     freeze_hash = receipt["sha256"]
@@ -636,12 +635,12 @@ def test_ui_must_not_hide_stored_fragments_without_extract(tmp_path: Path) -> No
         _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     )
     assert any(obj["object_id"] == planted["object_id"] for obj in leftover)
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&task=inventory"
     ).text
     assert "Alle passages en hun afhandeling" in html
     assert "Nog niet afgehandeld" in html
-    card = _client(console).get(
+    card = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={planted['object_id']}"
     ).text
     assert planted_text in card
@@ -652,18 +651,18 @@ def test_ui_must_not_hide_stored_fragments_without_extract(tmp_path: Path) -> No
     assert again["sha256"] == freeze_hash
     after = [_text_of(obj) for obj in _non_document(console.snapshot_objects(receipt["snapshot_id"]))]
     assert planted_text not in after
-    html_after = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    html_after = _client(console, production_app=production_app).get(f"/review?document={receipt['snapshot_id']}").text
     titles = _index_link_titles(html_after)
     assert planted_text not in titles
 
 
-def test_reextract_refuses_published_objects(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_reextract_refuses_published_objects(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
-    rows = console._load_objects(receipt["snapshot_id"])
-    rows[0]["governance"]["publication_status"] = "published"
-    console._save_objects(receipt["snapshot_id"], rows)
+    from tests.complete_workflow_support import seed_canonical_release
+    seed_canonical_release(console.canonical_publication_store,
+                           snapshot_id=receipt["snapshot_id"], token=receipt["snapshot_id"])
     with pytest.raises(ConsoleError, match="published_objects_must_not_be_rewritten"):
         console.reextract_unpublished(
             actor_id=accounts["researcher"]["account_id"],
@@ -713,8 +712,8 @@ def test_serving_still_fail_closed_only_confirmed_recommendation_mag() -> None:
     assert published_object_type(unclassified) == "unclassified"
 
 
-def test_publish_remains_g2_blocked(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_publish_remains_g2_blocked(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     published = console.publish(
@@ -729,6 +728,7 @@ def test_publish_remains_g2_blocked(tmp_path: Path) -> None:
     )
     assert considered["publish_allowed"] is False
     assert considered["g2"] == "BLOCKED"
-    html = _client(console, "publisher.carla").get("/publish").text
-    assert "geblokkeerd" in html.lower() or "BLOCKED" in html
-    assert "G2" in html or "geblokkeerd" in html.lower()
+    html = _client(console, "publisher.carla", production_app=production_app).get("/publish").text
+    assert '<h1>Publiceren</h1>' in html
+    assert "data-publish-form" not in html
+    assert console.canonical_publication_store.active_publication_rows() == []

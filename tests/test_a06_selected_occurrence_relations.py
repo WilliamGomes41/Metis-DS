@@ -17,7 +17,7 @@ import sys
 import pytest
 
 from src.knowledge_path_v1 import content_reviewable, source_lineage_resolves
-from src.operations_console_v1 import OperationsConsole, ConsoleError
+from src.operations_console_v1 import ConsoleError
 from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 from src.source_bound_fields_v3 import MODE
 from tests.test_recommendation_context_v3 import response_for
@@ -27,8 +27,8 @@ TEXT = 'Bespreek de voorkeuren'
 OTHER = 'Controleer de ondersteuning'
 
 
-def system(root, make=None, *, reverse=False, swap_sections=False, direction='both', distinct=True):
-    make = make or (lambda: OperationsConsole(root=root, source_store=root/'sources', runtime=root/'runtime'))
+def system(root, make=None, *, reverse=False, swap_sections=False, direction='both', distinct=True, production_console):
+    make = make or (lambda: production_console(processing_binder=lambda console: None, root=root, source_store=root/'sources', runtime=root/'runtime'))
     state = make()
     author = state.create_account(username='author', password='strong-test-password', roles=('researcher',))
     reviewer = state.create_account(username='reviewer', password='strong-test-password', roles=('reviewer',))
@@ -112,8 +112,8 @@ def assert_bundle(state, sid):
 
 @pytest.mark.parametrize('direction', ['outgoing', 'incoming', 'both'])
 @pytest.mark.parametrize('reverse,swap_sections', [(False, False), (True, False), (False, True), (True, True)])
-def test_v3_ingest_selected_duplicate_relations_survive_restart(tmp_path, direction, reverse, swap_sections):
-    state, sid, _, _, _, _, _, _, make, _ = system(tmp_path, direction=direction, reverse=reverse, swap_sections=swap_sections)
+def test_v3_ingest_selected_duplicate_relations_survive_restart(tmp_path, direction, reverse, swap_sections, *, production_console):
+    state, sid, _, _, _, _, _, _, make, _ = system(tmp_path, direction=direction, reverse=reverse, swap_sections=swap_sections, production_console=production_console)
     rows, candidates = assert_bundle(state, sid)
     assert sum(len(o.get('proposed_knowledge_relations', [])) for o in candidates) == (2 if direction == 'both' else 1)
     restored = make()
@@ -121,20 +121,20 @@ def test_v3_ingest_selected_duplicate_relations_survive_restart(tmp_path, direct
     assert_bundle(restored, sid)
 
 
-def test_native_postgres_v3_duplicate_endpoints_restart(workflow_postgres, tmp_path):
+def test_native_postgres_v3_duplicate_endpoints_restart(workflow_postgres, tmp_path, *, production_console):
     from tests.test_review_batch_atomic_postgres import _console
-    state, sid, _, _, _, _, _, _, make, _ = system(tmp_path, lambda: _console(tmp_path, workflow_postgres))
+    state, sid, _, _, _, _, _, _, make, _ = system(tmp_path, lambda: _console(tmp_path, workflow_postgres), production_console=production_console)
     rows, _ = assert_bundle(state, sid)
     assert make().snapshot_objects(sid, include_blocked=True) == rows
 
 
-def test_control_changing_only_first_text_allows_same_v3_ingest(tmp_path):
-    state, sid, *_ = system(tmp_path, distinct=False)
+def test_control_changing_only_first_text_allows_same_v3_ingest(tmp_path, *, production_console):
+    state, sid, *_ = system(tmp_path, distinct=False, production_console=production_console)
     assert_bundle(state, sid)
 
 
-def durable_story(root, monkeypatch, make=None):
-    state, sid, actor, reviewer, calls, _, control, env, make, bind = system(root, make)
+def durable_story(root, monkeypatch, make=None, *, production_console):
+    state, sid, actor, reviewer, calls, _, control, env, make, bind = system(root, make, production_console=production_console)
     rows, candidates = assert_bundle(state, sid)
     repeated = [o for o in candidates if o['content']['clean_text'] == TEXT]
     assert len(repeated) == 2
@@ -221,14 +221,11 @@ def durable_story(root, monkeypatch, make=None):
     process = subprocess.run([sys.executable, '-c', """
 import json, os, sys
 from pathlib import Path
-from src.operations_console_v1 import OperationsConsole
 root = Path(sys.argv[1])
-if sys.argv[3] == 'postgres':
-    from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
-    from tests.test_review_batch_atomic_postgres import _console
-    console = _console(root, PostgresCanonicalConfig(dsn=os.environ['METIS_TEST_POSTGRES_DSN']))
-else:
-    console = OperationsConsole(root=root, source_store=root/'sources', runtime=root/'runtime')
+from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from tests.production_support import production_application
+console = production_application(root, PostgresCanonicalConfig(dsn=os.environ['METIS_TEST_POSTGRES_DSN']),
+                                 processing_binder=lambda console: None).state.operations_kernel
 print(json.dumps({'objects': console.snapshot_objects(sys.argv[2], include_blocked=True),
                   'bindings': console.object_review_bindings(sys.argv[2])}))
 """, str(root), sid, 'postgres' if store is not None else 'file'],
@@ -237,13 +234,13 @@ print(json.dumps({'objects': console.snapshot_objects(sys.argv[2], include_block
     assert json.loads(process.stdout) == {'objects': final.snapshot_objects(sid, include_blocked=True), 'bindings': bindings}
 
 
-def test_file_v3_evidence_isolation_replay_retry_failure_and_review(tmp_path, monkeypatch):
-    durable_story(tmp_path, monkeypatch)
+def test_file_v3_evidence_isolation_replay_retry_failure_and_review(tmp_path, monkeypatch, *, production_console):
+    durable_story(tmp_path, monkeypatch, production_console=production_console)
 
 
-def test_postgres_v3_evidence_isolation_replay_retry_failure_and_review(workflow_postgres, tmp_path, monkeypatch):
+def test_postgres_v3_evidence_isolation_replay_retry_failure_and_review(workflow_postgres, tmp_path, monkeypatch, *, production_console):
     from tests.test_review_batch_atomic_postgres import _console
-    durable_story(tmp_path, monkeypatch, lambda: _console(tmp_path, workflow_postgres))
+    durable_story(tmp_path, monkeypatch, lambda: _console(tmp_path, workflow_postgres), production_console=production_console)
 
 
 @pytest.mark.parametrize('fault', ['unknown_block', 'bounds', 'not_selected', 'type', 'ambiguous'])
@@ -272,10 +269,10 @@ def test_exact_relation_validation_still_rejects_invalid_endpoints(fault):
     assert units == before
 
 
-def test_older_occurrence_replay_requires_fresh_inference(tmp_path):
+def test_older_occurrence_replay_requires_fresh_inference(tmp_path, *, production_console):
     from src.semantic_replay_v1 import stable_json_hash
     from src.source_occurrence_authority_v1 import SOURCE_OCCURRENCE_AUTHORITY_VERSION
-    state, sid, actor, _, calls, _, _, _, make, bind = system(tmp_path)
+    state, sid, actor, _, calls, _, _, _, make, bind = system(tmp_path, production_console=production_console)
     envelope = deepcopy(state._envelope(sid))
     identity = envelope['semantic_replay']['identity']
     identity['components']['semantic_contract_version'] = identity['components']['semantic_contract_version'].removesuffix('/' + SOURCE_OCCURRENCE_AUTHORITY_VERSION)
@@ -291,11 +288,11 @@ def test_older_occurrence_replay_requires_fresh_inference(tmp_path):
     assert_bundle(restored, sid)
 
 
-def test_older_occurrence_checkpoint_cannot_resume_silently(tmp_path):
+def test_older_occurrence_checkpoint_cannot_resume_silently(tmp_path, *, production_console):
     from tests.test_recoverable_formation_v1 import system as partial_system
     from src.semantic_replay_v1 import stable_json_hash
     from src.source_occurrence_authority_v1 import SOURCE_OCCURRENCE_AUTHORITY_VERSION
-    state, sid, actor, _, calls, _, make, bind = partial_system(tmp_path)
+    state, sid, actor, _, calls, _, make, bind = partial_system(tmp_path, production_console=production_console)
     envelope = deepcopy(state._envelope(sid))
     identity = envelope['semantic_replay']['identity']
     identity['components']['semantic_contract_version'] = identity['components']['semantic_contract_version'].removesuffix('/' + SOURCE_OCCURRENCE_AUTHORITY_VERSION)
@@ -310,8 +307,8 @@ def test_older_occurrence_checkpoint_cannot_resume_silently(tmp_path):
     assert make().snapshot_objects(sid, include_blocked=True) == before
 
 
-def stale_story(root, monkeypatch, make=None, *, mutation):
-    state, sid, actor, _, _, _, control, env, make, _ = system(root, make)
+def stale_story(root, monkeypatch, make=None, *, mutation, production_console):
+    state, sid, actor, _, _, _, control, env, make, _ = system(root, make, production_console=production_console)
     before, _ = assert_bundle(state, sid)
     second = make()
     publisher = second.create_account(username='publisher', password='strong-test-password', roles=('publisher',))
@@ -337,14 +334,14 @@ def stale_story(root, monkeypatch, make=None, *, mutation):
 
 
 @pytest.mark.parametrize('mutation', ['permission', 'revision'])
-def test_file_stale_activation_cannot_replace_selected_endpoints(tmp_path, monkeypatch, mutation):
-    stale_story(tmp_path, monkeypatch, mutation=mutation)
+def test_file_stale_activation_cannot_replace_selected_endpoints(tmp_path, monkeypatch, mutation, *, production_console):
+    stale_story(tmp_path, monkeypatch, mutation=mutation, production_console=production_console)
 
 
 @pytest.mark.parametrize('mutation', ['permission', 'revision'])
-def test_postgres_stale_activation_cannot_replace_selected_endpoints(workflow_postgres, tmp_path, monkeypatch, mutation):
+def test_postgres_stale_activation_cannot_replace_selected_endpoints(workflow_postgres, tmp_path, monkeypatch, mutation, *, production_console):
     from tests.test_review_batch_atomic_postgres import _console
-    stale_story(tmp_path, monkeypatch, lambda: _console(tmp_path, workflow_postgres), mutation=mutation)
+    stale_story(tmp_path, monkeypatch, lambda: _console(tmp_path, workflow_postgres), mutation=mutation, production_console=production_console)
 
 
 def test_same_block_distinct_offsets_remain_distinct_and_same_span_stays_ambiguous():

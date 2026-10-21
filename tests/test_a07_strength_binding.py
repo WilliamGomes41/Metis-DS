@@ -237,9 +237,9 @@ def test_new_binding_is_rechecked_at_transform_and_admission(ancillary_metadata)
     assert (target['metadata'].get('admission') or {}).get('gate_result') != 'allowed'
 
 
-def test_console_persists_independence_quarantine_and_failed_replacement(tmp_path):
+def test_console_persists_independence_quarantine_and_failed_replacement(tmp_path, *, production_console):
     import json
-    from src.operations_console_v1 import OperationsConsole, ConsoleError
+    from src.operations_console_v1 import ConsoleError
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV
     from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
     from src.source_bound_fields_v3 import MODE
@@ -263,7 +263,7 @@ def test_console_persists_independence_quarantine_and_failed_replacement(tmp_pat
             {'type': 'output_text', 'text': json.dumps(p)}]}]}
     env = {PASSAGE_FORMATION_MODE_ENV: MODE, LLM_API_KEY_ENV: 'test', LLM_MODEL_ENV: 'a07-test'}
     def reopen():
-        c = OperationsConsole(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
+        c = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
         bind_pre_review_semantic_processing(c, environ=env, post_json=post)
         return c
     c = reopen()

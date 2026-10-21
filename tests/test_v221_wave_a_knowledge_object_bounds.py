@@ -43,7 +43,6 @@ from src.object_taxonomy_v1 import (
     is_tiny_confirmable_text,
     published_object_type,
 )
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import (
     ConsoleError,
     OperationsConsole,
@@ -84,8 +83,8 @@ FAIL_STANDALONE = (
 )
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -143,8 +142,8 @@ def _ingest(
     return console.ingest(**defaults)
 
 
-def _client(console: OperationsConsole, username: str = "reviewer.bert") -> TestClient:
-    client = TestClient(create_console_app(console))
+def _client(console: OperationsConsole, username: str='reviewer.bert', *, production_app) -> TestClient:
+    client = TestClient(production_app(console))
     passwords = {
         "reviewer.bert": "bert-secret",
         "researcher.anne": "anne-secret",
@@ -462,8 +461,8 @@ def test_no_duplicate_identical_clean_text_from_same_freeze() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_continentie_fail_patterns_are_not_standalone_duty_objects(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_continentie_fail_patterns_are_not_standalone_duty_objects(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
@@ -493,7 +492,7 @@ def test_continentie_fail_patterns_are_not_standalone_duty_objects(tmp_path: Pat
     for pattern in FAIL_STANDALONE:
         assert pattern not in duty_texts
     assert all(EVENTUEEL not in text or OVERWEEG in text for text in duty_texts)
-    html = _client(console).get(f"/review?document={receipt['snapshot_id']}").text
+    html = _client(console, production_app=production_app).get(f"/review?document={receipt['snapshot_id']}").text
     titles = _index_link_titles(html)
     for pattern in FAIL_STANDALONE:
         assert pattern not in titles
@@ -503,8 +502,8 @@ def test_continentie_fail_patterns_are_not_standalone_duty_objects(tmp_path: Pat
     assert SLOGAN not in html
 
 
-def test_splitter_units_have_locator_and_bronpassage_after_ingest(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_splitter_units_have_locator_and_bronpassage_after_ingest(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
@@ -512,7 +511,7 @@ def test_splitter_units_have_locator_and_bronpassage_after_ingest(tmp_path: Path
     assert _locator_of(rec)
     assert _locator_of(rec).get("locator_value")
     assert EVENTUEEL in _text_of(rec)
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
     assert OVERWEEG in _visible_text(html)
@@ -539,8 +538,8 @@ def test_pdf_shaped_once_and_html_repeated_modules_do_not_duplicate() -> None:
     assert pdf_recs == [FULL_RECOMMENDATION]
 
 
-def test_short_definition_and_real_headings_survive_extract(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_short_definition_and_real_headings_survive_extract(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
@@ -557,7 +556,7 @@ def test_short_definition_and_real_headings_survive_extract(tmp_path: Path) -> N
 # ---------------------------------------------------------------------------
 
 
-def test_v216_tiny_objects_v217_chrome_v218_dedup_still_hold(tmp_path: Path) -> None:
+def test_v216_tiny_objects_v217_chrome_v218_dedup_still_hold(tmp_path: Path, *, production_app, production_console) -> None:
     assert is_tiny_confirmable_text("1.") is True
     assert is_tiny_confirmable_text("DOEN") is True
     assert is_tiny_confirmable_text("problemen.") is True
@@ -565,7 +564,7 @@ def test_v216_tiny_objects_v217_chrome_v218_dedup_still_hold(tmp_path: Path) -> 
     assert is_strength_stamp("DOEN") is True
     assert is_kennisplatform_chrome_text("Tools") is True
     assert is_continuation_fragment(EVENTUEEL) is True
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
@@ -579,7 +578,7 @@ def test_v216_tiny_objects_v217_chrome_v218_dedup_still_hold(tmp_path: Path) -> 
     assert any(OVERWEEG in text and EVENTUEEL in text for text in texts)
     source = APP_SOURCE.read_text(encoding="utf-8")
     assert SLOGAN not in source
-    html = _client(console, "researcher.anne").get(
+    html = _client(console, "researcher.anne", production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}"
     ).text
     assert SLOGAN not in html
@@ -587,8 +586,8 @@ def test_v216_tiny_objects_v217_chrome_v218_dedup_still_hold(tmp_path: Path) -> 
     assert "envelope" not in html.lower()
 
 
-def test_unpublished_reextract_allowed_hiding_without_extract_forbidden(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_unpublished_reextract_allowed_hiding_without_extract_forbidden(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     freeze = CONTINENTIE_FIXTURE.read_bytes()
     receipt = _ingest(console, accounts, data=freeze)
@@ -671,8 +670,8 @@ def test_serving_still_fail_closed_unclassified_never_served() -> None:
     assert published_object_type(unclassified) == "unclassified"
 
 
-def test_publish_remains_g2_blocked(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_publish_remains_g2_blocked(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     published = console.publish(
@@ -687,8 +686,9 @@ def test_publish_remains_g2_blocked(tmp_path: Path) -> None:
     )
     assert considered["publish_allowed"] is False
     assert considered["g2"] == "BLOCKED"
-    html = _client(console, "publisher.carla").get("/publish").text
-    assert "geblokkeerd" in html.lower() or "BLOCKED" in html
+    html = _client(console, "publisher.carla", production_app=production_app).get("/publish").text
+    assert '<h1>Publiceren</h1>' in html
+    assert "data-publish-form" not in html
 
 
 # ---------------------------------------------------------------------------
@@ -707,10 +707,8 @@ def test_publish_remains_g2_blocked(tmp_path: Path) -> None:
         "continentie/../escape.html",
     ],
 )
-def test_v221_ingest_filename_cannot_escape_source_store(
-    tmp_path: Path, filename: str
-) -> None:
-    console = _console(tmp_path)
+def test_v221_ingest_filename_cannot_escape_source_store(tmp_path: Path, filename: str, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     with pytest.raises(ConsoleError, match="invalid_store_path"):
         _ingest(console, accounts, filename=filename)
@@ -721,8 +719,8 @@ def test_v221_safe_filename_still_accepts_plain_basenames() -> None:
     assert safe_store_filename("richtlijn-v2.html") == "richtlijn-v2.html"
 
 
-def test_factory_fixture_still_extracts(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_factory_fixture_still_extracts(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(
         console,

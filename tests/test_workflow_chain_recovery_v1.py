@@ -55,14 +55,9 @@ def _install_schema(dsn: str) -> None:
 
 
 @pytest.fixture()
-def recovery_postgres() -> PostgresCanonicalConfig:
-    dsn = os.environ.get("METIS_TEST_POSTGRES_DSN", "").strip()
-    if not dsn:
-        pytest.skip("METIS_TEST_POSTGRES_DSN is required for PostgreSQL recovery evidence")
-    _install_schema(dsn)
-    config = PostgresCanonicalConfig(dsn=dsn)
-    yield config
-    _install_schema(dsn)
+def recovery_postgres(complete_postgres) -> PostgresCanonicalConfig:
+    """Use the session schema template and an owned database per test."""
+    return complete_postgres
 
 
 def _seed_workflow(config: PostgresCanonicalConfig) -> None:

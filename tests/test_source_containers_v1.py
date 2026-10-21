@@ -88,7 +88,7 @@ def test_scope_case_and_terminal_colon_do_not_require_duplicate_context():
         assert additional_context_codes({**row, 'section_path': [scope]}, {'realized': []}) == ['recommendation_scope_context_missing']
 
 
-def test_kernel_ui_export_and_manual_reset_survive_restart(tmp_path, make_console=None):
+def test_kernel_ui_export_and_manual_reset_survive_restart(tmp_path, make_console=None, *, production_console):
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
     from src.review_closure_v1 import ReviewClosureConsole
     from src.source_context_review_v1 import confirm_source_context
@@ -96,7 +96,7 @@ def test_kernel_ui_export_and_manual_reset_survive_restart(tmp_path, make_consol
     from src.operations_console_app import _render_review_index
     from tests.test_recommendation_context_v3 import response_for
     def make():
-        return make_console() if make_console else ReviewClosureConsole(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
+        return make_console() if make_console else production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
     state = make()
     author = state.create_account(username='author', password='strong-test-password', roles=('researcher',))
     reviewer = state.create_account(username='reviewer', password='strong-test-password', roles=('reviewer',))
@@ -136,9 +136,9 @@ def test_kernel_ui_export_and_manual_reset_survive_restart(tmp_path, make_consol
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
-def test_native_container_reset_restart(workflow_postgres, tmp_path):
+def test_native_container_reset_restart(workflow_postgres, tmp_path, *, production_console):
     from tests.test_review_batch_atomic_postgres import _console
-    test_kernel_ui_export_and_manual_reset_survive_restart(tmp_path, lambda: _console(tmp_path, workflow_postgres))
+    test_kernel_ui_export_and_manual_reset_survive_restart(tmp_path, lambda: _console(tmp_path, workflow_postgres), production_console=production_console)
 
 
 def test_published_context_projection_rejects_stale_and_unresolved_context():

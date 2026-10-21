@@ -58,15 +58,14 @@ def reserve(console, author, sid, command="start"):
                                             expected_revision=console.objects_revision(sid))
 
 
-def test_restart_recovers_pending_sql_command_after_http_wake_failure_without_files(workflow_postgres, tmp_path, monkeypatch):
-    calls = []
-    first = _console(tmp_path / "first", workflow_postgres)
+def test_restart_recovers_pending_sql_command_after_http_wake_failure_without_files(workflow_postgres, tmp_path, monkeypatch, *, production_console):
     blob = ImmutableBlobFixture()
-    first.immutable_source_store = blob
+    calls = []
+    first = production_console(root=tmp_path / "first", processing_binder=lambda console: None, azure=True, immutable_source_store=blob)
     author, _, sid = received(first)
     from src.source_processing_dispatch_v1 import SourceProcessingDispatcher
     app = installed_app(first)
-    with monkeypatch.context() as patch, TestClient(app, base_url="https://testserver", raise_server_exceptions=False) as client:
+    with monkeypatch.context() as patch, TestClient(app, base_url="https://console.example.test", headers={"Origin": "https://console.example.test"}, raise_server_exceptions=False) as client:
         login(client)
         def lost_wake(*args):
             raise RuntimeError("request_lost_after_durable_reservation")
@@ -78,19 +77,17 @@ def test_restart_recovers_pending_sql_command_after_http_wake_failure_without_fi
     assert attempt["dispatch"]["state"] == "pending"
     assert first.snapshot_objects(sid) == []
     shutil.rmtree(tmp_path / "first")  # every cache/mirror is disposable
-    second = _console(tmp_path / "second", workflow_postgres)
-    second.immutable_source_store = blob
+    second = production_console(root=tmp_path / "second", processing_binder=lambda console: None, azure=True, immutable_source_store=blob)
     def post(*args):
         calls.append(1)
         return provider(*args)
     bind(second, post)
     app = installed_app(second)
-    with TestClient(app, base_url="https://testserver") as client:
+    with TestClient(app, base_url="https://console.example.test", headers={"Origin": "https://console.example.test"}) as client:
         drain(client, app)
         login(client)
         assert "Status: voltooid" in client.get("/source-selection", params={"document": sid}).text
-    final = _console(tmp_path / "third", workflow_postgres)
-    final.immutable_source_store = blob
+    final = production_console(root=tmp_path / "third", processing_binder=lambda console: None, azure=True, immutable_source_store=blob)
     assert final._envelope(sid)["processing_attempts"][-1]["command_id"] == "start"
     assert final._envelope(sid)["processing_attempts"][-1]["dispatch"]["state"] == "claimed"
     assert final._envelope(sid)["processing_attempts"][-1]["state"] == "succeeded"
@@ -98,7 +95,8 @@ def test_restart_recovers_pending_sql_command_after_http_wake_failure_without_fi
     assert final._verified_source_bytes(final._envelope(sid))[1].startswith(b"<html>")
 
 
-def test_native_two_kernels_claim_one_attempt_and_writer_remains_available(workflow_postgres, tmp_path):
+def test_native_two_kernels_claim_one_attempt_and_writer_remains_available(workflow_postgres, tmp_path, *, production_console):
+    blob = ImmutableBlobFixture()
     from contextlib import contextmanager
     from time import perf_counter, sleep
     import json
@@ -108,13 +106,10 @@ def test_native_two_kernels_claim_one_attempt_and_writer_remains_available(workf
     entered, release = Event(), Event()
     claim_held, release_claim, waiter_started = Event(), Event(), Event()
     records, holder, waiter = [], {}, {}
-    first = _console(tmp_path / "first", workflow_postgres)
-    blob = ImmutableBlobFixture()
-    first.immutable_source_store = blob
+    first = production_console(root=tmp_path / "first", processing_binder=lambda console: None, azure=True, immutable_source_store=blob)
     author, _, sid = received(first)
     attempt, _ = reserve(first, author, sid)
-    second = _console(tmp_path / "second", workflow_postgres)
-    second.immutable_source_store = blob
+    second = production_console(root=tmp_path / "second", processing_binder=lambda console: None, azure=True, immutable_source_store=blob)
     calls = []
     def observe(pid):
         with psycopg.connect(workflow_postgres.dsn, autocommit=True, row_factory=dict_row) as observer:
@@ -227,8 +222,8 @@ def test_native_two_kernels_claim_one_attempt_and_writer_remains_available(workf
         "provider_calls": len(calls), "records": records}))
 
 
-def test_changed_strategy_fails_before_provider_and_preserves_receipt(tmp_path):
-    console = state(tmp_path)
+def test_changed_strategy_fails_before_provider_and_preserves_receipt(tmp_path, *, production_console):
+    console = state(tmp_path, production_console=production_console)
     calls = []
     author, _, sid = received(console, calls)
     attempt, _ = reserve(console, author, sid)
@@ -242,9 +237,9 @@ def test_changed_strategy_fails_before_provider_and_preserves_receipt(tmp_path):
     assert console._verified_source_bytes(stored)[1]
 
 
-def test_expired_pending_command_is_interrupted_not_automatically_retried(tmp_path, monkeypatch):
+def test_expired_pending_command_is_interrupted_not_automatically_retried(tmp_path, monkeypatch, *, production_console):
     from src.source_processing_dispatch_v1 import pending
-    console = state(tmp_path)
+    console = state(tmp_path, production_console=production_console)
     calls = []
     author, _, sid = received(console, calls)
     attempt, _ = reserve(console, author, sid)
@@ -256,14 +251,13 @@ def test_expired_pending_command_is_interrupted_not_automatically_retried(tmp_pa
     assert calls == []
 
 
-def test_binding_never_replaces_methods_or_reader_and_catalog_calls_no_provider(tmp_path):
+def test_binding_never_replaces_methods_or_reader_and_catalog_calls_no_provider(tmp_path, monkeypatch, production_console):
     from tests.test_pre_review_semantic_v1 import _fragment
-    from src.operations_console_v1 import OperationsConsole
-    class Catalog(OperationsConsole):
-        def source_fragment_catalog(self):
-            return self._deterministic_fragments_and_spec("html", tmp_path/"source.html", data=b"x",
-                document_id="doc", source_id="src", title="T", family="F", class_="richtlijn")[0]
-    console = Catalog(root=tmp_path, source_store=tmp_path/"sources", runtime=tmp_path/"runtime")
+    console = production_console(root=tmp_path, processing_binder=lambda console: None)
+    def catalog(self):
+        return self._deterministic_fragments_and_spec("html", tmp_path/"source.html", data=b"x",
+            document_id="doc", source_id="src", title="T", family="F", class_="richtlijn")[0]
+    monkeypatch.setattr(type(console), 'source_fragment_catalog', catalog)
     console._extract = lambda *args, **kwargs: [_fragment("p1", "Gebruik geen zalf.")]
     def forbidden(*args):
         raise AssertionError("read invoked model")
@@ -286,10 +280,9 @@ def test_azure_cannot_use_local_workflow_fallback(monkeypatch):
     assert validate_workflow_store_configuration() is True
 
 
-def test_native_receipt_requires_blob_readback_even_with_valid_cache(workflow_postgres, tmp_path):
-    console = _console(tmp_path, workflow_postgres)
+def test_native_receipt_requires_blob_readback_even_with_valid_cache(workflow_postgres, tmp_path, *, production_console):
     blob = ImmutableBlobFixture()
-    console.immutable_source_store = blob
+    console = production_console(root=tmp_path, processing_binder=lambda console: None, azure=True, immutable_source_store=blob)
     _, _, sid = received(console)
     stored = deepcopy(console._envelope(sid))
     assert blob.reads >= 1
@@ -299,14 +292,12 @@ def test_native_receipt_requires_blob_readback_even_with_valid_cache(workflow_po
     assert console._envelope(sid)["sha256"] == stored["sha256"]
 
 
-def test_native_simultaneous_receipts_and_distinct_successor_commands(workflow_postgres, tmp_path):
-    from threading import Barrier
-    first = _console(tmp_path / "first", workflow_postgres)
-    author, reviewer = accounts(first)
+def test_native_simultaneous_receipts_and_distinct_successor_commands(workflow_postgres, tmp_path, *, production_console):
     blob = ImmutableBlobFixture()
-    first.immutable_source_store = blob
-    second = _console(tmp_path / "second", workflow_postgres)
-    second.immutable_source_store = blob
+    from threading import Barrier
+    first = production_console(root=tmp_path / "first", processing_binder=lambda console: None, azure=True, immutable_source_store=blob)
+    author, reviewer = accounts(first)
+    second = production_console(root=tmp_path / "second", processing_binder=lambda console: None, azure=True, immutable_source_store=blob)
     command = dict(actor_id=author, filename="fixture.html",
         data=b"<html><body><p>Gebruik geen zalf.</p></body></html>", content_type="text/html",
         ingest_kind="new", title="Fixture", version="1", date="2026-10-09", live_url="",
@@ -359,11 +350,10 @@ def test_native_simultaneous_receipts_and_distinct_successor_commands(workflow_p
     assert first.snapshot_objects(parent) == [] and first.snapshot_objects(children[0]["snapshot_id"]) == []
 
 
-def test_native_blob_orphan_registration_failure_retry_has_one_identity(workflow_postgres, tmp_path, monkeypatch):
-    first = _console(tmp_path / "first", workflow_postgres)
-    author, reviewer = accounts(first)
+def test_native_blob_orphan_registration_failure_retry_has_one_identity(workflow_postgres, tmp_path, monkeypatch, *, production_console):
     blob = ImmutableBlobFixture()
-    first.immutable_source_store = blob
+    first = production_console(root=tmp_path / "first", processing_binder=lambda console: None, azure=True, immutable_source_store=blob)
+    author, reviewer = accounts(first)
     command = dict(actor_id=author, filename="fixture.html",
         data=b"<html><body><p>Gebruik geen zalf.</p></body></html>", content_type="text/html",
         ingest_kind="new", title="Fixture", version="1", date="2026-10-09", live_url="",
@@ -376,8 +366,7 @@ def test_native_blob_orphan_registration_failure_retry_has_one_identity(workflow
             first.receive_source(**command)
     assert len(blob.blobs) == 1
     assert first.list_envelopes() == []
-    restarted = _console(tmp_path / "second", workflow_postgres)
-    restarted.immutable_source_store = blob
+    restarted = production_console(root=tmp_path / "second", processing_binder=lambda console: None, azure=True, immutable_source_store=blob)
     receipt = restarted.receive_source(**command)
     assert restarted.receive_source(**command)["snapshot_id"] == receipt["snapshot_id"]
     assert len(restarted.list_envelopes()) == 1 and len(blob.blobs) == 1

@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import json
-import os
 import uuid
 from copy import deepcopy
 from pathlib import Path
@@ -17,9 +16,7 @@ from typing import Any
 
 import pytest
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.closed_review_loop_v1 import ClosedLoopReviewConsole
-from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.operations_console_v1 import ConsoleError
 from src.review_closure_v1 import PUBLISHED_WORKING_REVISION_IMMUTABLE
 from src.workflows.workflow_document_concurrency_v1 import (
@@ -27,7 +24,6 @@ from src.workflows.workflow_document_concurrency_v1 import (
     PostgresConcurrentWorkflowDocumentStore,
 )
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
-from src.workflows.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,29 +37,12 @@ pytestmark = [
 ]
 
 
-class _ReleaseAuthority:
-    """Only the durable release lookup needed to prove the crash-window seal."""
-
-    def __init__(self) -> None:
-        self.releases: dict[str, dict[str, Any]] = {}
-
-    def release_for_snapshot(self, snapshot_id: str) -> dict[str, Any] | None:
-        release = self.releases.get(snapshot_id)
-        return deepcopy(release) if release is not None else None
 
 
-def _local_console(tmp_path: Path, authority: _ReleaseAuthority) -> DurablePublicationConsole:
-    return DurablePublicationConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources",
-        runtime=tmp_path / "runtime",
-        canonical_publication_store=authority,  # type: ignore[arg-type]
-    )
 
 
-def test_canonical_release_seals_review_before_workflow_envelope_reconciliation(tmp_path: Path) -> None:
-    authority = _ReleaseAuthority()
-    console = _local_console(tmp_path, authority)
+def test_canonical_release_seals_review_before_workflow_envelope_reconciliation(tmp_path: Path, production_console) -> None:
+    console = production_console(processing_binder=lambda console: None)
     researcher = console.create_account(
         username="immutable-researcher",
         password="immutable-secret",
@@ -117,16 +96,9 @@ def test_canonical_release_seals_review_before_workflow_envelope_reconciliation(
 
     before_revision = console.objects_revision(snapshot_id)
     before_objects = console.snapshot_objects(snapshot_id)
-    authority.releases[snapshot_id] = {
-        "release_id": "release-immutable",
-        "release_version": "1.0-immutable",
-        "release_owner": "publisher",
-        "published_at": "2026-09-16T09:30:00+00:00",
-        "snapshot_id": snapshot_id,
-        "source_sha256": str(console._envelope(snapshot_id).get("sha256") or ""),
-        "source_locator": str(console._envelope(snapshot_id).get("immutable_storage_locator") or ""),
-        "objects": [{"object_id": target["object_id"], "object_version": target["object_version"]}],
-    }
+    from tests.complete_workflow_support import seed_canonical_release
+    seed_canonical_release(console.canonical_publication_store, snapshot_id=snapshot_id, token=snapshot_id)
+
 
     # Canonical authority has committed, but the workflow projection has not.
     assert console._envelope(snapshot_id)["state"] == "captured_not_published"
@@ -146,20 +118,15 @@ def test_canonical_release_seals_review_before_workflow_envelope_reconciliation(
     assert console.objects_revision(snapshot_id) == before_revision
     assert console.snapshot_objects(snapshot_id) == before_objects
 
-    # A fresh process sees the same canonical seal before any reconciliation.
-    restarted = _local_console(tmp_path, authority)
-    assert restarted._envelope(snapshot_id)["state"] == "captured_not_published"
+    # Production startup reconciles metadata while retaining the canonical seal.
+    restarted = production_console(processing_binder=lambda console: None)
+    assert restarted._envelope(snapshot_id)["state"] == "published"
     assert restarted.snapshot_is_published(snapshot_id) is True
     assert restarted.migrate_legacy_revise_to_review() == 0
     assert restarted.objects_revision(snapshot_id) == before_revision
     assert restarted._current_object(snapshot_id, target["object_id"])["governance"]["validation_status"] == "revise"
 
 
-def _dsn() -> str:
-    value = os.getenv("METIS_TEST_POSTGRES_DSN", "").strip()
-    if not value:
-        pytest.skip("METIS_TEST_POSTGRES_DSN not configured")
-    return value
 
 
 def _snapshot_token() -> tuple[str, str]:
@@ -204,15 +171,8 @@ def _workflow_object(document_id: str) -> dict[str, Any]:
     }
 
 
-def _prepare_postgres() -> tuple[PostgresConcurrentWorkflowDocumentStore, str]:
-    dsn = _dsn()
-    config = PostgresCanonicalConfig(dsn=dsn)
-    store = PostgresConcurrentWorkflowDocumentStore(config)
-    with store._connect() as con:
-        paths = migration_paths(ROOT)
-        apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))
-        con.execute((ROOT / "db" / "schema_v2.sql").read_text(encoding="utf-8"))
-    return store, dsn
+def _prepare_postgres(complete_postgres) -> tuple[PostgresConcurrentWorkflowDocumentStore, str]:
+    return PostgresConcurrentWorkflowDocumentStore(complete_postgres), complete_postgres.dsn
 
 
 def _create_workflow_account(store: PostgresConcurrentWorkflowDocumentStore, token: str) -> str:
@@ -249,8 +209,8 @@ def _seed_durable_release(
     return release_id, release_version, published_at
 
 
-def test_postgres_authority_blocks_object_write_in_canonical_commit_crash_window() -> None:
-    store, _dsn_value = _prepare_postgres()
+def test_postgres_authority_blocks_object_write_in_canonical_commit_crash_window(complete_postgres) -> None:
+    store, _dsn_value = _prepare_postgres(complete_postgres)
     snapshot_id, token = _snapshot_token()
     account_id = _create_workflow_account(store, token)
     release_id = ""

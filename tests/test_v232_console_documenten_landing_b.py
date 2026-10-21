@@ -29,7 +29,6 @@ from urllib.parse import urlparse
 import pytest
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import OperationsConsole
 
 
@@ -58,8 +57,8 @@ NO_DELETE_ROOMS = (
 )
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -118,12 +117,12 @@ def _ingest(console: OperationsConsole, accounts: dict, *, title: str = "Test ri
     )
 
 
-def _fresh_client(console: OperationsConsole) -> TestClient:
-    return TestClient(create_console_app(console))
+def _fresh_client(console: OperationsConsole, *, production_app) -> TestClient:
+    return TestClient(production_app(console))
 
 
-def _client(console: OperationsConsole, username: str = "researcher.anne") -> TestClient:
-    client = _fresh_client(console)
+def _client(console: OperationsConsole, username: str='researcher.anne', *, production_app) -> TestClient:
+    client = _fresh_client(console, production_app=production_app)
     passwords = {
         "reviewer.bert": "bert-secret",
         "researcher.anne": "anne-secret",
@@ -207,10 +206,10 @@ def _has_delete_control(html: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def test_tree_live_heading_nav_and_page_title_are_documenten(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_tree_live_heading_nav_and_page_title_are_documenten(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     tree = client.get("/tree").text
     headings = _h1s(tree)
     assert headings, "/tree must render an h1"
@@ -222,10 +221,10 @@ def test_tree_live_heading_nav_and_page_title_are_documenten(tmp_path: Path) -> 
     assert client.get("/tree").status_code == 200
 
 
-def test_live_ui_forbids_hierarchy_and_familieboom_labels(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_live_ui_forbids_hierarchy_and_familieboom_labels(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     for path in ("/tree", "/ingest", "/review", "/"):
         html = client.get(path).text
         visible = _visible_text(html)
@@ -245,12 +244,12 @@ def test_live_ui_forbids_hierarchy_and_familieboom_labels(tmp_path: Path) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_unpublished_delete_stays_on_documenten_tree_room_only(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_unpublished_delete_stays_on_documenten_tree_room_only(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title="Alleen Documenten-kamer")
     snap = receipt["snapshot_id"]
-    client = _client(console)
+    client = _client(console, production_app=production_app)
 
     tree = client.get("/tree").text
     assert _h1s(tree)[0] == "Documenten"
@@ -261,7 +260,10 @@ def test_unpublished_delete_stays_on_documenten_tree_room_only(tmp_path: Path) -
     assert _has_delete_control(tree)
 
     for path, heading in NO_DELETE_ROOMS:
-        html = client.get(path).text
+        room_client = _client(console, "publisher.carla", production_app=production_app) if path == "/publish" else client
+        response = room_client.get(path)
+        assert response.status_code == 200
+        html = response.text
         assert heading in html
         assert DELETE_LABEL not in html
         assert not _has_delete_control(html)
@@ -298,10 +300,10 @@ def test_app_source_still_wires_delete_only_on_tree() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_logged_in_home_is_not_ingest_redirect(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_logged_in_home_is_not_ingest_redirect(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     response = client.get("/", follow_redirects=False)
     assert response.status_code == 200
     assert _location_path(response) != "/ingest"
@@ -312,10 +314,10 @@ def test_logged_in_home_is_not_ingest_redirect(tmp_path: Path) -> None:
     assert "Documenten" in _visible_text(html)
 
 
-def test_post_auth_redirect_lands_on_home_not_ingest(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_post_auth_redirect_lands_on_home_not_ingest(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    client = _fresh_client(console)
+    client = _fresh_client(console, production_app=production_app)
     login = client.post(
         "/login",
         data={"username": "researcher.anne", "password": "anne-secret"},

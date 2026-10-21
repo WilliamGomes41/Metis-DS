@@ -428,7 +428,8 @@ class _PostgresWorkflowDocumentsMixin:
         reads = self._source_selection_reads()
         if reads is not None:
             if reads["envelopes"] is None:
-                self.list_envelopes()
+                self.refresh_workflow_documents()
+                reads["envelopes"] = self._envelopes
             return list(reads["envelopes"])
         self.refresh_workflow_documents()
         return list(self._envelopes)

@@ -19,7 +19,7 @@ import src.publish_refusal_audit_v1 as audit
 from src.request_diagnostics_v1 import _LOGGER
 from src.review_ledger import read_events, verify_ledger
 from tests.test_vsa_publish_document_v1 import (  # noqa: F401 - fixture import
-    MemoryCanonicalStore, MemorySourceStore, _ready_console, workflow_postgres,
+    canonical_store, MemorySourceStore, _ready_console, workflow_postgres,
 )
 
 pytestmark = [pytest.mark.release_control_opslag, pytest.mark.release_control_releasebewijs]
@@ -42,7 +42,7 @@ def _key(monkeypatch):
 
 
 def _blocked(tmp_path, config):
-    console, accounts, receipt = _ready_console(tmp_path, config, MemoryCanonicalStore(), MemorySourceStore())
+    console, accounts, receipt = _ready_console(tmp_path, config, canonical_store(config), MemorySourceStore())
     real = console.consider_publish
 
     def blocked(**kwargs):

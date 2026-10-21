@@ -29,7 +29,7 @@ from starlette.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 
-from tests.complete_workflow_support import complete_postgres  # noqa: F401, E402
+from tests.complete_workflow_support import complete_postgres, _isolated_console_postgres  # noqa: F401, E402
 
 
 def _start_test_postgres(config):
@@ -133,35 +133,16 @@ def postgres_template(pytestconfig):
 
 
 @pytest.fixture
-def production_console(tmp_path, production_environment, monkeypatch):
-    """Use the actual ASGI startup, including PG classes, stores and reconciliation."""
-    from src import console_asgi
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+def production_console(tmp_path, complete_postgres):
+    """The same composition root as production, backed by this test's database."""
+    from tests.production_support import production_application
     apps = {}
 
-    def factory(root=None, *, azure=False, processing_binder=bind_pre_review_semantic_processing, **options):
-        root = Path(root or tmp_path)
-        source = options.pop("immutable_source_store", None)
-        runtime = options.pop("runtime", root / "runtime")
-        sources = options.pop("source_store", root / "sources")
-        if options:
-            raise ValueError("production_console only accepts paths, Blob and a processing binder")
-        with monkeypatch.context() as setup:
-            setup.setattr(console_asgi, "ROOT", root)
-            setup.setenv("CONSOLE_DATA_ROOT", str(root))
-            setup.setenv("CONSOLE_RUNTIME", str(runtime))
-            setup.setenv("CONSOLE_SOURCE_STORE", str(sources))
-            setup.setattr(console_asgi, "_immutable_source_store", lambda: source)
-            setup.setattr(console_asgi, "bind_pre_review_semantic_processing", processing_binder)
-            if azure:
-                setup.setenv("WEBSITE_SITE_NAME", "d6a-test")
-                setup.setenv("CONSOLE_PUBLIC_ORIGIN", "https://console.example.test")
-            else:
-                setup.delenv("WEBSITE_SITE_NAME", raising=False)
-            app = console_asgi.build_app()
-            console = app.state.operations_kernel
-            apps[console] = app
-            return console
+    def factory(root=None, **options):
+        app = production_application(root or tmp_path, complete_postgres, **options)
+        console = app.state.operations_kernel
+        apps[console] = app
+        return console
     factory.apps = apps
     return factory
 
@@ -169,30 +150,19 @@ def production_console(tmp_path, production_environment, monkeypatch):
 @pytest.fixture
 def production_app(production_console):
     def factory(console=None, **options):
+        if console is not None and options:
+            raise TypeError("Configure the production console before requesting its ASGI application")
         console = console if console is not None else production_console(**options)
-        return production_console.apps[console]
+        from tests.production_support import application_for
+        return application_for(console)
     return factory
 
 
 @pytest.fixture
 def production_environment(tmp_path, complete_postgres, monkeypatch):
-    """Use the real ASGI composition root without cloud credentials or bootstrap users."""
-    from src import console_asgi
-    from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
-
-    for name in POSTGRES_STORE_SETTINGS:
-        monkeypatch.setenv(name, "postgres")
-    monkeypatch.setenv("METIS_CANONICAL_DB_DSN", complete_postgres.dsn)
-    monkeypatch.setenv("CONSOLE_DATA_ROOT", str(tmp_path))
-    monkeypatch.setenv("CONSOLE_RUNTIME", str(tmp_path / "runtime"))
-    monkeypatch.setenv("CONSOLE_SOURCE_STORE", str(tmp_path / "sources"))
-    monkeypatch.setenv("WEB_CONCURRENCY", "1")
-    for name in ("WEBSITE_SITE_NAME", "CONSOLE_BOOTSTRAP_USERNAME", "CONSOLE_BOOTSTRAP_PASSWORD",
-                 "CONSOLE_BOOTSTRAP_REVIEWER_USERNAME", "CONSOLE_BOOTSTRAP_REVIEWER_PASSWORD",
-                 "CONSOLE_IMMUTABLE_SOURCE_STORE", "METIS_CONSOLE_AUTH"):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(console_asgi, "ROOT", tmp_path)
-    monkeypatch.setattr(console_asgi, "_postgres_credential", lambda: None)
+    """Configure explicit ASGI startup tests without replacing the composition root."""
+    from tests.production_support import configure_production
+    configure_production(monkeypatch, tmp_path, complete_postgres)
 
 
 _V2_PROTOCOL = ROOT / "docs" / "history" / "protocol-v2" / "PROTOCOL_ROOT_FINAL_2026-09-10.md"

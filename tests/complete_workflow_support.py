@@ -1,36 +1,29 @@
-"""Native R+ test constructor; all workflow stores share one transaction binding."""
+"""Production PostgreSQL composition, shared fixtures and canonical seeds."""
 import json
 
 import pytest
-from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 from src.integrity_kernel import compute_canonical_object_hash
 from src.workflows.workflow_badge_counts_postgres_v1 import FastBadgePostgresCompleteWorkflowDurablePublicationConsole
-from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-from src.workflows.workflow_identity_cutover_v1 import CutoverPostgresWorkflowIdentityStore
-from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
-from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-from src.workflows.workflow_transaction_v1 import bind_workflow_stores
 
 
 def complete_console(root, config, console_cls=FastBadgePostgresCompleteWorkflowDurablePublicationConsole, **overrides):
-    identity = CutoverPostgresWorkflowIdentityStore(config)
-    documents = PostgresConcurrentWorkflowDocumentStore(config)
-    reviews = PostgresWorkflowReviewStore(config)
-    remaining = PostgresWorkflowRemainingStore(config)
-    bind_workflow_stores(identity, documents, reviews, remaining)
-    options = dict(
-        root=root, source_store=root / "sources", runtime=root / "runtime",
-        workflow_identity_store=identity, workflow_document_store=documents,
-        workflow_review_store=reviews, workflow_remaining_store=remaining,
-        canonical_publication_store=PostgresCanonicalPublicationStore(config),
-    )
-    options.update(overrides)
+    """Legacy call signature, one actual production composition underneath."""
+    from src.workflows.workflow_badge_counts_postgres_v1 import FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole
+    from tests.production_support import production_application
     from tests.decision_tree_test_support import install_fragment_proposer
-    return install_fragment_proposer(console_cls(**options))
+    if console_cls not in (FastBadgePostgresCompleteWorkflowDurablePublicationConsole,
+                           FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole):
+        raise ValueError('Console tests require a production FastBadge PostgreSQL class')
+    options = dict(source_store=root / 'sources', runtime=root / 'runtime')
+    options.update(overrides)
+    app = production_application(root, config,
+        azure=console_cls is FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
+        processing_binder=lambda console: None, **options)
+    return install_fragment_proposer(app.state.operations_kernel)
 
 
 @pytest.fixture
-def complete_postgres(monkeypatch, postgres_template):
+def _isolated_console_postgres(monkeypatch, postgres_template):
     """Full schema in an owned disposable database; never reset the supplied DB.
 
     METIS_TEST_POSTGRES_DSN must identify a test server with CREATEDB rights.
@@ -42,6 +35,12 @@ def complete_postgres(monkeypatch, postgres_template):
         # Child-process proofs must connect to this same isolated authority.
         monkeypatch.setenv("METIS_TEST_POSTGRES_DSN", config.dsn)
         yield config
+
+
+@pytest.fixture
+def complete_postgres(_isolated_console_postgres):
+    """Aliases share the same function-scoped database, including the factories."""
+    return _isolated_console_postgres
 
 
 def seed_canonical_release(store, *, snapshot_id, token):

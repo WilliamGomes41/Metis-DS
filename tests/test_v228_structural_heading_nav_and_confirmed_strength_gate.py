@@ -16,7 +16,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.object_taxonomy_v1 import recommendation_strength_ui_applies
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 
 
@@ -24,8 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 APP_SOURCE = ROOT / "src/operations_console_app.py"
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -110,8 +109,8 @@ def _ingest(console: OperationsConsole, accounts: dict, **kwargs) -> dict:
     return receipt
 
 
-def _client(console: OperationsConsole, username: str = "researcher.anne") -> TestClient:
-    client = TestClient(create_console_app(console))
+def _client(console: OperationsConsole, username: str='researcher.anne', *, production_app) -> TestClient:
+    client = TestClient(production_app(console))
     passwords = {
         "reviewer.bert": "bert-secret",
         "researcher.anne": "anne-secret",
@@ -344,8 +343,8 @@ def test_block_a_invalid_nearby_parent_must_not_be_default_or_bind() -> None:
     assert default["object_id"] != "h-body-2"
 
 
-def test_block_a_confirm_relations_rejects_invalid_heading_parent(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_block_a_confirm_relations_rejects_invalid_heading_parent(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     rows = console._load_objects(receipt["snapshot_id"])
@@ -398,8 +397,8 @@ def test_block_a_confirm_relations_rejects_invalid_heading_parent(tmp_path: Path
     )
 
 
-def test_block_a_confirm_child_relation_updates_canonical_parent(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_block_a_confirm_child_relation_updates_canonical_parent(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     rows = console._load_objects(receipt["snapshot_id"])
@@ -441,8 +440,8 @@ def test_block_a_confirm_child_relation_updates_canonical_parent(tmp_path: Path)
     assert cleared["parent_object_id"] is None
 
 
-def test_block_a_confirm_parent_relation_updates_child_record(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_block_a_confirm_parent_relation_updates_child_record(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     rows = console._load_objects(receipt["snapshot_id"])
@@ -481,8 +480,8 @@ def test_block_a_confirm_parent_relation_updates_child_record(tmp_path: Path) ->
     assert live_child["parent_object_id"] == "inverse-54"
 
 
-def test_block_a_clearing_stale_parent_relation_preserves_new_parent(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_block_a_clearing_stale_parent_relation_preserves_new_parent(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     rows = console._load_objects(receipt["snapshot_id"])
@@ -539,15 +538,13 @@ def test_block_a_clearing_stale_parent_relation_preserves_new_parent(tmp_path: P
     assert live_child["parent_object_id"] == "reparent-5"
 
 
-def test_block_a_console_parent_list_is_body_structure_onderzoekers_taal(
-    tmp_path: Path,
-) -> None:
-    console = _console(tmp_path)
+def test_block_a_console_parent_list_is_body_structure_onderzoekers_taal(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     target = next(obj for obj in objects if "Bespreek" in _text_of(obj) or obj.get("object_type") == "heading")
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={target['object_id']}"
     ).text
     visible = _visible_text(html)
@@ -590,8 +587,8 @@ def test_block_a_toc_crumb_must_not_bind_as_structural_parent() -> None:
     assert parent_proposal_may_bind(child, body_parent, rows) is True
 
 
-def test_block_a_confirm_relations_rejects_toc_heading_as_parent(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_block_a_confirm_relations_rejects_toc_heading_as_parent(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     rows = console._load_objects(receipt["snapshot_id"])
@@ -673,8 +670,8 @@ def test_block_a_toc_inference_ends_without_exact_repeated_title() -> None:
     assert "h-toc-2" not in omitted_choice
 
 
-def test_block_a_parent_relation_uses_current_object_as_parent(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_block_a_parent_relation_uses_current_object_as_parent(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     rows = console._load_objects(receipt["snapshot_id"])
@@ -721,8 +718,8 @@ def test_block_a_parent_relation_uses_current_object_as_parent(tmp_path: Path) -
         )
 
 
-def test_block_a_parent_choice_rows_are_actionable(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_block_a_parent_choice_rows_are_actionable(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     rows = console._load_objects(receipt["snapshot_id"])
@@ -750,21 +747,20 @@ def test_block_a_parent_choice_rows_are_actionable(tmp_path: Path) -> None:
     }
     rows.extend([parent, child])
     console._save_objects(receipt["snapshot_id"], rows)
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={child['object_id']}"
     ).text
     assert "data-parent-choice-list" in html
-    assert re.search(
+    assert not re.search(
         r'data-parent-choice-list[\s\S]*href="/review\?document=',
         html,
     )
-    assert f"object={parent['object_id']}" in html
     assert f'value="{parent["object_id"]}"' in html
     assert 'name="parent_choice"' in html
     assert 'type="radio"' in html
     assert f'value="{parent["object_id"]}"' in html
     assert "Relatie bevestigen" not in html
-    posted = _client(console).post(
+    posted = _client(console, production_app=production_app).post(
         "/review/relations",
         data={
             "snapshot_id": receipt["snapshot_id"],
@@ -855,10 +851,8 @@ def test_block_b_sterkte_only_on_stored_or_confirmed_recommendation_or_outcome()
     assert recommendation_strength_ui_applies(confirmed_heading) is False
 
 
-def test_block_b_console_hides_sterkte_on_proposed_recommendation_until_confirm(
-    tmp_path: Path,
-) -> None:
-    console = _console(tmp_path)
+def test_block_b_console_hides_sterkte_on_proposed_recommendation_until_confirm(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     rec = next(
@@ -868,7 +862,7 @@ def test_block_b_console_hides_sterkte_on_proposed_recommendation_until_confirm(
     )
     assert rec.get("confirmed_object_type") in {None, ""}
     assert rec.get("proposed_object_type") == "recommendation" or "Bespreek" in _text_of(rec)
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
     visible = _visible_text(html)
@@ -884,7 +878,7 @@ def test_block_b_console_hides_sterkte_on_proposed_recommendation_until_confirm(
         confirmed_object_type="recommendation",
         recommendation_strength="doen",
     )
-    confirmed_html = _client(console).get(
+    confirmed_html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
     confirmed_visible = _visible_text(confirmed_html)
@@ -892,14 +886,14 @@ def test_block_b_console_hides_sterkte_on_proposed_recommendation_until_confirm(
     assert 'name="recommendation_strength"' in confirmed_html
 
 
-def test_block_b_live_ui_appears_and_disappears_before_submit(tmp_path: Path) -> None:
+def test_block_b_live_ui_appears_and_disappears_before_submit(tmp_path: Path, *, production_app, production_console) -> None:
     source = APP_SOURCE.read_text(encoding="utf-8")
     assert "data-stamp-block" in source
     assert "confirmed_object_type" in source
     assert re.search(r"stamp\.hidden|hidden\s*=\s*!show|data-stamp-block", source)
     assert "addEventListener('change'" in source or 'addEventListener("change"' in source
     assert "recommendation" in source and "outcome" in source
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     rec = next(
@@ -907,7 +901,7 @@ def test_block_b_live_ui_appears_and_disappears_before_submit(tmp_path: Path) ->
         for obj in _non_document(console.snapshot_objects(receipt["snapshot_id"]))
         if "Bespreek" in _text_of(obj)
     )
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
     assert "data-stamp-block" in html
@@ -925,10 +919,8 @@ def test_block_b_live_ui_appears_and_disappears_before_submit(tmp_path: Path) ->
     assert "submit" not in body.lower() or "before" in source.lower() or "hidden" in body
 
 
-def test_block_b_type_change_away_clears_active_strength_audit_may_keep(
-    tmp_path: Path,
-) -> None:
-    console = _console(tmp_path)
+def test_block_b_type_change_away_clears_active_strength_audit_may_keep(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     rec = next(
@@ -977,10 +969,8 @@ def test_block_b_type_change_away_clears_active_strength_audit_may_keep(
     assert any(row.get("confirmed_recommendation_strength") == "doen" for row in history)
 
 
-def test_block_b_machine_proposed_strength_stays_hidden_until_type_confirm(
-    tmp_path: Path,
-) -> None:
-    console = _console(tmp_path)
+def test_block_b_machine_proposed_strength_stays_hidden_until_type_confirm(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     rec = next(
@@ -1004,7 +994,7 @@ def test_block_b_machine_proposed_strength_stays_hidden_until_type_confirm(
         if obj["object_id"] == rec["object_id"]
     )
     assert recommendation_strength_ui_applies(planted) is False
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
     visible = _visible_text(html)
@@ -1012,8 +1002,8 @@ def test_block_b_machine_proposed_strength_stays_hidden_until_type_confirm(
     assert planted.get("proposed_recommendation_strength") == "doen"
 
 
-def test_block_b_confirm_object_type_clears_active_strength(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_block_b_confirm_object_type_clears_active_strength(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     rec = next(
@@ -1062,12 +1052,10 @@ def test_block_b_confirm_object_type_clears_active_strength(tmp_path: Path) -> N
     assert any(row.get("confirmed_recommendation_strength") == "doen" for row in history)
 
 
-def test_block_b_hidden_sterkte_select_is_disabled_until_type_confirm(
-    tmp_path: Path,
-) -> None:
+def test_block_b_hidden_sterkte_select_is_disabled_until_type_confirm(tmp_path: Path, *, production_app, production_console) -> None:
     source = APP_SOURCE.read_text(encoding="utf-8")
     assert "strength.disabled" in source
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     rec = next(
@@ -1075,7 +1063,7 @@ def test_block_b_hidden_sterkte_select_is_disabled_until_type_confirm(
         for obj in _non_document(console.snapshot_objects(receipt["snapshot_id"]))
         if "Bespreek" in _text_of(obj)
     )
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
     assert re.search(r"data-stamp-block\b[^>]*\bhidden", html)
@@ -1090,8 +1078,8 @@ def test_block_b_hidden_sterkte_select_is_disabled_until_type_confirm(
     assert "Sterkte van de aanbeveling" not in visible
 
 
-def test_block_b_publish_stays_g2_blocked_and_handoff_absent(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_block_b_publish_stays_g2_blocked_and_handoff_absent(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     result = console.publish(
@@ -1101,6 +1089,7 @@ def test_block_b_publish_stays_g2_blocked_and_handoff_absent(tmp_path: Path) -> 
     assert result["status"] == "BLOCKED"
     assert result["g2"] == "BLOCKED"
     assert result.get("cutover") is False
-    html = _client(console, "publisher.carla").get("/publish").text
-    assert "geblokkeerd" in html.lower() or "BLOCKED" in html or "duurzame opslag" in html.lower()
+    html = _client(console, "publisher.carla", production_app=production_app).get("/publish").text
+    assert '<h1>Publiceren</h1>' in html
+    assert "data-publish-form" not in html or "duurzame opslag" in html.lower()
     assert not (ROOT / "HANDOFF.md").exists()

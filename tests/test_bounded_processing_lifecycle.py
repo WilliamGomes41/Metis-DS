@@ -173,10 +173,9 @@ def test_reviewer_decision_during_native_reextract_survives_stale_activation(wor
     assert len(final._envelope(sid)['quality_processing_runs'])==1
 
 
-def test_model_budget_uses_remaining_attempt_time_and_never_calls_after_expiry(tmp_path,monkeypatch):
-    from src.operations_console_v1 import OperationsConsole
+def test_model_budget_uses_remaining_attempt_time_and_never_calls_after_expiry(tmp_path, monkeypatch, *, production_console):
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-    console=OperationsConsole(root=tmp_path,source_store=tmp_path/'sources',runtime=tmp_path/'runtime')
+    console=production_console(processing_binder=lambda console: None, root=tmp_path,source_store=tmp_path/'sources',runtime=tmp_path/'runtime')
     console._extract=lambda *args,**kwargs:[fragment()]
     calls=[]
     def post(url,headers,payload,timeout):

@@ -18,7 +18,6 @@ from src.retrieval.answerability_gate_v1 import evaluate_answerability
 from src.four_eyes_v1 import requires_four_eyes
 from src.integrity_kernel import compute_canonical_object_hash
 from src.object_taxonomy_v1 import is_advice_weight, published_object_type
-from src.operations_console_app import create_console_app
 from src.object_taxonomy_v1 import looks_like_structural_heading
 from src.operations_console_v1 import (
     ConsoleError,
@@ -57,8 +56,8 @@ TYPE_NAMES = {
 }
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -132,8 +131,8 @@ def _toc_html() -> bytes:
     ).encode("utf-8")
 
 
-def _client(console: OperationsConsole, username: str = "reviewer.bert") -> TestClient:
-    client = TestClient(create_console_app(console))
+def _client(console: OperationsConsole, username: str='reviewer.bert', *, production_app) -> TestClient:
+    client = TestClient(production_app(console))
     password = "bert-secret" if username == "reviewer.bert" else "anne-secret"
     client.post("/login", data={"username": username, "password": password})
     return client
@@ -212,8 +211,8 @@ def _eval(query: str, records: list[dict]) -> dict:
 # ---------------------------------------------------------------------------
 
 
-def test_empty_source_date_is_rejected(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_empty_source_date_is_rejected(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     with pytest.raises(ConsoleError, match="source_date_required"):
         _ingest(console, accounts, date="")
@@ -221,8 +220,8 @@ def test_empty_source_date_is_rejected(tmp_path: Path) -> None:
         _ingest(console, accounts, date="   ")
 
 
-def test_source_date_does_not_default_to_today(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_source_date_does_not_default_to_today(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     today = date.today().isoformat()
     with pytest.raises(ConsoleError, match="source_date_required"):
@@ -234,7 +233,7 @@ def test_source_date_does_not_default_to_today(tmp_path: Path) -> None:
     dumped = json.dumps(receipt)
     if today != "2025-04-01":
         assert f'"date": "{today}"' not in dumped
-    client = _client(console, "researcher.anne")
+    client = _client(console, "researcher.anne", production_app=production_app)
     html = client.get("/ingest").text
     date_tags = [
         tag
@@ -247,8 +246,8 @@ def test_source_date_does_not_default_to_today(tmp_path: Path) -> None:
         assert today not in tag
 
 
-def test_source_date_stored_iso_not_dd_mm_yyyy(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_source_date_stored_iso_not_dd_mm_yyyy(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, date="01-02-2026")
     assert receipt["date"] == "2026-02-01"
@@ -268,10 +267,10 @@ def test_source_date_stored_iso_not_dd_mm_yyyy(tmp_path: Path) -> None:
         assert "valid_until" not in (obj.get("source") or {})
 
 
-def test_ingest_form_is_calendar_picker_nl_display(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_ingest_form_is_calendar_picker_nl_display(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    html = _client(console, "researcher.anne").get("/ingest").text
+    html = _client(console, "researcher.anne", production_app=production_app).get("/ingest").text
     assert 'lang="nl"' in html
     date_tags = [
         tag
@@ -292,8 +291,8 @@ def test_ingest_form_is_calendar_picker_nl_display(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("version", ["1", "1.0", "2.13", "1.2.3"])
-def test_source_version_accepts_dotted_integers(tmp_path: Path, version: str) -> None:
-    console = _console(tmp_path)
+def test_source_version_accepts_dotted_integers(tmp_path: Path, version: str, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, title=f"Versie {version}", version=version)
     assert receipt["version"] == version
@@ -306,17 +305,17 @@ def test_source_version_accepts_dotted_integers(tmp_path: Path, version: str) ->
 
 
 @pytest.mark.parametrize("version", ["", "v1", "2024", "1.", ".1", "1,2", "1-beta", "1-rc", " 1.0 ", "2.13 "])
-def test_source_version_rejects_invalid(tmp_path: Path, version: str) -> None:
-    console = _console(tmp_path)
+def test_source_version_rejects_invalid(tmp_path: Path, version: str, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     with pytest.raises(ConsoleError, match="source_version_required|invalid_source_version"):
         _ingest(console, accounts, version=version)
 
 
-def test_ingest_form_version_is_not_free_text(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_ingest_form_version_is_not_free_text(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    html = _client(console, "researcher.anne").get("/ingest").text
+    html = _client(console, "researcher.anne", production_app=production_app).get("/ingest").text
     version_tags = [
         tag
         for tag in re.findall(r"<input\b[^>]*>", html, flags=re.I)
@@ -326,8 +325,8 @@ def test_ingest_form_version_is_not_free_text(tmp_path: Path) -> None:
     assert any(re.search(r'pattern=', tag, flags=re.I) for tag in version_tags)
 
 
-def test_source_date_and_version_are_freeze_metadata_not_publish(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_source_date_and_version_are_freeze_metadata_not_publish(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, version="2.13", date="2025-04-01")
     assert receipt["state"] == "captured_not_published"
@@ -344,8 +343,8 @@ def test_source_date_and_version_are_freeze_metadata_not_publish(tmp_path: Path)
 # ---------------------------------------------------------------------------
 
 
-def test_new_extract_proposes_heading_for_real_headings_and_toc(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_new_extract_proposes_heading_for_real_headings_and_toc(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=_toc_html(), filename="toc.html", title="TOC richtlijn")
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
@@ -362,7 +361,7 @@ def test_new_extract_proposes_heading_for_real_headings_and_toc(tmp_path: Path) 
     assert by_text["Inhoudsopgave"]["object_type"] == "heading"
 
 
-def test_numbered_clinical_prose_is_not_a_heading(tmp_path: Path) -> None:
+def test_numbered_clinical_prose_is_not_a_heading(tmp_path: Path, *, production_console) -> None:
     html_src = (
         "<!doctype html><html lang=\"nl\"><body>"
         "<h1>Richtlijn Continentie</h1>"
@@ -371,7 +370,7 @@ def test_numbered_clinical_prose_is_not_a_heading(tmp_path: Path) -> None:
         "<li>1. Inleiding</li>"
         "</body></html>"
     ).encode("utf-8")
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=html_src, filename="list.html", title="Lijstproza")
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
@@ -385,8 +384,8 @@ def test_numbered_clinical_prose_is_not_a_heading(tmp_path: Path) -> None:
     assert by_text["1. Inleiding"]["object_type"] == "heading"
 
 
-def test_ordinary_text_is_not_auto_promoted_to_recommendation(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_ordinary_text_is_not_auto_promoted_to_recommendation(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=_toc_html(), filename="toc.html", title="TOC richtlijn")
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
@@ -399,8 +398,8 @@ def test_ordinary_text_is_not_auto_promoted_to_recommendation(tmp_path: Path) ->
     assert clinical.get("confirmed_object_type") in {None, ""}
 
 
-def test_existing_continentie_fixture_hashes_unchanged(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_existing_continentie_fixture_hashes_unchanged(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = console.snapshot_objects(receipt["snapshot_id"])
@@ -416,14 +415,14 @@ def test_existing_continentie_fixture_hashes_unchanged(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_review_list_title_is_source_snippet_not_unclassified(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_review_list_title_is_source_snippet_not_unclassified(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
     receipt = _ingest(console, accounts)
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     html = "".join(
         client.get(f"/review?document={receipt['snapshot_id']}&task={task}").text
         for task in ("headings", "individual", "together", "control")
@@ -448,15 +447,15 @@ def test_review_list_title_is_source_snippet_not_unclassified(tmp_path: Path) ->
     assert len(set(unclassified_titles)) == len(unclassified_titles)
 
 
-def test_four_thousand_identical_unclassified_titles_is_a_fail(tmp_path: Path) -> None:
+def test_four_thousand_identical_unclassified_titles_is_a_fail(tmp_path: Path, *, production_app, production_console) -> None:
     paragraphs = "".join(f"<p>Passage nummer {index} over continentie in de praktijk.</p>" for index in range(1, 13))
     html_src = f"<!doctype html><html lang=\"nl\"><body><h1>Richtlijn</h1>{paragraphs}</body></html>".encode(
         "utf-8"
     )
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=html_src, filename="many.html", title="Veel passages")
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&task=control"
     ).text
     titles = _index_link_titles(html)
@@ -468,7 +467,7 @@ def test_four_thousand_identical_unclassified_titles_is_a_fail(tmp_path: Path) -
     visible = re.sub(r"\s+", " ", html)
     assert "Passages corrigeren (12)" not in visible
     # The heading stays in the same not-yet-assessed coverage count as the 12 passages.
-    management = _client(console).get(f"/settings/technical?document={receipt['snapshot_id']}").text
+    management = _client(console, production_app=production_app).get(f"/settings/technical?document={receipt['snapshot_id']}").text
     assert "Nog niet beoordeeld" in management
     assert "13" in management
     assert "unclassified" not in visible.casefold()
@@ -479,11 +478,11 @@ def test_four_thousand_identical_unclassified_titles_is_a_fail(tmp_path: Path) -
 # ---------------------------------------------------------------------------
 
 
-def test_review_lanes_from_type_without_speed_toggle(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_review_lanes_from_type_without_speed_toggle(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=_toc_html(), filename="toc.html", title="TOC richtlijn")
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
     headings = client.get(f"/review?document={receipt['snapshot_id']}&task=headings").text
     individual = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
@@ -508,8 +507,8 @@ def test_review_lanes_from_type_without_speed_toggle(tmp_path: Path) -> None:
     assert "Documentenhiërarchie" not in dashboard
 
 
-def test_fast_lane_batch_confirms_headings_as_structure(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_fast_lane_batch_confirms_headings_as_structure(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=_toc_html(), filename="toc.html", title="TOC richtlijn")
     headings = [
@@ -535,8 +534,8 @@ def test_fast_lane_batch_confirms_headings_as_structure(tmp_path: Path) -> None:
         assert (row.get("governance") or {}).get("validation_status") == "approved"
 
 
-def test_slow_lane_stays_one_object_card(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_slow_lane_stays_one_object_card(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=_toc_html(), filename="toc.html", title="TOC richtlijn")
     slow = next(
@@ -544,7 +543,7 @@ def test_slow_lane_stays_one_object_card(tmp_path: Path) -> None:
         for obj in _non_document(console.snapshot_objects(receipt["snapshot_id"]))
         if obj["object_type"] != "heading"
     )
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={slow['object_id']}"
     ).text
     assert "review-card-two-column" in html
@@ -554,8 +553,8 @@ def test_slow_lane_stays_one_object_card(tmp_path: Path) -> None:
     assert html.count("<select") >= 1
 
 
-def test_batch_confirm_rejects_slow_lane_objects(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_batch_confirm_rejects_slow_lane_objects(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=_toc_html(), filename="toc.html", title="TOC richtlijn")
     slow = next(
@@ -571,14 +570,14 @@ def test_batch_confirm_rejects_slow_lane_objects(tmp_path: Path) -> None:
         )
 
 
-def test_human_can_reclassify_heading_that_is_advice_to_slow(tmp_path: Path) -> None:
+def test_human_can_reclassify_heading_that_is_advice_to_slow(tmp_path: Path, *, production_app, production_console) -> None:
     html_src = (
         "<!doctype html><html lang=\"nl\"><body>"
         "<h1>Overweeg verwijzing naar de huisarts</h1>"
         "<p>Dit is gewone toelichtende tekst.</p>"
         "</body></html>"
     ).encode("utf-8")
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=html_src, filename="advice.html", title="Advieskop")
     heading = next(
@@ -600,7 +599,7 @@ def test_human_can_reclassify_heading_that_is_advice_to_slow(tmp_path: Path) -> 
     assert refreshed["confirmed_object_type"] == "recommendation"
     assert refreshed.get("proposed_object_type") == "heading"
     assert review_lane(refreshed) == "slow"
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&task=individual"
     ).text
     assert heading["object_id"] not in html
@@ -669,14 +668,14 @@ def test_unclassified_not_supported_only_confirmed_recommendation_may_be() -> No
 # ---------------------------------------------------------------------------
 
 
-def test_four_eyes_still_required_for_exception_and_high_risk(tmp_path: Path) -> None:
+def test_four_eyes_still_required_for_exception_and_high_risk(tmp_path: Path, *, production_console) -> None:
     html_src = (
         "<!doctype html><html lang=\"nl\"><body>"
         "<h1>Voorbeeldrichtlijn</h1>"
         "<p>Continentie is een klinisch onderwerp in de ouderenzorg.</p>"
         "</body></html>"
     ).encode("utf-8")
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
@@ -721,14 +720,14 @@ def test_four_eyes_still_required_for_exception_and_high_risk(tmp_path: Path) ->
     assert "four_eyes_required" in considered["blockers"]
 
 
-def test_fast_lane_heading_accept_does_not_bypass_four_eyes(tmp_path: Path) -> None:
+def test_fast_lane_heading_accept_does_not_bypass_four_eyes(tmp_path: Path, *, production_console) -> None:
     html_src = (
         "<!doctype html><html lang=\"nl\"><body>"
         "<h1>Uitzonderingen</h1>"
         "<p>Gewone toelichtende tekst.</p>"
         "</body></html>"
     ).encode("utf-8")
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=html_src, filename="risk.html", title="Risicokop")
     heading = next(
@@ -765,13 +764,13 @@ def test_fast_lane_heading_accept_does_not_bypass_four_eyes(tmp_path: Path) -> N
     assert considered["tuple_authorization"] is False
 
 
-def test_reclassify_heading_onto_exception_still_needs_four_eyes(tmp_path: Path) -> None:
+def test_reclassify_heading_onto_exception_still_needs_four_eyes(tmp_path: Path, *, production_console) -> None:
     html_src = (
         "<!doctype html><html lang=\"nl\"><body>"
         "<h1>Tenzij samen met de cliënt hiervan wordt afgezien</h1>"
         "</body></html>"
     ).encode("utf-8")
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=html_src, filename="reclass.html", title="Herclassificatie")
     heading = next(
@@ -822,8 +821,8 @@ def _files_under(root: Path) -> list[Path]:
         "continentie/../escape.html",
     ],
 )
-def test_ingest_filename_cannot_escape_source_store(tmp_path: Path, filename: str) -> None:
-    console = _console(tmp_path)
+def test_ingest_filename_cannot_escape_source_store(tmp_path: Path, filename: str, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     store = (tmp_path / "sources" / "private").resolve()
     with pytest.raises(ConsoleError, match="invalid_store_path"):
@@ -840,8 +839,9 @@ def test_safe_filename_still_accepts_plain_basenames() -> None:
     assert safe_store_filename("continentie-v2.html") == "continentie-v2.html"
 
 
+@pytest.mark.file_topology
 def test_objects_path_cannot_escape_runtime_store(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+    console = _file_console(tmp_path)
     objects_dir = console._objects_dir.resolve()
     runtime = objects_dir.parent.resolve()
     planted = runtime / "pwned.jsonl"
@@ -861,6 +861,7 @@ def test_objects_path_cannot_escape_runtime_store(tmp_path: Path) -> None:
         path.resolve().relative_to(objects_dir)
 
 
+
 def test_safe_path_under_rejects_traversal(tmp_path: Path) -> None:
     root = (tmp_path / "store").resolve()
     root.mkdir()
@@ -876,8 +877,8 @@ def test_safe_path_under_rejects_traversal(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("date", ["../2025-04-01", "2025/04/01", "..\\2025-04-01", "2025-04-01/../x"])
-def test_freeze_source_date_with_path_chars_is_rejected(tmp_path: Path, date: str) -> None:
-    console = _console(tmp_path)
+def test_freeze_source_date_with_path_chars_is_rejected(tmp_path: Path, date: str, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     with pytest.raises(ConsoleError, match="invalid_source_date|source_date_required|invalid_store_path"):
         _ingest(console, accounts, date=date)
@@ -887,11 +888,19 @@ def test_freeze_source_date_with_path_chars_is_rejected(tmp_path: Path, date: st
 
 
 @pytest.mark.parametrize("version", ["../1.0", "1/0", "1\\0", "1.0/../2"])
-def test_freeze_source_version_with_path_chars_is_rejected(tmp_path: Path, version: str) -> None:
-    console = _console(tmp_path)
+def test_freeze_source_version_with_path_chars_is_rejected(tmp_path: Path, version: str, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     with pytest.raises(ConsoleError, match="invalid_source_version|invalid_store_path"):
         _ingest(console, accounts, version=version)
     store = (tmp_path / "sources" / "private").resolve()
     for path in _files_under(store):
         path.resolve().relative_to(store)
+
+
+def _file_console(tmp_path: Path) -> OperationsConsole:
+    return OperationsConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "output" / "runtime" / "operations-console",
+    )

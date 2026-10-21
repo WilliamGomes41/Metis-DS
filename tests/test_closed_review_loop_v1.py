@@ -14,12 +14,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from src.closed_review_loop_v1 import (
-    ClosedLoopReviewConsole,
-    REVIEW_DISPOSITION_INCONSISTENT,
-    install_closed_review_routes,
-)
-from src.operations_console_app import create_console_app
+from src.closed_review_loop_v1 import ClosedLoopReviewConsole, REVIEW_DISPOSITION_INCONSISTENT
 from src.operations_console_v1 import ConsoleError
 from src.passage_register_v1 import passage_register_of
 from src.pre_review_semantic_v1 import (
@@ -64,8 +59,8 @@ def _bind_semantic_candidates(console) -> None:
     )
 
 
-def _system(tmp_path):
-    console = ClosedLoopReviewConsole(
+def _system(tmp_path, *, production_console):
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",
@@ -118,8 +113,10 @@ def _review(
     comment="",
     proposed_correction="",
 ):
+    # Unit contract of the closed-loop owner on the production class and PG.
+    # Structured runtime submission is covered by its dedicated HTTP probes.
     obj = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
-    return console.review_object(
+    return ClosedLoopReviewConsole.review_object(console,
         actor_id=reviewer["account_id"],
         snapshot_id=sid,
         object_id=oid,
@@ -133,8 +130,8 @@ def _review(
     )
 
 
-def test_impossible_review_combination_fails_closed(tmp_path):
-    console, _researcher, reviewer, sid, ids = _system(tmp_path)
+def test_impossible_review_combination_fails_closed(tmp_path, *, production_console):
+    console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     with pytest.raises(ConsoleError, match="review_disposition_conflict"):
         _review(
             console,
@@ -147,8 +144,8 @@ def test_impossible_review_combination_fails_closed(tmp_path):
         )
 
 
-def test_reject_is_terminal_and_audit_preserves_original_suitability(tmp_path):
-    console, researcher, reviewer, sid, ids = _system(tmp_path)
+def test_reject_is_terminal_and_audit_preserves_original_suitability(tmp_path, *, production_console):
+    console, researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     _review(
         console,
         reviewer,
@@ -174,8 +171,8 @@ def test_reject_is_terminal_and_audit_preserves_original_suitability(tmp_path):
     assert signal["details"]["source_hash"] == console._envelope(sid)["sha256"]
 
 
-def test_reject_with_revision_is_one_commit_without_type_or_position_write(tmp_path, monkeypatch):
-    console, _researcher, reviewer, sid, ids = _system(tmp_path)
+def test_reject_with_revision_is_one_commit_without_type_or_position_write(tmp_path, monkeypatch, *, production_console):
+    console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     oid = ids[0]
     before = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
     heading_id = next(
@@ -225,8 +222,8 @@ def test_reject_with_revision_is_one_commit_without_type_or_position_write(tmp_p
     assert binding_relations(after) == before_relations
 
 
-def test_revise_is_non_terminal_until_repair(tmp_path):
-    console, researcher, reviewer, sid, ids = _system(tmp_path)
+def test_revise_is_non_terminal_until_repair(tmp_path, *, production_console):
+    console, researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     oid = ids[0]
     before = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
     prior_status = passage_register_of(before)["status"]
@@ -249,8 +246,8 @@ def test_revise_is_non_terminal_until_repair(tmp_path):
     assert console.audit_review_signals()[0]["details"]["final_disposition"] == "repair_required"
 
 
-def test_proposed_correction_is_not_automatically_applied(tmp_path):
-    console, _researcher, reviewer, sid, ids = _system(tmp_path)
+def test_proposed_correction_is_not_automatically_applied(tmp_path, *, production_console):
+    console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     oid = ids[0]
     before = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
     _review(
@@ -268,8 +265,8 @@ def test_proposed_correction_is_not_automatically_applied(tmp_path):
     assert current["content"]["clean_text"] == before["content"]["clean_text"]
 
 
-def test_source_bound_repair_rejects_invented_text(tmp_path):
-    console, _researcher, reviewer, sid, ids = _system(tmp_path)
+def test_source_bound_repair_rejects_invented_text(tmp_path, *, production_console):
+    console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     oid = ids[0]
     _review(
         console,
@@ -299,8 +296,8 @@ def test_source_bound_repair_rejects_invented_text(tmp_path):
         )
 
 
-def test_later_has_no_hidden_state_transition(tmp_path):
-    console, _researcher, reviewer, sid, ids = _system(tmp_path)
+def test_later_has_no_hidden_state_transition(tmp_path, *, production_console):
+    console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     oid = ids[0]
     before = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
     console.review_object(
@@ -320,8 +317,8 @@ def test_later_has_no_hidden_state_transition(tmp_path):
     assert after.get("confirmed_object_type") == before.get("confirmed_object_type")
 
 
-def test_support_disposition_requires_relation_and_reopens_both(tmp_path):
-    console, _researcher, reviewer, sid, ids = _system(tmp_path)
+def test_support_disposition_requires_relation_and_reopens_both(tmp_path, *, production_console):
+    console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     support_id, claim_id = ids[0], ids[1]
     _review(
         console,
@@ -363,8 +360,8 @@ def test_support_disposition_requires_relation_and_reopens_both(tmp_path):
     assert current[claim_id]["governance"]["validation_status"] == "needs_review"
 
 
-def test_review_and_audit_write_roll_back_together(tmp_path, monkeypatch):
-    console, _researcher, reviewer, sid, ids = _system(tmp_path)
+def test_review_and_audit_write_roll_back_together(tmp_path, monkeypatch, *, production_console):
+    console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     oid = ids[0]
     before = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
     ledger_before = list(read_events(console._ledger_path))
@@ -389,8 +386,8 @@ def test_review_and_audit_write_roll_back_together(tmp_path, monkeypatch):
     assert read_events(console._ledger_path) == ledger_before
 
 
-def test_publication_fails_closed_when_disposition_conflict_is_found(tmp_path, monkeypatch):
-    console, _researcher, _reviewer, sid, ids = _system(tmp_path)
+def test_publication_fails_closed_when_disposition_conflict_is_found(tmp_path, monkeypatch, *, production_console):
+    console, _researcher, _reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     publisher = console.create_account(
         username="piet", password="piet-secret", roles=("publisher",)
     )
@@ -405,8 +402,8 @@ def test_publication_fails_closed_when_disposition_conflict_is_found(tmp_path, m
     assert considered["disposition_conflict_object_ids"] == [oid]
 
 
-def test_revise_and_rejected_objects_do_not_leak_from_question_selector(tmp_path):
-    console, _researcher, reviewer, sid, ids = _system(tmp_path)
+def test_revise_and_rejected_objects_do_not_leak_from_question_selector(tmp_path, *, production_console):
+    console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     revise_id, reject_id = ids[0], ids[1]
     _review(
         console,
@@ -436,8 +433,8 @@ def test_revise_and_rejected_objects_do_not_leak_from_question_selector(tmp_path
     assert reject_id not in selected_ids
 
 
-def test_review_evidence_is_visible_in_read_only_audit_route(tmp_path):
-    console, _researcher, reviewer, sid, ids = _system(tmp_path)
+def test_review_evidence_is_visible_in_read_only_audit_route(tmp_path, *, production_app, production_console):
+    console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     _review(
         console,
         reviewer,
@@ -448,8 +445,7 @@ def test_review_evidence_is_visible_in_read_only_audit_route(tmp_path):
         eindoordeel="goedkeuren_na_correctie",
         comment="Context ontbreekt.",
     )
-    app = create_console_app(console)
-    install_closed_review_routes(app, console)
+    app = production_app(console)
     client = TestClient(app, base_url="https://testserver")
     client.post("/login", data={"username": "anne", "password": "anne-secret"})
     response = client.get("/audit/review-signals")
@@ -461,10 +457,10 @@ def test_review_evidence_is_visible_in_read_only_audit_route(tmp_path):
     assert obj["governance"]["validation_status"] == "revise"
 
 
-def test_batch_failure_rolls_back_all_selected_decisions_and_restart(tmp_path, monkeypatch):
+def test_batch_failure_rolls_back_all_selected_decisions_and_restart(tmp_path, monkeypatch, *, production_console):
     from copy import deepcopy
 
-    console, _researcher, reviewer, sid, ids = _system(tmp_path)
+    console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     before = deepcopy(console.snapshot_objects(sid))
     bindings = deepcopy(console.object_review_bindings(sid))
     events = read_events(console._ledger_path)
@@ -481,7 +477,7 @@ def test_batch_failure_rolls_back_all_selected_decisions_and_restart(tmp_path, m
     assert console.snapshot_objects(sid) == before
     assert console.object_review_bindings(sid) == bindings
     assert read_events(console._ledger_path) == events
-    restarted = ClosedLoopReviewConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted.snapshot_objects(sid) == before
     assert restarted.object_review_bindings(sid) == bindings
     assert read_events(restarted._ledger_path) == events

@@ -24,7 +24,7 @@ from tests.test_vsa_review_workboard_v1 import _obj
 def summary_database():
     dsn = os.environ.get("METIS_TEST_POSTGRES_DSN")
     if not dsn:
-        pytest.skip("METIS_TEST_POSTGRES_DSN required for PostgreSQL queue parity")
+        pytest.fail("PostgreSQL was not bootstrapped during collection")
     import psycopg
     from psycopg.rows import dict_row
     schema = "review_parity_" + uuid4().hex
@@ -170,3 +170,9 @@ def test_sql_sets_match_domain_queues_including_missing_admission(summary_databa
         followups = review_followup_queues(objects, review_path=path, bindings=bindings, fragments=_allowed_source())
         assert summary["blocked_count"] == len(followups["repair"])
         assert summary["closure_gap_count"] == len(followups["disposition"])
+
+
+@pytest.fixture(autouse=True)
+def isolated_postgres(complete_postgres):
+    """All store connections in this test target its own cloned database."""
+    return complete_postgres

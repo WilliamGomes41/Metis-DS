@@ -17,8 +17,6 @@ import fitz
 import pytest
 from fastapi.testclient import TestClient
 
-from src.operations_console_app import create_console_app
-from src.operations_console_v1 import OperationsConsole
 from src.open_original_v1 import document_visible_prose, parse_page_bbox
 
 HTML = b'''<!doctype html><html><body><h1>Complete guideline</h1>
@@ -29,8 +27,8 @@ HTML = b'''<!doctype html><html><body><h1>Complete guideline</h1>
 </body></html>'''
 
 
-def setup_source(tmp_path: Path, data: bytes = HTML, kind: str = "html"):
-    console = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources",
+def setup_source(tmp_path: Path, data: bytes=HTML, kind: str='html', *, production_app, production_console):
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources",
                                 runtime=tmp_path / "runtime")
     reviewer = console.create_account(username="reviewer", password="secret", roles=("researcher", "reviewer"))
     uploader = console.create_account(username="uploader", password="secret", roles=("researcher",))
@@ -43,14 +41,14 @@ def setup_source(tmp_path: Path, data: bytes = HTML, kind: str = "html"):
     objects = console.snapshot_objects(snapshot)
     target = next(row for row in objects if row["object_type"] != "document"
                   and "Verwijs" in (row.get("content") or {}).get("clean_text", ""))
-    client = TestClient(create_console_app(console), base_url="https://testserver")
+    client = TestClient(production_app(console), base_url="https://testserver")
     assert client.post("/login", data={"username": "reviewer", "password": "secret"}).status_code == 200
     query = f'document={snapshot}&object={target["object_id"]}'
     return console, client, snapshot, target, query
 
 
-def test_click_full_guideline_shows_all_frozen_html_and_returns_to_same_task(tmp_path):
-    console, client, snapshot, target, query = setup_source(tmp_path)
+def test_click_full_guideline_shows_all_frozen_html_and_returns_to_same_task(tmp_path, *, production_app, production_console):
+    console, client, snapshot, target, query = setup_source(tmp_path, production_app=production_app, production_console=production_console)
     objects_before = deepcopy(console.snapshot_objects(snapshot))
     source_before = console._verified_source_bytes(console._envelope(snapshot))[1]
     card = client.get(f"/review?{query}&task=contextual").text
@@ -76,7 +74,7 @@ def test_click_full_guideline_shows_all_frozen_html_and_returns_to_same_task(tmp
     assert console._verified_source_bytes(console._envelope(snapshot))[1] == source_before
 
 
-def test_full_pdf_preserves_every_page_and_uses_located_page(tmp_path):
+def test_full_pdf_preserves_every_page_and_uses_located_page(tmp_path, *, production_app, production_console):
     doc = fitz.open()
     page = doc.new_page()
     page.insert_text((72, 72), "Verwijs naar de huisarts.")
@@ -84,7 +82,7 @@ def test_full_pdf_preserves_every_page_and_uses_located_page(tmp_path):
     doc.new_page().insert_text((72, 72), "Appendix on a second page.")
     data = doc.tobytes()
     doc.close()
-    console, client, snapshot, target, query = setup_source(tmp_path, data, "pdf")
+    console, client, snapshot, target, query = setup_source(tmp_path, data, "pdf", production_app=production_app, production_console=production_console)
     response = client.get(f"/review/bronpassage?{query}&task=history")
     assert response.status_code == 200
     assert 'type="application/pdf"' in response.text
@@ -111,16 +109,16 @@ def test_full_pdf_preserves_every_page_and_uses_located_page(tmp_path):
 
 
 @pytest.mark.parametrize("route", ["bronpassage", "brondocument"])
-def test_full_source_requires_session_and_valid_object(tmp_path, route):
-    _, client, _, _, query = setup_source(tmp_path)
+def test_full_source_requires_session_and_valid_object(tmp_path, route, *, production_app, production_console):
+    _, client, _, _, query = setup_source(tmp_path, production_app=production_app, production_console=production_console)
     assert client.get(f"/review/{route}?document=unknown&object=unknown").status_code == 400
     client.cookies.clear()
     assert client.get(f"/review/{route}?{query}").status_code == 401
 
 
 @pytest.mark.parametrize("corrupt", [False, True])
-def test_missing_or_corrupt_source_fails_closed(tmp_path, corrupt):
-    console, client, snapshot, _, query = setup_source(tmp_path)
+def test_missing_or_corrupt_source_fails_closed(tmp_path, corrupt, *, production_app, production_console):
+    console, client, snapshot, _, query = setup_source(tmp_path, production_app=production_app, production_console=production_console)
     path, _ = console._verified_source_bytes(console._envelope(snapshot))
     if corrupt:
         path.write_bytes(b"unverified replacement")
@@ -139,8 +137,8 @@ def test_full_document_projection_keeps_blocks_and_json_literal():
     assert document_visible_prose(b'{"text":"<not-a-tag>"}', "boom") == '{"text":"<not-a-tag>"}'
 
 
-def test_full_source_does_not_bypass_missing_locator(tmp_path):
-    console, client, snapshot, target, query = setup_source(tmp_path)
+def test_full_source_does_not_bypass_missing_locator(tmp_path, *, production_app, production_console):
+    console, client, snapshot, target, query = setup_source(tmp_path, production_app=production_app, production_console=production_console)
     rows = console.snapshot_objects(snapshot)
     for row in rows:
         if row["object_id"] == target["object_id"]:
@@ -155,8 +153,8 @@ def test_full_source_does_not_bypass_missing_locator(tmp_path):
         assert "source_locator_missing" in response.text
 
 
-def test_boom_projection_escapes_literal_markup_and_downloads_json(tmp_path, monkeypatch):
-    console, client, _, _, query = setup_source(tmp_path)
+def test_boom_projection_escapes_literal_markup_and_downloads_json(tmp_path, monkeypatch, *, production_app, production_console):
+    console, client, _, _, query = setup_source(tmp_path, production_app=production_app, production_console=production_console)
     original = b'{"text":"<script>alert(1)</script>"}'
     monkeypatch.setattr(console, "open_source_passage", lambda **kwargs: {
         "freeze_bytes": original, "content_kind": "boom", "passage": "a passage",
@@ -171,8 +169,8 @@ def test_boom_projection_escapes_literal_markup_and_downloads_json(tmp_path, mon
     assert download.headers["content-disposition"] == 'attachment; filename="richtlijn.json"'
 
 
-def test_duplicate_html_route_marks_the_located_second_occurrence(tmp_path, monkeypatch):
-    console, client, _, _, query = setup_source(tmp_path)
+def test_duplicate_html_route_marks_the_located_second_occurrence(tmp_path, monkeypatch, *, production_app, production_console):
+    console, client, _, _, query = setup_source(tmp_path, production_app=production_app, production_console=production_console)
     paragraph = b'<p>Verwijs naar de huisarts.</p>'
     original = b'<h1>Richtlijn</h1>\n' + paragraph + b'\n<p>Tussenliggende tekst.</p>\n' + paragraph
     start = original.rfind(paragraph)
@@ -190,14 +188,14 @@ def test_duplicate_html_route_marks_the_located_second_occurrence(tmp_path, monk
     assert 'kon niet eenduidig' not in response.text
 
 
-def test_multifragment_pdf_marks_both_pages_without_changing_original(tmp_path):
+def test_multifragment_pdf_marks_both_pages_without_changing_original(tmp_path, *, production_app, production_console):
     doc = fitz.open()
     doc.new_page().insert_text((72, 72), "Verwijs naar de huisarts.")
     doc.new_page().insert_text((72, 144), "Aanvullende broncontext.")
     second_bbox = doc[1].get_text("blocks")[0][:4]
     data = doc.tobytes()
     doc.close()
-    console, client, snapshot, target, query = setup_source(tmp_path, data, "pdf")
+    console, client, snapshot, target, query = setup_source(tmp_path, data, "pdf", production_app=production_app, production_console=production_console)
     second_locator = {"locator_type": "page_bbox", "locator_value": "page:2;bbox:" + ",".join(map(str, second_bbox))}
     rows = console.snapshot_objects(snapshot)
     row = next(row for row in rows if row["object_id"] == target["object_id"])
@@ -218,8 +216,8 @@ def test_multifragment_pdf_marks_both_pages_without_changing_original(tmp_path):
     assert console._verified_source_bytes(console._envelope(snapshot))[1] == data
 
 
-def test_multifragment_html_marks_all_source_fragments(tmp_path, monkeypatch):
-    console, client, _, _, query = setup_source(tmp_path)
+def test_multifragment_html_marks_all_source_fragments(tmp_path, monkeypatch, *, production_app, production_console):
+    console, client, _, _, query = setup_source(tmp_path, production_app=production_app, production_console=production_console)
     first, second = b'<p>Eerste bronzin.</p>', b'<p>Tweede bronzin.</p>'
     original = first + b'\n<p>Niet geselecteerd.</p>\n' + second
     spans = [(0, len(first)), (original.index(second), len(original))]

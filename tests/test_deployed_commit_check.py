@@ -232,17 +232,15 @@ def test_workflow_binds_expected_commit_to_selected_release(environment, sha_sou
     assert "REQUESTED_SHA: ${{ " + sha_source + " }}" in step
 
 
-def test_packaged_marker_through_real_health_endpoint_and_checker(tmp_path, monkeypatch):
+def test_packaged_marker_through_real_health_endpoint_and_checker(tmp_path, monkeypatch, *, production_app, production_console):
     import uvicorn
-    from src.operations_console_app import create_console_app
-    from src.operations_console_v1 import OperationsConsole
     from src import request_diagnostics_v1 as diagnostics
 
     marker = tmp_path / "deployed_commit.txt"
     marker.write_text(OLD)
     monkeypatch.setattr(diagnostics, "DEPLOYED_COMMIT_MARKER", marker)
-    console = OperationsConsole(root=tmp_path, runtime=tmp_path / "runtime")
-    app = create_console_app(console)
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, runtime=tmp_path / "runtime")
+    app = production_app(console)
     server = uvicorn.Server(uvicorn.Config(app, log_level="critical", lifespan="off"))
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))

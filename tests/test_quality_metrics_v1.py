@@ -147,15 +147,13 @@ def test_real_review_carries_evidence_atomically_and_reading_does_not_change_aut
     assert stable_hash(console.snapshot_objects(sid)) == before
 
 
-def test_postgres_concurrent_reports_restart_retry_and_no_local_fallback(tmp_path):
+def test_postgres_concurrent_reports_restart_retry_and_no_local_fallback(tmp_path, complete_postgres):
     import os
     import uuid
     from pathlib import Path
     import psycopg
     from psycopg.rows import dict_row
-    dsn = os.getenv('METIS_TEST_POSTGRES_DSN')
-    if not dsn:
-        pytest.skip('METIS_TEST_POSTGRES_DSN required')
+    dsn = complete_postgres.dsn
     connect = lambda: psycopg.connect(dsn, row_factory=dict_row)
     with connect() as con:
         con.execute('CREATE SCHEMA IF NOT EXISTS workflow')

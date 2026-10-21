@@ -37,7 +37,7 @@ pytestmark = [
 def _dsn() -> str:
     value = os.getenv("METIS_TEST_POSTGRES_DSN", "").strip()
     if not value:
-        pytest.skip("METIS_TEST_POSTGRES_DSN not configured")
+        pytest.fail("PostgreSQL was not bootstrapped during collection")
     return value
 
 
@@ -540,3 +540,9 @@ def test_explicit_policy_review_uses_bounded_postgres_reads(document_count):
             for sid in snapshots:
                 con.execute("DELETE FROM workflow.documents WHERE snapshot_id=%s", (sid,))
             con.execute("DELETE FROM workflow.accounts WHERE account_id=%s", (account_id,))
+
+
+@pytest.fixture(autouse=True)
+def isolated_postgres(complete_postgres):
+    """All store connections in this test target its own cloned database."""
+    return complete_postgres

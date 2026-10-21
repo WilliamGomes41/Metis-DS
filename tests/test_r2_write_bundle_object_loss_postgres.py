@@ -5,8 +5,8 @@ runtime (so they share the process store lock). Instance A gets an injected
 fault inside a supported review command (review_object approve). After A's
 document context has rolled back and released the lock, but before A's
 post-rollback step runs (_restore_review_state on main, the remirror after
-the fix), instance B reviews object B with decision "revise" and then applies
-the correction via correct_object, which writes a new object version. B's
+the fix), instance B applies a structured source repair to object B through the
+production Review command, which writes a new source-bound object version. B's
 corrected object (content and object_version), B's binding and B's audit
 events MOET survive A's post-rollback step; a blind write_bundle of A's
 pre-mutation copy MAG NIET overwrite them (see WilliamGomes41/Metis#33).
@@ -71,20 +71,23 @@ def test_r2_restore_after_lock_release_overwrites_concurrent_correction_object(w
     original_restore = getattr(a, hook_name)
 
     def run_b():
-        # B commits a second change through the normal path.
-        text = obj_b["content"]["clean_text"].rstrip(".")
-        b.review_object(actor_id=rid, snapshot_id=sid, object_id=obj_b["object_id"], decision="revise",
-                        comment="Corrigeer de formulering.", proposed_correction=text)
-        seen["b_revised"] = b.correct_object(
+        # B uses production's structured source repair, leaving completed
+        # review recovery rather than a legacy revise request for startup.
+        from src.deterministic_review_repair_v1 import REPAIR_SOURCE_UNITS
+        units = b.source_units(snapshot_id=sid, object_id=obj_b["object_id"])
+        selected = next(unit for unit in units if unit["text"] != obj_b["content"]["clean_text"])
+        seen["b_revised"] = b.submit_review_resolution(
             actor_id=rid, snapshot_id=sid, object_id=obj_b["object_id"],
-            patch={"reason": "r2 concurrent correction",
-                   "operations": [{"op": "set", "path": "content.clean_text", "value": text}]},
+            expected_revision=b.objects_revision(sid), suitability="nee",
+            comment="Corrigeer de bronselectie.", repair_kind=REPAIR_SOURCE_UNITS,
+            source_unit_ids=[selected["unit_id"]],
         )
+        assert seen["b_revised"]["object_version"] != obj_b["object_version"]
+        assert seen["b_revised"]["content"]["clean_text"] != obj_b["content"]["clean_text"]
         seen["events_after_b"] = b.workflow_review_store.read_events()
         seen["bindings_after_b"] = [x for x in b.workflow_review_store.read_bindings().get(sid, [])
                                     if x["object_id"] == obj_b["object_id"]]
-        seen["obj_after_b"] = next(o for o in b.workflow_document_store.list_document_objects(sid)
-                                      if o["object_id"] == obj_b["object_id"])
+        seen["obj_after_b"] = b._current_object(sid, obj_b["object_id"])
         seen["objs_after_b"] = b.workflow_document_store.list_document_objects(sid)
 
     def interleave_then_restore(*args, **kwargs):
@@ -121,8 +124,7 @@ def test_r2_restore_after_lock_release_overwrites_concurrent_correction_object(w
     assert seen["obj_after_b"] != obj_b, "precondition: B object change committed"
 
     fresh = _console(tmp_path, workflow_postgres)
-    b_obj = next(o for o in fresh.workflow_document_store.list_document_objects(sid)
-                 if o["object_id"] == obj_b["object_id"])
+    b_obj = fresh._current_object(sid, obj_b["object_id"])
     b_bindings = [x for x in fresh.workflow_review_store.read_bindings().get(sid, [])
                   if x["object_id"] == obj_b["object_id"]]
     events = fresh.workflow_review_store.read_events()

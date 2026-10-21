@@ -19,7 +19,6 @@ from src.klasse_wijzigen_v1 import (
     is_cross_model_class_change,
     review_model_for_klasse,
 )
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.review_ledger import read_events
 
@@ -28,8 +27,8 @@ ROOT = Path(__file__).resolve().parents[1]
 HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -118,10 +117,10 @@ def _ingest_richtlijn(console: OperationsConsole, accounts: dict[str, dict], **o
     return console.ingest(**kwargs)
 
 
-def _html_client(tmp_path: Path) -> tuple[TestClient, OperationsConsole, dict]:
-    console = _console(tmp_path)
+def _html_client(tmp_path: Path, *, production_app, production_console) -> tuple[TestClient, OperationsConsole, dict]:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
     return client, console, accounts
 
@@ -154,8 +153,8 @@ def test_review_model_matrix_same_versus_cross() -> None:
     assert is_cross_model_class_change("beslisboom", "richtlijn") is True
 
 
-def test_console_action_renamed_klasse_wijzigen_not_promoveren(tmp_path: Path) -> None:
-    client, console, accounts = _html_client(tmp_path)
+def test_console_action_renamed_klasse_wijzigen_not_promoveren(tmp_path: Path, *, production_app, production_console) -> None:
+    client, console, accounts = _html_client(tmp_path, production_app=production_app, production_console=production_console)
     _ingest_richtlijn(console, accounts)
     html = client.get("/tree").text
     assert "Documenten" in html
@@ -166,8 +165,8 @@ def test_console_action_renamed_klasse_wijzigen_not_promoveren(tmp_path: Path) -
     assert "envelope" not in html.lower()
 
 
-def test_cross_model_direct_change_blocked_keeps_prior_objects(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_cross_model_direct_change_blocked_keeps_prior_objects(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     richtlijn = _ingest_richtlijn(console, accounts)
     boom = _ingest_boom(console, accounts)
@@ -199,8 +198,8 @@ def test_cross_model_direct_change_blocked_keeps_prior_objects(tmp_path: Path) -
     ]
 
 
-def test_cross_model_requires_reextract_new_graph_prior_objects_audit_history(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_cross_model_requires_reextract_new_graph_prior_objects_audit_history(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     boom = _ingest_boom(console, accounts)
     prior = console.snapshot_objects(boom["snapshot_id"])
@@ -243,8 +242,8 @@ def test_cross_model_requires_reextract_new_graph_prior_objects_audit_history(tm
     assert _source_identity(changed) == identity
 
 
-def test_cross_model_html_to_boom_reextract_required_does_not_relabel(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_cross_model_html_to_boom_reextract_required_does_not_relabel(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
     prior_ids = [row["object_id"] for row in console.snapshot_objects(receipt["snapshot_id"])]
@@ -266,8 +265,8 @@ def test_cross_model_html_to_boom_reextract_required_does_not_relabel(tmp_path: 
     assert [row["object_id"] for row in console.snapshot_objects(receipt["snapshot_id"])] == prior_ids
 
 
-def test_same_model_uses_full_rereview_not_selective(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_same_model_uses_full_rereview_not_selective(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts, class_="transcript", title="Transcript fixture")
     objects = console.snapshot_objects(receipt["snapshot_id"])
@@ -300,8 +299,8 @@ def test_same_model_uses_full_rereview_not_selective(tmp_path: Path) -> None:
     assert consequence["review"] == "full_re_review"
 
 
-def test_preconfirm_consequence_shown_on_documentenhierarchie(tmp_path: Path) -> None:
-    client, console, accounts = _html_client(tmp_path)
+def test_preconfirm_consequence_shown_on_documentenhierarchie(tmp_path: Path, *, production_app, production_console) -> None:
+    client, console, accounts = _html_client(tmp_path, production_app=production_app, production_console=production_console)
     _ingest_richtlijn(console, accounts)
     html = client.get("/tree").text
     lower = html.lower()
@@ -315,8 +314,8 @@ def test_preconfirm_consequence_shown_on_documentenhierarchie(tmp_path: Path) ->
     assert re.search(r'name=["\']confirm["\']', html, flags=re.I)
 
 
-def test_class_change_recorded_as_audit_event(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_class_change_recorded_as_audit_event(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts, class_="transcript", title="Audit klasse")
     console.promote_class(
@@ -345,8 +344,8 @@ def test_class_change_recorded_as_audit_event(tmp_path: Path) -> None:
     assert "Auditor" not in event["actor"]
 
 
-def test_source_sha_title_version_provenance_unchanged(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_source_sha_title_version_provenance_unchanged(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts, class_="handreiking", title="Herkomst fixture", version="2.1")
     freeze_before = Path(receipt["binary_path"]).read_bytes()
@@ -363,8 +362,8 @@ def test_source_sha_title_version_provenance_unchanged(tmp_path: Path) -> None:
     assert changed["version"] == "2.1"
 
 
-def test_g2_still_blocks_publish_after_klasse_wijzigen(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_g2_still_blocks_publish_after_klasse_wijzigen(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts, class_="artikel")
     console.promote_class(

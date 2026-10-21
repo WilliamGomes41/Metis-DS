@@ -13,17 +13,16 @@ from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 from tests.test_availability_repair import installed_app, drain
 from tests.test_recoverable_formation_v1 import system
 from tests.test_recommendation_coverage_v1 import FIRST, SECOND
-from tests.test_review_batch_atomic_postgres import _console
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
 @pytest.fixture(params=["file", "postgres"])
-def partial(request, tmp_path):
+def partial(request, tmp_path, *, production_console):
     make = None
     if request.param == "postgres":
         config = request.getfixturevalue("workflow_postgres")
-        make = lambda: _console(tmp_path, config)
-    return system(tmp_path, make_console=make)
+        make = lambda: production_console(root=tmp_path, processing_binder=lambda console: None)
+    return system(tmp_path, make_console=make, production_console=production_console)
 
 
 @pytest.mark.parametrize("changed_mode,changed_model", [

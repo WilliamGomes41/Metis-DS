@@ -57,10 +57,10 @@ def command(console, accounts, sid, command_id, **extra):
 
 @pytest.mark.parametrize("participation", [None, "optional", "required"])
 @pytest.mark.parametrize("backend", ["local", "postgres"])
-def test_pdf_requires_passage_and_graph_review_after_restart(tmp_path, participation, backend):
+def test_pdf_requires_passage_and_graph_review_after_restart(tmp_path, participation, backend, *, complete_postgres):
     if backend == "postgres":
         from tests.decision_graph_native_support import native_state
-        state, _, _ = native_state(tmp_path)
+        state, _, _ = native_state(tmp_path, config=complete_postgres)
     else:
         state = lambda: _console(tmp_path)
     console = state()
@@ -266,11 +266,11 @@ def test_ingest_command_deduplicates_and_rejects_changed_payload(tmp_path):
         _ingest_boom(restarted, accounts, **{**kwargs, "title": "Different"})
 
 
-def test_native_postgres_graph_publication_restart_and_withdrawal(tmp_path):
+def test_native_postgres_graph_publication_restart_and_withdrawal(tmp_path, *, complete_postgres):
     from datetime import datetime, timedelta
     from tests.decision_graph_native_support import native_state
     from src.decision_graph_v1 import read_active_graph
-    state, store, source = native_state(tmp_path)
+    state, store, source = native_state(tmp_path, config=complete_postgres)
     console = state()
     suffix = uuid.uuid4().hex[:10]
     accounts = {name: console.create_account(username=f"{name}-{suffix}", password="test-only-local-secret", roles=roles)

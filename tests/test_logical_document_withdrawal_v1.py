@@ -36,18 +36,7 @@ pytestmark = [
 
 
 def _store() -> PostgresCanonicalPublicationStore:
-    dsn = os.environ.get("METIS_TEST_POSTGRES_DSN", "").strip()
-    if not dsn:
-        pytest.skip("METIS_TEST_POSTGRES_DSN is required for withdrawal PostgreSQL evidence")
-    store = PostgresCanonicalPublicationStore(PostgresCanonicalConfig(dsn=dsn))
-    with store._connect() as con:
-        con.execute((ROOT / "db" / "schema_v2.sql").read_text(encoding="utf-8"))
-        con.execute(
-            (ROOT / "db" / "migrations" / "001_canonical_source_lineage.sql").read_text(
-                encoding="utf-8"
-            )
-        )
-    return store
+    return PostgresCanonicalPublicationStore(PostgresCanonicalConfig(dsn=os.environ["METIS_TEST_POSTGRES_DSN"]))
 
 
 def _object(*, object_id: str, version: str, document_id: str, checksum: str, text: str) -> dict:
@@ -345,3 +334,9 @@ def test_withdrawal_requires_explicit_document_actor_reason_and_unambiguous_acti
             snapshot_ids=[snapshot1, snapshot2],
             object_ids=[object1, object2],
         )
+
+
+@pytest.fixture(autouse=True)
+def isolated_postgres(complete_postgres):
+    """Do not inherit releases from another module or reset the supplied database."""
+    return complete_postgres

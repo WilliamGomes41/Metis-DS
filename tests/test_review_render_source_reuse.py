@@ -7,24 +7,23 @@
 # release-control-evidence: releasebewijs
 """
 from copy import deepcopy
-from contextlib import contextmanager
 import json
-from types import MethodType, SimpleNamespace
 from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
 
-from src.document_status_ui_v1 import install_document_status_ui
-from src.operations_console_app import create_console_app
-from src.review_closure_v1 import ReviewClosureConsole
-from src.review_workboard_v1 import install_review_workboard
 from tests.semantic_fixture_support import bind_fixture_selections
 
 
 @pytest.fixture
-def review_client(tmp_path, request):
-    console = ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "source",
+def review_client(tmp_path, request, monkeypatch, *, production_app, production_console):
+    import src.review_workboard_v1 as workboard
+
+    # Compare cached and uncached HTML at the same observation instant, including
+    # the visible counter timestamp; CI requests can cross a minute boundary.
+    monkeypatch.setattr(workboard, "_observed_at", lambda: "2026-10-21T12:34:59+00:00")
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "source",
                                    runtime=tmp_path / "runtime")
     author = console.create_account(username="author", password="fixture-only", roles=("researcher",))
     reviewer = console.create_account(username="reviewer", password="fixture-only", roles=("reviewer",))
@@ -62,9 +61,7 @@ def review_client(tmp_path, request):
         "workflow_status": "in_review", "release_status": "none", "serving_status": "inactive",
         "presentation_status": "in_review",
     }}
-    app = create_console_app(console)
-    install_document_status_ui(app, console)
-    install_review_workboard(app, console)
+    app = production_app(console)
     with TestClient(app, base_url="https://testserver") as client:
         response = client.post("/login", data={"username": "reviewer", "password": "fixture-only"},
                                follow_redirects=False)
@@ -153,24 +150,14 @@ def test_postgres_overview_reuses_full_source_for_retained_records(review_client
     envelope = deepcopy(console._envelope(sid))
     batch_reads = []
 
-    @contextmanager
-    def connect():
-        def execute(_sql, params):
-            assert params[:2] == (envelope["named_reviewers"][0], None)
-            return SimpleNamespace(fetchall=lambda: [{"snapshot_id": sid, "envelope_payload": deepcopy(envelope)}])
-        yield SimpleNamespace(execute=execute)
-
+    real_objects = console.workflow_document_store.list_current_objects_batch
     def objects(ids):
         assert ids == [sid]
         batch_reads.append(1)
-        return {sid: deepcopy(before)}
+        return real_objects(ids)
 
-    # Only storage adapters are disposable; run the production summary/enrichment
-    # implementation and actual review-work-item calculation through HTTP.
-    console.workflow_document_store = SimpleNamespace(_connect=connect, list_current_objects_batch=objects)
-    console.workflow_review_store = SimpleNamespace(read_bindings=lambda ids: {sid: []})
-    for name in ("review_workboard_summaries", "_enrich_review_workboard_summaries"):
-        setattr(console, name, MethodType(getattr(_PostgresBadgeCountsMixin, name), console))
+    # Observe the actual PostgreSQL adapter; never replace workflow authority.
+    monkeypatch.setattr(console.workflow_document_store, 'list_current_objects_batch', objects)
     renderer = workboard.review_work_item
     with monkeypatch.context() as baseline:
         baseline.setattr(workboard, "review_work_item", renderer.__wrapped__)
