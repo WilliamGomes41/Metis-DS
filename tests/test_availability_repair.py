@@ -22,9 +22,10 @@ from tests.semantic_fixture_support import bind_fixture_selections
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
-@pytest.fixture(params=["local", "postgres"])
+@pytest.fixture(params=["postgres"])
 def backend_state(request):
-    # Both historical parameter slots now exercise the production PG topology.
+    # Both former labels used state() and the same production PG topology.
+    # Keep native evidence IDs while running each scenario once.
     return request.param
 
 

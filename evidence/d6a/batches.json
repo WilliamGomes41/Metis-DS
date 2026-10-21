@@ -630,6 +630,7 @@
       }
     ],
     "full_suite_status": "pending",
-    "ci_status": "not run: push approval pending"
+    "ci_status": "not run: push approval pending",
+    "local_preparation": "portion16-local-preparation.json"
   }
 ]

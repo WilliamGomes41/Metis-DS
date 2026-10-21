@@ -1,0 +1,145 @@
+{
+  "batch": "16",
+  "status": "prepared locally; not pushed",
+  "change_class": "C",
+  "rewrite_risk": "none",
+  "prepared_at": "2026-10-21T20:37:42.236387+00:00",
+  "branch": "codex/d6a-16-ci-prepared",
+  "source_commit": "b3796639281e4542c784591bc925339affd724f8",
+  "source_working_changes": {
+    "tests/test_availability_repair.py": {
+      "git_blob": "b4bc0154ac962f40eef7a222a3922da33015401c"
+    }
+  },
+  "parent_batch_head": "4596b63664b132c66aea6ad321050ab882bd8335",
+  "remote_batch16_head": "c5600046ffd656fa6dabdea36a6ca1ae008e0b03",
+  "runtime_changes": false,
+  "ci_guard_changes": false,
+  "inherited_fixes": [
+    "Durable reservation inspected before real transport idle deadline",
+    "Lock release timer starts in writer",
+    "Duplicate PG authorization and A10 cache-repair scenario executions removed"
+  ],
+  "local_changes": [
+    "Availability labels local/postgres share the exact same production factory; 31 executions reduced to 19 while preserving all unique scenarios"
+  ],
+  "environment": {
+    "python": [
+      "3.12.14",
+      "3.13.5"
+    ],
+    "postgresql": "16.2",
+    "pip_installed_for_packaging": true,
+    "dependencies": "requirements-dev.lock"
+  },
+  "verification": {
+    "effective_unique_passed": {
+      "3.12": 345,
+      "3.13": 362
+    },
+    "batch_and_core_regression_cases_per_python": 326,
+    "availability_cases_per_python": 19,
+    "delay_and_render_cases_python313": 19,
+    "postgres_skips": 0,
+    "helper_argument_audit": {
+      "new_required_helpers": 10,
+      "call_sites_checked": 81,
+      "missing_arguments": 0
+    },
+    "full_collection": {
+      "python": "3.13.5",
+      "tests": 5618,
+      "seconds": 10.37
+    },
+    "checks": [
+      "repository_preflight PASS",
+      "release_control_preflight against parent batch PASS",
+      "architecture boundaries PASS",
+      "compileall src/tests PASS",
+      "git diff --check PASS"
+    ],
+    "runs": [
+      {
+        "role": "Initial batch and regression selection; packaging failed because local pip was missing",
+        "junit": "/workspace/work/d6a16-312.xml",
+        "sha256": "5a8d8db3b5c15213a0190b457612580a137d580a18490e8ae348fc6a4695360b",
+        "cases": 326,
+        "passed": 324,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "role": "Both initial failures rerun after installing pip; no product/test change required",
+        "junit": "/workspace/work/d6a16-packaging-312.xml",
+        "sha256": "dad505ef26a29dc9c8a6889576f29180d185402ca8b5542acf8ceb2dce4654e8",
+        "cases": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "role": "Identical backend alias removed; every unique availability scenario retained",
+        "junit": "/workspace/work/d6a16-availability-312.xml",
+        "sha256": "a4b8f2cfd3486a9836a2b0194277cee388b9ab023205f16316b89b8911aa0e66",
+        "cases": 19,
+        "passed": 19,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "role": "Initial batch and regression selection; packaging failed because local pip was missing",
+        "junit": "/workspace/work/d6a16-313.xml",
+        "sha256": "ccec0d17da7828b7095ffb6f7eb200aad61a70a5d5a8f55c581a8dd6c5f7c153",
+        "cases": 326,
+        "passed": 324,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "role": "Both initial failures rerun after installing pip; no product/test change required",
+        "junit": "/workspace/work/d6a16-packaging-313.xml",
+        "sha256": "d681d57db23852a3f2f8a67233273717019a86578f5cc2975866af2955e2a836",
+        "cases": 2,
+        "passed": 2,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "role": "Identical backend alias removed; every unique availability scenario retained",
+        "junit": "/workspace/work/d6a16-availability-313.xml",
+        "sha256": "ac6d53b83ce02315a4e7f6f1a3d88b7b7ca5a3b116294d9deef162c7741dd023",
+        "cases": 19,
+        "passed": 19,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "role": "0.7s delayed status reader, 0.3s delayed HTTP request, and all source-render reuse tests",
+        "junit": "/workspace/work/d6a16-delay-replay.xml",
+        "sha256": "e4a93d6bf80d64204f503f3f42c0d8dd780b6e4bfbffd501f630f153c5179c61",
+        "cases": 19,
+        "passed": 19,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "limitations": [
+    "Full suite execution has not been repeated for batch 16",
+    "The pinned-baseline <=2x CI runtime gate remains unmeasured for this batch",
+    "Parent PR 806 CI must finish successfully before publishing the next portion",
+    "GitHub CI, Cursor, real Docling acceptance and deployments are not claimed"
+  ],
+  "publication": {
+    "pushed": false,
+    "pull_request_created": false,
+    "remote_writes": false
+  }
+}
