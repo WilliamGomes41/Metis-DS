@@ -262,8 +262,11 @@ def installed_app(console):
 def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(backend_state, tmp_path, monkeypatch, path, params, *, production_console):
     import re
     import src.knowledge_materialisation_v1 as materialisation
+    import src.review_workboard_v1 as workboard
     import src.semantic_passage_v1 as semantic
     from src.source_accountability_v1 import is_source_record
+    # Preserve the visible timestamp in the equality proof at one fixed instant.
+    monkeypatch.setattr(workboard, '_observed_at', lambda: '2026-10-21T12:34:59+00:00')
     console=state(tmp_path, production_console=production_console);author,reviewer=accounts(console)
     texts=['Gebruik geen zalf.',*[f'Bronpassage {i} bevat aanvullende informatie voor menselijke beoordeling.' for i in range(30)]]
     def select(_url,_headers,payload,_timeout):
