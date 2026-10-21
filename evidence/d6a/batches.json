@@ -578,13 +578,14 @@
       ],
       "changed_test_files": 20,
       "support_files": [],
-      "ci_status": "full suite passed on previous head; native diagnostic IDs repaired; new exact-head CI running",
+      "ci_status": "All current PR workflows and both Python3.12/3.13 full-suite jobs succeeded; zero PG skips; same-job timing under2x baseline",
       "delivery": "published reviewable branch",
       "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/799",
       "publication_evidence": "portions06-10-publication.json",
       "boundary_repair_evidence": "portion09-fixture-boundary-repair.json",
       "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
-      "native_label_repair": "portion09-10-native-label-repair.json"
+      "native_label_repair": "portion09-10-native-label-repair.json",
+      "ci_success_evidence": "portions09-10-ci-success.json"
     },
     "introducing_portion_consumer_proof": [
       {
@@ -657,14 +658,15 @@
         "tests/conftest.py",
         "tests/production_support.py"
       ],
-      "ci_status": "full suite passed on previous head; native diagnostic IDs repaired; new exact-head CI running",
+      "ci_status": "All current PR workflows and both Python3.12/3.13 full-suite jobs succeeded; zero PG skips; same-job timing under2x baseline",
       "delivery": "published reviewable branch",
       "pull_request": "https://github.com/WilliamGomes41/Metis-DS/pull/800",
       "publication_evidence": "portions06-10-publication.json",
       "boundary_repair_evidence": "portion09-fixture-boundary-repair.json",
       "lock_observation_repair": "portion10-lock-observation-repair.json",
       "recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
-      "native_label_repair": "portion09-10-native-label-repair.json"
+      "native_label_repair": "portion09-10-native-label-repair.json",
+      "ci_success_evidence": "portions09-10-ci-success.json"
     }
   },
   {

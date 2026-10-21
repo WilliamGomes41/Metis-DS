@@ -178,7 +178,9 @@
   "new_ci": {
     "portion09": 39583790280,
     "portion10": 39583789282,
-    "status": "running on label-corrected heads"
+    "status": "success on both exact heads and Python3.12/3.13",
+    "verified_at": "2026-10-21 11:26:22 UTC"
   },
-  "scope_limit": "This is a repair of test evidence metadata. D6a and D6b completion are not claimed."
+  "scope_limit": "This is a repair of test evidence metadata. D6a and D6b completion are not claimed.",
+  "current_success_evidence": "portions09-10-ci-success.json"
 }

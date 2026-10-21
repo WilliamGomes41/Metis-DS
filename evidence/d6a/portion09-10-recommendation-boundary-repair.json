@@ -222,12 +222,13 @@
   "new_ci": {
     "portion09": 39576308383,
     "portion10": 39576306888,
-    "status": "running; no completion claim"
+    "status": "Superseded after native test-label repair; current exact heads fully green: portions09-10-ci-success.json"
   },
   "repository_checks": [
     "preflight PASS on09 and10",
     "architecture boundaries PASS",
     "release control against each immediate base PASS",
     "diff check PASS"
-  ]
+  ],
+  "current_success_evidence": "portions09-10-ci-success.json"
 }

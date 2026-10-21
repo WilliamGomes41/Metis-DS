@@ -205,5 +205,6 @@
     "junit": "d6a09-original-loop-green.xml",
     "sha256": "b390df31f96ca1f06474b5da393d332a7d5b9a448ef78f8df6934328ca62b69a",
     "commit": "be1f72e8c255a12a4289822ada520298e6cbf3fa"
-  }
+  },
+  "current_success_evidence": "portions09-10-ci-success.json"
 }

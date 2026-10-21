@@ -173,6 +173,7 @@
     "compile changed tests PASS",
     "git diff --check PASS"
   ],
-  "ci": "pending on corrected head",
-  "full_suite_and_timing": "pending; no D6a completion claim"
+  "ci": "Superseded repaired heads; current portion10 head fully green: portions09-10-ci-success.json",
+  "full_suite_and_timing": "Verified on both Python versions and same-job timing: portions09-10-ci-success.json",
+  "current_success_evidence": "portions09-10-ci-success.json"
 }

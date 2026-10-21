@@ -1,0 +1,500 @@
+{
+  "scope": "Exact heads of D6a09 and D6a10; not completion of the full D6a program",
+  "verified_at": "2026-10-21 11:26:22 UTC",
+  "change_class": "C",
+  "rewrite_risk": "none",
+  "D6a_done": false,
+  "D6b_started": false,
+  "repairs": [
+    "Move native recommendation helper consumer onto the production console/app fixtures in the introducing portion",
+    "Preserve PostgreSQL evidence labels for first-start/restart diagnostic test cases"
+  ],
+  "runtime_changes": false,
+  "assertions_weakened": false,
+  "heads": [
+    {
+      "pr": 799,
+      "sha": "96a19fdcb1c8de28161ef614356736ebe343d6a4",
+      "runs": [
+        {
+          "id": 39583790280,
+          "name": "ci",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 39583790342,
+          "name": "Bend experiment proof",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 39583790537,
+          "name": "source-processing-proof",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 39583790681,
+          "name": "workflow-topology-proof",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "detailed": [
+        {
+          "run": 39583790280,
+          "name": "ci",
+          "jobs": [
+            {
+              "id": 119167999206,
+              "name": "change-contract",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            },
+            {
+              "id": 119167999682,
+              "name": "architecture-boundaries",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            },
+            {
+              "id": 119168090199,
+              "name": "characterization-evidence",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            },
+            {
+              "id": 119168090441,
+              "name": "test (3.12)",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            },
+            {
+              "id": 119168090446,
+              "name": "test (3.13)",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            }
+          ]
+        },
+        {
+          "run": 39583790342,
+          "name": "Bend experiment proof",
+          "jobs": [
+            {
+              "id": 119167574318,
+              "name": "proof",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            }
+          ]
+        },
+        {
+          "run": 39583790537,
+          "name": "source-processing-proof",
+          "jobs": [
+            {
+              "id": 119167574800,
+              "name": "native-and-browser",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            },
+            {
+              "id": 119167575349,
+              "name": "baseline",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            }
+          ]
+        },
+        {
+          "run": 39583790681,
+          "name": "workflow-topology-proof",
+          "jobs": [
+            {
+              "id": 119167575265,
+              "name": "topology-and-review",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "pr": 800,
+      "sha": "22f903402c386d16108bc3757b72e3caf33ad5c8",
+      "runs": [
+        {
+          "id": 39583788986,
+          "name": "docling-acceptance",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 39583788992,
+          "name": "workflow-topology-proof",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 39583789028,
+          "name": "ci",
+          "status": "completed",
+          "conclusion": "cancelled"
+        },
+        {
+          "id": 39583789064,
+          "name": "source-processing-proof",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 39583789245,
+          "name": "source-processing-proof",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 39583789246,
+          "name": "docling-acceptance",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 39583789252,
+          "name": "workflow-topology-proof",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 39583789282,
+          "name": "ci",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ],
+      "detailed": [
+        {
+          "run": 39583788986,
+          "name": "docling-acceptance",
+          "jobs": [
+            {
+              "id": 119167568748,
+              "name": "real-pdf",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            }
+          ]
+        },
+        {
+          "run": 39583788992,
+          "name": "workflow-topology-proof",
+          "jobs": [
+            {
+              "id": 119167569548,
+              "name": "topology-and-review",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            }
+          ]
+        },
+        {
+          "run": 39583789064,
+          "name": "source-processing-proof",
+          "jobs": [
+            {
+              "id": 119167569464,
+              "name": "native-and-browser",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            },
+            {
+              "id": 119167569694,
+              "name": "baseline",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            }
+          ]
+        },
+        {
+          "run": 39583789245,
+          "name": "source-processing-proof",
+          "jobs": [
+            {
+              "id": 119167570315,
+              "name": "baseline",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            },
+            {
+              "id": 119167570725,
+              "name": "native-and-browser",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            }
+          ]
+        },
+        {
+          "run": 39583789246,
+          "name": "docling-acceptance",
+          "jobs": [
+            {
+              "id": 119167569706,
+              "name": "real-pdf",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            }
+          ]
+        },
+        {
+          "run": 39583789252,
+          "name": "workflow-topology-proof",
+          "jobs": [
+            {
+              "id": 119167570188,
+              "name": "topology-and-review",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            }
+          ]
+        },
+        {
+          "run": 39583789282,
+          "name": "ci",
+          "jobs": [
+            {
+              "id": 119167975724,
+              "name": "change-contract",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            },
+            {
+              "id": 119167975732,
+              "name": "architecture-boundaries",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            },
+            {
+              "id": 119168056929,
+              "name": "test (3.13)",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            },
+            {
+              "id": 119168057025,
+              "name": "test (3.12)",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            },
+            {
+              "id": 119168057202,
+              "name": "characterization-evidence",
+              "status": "completed",
+              "conclusion": "success",
+              "active": [],
+              "failed": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "full_suite_jobs": [
+    {
+      "pr": 799,
+      "py": "3.12",
+      "id": 119168090441,
+      "reports": [
+        {
+          "commit": "e81fdeee049574c79bb8189428d7e9caee3d7f02",
+          "python": "3.12.15",
+          "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+          "seconds": 1734.407,
+          "exit_code": 0,
+          "postgres_version": 160015,
+          "tests": 5691,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 33,
+          "postgres_skips": []
+        }
+      ],
+      "signals": [
+        "2026-10-21T10:51:11.4389299Z 5658 passed, 27 skipped, 6 xfailed, 9 warnings, 3 subtests passed in 1730.91s (0:28:50)",
+        "2026-10-21T10:51:15.2015879Z Blockage diagnostics: 23 executed, zero skipped, zero failures/errors",
+        "2026-10-21T10:51:15.2883519Z Refusal PostgreSQL: 19 PASSED, zero skipped, zero failures/errors",
+        "2026-10-21T10:51:15.3777718Z A10: 76 executed, zero skipped, zero failures/errors",
+        "2026-10-21T10:51:45.0411695Z 2 passed, 1 warning in 8.64s"
+      ]
+    },
+    {
+      "pr": 799,
+      "py": "3.13",
+      "id": 119168090446,
+      "reports": [
+        {
+          "commit": "9fa200426f715d5b4beb3882a92c81f57026c1d2",
+          "python": "3.13.16",
+          "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+          "seconds": 1576.312,
+          "exit_code": 0,
+          "postgres_version": 160015,
+          "tests": 5674,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 33,
+          "postgres_skips": []
+        },
+        {
+          "commit": "e81fdeee049574c79bb8189428d7e9caee3d7f02",
+          "python": "3.13.16",
+          "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+          "seconds": 2202.013,
+          "exit_code": 0,
+          "postgres_version": 160015,
+          "tests": 5691,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 33,
+          "postgres_skips": [],
+          "baseline_seconds": 1576.312,
+          "ratio": 1.3969,
+          "within_twice_baseline": true
+        }
+      ],
+      "signals": [
+        "2026-10-21T11:25:20.1889882Z 5658 passed, 27 skipped, 6 xfailed, 9 warnings, 3 subtests passed in 2198.94s (0:36:38)",
+        "2026-10-21T11:25:24.7276428Z Blockage diagnostics: 23 executed, zero skipped, zero failures/errors",
+        "2026-10-21T11:25:24.8393947Z Refusal PostgreSQL: 19 PASSED, zero skipped, zero failures/errors",
+        "2026-10-21T11:25:24.9928903Z A10: 76 executed, zero skipped, zero failures/errors"
+      ]
+    },
+    {
+      "pr": 800,
+      "py": "3.12",
+      "id": 119168057025,
+      "reports": [
+        {
+          "commit": "b1181fa2ac4e3d66bc03afa2a42ef57e2323dc3f",
+          "python": "3.12.15",
+          "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+          "seconds": 1966.825,
+          "exit_code": 0,
+          "postgres_version": 160015,
+          "tests": 5691,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 33,
+          "postgres_skips": []
+        }
+      ],
+      "signals": [
+        "2026-10-21T10:54:59.9282346Z 5658 passed, 27 skipped, 6 xfailed, 9 warnings, 3 subtests passed in 1963.50s (0:32:43)",
+        "2026-10-21T10:55:03.5414208Z Blockage diagnostics: 23 executed, zero skipped, zero failures/errors",
+        "2026-10-21T10:55:03.6168769Z Refusal PostgreSQL: 19 PASSED, zero skipped, zero failures/errors",
+        "2026-10-21T10:55:03.7101052Z A10: 76 executed, zero skipped, zero failures/errors",
+        "2026-10-21T10:55:39.5558095Z 2 passed, 1 warning in 9.51s"
+      ]
+    },
+    {
+      "pr": 800,
+      "py": "3.13",
+      "id": 119168056929,
+      "reports": [
+        {
+          "commit": "9fa200426f715d5b4beb3882a92c81f57026c1d2",
+          "python": "3.13.16",
+          "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+          "seconds": 1173.978,
+          "exit_code": 0,
+          "postgres_version": 160015,
+          "tests": 5674,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 33,
+          "postgres_skips": []
+        },
+        {
+          "commit": "b1181fa2ac4e3d66bc03afa2a42ef57e2323dc3f",
+          "python": "3.13.16",
+          "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+          "seconds": 1885.849,
+          "exit_code": 0,
+          "postgres_version": 160015,
+          "tests": 5691,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 33,
+          "postgres_skips": [],
+          "baseline_seconds": 1173.978,
+          "ratio": 1.6064,
+          "within_twice_baseline": true
+        }
+      ],
+      "signals": [
+        "2026-10-21T11:13:12.1610863Z 5658 passed, 27 skipped, 6 xfailed, 9 warnings, 3 subtests passed in 1882.41s (0:31:22)",
+        "2026-10-21T11:13:16.0220073Z Blockage diagnostics: 23 executed, zero skipped, zero failures/errors",
+        "2026-10-21T11:13:16.0951621Z Refusal PostgreSQL: 19 PASSED, zero skipped, zero failures/errors",
+        "2026-10-21T11:13:16.1855605Z A10: 76 executed, zero skipped, zero failures/errors"
+      ]
+    }
+  ],
+  "case_results_per_job": {
+    "tests": 5691,
+    "passed": 5658,
+    "optional_skips": 27,
+    "existing_xfails": 6,
+    "postgres_skips": 0,
+    "failures": 0,
+    "errors": 0
+  },
+  "timing_scope": "Python3.13 compares an unchanged9fa2004 checkout to the portion on the same CI job; Python3.12 is a separately timed full run.",
+  "limits": [
+    "The historical final-portion local timing gate and remaining D6a environment/cutover gates remain open.",
+    "Cancelled duplicate CI event for portion10 was superseded by the successful current event."
+  ]
+}

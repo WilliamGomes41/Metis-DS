@@ -1,4 +1,4 @@
-# D6a — lokaal uitvoeringsbewijs
+# D6a — uitvoeringsbewijs
 
 De lokale migratie naar de productiecompositie op PostgreSQL is voorbereid in
 21 migratieporties plus één afzonderlijke Class A-bugreparatie. Iedere
@@ -18,18 +18,18 @@ Ook porties03 tot en met10 zijn als draft geopend:
 [#799](https://github.com/WilliamGomes41/Metis-DS/pull/799) en
 [#800](https://github.com/WilliamGomes41/Metis-DS/pull/800).
 Tien PRs zijn geopend; twaalf moeten nog worden geopend.
-De workflows van06 tot en met10 zijn gestart of staan in de wachtrij.
+De publicatiebewijzen bewaren hun oorspronkelijke momentopname. Porties09 en10 zijn inmiddels volledig groen in CI.
 Zie [publicatiebewijs van porties03–05](portions03-05-publication.json) en
 [porties06–10](portions06-10-publication.json).
 
 D6a is nog niet formeel afgerond en D6b is niet gestart. #695 houdt voorrang
 bij capaciteitsgebrek; GNC is niet gestart.
 
-PR09 is hersteld na een gemiste fixturedoorgifte bij de portiegrens.
-De eerder mislukte source-processing-workflow is groen op de gecorrigeerde head;
-de volledige CI-suite en timing lopen nog.
-Alle directe afnemers zijn meegenomen; vier zelfstandige migraties schuiven naar10.
-Zie [het herstelbewijs](portion09-fixture-boundary-repair.json).
+PR09 en10 zijn volledig groen op Python3.12 en3.13, inclusief alle vervolgchecks.
+Per job:5658 passed,27 optionele skips,6 bestaande xfails en nul PG-skips.
+De CI-verhoudingen tegenover de ongewijzigde basis zijn **1.3969×** voor09
+en **1.6064×** voor10. Zie [de exacte heads, jobs en metingen](portions09-10-ci-success.json).
+Dit rondt de overige D6a-porties en de afsluitende gates niet af.
 
 ## Actuele controle
 
@@ -45,9 +45,10 @@ De fixture moet verder worden verbeterd en in CI vergeleken voordat D6b kan star
 [exacte meetgegevens](local-final-full.json) en
 [alle verificatiegrenzen](verification.json).
 De runtime-, fixture- en meetrunnerbroncode zijn identiek aan de gemeten commit.
-Daarna zijn alleen CI, één rapportexportscript en vijf CI-contractcases
-aangepast om de versnelling op main (#790) te behouden; deze 34 contracttests
-en zeven echte rapportexports slagen. Zie [CI-integratie](main-ci-integration.json). De gegevens per portie bewaren hun oorspronkelijke uitgevoerde
+Na die meting zijn CI, één rapportexportscript, vijf CI-contractcases en
+gerichte test-helper-/bewijsherstellen aangepast. De 34 CI-contracttests en
+zeven echte rapportexports slagen; exacte bronverschillen staan in
+[de bronvergelijking](measured-source-equivalence.json). Zie [CI-integratie](main-ci-integration.json). De gegevens per portie bewaren hun oorspronkelijke uitgevoerde
 revisies; de actuele branches staan daarnaast in de reviewvolgorde.
 
 De volledige gemeten inventaris telt 5700 cases, waarvan 2034
@@ -100,8 +101,6 @@ D6b wacht daarnaast op de afgesproken review van Lex, Sherlock en Argos en de
 beslissing over bestaande lokale JSON-toestand. De bestandsruntime, vijf
 storevariabelen en lokale CLI-start zijn daarom nog aanwezig.
 
-PR10: een gedeelde lockteller veroorzaakte een wisselende testuitkomst. De voorbereidingsproeven meten nu lockeigenaarschap per thread; bestaande rode/groene proef en alle 206 native acceptatiegevallen zijn vastgelegd in [het herstelbewijs](portion10-lock-observation-repair.json). Nieuwe volledige CI en tijdmeting zijn nog open.
-
-PR09/10: de volledige CI toonde één gemiste aanbevelingshelper-afnemer. De fixture- en consolefabriek zijn naar de introducerende portie verplaatst, met behoud van alle bestaande verwachtingen. Zie [het herstelbewijs](portion09-10-recommendation-boundary-repair.json); de nieuwe volledige CI-uitkomsten zijn nog open.
-
-PR09/10: de volledige suites waren op Python3.12 groen; een volgende bewijscheck herkende de hernoemde diagnosegevallen niet als PG. De bestaande gate blijft intact, met expliciete PG-test-IDs en 23/23 lokaal uitgevoerde diagnosegevallen op beide porties. Zie [het labelherstelbewijs](portion09-10-native-label-repair.json). Nieuwe exacte-head CI loopt nog.
+De oorspronkelijke helper-, thread-lock- en diagnose-ID-herstelbewijzen blijven
+bewaard als geschiedenis. Hun actuele CI-uitkomst staat in
+[portions09-10-ci-success.json](portions09-10-ci-success.json).

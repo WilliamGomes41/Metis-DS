@@ -16,7 +16,7 @@
     "post_measurement_test_probe_change": "Two test files now share thread ownership observation; original 206-case native acceptance rerun. Full suite timing remains the historical measured revision."
   },
   "not_verified": [
-    "GitHub CI baseline and after each proposed portion",
+    "CI baseline/after comparisons for the remaining portions;09 and10 verified in portions09-10-ci-success.json",
     "Cursor local and Cursor cloud if used",
     "persistent managed Codex environment settings",
     "Lex/Sherlock/Argos cutover review",
@@ -96,5 +96,6 @@
   "portion09_boundary_repair": "portion09-fixture-boundary-repair.json",
   "portion10_lock_observation_repair": "portion10-lock-observation-repair.json",
   "portion09_10_recommendation_boundary_repair": "portion09-10-recommendation-boundary-repair.json",
-  "portion09_10_native_label_repair": "portion09-10-native-label-repair.json"
+  "portion09_10_native_label_repair": "portion09-10-native-label-repair.json",
+  "portions09_10_ci_success": "portions09-10-ci-success.json"
 }
