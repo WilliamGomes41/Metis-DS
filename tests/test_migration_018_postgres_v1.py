@@ -24,6 +24,7 @@ CONSTRAINT = 'publication_refusals_dedup_key_uniq'
 pytestmark = [pytest.mark.release_control_opslag, pytest.mark.release_control_releasebewijs]
 
 
+@pytest.mark.pure_function
 def test_018_guards_a_named_unique_constraint_via_pg_constraint():
     sql = NEW.read_text()
     assert 'DO $$' in sql and 'pg_constraint' in sql and 'conname' in sql and 'conrelid' in sql
@@ -31,17 +32,14 @@ def test_018_guards_a_named_unique_constraint_via_pg_constraint():
 
 
 @pytest.fixture()
-def pg():
-    dsn = os.environ.get('METIS_TEST_POSTGRES_DSN', '').strip()
-    if not dsn:
-        pytest.skip('METIS_TEST_POSTGRES_DSN is required for migration 018 evidence')
+def pg(complete_postgres):
     import psycopg
-    con = psycopg.connect(dsn, autocommit=True)
-    con.execute('DROP SCHEMA IF EXISTS workflow CASCADE')
-    con.execute('CREATE SCHEMA workflow')
-    yield con
-    con.execute('DROP SCHEMA IF EXISTS workflow CASCADE')
-    con.close()
+    # This migration proof intentionally reconstructs the pre-018 schema,
+    # exclusively inside this test's owned database.
+    with psycopg.connect(complete_postgres.dsn, autocommit=True) as con:
+        con.execute('DROP SCHEMA workflow CASCADE')
+        con.execute('CREATE SCHEMA workflow')
+        yield con
 
 
 def _constraints(con):

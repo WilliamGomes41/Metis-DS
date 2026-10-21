@@ -113,5 +113,55 @@
     ],
     "ci_status": "not run: push approval pending",
     "full_suite_status": "pending"
+  },
+  {
+    "batch": "06",
+    "base": "57c6bb4",
+    "commit": "pending",
+    "test_files": [
+      "tests/decision_graph_native_support.py",
+      "tests/production_support.py",
+      "tests/test_665_tier_d_refused_postgres.py",
+      "tests/test_a09_source_repair.py",
+      "tests/test_d6a_postgres_support.py",
+      "tests/test_decision_bundles.py",
+      "tests/test_decision_graph_chain.py",
+      "tests/test_decision_graph_native_concurrency.py",
+      "tests/test_decision_ingest_recovery.py",
+      "tests/test_decision_successors.py",
+      "tests/test_migration_018_postgres_v1.py",
+      "tests/test_published_working_revision_immutable_v1.py",
+      "tests/test_quality_metrics_v1.py",
+      "tests/test_review_participation_management.py"
+    ],
+    "executed_count": 129,
+    "new_cases": 2,
+    "failures": 0,
+    "skipped": 0,
+    "verification": "Targeted native runs and a rerun of five startup-sensitive correction cases; production startup migration effects are asserted separately from raw rollback",
+    "junit": [
+      {
+        "file": "d6a06.xml",
+        "sha256": "c9b794f217b8ecb1ab248d2ed5ee6e1807b2e7182daafc45dc84b12b8c511209"
+      },
+      {
+        "file": "d6a06-callers.xml",
+        "sha256": "07c7003a28a32b613ab2a8074732880af111c8447d7fbbfcb44d2be05fc9a1cf"
+      },
+      {
+        "file": "d6a06-t13.xml",
+        "sha256": "793b9c5681729bb280df88f056552b61534dc325b4c1568725860ba4aae531a5"
+      },
+      {
+        "file": "d6a06-immutable.xml",
+        "sha256": "b9f7572c7b15cbc06acde9817c15c42e5b20585e4264dd5b4bbd0d50cbaaa492"
+      },
+      {
+        "file": "d6a06-a09-fixed.xml",
+        "sha256": "a2fa60f44a94c3a75e0950def7e6f13891c053c3f50998f2f6ad43631c971612"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending"
   }
 ]

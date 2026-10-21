@@ -15,8 +15,8 @@ from tests.decision_graph_native_support import native_state
 from tests.test_decision_graph_chain import _accounts, ingest, command, complete_graph, policy, source_pdf, _ingest_boom
 
 
-def test_native_graph_policy_race_and_failure_rollback(tmp_path, monkeypatch):
-    state, _, _ = native_state(tmp_path)
+def test_native_graph_policy_race_and_failure_rollback(tmp_path, monkeypatch, *, complete_postgres):
+    state, _, _ = native_state(tmp_path, config=complete_postgres)
     console = state("setup")
     accounts = _accounts(console)
     sid = ingest(console, accounts)["snapshot_id"]
@@ -58,8 +58,8 @@ def test_native_graph_policy_race_and_failure_rollback(tmp_path, monkeypatch):
     assert restarted.workflow_review_store.read_events() == events
 
 
-def test_native_identical_ingest_retry_has_one_snapshot(tmp_path):
-    state, _, _ = native_state(tmp_path)
+def test_native_identical_ingest_retry_has_one_snapshot(tmp_path, *, complete_postgres):
+    state, _, _ = native_state(tmp_path, config=complete_postgres)
     console = state("setup")
     accounts = _accounts(console)
     workers = [state(str(i)) for i in range(2)]
@@ -75,9 +75,9 @@ def test_native_identical_ingest_retry_has_one_snapshot(tmp_path):
     assert len(state("restart").list_envelopes()) == 1
 
 
-def test_native_policy_publication_race_never_publishes_stale_review(tmp_path):
+def test_native_policy_publication_race_never_publishes_stale_review(tmp_path, *, complete_postgres):
     from tests.test_decision_graph_chain import finish
-    state, store, _ = native_state(tmp_path)
+    state, store, _ = native_state(tmp_path, config=complete_postgres)
     console = state("setup")
     accounts = _accounts(console)
     sid = ingest(console, accounts)["snapshot_id"]
@@ -108,9 +108,9 @@ def test_native_policy_publication_race_never_publishes_stale_review(tmp_path):
         assert state("verify")._envelope(sid)["review_policy"]["revision"] == 2
 
 
-def test_native_late_extraction_cannot_replace_new_policy(tmp_path, monkeypatch):
+def test_native_late_extraction_cannot_replace_new_policy(tmp_path, monkeypatch, *, complete_postgres):
     from threading import Event
-    state, _, _ = native_state(tmp_path)
+    state, _, _ = native_state(tmp_path, config=complete_postgres)
     setup = state("setup")
     accounts = _accounts(setup)
     sid = ingest(setup, accounts)["snapshot_id"]

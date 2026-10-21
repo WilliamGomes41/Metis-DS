@@ -32,7 +32,8 @@ def configure_production(patch, root, config):
 
 def production_application(root, config, *, azure=False,
                            processing_binder=bind_pre_review_semantic_processing,
-                           immutable_source_store=None, source_store=None, runtime=None):
+                           immutable_source_store=None, source_store=None, runtime=None,
+                           canonical_publication_store=None):
     """Call build_app itself; replace only model/Blob transport and configuration."""
     from src import console_asgi
     root = Path(root)
@@ -42,6 +43,12 @@ def production_application(root, config, *, azure=False,
             patch.setenv("CONSOLE_RUNTIME", str(runtime))
         if source_store is not None:
             patch.setenv("CONSOLE_SOURCE_STORE", str(source_store))
+        if canonical_publication_store is not None:
+            from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+            if (type(canonical_publication_store) is not PostgresCanonicalPublicationStore
+                    or canonical_publication_store.config != config):
+                raise ValueError("Canonical store must be the production PostgreSQL store for this test database")
+            patch.setattr(console_asgi, "_canonical_store", lambda **kwargs: canonical_publication_store)
         patch.setattr(console_asgi, "_immutable_source_store", lambda: immutable_source_store)
         patch.setattr(console_asgi, "bind_pre_review_semantic_processing", processing_binder)
         if azure:

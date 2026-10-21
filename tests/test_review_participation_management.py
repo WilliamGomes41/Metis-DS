@@ -25,7 +25,7 @@ from tests.test_decision_graph_chain import _console, _accounts, ingest, finish,
 def setup(request, tmp_path):
     if request.param == 'postgres':
         from tests.decision_graph_native_support import native_state
-        state, store, source = native_state(tmp_path)
+        state, store, source = native_state(tmp_path, config=request.getfixturevalue("complete_postgres"))
     else:
         state = lambda node='default': _console(tmp_path)
         store = None
@@ -170,9 +170,9 @@ def test_primary_replacement_and_readd_do_not_resurrect_evidence(setup):
     assert all(primary in missing_reviewers(o,console.object_review_bindings(sid)) for o in passages(console,sid))
 
 
-def test_native_participation_publication_race_and_rollback(tmp_path,monkeypatch):
+def test_native_participation_publication_race_and_rollback(tmp_path, monkeypatch, *, complete_postgres):
     from tests.decision_graph_native_support import native_state
-    state,store,_=native_state(tmp_path);console=state('setup');accounts=_accounts(console)
+    state,store,_=native_state(tmp_path, config=complete_postgres);console=state('setup');accounts=_accounts(console)
     sid=ingest(console,accounts)['snapshot_id'];finish(console,accounts,sid)
     editor=state('editor');publisher=state('publisher');barrier=Barrier(2)
     rev=editor.objects_revision(sid)
@@ -204,10 +204,10 @@ def test_native_participation_publication_race_and_rollback(tmp_path,monkeypatch
     assert restarted.workflow_review_store.read_events()==events
 
 
-def test_native_concurrent_roster_changes_and_late_extraction(tmp_path,monkeypatch):
+def test_native_concurrent_roster_changes_and_late_extraction(tmp_path, monkeypatch, *, complete_postgres):
     from tests.decision_graph_native_support import native_state
     from threading import Event
-    state,_,_=native_state(tmp_path);console=state('setup');accounts=_accounts(console)
+    state,_,_=native_state(tmp_path, config=complete_postgres);console=state('setup');accounts=_accounts(console)
     sid=ingest(console,accounts)['snapshot_id'];extra=person(console)
     workers=[state('one'),state('two')];barrier=Barrier(2);rev=console.objects_revision(sid)
     def race(i):

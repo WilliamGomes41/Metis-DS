@@ -132,3 +132,17 @@ productieregels aangepast om deze tests groen te maken.
 De JUnit-bronnen en aantallen staan in `evidence/d6a/batches.json`. Een reeks
 lokale herhalingen wordt daar onderscheiden van één foutloze volledige run.
 De overige porties, CI-metingen, Cursor-bewijs en de D6b-voorwaarden zijn nog open.
+
+Portie 6 verplaatst de native beslisboomhelper naar de gedeelde fixture en echte
+ASGI-start. Een geïnjecteerde canonical store moet exact de productie-PG-store
+voor dezelfde testdatabase zijn; twee negatieve gevallen weigeren een double
+of andere database. Ook de laatste oude `pytest.skip`-tak voor een ontbrekende
+PG-DSN is verwijderd. Migratietests bouwen hun oude schema uitsluitend binnen
+hun eigen gekloonde database op.
+
+De A09-foutproeven controleren eerst exacte PG-rijen en ledger vóór startup.
+Een echte startup mag de bestaande legacy-`revise`-migratie uitvoeren: oude
+canonical tuples blijven behouden en alleen de benoemde `clear repair context`-
+opvolger met dezelfde bron/inhoud wordt toegestaan. De autorisatie-race start
+zijn tweede worker vóór de legacy fixture, zodat alleen de rolwijziging tijdens
+de voorbereiding plaatsvindt. Deze aanpassingen veranderen geen runtimecode.
