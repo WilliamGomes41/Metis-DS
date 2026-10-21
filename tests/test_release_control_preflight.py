@@ -354,7 +354,6 @@ def test_ci_retains_required_matrix_and_full_verification() -> None:
         "python scripts/release_control_preflight.py --base origin/main",
         "python scripts/product_api_contract.py --check --base-ref origin/main",
         "python -m compileall -q src tests",
-        "pytest -q tests/test_architecture_invariants.py",
         "python scripts/measure_test_suite.py --output output/d6a-after.json",
     ):
         assert command in test_job, f"Required CI verification removed: {command}"
@@ -369,6 +368,43 @@ def test_ci_retains_required_matrix_and_full_verification() -> None:
     assert len(command) == 5
     assert [ast.literal_eval(arg) for arg in command[1:4]] == ["-m", "pytest", "-q"]
     assert isinstance(command[4], ast.JoinedStr) and command[4].values[0].value == "--junitxml="
+
+
+@pytest.mark.parametrize("outcome", [None, "failure", "error", "skipped"])
+def test_native_evidence_export_preserves_executed_results(tmp_path, outcome) -> None:
+    import xml.etree.ElementTree as ET
+    spec = importlib.util.spec_from_file_location("export_test_evidence", ROOT / "scripts/export_test_evidence.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    root = ET.Element("testsuite")
+    case = ET.SubElement(root, "testcase", classname="tests.test_native.TestRestart", name="test_commit", time="1.25")
+    if outcome:
+        ET.SubElement(case, outcome, message="original failure detail").text = "unchanged trace"
+    ET.SubElement(root, "testcase", classname="tests.test_native_extra", name="unrelated", time="9")
+    source, output = tmp_path / "full.xml", tmp_path / "proof.xml"
+    ET.ElementTree(root).write(source)
+    assert module.export(source, output, ["tests/test_native.py"]) == int(outcome is not None)
+    exported = ET.parse(output).getroot()
+    assert exported.get("tests") == "1" and exported.get("time") == "1.25"
+    assert ET.tostring(next(exported.iter("testcase"))) == ET.tostring(case)
+    with pytest.raises(ValueError, match="No executed evidence"):
+        module.export(source, tmp_path / "missing.xml", ["tests/test_missing.py"])
+
+
+def test_ci_reuses_full_suite_for_native_proof_artifacts() -> None:
+    import re
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text().split("\n  test:\n", 1)[1]
+    proof_commands = re.findall(r"export_test_evidence.py ([^\n]+)", workflow)
+    assert len(proof_commands) == 7
+    for command in proof_commands:
+        assert "--source output/d6a-after.xml" in command
+    # The full measured run precedes every native export; only the conditional
+    # old-code reproduction and the separately installed browser may rerun pytest.
+    assert workflow.index("python scripts/measure_test_suite.py --output") < workflow.index("export_test_evidence.py")
+    pytest_commands = re.findall(r"(?m)^          pytest ([^\n]+)", workflow)
+    assert len(pytest_commands) == 2
+    assert "a08-before.xml" in pytest_commands[0]
+    assert "test_browser_knowledge_context.py" in pytest_commands[1]
 
 
 def test_contributing_names_skill_checks_and_ci_must_not_forget_them() -> None:
