@@ -29,8 +29,8 @@ def factory(request, tmp_path):
     return lambda: state(tmp_path)
 
 
-def test_resume_after_restart_reuses_extraction_and_preserves_completed_object(tmp_path, monkeypatch, factory):
-    first, sid, actor, _, calls, mode, make, bind = system(tmp_path, make_console=factory)
+def test_resume_after_restart_reuses_extraction_and_preserves_completed_object(tmp_path, monkeypatch, factory, *, production_console):
+    first, sid, actor, _, calls, mode, make, bind = system(tmp_path, make_console=factory, production_console=production_console)
     retained = deepcopy(next(o for o in first.snapshot_objects(sid) if o['content']['clean_text'] == FIRST))
     restarted = make(); bind(restarted); mode['broken'] = False
     def forbidden(*a, **kw):
@@ -90,8 +90,8 @@ def test_http_extraction_checkpoint_survives_provider_failure_and_restart(factor
 
 
 @pytest.mark.parametrize('change', ['fragments', 'source', 'contract'])
-def test_corrupt_or_incompatible_extraction_cannot_fallback_or_replace_work(factory, tmp_path, monkeypatch, change):
-    first, sid, actor, _, _, mode, make, attach = system(tmp_path, make_console=factory)
+def test_corrupt_or_incompatible_extraction_cannot_fallback_or_replace_work(factory, tmp_path, monkeypatch, change, *, production_console):
+    first, sid, actor, _, _, mode, make, attach = system(tmp_path, make_console=factory, production_console=production_console)
     before = deepcopy(first.snapshot_objects(sid))
     envelope = deepcopy(first._envelope(sid))
     record = envelope[KEY]
@@ -167,8 +167,8 @@ def test_revision_changed_during_extraction_rejects_checkpoint(factory, monkeypa
     assert KEY not in final._envelope(sid) and final.snapshot_objects(sid) == []
 
 
-def test_context_rejects_missing_identity_and_wrong_actor_before_work(tmp_path):
-    console, sid, actor, _, _, _, _, _ = system(tmp_path)
+def test_context_rejects_missing_identity_and_wrong_actor_before_work(tmp_path, *, production_console):
+    console, sid, actor, _, _, _, _, _ = system(tmp_path, production_console=production_console)
     envelope = deepcopy(console._envelope(sid))
     attempt = envelope['processing_attempts'][-1]
     with pytest.raises(ConsoleError, match='processing_command_conflict'):
@@ -179,8 +179,8 @@ def test_context_rejects_missing_identity_and_wrong_actor_before_work(tmp_path):
         build_formation_context(console, envelope=envelope, actor_id=actor, expected_revision=None)
 
 
-def test_explicit_reextraction_is_fresh_and_legacy_native_read_still_extracts(tmp_path, monkeypatch):
-    console, sid, actor, _, _, _, _, _ = system(tmp_path, broken=False)
+def test_explicit_reextraction_is_fresh_and_legacy_native_read_still_extracts(tmp_path, monkeypatch, *, production_console):
+    console, sid, actor, _, _, _, _, _ = system(tmp_path, broken=False, production_console=production_console)
     original = console._extract
     calls = []
     def counted(*a, **kw):

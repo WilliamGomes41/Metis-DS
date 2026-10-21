@@ -117,7 +117,7 @@ def test_replay_revalidates_merged_proposal_without_another_provider_call():
     assert replayed["_semantic_replay"]["proposal"] == spec["_semantic_replay"]["proposal"]
 
 
-def console_v3_story(tmp_path, make_console):
+def console_v3_story(tmp_path, make_console, *, production_app):
     from src.operations_console_v1 import ConsoleError
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV
     from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
@@ -153,7 +153,7 @@ def console_v3_story(tmp_path, make_console):
     from src.operations_console_app import create_console_app, COOKIE
     import csv, io
     from zipfile import ZipFile
-    client = TestClient(create_console_app(restarted))
+    client = TestClient(production_app(restarted))
     url = '/review/processing-evidence-export'
     assert client.get(url, params={'document': sid}, follow_redirects=False).status_code in {302, 303, 307, 401, 403}
     session = restarted.authenticate('reviewer', 'strong-test-password')
@@ -177,7 +177,7 @@ def console_v3_story(tmp_path, make_console):
     assert restarted._envelope(sid)['processing_attempts'][-1]['state'] == 'failed'
 
 
-def test_console_v3_survives_restart_replays_and_failed_replacement_is_atomic(tmp_path):
+def test_console_v3_survives_restart_replays_and_failed_replacement_is_atomic(tmp_path, *, production_app, production_console):
     from src.operations_console_v1 import OperationsConsole
-    console_v3_story(tmp_path, lambda: OperationsConsole(
-        root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime'))
+    console_v3_story(tmp_path, lambda: production_console(processing_binder=lambda console: None,
+        root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime'), production_app=production_app)

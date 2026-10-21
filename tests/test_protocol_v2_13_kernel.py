@@ -26,7 +26,6 @@ from src.four_eyes_v1 import (
 from src.integrity_kernel import compute_canonical_object_hash, sha256_bytes
 from src.knowledge_relations_v1 import build_knowledge_relation
 from src.object_taxonomy_v1 import published_object_type
-from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.product_api_v1 import ProductPaths, create_product_app
 from src.product_security_v1 import TenantPolicy, TenantRegistry, hash_api_key
@@ -48,8 +47,8 @@ HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
 SCHEMA = ROOT / "schemas/knowledge_object.schema.v1.2.json"
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -244,12 +243,12 @@ def test_token_budget_does_not_define_object_identity() -> None:
     assert max(len(unit.split()) for unit in units) < 20
 
 
-def test_ingest_splits_fused_html_into_separate_objects(tmp_path: Path) -> None:
+def test_ingest_splits_fused_html_into_separate_objects(tmp_path: Path, *, production_console) -> None:
     html = """<!doctype html><html lang="nl"><body>
 <h1>Voorbeeldrichtlijn</h1>
 <p>Bij een cliënt van 70 jaar of ouder. Verwijs naar de huisarts.</p>
 </body></html>"""
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts, data=html.encode("utf-8"), filename="fused.html")
     objects = [
@@ -339,8 +338,8 @@ def test_unconfirmed_relations_do_not_bind() -> None:
     _ = condition
 
 
-def test_changed_confirmed_relations_invalidate_publish_authorization(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_changed_confirmed_relations_invalidate_publish_authorization(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console, [("Verwijs naar de huisarts.", "recommendation")])
@@ -456,8 +455,8 @@ def test_published_recommendation_served_with_applies_if_except_if(tmp_path: Pat
         assert bound.get("advice_weight") is not True
 
 
-def test_four_eyes_required_for_exception_and_risk_fields_uploader_insufficient(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_four_eyes_required_for_exception_and_risk_fields_uploader_insufficient(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
@@ -551,8 +550,8 @@ def test_agents_cannot_satisfy_four_eyes() -> None:
     assert "blocked_pending_immutable_locator" in contract["blockers"]
 
 
-def test_reviewer_opens_exact_source_passage_v211_locator(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_reviewer_opens_exact_source_passage_v211_locator(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     data = HTML_FIXTURE.read_bytes()
     receipt = _ingest_html(console, accounts, data=data)
@@ -577,7 +576,7 @@ def test_reviewer_opens_exact_source_passage_v211_locator(tmp_path: Path) -> Non
     assert opened["passage"] in freeze_text
     assert opened["passage"] != json_only_locator(target)
 
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     review_html = client.get(
         f"/review?document={receipt['snapshot_id']}&object={target['object_id']}"
@@ -613,8 +612,8 @@ def test_missing_locator_abstains() -> None:
     assert result["results"] == []
 
 
-def test_g2_still_blocks_publish(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_g2_still_blocks_publish(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts)
     target = next(
@@ -640,10 +639,10 @@ def test_g2_still_blocks_publish(tmp_path: Path) -> None:
     assert "blocked_pending_immutable_locator" in considered["blockers"]
 
 
-def test_documentenhierarchie_ui_heading_unchanged(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_documentenhierarchie_ui_heading_unchanged(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
     html = client.get("/tree").text
     assert "Documenten" in html

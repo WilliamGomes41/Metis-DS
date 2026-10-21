@@ -226,7 +226,7 @@ def test_literal_relation_endpoints_reach_existing_relation_attachment():
     assert all(r["relation_type"] == "applies_if" for r in relations)
 
 
-def test_console_literal_evidence_persists_and_replays_after_restart(tmp_path):
+def test_console_literal_evidence_persists_and_replays_after_restart(tmp_path, *, production_console):
     from src.operations_console_v1 import OperationsConsole
     from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV
     from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
@@ -244,7 +244,7 @@ def test_console_literal_evidence_persists_and_replays_after_restart(tmp_path):
         return response(p)
     env = {PASSAGE_FORMATION_MODE_ENV: MODE, LLM_API_KEY_ENV: "test", LLM_MODEL_ENV: "test-model"}
     def open_console():
-        c = OperationsConsole(root=tmp_path, source_store=tmp_path/"sources", runtime=tmp_path/"runtime")
+        c = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path/"sources", runtime=tmp_path/"runtime")
         bind_pre_review_semantic_processing(c, environ=env, post_json=post)
         return c
     c = open_console()

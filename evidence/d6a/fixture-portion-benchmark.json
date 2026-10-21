@@ -1,0 +1,40 @@
+{
+  "commit": "0c3a90de6cc4309d694cca0b4f10aa45cfae6770",
+  "portion": [
+    "test_console_asgi",
+    "test_console_workspace_layout",
+    "test_console_settings_hub_v1",
+    "test_console_ingest_names_review_labels",
+    "test_review_batch_atomic_postgres",
+    "test_navigation_reads_postgres",
+    "test_review_workboard_heading_advance_postgres_v1"
+  ],
+  "postgres_dsn_redacted": true,
+  "strategies": {
+    "template": {
+      "seconds": 15.171,
+      "exit_code": 0,
+      "tests": 37,
+      "failures": [],
+      "skipped": 0,
+      "xml_sha256": "e33d62aa56052555f40c23b9870e0444e65fa2305a4d72683ed9e8a6ac04cc0f"
+    },
+    "rollback": {
+      "seconds": 9.139,
+      "exit_code": 1,
+      "tests": 37,
+      "failures": [
+        "tests.test_console_asgi::test_bootstrap_creates_owner_once",
+        "tests.test_console_ingest_names_review_labels::test_pdf_review_index_uses_human_labels_and_working_object_links",
+        "tests.test_review_batch_atomic_postgres::test_http_batch_failure_retry_stale_and_restart",
+        "tests.test_navigation_reads_postgres::test_native_navigation_count_matches_workboard_with_six_connections[2]",
+        "tests.test_navigation_reads_postgres::test_native_navigation_count_matches_workboard_with_six_connections[200]",
+        "tests.test_review_workboard_heading_advance_postgres_v1::test_batch_confirmed_headings_disappear_from_fast_workboard_summary"
+      ],
+      "skipped": 0,
+      "xml_sha256": "6e9f948a1c8b23bcf9e8b42d83c3763d050032cbe7edf995920fa7364102b8c4"
+    }
+  },
+  "selected": "template",
+  "decision": "Rollback is eligible only when every existing case passes with independent readers and commits."
+}

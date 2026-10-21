@@ -21,11 +21,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.blockage_diagnostics_v1 import blockage_report, collect_blockage, read_blockage_zip
-from src.operations_console_app import create_console_app
 from src.processing_evidence_export_v1 import _csv
-from tests.test_source_dispatch_hardening import console
+@pytest.fixture(params=['first-start', 'restart'], ids=['postgres-first-start', 'postgres-restart'])
+def console(request, tmp_path, production_console):
+    first = production_console(root=tmp_path, processing_binder=lambda console: None)
+    return first if request.param == 'first-start' else production_console(root=tmp_path, processing_binder=lambda console: None)
 from tests.complete_workflow_support import complete_postgres as workflow_postgres
-from tests.test_processing_trace_v1 import restart
 from tests.test_recoverable_formation_v1 import system
 
 
@@ -146,12 +147,12 @@ def test_zip_reader_bounds_duplicates_and_invalid_rows(tmp_path, monkeypatch):
         read_blockage_zip(path)
 
 
-def partial(console):
-    return system(console.root, make_console=lambda: restart(console))
+def partial(console, *, production_console):
+    return system(console.root, make_console=lambda: production_console(root=console.root, processing_binder=lambda console: None), production_console=production_console)
 
 
-def test_independent_http_report_survives_broken_worklist_without_processing(console, monkeypatch):
-    state, sid, actor, reviewer, calls, mode, make, bind = partial(console)
+def test_independent_http_report_survives_broken_worklist_without_processing(console, monkeypatch, *, production_app, production_console):
+    state, sid, actor, reviewer, calls, mode, make, bind = partial(console, production_console=production_console)
     before = deepcopy(state._envelope(sid)), state.snapshot_objects(sid), state.objects_revision(sid)
     def forbidden(*args, **kwargs):
         raise AssertionError('stored diagnostic read touched processing, objects or the worklist')
@@ -160,7 +161,7 @@ def test_independent_http_report_survives_broken_worklist_without_processing(con
                  'reserve_source_selection','execute_source_selection'):
         monkeypatch.setattr(state,name,forbidden)
     # Exercise ASGI reads independently of the unrelated periodic dispatcher scan.
-    client = TestClient(create_console_app(state), base_url='https://testserver')
+    client = TestClient(production_app(state), base_url='https://testserver')
     try:
         login(client)
         page = client.get('/source-selection/blockage', params={'document':sid})
@@ -178,8 +179,8 @@ def test_independent_http_report_survives_broken_worklist_without_processing(con
     assert len(calls) == 2
 
 
-def test_actual_kernel_conditions_and_configuration_guard_are_reused(console, monkeypatch):
-    state, sid, actor, reviewer, calls, mode, make, bind = partial(console)
+def test_actual_kernel_conditions_and_configuration_guard_are_reused(console, monkeypatch, *, production_console):
+    state, sid, actor, reviewer, calls, mode, make, bind = partial(console, production_console=production_console)
     before = deepcopy(state._envelope(sid)), state.snapshot_objects(sid)
     report = collect_blockage(state, actor_id=actor, snapshot_id=sid, current_checks=True)
     assert report['current_checks']['context_matches']
@@ -195,8 +196,8 @@ def test_actual_kernel_conditions_and_configuration_guard_are_reused(console, mo
     assert report['current_checks']['errors']['resume_configuration'] == 'processing_resume_configuration_incompatible'
 
 
-def test_changed_revision_and_partial_check_failure_leave_recorded_evidence_available(console, monkeypatch):
-    state, sid, actor, reviewer, calls, mode, make, bind = partial(console)
+def test_changed_revision_and_partial_check_failure_leave_recorded_evidence_available(console, monkeypatch, *, production_console):
+    state, sid, actor, reviewer, calls, mode, make, bind = partial(console, production_console=production_console)
     original = state.publication_readiness
     def broken(*args, **kwargs):
         raise OSError('private dependency failure')
@@ -223,11 +224,11 @@ def test_changed_revision_and_partial_check_failure_leave_recorded_evidence_avai
     assert all(a['observed_conditions_met'] is None for a in report['follow_up'])
 
 
-def test_http_access_denial_never_discloses_report(console):
-    state, sid, actor, reviewer, calls, mode, make, bind = partial(console)
+def test_http_access_denial_never_discloses_report(console, *, production_app, production_console):
+    state, sid, actor, reviewer, calls, mode, make, bind = partial(console, production_console=production_console)
     state.create_account(username='outsider',password='strong-test-password',roles=('reviewer',))
     before = deepcopy(state._envelope(sid))
-    with TestClient(create_console_app(state), base_url='https://testserver') as client:
+    with TestClient(production_app(state), base_url='https://testserver') as client:
         for params in ({'document':sid},{'document':sid,'download':1,'checks':1}):
             response = client.get('/source-selection/blockage',params=params,follow_redirects=False)
             assert response.status_code in (303,401)
@@ -238,9 +239,9 @@ def test_http_access_denial_never_discloses_report(console):
     assert make()._envelope(sid) == before
 
 
-def test_zip_report_matches_recorded_state_and_never_runs_current_checks(console, tmp_path, monkeypatch):
+def test_zip_report_matches_recorded_state_and_never_runs_current_checks(console, tmp_path, monkeypatch, *, production_console):
     from src.processing_evidence_export_v1 import processing_evidence_zip
-    state, sid, actor, reviewer, calls, mode, make, bind = partial(console)
+    state, sid, actor, reviewer, calls, mode, make, bind = partial(console, production_console=production_console)
     objects, revision = state.snapshot_objects_and_revision(sid)
     def forbidden(*args, **kwargs):
         raise AssertionError('ZIP export reran a gate or processing')
@@ -257,8 +258,8 @@ def test_zip_report_matches_recorded_state_and_never_runs_current_checks(console
     assert len(calls) == 2
 
 
-def test_actual_recovery_moves_diagnosis_to_review_and_keeps_old_findings_historical(console, monkeypatch):
-    state, sid, actor, reviewer, calls, mode, make, bind = partial(console)
+def test_actual_recovery_moves_diagnosis_to_review_and_keeps_old_findings_historical(console, monkeypatch, *, production_console):
+    state, sid, actor, reviewer, calls, mode, make, bind = partial(console, production_console=production_console)
     before = collect_blockage(state,actor_id=actor,snapshot_id=sid,current_checks=True)
     assert before['next_blocking_stage'] == 'source_formation'
     assert not any(a['action'] == 'review_obligations' for a in before['follow_up'])
@@ -279,9 +280,9 @@ def test_actual_recovery_moves_diagnosis_to_review_and_keeps_old_findings_histor
     assert len(calls) == 3
 
 
-def test_access_revoked_during_current_checks_is_denied_not_exported(console, monkeypatch):
+def test_access_revoked_during_current_checks_is_denied_not_exported(console, monkeypatch, *, production_console):
     from src.operations_console_v1 import ConsoleError
-    state, sid, actor, reviewer, calls, mode, make, bind = partial(console)
+    state, sid, actor, reviewer, calls, mode, make, bind = partial(console, production_console=production_console)
     original=state.publication_readiness
     def revoke(snapshot_id):
         result=original(snapshot_id)
@@ -315,8 +316,8 @@ def test_current_readiness_does_not_fall_back_to_native_extraction(console, monk
     assert console._envelope(sid) == before
 
 
-def test_current_checks_stay_retained_only_if_source_metadata_changes_during_check(console, monkeypatch):
-    state, sid, actor, reviewer, calls, mode, make, bind = partial(console)
+def test_current_checks_stay_retained_only_if_source_metadata_changes_during_check(console, monkeypatch, *, production_console):
+    state, sid, actor, reviewer, calls, mode, make, bind = partial(console, production_console=production_console)
     original=state.publication_readiness
     invoked=[]
     def forbidden(*args,**kwargs):

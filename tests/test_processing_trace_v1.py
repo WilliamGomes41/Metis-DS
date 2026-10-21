@@ -362,12 +362,12 @@ def test_processing_only_cli_exports_redacted_trace_without_browser(tmp_path):
     assert 'Stored processing state: succeeded' in (output/'summary.txt').read_text()
 
 
-def test_semantic_resume_trace_keeps_completed_candidate_and_targets_only_open_work(console, monkeypatch):
+def test_semantic_resume_trace_keeps_completed_candidate_and_targets_only_open_work(console, monkeypatch, *, production_console):
     from tests.test_recoverable_formation_v1 import system
     from tests.test_recommendation_coverage_v1 import FIRST, SECOND
     from src.processing_trace_v1 import processing_trace
     state, sid, actor, reviewer, calls, mode, make, bind_semantics = system(
-        console.root, make_console=lambda: restart(console))
+        console.root, make_console=lambda: restart(console), production_console=production_console)
     before = state.snapshot_objects(sid)
     complete = next(o for o in before if o['content']['clean_text'] == FIRST)
     initial = processing_trace(state._envelope(sid))

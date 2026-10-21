@@ -265,5 +265,68 @@
     ],
     "full_suite_status": "pending",
     "ci_status": "not run: push approval pending"
+  },
+  {
+    "batch": "08",
+    "base": "0c3a90d",
+    "commit": "2fb109f",
+    "change_class": "B",
+    "scope": "Bounded PostgreSQL key-list read repair; no lifecycle writes",
+    "executed_count": 13,
+    "failures": 0,
+    "skipped": 0,
+    "junit": [
+      {
+        "file": "d6a-key-list-after.xml",
+        "sha256": "3a290c262392d58f1158b3e60f884394d93c733580d97db09be0dec59ef3514b"
+      }
+    ],
+    "full_suite_status": "queued",
+    "ci_status": "not run: push approval pending"
+  },
+  {
+    "batch": "09",
+    "base": "2fb109f",
+    "commit": "pending",
+    "test_files": [
+      "tests/test_a3_attempt_correctness.py",
+      "tests/test_admission_language_variation.py",
+      "tests/test_blockage_diagnostics_v1.py",
+      "tests/test_context_preservation.py",
+      "tests/test_docling_contract_v1.py",
+      "tests/test_form_bound_revision.py",
+      "tests/test_protocol_v2_13_kernel.py",
+      "tests/test_publish_refusal_audit_v1.py",
+      "tests/test_recommendation_coverage_v1.py",
+      "tests/test_recoverable_formation_v1.py",
+      "tests/test_semantic_safety_app_v1.py",
+      "tests/test_source_bound_continuation_repair.py",
+      "tests/test_source_bound_fields_v2.py",
+      "tests/test_source_cache_work_v1.py",
+      "tests/test_source_evidence_resolution_v1.py",
+      "tests/test_source_resume_acceptance.py",
+      "tests/test_source_selection_key_list_golden.py",
+      "tests/test_stale_write_ux.py"
+    ],
+    "executed_unique_cases": 293,
+    "failures": 0,
+    "skipped": 0,
+    "verification": "Targeted run plus repaired-case reruns. Blockage parameters now first-start/restart; source-dependent imported factory call sites updated. The publication-refusal module retains its old explicit file constructor until its own publication-helper port.",
+    "junit": [
+      {
+        "file": "d6a08.xml",
+        "sha256": "5d475cf1467db648f11ad51b44c2c21d373a9e8e969a3304f7241204bd3bf097"
+      },
+      {
+        "file": "d6a-key-list-after.xml",
+        "sha256": "3a290c262392d58f1158b3e60f884394d93c733580d97db09be0dec59ef3514b"
+      },
+      {
+        "file": "d6a09-fixed.xml",
+        "sha256": "284b27869d2541cdb7f37bd4d36d327e3bdcb617cbc22b54ecf68f05a4a11160"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending"
   }
 ]
