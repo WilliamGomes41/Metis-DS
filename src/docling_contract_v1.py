@@ -76,7 +76,7 @@ PAGE_ASSESSMENT = "metis-docling-page-assessment-v1"
 
 def translate(result: dict, *, document_id: str, source_id: str, source_sha256: str,
               pages: list[int] | None = None, assess_pages: bool = False,
-              page_facts: dict | None = None, accounted_pages: list | None = None) -> ExtractedFragments:
+              page_facts=None, accounted_pages: list | None = None) -> ExtractedFragments:
     """Translate, then assess usability. No Markdown export.
 
     Without ``assess_pages`` the first finding blocks the document. With it,
@@ -304,9 +304,12 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
     for page, codes in sorted(held.items()):
         reasons = sorted(codes)
         accounting = _accounting_for(accounted_pages, page, reasons, source_sha256)
-        if reasons == [PAGE_TEXT_UNVERIFIED] and _proven_empty((page_facts or {}).get(page)):
+        # Facts are read only for a page that may be empty, never for every page.
+        facts = (None if reasons != [PAGE_TEXT_UNVERIFIED] else page_facts(page) if callable(page_facts)
+                 else (page_facts or {}).get(page))
+        if _proven_empty(facts):
             set_aside.append({"page": page, "reasons": reasons, "basis": "pdf_page_without_content",
-                              "page_facts": deepcopy(page_facts[page])})
+                              "page_facts": deepcopy(facts)})
         elif accounting is not None:
             set_aside.append({"page": page, "reasons": reasons, "basis": "recorded_accounting",
                               "accounting": accounting})

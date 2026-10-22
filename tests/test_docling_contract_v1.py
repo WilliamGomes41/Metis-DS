@@ -538,6 +538,23 @@ def test_only_a_page_the_pdf_proves_empty_is_accepted_without_accounting():
         rows(payload)
 
 
+def test_a_page_with_only_an_inline_image_is_not_proven_empty(tmp_path):
+    import fitz
+    from src.docling_pdf_v1 import page_fact
+    with fitz.open() as document:
+        document.new_page()
+        stream = document.get_new_xref()
+        document.update_object(stream, "<<>>")
+        document.update_stream(stream, b"q 100 0 0 100 50 50 cm BI /W 1 /H 1 /CS /G /BPC 8 ID \x00 EI Q")
+        document.xref_set_key(document[0].xref, "Contents", f"{stream} 0 R")
+        document.new_page()
+        document.save(tmp_path / "inline.pdf")
+    assert page_fact(tmp_path / "inline.pdf", 1)["images"] == 1
+    assert page_fact(tmp_path / "inline.pdf", 2) == EMPTY
+    with pytest.raises(DoclingError, match="docling_timeout"):
+        page_fact(tmp_path / "inline.pdf", 2, deadline=0)
+
+
 def test_scan_and_header_only_pages_are_not_treated_as_empty():
     payload = result()
     page(payload, 2)
@@ -664,7 +681,7 @@ def test_unresolved_page_blocks_formation_until_accounted_then_is_left_out(tmp_p
         calls.append(assess_pages)
         return translate(payload, document_id=document_id, source_id=source_id,
                          source_sha256=hashlib.sha256(Path(path).read_bytes()).hexdigest(),
-                         assess_pages=assess_pages, page_facts=adapter.page_facts(Path(path)),
+                         assess_pages=assess_pages, page_facts=lambda number: adapter.page_fact(Path(path), number),
                          accounted_pages=accounted_pages)
     monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
     monkeypatch.setattr(adapter, "extract", controlled_extract)
