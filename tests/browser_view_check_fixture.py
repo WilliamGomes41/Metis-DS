@@ -1,5 +1,4 @@
 """Real PG production app, synthetic source/model and private evidence transport."""
-from tests.semantic_fixture_support import bind_fixture_selections
 import os
 import json
 from hashlib import sha256
@@ -15,7 +14,7 @@ from tests.test_azure_source_processing import ImmutableBlobFixture
 from tests.test_view_check_postgres import configure
 from tests.test_source_context_review_v1 import _system
 
-app = browser_application('view-check-browser', processing_binder=bind_fixture_selections,
+app = browser_application('view-check-browser', processing_binder=lambda state: None,
                           immutable_source_store=ImmutableBlobFixture())
 console = app.state.operations_kernel
 author, reviewer = accounts(console)
