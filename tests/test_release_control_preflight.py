@@ -398,6 +398,11 @@ def test_ci_reuses_full_suite_for_native_proof_artifacts() -> None:
     assert len(proof_commands) == 7
     for command in proof_commands:
         assert "--source output/d6a-after.xml" in command
+    # A timing-gate failure still leaves executed JUnit evidence. Every native
+    # export must override GitHub's implicit success() rather than skip that proof.
+    for step in re.split(r"(?m)^      - name: ", workflow):
+        if "python scripts/export_test_evidence.py" in step:
+            assert "if: ${{ !cancelled() }}" in step, step.splitlines()[0]
     # The full measured run precedes every native export; only the conditional
     # old-code reproduction and the separately installed browser may rerun pytest.
     assert workflow.index("python scripts/measure_test_suite.py --output") < workflow.index("export_test_evidence.py")
