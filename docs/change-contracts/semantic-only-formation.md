@@ -205,7 +205,7 @@ Rewrite risk: none
 
 ## 10. Testresultaten
 
-- Volledige suite met PostgreSQL 16 (gestart via `scripts/test_postgres.sh` door `tests/conftest.py`), 4 workers, na optie 1 en de discrepantiemelding: 5559 geslaagd, 3 xfailed (B23 fail-first), 29 overgeslagen, 1 gefaald.
+- Volledige suite met PostgreSQL 16 (gestart via `scripts/test_postgres.sh` door `tests/conftest.py`), 4 workers, na optie 1 en de discrepantiemelding: 5559 geslaagd, 3 xfailed (B23 fail-first), 29 overgeslagen, 1 gefaald. Na merge van `main` (`c59f123`, Zorgmaatje; alleen characterization-goldens conflicteerden en zijn opnieuw opgenomen): 5570 geslaagd, 3 xfailed, 29 overgeslagen, 1 gefaald (dezelfde test).
   - Gefaald: `tests/test_security_sandbox.py::test_tested_code_cannot_overwrite_control_files`; faalt ook op `fe0ccf8` in deze container (root negeert alleen-lezen rechten); niet gerelateerd.
   - Overgeslagen: uitsluitend omgevingsafhankelijk (echte Docling-modellen, Chromium-browserproeven, Bend-toolchain, niet-root POSIX-rechten). De echte Docling-PDF-tests zijn dus niet uitgevoerd.
 - `python scripts/check_architecture_boundaries.py`: PASS.
