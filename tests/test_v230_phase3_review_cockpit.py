@@ -71,8 +71,8 @@ EINDOORDEEL_LABELS = (
 )
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -172,8 +172,8 @@ def _find_by_text(objects: list[dict], snippet: str) -> dict:
     raise AssertionError(f"no object contains {snippet!r}")
 
 
-def _client(console: OperationsConsole) -> TestClient:
-    client = TestClient(create_console_app(console))
+def _client(console: OperationsConsole, *, production_app) -> TestClient:
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     return client
 
@@ -248,8 +248,8 @@ def _heading_id(objects: list[dict], current_id: str) -> str:
     raise AssertionError("no heading available as parent")
 
 
-def _setup_adviseert(tmp_path: Path) -> tuple[OperationsConsole, dict, dict, dict, str]:
-    console = _console(tmp_path)
+def _setup_adviseert(tmp_path: Path, *, production_app, production_console) -> tuple[OperationsConsole, dict, dict, dict, str]:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = [
@@ -258,7 +258,7 @@ def _setup_adviseert(tmp_path: Path) -> tuple[OperationsConsole, dict, dict, dic
         if obj.get("object_type") != "document"
     ]
     adviseert = _find_by_text(objects, "adviseert de verpleegkundige de risicofactoren")
-    html = _client(console).get(
+    html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={adviseert['object_id']}"
     ).text
     return console, accounts, receipt, adviseert, html
@@ -269,8 +269,8 @@ def _setup_adviseert(tmp_path: Path) -> tuple[OperationsConsole, dict, dict, dic
 # ---------------------------------------------------------------------------
 
 
-def test_review_cockpit_uses_fixed_ordinary_dutch_copy(tmp_path: Path) -> None:
-    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path)
+def test_review_cockpit_uses_fixed_ordinary_dutch_copy(tmp_path: Path, *, production_app, production_console) -> None:
+    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert["object_id"])
     visible = _visible_text(_strip_hidden(card))
     for sentence in REVIEWER_COPY:
@@ -282,8 +282,8 @@ def test_review_cockpit_uses_fixed_ordinary_dutch_copy(tmp_path: Path) -> None:
     assert "Controleer de gemarkeerde brontekst, de voorgestelde kop en het informatietype" not in visible
 
 
-def test_primary_surface_has_no_protocol_jargon_or_relation_chrome(tmp_path: Path) -> None:
-    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path)
+def test_primary_surface_has_no_protocol_jargon_or_relation_chrome(tmp_path: Path, *, production_app, production_console) -> None:
+    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert["object_id"])
     primary = _strip_hidden(card)
     visible = _visible_text(primary)
@@ -297,8 +297,8 @@ def test_primary_surface_has_no_protocol_jargon_or_relation_chrome(tmp_path: Pat
     assert "toc-headings" not in primary
 
 
-def test_review_cockpit_is_a_to_f_order_with_one_save(tmp_path: Path) -> None:
-    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path)
+def test_review_cockpit_is_a_to_f_order_with_one_save(tmp_path: Path, *, production_app, production_console) -> None:
+    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert["object_id"])
     positions = []
     for letter in "abcdef":
@@ -326,8 +326,8 @@ def test_review_cockpit_is_a_to_f_order_with_one_save(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_step_a_shows_selected_passage_without_selection_explanation(tmp_path: Path) -> None:
-    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path)
+def test_step_a_shows_selected_passage_without_selection_explanation(tmp_path: Path, *, production_app, production_console) -> None:
+    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     step = _step(_card(html, adviseert["object_id"]), "a")
     visible = _visible_text(step)
     assert "adviseert de verpleegkundige" in visible
@@ -341,8 +341,8 @@ def test_step_a_shows_selected_passage_without_selection_explanation(tmp_path: P
 # ---------------------------------------------------------------------------
 
 
-def test_step_b_broncontext_is_surrounding_freeze_not_card_enlarge(tmp_path: Path) -> None:
-    console, _accounts, receipt, adviseert, html = _setup_adviseert(tmp_path)
+def test_step_b_broncontext_is_surrounding_freeze_not_card_enlarge(tmp_path: Path, *, production_app, production_console) -> None:
+    console, _accounts, receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert["object_id"])
     step = _step(card, "b")
     visible = _visible_text(step)
@@ -374,8 +374,8 @@ def test_step_b_broncontext_is_surrounding_freeze_not_card_enlarge(tmp_path: Pat
     assert opened.get("reserialized") is False
 
 
-def test_broncontext_is_not_a_css_zoom_of_the_card_snippet(tmp_path: Path) -> None:
-    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path)
+def test_broncontext_is_not_a_css_zoom_of_the_card_snippet(tmp_path: Path, *, production_app, production_console) -> None:
+    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert["object_id"])
     step = _step(card, "b")
     assert "transform: scale" not in step.casefold()
@@ -389,8 +389,8 @@ def test_broncontext_is_not_a_css_zoom_of_the_card_snippet(tmp_path: Path) -> No
 # ---------------------------------------------------------------------------
 
 
-def test_step_c_suitability_options_are_ordinary_dutch(tmp_path: Path) -> None:
-    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path)
+def test_step_c_suitability_options_are_ordinary_dutch(tmp_path: Path, *, production_app, production_console) -> None:
+    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     step = _step(_card(html, adviseert["object_id"]), "c")
     visible = _visible_text(step)
     for label in SUITABILITY_LABELS:
@@ -410,8 +410,8 @@ def test_step_c_suitability_options_are_ordinary_dutch(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_step_d_documentpositie_is_gevonden_onder_not_parent_dump(tmp_path: Path) -> None:
-    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path)
+def test_step_d_documentpositie_is_gevonden_onder_not_parent_dump(tmp_path: Path, *, production_app, production_console) -> None:
+    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert["object_id"])
     step = _step(card, "d")
     primary = _strip_hidden(step)
@@ -441,12 +441,12 @@ def test_step_d_documentpositie_is_gevonden_onder_not_parent_dump(tmp_path: Path
     radios = re.findall(r'<input[^>]*type="radio"[^>]*name="parent_choice"[^>]*>', chooser_html)
     links = re.findall(r'<a[^>]*href="/review\?document=', chooser_html)
     assert radios, "select must be a distinct radio"
-    assert links, "navigate must be a distinct link"
+    assert not links, "the production chooser keeps heading labels and radios without duplicate navigation"
     assert 'form="relations-' not in chooser_html
 
 
-def test_heading_chooser_browse_does_not_silently_select(tmp_path: Path) -> None:
-    console, accounts, receipt, adviseert, html = _setup_adviseert(tmp_path)
+def test_heading_chooser_browse_does_not_silently_select(tmp_path: Path, *, production_app, production_console) -> None:
+    console, accounts, receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert["object_id"])
     step = _step(card, "d")
     radio_values = re.findall(
@@ -455,7 +455,7 @@ def test_heading_chooser_browse_does_not_silently_select(tmp_path: Path) -> None
     )
     assert radio_values
     heading_id = radio_values[0]
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     browsed = client.get(
         f"/review?document={receipt['snapshot_id']}&object={heading_id}"
     ).text
@@ -479,8 +479,8 @@ def test_heading_chooser_browse_does_not_silently_select(tmp_path: Path) -> None
 # ---------------------------------------------------------------------------
 
 
-def test_step_e_starts_from_metis_proposal_not_only_unconfirmed(tmp_path: Path) -> None:
-    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path)
+def test_step_e_starts_from_metis_proposal_not_only_unconfirmed(tmp_path: Path, *, production_app, production_console) -> None:
+    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     step = _step(_card(html, adviseert["object_id"]), "e")
     primary = _visible_text(_strip_hidden(step))
     assert "Metis stelt voor:" in primary
@@ -495,8 +495,8 @@ def test_step_e_starts_from_metis_proposal_not_only_unconfirmed(tmp_path: Path) 
         assert "hidden" in opening or 'hidden' in step[step.find("Type wijzigen") :][:400]
 
 
-def test_sterkte_stays_hidden_until_confirmed_aanbeveling(tmp_path: Path) -> None:
-    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path)
+def test_sterkte_stays_hidden_until_confirmed_aanbeveling(tmp_path: Path, *, production_app, production_console) -> None:
+    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert["object_id"])
     assert adviseert.get("confirmed_object_type") not in {"recommendation", "outcome"}
     stamp = re.search(r"<section[^>]*data-stamp-block[^>]*>", card)
@@ -513,8 +513,8 @@ def test_sterkte_stays_hidden_until_confirmed_aanbeveling(tmp_path: Path) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_step_f_eindoordeel_options(tmp_path: Path) -> None:
-    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path)
+def test_step_f_eindoordeel_options(tmp_path: Path, *, production_app, production_console) -> None:
+    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     step = _step(_card(html, adviseert["object_id"]), "f")
     visible = _visible_text(step)
     for label in EINDOORDEEL_LABELS:
@@ -529,12 +529,12 @@ def test_step_f_eindoordeel_options(tmp_path: Path) -> None:
     assert "Revisie vragen" not in visible
 
 
-def test_one_save_stores_suitability_documentpositie_type_and_eindoordeel(tmp_path: Path) -> None:
-    console, accounts, receipt, adviseert, html = _setup_adviseert(tmp_path)
+def test_one_save_stores_suitability_documentpositie_type_and_eindoordeel(tmp_path: Path, *, production_app, production_console) -> None:
+    console, accounts, receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert["object_id"])
     parent_ids = re.findall(r'<input[^>]*name="parent_choice"[^>]*value="([^"]+)"', card)
     parent_id = parent_ids[0] if parent_ids else ""
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     posted = client.post(
         "/review",
         data={
@@ -576,9 +576,13 @@ def test_one_save_stores_suitability_documentpositie_type_and_eindoordeel(tmp_pa
     assert mine[-1].get("eindoordeel") == "goedkeuren" or review.get("eindoordeel") == "goedkeuren"
 
 
-def test_later_beoordelen_saves_without_approving(tmp_path: Path) -> None:
-    console, accounts, receipt, adviseert, _html = _setup_adviseert(tmp_path)
-    client = _client(console)
+def test_later_beoordelen_preserves_pending_state_without_writes(tmp_path: Path, *, production_app, production_console) -> None:
+    console, accounts, receipt, adviseert, _html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
+    before = console.snapshot_objects(receipt["snapshot_id"], include_blocked=True)
+    client = _client(console, production_app=production_app)
+    from src.review_ledger import read_events
+    before_events = read_events(console._ledger_path)
+    before_bindings = console.object_review_bindings(receipt["snapshot_id"])
     posted = client.post(
         "/review",
         data={
@@ -601,8 +605,8 @@ def test_later_beoordelen_saves_without_approving(tmp_path: Path) -> None:
         if obj["object_id"] == adviseert["object_id"]
     )
     review = (live.get("metadata") or {}).get("review_passage") or {}
-    assert review.get("suitability") == "mist_context"
-    assert review.get("eindoordeel") == "later_beoordelen"
+    assert console.snapshot_objects(receipt["snapshot_id"], include_blocked=True) == before
+    assert review == ((adviseert.get("metadata") or {}).get("review_passage") or {})
     assert (live.get("governance") or {}).get("validation_status") != "approved"
     bindings = [
         row
@@ -610,10 +614,12 @@ def test_later_beoordelen_saves_without_approving(tmp_path: Path) -> None:
         if row.get("object_id") == adviseert["object_id"] and row.get("valid") and row.get("decision") == "approve"
     ]
     assert bindings == []
+    assert read_events(console._ledger_path) == before_events
+    assert console.object_review_bindings(receipt["snapshot_id"]) == before_bindings
 
 
-def test_save_redirects_to_next_ordinary_object(tmp_path: Path) -> None:
-    console, accounts, receipt, adviseert, _html = _setup_adviseert(tmp_path)
+def test_save_redirects_to_next_ordinary_object(tmp_path: Path, *, production_app, production_console) -> None:
+    console, accounts, receipt, adviseert, _html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     objects = [
         obj
         for obj in console.snapshot_objects(receipt["snapshot_id"])
@@ -623,7 +629,7 @@ def test_save_redirects_to_next_ordinary_object(tmp_path: Path) -> None:
     assert len(ordinary) >= 2
     current_index = next(i for i, obj in enumerate(ordinary) if obj["object_id"] == adviseert["object_id"])
     nxt = ordinary[current_index + 1]
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     posted = client.post(
         "/review",
         data={
@@ -635,7 +641,7 @@ def test_save_redirects_to_next_ordinary_object(tmp_path: Path) -> None:
             "found_under": CURRENT_HEADING,
             "type_action": "dit_klopt",
             "confirmed_object_type": "recommendation",
-            "eindoordeel": "later_beoordelen",
+            "eindoordeel": "afwijzen", "comment": "Niet publiceren in deze fixture.", "return_task": "contextual",
         },
         follow_redirects=False,
     )
@@ -649,8 +655,8 @@ def test_save_redirects_to_next_ordinary_object(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_ineligible_source_passage_stays_out_of_candidate_lanes(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_ineligible_source_passage_stays_out_of_candidate_lanes(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = console.snapshot_objects(receipt["snapshot_id"])
@@ -661,8 +667,8 @@ def test_ineligible_source_passage_stays_out_of_candidate_lanes(tmp_path: Path) 
     assert djg not in ordinary_review_queue(objects, fragments=console.review_source_fragments(receipt["snapshot_id"]), bindings=console.object_review_bindings(receipt["snapshot_id"]))
     assert djg not in blocked_audit_lane(objects)
 
-def test_ordinary_queue_and_index_remain_allowed_only(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_ordinary_queue_and_index_remain_allowed_only(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = [
@@ -673,7 +679,7 @@ def test_ordinary_queue_and_index_remain_allowed_only(tmp_path: Path) -> None:
     ordinary = ordinary_review_queue(objects, fragments=console.review_source_fragments(receipt["snapshot_id"]), bindings=console.object_review_bindings(receipt["snapshot_id"]))
     assert all(_admission(obj).get("gate_result") == GATE_ALLOWED for obj in ordinary)
     assert not any(obj in ordinary for obj in blocked_audit_lane(objects))
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     index = client.get(
         f"/review?document={receipt['snapshot_id']}&task=individual"
     ).text
@@ -686,8 +692,8 @@ def test_ordinary_queue_and_index_remain_allowed_only(tmp_path: Path) -> None:
     assert "review-blocked-audit" in control
 
 
-def test_boom_path_is_unchanged_and_publish_stays_blocked(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_boom_path_is_unchanged_and_publish_stays_blocked(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = console.ingest(
         actor_id=accounts["researcher"]["account_id"],
@@ -732,8 +738,8 @@ def test_boom_path_is_unchanged_and_publish_stays_blocked(tmp_path: Path) -> Non
     assert published["status"] == "BLOCKED"
 
 
-def test_review_and_correction_do_not_change_sibling_canonical_hash(tmp_path: Path) -> None:
-    console, accounts, receipt, adviseert, _html = _setup_adviseert(tmp_path)
+def test_review_and_correction_do_not_change_sibling_canonical_hash(tmp_path: Path, *, production_app, production_console) -> None:
+    console, accounts, receipt, adviseert, _html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     objects = [
         obj
         for obj in console.snapshot_objects(receipt["snapshot_id"])
@@ -774,6 +780,8 @@ def test_review_and_correction_do_not_change_sibling_canonical_hash(tmp_path: Pa
         comment="Corrigeer de formulering.",
         proposed_correction="Bespreek het onderwerp expliciet met de zorgvrager.",
     )
+    sealed = console._current_object(receipt["snapshot_id"], other["object_id"])
+    other_hash = compute_canonical_object_hash(sealed)
     console.correct_object(
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
@@ -792,7 +800,7 @@ def test_review_and_correction_do_not_change_sibling_canonical_hash(tmp_path: Pa
     still_other_old = next(
         obj
         for obj in console.snapshot_objects(receipt["snapshot_id"], include_blocked=True)
-        if obj["object_id"] == other["object_id"] and obj["object_version"] == other["object_version"]
+        if obj["object_id"] == other["object_id"] and obj["object_version"] == sealed["object_version"]
     )
     assert compute_canonical_object_hash(still_other_old) == other_hash
     untouched = next(
@@ -845,8 +853,8 @@ def test_merge_heading_parent_relations_keeps_semantic_edges() -> None:
     assert not any(row.get("relation_type") in {"parent", "child"} and row.get("target_object_id") != "new-heading" for row in merged)
 
 
-def test_documentpositie_save_preserves_confirmed_semantic_relations(tmp_path: Path) -> None:
-    console, accounts, receipt, adviseert, _html = _setup_adviseert(tmp_path)
+def test_documentpositie_save_preserves_confirmed_semantic_relations(tmp_path: Path, *, production_app, production_console) -> None:
+    console, accounts, receipt, adviseert, _html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     objects = [
         obj
         for obj in console.snapshot_objects(receipt["snapshot_id"])
@@ -891,14 +899,11 @@ def test_documentpositie_save_preserves_confirmed_semantic_relations(tmp_path: P
         row.get("relation_type") == "applies_if" and row.get("target_object_id") == condition["object_id"]
         for row in rels
     ), "applies_if must survive heading/parent assignment"
-    assert any(
-        row.get("relation_type") == "child" and row.get("target_object_id") == heading_id
-        for row in rels
-    )
+    assert rels == (after_bind.get("confirmed_relations") or []), "deferring review must not apply a heading change"
 
 
-def test_failed_review_does_not_persist_parent_relation(tmp_path: Path) -> None:
-    console, accounts, receipt, adviseert, _html = _setup_adviseert(tmp_path)
+def test_failed_review_does_not_persist_parent_relation(tmp_path: Path, *, production_app, production_console) -> None:
+    console, accounts, receipt, adviseert, _html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     objects = [
         obj
         for obj in console.snapshot_objects(receipt["snapshot_id"])
@@ -941,14 +946,14 @@ def test_failed_review_does_not_persist_parent_relation(tmp_path: Path) -> None:
     ]
 
 
-def test_empty_suitability_is_rejected_and_creates_no_approval_binding(tmp_path: Path) -> None:
-    console, accounts, receipt, adviseert, html = _setup_adviseert(tmp_path)
+def test_empty_suitability_is_rejected_and_creates_no_approval_binding(tmp_path: Path, *, production_app, production_console) -> None:
+    console, accounts, receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert["object_id"])
     assert 'name="suitability"' in card
     source = (ROOT / "src/operations_console_app.py").read_text(encoding="utf-8")
     gate = source[source.find("const update = ") : source.find("updateChooser();")]
     assert "suitability" in gate
-    client = _client(console)
+    client = _client(console, production_app=production_app)
     posted = client.post(
         "/review",
         data={
@@ -990,8 +995,8 @@ def test_empty_suitability_is_rejected_and_creates_no_approval_binding(tmp_path:
         )
 
 
-def test_dit_klopt_reveals_sterkte_before_one_save(tmp_path: Path) -> None:
-    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path)
+def test_dit_klopt_reveals_sterkte_before_one_save(tmp_path: Path, *, production_app, production_console) -> None:
+    _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert["object_id"])
     assert 'value="dit_klopt" checked' not in card
     source = (ROOT / "src/operations_console_app.py").read_text(encoding="utf-8")

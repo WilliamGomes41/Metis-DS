@@ -30,16 +30,16 @@ pytestmark = [
 ]
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
     )
 
 
-def _restart(tmp_path: Path) -> OperationsConsole:
-    return _console(tmp_path)
+def _restart(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return _console(tmp_path, production_console=production_console)
 
 
 def _accounts(console: OperationsConsole) -> dict[str, dict]:
@@ -114,9 +114,8 @@ def _ingest_boom(console: OperationsConsole, accounts: dict[str, dict]) -> dict:
     )
 
 
-def _disk_envelope(console: OperationsConsole, snapshot_id: str) -> dict:
-    payload = json.loads(console._envelopes_path.read_text(encoding="utf-8"))
-    return payload[snapshot_id]
+def _disk_envelope(console, snapshot_id):
+    return console.workflow_document_store.get_envelope(snapshot_id)
 
 
 def _object_statuses(console: OperationsConsole, snapshot_id: str) -> list[str]:
@@ -127,28 +126,22 @@ def _object_statuses(console: OperationsConsole, snapshot_id: str) -> list[str]:
     ]
 
 
-def _assert_unpromoted(
-    failed: OperationsConsole,
-    tmp_path: Path,
-    snapshot_id: str,
-    original_class: str,
-    *,
-    original_statuses: list[str],
-) -> None:
+def _assert_unpromoted(failed: OperationsConsole, tmp_path: Path, snapshot_id: str, original_class: str, *, original_statuses: list[str], production_console) -> None:
     disk = _disk_envelope(failed, snapshot_id)
     assert failed._envelopes[snapshot_id]["class"] == original_class
     assert disk["class"] == original_class
-    restarted = _restart(tmp_path)
+    restarted = _restart(tmp_path, production_console=production_console)
     assert restarted._envelopes[snapshot_id]["class"] == original_class
     assert _disk_envelope(restarted, snapshot_id)["class"] == original_class
     assert _object_statuses(restarted, snapshot_id) == original_statuses
     assert _object_statuses(failed, snapshot_id) == original_statuses
 
 
+@pytest.mark.file_topology
 def test_promote_class_same_model_objects_save_failure_leaves_memory_and_disk_unpromoted(
     tmp_path: Path,
 ) -> None:
-    console = _console(tmp_path)
+    console = _file_console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -167,13 +160,15 @@ def test_promote_class_same_model_objects_save_failure_leaves_memory_and_disk_un
             snapshot_id=snapshot_id,
             new_class="handreiking",
         )
-    _assert_unpromoted(console, tmp_path, snapshot_id, "richtlijn", original_statuses=original_statuses)
+    _file_assert_unpromoted(console, tmp_path, snapshot_id, "richtlijn", original_statuses=original_statuses)
 
 
-def test_promote_class_same_model_envelopes_save_failure_disk_consistent_after_restart(
+
+@pytest.mark.file_topology
+def test_promote_class_same_model_envelopes_save_failure_disk_consistent_after_file_restart(
     tmp_path: Path,
 ) -> None:
-    console = _console(tmp_path)
+    console = _file_console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -191,13 +186,15 @@ def test_promote_class_same_model_envelopes_save_failure_disk_consistent_after_r
             new_class="handreiking",
         )
     _ = real_save
-    _assert_unpromoted(console, tmp_path, snapshot_id, "richtlijn", original_statuses=original_statuses)
+    _file_assert_unpromoted(console, tmp_path, snapshot_id, "richtlijn", original_statuses=original_statuses)
 
 
-def test_promote_class_same_model_bindings_save_failure_disk_consistent_after_restart(
+
+@pytest.mark.file_topology
+def test_promote_class_same_model_bindings_save_failure_disk_consistent_after_file_restart(
     tmp_path: Path,
 ) -> None:
-    console = _console(tmp_path)
+    console = _file_console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -216,16 +213,18 @@ def test_promote_class_same_model_bindings_save_failure_disk_consistent_after_re
             new_class="handreiking",
         )
     _ = real_save
-    _assert_unpromoted(console, tmp_path, snapshot_id, "richtlijn", original_statuses=original_statuses)
-    restarted = _restart(tmp_path)
+    _file_assert_unpromoted(console, tmp_path, snapshot_id, "richtlijn", original_statuses=original_statuses)
+    restarted = _file_restart(tmp_path)
     if restarted._bindings_path.exists():
         assert json.loads(restarted._bindings_path.read_text(encoding="utf-8")) == original_bindings
 
 
-def test_promote_class_cross_model_objects_save_failure_disk_wins_on_restart(
+
+@pytest.mark.file_topology
+def test_promote_class_cross_model_objects_save_failure_disk_wins_on_file_restart(
     tmp_path: Path,
 ) -> None:
-    console = _console(tmp_path)
+    console = _file_console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest_boom(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -246,16 +245,18 @@ def test_promote_class_cross_model_objects_save_failure_disk_wins_on_restart(
             new_class="richtlijn",
             reextract=True,
         )
-    _assert_unpromoted(console, tmp_path, snapshot_id, "beslisboom", original_statuses=original_statuses)
-    restarted = _restart(tmp_path)
+    _file_assert_unpromoted(console, tmp_path, snapshot_id, "beslisboom", original_statuses=original_statuses)
+    restarted = _file_restart(tmp_path)
     assert [row["object_id"] for row in restarted.snapshot_objects(snapshot_id)] == original_ids
     assert (console._envelopes[snapshot_id].get("prior_processing_history") or []) == (
-        _disk_envelope(console, snapshot_id).get("prior_processing_history") or []
+        _file_disk_envelope(console, snapshot_id).get("prior_processing_history") or []
     )
 
 
-def test_correct_object_envelopes_save_failure_disk_wins_on_restart(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+
+@pytest.mark.file_topology
+def test_correct_object_envelopes_save_failure_disk_wins_on_file_restart(tmp_path: Path) -> None:
+    console = _file_console(tmp_path)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -300,9 +301,9 @@ def test_correct_object_envelopes_save_failure_disk_wins_on_restart(tmp_path: Pa
     _ = real_save
     assert console._envelopes[snapshot_id].get("review_passes") == before_passes
     assert console._envelopes[snapshot_id].get("clinical_rereview_required") == before_rereview
-    disk = _disk_envelope(console, snapshot_id)
+    disk = _file_disk_envelope(console, snapshot_id)
     assert disk.get("review_passes") == before_passes
-    restarted = _restart(tmp_path)
+    restarted = _file_restart(tmp_path)
     assert restarted._envelopes[snapshot_id].get("review_passes") == before_passes
     assert restarted._envelopes[snapshot_id].get("clinical_rereview_required") == before_rereview
     assert len(restarted._load_objects(snapshot_id)) == object_count_before
@@ -310,8 +311,9 @@ def test_correct_object_envelopes_save_failure_disk_wins_on_restart(tmp_path: Pa
     assert "MUST-NOT-LAND-ON-FAILED-ENVELOPES" not in dumped
 
 
-def test_promote_class_success_then_restart_keeps_new_class(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+
+def test_promote_class_success_then_restart_keeps_new_class(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
     snapshot_id = receipt["snapshot_id"]
@@ -321,7 +323,45 @@ def test_promote_class_success_then_restart_keeps_new_class(tmp_path: Path) -> N
         new_class="handreiking",
     )
     assert changed["class"] == "handreiking"
-    restarted = _restart(tmp_path)
+    restarted = _restart(tmp_path, production_console=production_console)
     assert restarted._envelopes[snapshot_id]["class"] == "handreiking"
     assert _disk_envelope(restarted, snapshot_id)["class"] == "handreiking"
     assert all(status == "needs_review" for status in _object_statuses(restarted, snapshot_id))
+
+
+def _file_console(tmp_path: Path) -> OperationsConsole:
+    return OperationsConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "output" / "runtime" / "operations-console",
+    )
+
+
+
+def _file_restart(tmp_path: Path) -> OperationsConsole:
+    return _file_console(tmp_path)
+
+
+
+def _file_disk_envelope(console: OperationsConsole, snapshot_id: str) -> dict:
+    payload = json.loads(console._envelopes_path.read_text(encoding="utf-8"))
+    return payload[snapshot_id]
+
+
+
+def _file_assert_unpromoted(
+    failed: OperationsConsole,
+    tmp_path: Path,
+    snapshot_id: str,
+    original_class: str,
+    *,
+    original_statuses: list[str],
+) -> None:
+    disk = _file_disk_envelope(failed, snapshot_id)
+    assert failed._envelopes[snapshot_id]["class"] == original_class
+    assert disk["class"] == original_class
+    restarted = _file_restart(tmp_path)
+    assert restarted._envelopes[snapshot_id]["class"] == original_class
+    assert _file_disk_envelope(restarted, snapshot_id)["class"] == original_class
+    assert _object_statuses(restarted, snapshot_id) == original_statuses
+    assert _object_statuses(failed, snapshot_id) == original_statuses

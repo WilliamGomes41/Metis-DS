@@ -27,8 +27,8 @@ from src.review_ledger import read_events
 from src.serving_relations_v1 import binding_relations
 
 
-def _system(tmp_path, console_type=DeterministicRepairReviewConsole):
-    console = console_type(
+def _system(tmp_path, *, production_app, production_console):
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",
@@ -67,9 +67,7 @@ def _system(tmp_path, console_type=DeterministicRepairReviewConsole):
         and row.get("proposed_object_type") != "heading"
     ]
     assert len(objects) >= 3
-    app = create_console_app(console)
-    install_deterministic_review_repair_routes(app, console)
-    install_closed_review_routes(app, console)
+    app = production_app(console)
     client = TestClient(app)
     client.post("/login", data={"username": "bert", "password": "bert-secret"})
     return console, client, researcher, reviewer, sid, objects
@@ -90,11 +88,11 @@ def _review_payload(console, sid, obj, *, suitability="mist_context", comment="C
     }
 
 
-def test_revise_first_post_is_prewrite_specification_step(tmp_path):
-    console, client, _researcher, _reviewer, sid, objects = _system(tmp_path)
+def test_revise_first_post_is_prewrite_specification_step(tmp_path, *, production_app, production_console):
+    console, client, _researcher, _reviewer, sid, objects = _system(tmp_path, production_app=production_app, production_console=production_console)
     obj = objects[0]
-    before_rows = console._objects_path(sid).read_bytes()
-    before_ledger = console._ledger_path.read_bytes() if console._ledger_path.exists() else b""
+    before_rows = console._load_objects(sid, remember=False)
+    before_ledger = read_events(console._ledger_path)
 
     response = client.post("/review", data=_review_payload(console, sid, obj))
 
@@ -102,15 +100,15 @@ def test_revise_first_post_is_prewrite_specification_step(tmp_path):
     assert "Correctie specificeren" in response.text
     assert "Er is nog niets gewijzigd" in response.text
     assert 'action="/review/resolve"' in response.text
-    assert console._objects_path(sid).read_bytes() == before_rows
-    after_ledger = console._ledger_path.read_bytes() if console._ledger_path.exists() else b""
+    assert console._load_objects(sid, remember=False) == before_rows
+    after_ledger = read_events(console._ledger_path)
     assert after_ledger == before_ledger
     current = console._current_object(sid, obj["object_id"])
     assert current["governance"]["validation_status"] == "needs_review"
 
 
-def test_source_unit_resolution_creates_new_proposal_and_no_revise_remains(tmp_path):
-    console, _client, _researcher, reviewer, sid, objects = _system(tmp_path)
+def test_source_unit_resolution_creates_new_proposal_and_no_revise_remains(tmp_path, *, production_app, production_console):
+    console, _client, _researcher, reviewer, sid, objects = _system(tmp_path, production_app=production_app, production_console=production_console)
     obj = objects[0]
     before_version = obj["object_version"]
     units = console.source_units(snapshot_id=sid, object_id=obj["object_id"])
@@ -152,11 +150,11 @@ def test_source_unit_resolution_creates_new_proposal_and_no_revise_remains(tmp_p
     )
 
 
-def test_unknown_source_unit_rolls_back_review_and_repair(tmp_path):
-    console, _client, _researcher, reviewer, sid, objects = _system(tmp_path)
+def test_unknown_source_unit_rolls_back_review_and_repair(tmp_path, *, production_app, production_console):
+    console, _client, _researcher, reviewer, sid, objects = _system(tmp_path, production_app=production_app, production_console=production_console)
     obj = objects[0]
-    before_rows = console._objects_path(sid).read_bytes()
-    before_ledger = console._ledger_path.read_bytes() if console._ledger_path.exists() else b""
+    before_rows = console._load_objects(sid, remember=False)
+    before_ledger = read_events(console._ledger_path)
 
     with pytest.raises(ConsoleError, match="repair_source_unit_unknown"):
         console.submit_review_resolution(
@@ -170,13 +168,13 @@ def test_unknown_source_unit_rolls_back_review_and_repair(tmp_path):
             source_unit_ids=["does-not-exist::s1"],
         )
 
-    assert console._objects_path(sid).read_bytes() == before_rows
-    after_ledger = console._ledger_path.read_bytes() if console._ledger_path.exists() else b""
+    assert console._load_objects(sid, remember=False) == before_rows
+    after_ledger = read_events(console._ledger_path)
     assert after_ledger == before_ledger
 
 
-def test_merge_resolution_supersedes_absorbed_object_and_reopens_primary(tmp_path):
-    console, _client, _researcher, reviewer, sid, objects = _system(tmp_path)
+def test_merge_resolution_supersedes_absorbed_object_and_reopens_primary(tmp_path, *, production_app, production_console):
+    console, _client, _researcher, reviewer, sid, objects = _system(tmp_path, production_app=production_app, production_console=production_console)
     primary, absorbed = objects[0], objects[1]
 
     repaired = console.submit_review_resolution(
@@ -206,8 +204,8 @@ def test_merge_resolution_supersedes_absorbed_object_and_reopens_primary(tmp_pat
     )
 
 
-def test_support_resolution_writes_real_relation_and_reopens_review(tmp_path):
-    console, _client, _researcher, reviewer, sid, objects = _system(tmp_path)
+def test_support_resolution_writes_real_relation_and_reopens_review(tmp_path, *, production_app, production_console):
+    console, _client, _researcher, reviewer, sid, objects = _system(tmp_path, production_app=production_app, production_console=production_console)
     support, claim = objects[0], objects[1]
 
     repaired = console.submit_review_resolution(
@@ -234,10 +232,10 @@ def test_support_resolution_writes_real_relation_and_reopens_review(tmp_path):
     )
 
 
-def test_direct_revise_cannot_be_left_behind(tmp_path):
-    console, _client, _researcher, reviewer, sid, objects = _system(tmp_path)
+def test_direct_revise_cannot_be_left_behind(tmp_path, *, production_app, production_console):
+    console, _client, _researcher, reviewer, sid, objects = _system(tmp_path, production_app=production_app, production_console=production_console)
     obj = objects[0]
-    before = console._objects_path(sid).read_bytes()
+    before = console._load_objects(sid, remember=False)
 
     with pytest.raises(StructuredRepairRequired):
         console.review_object(
@@ -251,5 +249,5 @@ def test_direct_revise_cannot_be_left_behind(tmp_path):
             expected_revision=console.objects_revision(sid),
         )
 
-    assert console._objects_path(sid).read_bytes() == before
+    assert console._load_objects(sid, remember=False) == before
     assert console._current_object(sid, obj["object_id"])["governance"]["validation_status"] == "needs_review"

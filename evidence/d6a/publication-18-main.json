@@ -1,0 +1,71 @@
+{
+  "batch": "18",
+  "target": "main",
+  "base_main": "d81b5a48ea380fe0dfe1b5f163d1dfda396f1b0d",
+  "change_class": "C",
+  "rewrite_risk": "none",
+  "code_parent": "8d6e97f253ce0d655a0c3a847ece824cb8daa22f",
+  "tests_tree": "2752400779e608c740aab0a445f5787d6738c301",
+  "runtime_changes": false,
+  "publication_authorized": true,
+  "merge_order": [
+    17,
+    18,
+    19
+  ],
+  "targeted_python": "3.13.5",
+  "targeted_cases": 174,
+  "passed": 174,
+  "failures": 0,
+  "errors": 0,
+  "skipped": [],
+  "postgres_skips": 0,
+  "junit_sha256": "3ba0b1cd4c82be0954f746f47eaf84e6e413a8cd175e51a3988330844fca565f",
+  "static_checks": [
+    {
+      "command": [
+        "python",
+        "scripts/repository_preflight.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python",
+        "scripts/release_control_preflight.py",
+        "--base",
+        "origin/main"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python",
+        "scripts/check_architecture_boundaries.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python",
+        "-m",
+        "compileall",
+        "-q",
+        "src",
+        "tests"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "origin/main"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "full_suite": "Required; combined local run in progress and GitHub matrix pending publication",
+  "ci_status": "not yet run on these new main-targeting heads"
+}

@@ -33,8 +33,8 @@ STORY_FIXTURE = ROOT / "data/fixtures/story_html_boom_player_fixture.html"
 TENANTS = ROOT / "config/tenants.v1.json"
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -60,17 +60,10 @@ def _accounts(console: OperationsConsole) -> dict[str, dict]:
         roles=("publisher",),
         display_name="Carla Publisher",
     )
-    engineer = console.create_account(
-        username="engineer.dev",
-        password="dev-secret",
-        roles=(),
-        display_name="Engineer",
-    )
     return {
         "researcher": researcher,
         "reviewer": reviewer,
         "publisher": publisher,
-        "engineer": engineer,
     }
 
 
@@ -118,8 +111,8 @@ def _docx_bytes() -> bytes:
     return buf.getvalue()
 
 
-def test_html_and_pdf_ingest_accepted_word_and_story_html_rejected(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_html_and_pdf_ingest_accepted_word_and_story_html_rejected(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     html_receipt = _ingest_html(console, accounts)
     assert html_receipt["state"] == "captured_not_published"
@@ -176,10 +169,10 @@ def test_html_and_pdf_ingest_accepted_word_and_story_html_rejected(tmp_path: Pat
         )
 
 
-def test_url_ingest_of_html_is_rejected_as_live_url_html(tmp_path: Path) -> None:
+def test_url_ingest_of_html_is_rejected_as_live_url_html(tmp_path: Path, *, production_console) -> None:
     payload = HTML_FIXTURE.read_bytes()
     url = "https://example.test/continentie.html"
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     console.url_fetcher = lambda _url: (payload, "text/html; charset=utf-8", "continentie.html")
     accounts = _accounts(console)
     with pytest.raises(ConsoleError, match="live_url_html_not_allowed"):
@@ -197,8 +190,8 @@ def test_url_ingest_of_html_is_rejected_as_live_url_html(tmp_path: Path) -> None
         )
 
 
-def test_family_set_at_ingest_move_does_not_rehash_or_require_rereview(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_family_set_at_ingest_move_does_not_rehash_or_require_rereview(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts, family="continentie")
     sha_before = receipt["sha256"]
@@ -223,8 +216,8 @@ def test_family_set_at_ingest_move_does_not_rehash_or_require_rereview(tmp_path:
     assert tree["stable"] is True
 
 
-def test_equivalent_family_input_reuses_first_stored_spelling(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_equivalent_family_input_reuses_first_stored_spelling(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     first = _ingest_html(
         console,
@@ -246,8 +239,8 @@ def test_equivalent_family_input_reuses_first_stored_spelling(tmp_path: Path) ->
     assert set(console.family_tree()["families"]) == {"Delier"}
 
 
-def test_move_family_reuses_equivalent_existing_family_without_rehash(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_move_family_reuses_equivalent_existing_family_without_rehash(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     _ingest_html(console, accounts, family="Delier", title="Delier")
     target = _ingest_html(console, accounts, family="Ander onderwerp", title="Andere bron")
@@ -271,10 +264,10 @@ def test_move_family_reuses_equivalent_existing_family_without_rehash(tmp_path: 
     assert hashes_after == hashes_before
 
 
-def test_stale_console_reloads_existing_family_before_ingest(tmp_path: Path) -> None:
-    first_console = _console(tmp_path)
+def test_stale_console_reloads_existing_family_before_ingest(tmp_path: Path, *, production_console) -> None:
+    first_console = _console(tmp_path, production_console=production_console)
     first_accounts = _accounts(first_console)
-    stale_console = _console(tmp_path)
+    stale_console = _console(tmp_path, production_console=production_console)
     stale_accounts = {row["username"]: row for row in stale_console.list_accounts()}
     researcher = stale_accounts["researcher.anne"]
     reviewer = stale_accounts["reviewer.bert"]
@@ -301,8 +294,8 @@ def test_stale_console_reloads_existing_family_before_ingest(tmp_path: Path) -> 
     assert set(stale_console.family_tree()["families"]) == {"Delier"}
 
 
-def test_subject_inputs_suggest_existing_families_but_allow_new_text(tmp_path: Path) -> None:
-    client, console, accounts = _html_client(tmp_path)
+def test_subject_inputs_suggest_existing_families_but_allow_new_text(tmp_path: Path, *, production_app, production_console) -> None:
+    client, console, accounts = _html_client(tmp_path, production_app=production_app, production_console=production_console)
     _ingest_html(console, accounts, family="Delier")
 
     ingest = client.get("/ingest").text
@@ -318,8 +311,8 @@ def test_subject_inputs_suggest_existing_families_but_allow_new_text(tmp_path: P
     assert "Nieuw onderwerp" not in tree
 
 
-def test_adding_a_branch_does_not_redraw_the_tree_and_siblings_are_not_parented(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_adding_a_branch_does_not_redraw_the_tree_and_siblings_are_not_parented(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     richtlijn = _ingest_html(console, accounts, family="continentie", class_="richtlijn", title="Richtlijn")
     podcast = console.ingest(
@@ -349,8 +342,8 @@ def test_adding_a_branch_does_not_redraw_the_tree_and_siblings_are_not_parented(
     assert all(child["parent"] != richtlijn["snapshot_id"] for child in family["children"])
 
 
-def test_class_promotion_requires_review(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_class_promotion_requires_review(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts, class_="transcript")
     promoted = console.promote_class(
@@ -371,8 +364,8 @@ def test_class_promotion_requires_review(tmp_path: Path) -> None:
     assert consider["independence_satisfied"] is False
 
 
-def test_uploader_cannot_be_the_sole_required_reviewer(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_uploader_cannot_be_the_sole_required_reviewer(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     with pytest.raises(ConsoleError, match="uploader_cannot_be_sole_required_reviewer"):
         console.ingest(
@@ -418,12 +411,12 @@ def test_uploader_cannot_be_the_sole_required_reviewer(tmp_path: Path) -> None:
     assert "blocked_pending_immutable_locator" in consider_after["blockers"]
 
 
-def test_reject_and_correction_create_new_object_version_not_silent_mutation(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_reject_and_correction_create_new_object_version_not_silent_mutation(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts)
     objects = console.snapshot_objects(receipt["snapshot_id"])
-    original = next(obj for obj in objects if obj["object_type"] != "document")
+    original = next(obj for obj in objects if obj["object_type"] not in {"document", "heading"} and obj.get("proposed_object_type") != "heading")
     original_hash = compute_canonical_object_hash(original)
     original_version = original["object_version"]
     original_json = json.dumps(original, sort_keys=True)
@@ -439,24 +432,16 @@ def test_reject_and_correction_create_new_object_version_not_silent_mutation(tmp
     assert blocked["governance"]["validation_status"] == "rejected"
     assert json.dumps(original, sort_keys=True) == original_json
 
-    other = next(obj for obj in console.snapshot_objects(receipt["snapshot_id"]) if obj["object_id"] != original["object_id"] and obj["object_type"] != "document")
-    console.review_object(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=other["object_id"],
-        decision="revise",
-        comment="Corrigeer de formulering.",
-        proposed_correction="Bespreek het onderwerp expliciet met de zorgvrager.",
-    )
-    revised = console.correct_object(
-        actor_id=accounts["researcher"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=other["object_id"],
-        patch={
-            "reason": "reviewer correction",
-            "operations": [{"op": "set", "path": "content.clean_text", "value": "Bespreek het onderwerp expliciet met de zorgvrager."}],
-        },
-    )
+    other = next(obj for obj in console.snapshot_objects(receipt["snapshot_id"]) if obj["object_id"] != original["object_id"] and obj["object_type"] not in {"document", "heading"} and obj.get("proposed_object_type") != "heading")
+    from src.deterministic_review_repair_v1 import REPAIR_SOURCE_UNITS
+    units = console.source_units(snapshot_id=receipt['snapshot_id'], object_id=other['object_id'])
+    own_fragments = {ref['raw_object_id'] for ref in other['provenance']['source_fragments']}
+    selected = [u['unit_id'] for u in units if u['fragment_id'] in own_fragments]
+    assert selected
+    revised = console.submit_review_resolution(actor_id=accounts['reviewer']['account_id'],
+        snapshot_id=receipt['snapshot_id'], object_id=other['object_id'],
+        expected_revision=console.objects_revision(receipt['snapshot_id']), suitability='mist_context',
+        comment='Selecteer de geverifieerde bronpassage.', repair_kind=REPAIR_SOURCE_UNITS, source_unit_ids=selected[:1])
     assert revised["object_version"] != other["object_version"]
     assert revised["governance"]["validation_status"] == "needs_review"
     assert revised["governance"]["publication_status"] == "unpublished"
@@ -472,8 +457,8 @@ def test_reject_and_correction_create_new_object_version_not_silent_mutation(tmp
     assert compute_canonical_object_hash(original) == original_hash
 
 
-def test_no_shared_login_and_role_authorization(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_no_shared_login_and_role_authorization(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     with pytest.raises(ConsoleError, match="username_already_exists"):
         console.create_account(username="researcher.anne", password="other", roles=("reviewer",))
@@ -483,27 +468,15 @@ def test_no_shared_login_and_role_authorization(tmp_path: Path) -> None:
     researcher_session = console.authenticate("researcher.anne", "anne-secret")
     reviewer_session = console.authenticate("reviewer.bert", "bert-secret")
     publisher_session = console.authenticate("publisher.carla", "carla-secret")
-    engineer_session = console.authenticate("engineer.dev", "dev-secret")
+    with pytest.raises(ConsoleError, match="workflow_account_write_failed"):
+        console.create_account(username="engineer.dev", password="dev-secret", roles=(), display_name="Engineer")
+    with pytest.raises(ConsoleError, match="invalid_credentials"):
+        console.authenticate("engineer.dev", "dev-secret")
     assert researcher_session["account_id"] != reviewer_session["account_id"]
     assert "researcher" in researcher_session["roles"]
     assert "reviewer" in reviewer_session["roles"]
     assert "publisher" in publisher_session["roles"]
 
-    with pytest.raises(ConsoleError, match="researcher_role_required"):
-        console.ingest(
-            actor_id=accounts["engineer"]["account_id"],
-            filename="continentie.html",
-            data=HTML_FIXTURE.read_bytes(),
-            content_type="text/html",
-            ingest_kind="new",
-            title="Engineer path",
-            version="1.0",
-            date="2025-04-01",
-            live_url="https://example.test/eng",
-            class_="richtlijn",
-            family="continentie",
-            named_reviewers=[accounts["reviewer"]["account_id"]],
-        )
     with pytest.raises(ConsoleError, match="researcher_role_required"):
         console.ingest(
             actor_id=accounts["reviewer"]["account_id"],
@@ -544,11 +517,11 @@ def test_no_shared_login_and_role_authorization(tmp_path: Path) -> None:
             family="continentie",
             named_reviewers=["Metis"],
         )
-    assert engineer_session["roles"] == []
+    assert not any(row["username"] == "engineer.dev" for row in console.list_accounts())
 
 
-def test_publication_blocked_without_immutable_locator(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_publication_blocked_without_immutable_locator(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts)
     assert receipt["immutable_storage_locator"] is None
@@ -559,8 +532,8 @@ def test_publication_blocked_without_immutable_locator(tmp_path: Path) -> None:
     assert result.get("g2") != "PASS"
 
 
-def test_new_version_creates_snapshot_and_object_diff_without_faking_cutover(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_new_version_creates_snapshot_and_object_diff_without_faking_cutover(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     first = _ingest_html(console, accounts, version="1.0")
     updated_html = HTML_FIXTURE.read_text(encoding="utf-8").replace(
@@ -594,8 +567,8 @@ def test_new_version_creates_snapshot_and_object_diff_without_faking_cutover(tmp
     assert still_live["snapshot_id"] == first["snapshot_id"]
 
 
-def test_heavier_class_must_not_be_filled_by_lighter_class(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_heavier_class_must_not_be_filled_by_lighter_class(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     _ingest_html(console, accounts, class_="richtlijn", title="Richtlijn")
     console.ingest(
@@ -612,11 +585,14 @@ def test_heavier_class_must_not_be_filled_by_lighter_class(tmp_path: Path) -> No
         family="continentie",
         named_reviewers=[accounts["reviewer"]["account_id"]],
     )
-    selected = console.select_for_question(family="continentie", asked_class="richtlijn")
+    assert console.select_for_question(family='continentie', asked_class='richtlijn') == []
+    # Isolate the existing family/class projection; pending review remains filtered above.
+    select = lambda **query: OperationsConsole.select_for_question(console, **query)
+    selected = select(family="continentie", asked_class="richtlijn")
     assert selected
     assert all(item["class"] == "richtlijn" for item in selected)
     assert all(item["class"] != "podcast" for item in selected)
-    labelled = console.select_for_question(family="continentie", asked_class="podcast")
+    labelled = select(family="continentie", asked_class="podcast")
     assert labelled
     assert all(item["class"] == "podcast" for item in labelled)
     assert CLASS_ORDER["richtlijn"] > CLASS_ORDER["podcast"]
@@ -700,12 +676,12 @@ def test_product_api_still_object_level_retrieve_and_unpublished_abstain(tmp_pat
     assert "llm" not in json.dumps(supported).lower()
 
 
-def test_console_is_not_nurse_care_chat_or_public_website(tmp_path: Path) -> None:
+def test_console_is_not_nurse_care_chat_or_public_website(tmp_path: Path, *, production_app, production_console) -> None:
     from src.operations_console_app import create_console_app
 
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    app = create_console_app(console)
+    app = production_app(console)
     client = TestClient(app)
     page = client.get("/").text.lower()
     for forbidden in (
@@ -736,8 +712,8 @@ def test_console_is_not_nurse_care_chat_or_public_website(tmp_path: Path) -> Non
     assert health["product_api"] is False
 
 
-def test_continentie_researcher_path_is_the_console_mailbox(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_continentie_researcher_path_is_the_console_mailbox(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts, family="continentie")
     path = console.researcher_path()
@@ -748,7 +724,7 @@ def test_continentie_researcher_path_is_the_console_mailbox(tmp_path: Path) -> N
     assert receipt["family"] == "continentie"
     from src.operations_console_app import create_console_app
 
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
     ingest_page = client.get("/ingest").text.lower()
     assert "onderwerp" in ingest_page
@@ -758,12 +734,12 @@ def test_continentie_researcher_path_is_the_console_mailbox(tmp_path: Path) -> N
     assert "over deze console" not in ingest_page
 
 
-def _html_client(tmp_path: Path) -> tuple[TestClient, OperationsConsole, dict]:
+def _html_client(tmp_path: Path, *, production_app, production_console) -> tuple[TestClient, OperationsConsole, dict]:
     from src.operations_console_app import create_console_app
 
-    console = _console(tmp_path)
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
     client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
     return client, console, accounts
 
@@ -784,10 +760,10 @@ def _visible_named_inputs(html: str, name: str) -> list[str]:
     return found
 
 
-def test_login_asks_for_gebruikersnaam_and_password_type(tmp_path: Path) -> None:
+def test_login_asks_for_gebruikersnaam_and_password_type(tmp_path: Path, *, production_app, production_console) -> None:
     from src.operations_console_app import create_console_app
 
-    client = TestClient(create_console_app(_console(tmp_path)))
+    client = TestClient(production_app(_console(tmp_path, production_console=production_console)))
     html = client.get("/login").text
     lower = html.lower()
     assert "gebruikersnaam" in lower
@@ -799,8 +775,8 @@ def test_login_asks_for_gebruikersnaam_and_password_type(tmp_path: Path) -> None
     assert "envelope" not in lower
 
 
-def test_researcher_html_has_no_envelope_and_no_visible_snapshot_id(tmp_path: Path) -> None:
-    client, console, accounts = _html_client(tmp_path)
+def test_researcher_html_has_no_envelope_and_no_visible_snapshot_id(tmp_path: Path, *, production_app, production_console) -> None:
+    client, console, accounts = _html_client(tmp_path, production_app=production_app, production_console=production_console)
     _ingest_html(console, accounts)
     for path in ("/ingest", "/tree", "/review", "/publish"):
         html = client.get(path).text
@@ -808,8 +784,8 @@ def test_researcher_html_has_no_envelope_and_no_visible_snapshot_id(tmp_path: Pa
         assert _visible_named_inputs(html, "snapshot_id") == []
 
 
-def test_ingest_primary_action_is_inleveren_not_envelope(tmp_path: Path) -> None:
-    client, _, _ = _html_client(tmp_path)
+def test_ingest_primary_action_is_inleveren_not_envelope(tmp_path: Path, *, production_app, production_console) -> None:
+    client, _, _ = _html_client(tmp_path, production_app=production_app, production_console=production_console)
     html = client.get("/ingest").text
     assert "envelope" not in html.lower()
     assert re.search(r"<button\b[^>]*>\s*inleveren\s*</button>", html, flags=re.I)
@@ -817,8 +793,8 @@ def test_ingest_primary_action_is_inleveren_not_envelope(tmp_path: Path) -> None
     assert "<h1>document inleveren</h1>" in html.lower()
 
 
-def test_family_tree_exposes_move_and_promote_on_listed_document(tmp_path: Path) -> None:
-    client, console, accounts = _html_client(tmp_path)
+def test_family_tree_exposes_move_and_promote_on_listed_document(tmp_path: Path, *, production_app, production_console) -> None:
+    client, console, accounts = _html_client(tmp_path, production_app=production_app, production_console=production_console)
     receipt = _ingest_html(console, accounts, title="Continentie fixture", version="1.0")
     html = client.get("/tree").text
     lower = html.lower()
@@ -837,12 +813,12 @@ def test_family_tree_exposes_move_and_promote_on_listed_document(tmp_path: Path)
     assert "verplaatsen" in moved.text.lower()
 
 
-def test_brand_css_uses_venvn_tokens_and_one_secondary_family(tmp_path: Path) -> None:
+def test_brand_css_uses_venvn_tokens_and_one_secondary_family(tmp_path: Path, *, production_app, production_console) -> None:
     from src.operations_console_app import create_console_app
 
     css = (ROOT / "assets/brand/console.css").read_text(encoding="utf-8")
     html_login_template = (ROOT / "src/operations_console_app.py").read_text(encoding="utf-8")
-    served = TestClient(create_console_app(_console(tmp_path))).get("/brand/console.css")
+    served = TestClient(production_app(_console(tmp_path, production_console=production_console))).get("/brand/console.css")
     assert served.status_code == 200
     assert "#E23100" in served.text
     assert "#E23100" in css
@@ -863,7 +839,7 @@ def test_brand_css_uses_venvn_tokens_and_one_secondary_family(tmp_path: Path) ->
     assert "fail closed" in fonts_readme.lower() or "fails closed" in fonts_readme.lower()
 
 
-def test_header_uses_official_beeldmerk_image_not_constructed_mark(tmp_path: Path) -> None:
+def test_header_uses_official_beeldmerk_image_not_constructed_mark(tmp_path: Path, *, production_app, production_console) -> None:
     from src.operations_console_app import create_console_app
 
     mark = ROOT / "assets/brand/venvn-beeldmerk.png"
@@ -877,7 +853,7 @@ def test_header_uses_official_beeldmerk_image_not_constructed_mark(tmp_path: Pat
     assert "/brand/venvn-beeldmerk.png" in source
     assert ".beeldmerk .v-first" not in css
     assert ".beeldmerk .amp" not in css
-    client = TestClient(create_console_app(_console(tmp_path)))
+    client = TestClient(production_app(_console(tmp_path, production_console=production_console)))
     login = client.get("/login").text
     assert 'src="/brand/venvn-beeldmerk.png"' in login
     assert 'class="v-first"' not in login
@@ -890,7 +866,7 @@ def test_header_uses_official_beeldmerk_image_not_constructed_mark(tmp_path: Pat
         assert pirate not in css
 
 
-def test_metis_brand_assets_are_used_for_login_and_authenticated_navigation(tmp_path: Path) -> None:
+def test_metis_brand_assets_are_used_for_login_and_authenticated_navigation(tmp_path: Path, *, production_app, production_console) -> None:
     from src.operations_console_app import create_console_app
 
     wordmark = ROOT / "assets/brand/metis-wordmark.jpg"
@@ -900,7 +876,7 @@ def test_metis_brand_assets_are_used_for_login_and_authenticated_navigation(tmp_
     assert wordmark.read_bytes()[:3] == b"\xff\xd8\xff"
     assert mark.read_bytes()[:3] == b"\xff\xd8\xff"
 
-    client, _, _ = _html_client(tmp_path)
+    client, _, _ = _html_client(tmp_path, production_app=production_app, production_console=production_console)
     login = client.get("/login").text
     assert 'src="/brand/metis-wordmark.jpg"' in login
     assert "Een dienst van" in login
@@ -919,8 +895,8 @@ def test_metis_brand_assets_are_used_for_login_and_authenticated_navigation(tmp_
     assert served_mark.headers["content-type"] == "image/jpeg"
 
 
-def test_via_negativa_is_not_the_heading_of_researcher_rooms(tmp_path: Path) -> None:
-    client, console, accounts = _html_client(tmp_path)
+def test_via_negativa_is_not_the_heading_of_researcher_rooms(tmp_path: Path, *, production_app, production_console) -> None:
+    client, console, accounts = _html_client(tmp_path, production_app=production_app, production_console=production_console)
     _ingest_html(console, accounts)
     forbidden = (
         "niet de product api",
@@ -939,8 +915,8 @@ def test_via_negativa_is_not_the_heading_of_researcher_rooms(tmp_path: Path) -> 
     assert ingest_h1 == "document inleveren"
 
 
-def test_html_ingest_submits_document_and_publish_stays_blocked(tmp_path: Path) -> None:
-    client, console, accounts = _html_client(tmp_path)
+def test_html_ingest_submits_document_and_publish_stays_blocked(tmp_path: Path, *, production_app, production_console) -> None:
+    client, console, accounts = _html_client(tmp_path, production_app=production_app, production_console=production_console)
     response = client.post(
         "/ingest",
         data={
@@ -963,13 +939,15 @@ def test_html_ingest_submits_document_and_publish_stays_blocked(tmp_path: Path) 
     envelopes = console.list_envelopes()
     assert len(envelopes) == 1
     assert envelopes[0]["title"] == "Continentie via console"
-    publish = client.get("/publish").text.lower()
+    assert client.get('/publish').status_code == 403
+    client.post('/login', data={'username':'publisher.carla', 'password':'carla-secret'})
+    publish = client.get('/publish', params={'document': envelopes[0]['snapshot_id']}).text.lower()
     assert "publiceren" in publish
     assert "geblokkeerd" in publish or "blocked" in publish
 
 
-def test_document_keyed_move_wrapper_does_not_rehash(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_document_keyed_move_wrapper_does_not_rehash(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts, family="continentie")
     moved = console.move_family_document(

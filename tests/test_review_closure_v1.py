@@ -28,13 +28,11 @@ from tests.complete_workflow_support import complete_postgres as workflow_postgr
 
 @pytest.mark.parametrize("console_type", [DeterministicRepairReviewConsole, ReviewClosureConsole])
 @pytest.mark.parametrize("repair_kind", [REPAIR_SOURCE_UNITS, REPAIR_MERGE_OBJECTS])
-def test_repair_finalization_preserves_hash_policy_restart_and_stale_replay(
-    tmp_path, console_type, repair_kind,
-):
+def test_repair_finalization_preserves_hash_policy_restart_and_stale_replay(tmp_path, console_type, repair_kind, *, production_app, production_console):
     from src.integrity_kernel import stable_hash, schema_errors, compute_canonical_object_hash
     from tests.test_deterministic_review_repair_v1 import _system as repair_system
 
-    console, _, _, reviewer, sid, objects = repair_system(tmp_path, console_type)
+    console, _, _, reviewer, sid, objects = repair_system(tmp_path, production_console=production_console, production_app=production_app)
     obj = objects[0]
     command = dict(
         actor_id=reviewer["account_id"], snapshot_id=sid, object_id=obj["object_id"],
@@ -49,44 +47,34 @@ def test_repair_finalization_preserves_hash_policy_restart_and_stale_replay(
     else:
         command.update(suitability="samenvoegen", merge_object_ids=[objects[1]["object_id"]])
 
-    repaired = console.submit_review_resolution(**command)
+    resolve = (console.submit_review_resolution if console_type is ReviewClosureConsole
+               else lambda **payload: DeterministicRepairReviewConsole.submit_review_resolution(console, **payload))
+    repaired = resolve(**command)
     events = read_events(console._ledger_path)
     revision_event = next(event for event in reversed(events)
                           if event.get("event_type") == "revision_created"
                           and event.get("object_id") == obj["object_id"])
-    if console_type is ReviewClosureConsole:
-        expected_hash = revision_event["details"]["revision_patch_hash"]
-    elif repair_kind == REPAIR_SOURCE_UNITS:
-        expected_hash = stable_hash({
-            "repair_kind": REPAIR_SOURCE_UNITS,
-            "source_unit_ids": command["source_unit_ids"],
-            "source_fragment_ids": list(dict.fromkeys(unit["fragment_id"] for unit in units)),
-            "text": repaired["content"]["clean_text"],
-        })
-    else:
-        expected_hash = stable_hash({
-            "repair_kind": REPAIR_MERGE_OBJECTS,
-            "merge_object_ids": command["merge_object_ids"],
-            "merged_text": repaired["content"]["clean_text"],
-        })
+    # Every runtime case now has the production closure contract, including
+    # direct calls at the deterministic command boundary.
+    expected_hash = revision_event["details"]["revision_patch_hash"]
     assert repaired["provenance"]["revision_patch_hash"] == expected_hash
     assert repaired["provenance"]["canonical_object_hash"] == compute_canonical_object_hash(repaired)
     assert schema_errors(repaired, console.schema_path) == []
     assert repaired["governance"]["validation_status"] == "needs_review"
     before = console.snapshot_objects(sid)
     with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
-        console.submit_review_resolution(**command)
+        resolve(**command)
     assert console.snapshot_objects(sid) == before
     assert read_events(console._ledger_path) == events
-    restarted = console_type(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted._current_object(sid, obj["object_id"]) == repaired
 
 
 @pytest.mark.parametrize("console_type", [DeterministicRepairReviewConsole, ReviewClosureConsole])
-def test_failure_after_prepared_correction_commit_rolls_back_whole_repair(tmp_path, monkeypatch, console_type):
+def test_failure_after_prepared_correction_commit_rolls_back_whole_repair(tmp_path, monkeypatch, console_type, *, production_app, production_console):
     from tests.test_deterministic_review_repair_v1 import _system as repair_system
 
-    console, _, _, reviewer, sid, objects = repair_system(tmp_path, console_type)
+    console, _, _, reviewer, sid, objects = repair_system(tmp_path, production_console=production_console, production_app=production_app)
     obj = objects[0]
     units = console.source_units(snapshot_id=sid, object_id=obj["object_id"])
     fragment_ids = {ref["raw_object_id"] for ref in obj["provenance"]["source_fragments"]}
@@ -111,12 +99,12 @@ def test_failure_after_prepared_correction_commit_rolls_back_whole_repair(tmp_pa
     assert console.snapshot_objects(sid) == before
     assert console.objects_revision(sid) == revision
     assert read_events(console._ledger_path) == events
-    restarted = console_type(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted.snapshot_objects(sid) == before
 
 
-def _system(tmp_path, console=None):
-    console = console or ReviewClosureConsole(
+def _system(tmp_path, console=None, *, production_app, production_console):
+    console = console or production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",
@@ -154,17 +142,14 @@ def _system(tmp_path, console=None):
         and row.get("proposed_object_type") != "heading"
     ]
     assert objects
-    app = create_console_app(console)
-    install_deterministic_review_repair_routes(app, console)
-    install_closed_review_routes(app, console)
-    install_review_recovery_page(app, console)
+    app = production_app(console)
     client = TestClient(app)
     client.post("/login", data={"username": "bert", "password": "bert-secret"})
     return console, client, researcher, reviewer, sid, objects
 
 
-def test_legacy_free_text_repair_is_not_writable(tmp_path):
-    console, client, _researcher, _reviewer, sid, objects = _system(tmp_path)
+def test_legacy_free_text_repair_is_not_writable(tmp_path, *, production_app, production_console):
+    console, client, _researcher, _reviewer, sid, objects = _system(tmp_path, production_app=production_app, production_console=production_console)
     obj = objects[0]
 
     response = client.post(
@@ -182,8 +167,8 @@ def test_legacy_free_text_repair_is_not_writable(tmp_path):
     assert not hasattr(console, "repair_source")
 
 
-def test_existing_recommendation_strength_does_not_force_classification_repair(tmp_path):
-    console, _client, _researcher, _reviewer, sid, objects = _system(tmp_path)
+def test_existing_recommendation_strength_does_not_force_classification_repair(tmp_path, *, production_app, production_console):
+    console, _client, _researcher, _reviewer, sid, objects = _system(tmp_path, production_app=production_app, production_console=production_console)
     obj = objects[0]
     current = dict(obj)
     current["confirmed_recommendation_strength"] = "sterk"
@@ -205,8 +190,8 @@ def test_existing_recommendation_strength_does_not_force_classification_repair(t
     assert kind == REPAIR_SOURCE_UNITS
 
 
-def test_source_repair_keeps_revision_patch_hash_and_records_exact_selection(tmp_path):
-    console, _client, _researcher, reviewer, sid, objects = _system(tmp_path)
+def test_source_repair_keeps_revision_patch_hash_and_records_exact_selection(tmp_path, *, production_app, production_console):
+    console, _client, _researcher, reviewer, sid, objects = _system(tmp_path, production_app=production_app, production_console=production_console)
     obj = objects[0]
     units = console.source_units(snapshot_id=sid, object_id=obj["object_id"])
     own_fragment_ids = {
@@ -254,8 +239,8 @@ def test_source_repair_keeps_revision_patch_hash_and_records_exact_selection(tmp
     ]
 
 
-def test_startup_migration_reopens_legacy_revise_without_editing_content(tmp_path):
-    console, _client, _researcher, reviewer, sid, objects = _system(tmp_path)
+def test_startup_migration_reopens_legacy_revise_without_editing_content(tmp_path, *, production_app, production_console):
+    console, _client, _researcher, reviewer, sid, objects = _system(tmp_path, production_app=production_app, production_console=production_console)
     obj = objects[0]
     before_text = str((obj.get("content") or {}).get("clean_text") or "")
 
@@ -282,7 +267,7 @@ def test_startup_migration_reopens_legacy_revise_without_editing_content(tmp_pat
 
 
 @pytest.mark.parametrize("backend", ["local", "postgres"])
-def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_path, backend, request):
+def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_path, backend, request, *, production_app, production_console):
     from html.parser import HTMLParser
     from tests.test_deterministic_review_repair_v1 import _review_payload
 
@@ -299,7 +284,7 @@ def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_p
     from tests.test_review_batch_atomic_postgres import _console
     config = request.getfixturevalue("workflow_postgres") if backend == "postgres" else None
     runtime = _console(tmp_path, config) if config else None
-    console, client, _researcher, _reviewer, sid, objects = _system(tmp_path, runtime)
+    console, client, _researcher, _reviewer, sid, objects = _system(tmp_path, runtime, production_app=production_app, production_console=production_console)
     obj = objects[0]
     rows = console._load_objects(sid)
     target = next(row for row in rows if row["object_id"] == obj["object_id"])
@@ -339,18 +324,18 @@ def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_p
     repaired = console._current_object(sid, obj["object_id"])
     assert repaired["object_version"] != obj["object_version"]
     assert repaired["governance"]["validation_status"] == "needs_review"
-    restarted = _console(tmp_path, config) if config else ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    restarted = _console(tmp_path, config) if config else production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted._current_object(sid, obj["object_id"]) == repaired
 
 
 @pytest.mark.parametrize("gate", [None, "allowed", "blocked"])
-def test_approval_ui_uses_existing_admission_policy(tmp_path, gate):
+def test_approval_ui_uses_existing_admission_policy(tmp_path, gate, *, production_app, production_console):
     import re
 
     from tests.semantic_fixture_support import bind_fixture_selections
-    console = ReviewClosureConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     bind_fixture_selections(console, [("De verpleegkundige bespreekt passende ondersteuning met de client.", "definition")])
-    console, client, _researcher, _reviewer, sid, objects = _system(tmp_path, console)
+    console, client, _researcher, _reviewer, sid, objects = _system(tmp_path, console, production_app=production_app, production_console=production_console)
     obj = next(row for row in objects if row.get("proposed_object_type") == "definition")
     rows = console._load_objects(sid)
     target = next(row for row in rows if row["object_id"] == obj["object_id"])
@@ -365,3 +350,12 @@ def test_approval_ui_uses_existing_admission_policy(tmp_path, gate):
     approval = re.search(r'<input[^>]*name="eindoordeel"[^>]*value="goedkeuren"[^>]*>', page.text)
     assert approval
     assert ("disabled" in approval.group()) == (gate != "allowed")
+
+
+@pytest.mark.pure_function
+def test_compatibility_repair_hash_and_production_closure_patch_contract():
+    from src.integrity_kernel import stable_hash
+    spec = {'repair_kind': REPAIR_SOURCE_UNITS, 'source_unit_ids': ['unit-a'],
+            'source_fragment_ids': ['fragment-a'], 'text': 'Exacte brontekst.'}
+    assert DeterministicRepairReviewConsole._source_repair_provenance_patch(None, spec) == {'revision_patch_hash': stable_hash(spec)}
+    assert ReviewClosureConsole._source_repair_provenance_patch(None, spec) == {}

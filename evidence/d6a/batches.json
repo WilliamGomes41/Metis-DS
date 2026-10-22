@@ -157,7 +157,7 @@
       }
     ],
     "ci_status": "not run: push approval pending",
-    "full_suite_status": "Initial full run found four helper-call errors; fixed, pinned full rerun queued",
+    "full_suite_status": "local green: 5647 passed, 27 non-PG skips, 6 xfailed; zero PG skips; 1169.733 seconds",
     "historical_commit": "57c6bb4",
     "followup": "Four imported deletion-proof callers were found in the full run and fixed on this batch branch; later local branches were rebased to include the repair.",
     "followup_junit": {
@@ -165,7 +165,8 @@
       "sha256": "d54aad108483adf68225948e4377d49d5914015edc637cfb4d77288a237cdf10",
       "tests": 30,
       "failures": 0
-    }
+    },
+    "full_suite_evidence": "local-batch05-full.json"
   },
   {
     "batch": "06",
@@ -214,9 +215,10 @@
         "sha256": "a2fa60f44a94c3a75e0950def7e6f13891c053c3f50998f2f6ad43631c971612"
       }
     ],
-    "full_suite_status": "pending",
+    "full_suite_status": "local green: 5649 passed, 27 non-PG skips, 6 xfailed; zero PG skips; 1268.878 seconds",
     "ci_status": "not run: push approval pending",
-    "historical_commit": "80d68c3"
+    "historical_commit": "80d68c3",
+    "full_suite_evidence": "local-batch06-full.json"
   },
   {
     "batch": "07",
@@ -668,6 +670,47 @@
       {
         "file": "d6a17-final.xml",
         "sha256": "520a316cb0f00577e44aa893cecc59f1d8ffdcaa326fe30bc7265e0674efaf28"
+      }
+    ],
+    "full_suite_status": "pending",
+    "ci_status": "not run: push approval pending"
+  },
+  {
+    "batch": "18",
+    "base": "a7516ef",
+    "commit": "codex/d6a-18-review-surfaces",
+    "test_files": [
+      "tests/test_ingest_beschikbaarheid.py",
+      "tests/test_promote_class_process_consistency.py",
+      "tests/test_v230_phase1_admission_gate.py",
+      "tests/test_v230_phase2_deep_context_scan.py",
+      "tests/test_v230_phase3_review_cockpit.py",
+      "tests/test_v230_phase4_passage_register_coverage_gold.py",
+      "tests/test_v233_review_audit_regressions.py",
+      "tests/test_operations_console_mvp.py",
+      "tests/test_review_closure_v1.py",
+      "tests/test_deterministic_review_repair_v1.py"
+    ],
+    "executed_unique_cases": 168,
+    "existing_cases": 167,
+    "added_cases": 1,
+    "failures": 0,
+    "skipped": 0,
+    "renamed_cases": {
+      "test_later_beoordelen_saves_without_approving": "test_later_beoordelen_preserves_pending_state_without_writes",
+      "test_review_save_maps_suitability_onto_register": "test_register_projection_maps_suitability_without_deferred_review_writes",
+      "test_concurrent_writer_between_members_is_not_adopted_as_batch_revision": "test_concurrent_writer_between_members_waits_for_atomic_pg_batch",
+      "test_http_partial_batch_conflict_reports_committed_work_truthfully": "test_http_atomic_batch_and_serialized_writer_report_current_work_truthfully"
+    },
+    "verification": "All original cases retained and one pure compatibility-hash contract added. Production navigation/assigned reviewer/deferred-review semantics and PG atomic batches; full raw SQL/restart proofs retained. Five retiring atomic JSON writer cases explicitly file_topology. Separate Class A prerequisite a7516ef repairs command-local PG evidence visibility, outside this test-only portion.",
+    "junit": [
+      {
+        "file": "d6a18-final.xml",
+        "sha256": "4efe3db03f1e4aec6408a8fb6a3d4f4f8986b04ae8ccd00852e1f84ad6a60128"
+      },
+      {
+        "file": "d6a18-restored.xml",
+        "sha256": "6c27c4bca26c5dfdfecea0f231c471c7a616ca439c0536837d9be981ad1f3f98"
       }
     ],
     "full_suite_status": "pending",
