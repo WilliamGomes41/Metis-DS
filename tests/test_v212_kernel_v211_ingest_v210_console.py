@@ -11,6 +11,7 @@ Protocol v2.10 (live, console follow-up): Documentenhiërarchie, waiting-task
 badges, Accounts room with closed roles.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
 from pathlib import Path
@@ -49,7 +50,7 @@ FORBIDDEN_IDENTITIES = (
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -79,7 +80,6 @@ def _accounts(console: OperationsConsole) -> dict[str, dict]:
 
 
 def _ingest_html(console: OperationsConsole, accounts: dict, **kwargs) -> dict:
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
     defaults = dict(
         actor_id=accounts["researcher"]["account_id"],

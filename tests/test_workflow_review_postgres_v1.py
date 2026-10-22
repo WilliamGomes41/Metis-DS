@@ -7,6 +7,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
 from contextlib import contextmanager
@@ -279,9 +280,8 @@ def test_review_runtime_buffers_events_without_disk_mirrors() -> None:
 
 
 def test_postgres_review_startup_leaves_corrupt_binding_mirror_unused(tmp_path: Path, production_console) -> None:
-    from tests.semantic_fixture_support import bind_fixture_selections
     runtime = tmp_path/'review-runtime'
-    console = production_console(root=tmp_path, runtime=runtime, processing_binder=lambda console:None)
+    console = production_console(root=tmp_path, runtime=runtime, processing_binder=bind_fixture_selections)
     author = console.create_account(username='author', password='fixture-password', roles=['researcher'])
     reviewer = console.create_account(username='reviewer', password='fixture-password', roles=['reviewer'])
     text = 'Een observatie is een systematische waarneming.'
@@ -297,7 +297,7 @@ def test_postgres_review_startup_leaves_corrupt_binding_mirror_unused(tmp_path: 
     events = read_events(console._ledger_path)
     assert bindings and events
     (runtime/'publish_authorizations.json').write_text('{"broken":',encoding='utf-8')
-    fresh = production_console(root=tmp_path,runtime=runtime,processing_binder=lambda console:None)
+    fresh = production_console(root=tmp_path,runtime=runtime,processing_binder=bind_fixture_selections)
     assert fresh.object_review_bindings(sid)==bindings
     assert read_events(fresh._ledger_path)==events
     assert (runtime/'publish_authorizations.json').read_text()=='{"broken":'

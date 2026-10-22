@@ -10,20 +10,32 @@ from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 from src.recommendation_semantics_v1 import source_literal_strength, source_label_direction
 
 
-def bind_fixture_selections(console, selections=None):
-    """Select literal paragraphs; optionally restrict to (literal, type) pairs."""
+def bind_fixture_selections(console, selections=None, relations=None):
+    """Select literal paragraphs; optionally restrict to (literal, type) pairs.
+
+    With ``relations`` [(source literal, relation type, target literal)] the
+    fake model also proposes those source-bound relations and may select
+    several literals within one block.
+    """
     def provider(_url, _headers, payload, _timeout):
         data = json.loads(payload["input"][1]["content"])
         if payload["text"]["format"]["name"] == "decision_tree_proposal":
             return _decision_tree_response(data)
         objects = []
+        chosen = []
         for block in data["source_blocks"]:
             text = block["text"]
-            selected = (next(((literal, type_) for literal, type_ in selections if literal in text), None)
-                        if selections is not None else (text, propose_object_type(text, is_heading=False) or "unclassified"))
-            if selected is None:
-                continue
-            literal, type_ = selected
+            if selections is None:
+                chosen.append((block, text, propose_object_type(text, is_heading=False) or "unclassified"))
+            elif relations is None:
+                first = next(((literal, type_) for literal, type_ in selections if literal in text), None)
+                if first is not None:
+                    chosen.append((block, *first))
+            else:
+                chosen.extend(sorted(((block, literal, type_) for literal, type_ in selections if literal in text),
+                                     key=lambda row: text.index(row[1])))
+        for block, literal, type_ in chosen:
+            text = block["text"]
             def ref(value, owner=block):
                 return {"block_id": owner["block_id"], "literal": value, "occurrence": None}
             semantics = None
@@ -39,18 +51,50 @@ def bind_fixture_selections(console, selections=None):
                 semantics["direction"] = semantics["direction"] or "for"
             objects.append({"spans": [ref(literal)], "proposed_object_type": type_,
                             "recommendation_semantics": semantics})
-        proposal = {"objects": objects, "relations": [], "abstain_reason": None if objects else "uncertain"}
+        proposal = {"objects": objects, "relations": [_relation(data, *row) for row in relations or []],
+                    "abstain_reason": None if objects else "uncertain"}
         return {"status": "completed", "output": [{"type": "message", "content": [
             {"type": "output_text", "text": json.dumps(proposal)}]}]}
+    # Fixture consoles may be re-bound with narrower selections after creation.
+    console._pre_review_semantic_bound = False
     bind_pre_review_semantic_processing(console, environ={
         "METIS_PASSAGE_FORMATION_MODE": "semantic-source-bound-v1",
         "METIS_LLM_API_KEY": "fixture", "METIS_LLM_MODEL": "fixture",
     }, post_json=provider)
+    console._metis_fixture_binding = True
+
+
+def rebinding(bind):
+    """Test harness: an explicit later binding replaces the fixture model, never itself."""
+    def rebind(console, *args, **kwargs):
+        if getattr(console, "_metis_fixture_binding", False):
+            console._pre_review_semantic_bound = False
+            console._metis_fixture_binding = False
+        return bind(console, *args, **kwargs)
+    rebind.__wrapped__ = bind
+    return rebind
+
+
+def _relation(data, source, relation_type, target):
+    def span(literal):
+        block = next(b for b in data["source_blocks"] if literal in b["text"])
+        start = block["text"].index(literal)
+        return {"block_id": block["block_id"], "start": start, "end": start + len(literal)}
+    return {"source_spans": [span(source)], "relation_type": relation_type,
+            "target_spans": [span(target)], "evidence_spans": [span(target)]}
 
 
 def _decision_tree_response(data):
-    """One unit per source block, open roles, no connections: the reviewer builds the graph."""
+    """One unit per source block, open roles, no connections: the reviewer builds the graph.
+
+    A structured export is answered as a faithful model would: its items and
+    explicit branches and bundles, read only from the request payload.
+    """
     from src.decision_tree_proposal_v1 import CONTRACT
+    if any((item.get("record") or {}).get("export_id") for item in data["evidence_items"].values()):
+        proposal = export_tree_proposal(data)
+        return {"status": "completed", "output": [{"type": "message", "content": [
+            {"type": "output_text", "text": json.dumps(proposal)}]}]}
     units = [{"ref": f"u{i + 1}", "role": "action", "selection": None, "entry": False,
               "quoted_text": block["text"], "spans": [{"block_id": block["block_id"], "start": 0,
                                                        "end": len(block["text"])}]}
@@ -60,6 +104,49 @@ def _decision_tree_response(data):
                                                       "code": "role_ambiguous"} for i, u in enumerate(units)]}
     return {"status": "completed", "output": [{"type": "message", "content": [
         {"type": "output_text", "text": json.dumps(proposal)}]}]}
+
+
+def export_tree_proposal(data, *, roles=None):
+    """Units, connections and bundles exactly as the export states them."""
+    from src.decision_tree_proposal_v1 import CONTRACT
+    items = data["evidence_items"]
+    block_of = {fid: block for block in data["source_blocks"] for fid in block["source_fragment_ids"]}
+    units, ref_of, containers = [], {}, {}
+    for key, item in items.items():
+        record = item.get("record") or {}
+        text = " ".join(str(item.get("text") or "").split())
+        if item["kind"] != "text" or not record.get("export_id") or not text:
+            continue
+        block = block_of[key]
+        start = block["text"].index(text)
+        ref = f"u{len(units) + 1}"
+        role = ("context" if record.get("bundle_role") == "member" else "outcome"
+                if record.get("export_kind") == "outcome" else "start"
+                if record.get("export_kind") == "path" else "action")
+        units.append({"ref": ref, "role": (roles or {}).get(record["export_id"], role),
+                      "selection": None, "entry": False, "quoted_text": text,
+                      "spans": [{"block_id": block["block_id"], "start": start, "end": start + len(text)}]})
+        ref_of[record["export_id"]] = ref
+        if record.get("bundle_role") == "container":
+            containers[record["bundle_id"]] = (ref, [])
+    for item in items.values():
+        record = item.get("record") or {}
+        if record.get("bundle_role") == "member" and record.get("export_id") in ref_of:
+            containers[record["bundle_id"]][1].append(ref_of[record["export_id"]])
+    connections = [{"ref": f"c{len(units) + index}", "from": ref_of[item["record"]["from"]],
+                    "to": ref_of[item["record"]["to"]],
+                    "kind": "answer" if item["record"].get("label") else "continue",
+                    "label_span": None, "evidence_ids": [key]}
+                   for index, (key, item) in enumerate(items.items())
+                   if item["kind"] == "export_edge" and item["record"]["from"] in ref_of
+                   and item["record"]["to"] in ref_of]
+    bundles = [{"ref": f"b{index + 1}", "container": container, "members": members}
+               for index, (container, members) in enumerate(containers.values())]
+    # The export states kinds and branches, not answer semantics: roles stay open.
+    unresolved = [{"ref": f"r{index + 1}", "subject": unit["ref"], "code": "role_ambiguous"}
+                  for index, unit in enumerate(u for u in units if u["role"] != "context")]
+    return {"contract": CONTRACT, "units": units, "connections": connections, "context_bindings": [],
+            "result_bundles": bundles, "unresolved": unresolved}
 
 
 def legacy_recommendation_fixture(console, snapshot_id):

@@ -5,7 +5,14 @@ it does not create KnowledgeObjects, review decisions, publication releases or
 serving records. The normal deployment-owned passage-formation mode is never
 changed by an experiment.
 
-## Current bounded comparison
+> **Retired by Protocol 4.3.0 (2026-10-22).** The deterministic formation route
+> no longer exists. New comparisons are refused (`comparison_route_retired`), a
+> pending deterministic arm can never be claimed, and the create/freeze routes are
+> removed. Recorded comparisons stay readable and can still be assessed,
+> analysed, closed or cancelled under their original version. The text below
+> describes how recorded comparisons were made.
+
+## Recorded bounded comparison
 
 The owner creates a draft for an HTML/PDF source they own or review, selects up
 to 30 extracted fragments (at most 20,000 characters of visible source text),

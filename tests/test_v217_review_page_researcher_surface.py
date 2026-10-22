@@ -7,6 +7,7 @@ Continentie re-extract. Tests hit the real functions.
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import re
 from html.parser import HTMLParser
@@ -65,7 +66,7 @@ DOELGROEP_TAG_SOUP = (
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -532,16 +533,14 @@ def test_relation_checkbox_label_is_adjacent_not_stretched(tmp_path: Path, *, pr
     freeze = _chrome_freeze()
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
+    scope = "Deze richtlijn gaat over continentiezorg in de wijkverpleging."
+    goal = "Het doel is eenduidige afspraken in de wijkzorg."
+    # Relations are model proposals; the fake model proposes one explicitly.
+    bind_fixture_selections(console, [(scope, "explanation"), (goal, "explanation")],
+                            relations=[(scope, "explains", goal)])
     receipt = _ingest(console, accounts, data=freeze, filename="chrome.html", title="Chrome")
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    child = next(
-        obj
-        for obj in objects
-        if any(
-            rel.get("relation_type") == "child"
-            for rel in (obj.get("relations") or [])
-        )
-    )
+    child = next(obj for obj in objects if obj.get("relations"))
     html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={child['object_id']}"
     ).text

@@ -9,6 +9,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 from copy import deepcopy
 from pathlib import Path
@@ -52,7 +53,7 @@ MERGED = f"{FIRST} {CONTINUATION}"
 
 
 def _console(tmp_path: Path, *, production_console) -> tuple[OperationsConsole, dict, dict]:
-    console = production_console(processing_binder=lambda console: None,
+    console = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -69,7 +70,6 @@ def _console(tmp_path: Path, *, production_console) -> tuple[OperationsConsole, 
         roles=("reviewer",),
         display_name="Bert Reviewer",
     )
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console, [(MERGED, "recommendation"),
         ("Eenzaamheid is een gevoel van gemis.", "definition")])
     return console, researcher, reviewer
@@ -374,7 +374,7 @@ def test_source_bound_repair_reopens_only_changed_candidate_and_survives_restart
     assert (console._envelope(snapshot_id).get("review_passes") or {}) == envelope_review_passes
     assert console._envelope(snapshot_id).get("clinical_rereview_required") == envelope_rereview
 
-    restarted = production_console(processing_binder=lambda console: None,
+    restarted = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",

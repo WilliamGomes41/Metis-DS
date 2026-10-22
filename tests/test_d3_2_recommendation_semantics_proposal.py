@@ -9,6 +9,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import hashlib
 import json
@@ -723,7 +724,7 @@ def test_semantic_recommendation_without_new_semantics_is_hard_blocked_not_legac
 
 
 def test_runtime_current_schema_is_v14_while_legacy_schemas_remain_addressable(tmp_path: Path, *, production_console) -> None:
-    console = production_console(processing_binder=lambda console: None,
+    console = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",

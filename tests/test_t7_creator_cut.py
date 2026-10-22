@@ -15,7 +15,6 @@ from src.admission_gate_v1 import (
     is_inhoudelijk_candidate,
 )
 from src.candidate_eligibility_v1 import assess_candidate_eligibility
-from src.context_aware_split_v1 import split_context_aware_units
 from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
 from src.knowledge_path_v1 import content_reviewable
 from src.semantic_passage_v1 import (
@@ -49,6 +48,23 @@ def _fragment(fragment_id: str, text: str) -> dict:
             "locator_type": "web_line_range",
             "locator_value": "lines:1-1",
         },
+    }
+
+
+def _historical_deterministic_row(fragment: dict, *, document_id: str) -> dict:
+    """A row as the removed deterministic splitter persisted it (pre Protocol 4.3.0)."""
+    text = fragment["clean_text"]
+    return {
+        "object_id": f"{document_id}-{fragment['fragment_id']}",
+        "object_type": "unclassified",
+        "text": text,
+        "clean_text": text,
+        "source_fragment_ids": [fragment["fragment_id"]],
+        "section_path": list(fragment["section_path"]),
+        "heading": None,
+        "review_track": "clinical",
+        "relations": [],
+        "confirmed_relations": [],
     }
 
 
@@ -218,10 +234,7 @@ def test_abstain_coverage_is_not_a_knowledge_candidate() -> None:
 def test_deterministic_fragment_cannot_become_a_candidate_by_classification_or_admission() -> None:
     text = "Bespreek met de patiënt welke behandeling het beste past."
     fragments = [_fragment("p1", text)]
-    [spec_item] = [
-        row for row in split_context_aware_units(fragments, document_id="doc-t7")
-        if row.get("object_type") != "heading"
-    ]
+    spec_item = _historical_deterministic_row(fragments[0], document_id="doc-t7")
     spec_item["proposed_object_type"] = "definition"
     assert "-sem-" not in spec_item["object_id"]
     with pytest.raises(ValueError, match="materialiser_requires_selection_decision"):
@@ -265,10 +278,7 @@ def test_same_source_has_one_semantic_candidate_and_a_separate_deterministic_row
     [candidate] = materialise_knowledge_candidates(
         decisions, document_id="doc-t7", fragments=fragments
     )
-    [deterministic] = [
-        row for row in split_context_aware_units(fragments, document_id="doc-t7")
-        if row.get("clean_text") == text
-    ]
+    deterministic = _historical_deterministic_row(fragments[0], document_id="doc-t7")
 
     assert candidate["clean_text"] == deterministic["clean_text"] == text
     assert candidate["object_id"] != deterministic["object_id"]

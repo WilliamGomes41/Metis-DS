@@ -7,6 +7,7 @@ PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here. publish() stays
 G2-BLOCKED. Phase 3/4 + Dit klopt paths stay.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
 import os
@@ -24,7 +25,7 @@ SNAPSHOT_WRITE_CONFLICT = "snapshot_object_write_conflict"
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -168,7 +169,7 @@ def test_stale_revision_save_fails_closed_with_console_error(tmp_path: Path, *, 
     accounts = _accounts(first)
     receipt = _ingest(first, accounts)
     snapshot_id = receipt["snapshot_id"]
-    second = production_console(processing_binder=lambda console: None,
+    second = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",

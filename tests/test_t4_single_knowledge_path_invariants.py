@@ -6,6 +6,7 @@ that still admits non-heading prose without a semantic selection is not
 closed here.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
 from copy import deepcopy
@@ -424,7 +425,7 @@ def test_changed_spans_do_not_inherit_review_authority():
 
 
 def _console(tmp_path, *, production_console):
-    console = production_console(processing_binder=lambda console: None,
+    console = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",

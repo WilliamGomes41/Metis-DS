@@ -7,6 +7,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
 import uuid
@@ -42,7 +43,7 @@ pytestmark = [
 
 
 def test_canonical_release_seals_review_before_workflow_envelope_reconciliation(tmp_path: Path, production_console) -> None:
-    console = production_console(processing_binder=lambda console: None)
+    console = production_console(processing_binder=bind_fixture_selections)
     researcher = console.create_account(
         username="immutable-researcher",
         password="immutable-secret",
@@ -119,7 +120,7 @@ def test_canonical_release_seals_review_before_workflow_envelope_reconciliation(
     assert console.snapshot_objects(snapshot_id) == before_objects
 
     # Production startup reconciles metadata while retaining the canonical seal.
-    restarted = production_console(processing_binder=lambda console: None)
+    restarted = production_console(processing_binder=bind_fixture_selections)
     assert restarted._envelope(snapshot_id)["state"] == "published"
     assert restarted.snapshot_is_published(snapshot_id) is True
     assert restarted.migrate_legacy_revise_to_review() == 0

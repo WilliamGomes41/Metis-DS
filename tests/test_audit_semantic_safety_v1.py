@@ -79,6 +79,9 @@ def test_full_source_semantic_candidate_passes_frozen_machine_safety_checks() ->
     assert report["suite_baseline_commit"] == EVALUATED_COMMIT
     assert report["deployed_commit"] == "47e7652574ee37f91fbd58e5ffa16b2dfd44b378"
     assert "audit-secret" not in json.dumps(report, ensure_ascii=False)
+    # The deterministic baseline route no longer exists and is never executed.
+    assert all(set(row) == {"case_id", "risk_category", "source_hash", "source_locator", "candidate"}
+               for row in report["results"])
 
 
 def test_source_bound_candidate_still_fails_audit_when_condition_is_omitted() -> None:

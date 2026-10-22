@@ -6,7 +6,7 @@ Current work is read in this order:
 
 `PROTOCOL.md → ROADMAP.md → acceptatietests → code`
 
-The only current protocol is root `PROTOCOL.md` (v4.2.0). Technical documentation stays in `docs/`. New step, audit or repair writeups belong here, not at the repository root.
+The only current protocol is root `PROTOCOL.md` (v4.3.0). Technical documentation stays in `docs/`. New step, audit or repair writeups belong here, not at the repository root.
 
 | Protocol archive | Contents |
 |---|---|
@@ -14,6 +14,7 @@ The only current protocol is root `PROTOCOL.md` (v4.2.0). Technical documentatio
 | `protocol-v3/` | Frozen v3 protocol and roadmap |
 | `protocol-v4.0/` | Frozen v4.0 protocol and roadmap before v4.1 |
 | `protocol-v4.1/` | Frozen v4.1 protocol and roadmap before v4.2 |
+| `protocol-v4.2/` | Frozen v4.2 protocol and roadmap before v4.3 |
 
 The completeness assessment for the v4.1 consolidation is recorded in `PROTOCOL_V4_1_COMPLETENESS_2026-10-18.md`.
 

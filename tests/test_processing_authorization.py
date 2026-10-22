@@ -3,6 +3,7 @@
 # release-control-evidence: scope/belofte opslag concurrent stale interrupt retry version-compat
 # release-control-evidence: toegang beschikbaarheid kwaliteit slop releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -24,7 +25,7 @@ from tests.complete_workflow_support import complete_postgres as workflow_postgr
 @pytest.fixture(params=["postgres"])
 def console(tmp_path, *, production_console):
     # Both former labels called this exact production PostgreSQL factory.
-    return production_console(root=tmp_path, processing_binder=lambda console: None)
+    return production_console(root=tmp_path, processing_binder=bind_fixture_selections)
 
 
 def snapshot(console, sid):
@@ -295,7 +296,7 @@ def test_actual_resume_preserves_completed_work_and_denies_outsider(console, mon
 def test_native_revocation_is_ordered_with_short_admission(workflow_postgres, tmp_path, monkeypatch, boundary, *, production_console):
     import psycopg
     from time import monotonic, sleep
-    first = production_console(root=tmp_path, processing_binder=lambda console: None)
+    first = production_console(root=tmp_path, processing_binder=bind_fixture_selections)
     author, reviewer = accounts(first)
     bind(first, provider)
     sid = receive(first, author, reviewer, "native-order")

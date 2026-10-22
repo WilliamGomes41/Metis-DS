@@ -5,6 +5,7 @@ an authorized researcher/reviewer. Tests hit the real functions.
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
 import re
@@ -14,8 +15,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.atomic_split_v1 import fusion_is_forbidden, split_meaning_units
+from src.admission_gate_v1 import is_inhoudelijk_candidate
 from src.extract_html_v1 import extract as extract_html
+from src.knowledge_path_v1 import content_reviewable
 from src.four_eyes_v1 import requires_four_eyes
 from src.object_taxonomy_v1 import (
     is_advice_weight,
@@ -58,7 +60,7 @@ CONFIRM_COPY = "Ik bevestig dat ik dit unpublished document wil verwijderen"
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -744,15 +746,7 @@ def test_v216_through_v219_review_extract_still_holds(tmp_path: Path, *, product
         assert label not in texts
     assert "1.1 Inleiding" in texts
     assert "2. Inleiding" in texts
-    fused = split_meaning_units(f"{OVERWEEG} {EVENTUEEL}")
-    assert len(fused) == 1
-    assert EVENTUEEL in fused[0]
     assert is_continuation_fragment(EVENTUEEL) is True
-    fused_exception = (
-        "Verwijs de cliënt naar de huisarts. "
-        "Tenzij samen met de cliënt hiervan wordt afgezien."
-    )
-    assert fusion_is_forbidden(fused_exception) is True
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=freeze, filename="hold.html", title="Hold")
@@ -760,11 +754,11 @@ def test_v216_through_v219_review_extract_still_holds(tmp_path: Path, *, product
     stored = [_text_of(obj) for obj in objects]
     for label in CHROME_LABELS:
         assert all(label.casefold() != text.casefold() for text in stored)
-    assert all(not is_strength_stamp(_text_of(obj)) for obj in objects)
-    assert all(not is_list_number_only(_text_of(obj)) for obj in objects)
-    assert all(not is_tiny_confirmable_text(_text_of(obj)) for obj in objects)
-    assert EVENTUEEL not in stored
-    assert any(OVERWEEG in text and EVENTUEEL in text for text in stored)
+    reviewable = [obj for obj in objects if content_reviewable(obj)]
+    assert all(not is_strength_stamp(_text_of(obj)) for obj in objects if is_inhoudelijk_candidate(obj))
+    assert all(not is_list_number_only(_text_of(obj)) for obj in reviewable)
+    assert all(not is_tiny_confirmable_text(_text_of(obj)) for obj in reviewable)
+    assert any(OVERWEEG in text for text in stored)
     koppen, _inhoud = review_stacks(objects)
     duty = slow_review_duty(objects)
     leftover = remaining_unclassified(objects)

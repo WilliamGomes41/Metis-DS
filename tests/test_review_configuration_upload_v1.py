@@ -7,6 +7,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 from secrets import token_urlsafe
 
@@ -22,13 +23,12 @@ HTML = b"<html><body><h1>Bron</h1><p>Bespreek als verpleegkundige de sociale con
 
 @pytest.fixture
 def system(tmp_path, *, production_console):
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources" / "private", runtime=tmp_path / "runtime")
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources" / "private", runtime=tmp_path / "runtime")
     password = token_urlsafe(24)
     uploader = console.create_account("uploader", password, roles=("researcher", "reviewer"), display_name="Onderzoeker")
     first = console.create_account("eerste", token_urlsafe(24), roles=("reviewer",), display_name="Eerste")
     second = console.create_account("tweede", token_urlsafe(24), roles=("reviewer",), display_name="Tweede")
     reader = console.create_account("lezer", token_urlsafe(24), roles=("reviewer",), display_name="Lezer")
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
     ids = {"uploader": uploader["account_id"], "first": first["account_id"],
            "second": second["account_id"], "reader": reader["account_id"]}

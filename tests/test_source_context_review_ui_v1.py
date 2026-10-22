@@ -6,6 +6,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 from html.parser import HTMLParser
 
@@ -56,7 +57,7 @@ def _payload(form, role='label', reason='Dit label hoort bij de geselecteerde pa
 
 
 def test_passage_first_navigation_preserves_existing_targets_and_reopens_reviews(tmp_path, *, production_app, production_console):
-    state, _, reviewer, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
+    state, _, reviewer, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     sid = command['snapshot_id']
     client = _client(state, production_app=production_app)
     before = deepcopy(state.snapshot_objects(sid))
@@ -96,12 +97,12 @@ def test_passage_first_navigation_preserves_existing_targets_and_reopens_reviews
         assert row['governance']['validation_status'] == 'needs_review'
     assert not any(binding.get('valid') for binding in state.object_review_bindings(sid)
                    if binding['object_id'] == target['object_id'])
-    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / 'sources', runtime=tmp_path / 'runtime')
+    restarted = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / 'sources', runtime=tmp_path / 'runtime')
     assert restarted.snapshot_objects(sid) == rows
 
 
 def test_separate_exclude_and_reset_commands_have_no_hidden_targets(tmp_path, *, production_app, production_console):
-    state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
+    state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     state.confirm_source_context(**command)
     client = _client(state, production_app=production_app)
     sid = command['snapshot_id']
@@ -125,7 +126,7 @@ def test_separate_exclude_and_reset_commands_have_no_hidden_targets(tmp_path, *,
 
 
 def test_invalid_and_stale_submission_retains_draft_without_mutation(tmp_path, *, production_app, production_console):
-    state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
+    state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     client = _client(state, production_app=production_app)
     sid = command['snapshot_id']
     page = client.get('/review', params={'document': sid, 'object': source['object_id'], 'context_target': target['object_id']})
@@ -150,7 +151,7 @@ def test_invalid_and_stale_submission_retains_draft_without_mutation(tmp_path, *
 
 
 def test_context_ui_keeps_full_text_and_explicit_choices(tmp_path, *, production_console):
-    state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
+    state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     rows = deepcopy(state.snapshot_objects(command['snapshot_id']))
     source = next(row for row in rows if row['object_id'] == source['object_id'])
     target = next(row for row in rows if row['object_id'] == target['object_id'])
@@ -177,7 +178,7 @@ def test_context_ui_keeps_full_text_and_explicit_choices(tmp_path, *, production
 
 
 def test_context_navigation_cannot_bypass_authorization_or_redirect_externally(tmp_path, monkeypatch, *, production_app, production_console):
-    state, researcher, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
+    state, researcher, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     sid = command['snapshot_id']
     client = _client(state, production_app=production_app)
     before = deepcopy(state.snapshot_objects(sid))

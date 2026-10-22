@@ -47,7 +47,6 @@ from src.review_cockpit_v1 import (
     review_passage_record,
     review_passage_requested,
 )
-from src.atomic_split_v1 import proposed_relations_for_units
 from src.beslisboom_path_v1 import (
     CLOSED_BOOM_TYPES,
     CLOSED_KLASSEN,
@@ -62,7 +61,6 @@ from src.beslisboom_path_v1 import (
     review_path_for_klasse,
     stamp_boom_flags,
 )
-from src.context_aware_split_v1 import split_context_aware_units
 from src.source_preparation_context_v1 import build_formation_context
 from src.extract_html_v1 import extract as extract_html
 from src.extract_pdf_v2 import extract as extract_pdf
@@ -132,7 +130,7 @@ CAPTURED = "captured_not_published"
 PRE_REVIEW_BLOCKED = "blocked_pending_pre_review"
 PUBLISHED_ENVELOPE_STATES = frozenset({"published", "superseded", "withdrawn"})
 UNPUBLISHED_DELETE_EVENT = "unpublished_snapshot_deleted"
-PUBLICATION_PROTOCOL_VERSION = "4.2.0"
+PUBLICATION_PROTOCOL_VERSION = "4.3.0"
 ALLOWED_DELETE_NEXT = frozenset({"/ingest", "/review", "/tree"})
 ALLOWED_ROLES = frozenset({"researcher", "reviewer", "publisher"})
 ALLOWED_CLASSES = CLOSED_KLASSEN
@@ -635,38 +633,6 @@ def classify_official_file(data: bytes, filename: str, content_type: str | None)
     ):
         return "html"
     raise ConsoleError("unsupported_official_file")
-
-
-def _spec_from_fragments(
-    *,
-    document_id: str,
-    title: str,
-    family: str,
-    class_: str,
-    fragments: list[dict[str, Any]],
-    content_kind: str,
-) -> dict[str, Any]:
-    objects: list[dict[str, Any]] = [
-        {
-            "object_id": f"{document_id}-document",
-            "object_type": "document",
-            "text": title,
-            "review_track": "technical",
-        }
-    ]
-    meaning_units = split_context_aware_units(fragments, document_id=document_id)
-    proposed_relations_for_units(meaning_units)
-    objects.extend(meaning_units)
-    return {
-        "spec_version": "console-ingest-1.0",
-        "document_id": document_id,
-        "object_version": "1.0",
-        "target_group": [],
-        "care_setting": [],
-        "topic": [family, f"class:{class_}", f"source-kind:{content_kind}"],
-        "objects": objects,
-    }
-
 
 
 def unpublished_delete_permitted(account: dict[str, Any] | None, envelope: dict[str, Any]) -> bool:
@@ -1795,12 +1761,9 @@ class OperationsConsole:
         from src.docling_pdf_v1 import enabled
         if kind == "pdf" and enabled():
             return True
-        from src.passage_formation_policy_v1 import DETERMINISTIC_MODE
         if not getattr(self, "_pre_review_semantic_bound", False):
             return False
-        if class_ == "beslisboom":
-            return kind == "pdf"  # model proposal; the prose rollback mode does not apply
-        return kind in {"html", "pdf"} and self._passage_formation_mode_reader() != DETERMINISTIC_MODE
+        return kind in {"html", "pdf", "boom"}  # every supported source gets a model proposal
 
     @diagnostic_phase("processing_status")
     def processing_status(self, snapshot_id: str, *, actor_id: str | None = None,
@@ -2514,49 +2477,9 @@ class OperationsConsole:
             command["formation_context"] = context
         strategy = getattr(self, "_source_processing_strategy", None)
         if strategy is None:
-            return self._deterministic_fragments_and_spec(kind, path, **command)
+            # No implicit formation route: an unconfigured runtime fails closed.
+            raise ConsoleError("source_processing_strategy_unconfigured")
         return strategy.prepare(kind, path, **command)
-
-    def _deterministic_fragments_and_spec(
-        self,
-        kind: str,
-        path: Path,
-        *,
-        data: bytes,
-        document_id: str,
-        source_id: str,
-        title: str,
-        family: str,
-        class_: str,
-        formation_context: dict[str, Any] | None = None,
-    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        retained_fragments = (formation_context or {}).get("retained_fragments")
-        if class_ == "beslisboom" and kind in {"pdf", "boom"}:
-            from src.decision_tree_route_v1 import prepare
-            return prepare(kind, path, data=data, document_id=document_id, source_id=source_id,
-                           title=title, family=family, class_=class_, formation_context=formation_context,
-                           proposer=getattr(self, "_decision_tree_proposer", None))
-        if kind == "boom":
-            try:
-                fragments = extract_boom_fragments(data, document_id=document_id, source_id=source_id)
-            except ValueError as exc:
-                raise ConsoleError("invalid_boom_freeze") from exc
-            fragments = [{k: v for k, v in f.items() if k != "boom_kind"} for f in fragments]
-            return fragments, _spec_from_fragments(document_id=document_id, title=title, family=family,
-                class_=class_, fragments=fragments, content_kind=kind)
-        from src.docling_pdf_v1 import enabled
-        kwargs = {"deadline": (formation_context or {}).get("attempt_deadline")} if kind == "pdf" and enabled() else {}
-        fragments = (retained_fragments if retained_fragments is not None else
-                     self._extract(kind, path, document_id=document_id, source_id=source_id, **kwargs))
-        spec = _spec_from_fragments(
-            document_id=document_id,
-            title=title,
-            family=family,
-            class_=class_,
-            fragments=fragments,
-            content_kind=kind,
-        )
-        return fragments, spec
 
     def _diff_objects(self, previous: list[dict[str, Any]], current: list[dict[str, Any]]) -> dict[str, Any]:
         def current_candidates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -2763,37 +2686,6 @@ class OperationsConsole:
             objects = transform_generic(spec, self._class_change_manifest(envelope), fragments)
             stamp_boom_flags(objects, fragments)
             return objects
-        if envelope["content_kind"] == "boom":
-            try:
-                fragments = extract_boom_fragments(
-                    freeze_bytes,
-                    document_id=envelope["document_id"],
-                    source_id=envelope["source_id"],
-                )
-            except ValueError as exc:
-                raise ConsoleError("invalid_boom_freeze") from exc
-            fragments = [
-                {key: value for key, value in fragment.items() if key != "boom_kind"}
-                for fragment in fragments
-            ]
-            spec = _spec_from_fragments(
-                document_id=envelope["document_id"],
-                title=envelope["title"],
-                family=envelope["family"],
-                class_=new_class,
-                fragments=fragments,
-                content_kind=envelope["content_kind"],
-            )
-            objects = transform_generic(spec, self._class_change_manifest(envelope), fragments)
-            return apply_passage_register(
-                apply_admission_gate(
-                    objects,
-                    klasse=new_class,
-                    fragments=fragments,
-                    document_version=envelope["version"],
-                    source_hash=envelope["sha256"],
-                )
-            )
         fragments, spec = self._fragments_and_spec(
             envelope["content_kind"],
             freeze_path,

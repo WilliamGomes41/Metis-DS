@@ -7,6 +7,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
 from copy import deepcopy
@@ -133,7 +134,7 @@ class MemoryCanonicalStore:
 def _ready_console(tmp_path: Path, *, production_console, isolated=False):
     console = production_console(root=tmp_path, source_store=tmp_path / "sources" / "private",
                                  runtime=tmp_path / "runtime", immutable_source_store=MemorySourceStore(),
-                                 processing_binder=lambda console: None, isolated=isolated)
+                                 processing_binder=bind_fixture_selections, isolated=isolated)
     return _prepare_console(console)
 
 
@@ -149,7 +150,6 @@ def _prepare_console(console):
             username="publisher.carla", password=TEST_PASSWORD, roles=("publisher",)
         ),
     }
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
     receipt = console.ingest(
         actor_id=accounts["researcher"]["account_id"],

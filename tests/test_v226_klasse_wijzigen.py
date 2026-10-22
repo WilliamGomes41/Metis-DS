@@ -5,6 +5,7 @@ full previous_review schema are out of scope. publish() stays G2-BLOCKED.
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
 import re
@@ -28,7 +29,7 @@ HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -174,7 +175,8 @@ def test_cross_model_direct_change_blocked_keeps_prior_objects(tmp_path: Path, *
     before_boom = console.snapshot_objects(boom["snapshot_id"])
     before_ids = {row["object_id"] for row in before_richtlijn}
 
-    with pytest.raises(ConsoleError, match="cross_model_direct_change_blocked"):
+    # Semantically formed guideline knowledge needs a successor (T11) before any direct change.
+    with pytest.raises(ConsoleError, match="knowledge_class_change_requires_successor"):
         console.promote_class(
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=richtlijn["snapshot_id"],
@@ -247,13 +249,13 @@ def test_cross_model_html_to_boom_reextract_required_does_not_relabel(tmp_path: 
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
     prior_ids = [row["object_id"] for row in console.snapshot_objects(receipt["snapshot_id"])]
-    with pytest.raises(ConsoleError, match="cross_model_direct_change_blocked"):
+    with pytest.raises(ConsoleError, match="knowledge_class_change_requires_successor"):
         console.promote_class(
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=receipt["snapshot_id"],
             new_class="beslisboom",
         )
-    with pytest.raises(ConsoleError, match="invalid_boom_freeze|cross_model_reextract_required"):
+    with pytest.raises(ConsoleError, match="knowledge_class_change_requires_successor"):
         console.promote_class(
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=receipt["snapshot_id"],

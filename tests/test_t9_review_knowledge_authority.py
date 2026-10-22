@@ -24,7 +24,7 @@ from test_t4_single_knowledge_path_invariants import _allowed_candidate, _allowe
 
 
 def _console(tmp_path, *, production_console, title="Begrippen"):
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     existing = {a["username"]: a for a in console.list_accounts()}
     author = existing.get("anne") or console.create_account(username="anne", password="anne-secret", roles=("researcher",))
     reviewer = existing.get("bert") or console.create_account(username="bert", password="bert-secret", roles=("reviewer",))
@@ -391,7 +391,7 @@ def test_native_stale_review_does_not_attempt_a_restorative_write(workflow_postg
 
 def test_second_worker_rechecks_durable_bindings_before_duplicate_submit(tmp_path, *, production_console):
     console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
-    second = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    second = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     _approve(console, reviewer, sid, obj, expected_revision=console.objects_revision(sid))
     current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
     before = _state(console, sid)

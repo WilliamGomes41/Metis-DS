@@ -6,6 +6,7 @@ the public page/stylesheet route; slop keeps the existing shared renderer and
 optional-assets behavior without another asset-serving mechanism.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import hashlib
 import os
@@ -49,7 +50,7 @@ def test_content_changes_url_with_identical_mtime_and_size(tmp_path, monkeypatch
 
 @pytest.mark.parametrize("path", ["/", "/login"])
 def test_rendered_css_url_serves_current_tile_styles(tmp_path, path, *, production_app, production_console):
-    console = production_console(processing_binder=lambda console: None,
+    console = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",

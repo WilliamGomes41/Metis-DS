@@ -8,6 +8,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import asyncio
 import threading
@@ -185,7 +186,7 @@ def hotpath(production_console,production_app,monkeypatch):
     from functools import wraps
     from types import SimpleNamespace
     from tests.complete_workflow_support import seed_canonical_release
-    console=production_console(processing_binder=lambda console:None)
+    console=production_console(processing_binder=bind_fixture_selections)
     author=console.create_account(username='author',password='fixture-password',roles=['researcher'])
     reviewer=console.create_account(username='reviewer',password='fixture-password',roles=['reviewer'])
     snapshots=[]
@@ -253,8 +254,9 @@ def test_review_default_document_dashboard_uses_projection_without_snapshot_read
     review=h.client.get('/review',params={'document':h.snapshots[1]})
     assert review.status_code==200 and 'Unpublished fixture' in review.text
     assert 'Reviewvoortgang' in review.text
-    assert h.summary['progress_total']>=205 and h.summary['progress_done']==0
-    assert f"0 van {h.summary['progress_total']} bronpassages afgehandeld" in review.text
+    # The counts come from the projection; which passages start as handled is formation output.
+    assert h.summary['progress_total']>=205 and h.summary['progress_done']<h.summary['progress_total']
+    assert f"{h.summary['progress_done']} van {h.summary['progress_total']} bronpassages afgehandeld" in review.text
     assert h.calls['snapshot_api']==0 and h.calls['single_objects']==0,dict(h.calls)
 
 

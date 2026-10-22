@@ -6,6 +6,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 
 import pytest
@@ -16,7 +17,7 @@ from tests.test_v226_klasse_wijzigen import _accounts, _ingest_richtlijn
 
 
 def _system(tmp_path, *, production_app, production_console):
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     accounts = _accounts(console)
     receipt = _ingest_richtlijn(console, accounts)
     client = TestClient(production_app(console))
@@ -53,7 +54,7 @@ def test_closed_document_has_no_mutation_forms_and_stale_posts_fail(tmp_path, st
         response = client.post(path, data={"snapshot_id": sid, **fields}, follow_redirects=False)
         assert response.status_code in {400, 409}
     assert (console._envelope(sid), console.snapshot_objects(sid, include_blocked=True)) == before
-    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    restarted = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted.snapshot_is_published(sid)
     assert restarted.snapshot_objects(sid, include_blocked=True) == before[1]
 

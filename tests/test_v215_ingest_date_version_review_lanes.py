@@ -5,6 +5,7 @@ type-routed review lanes. Tests are the specification. PROTOCOL.md and
 docs/PROTOCOL_V2_* are not edited here.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
 import re
@@ -33,15 +34,17 @@ HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
 
 # Locked hashes of the already-extracted Continentie factory fixture (main).
 # New heading-proposal MUST NOT rewrite these objects.
+# Semantic formation (Protocol 4.3.0) through the fixture model; earlier values
+# recorded the removed deterministic splitter.
 CONTINENTIE_FIXTURE_HASHES = {
-    "Continentie fixture": "1e49d3535085b5b080f466a4039c6ebfa89a1f9dc9887daac5bc2f7b86305418",
-    "Voorbeeldrichtlijn bron 2": "26f8080b91a0897106a61e51304c6f41c09f99e8f5823f6b6efc7ea59a83087e",
-    "Samenvatting": "ab2de26ba4aed4280e247b752cff528ba9a056ac1735f792f0932cf5f93c9faf",
-    "Aanbevelingen": "b5438fb85fa84dc2515b175d8232a6b795e15e2e05ceb8be8cc11d377dbd3360",
-    "Bespreek het onderwerp met de zorgvrager.": "6ced42da8c9831e117a5ea87728f7918e4c9661bd3f22a7a621fa9b342d7c21a",
-    "Gebruik gedurende minimaal drie dagen een dagboek.": "98a79958782b8207350750c0f171ac9752b184bbf231ee9fe8fa8cb8934cecd4",
-    "Doorverwijzen": "68945e9512e8f37edafcb4ab555bc361905968e0f575ea5161fa2b1ab0700c43",
-    "Verwijs bij een alarmsignaal naar de bevoegde behandelaar.": "1b780fcd300d73911a35469d0e72f9474317b666a355729f3ceddd403325bbf3",
+    "Continentie fixture": "3c6526153d9d39bcd7a4257a37c19fde62c7203b11b4599f5a88d448e69646d2",
+    "Voorbeeldrichtlijn bron 2": "65cf45e3597b4cf8191d3345a62f357a4ce90697ca4e1144d10910c4fef68e3e",
+    "Samenvatting": "a0a8fd2cd625daed323330a5734b972eb9d1d011b2995cfae20d08a83c92a2ac",
+    "Aanbevelingen": "9d73375991fc68d1f1a87d17f8f4fd21508997dd96ef03db6098750fe59ee1f6",
+    "Bespreek het onderwerp met de zorgvrager.": "a059274c7163c9fbf8c42660067b2c3bff27f8fe25f9fd45cff12677e3c5def9",
+    "Gebruik gedurende minimaal drie dagen een dagboek.": "8de8b6b47d1a034b950f2a816a28b266c9c2e1dbd4bceb094e274a3c3db83e9b",
+    "Doorverwijzen": "b9502d0bf3f8a5111b09bc3707f34b596b4e8277ac4b90307f77e7eac5683a85",
+    "Verwijs bij een alarmsignaal naar de bevoegde behandelaar.": "eebbd9ff23b72d6cc300d1a0ff560b3485aabd1223aeedfae1037ce5fce65579",
 }
 
 TYPE_NAMES = {
@@ -57,7 +60,7 @@ TYPE_NAMES = {
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -405,6 +408,11 @@ def test_existing_continentie_fixture_hashes_unchanged(tmp_path: Path, *, produc
     objects = console.snapshot_objects(receipt["snapshot_id"])
     found = {_text_of(obj): compute_canonical_object_hash(obj) for obj in objects}
     assert found == CONTINENTIE_FIXTURE_HASHES
+    # Independent re-ingest of the same source reproduces every object exactly.
+    again = production_console(processing_binder=bind_fixture_selections, root=tmp_path / "again", isolated=True,
+                               source_store=tmp_path / "again" / "sources", runtime=tmp_path / "again" / "runtime")
+    repeated = again.snapshot_objects(_ingest(again, _accounts(again))["snapshot_id"])
+    assert {_text_of(obj): compute_canonical_object_hash(obj) for obj in repeated} == found
     paragraphs = [obj for obj in objects if obj["object_type"] == "unclassified"]
     assert any(_text_of(obj).startswith("Bespreek") for obj in paragraphs)
     assert all(obj["object_type"] != "recommendation" for obj in _non_document(objects))
@@ -418,7 +426,6 @@ def test_existing_continentie_fixture_hashes_unchanged(tmp_path: Path, *, produc
 def test_review_list_title_is_source_snippet_not_unclassified(tmp_path: Path, *, production_app, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
     receipt = _ingest(console, accounts)
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
@@ -454,6 +461,9 @@ def test_four_thousand_identical_unclassified_titles_is_a_fail(tmp_path: Path, *
     )
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
+    # The model proposes each passage as explanation, never as unclassified knowledge.
+    bind_fixture_selections(console, [(f"Passage nummer {index} over continentie in de praktijk.", "explanation")
+                                      for index in range(1, 13)])
     receipt = _ingest(console, accounts, data=html_src, filename="many.html", title="Veel passages")
     html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&task=control"
@@ -465,7 +475,6 @@ def test_four_thousand_identical_unclassified_titles_is_a_fail(tmp_path: Path, *
     # Protocol v2.19: leftover unclassified is not equal one-by-one duty cards.
     assert passage_titles == []
     visible = re.sub(r"\s+", " ", html)
-    assert "Passages corrigeren (12)" not in visible
     # The heading stays in the same not-yet-assessed coverage count as the 12 passages.
     management = _client(console, production_app=production_app).get(f"/settings/technical?document={receipt['snapshot_id']}").text
     assert "Nog niet beoordeeld" in management
@@ -677,7 +686,6 @@ def test_four_eyes_still_required_for_exception_and_high_risk(tmp_path: Path, *,
     ).encode("utf-8")
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
     receipt = _ingest(console, accounts, data=html_src, filename="exc.html", title="Uitzondering")
     target = next(obj for obj in _non_document(console.snapshot_objects(receipt["snapshot_id"]))

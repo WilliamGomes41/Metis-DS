@@ -8,6 +8,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import install_fixture_history
+from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 from html import unescape
 import re
@@ -28,7 +30,7 @@ HTML = b'''<!doctype html><html><body><h1>Complete guideline</h1>
 
 
 def setup_source(tmp_path: Path, data: bytes=HTML, kind: str='html', *, production_app, production_console):
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources",
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources",
                                 runtime=tmp_path / "runtime")
     reviewer = console.create_account(username="reviewer", password="secret", roles=("researcher", "reviewer"))
     uploader = console.create_account(username="uploader", password="secret", roles=("researcher",))
@@ -145,7 +147,7 @@ def test_full_source_does_not_bypass_missing_locator(tmp_path, *, production_app
             row.pop("source_locator", None)
             for fragment in (row.get("provenance") or {}).get("source_fragments") or []:
                 fragment.pop("source_locator", None)
-    console._save_objects(snapshot, rows)
+    install_fixture_history(console, snapshot, rows)  # persisted corruption, not a T11 command
     for route in ("bronpassage", "brondocument"):
         response = client.get(f"/review/{route}?{query}")
         assert response.status_code == 400
@@ -200,7 +202,7 @@ def test_multifragment_pdf_marks_both_pages_without_changing_original(tmp_path, 
     rows = console.snapshot_objects(snapshot)
     row = next(row for row in rows if row["object_id"] == target["object_id"])
     row.setdefault("provenance", {}).setdefault("source_fragments", []).append({"source_locator": second_locator})
-    console._save_objects(snapshot, rows)
+    install_fixture_history(console, snapshot, rows)  # persisted corruption, not a T11 command
     opened = console.open_source_passage(snapshot_id=snapshot, object_id=target["object_id"], include_document=True)
     assert len(opened["locators"]) == 2
     assert "Aanvullende broncontext." in opened["passage"]

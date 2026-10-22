@@ -1,7 +1,7 @@
 # Metis — Roadmap v4
 
 **Status:** actief  
-**Peildatum:** 2026-10-18
+**Peildatum:** 2026-10-22
 
 **Gecontroleerde main:** [`8f0e2692216ad44afa13e2e357c05f32e66fb3db`](https://github.com/WilliamGomes41/Metis-DS/commit/8f0e2692216ad44afa13e2e357c05f32e66fb3db) (merge van #735).
 
@@ -69,7 +69,7 @@ Een proof-slice wordt pas een nieuwe repair bij een reproduceerbare invariantbre
 - Beoordeel brongebonden passagevorming op een bevroren set met blinde A/B-review, correcties, foutcategorieën, reviewtijd en bruikbare yield. Onverifieerbare toevoegingen die zouden kunnen doorstromen: nul tolerantie.
 - [#513](https://github.com/WilliamGomes41/Metis-DS/issues/513) is in code afgerond via [PR #514](https://github.com/WilliamGomes41/Metis-DS/pull/514). Beoordeel echte bronselectie, aanbevelingscontext en Admission onder [#530](https://github.com/WilliamGomes41/Metis-DS/issues/530), met bevroren bronnen, vooraf vastgelegde menselijke referenties en echte provideruitvoer.
 - De Smetten-tabelgrens blijft een afzonderlijke implementatietaak: [#515](https://github.com/WilliamGomes41/Metis-DS/issues/515). Bewaar tabelinhoud als context en bewijs dat echte aanbevelingen behouden blijven; geen historische herverwerking of automatische uitsluiting.
-- Verifieer de gekozen verwerkingsroute en rolverdeling conform protocol §5. `semantic-source-bound-v2` blijft de standaard; V1, V3 en deterministische verwerking vereisen expliciete configuratie. Geen stille terugval.
+- Verifieer de gekozen verwerkingsroute en rolverdeling conform protocol §5. `semantic-source-bound-v2` blijft de standaard; V1 en V3 vereisen expliciete configuratie. Deterministische vorming bestaat niet meer (Protocol 4.3.0). Geen stille terugval.
 - Audit-bewijs eindigt bij `READY FOR IMPLEMENTATION`. Een menselijke ontwikkelroute buiten Metis beslist over code en releases. Compiled knowledge blijft uitsluitend afgeleid uit actieve gepubliceerde kennis; een module is nog geen bewezen productie-executor.
 
 ## R4.4 Aanmelding en uitrol
@@ -92,7 +92,7 @@ Een proof-slice wordt pas een nieuwe repair bij een reproduceerbare invariantbre
 - Verifieer de gemergde beschikbaarheids-, bronhergebruik- en contextnavigatiereparaties via de oorspronkelijke gebruikershandeling op de werkelijk draaiende commit. Gesloten codeissues zijn geen productieacceptatie.
 - Leg resterende afwijkingen en niet-gevoelig voortgangsbewijs vast in de bestaande issues. Volledige diagnostiek blijft intern; geen tweede statusadministratie of algemene herbouw.
 
-## R4.6 Vormingskader per bron invoeren (Protocol v4.2 §5.4)
+## R4.6 Vormingskader per bron invoeren (Protocol v4.3 §5.4)
 
 **Status:** norm vastgelegd; implementatie open voor prozaroutes. De prozaroute wordt nog deploymentbreed gekozen via `METIS_PASSAGE_FORMATION_MODE` en niet als documenttoestand vastgelegd. Beslisbomen zijn omgezet naar hun enige route `decision-tree-source-bound-v1` (Protocol 4.2.0); de oude structurele vorming is verwijderd.
 
@@ -102,7 +102,9 @@ Een proof-slice wordt pas een nieuwe repair bij een reproduceerbare invariantbre
 - Besluit William 2026-10-18: geen dubbele vormingsroutes naast elkaar. Beslisbomen (PDF en JSON-export) zijn omgezet zonder voorafgaand §10-experiment; de oude route is in dezelfde wijziging verwijderd. Status, verwijderingsinventaris en bewijs: [vervangingsinventaris](docs/audit/decision-tree-route-replacement.md).
 - Open voor beslisbomen: inhoudelijke acceptatie van de route op een bevroren corpus met onafhankelijke menselijke referentie en vooraf vastgelegde grenswaarden ([preregistratie](data/audit/decision_tree_route_experiment_v1.json)); tot die tijd is menselijke graafreview per document de enige bevestiging. Gerichte validatoruitbreiding voor brongebonden paginaovergangen en reviewgebonden contextbindingen. Echte provider-uitvoer op productieachtige PDF's.
 - Beslisbomen die vóór de omschakeling zijn gevormd: leesbaar en verifieerbaar; herverwerking (`decision_tree_legacy_route_retired`) en eenheidcorrectie (`decision_unit_legacy_revision_retired`) falen gesloten en vereisen een expliciete opvolger. Inventaris: `scripts/decision_tree_route_inventory.py`.
-- Nieuwe releases registreren `PUBLICATION_PROTOCOL_VERSION` 4.2.0. Bestaande releases behouden hun vastgelegde versie.
+- Besluit William 2026-10-22: semantische vorming is de enige vormingsroute voor alle nieuwe bronverwerking (Protocol 4.3.0). Verwijderd zonder voorafgaand §10-experiment en zonder rollbackvenster: `deterministic-v1`, de impliciete terugval van een console zonder strategie, de deterministische prozasplitter, de directe prozaconversie bij klassewijziging, het deterministische exportvoorstel voor beslisbomen en de deterministische arm van de routevergelijking en de veiligheidsaudit. Operationele rollback is een softwareterugzetting. Exports worden semantisch voorgesteld en falen gesloten tenzij alle expliciete items, verbindingen, labels en bundels exact worden gereproduceerd. Componentoverzicht en invariantentabel: [change contract](docs/change-contracts/semantic-only-formation.md).
+- Open na 4.3.0: inhoudelijke acceptatie (G4 uit `docs/METIS_SOURCE_BOUND_IMPLEMENTATION_PLAN.md`) van semantische vorming per bronsegment, nu zonder deterministische vergelijkingsarm; echte provider-uitvoer op productieachtige exports en PDF's; extra modelafhankelijkheid en kosten voor exports.
+- Nieuwe releases registreren `PUBLICATION_PROTOCOL_VERSION` 4.3.0. Bestaande releases behouden hun vastgelegde versie.
 
 **Klaar wanneer:** een routewissel in de omgeving aantoonbaar geen invloed heeft op vastgelegde of lopende verwerking, retry en herstel de vastgelegde route gebruiken, en beide strategieën hun huidige standaardroute behouden.
 

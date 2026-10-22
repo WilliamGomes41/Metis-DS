@@ -1,6 +1,6 @@
 # Metis governance
 
-**Status:** actief onder Protocol v4.2.0 — enige vigerende protocolnorm
+**Status:** actief onder Protocol v4.3.0 — enige vigerende protocolnorm
 
 **Datum:** 2026-10-18
 

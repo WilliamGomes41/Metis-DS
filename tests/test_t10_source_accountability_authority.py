@@ -7,6 +7,7 @@
 # release-control-evidence: toegang
 # release-control-evidence: beschikbaarheid
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 import pytest
 
@@ -190,7 +191,7 @@ def test_confirm_reset_duplicate_conflict_restart_and_projection(tmp_path, *, pr
     from src.source_containers_v1 import source_accountability
     from src.operations_console_v1 import ConsoleError
     from src.review_ledger import read_events
-    state, _, reviewer, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
+    state, _, reviewer, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     sid = command["snapshot_id"]
     state.confirm_source_context(**command)
     def project(console):
@@ -210,7 +211,7 @@ def test_confirm_reset_duplicate_conflict_restart_and_projection(tmp_path, *, pr
     state.review_object(actor_id=reviewer["account_id"], snapshot_id=sid, object_id=target["object_id"],
                         decision="approve", confirmed_object_type="definition", relation_review_ack=True)
     assert project(state)[source["object_id"]]["closure"] == "accounted"
-    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    restarted = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert project(restarted) == project(state)
     restarted.confirm_source_context(**{**command, "role": "reset", "target_object_ids": [],
         "command_id": "reset", "expected_revision": restarted.objects_revision(sid)})
@@ -302,7 +303,7 @@ def test_machine_context_target_repair_has_inventory_priority_over_review_duty()
 def test_legacy_explicit_context_follows_current_target(status, tmp_path, *, production_console):
     from tests.test_source_context_review_v1 import _system
     from src.source_containers_v1 import source_accountability
-    state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
+    state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     state.confirm_source_context(**command)
     rows = state.snapshot_objects(command["snapshot_id"])
     current = next(o for o in rows if o["object_id"] == target["object_id"])

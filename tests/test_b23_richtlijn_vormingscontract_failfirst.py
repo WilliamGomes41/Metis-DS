@@ -32,12 +32,12 @@ from pathlib import Path
 import pytest
 
 from src.admission_gate_v1 import apply_admission_gate
-from src.operations_console_v1 import ConsoleError, _spec_from_fragments
+from src.operations_console_v1 import ConsoleError
 from src.pre_review_semantic_v1 import semantic_spec_from_fragments
 from src.semantic_transform_generic_v1 import transform
 from src.source_bound_fields_v3 import FIELDS
 
-MODES = ["semantic-source-bound-v3", "deterministic-v1"]
+MODES = ["semantic-source-bound-v3"]  # deterministic-v1 was removed in Protocol 4.3.0
 XFAIL = pytest.mark.xfail(strict=True, reason="B23 nog niet geïmplementeerd op main (Forge)")
 REFERENCE = json.loads((Path(__file__).parent / "fixtures" / "smetten-reference.json").read_text())
 
@@ -124,13 +124,9 @@ def _maximal_provider(_url, _headers, payload, _timeout):
 
 def form(mode, fragments):
     """Vorm via de echte productiepaden per modus; geen eigen formatielogica."""
-    if mode == "deterministic-v1":
-        spec = _spec_from_fragments(document_id="smetten", title="Smetten", family="smetten",
-                                    class_="richtlijn", fragments=fragments, content_kind="pdf")
-    else:
-        spec = semantic_spec_from_fragments(document_id="smetten", title="Smetten", family="smetten",
-            class_="richtlijn", fragments=fragments, content_kind="pdf", api_key="test", model="test",
-            post_json=_maximal_provider, field_contract_v3=True)
+    spec = semantic_spec_from_fragments(document_id="smetten", title="Smetten", family="smetten",
+        class_="richtlijn", fragments=fragments, content_kind="pdf", api_key="test", model="test",
+        post_json=_maximal_provider, field_contract_v3=True)
     manifest = {"canonical_source": {"source_id": "smetten", "title": "Smetten", "source_type": "pdf",
         "source_url": "test", "source_level": "national", "canonicality": "canonical",
         "integrity_status": "verified", "source_checksum": "a" * 64, "version": "1"}}

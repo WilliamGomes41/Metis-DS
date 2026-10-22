@@ -2,6 +2,10 @@
 
 The aggregate owns experimental state only. It never writes KnowledgeObjects,
 review bindings, publication records, or the normal quality event ledger.
+
+The deterministic arm measured a formation route that no longer exists, so no
+comparison is created or frozen any more. Recorded comparisons keep their
+original version and remain readable, assessable, analysable and closable.
 """
 from __future__ import annotations
 
@@ -20,7 +24,7 @@ from uuid import uuid4
 
 VERSION = "route-comparison-v1"
 ASSESSMENT_VERSION = "route-assessment-v1"
-ROUTES = ("deterministic", "semantic")
+ROUTES = ("deterministic", "semantic")  # the arms of recorded comparisons
 CHOICES = ("direct", "repair", "unusable", "unassessable")
 _ID = re.compile(r"rc_[0-9a-f]{32}")
 
@@ -44,44 +48,11 @@ def _event(row: dict[str, Any], actor: str, action: str) -> None:
                           "version": row["version"]})
 
 
-def new_comparison(*, owner: str, snapshot_id: str, source_hash: str,
-                   title: str) -> dict[str, Any]:
-    if not owner or not snapshot_id or not re.fullmatch(r"[0-9a-f]{64}", source_hash):
-        raise ComparisonError("comparison_source_invalid")
-    row = {"schema_version": VERSION, "comparison_id": "rc_" + uuid4().hex,
-           "owner_account_id": owner, "snapshot_id": snapshot_id,
-           "source_hash": source_hash, "title": title, "state": "draft",
-           "version": 0, "created_at": now(), "events": [], "arms": {},
-           "assessments": {}, "analyses": []}
-    _event(row, owner, "created")
-    return row
-
-
-def freeze(row: dict[str, Any], *, actor: str, source_hash: str,
-           fragments: list[dict[str, Any]], code_version: str, semantic_model: str) -> None:
-    if row["state"] != "draft" or actor != row["owner_account_id"]:
-        raise ComparisonError("comparison_transition_forbidden")
-    if source_hash != row["source_hash"] or not fragments or len(fragments) > 30:
-        raise ComparisonError("comparison_source_mismatch")
-    if not code_version or not semantic_model or sum(len(str(f.get("clean_text") or f.get("raw_text") or "")) for f in fragments) > 20000:
-        raise ComparisonError("comparison_input_limit")
-    ids = [str(f.get("fragment_id") or "") for f in fragments]
-    if any(not value for value in ids) or len(set(ids)) != len(ids):
-        raise ComparisonError("comparison_fragments_invalid")
-    row["fragments"] = deepcopy(fragments)
-    row["input_hash"] = digest(fragments)
-    row["code_version"] = code_version
-    row["semantic_model"] = semantic_model
-    row["arms"] = {route: {"status": "pending", "attempts": []} for route in ROUTES}
-    # The mapping is retained only in the aggregate; the assessment view hides it.
-    row["blind_order"] = list(ROUTES) if int(digest(row["comparison_id"])[0], 16) % 2 else list(reversed(ROUTES))
-    row["state"] = "frozen"
-    _event(row, actor, "frozen")
-
-
 def claim_arm(row: dict[str, Any], *, actor: str, route: str) -> str:
     if actor != row["owner_account_id"] or route not in ROUTES:
         raise ComparisonError("comparison_transition_forbidden")
+    if route == "deterministic" and row["arms"][route]["status"] != "succeeded":
+        raise ComparisonError("comparison_route_retired")
     if row["state"] not in {"frozen", "running", "blocked"}:
         raise ComparisonError("comparison_transition_forbidden")
     arm = row["arms"][route]

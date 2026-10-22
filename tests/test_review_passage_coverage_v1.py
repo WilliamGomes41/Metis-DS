@@ -1,3 +1,4 @@
+from tests.semantic_fixture_support import install_fixture_history
 from test_t4_single_knowledge_path_invariants import _allowed_source
 """#405: counts never hide open source work.
 
@@ -99,7 +100,7 @@ def test_http_followup_is_reachable_and_can_be_resolved_without_losing_history(t
     if gate:
         target["metadata"]["admission"] = {"gate_result": gate, "reason_codes": ["source_fidelity_failure"]}
     target["metadata"]["passage_register"] = {"status": "not_yet_assessed", "source": "extract"}
-    console._save_objects(sid, objects)
+    install_fixture_history(console, sid, objects)  # seeded persisted state, not a T11 command
     before = console.objects_revision(sid)
     client = _client(console, production_app=production_app)
     _login(client, accounts["reviewer_a"]["username"])

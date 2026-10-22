@@ -8,6 +8,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from copy import deepcopy
 from threading import Event, Thread
@@ -28,7 +29,7 @@ ORIGIN = "https://testserver"
 @pytest.fixture(params=["local", "entra-postgres"])
 def runtime(request, tmp_path, monkeypatch, *, production_app, production_console):
     native = request.param == "entra-postgres"
-    console = (production_console(root=tmp_path, processing_binder=lambda console: None)
+    console = (production_console(root=tmp_path, processing_binder=bind_fixture_selections)
                if native else state(tmp_path, production_console=production_console))
     author = console.create_account(username="author", password="fixture-only",
                                     roles=("researcher", "reviewer", "publisher"))["account_id"]
@@ -55,7 +56,7 @@ def runtime(request, tmp_path, monkeypatch, *, production_app, production_consol
     environment = {name: value for name, value in os.environ.items()
                    if name.startswith('METIS_ENTRA_') or name == 'METIS_CONSOLE_AUTH'}
     environment['CONSOLE_PUBLIC_ORIGIN'] = ORIGIN
-    console = production_console(root=tmp_path, processing_binder=lambda console: None, environment=environment)
+    console = production_console(root=tmp_path, processing_binder=bind_fixture_selections, environment=environment)
     bind(console, lambda *args: inference_boundary["call"](*args))
     app = production_app(console)
     microsoft = FakeMicrosoft()

@@ -8,6 +8,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,7 +29,7 @@ from src.serving_relations_v1 import binding_relations
 
 
 def _system(tmp_path, *, production_app, production_console):
-    console = production_console(processing_binder=lambda console: None,
+    console = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",

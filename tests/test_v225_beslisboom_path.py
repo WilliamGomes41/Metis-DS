@@ -6,6 +6,7 @@ publish() stays G2-BLOCKED. Product API boom serving is not activated.
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import hashlib
 import json
@@ -61,7 +62,7 @@ STORY_FIXTURE = ROOT / "data/fixtures/story_html_boom_player_fixture.html"
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
     from tests.decision_tree_test_support import install_fragment_proposer
-    return install_fragment_proposer(production_console(processing_binder=lambda console: None,
+    return install_fragment_proposer(production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -257,7 +258,7 @@ def test_other_klassen_do_not_get_boom_types(tmp_path: Path, *, production_conso
         if row.get("object_type") != "heading"
         and (row.get("content") or {}).get("clean_text")
     )
-    with pytest.raises(ConsoleError, match="content_duty_required"):
+    with pytest.raises(ConsoleError, match="content_duty_required|unknown_object_type"):
         console.review_object(
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=receipt["snapshot_id"],

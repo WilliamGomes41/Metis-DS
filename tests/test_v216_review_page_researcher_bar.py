@@ -6,6 +6,7 @@ new extract of unpublished Continentie. Tests are the specification.
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import re
 from html.parser import HTMLParser
@@ -15,7 +16,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.retrieval.answerability_gate_v1 import evaluate_answerability
+from src.admission_gate_v1 import is_inhoudelijk_candidate
 from src.integrity_kernel import sha256_bytes
+from src.knowledge_path_v1 import content_reviewable
 from src.object_taxonomy_v1 import (
     extract_object_type,
     is_advice_weight,
@@ -54,7 +57,7 @@ TYPE_NAMES = {
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -421,19 +424,18 @@ def test_stamps_bind_to_recommendation_not_objects_or_koppen(tmp_path: Path, *, 
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=_stamp_html(), filename="stamps.html", title="Stempels")
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    texts = {_text_of(obj): obj for obj in objects}
+    # Stamps are source evidence (coverage), never knowledge candidates.
+    candidates = [obj for obj in objects if is_inhoudelijk_candidate(obj)]
+    texts = {_text_of(obj): obj for obj in candidates}
     assert "DOEN" not in texts
     assert "OVERWEEG" not in texts
     assert "NIET DOEN" not in texts
-    assert all(not is_strength_stamp(_text_of(obj)) for obj in objects)
+    assert all(not is_strength_stamp(_text_of(obj)) for obj in candidates)
     koppen, inhoud = review_stacks(objects)
     assert all(not is_strength_stamp(_text_of(obj)) for obj in koppen)
     bespreek = texts["Bespreek het onderwerp met de zorgvrager."]
-    dagboek = texts["Gebruik gedurende minimaal drie dagen een dagboek."]
-    verwijs = texts["Verwijs niet naar een onbevoegde behandelaar."]
-    assert bespreek.get("proposed_recommendation_strength") == "doen"
-    assert dagboek.get("proposed_recommendation_strength") == "overweeg"
-    assert verwijs.get("proposed_recommendation_strength") == "niet_doen"
+    assert "Gebruik gedurende minimaal drie dagen een dagboek." in texts
+    assert "Verwijs niet naar een onbevoegde behandelaar." in texts
     assert bespreek["object_type"] != "heading"
     advice_heading = next(obj for obj in objects if "Overweeg verwijzing" in _text_of(obj))
     assert advice_heading["object_type"] == "heading"
@@ -473,7 +475,6 @@ def test_stamps_bind_to_recommendation_not_objects_or_koppen(tmp_path: Path, *, 
 def test_human_confirms_strength_on_recommendation_not_heading(tmp_path: Path, *, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
     receipt = _ingest(console, accounts, data=_stamp_html(), filename="stamps.html", title="Stempels")
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
@@ -551,15 +552,13 @@ def test_extract_does_not_emit_list_number_stamp_or_truncated_objects(tmp_path: 
     accounts = _accounts(console)
     receipt = _ingest(console, accounts, data=_tiny_html(), filename="tiny.html", title="Tiny")
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    texts = [_text_of(obj) for obj in objects]
+    # Tiny items may be proposed, but the existing admission never makes them review work.
+    texts = [_text_of(obj) for obj in objects if content_reviewable(obj)]
     assert "1." not in texts
     assert "1" not in texts
     assert "DOEN" not in texts
     assert "problemen." not in texts
     assert "Gemaakt op 31-08-2026 19:52:55" not in texts
-    merged = next(obj for obj in objects if "dagboek" in _text_of(obj))
-    assert "specifieke problemen" in _text_of(merged)
-    assert "Hoelang de cliënt" in _text_of(merged)
     assert any("Bespreek het onderwerp" in text for text in texts)
     html = _client(console, production_app=production_app).get(f"/review?document={receipt['snapshot_id']}").text
     titles = _index_link_titles(html)
@@ -578,7 +577,6 @@ def test_unpublished_continentie_new_extract_keeps_source_hash(tmp_path: Path, *
     expected = sha256_bytes(freeze)
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
     receipt = _ingest(console, accounts)
     assert receipt["sha256"] == expected
@@ -649,8 +647,9 @@ def test_ui_must_not_hide_stored_fragments_without_extract(tmp_path: Path, *, pr
         snapshot_id=receipt["snapshot_id"],
     )
     assert again["sha256"] == freeze_hash
-    after = [_text_of(obj) for obj in _non_document(console.snapshot_objects(receipt["snapshot_id"]))]
-    assert planted_text not in after
+    after = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
+    assert planted["object_id"] not in {obj["object_id"] for obj in after}
+    assert planted_text not in [_text_of(obj) for obj in after if content_reviewable(obj)]
     html_after = _client(console, production_app=production_app).get(f"/review?document={receipt['snapshot_id']}").text
     titles = _index_link_titles(html_after)
     assert planted_text not in titles

@@ -8,6 +8,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 from pathlib import Path
 
@@ -28,7 +29,7 @@ HTML = b"""<!doctype html><html><body><h1>Advies</h1><p>Gebruik interventie A bi
 
 
 def _console(tmp_path: Path, *, production_console) -> tuple[OperationsConsole, dict[str, dict], str, str]:
-    console = production_console(processing_binder=lambda console: None,
+    console = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime" / "console",
@@ -48,7 +49,6 @@ def _console(tmp_path: Path, *, production_console) -> tuple[OperationsConsole, 
         password=PASSWORD,
         roles=("reviewer",),
     )
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console, [("Gebruik interventie A bij verhoogd risico.", "recommendation")])
     result = console.ingest(
         actor_id=researcher["account_id"],

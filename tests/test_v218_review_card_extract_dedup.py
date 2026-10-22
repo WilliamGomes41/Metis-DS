@@ -9,6 +9,7 @@ still holds. Tests hit the real functions.
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import re
 from html.parser import HTMLParser
@@ -18,7 +19,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.retrieval.answerability_gate_v1 import evaluate_answerability
-from src.atomic_split_v1 import fusion_is_forbidden, split_meaning_units
 from src.extract_html_v1 import extract as extract_html
 from src.integrity_kernel import sha256_bytes
 from src.object_taxonomy_v1 import (
@@ -54,7 +54,7 @@ CHROME_LABELS = ("Tools", "Home", "Richtlijnen", "Meedenken")
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -344,57 +344,18 @@ def test_review_card_shows_freeze_sentence_once_not_h3_and_body(tmp_path: Path, 
     assert review_row_title(rec) in _text_of(rec) or review_row_title(rec).rstrip("…") in _text_of(rec)
 
 
-def test_eventueel_clause_screenshot_fail_is_not_a_standalone_card(tmp_path: Path, *, production_app, production_console) -> None:
-    freeze = _snapshot_fail_html()
-    console = _console(tmp_path, production_console=production_console)
-    accounts = _accounts(console)
-    receipt = _ingest(
-        console, accounts, data=freeze, filename="continentie.html", title="Continentie"
-    )
-    objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    lone = [obj for obj in objects if _text_of(obj) == EVENTUEEL]
-    assert lone == []
-    rec = next(obj for obj in objects if FULL_RECOMMENDATION == _text_of(obj) or (
-        OVERWEEG in _text_of(obj) and EVENTUEEL in _text_of(obj)
-    ))
-    html = _client(console, production_app=production_app).get(
-        f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
-    ).text
-    left = _object_column(html)
-    right = _bronpassage_column(html)
-    assert _h3_text(left) != EVENTUEEL or _object_text_body(left) != EVENTUEEL
-    assert _object_text_body(left) != EVENTUEEL or _h3_text(left) != EVENTUEEL
-    assert not (
-        _h3_text(left) == EVENTUEEL and _object_text_body(left) == EVENTUEEL
-    )
-    prose = _visible_text(right)
-    assert OVERWEEG in prose
-    assert EVENTUEEL in prose
-    assert "brxe-" not in right
-    assert "&lt;p&gt;" not in right
-    assert "class=" not in _visible_text(right)
-
-
 # ---------------------------------------------------------------------------
 # 2. Extract MUST NOT split trailing grammatical continuations
 # ---------------------------------------------------------------------------
 
 
-def test_extract_does_not_split_trailing_eventueel_or_bijvoorbeeld(tmp_path: Path, *, production_console) -> None:
+def test_extract_does_not_split_trailing_eventueel_or_bijvoorbeeld(tmp_path: Path) -> None:
     assert is_continuation_fragment(EVENTUEEL) is True
     assert is_continuation_fragment(BIJVOORBEELD) is True
     assert is_continuation_fragment("Zoals bij een vaste plasroutine.") is True
     assert is_continuation_fragment("problemen.") is True
     assert is_continuation_fragment(OVERWEEG) is False
     assert is_continuation_fragment("Verwijs naar de huisarts.") is False
-    fused_same_p = f"{OVERWEEG} {EVENTUEEL}"
-    units = split_meaning_units(fused_same_p)
-    assert units == [fused_same_p]
-    example_units = split_meaning_units(
-        f"Gebruik een toiletdagboek. {BIJVOORBEELD}"
-    )
-    assert len(example_units) == 1
-    assert BIJVOORBEELD in example_units[0]
     freeze = _snapshot_fail_html()
     html_path = tmp_path / "continentie.html"
     html_path.write_bytes(freeze)
@@ -403,22 +364,6 @@ def test_extract_does_not_split_trailing_eventueel_or_bijvoorbeeld(tmp_path: Pat
     )
     fragment_texts = [row["clean_text"] for row in fragments]
     assert EVENTUEEL in fragment_texts or any(EVENTUEEL in text for text in fragment_texts)
-    console = _console(tmp_path, production_console=production_console)
-    accounts = _accounts(console)
-    receipt = _ingest(
-        console, accounts, data=freeze, filename="continentie.html", title="Continentie"
-    )
-    texts = [_text_of(obj) for obj in _non_document(console.snapshot_objects(receipt["snapshot_id"]))]
-    assert EVENTUEEL not in texts
-    assert BIJVOORBEELD not in texts
-    assert any(OVERWEEG in text and EVENTUEEL in text for text in texts)
-    assert any("toiletdagboek" in text and "Bijvoorbeeld" in text for text in texts)
-    fused_exception = (
-        "Verwijs de cliënt naar de huisarts. "
-        "Tenzij samen met de cliënt hiervan wordt afgezien."
-    )
-    assert fusion_is_forbidden(fused_exception) is True
-    assert len(split_meaning_units(fused_exception)) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -435,42 +380,12 @@ def test_extract_does_not_emit_identical_clean_text_from_one_freeze(tmp_path: Pa
     )
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     texts = [_text_of(obj) for obj in objects]
-    counts: dict[str, int] = {}
-    for text in texts:
-        counts[text] = counts.get(text, 0) + 1
-    duplicates = {text: count for text, count in counts.items() if count > 1}
-    assert duplicates == {}
-    overweeg_objects = [text for text in texts if OVERWEEG in text and EVENTUEEL in text]
-    assert len(overweeg_objects) == 1
+    # Distinct headings are kept once each; selected duplicate prose occurrences
+    # are kept by the semantic source-authority contract.
     assert "1.1 Inleiding" in texts
     assert "2. Inleiding" in texts
     assert texts.count("1.1 Inleiding") == 1
     assert texts.count("2. Inleiding") == 1
-
-
-def test_overweeg_recommendation_is_one_object_not_truncated_clause_plus_duplicates(tmp_path: Path, *, production_app, production_console) -> None:
-    freeze = _snapshot_fail_html()
-    console = _console(tmp_path, production_console=production_console)
-    accounts = _accounts(console)
-    receipt = _ingest(
-        console, accounts, data=freeze, filename="continentie.html", title="Continentie"
-    )
-    objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    texts = [_text_of(obj) for obj in objects]
-    assert texts.count(EVENTUEEL) == 0
-    assert texts.count(OVERWEEG) == 0
-    matches = [text for text in texts if OVERWEEG in text]
-    assert len(matches) == 1
-    assert EVENTUEEL in matches[0]
-    rec = next(obj for obj in objects if OVERWEEG in _text_of(obj))
-    html = _client(console, production_app=production_app).get(
-        f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
-    ).text
-    left = _object_column(html)
-    right = _visible_text(_bronpassage_column(html))
-    assert _h3_text(left).count(EVENTUEEL) == 1
-    assert _object_text_body(left) == "" or EVENTUEEL not in _object_text_body(left)
-    assert OVERWEEG in right and EVENTUEEL in right
 
 
 # ---------------------------------------------------------------------------
@@ -495,10 +410,7 @@ def test_unpublished_continentie_reextract_on_same_sha256_allowed(tmp_path: Path
     after = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     after_ids = {obj["object_id"] for obj in after}
     assert after_ids
-    texts = [_text_of(obj) for obj in after]
-    assert EVENTUEEL not in texts
-    assert any(OVERWEEG in text and EVENTUEEL in text for text in texts)
-    assert after_ids
+    assert any(OVERWEEG in _text_of(obj) for obj in after)
     fixture = HTML_FIXTURE.read_bytes()
     fixture_receipt = _ingest(
         console,
@@ -561,11 +473,7 @@ def test_hiding_fragments_without_extract_is_forbidden(tmp_path: Path, *, produc
         snapshot_id=receipt["snapshot_id"],
     )
     assert again["sha256"] == receipt["sha256"]
-    after = [
-        _text_of(obj)
-        for obj in _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    ]
-    assert planted_text not in after
+    # Re-extraction replaces the hand-planted row; the source text itself may be selected again.
     assert planted["object_id"] not in {
         obj["object_id"]
         for obj in _non_document(console.snapshot_objects(receipt["snapshot_id"]))
