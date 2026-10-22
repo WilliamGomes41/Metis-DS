@@ -407,24 +407,25 @@ class _PostgresWorkflowDocumentsMixin:
         """Read the authoritative list instead of a process-local startup cache."""
         reads = self._source_selection_reads()
         if reads is not None:
-            if reads["envelopes"] is None:
-                try:
-                    rows = self.workflow_document_store.list_envelopes()
-                except WorkflowDocumentStoreError as exc:
-                    raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
-                reads["envelopes"] = {str(row["snapshot_id"]): row for row in rows}
-            return [self._receipt(row) for row in reads["envelopes"].values()]
+            return [self._receipt(row) for row in self._scoped_envelopes(reads).values()]
         self.refresh_workflow_documents()
         return [self._receipt(row) for row in self._envelopes.values()]
+
+    def _scoped_envelopes(self, reads: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        """One request-local store read; never alias the process-wide ``_envelopes`` cache."""
+        if reads["envelopes"] is None:
+            try:
+                rows = self.workflow_document_store.list_envelopes()
+            except WorkflowDocumentStoreError as exc:
+                raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
+            reads["envelopes"] = {str(row["snapshot_id"]): row for row in rows}
+        return reads["envelopes"]
 
     def list_snapshot_ids(self) -> list[str]:
         """PR-a: the same authoritative read as list_envelopes, without per-row receipts."""
         reads = self._source_selection_reads()
         if reads is not None:
-            if reads["envelopes"] is None:
-                self.refresh_workflow_documents()
-                reads["envelopes"] = self._envelopes
-            return list(reads["envelopes"])
+            return list(self._scoped_envelopes(reads))
         self.refresh_workflow_documents()
         return list(self._envelopes)
 

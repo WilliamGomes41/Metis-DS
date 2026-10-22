@@ -95,7 +95,13 @@ def main():
               'decision': 'Rollback is eligible only when every existing case passes with independent readers and commits.'}
     output.write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))
-    return int(bool(results['template']['failures']) or bool(results['template']['skipped']))
+    return 0 if template_accepted(results['template']) else 1
+
+
+def template_accepted(result):
+    """Benchmark evidence only for a clean pytest run of the whole selected portion."""
+    return (result['exit_code'] == 0 and result['tests'] > 0
+            and not result['failures'] and not result['skipped'])
 
 
 if __name__ == '__main__':
