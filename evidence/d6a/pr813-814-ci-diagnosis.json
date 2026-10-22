@@ -1,0 +1,249 @@
+{
+  "recorded_at": "2026-10-22T08:05:32.972488+00:00",
+  "change_class": "C",
+  "rewrite_risk": "none",
+  "ci": [
+    {
+      "pr": 813,
+      "head": "22499bbf01569780e25cba95513ec71689c0ebcd",
+      "ci_run": 39728414526,
+      "failed_python313_job": 119657661892,
+      "baseline": {
+        "commit": "9fa200426f715d5b4beb3882a92c81f57026c1d2",
+        "python": "3.13.16",
+        "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+        "seconds": 1271.479,
+        "exit_code": 0,
+        "postgres_version": 160015,
+        "tests": 5674,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 33,
+        "postgres_skips": []
+      },
+      "after": {
+        "commit": "2585e79df49707aa397b78d0e75c1dcf08782a62",
+        "python": "3.13.16",
+        "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+        "seconds": 2592.903,
+        "exit_code": 0,
+        "postgres_version": 160015,
+        "tests": 5643,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 34,
+        "postgres_skips": [],
+        "baseline_seconds": 1271.479,
+        "ratio": 2.0393,
+        "within_twice_baseline": false
+      },
+      "full_junit_sha256": "be80330f06c4d3f95b37ea4a351c470432701f9f55f709aac165ea480e6574f3",
+      "diagnosis": "Full suite has no test failures or PostgreSQL skips. The unchanged2x timing gate fails; default success() then skips D5 export, causing missing upload artifact.",
+      "required_reduction_seconds": 49.945
+    },
+    {
+      "pr": 814,
+      "head": "bd0331cdb789d526db8975e7dadfaf294afeca41",
+      "ci_run": 39731730562,
+      "failed_python313_job": 119668142589,
+      "baseline": {
+        "commit": "9fa200426f715d5b4beb3882a92c81f57026c1d2",
+        "python": "3.13.16",
+        "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+        "seconds": 1214.23,
+        "exit_code": 0,
+        "postgres_version": 160015,
+        "tests": 5674,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 33,
+        "postgres_skips": []
+      },
+      "after": {
+        "commit": "1ed1885f50bf6b372bb5d4cdd1e3597b339e6258",
+        "python": "3.13.16",
+        "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+        "seconds": 2460.432,
+        "exit_code": 0,
+        "postgres_version": 160015,
+        "tests": 5644,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 34,
+        "postgres_skips": [],
+        "baseline_seconds": 1214.23,
+        "ratio": 2.0263,
+        "within_twice_baseline": false
+      },
+      "full_junit_sha256": "c16711e9cad64016a0bd96decd1bbac0dd88f30d767c3cc31fcd20ce1382eff8",
+      "diagnosis": "Full suite has no test failures or PostgreSQL skips. The unchanged2x timing gate fails; default success() then skips D5 export, causing missing upload artifact.",
+      "required_reduction_seconds": 31.972
+    }
+  ],
+  "change": "Three native evidence export steps now explicitly use !cancelled(), matching the other four exports. Existing CI contract detects omission. Timing failure and all executed evidence gates remain enforced.",
+  "unchanged": [
+    "Production src tree",
+    "PostgreSQL schema",
+    "Fixture source",
+    "Pinned9fa2004 baseline",
+    "Full suite selection",
+    "2x timing gate",
+    "fsync,synchronous_commit,full_page_writes"
+  ],
+  "checks": [
+    {
+      "junit": "pr813-export-red.xml",
+      "sha256": "e5c40d1b4ea5352c3db4b833fad7b8d2a0b0f97e4f59672ba15cd5bb9811f8a8",
+      "tests": 1,
+      "failures": 1,
+      "skipped": 0
+    },
+    {
+      "junit": "pr813-export-green.xml",
+      "sha256": "e860c8d5b968eb22834b0e6da07a5a88df9aa932f443d78eca9924d767b64ec0",
+      "tests": 34,
+      "failures": 0,
+      "skipped": 0
+    }
+  ],
+  "exports": {
+    "source": "PR814 CI run39731730562 Python3.13",
+    "source_sha256": "c16711e9cad64016a0bd96decd1bbac0dd88f30d767c3cc31fcd20ce1382eff8",
+    "steps": [
+      {
+        "step": "D5 PostgreSQL lifecycle without disk mirrors",
+        "exit_code": 0
+      },
+      {
+        "step": "Verify reprocessing owner guard and PG state against native PostgreSQL (#708)",
+        "exit_code": 0
+      },
+      {
+        "step": "Verify blockage diagnostics and native read-only access",
+        "exit_code": 0
+      },
+      {
+        "step": "Verify publication refusal store against native PostgreSQL (#637, PASSED proof)",
+        "exit_code": 0
+      },
+      {
+        "step": "Verify A10 source repair against native PostgreSQL",
+        "exit_code": 0
+      },
+      {
+        "step": "Require executed A10 evidence without skipped cases",
+        "exit_code": 0
+      },
+      {
+        "step": "Verify A08 atomic heading batches against native PostgreSQL",
+        "exit_code": 0
+      },
+      {
+        "step": "Require executed A08 native evidence without skipped cases",
+        "exit_code": 0
+      },
+      {
+        "step": "Verify durable processing trace and restart evidence",
+        "exit_code": 0
+      }
+    ],
+    "proofs": [
+      {
+        "name": "pg-without-mirrors",
+        "tests": 20,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "sha256": "061f3d38e158a16725c627a8f1834cc6407a76d6b26b745c7fac16f185a660c1"
+      },
+      {
+        "name": "reprocessing-708",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "sha256": "646b020123e750dbb4b64385fb64033189cf4ca84c05e2a443366af55f5e1d22"
+      },
+      {
+        "name": "blockage-diagnostics",
+        "tests": 23,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "sha256": "559e640955733cbfa7fdfeedab3d31ff2d5e6241c9fc51e5df4cd115f598ab9a"
+      },
+      {
+        "name": "refusal-postgres",
+        "tests": 19,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "sha256": "6770b2e66a6aeeda9fc0d4fad6797abe1b29fe0a70bb895aa9a59349b1015154"
+      },
+      {
+        "name": "a10-native",
+        "tests": 39,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "sha256": "e4606ef6b7d89816de33487ce23804675261ba506b3cd4218bb36e5e2eff8d98"
+      },
+      {
+        "name": "a08-native",
+        "tests": 70,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "sha256": "f99893b025b2ac93def9217fe6c658e4cb25f08a4dca0a62b2dd564af3e545a6"
+      },
+      {
+        "name": "processing-trace",
+        "tests": 23,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "sha256": "cb588e3aa681b3e3b0887174eaba670fba38839314a1acebdbbaa5e34449c085"
+      }
+    ]
+  },
+  "local_profile": {
+    "portion": "37 existing production factory/HTTP/native tests",
+    "junit": "pr813-fixture-before.xml",
+    "passed": 37,
+    "skipped": 0,
+    "instrumentation": "Debug-only cProfile plus boundary timers; no SQL/authority replacements",
+    "boundaries": {
+      "create": [
+        23,
+        0.29838130500138504
+      ],
+      "acquire": [
+        22,
+        0.020340208000561688
+      ],
+      "production_application": [
+        22,
+        8.023745918999339
+      ],
+      "release": [
+        22,
+        0.0011367649985913886
+      ],
+      "drop": [
+        23,
+        0.21351818299899605
+      ]
+    },
+    "limit": "This portion shows negligible database-copy waiting and substantial real application composition cost. It is not a whole-suite speedup or proof of the global bottleneck."
+  },
+  "verification": {
+    "repository_preflight": "PASS",
+    "architecture_boundaries": "PASS",
+    "release_control_against_main": "PASS",
+    "compileall": "PASS",
+    "diff_check": "PASS"
+  },
+  "status": "Export scheduling corrected; suite timing still unresolved. New exact-head CI pending.",
+  "D6a_done": false,
+  "D6b_started": false
+}

@@ -45,34 +45,33 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
     """Runtime operations added on top of the migration-only document store."""
 
     def verify_cutover_schema(self) -> None:
-        self.verify_schema()
         try:
             with self._connect() as con:
+                self._verify_schema_connection(con)
                 rows = con.execute(
                     "SELECT table_name,column_name FROM information_schema.columns "
                     "WHERE table_schema='workflow' AND "
                     "((table_name='documents' AND column_name='envelope_payload') OR "
                     "(table_name='document_objects' AND column_name='position'))"
                 ).fetchall()
+                present = {(str(row["table_name"]), str(row["column_name"])) for row in rows}
+                required = {("documents", "envelope_payload"), ("document_objects", "position")}
+                if present != required:
+                    raise WorkflowDocumentStoreError("workflow_document_cutover_schema_missing")
+                try:
+                    unresolved = con.execute(
+                        "SELECT COUNT(*) AS n FROM workflow.documents d "
+                        "LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id "
+                        "WHERE d.topic_id IS NULL OR t.topic_id IS NULL"
+                    ).fetchone()
+                except WorkflowDocumentStoreError:
+                    raise
+                except Exception as exc:
+                    raise WorkflowDocumentStoreError("workflow_topic_identity_check_failed") from exc
         except WorkflowDocumentStoreError:
             raise
         except Exception as exc:
             raise WorkflowDocumentStoreError("workflow_document_cutover_schema_check_failed") from exc
-        present = {(str(row["table_name"]), str(row["column_name"])) for row in rows}
-        required = {("documents", "envelope_payload"), ("document_objects", "position")}
-        if present != required:
-            raise WorkflowDocumentStoreError("workflow_document_cutover_schema_missing")
-        try:
-            with self._connect() as con:
-                unresolved = con.execute(
-                    "SELECT COUNT(*) AS n FROM workflow.documents d "
-                    "LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id "
-                    "WHERE d.topic_id IS NULL OR t.topic_id IS NULL"
-                ).fetchone()
-        except WorkflowDocumentStoreError:
-            raise
-        except Exception as exc:
-            raise WorkflowDocumentStoreError("workflow_topic_identity_check_failed") from exc
         if unresolved and int(unresolved["n"]):
             raise WorkflowDocumentStoreError("workflow_topic_identity_not_prepared")
 

@@ -765,5 +765,75 @@
         "sha256": "9ea571cc0eca8e631fe6ead0bd66930b465e16f0a7f36ed52dd8f770b3daa984"
       }
     ]
+  },
+  {
+    "batch": "20",
+    "base": "eb25e2f",
+    "commit": "codex/d6a-20-helper-consumers",
+    "test_files": [
+      "tests/test_account_retirement_v1.py",
+      "tests/test_estimate_linear_golden.py",
+      "tests/test_h2a_approvals_independent_v1.py",
+      "tests/test_overview_compact_state_v1.py",
+      "tests/test_recommendation_context_postgres.py",
+      "tests/test_review_configuration_gate_v1.py",
+      "tests/test_t8_materialisation_admission_integrity.py",
+      "tests/test_pre_review_failure_diagnostics_v1.py"
+    ],
+    "executed_unique_cases": 138,
+    "failures": 0,
+    "skipped": 0,
+    "verification": "All original test functions retained. Actual PG retirement/UI, shared UI/model helper consumers and diagnostics use production apps. Formation-incomplete test setup commits its envelope to PG rather than mutating a detached copy.",
+    "junit": [
+      {
+        "file": "d6a20-final.xml",
+        "sha256": "f98e7adc81889a2a61fa6c059e2a489d8af6b78b98ae2d79b334285a0863b5f4"
+      }
+    ],
+    "delivery": "Already included in earlier introducing portions and PR #812; no standalone PR.",
+    "historical_source": "origin/codex/d6a-22-batch-authority@35fba849",
+    "historical_proof_note": "Original local evidence; current publication and CI are recorded separately."
+  },
+  {
+    "batch": "21",
+    "base": "ad45ce5",
+    "commit": "codex/d6a-21-characterization",
+    "test_files": [
+      "tests/characterization/test_ingest.py",
+      "tests/characterization/test_ingest_boundaries.py",
+      "tests/characterization/test_review_room.py",
+      "tests/characterization/test_review_overview.py"
+    ],
+    "executed_unique_cases": 135,
+    "failures": 0,
+    "skipped": 0,
+    "verification": "36 exact PG view/route goldens;84 complete JSON-file-tree goldens explicitly file_topology. Historical identities seeded as real SQL rows; production classes and all119 routes. Reviewed22 changed golden outputs: native revision token, batch task, production lifecycle display and11 existing ASGI routes. Both mutation counts preserved;120 cases green after restore. Historical source-range SHA mismatch remains explicitly not verified.",
+    "junit": [
+      {
+        "file": "d6a21-final.xml",
+        "sha256": "638770daa70503ed209a60c28076c1bef936f25d7c143070c165137c06b9d350"
+      },
+      {
+        "file": "d6a21-review-mutation.xml",
+        "sha256": "f9a555c53f5295c3f895b49cdee48752c6ee27318b1d38b5f3ae78e72669f6a9"
+      },
+      {
+        "file": "d6a21-ingest-mutation.xml",
+        "sha256": "6fc0b36b661fef82878c6f9a8dca4886d7360a7756adb147ddffb21c1ccb94ce"
+      }
+    ],
+    "additional_junit": [
+      {
+        "file": "d6a21-lane-consumer.xml",
+        "sha256": "4a8138d44e84643c6b4aa36e867628a8fc99e22b3e830d32afe210bb75771bd1"
+      },
+      {
+        "file": "d6a21-overview-consumer.xml",
+        "sha256": "8984fea80af23fc60bc5b3c0d8fd86c6b285edbc95cdd9d0cb7b98f148477a5d"
+      }
+    ],
+    "historical_source": "origin/codex/d6a-22-batch-authority@35fba849",
+    "historical_proof_note": "Original local evidence; current publication and CI are recorded separately.",
+    "delivery": "Test migration included in #812; remaining explicit CI service and evidence published on codex/d6a-21-main."
   }
 ]
