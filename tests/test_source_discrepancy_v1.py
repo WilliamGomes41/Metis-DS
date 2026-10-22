@@ -91,6 +91,18 @@ def test_reported_discrepancy_blocks_unchanged_approval_and_is_recorded_on_rejec
     assert sum(r["source_discrepancy_reports"] for r in quality["routes"].values()) == 1
     assert quality["definition_version"] == "quality-workprocess-v1.1.0"
 
+    # A later revision keeps the span-derived id under another model; the report
+    # stays attributed to the formation of the version it was made on.
+    reported = report["details"]["source_discrepancy_formation"]
+    documents = capture(console, users["researcher"])["documents"]
+    for document in documents:
+        for obj in document["objects"]:
+            if obj.get("object_id") == object_id:
+                obj.setdefault("metadata", {}).setdefault("semantic_passage", {})["model"] = "later-model"
+    later = build_report(documents, as_of=AS_OF)["source_discrepancies"]["by_formation"]
+    assert [(row["model"], row["reports"]) for row in later] == [(reported["model"], 1)]
+    assert reported["model"] != "later-model"
+
 
 def test_heading_cannot_carry_a_discrepancy(tmp_path, *, production_console) -> None:
     console, users, snapshot_id, _ = _system(tmp_path, production_console=production_console)

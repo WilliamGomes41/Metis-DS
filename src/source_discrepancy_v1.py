@@ -19,6 +19,18 @@ CATEGORIES = {
 # signals a defect in that guarantee, not an ordinary interpretation error.
 CRITICAL = frozenset({"tekst_of_bronplek_wijkt_af"})
 DETAILS_KEY = "source_discrepancy"
+# Formation of the reported version, fixed at report time: a later revision may
+# keep the span-derived object id under another route or model.
+FORMATION_KEY = "source_discrepancy_formation"
+
+
+def formation_of(obj: dict[str, Any]) -> dict[str, str]:
+    """Route, formation mode and model of exactly this object version."""
+    from src.quality_evidence_v1 import route_of
+    semantic = (obj.get("metadata") or {}).get("semantic_passage") or {}
+    return {"route": str(route_of(obj)["route"]),
+            "formation_mode": str(semantic.get("formation_mode") or "unknown"),
+            "model": str(semantic.get("model") or "unknown")}
 
 
 def normalize(values: Iterable[Any] | None) -> list[str]:

@@ -125,7 +125,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
     ) -> dict[str, Any]:
         envelope = self._envelope(snapshot_id)
         actor = self._account(actor_id)
-        from src.source_discrepancy_v1 import DETAILS_KEY
+        from src.source_discrepancy_v1 import DETAILS_KEY, FORMATION_KEY, formation_of
         return append_event(
             self._ledger_path,
             event_type=REVIEW_AUDIT_EVIDENCE_EVENT,
@@ -133,7 +133,8 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             object_version=str(target.get("object_version") or ""),
             actor=actor["username"],
             details={
-                **({DETAILS_KEY: list(source_discrepancy)} if source_discrepancy else {}),
+                **({DETAILS_KEY: list(source_discrepancy), FORMATION_KEY: formation_of(target)}
+                   if source_discrepancy else {}),
                 "snapshot_id": snapshot_id,
                 "source_hash": str(envelope.get("sha256") or ""),
                 "source_locator": _source_locator(

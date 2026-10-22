@@ -17,7 +17,7 @@ from src.review_disposition_v1 import definitive_review_disposition
 from src.review_duty_v1 import review_stage, authoritative_review_type
 from src.beslisboom_path_v1 import review_path_for_klasse
 from src.closed_review_loop_v1 import REVIEW_AUDIT_EVIDENCE_EVENT
-from src.source_discrepancy_v1 import CRITICAL, DETAILS_KEY
+from src.source_discrepancy_v1 import CRITICAL, DETAILS_KEY, FORMATION_KEY
 
 DEFINITION_VERSION = "quality-workprocess-v1.1.0"
 ROUTES = ("deterministic", "semantic", "remainder", "unknown")
@@ -125,11 +125,10 @@ def build_report(documents: list[dict[str, Any]], *, as_of: str,
             if kind == REVIEW_AUDIT_EVIDENCE_EVENT and payload.get(DETAILS_KEY):
                 # One report per reviewed object version, attributed to its formation.
                 key = (sid, event.get("object_id"), payload.get("review_snapshot_hash"))
-                reviewed = next((o for o in objects if o.get("object_id") == event.get("object_id")), {})
-                semantic = (reviewed.get("metadata") or {}).get("semantic_passage") or {}
-                discrepancies.setdefault(key, {"route": route_of(reviewed)["route"] if reviewed else "unknown",
-                                               "formation_mode": semantic.get("formation_mode") or "unknown",
-                                               "model": semantic.get("model") or "unknown",
+                formation = payload.get(FORMATION_KEY) or {}
+                discrepancies.setdefault(key, {"route": formation.get("route") or "unknown",
+                                               "formation_mode": formation.get("formation_mode") or "unknown",
+                                               "model": formation.get("model") or "unknown",
                                                "categories": list(payload[DETAILS_KEY])})
                 continue
             if kind == "quality_object_corrected":

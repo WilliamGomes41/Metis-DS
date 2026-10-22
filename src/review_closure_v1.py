@@ -146,8 +146,9 @@ class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewC
         if repair_spec:
             details["repair_spec"] = deepcopy(repair_spec)
         if source_discrepancy:
-            from src.source_discrepancy_v1 import DETAILS_KEY
+            from src.source_discrepancy_v1 import DETAILS_KEY, FORMATION_KEY, formation_of
             details[DETAILS_KEY] = list(source_discrepancy)
+            details[FORMATION_KEY] = formation_of(target)
         return append_event(
             self._ledger_path,
             event_type=REVIEW_AUDIT_EVIDENCE_EVENT,
