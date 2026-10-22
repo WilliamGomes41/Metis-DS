@@ -25,6 +25,7 @@ from src.operations_console_v1 import ConsoleError, OperationsConsole, SNAPSHOT_
 from src.admission_gate_v1 import is_admission_blocked
 from src.source_discrepancy_v1 import normalize as normalize_discrepancy
 from src.beslisboom_path_v1 import review_path_for_klasse
+from src.passage_register_v1 import passage_register_of
 from src.publish_authorization_v1 import invalidate_for_object
 from src.review_cockpit_v1 import map_eindoordeel
 from src.serving_relations_v1 import binding_relations
@@ -397,6 +398,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         units: list[dict[str, Any]],
         source_discrepancy: list[str] | None = None,
     ) -> dict[str, Any]:
+        reviewed = self._current_object(snapshot_id, object_id)
         text, source_refs, normalized_ids = self._selected_source_material(
             snapshot_id=snapshot_id,
             object_id=object_id,
@@ -438,6 +440,14 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             materialisation_decision=decision,
             source_repair_spec=repair_spec,
         )
+        self._append_discrepancy_evidence(
+            actor_id=actor_id,
+            snapshot_id=snapshot_id,
+            reviewed=reviewed,
+            original_suitability="source_units",
+            comment=comment,
+            source_discrepancy=source_discrepancy,
+        )
         self._append_audit_evidence(
             actor_id=actor_id,
             snapshot_id=snapshot_id,
@@ -447,9 +457,34 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             final_disposition="needs_review",
             comment=comment,
             proposed_correction="",
-            source_discrepancy=source_discrepancy,
         )
         return revised
+
+    def _append_discrepancy_evidence(
+        self,
+        *,
+        actor_id: str,
+        snapshot_id: str,
+        reviewed: dict[str, Any],
+        original_suitability: str,
+        comment: str,
+        source_discrepancy: list[str] | None,
+    ) -> None:
+        """Bind a reported discrepancy to the version the reviewer saw, not the repair."""
+        if not source_discrepancy:
+            return
+        self._append_audit_evidence(
+            actor_id=actor_id,
+            snapshot_id=snapshot_id,
+            target=reviewed,
+            decision="revise",
+            original_suitability=original_suitability,
+            final_disposition="repair_required",
+            prior_passage_status=str(passage_register_of(reviewed).get("status") or ""),
+            comment=comment,
+            proposed_correction="",
+            source_discrepancy=source_discrepancy,
+        )
 
     def _verified_object_source_position(
         self,
@@ -634,6 +669,14 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             target_ids=target_ids,
             superseded_by=object_id,
         )
+        self._append_discrepancy_evidence(
+            actor_id=actor_id,
+            snapshot_id=snapshot_id,
+            reviewed=primary,
+            original_suitability="samenvoegen",
+            comment=comment,
+            source_discrepancy=source_discrepancy,
+        )
         self._append_audit_evidence(
             actor_id=actor_id,
             snapshot_id=snapshot_id,
@@ -643,7 +686,6 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             final_disposition="needs_review",
             comment=comment,
             proposed_correction="",
-            source_discrepancy=source_discrepancy,
         )
         return self._current_object(snapshot_id, object_id)
 

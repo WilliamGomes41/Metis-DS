@@ -117,7 +117,8 @@ def verify_export_preserved(construction: dict[str, Any], data: bytes,
 
     Every non-empty exported item is one whole unit; every well-formed branch
     between them is one edge with its literal label and only its own evidence;
-    no other edge exists; every exported bundle is reproduced with its members.
+    no other edge exists; every exported bundle is reproduced with its members;
+    no item that an exported branch leads to is proposed as an entrypoint.
     """
     from src.decision_graph_v1 import export_branches
     candidates = construction["spec"]["objects"][1:]
@@ -143,6 +144,8 @@ def verify_export_preserved(construction: dict[str, Any], data: bytes,
     actual = sorted((e["from"], e["to"], e["kind"], e["label"], tuple(e["evidence_ids"]))
                     for e in construction["graph_plan"]["edges"])
     if actual != expected or construction["relation_findings"]:
+        raise DecisionTreeProposalError("decision_export_route_not_preserved")
+    if {to for _from, to, *_rest in expected} & set(construction["graph_plan"]["entrypoints"]):
         raise DecisionTreeProposalError("decision_export_route_not_preserved")
     bundles = sorted(
         (object_for[str(f["boom_id"])],

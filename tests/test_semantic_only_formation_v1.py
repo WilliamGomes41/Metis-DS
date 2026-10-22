@@ -125,8 +125,13 @@ def _uncited_connection(p):
                              "evidence_ids": []})
 
 
+def _routed_entrypoint(p):
+    next(u for u in p["units"] if u["quoted_text"] == "Is er een verhoogd valrisico?")["entry"] = True
+
+
 @pytest.mark.parametrize("mutate, code", [
     (_drop_connection, "decision_export_route_not_preserved"),
+    (_routed_entrypoint, "decision_export_route_not_preserved"),
     (_add_connection, "decision_export_route_not_preserved"),
     (_redirect_connection, "decision_export_route_not_preserved"),
     (_relabel_connection, "decision_export_route_not_preserved"),
@@ -140,6 +145,13 @@ def test_export_proposal_that_changes_the_explicit_graph_fails_closed(mutate, co
         _prepare(_faithful(mutate))
     assert error.value.code == "pre_review_llm_proposal_rejected"
     assert str(error.value) == code
+
+
+def test_export_root_may_be_proposed_as_entrypoint() -> None:
+    def root_entry(p):
+        next(u for u in p["units"] if u["quoted_text"] == "Screening op valrisico")["entry"] = True
+    texts, _edges, _bundles, construction = _graph(_prepare(_faithful(root_entry))[1])
+    assert [texts[oid] for oid in construction["graph_plan"]["entrypoints"]] == ["Screening op valrisico"]
 
 
 def test_model_cannot_add_words_reorder_spans_or_fabricate_a_block() -> None:

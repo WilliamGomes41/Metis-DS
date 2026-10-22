@@ -151,7 +151,7 @@ Na deze wijziging bestaat er precies één uitvoerbare kandidaatvormingsroute v�
 | Console zonder strategie | `test_unconfigured_runtime_fails_explicitly_and_a_configured_runtime_forms_semantically` |
 | `deterministic-v1` geconfigureerd | `test_runtime_policy_is_instance_bound_and_has_no_rollback_mode`, policy- en protocoltests |
 | Model faalt / ontbreekt (export) | `test_failing_or_missing_model_never_falls_back_for_exports`; proza: bestaande fail-closed-tests |
-| Export: verbinding weggelaten, toegevoegd, omgeleid, label gewijzigd, als onzeker gemarkeerd, zonder bewijs; eenheid ingekort; bundel weg | `test_export_proposal_that_changes_the_explicit_graph_fails_closed` |
+| Export: verbinding weggelaten, toegevoegd, omgeleid, label gewijzigd, als onzeker gemarkeerd, zonder bewijs; eenheid ingekort; bundel weg; beginpunt op een item waar een exporttak naartoe leidt | `test_export_proposal_that_changes_the_explicit_graph_fails_closed`, `test_export_root_may_be_proposed_as_entrypoint` |
 | Woorden toegevoegd, spans omgekeerd, verzonnen blok | `test_model_cannot_add_words_reorder_spans_or_fabricate_a_block` |
 | Export buiten klasse beslisboom | `test_export_outside_the_decision_tree_class_is_formed_semantically` |
 | Vastgelegd bewijs niet gewijzigd; PDF-verzoek gelijk | `test_export_request_names_export_ids_while_pdf_request_and_recorded_evidence_stay_unchanged` |
@@ -176,7 +176,7 @@ Rewrite risk: none
 
 - Domain entity: het bestaande reviewbesluit op één exacte objectversie (`review_object`, `submit_review_resolution`).
 - Invariant: een gemelde discrepantie laat alleen `revise` of `reject` toe; alleen bij kennisobjecten (niet bij koppen of bronrecords); vaste soorten (`source_discrepancy_v1.CATEGORIES`).
-- Durable state before/after: ongewijzigd behalve één extra veld `source_discrepancy` op het bestaande `review_audit_evidence`-ledgerbewijs van dat besluit.
+- Durable state before/after: ongewijzigd behalve één extra veld `source_discrepancy` op het bestaande `review_audit_evidence`-ledgerbewijs van dat besluit. Bij bron- en samenvoegreparatie is dat een `revise`-bewijs op de beoordeelde objectversie, vóór het reparatiebewijs op de nieuwe versie; de melding hoort nooit bij een gecorrigeerd, nog onbeoordeeld voorstel (`test_reported_discrepancy_is_bound_to_the_reviewed_version_not_the_repair`).
 - Transaction boundary: hetzelfde besluit- of correctiecommando (inclusief bron- en samenvoegreparatie); een geweigerde melding schrijft niets.
 - Failure/recovery: weigering laat envelope, objecten en bindingen ongewijzigd; de kaart toont de invoer opnieuw.
 - Idempotency: de melding telt mee in de commandohash alleen als zij aanwezig is, zodat bestaande hashes geldig blijven.
