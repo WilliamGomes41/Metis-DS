@@ -181,6 +181,7 @@ jobs:
           path: output/d6a-*
           if-no-files-found: warn
       - name: D5 PostgreSQL lifecycle without disk mirrors
+        if: ${{ !cancelled() }}
         run: |
           python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/pg-without-mirrors.xml tests/test_pg_console_without_disk_mirrors.py tests/test_d5_pg_recovery_and_source_v1.py tests/test_d5_code_rollback_postgres.py tests/test_d5_two_workers_postgres.py
           python - <<'PYCODE'
@@ -209,6 +210,7 @@ jobs:
           path: output/pg-without-mirrors.xml
           if-no-files-found: error
       - name: Verify reprocessing owner guard and PG state against native PostgreSQL (#708)
+        if: ${{ !cancelled() }}
         run: |
           python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/reprocessing-708.xml tests/test_708_reprocessing_guard_postgres.py
           python - <<'PYCODE'
@@ -219,6 +221,7 @@ jobs:
           assert not list(root.iter("failure")) and not list(root.iter("error")), "Reprocessing PostgreSQL proof failed"
           PYCODE
       - name: Verify blockage diagnostics and native read-only access
+        if: ${{ !cancelled() }}
         run: |
           python scripts/export_test_evidence.py --source output/d6a-after.xml --output output/blockage-diagnostics.xml tests/test_blockage_diagnostics_v1.py
           python - <<'PYCODE'
