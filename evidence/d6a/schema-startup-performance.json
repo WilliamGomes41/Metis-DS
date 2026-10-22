@@ -1,0 +1,270 @@
+{
+  "recorded_at": "2026-10-22T09:35:49.220262+00:00",
+  "change_class": "B",
+  "rewrite_risk": "none",
+  "implementation_commit": "53d0d78ddf3684e54759431b354fb8c419c9e627",
+  "base": "23397b336327e0a890d609d4896942a50ce9c6d0",
+  "contract": "docs/change-contracts/d6a-schema-check-performance.md",
+  "mechanism": "Each native schema-verification call owns one connection for the unchanged base and specialized SELECTs. No cached schema verdict or omitted startup check.",
+  "unchanged_sql": [
+    {
+      "file": "src/workflows/workflow_documents_postgres_v1.py",
+      "unchanged_statement_count": 2
+    },
+    {
+      "file": "src/workflows/workflow_documents_cutover_v1.py",
+      "unchanged_statement_count": 2
+    },
+    {
+      "file": "src/workflows/workflow_review_postgres_v1.py",
+      "unchanged_statement_count": 1
+    },
+    {
+      "file": "src/workflows/workflow_remaining_postgres_v1.py",
+      "unchanged_statement_count": 2
+    }
+  ],
+  "red": {
+    "junit": "pr813-schema-red.xml",
+    "sha256": "e8b76ed586500e32c4e765b266ee47299d69b54745ff5f6c0841c1146873e40a",
+    "cases": 7,
+    "failures": 1,
+    "errors": 0,
+    "skipped": 0
+  },
+  "native": {
+    "junit": "pr813-schema-native-final.xml",
+    "sha256": "7e600db1df2b1047d4926785faa574bb14b2db2dbd02c1cec1f27cf063cef83c",
+    "cases": 74,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "d5": {
+    "junit": "pr813-schema-d5.xml",
+    "sha256": "6e696061ef1c62b97a35afaf78d91fe099a9ca6a1ba78712ea22fecbdf007176",
+    "cases": 20,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "mutation": {
+    "junit": "pr813-schema-mutation.xml",
+    "sha256": "599ea3117d5b5918a84b77ffdb3c48002a9a66e3a02523607265d06bbcf8526c",
+    "cases": 1,
+    "failures": 1,
+    "errors": 0,
+    "skipped": 0,
+    "fault": "Removed base-schema verification from the review store in an isolated disposable worktree",
+    "expected_failure": "DID NOT RAISE WorkflowDocumentStoreError after schema damage",
+    "cleanup": "Mutation worktree removed; real code unchanged"
+  },
+  "portion": {
+    "cases_per_run": 37,
+    "order": "before,after,after,before",
+    "runs": [
+      {
+        "mode": "before",
+        "seconds": 14.6317,
+        "exit": 0,
+        "tests": 37,
+        "failures": 0,
+        "skipped": 0
+      },
+      {
+        "mode": "after",
+        "seconds": 12.5704,
+        "exit": 0,
+        "tests": 37,
+        "failures": 0,
+        "skipped": 0
+      },
+      {
+        "mode": "after",
+        "seconds": 13.1335,
+        "exit": 0,
+        "tests": 37,
+        "failures": 0,
+        "skipped": 0
+      },
+      {
+        "mode": "before",
+        "seconds": 14.7192,
+        "exit": 0,
+        "tests": 37,
+        "failures": 0,
+        "skipped": 0
+      }
+    ],
+    "before_mean_seconds": 14.675450000000001,
+    "after_mean_seconds": 12.851949999999999,
+    "reduction_fraction": 0.124255133573417
+  },
+  "startup": {
+    "paired_runs": [
+      {
+        "mode": "before",
+        "samples": 25,
+        "median_seconds": 0.2732030320003105,
+        "total_seconds": 7.671315429004608,
+        "connections": [
+          30
+        ]
+      },
+      {
+        "mode": "after",
+        "samples": 25,
+        "median_seconds": 0.20204612300040026,
+        "total_seconds": 5.751203080004416,
+        "connections": [
+          16
+        ]
+      },
+      {
+        "mode": "after",
+        "samples": 25,
+        "median_seconds": 0.21444750400041812,
+        "total_seconds": 5.969235891003336,
+        "connections": [
+          16
+        ]
+      },
+      {
+        "mode": "before",
+        "samples": 25,
+        "median_seconds": 0.21842318900053215,
+        "total_seconds": 6.080916611999783,
+        "connections": [
+          30
+        ]
+      }
+    ],
+    "reproducible_before": {
+      "commit": "23397b336327e0a890d609d4896942a50ce9c6d0",
+      "python": "3.13.5",
+      "postgres_version": 160015,
+      "durability": {
+        "fsync": "on",
+        "synchronous_commit": "on",
+        "full_page_writes": "on"
+      },
+      "repeats": 25,
+      "median_seconds": 0.2402425479995145,
+      "total_seconds": 7.071278722996794,
+      "connection_counts": [
+        30
+      ],
+      "routes": 122,
+      "route_sha256": "2eb378a25eec993c97c86b6ca4363e028b11d41d5dd324dcc97286a7ce537486"
+    },
+    "reproducible_after": {
+      "commit": "53d0d78ddf3684e54759431b354fb8c419c9e627",
+      "python": "3.13.5",
+      "postgres_version": 160015,
+      "durability": {
+        "fsync": "on",
+        "synchronous_commit": "on",
+        "full_page_writes": "on"
+      },
+      "repeats": 25,
+      "median_seconds": 0.18441171399899758,
+      "total_seconds": 5.3875757480000175,
+      "connection_counts": [
+        16
+      ],
+      "routes": 122,
+      "route_sha256": "2eb378a25eec993c97c86b6ca4363e028b11d41d5dd324dcc97286a7ce537486"
+    },
+    "command": "python scripts/benchmark_console_startup.py --checkout CHECKOUT --repeats25",
+    "limit": "Empty isolated database; startup only, not a whole-suite ratio"
+  },
+  "rejected_experiments": {
+    "garbage_collection": [
+      {
+        "mode": "before",
+        "seconds": 15.6999,
+        "exit": 0,
+        "tests": 37,
+        "failures": 0,
+        "skipped": 0
+      },
+      {
+        "mode": "after",
+        "seconds": 16.0801,
+        "exit": 0,
+        "tests": 37,
+        "failures": 0,
+        "skipped": 0
+      },
+      {
+        "mode": "after",
+        "seconds": 16.7549,
+        "exit": 0,
+        "tests": 37,
+        "failures": 0,
+        "skipped": 0
+      },
+      {
+        "mode": "before",
+        "seconds": 13.733,
+        "exit": 0,
+        "tests": 37,
+        "failures": 0,
+        "skipped": 0
+      }
+    ],
+    "base_verifier_only": [
+      {
+        "mode": "before",
+        "seconds": 14.4121,
+        "exit": 0,
+        "tests": 37,
+        "failures": 0,
+        "skipped": 0
+      },
+      {
+        "mode": "after",
+        "seconds": 15.4346,
+        "exit": 0,
+        "tests": 37,
+        "failures": 0,
+        "skipped": 0
+      },
+      {
+        "mode": "after",
+        "seconds": 15.0071,
+        "exit": 0,
+        "tests": 37,
+        "failures": 0,
+        "skipped": 0
+      },
+      {
+        "mode": "before",
+        "seconds": 13.7355,
+        "exit": 0,
+        "tests": 37,
+        "failures": 0,
+        "skipped": 0
+      }
+    ],
+    "decision": "Neither experiment demonstrated a sufficient portion improvement; neither was shipped alone."
+  },
+  "unchanged": [
+    "Schema and workflow data",
+    "Production classes, routes and guards",
+    "Authorization and password hashing",
+    "Pinned9fa2004 baseline and2x gate",
+    "Entire suite selection",
+    "PostgreSQL16 durability settings"
+  ],
+  "checks": {
+    "repository": "PASS",
+    "architecture": "PASS",
+    "release_control": "PASS against main",
+    "compileall": "PASS",
+    "diff": "PASS"
+  },
+  "new_exact_head_CI": "Pending; no D6a completion or D6b start claimed",
+  "D6a_done": false,
+  "D6b_started": false
+}
