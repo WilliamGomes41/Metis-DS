@@ -1,0 +1,82 @@
+{
+  "batch": "19",
+  "target": "main",
+  "base_main": "d81b5a48ea380fe0dfe1b5f163d1dfda396f1b0d",
+  "change_class": "C",
+  "rewrite_risk": "none",
+  "code_parent": "b3d9caac9f99c5e3e354e9259ccc492746f5ce7d",
+  "tests_tree": "dae7458f2c8070fe71e6becfaed1f5e0c9c83711",
+  "runtime_changes": false,
+  "publication_authorized": true,
+  "merge_order": [
+    17,
+    18,
+    19
+  ],
+  "targeted_python": "3.13.5",
+  "targeted_cases": 288,
+  "passed": 288,
+  "failures": 0,
+  "errors": 0,
+  "skipped": [],
+  "postgres_skips": 0,
+  "junit_sha256": "98a2d57ab133f8924a477a57f7bcd3a91b5b320b940784a3ee68f1e7fc9282f1",
+  "static_checks": [
+    {
+      "command": [
+        "python",
+        "scripts/repository_preflight.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python",
+        "scripts/release_control_preflight.py",
+        "--base",
+        "origin/main"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python",
+        "scripts/check_architecture_boundaries.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python",
+        "-m",
+        "compileall",
+        "-q",
+        "src",
+        "tests"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "origin/main"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "full_suite": "Required; combined local run in progress and GitHub matrix pending publication",
+  "ci_status": "not yet run on these new main-targeting heads",
+  "constructor_consumers": {
+    "initial_failure": "Existing characterization console_at constructed the retiring file class; the new constructor guard correctly refused it",
+    "repair": "Migrate existing characterization and overview consumers through the production factory; retain all guard/assertions and all four PR808 routes",
+    "passed": 135,
+    "junit_sha256": "ff6e1128b73a24634e2c4ef5056dadffdf6a7003b2d10369255514e897aebdf0"
+  },
+  "helper_argument_audit": {
+    "helpers": 43,
+    "calls": 267,
+    "missing": []
+  }
+}

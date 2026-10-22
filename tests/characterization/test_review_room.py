@@ -26,11 +26,10 @@ CASES = ["empty", "documents", "unknown_document", "index", "proportionate_index
 
 
 @pytest.mark.parametrize("case", CASES)
-def test_review_room_golden(case, tmp_path, monkeypatch, golden):
+def test_review_room_golden(case, tmp_path, monkeypatch, golden, production_console):
     import src.operations_console_app as ui
 
-    console = (console_at(tmp_path, ProportionateReviewConsole)
-               if case.startswith("batch") or case == "proportionate_index" else console_at(tmp_path))
+    console = console_at(tmp_path, production_console=production_console)
     account = deepcopy(console._accounts[REVIEWER])
     args = {}
     if case != "empty":

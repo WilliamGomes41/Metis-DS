@@ -53,15 +53,15 @@ def select_with_sources(console):
     console._fragments_and_spec = prepare
 
 
-def guideline_document(tmp_path, cls=None):
-    console = console_at(tmp_path, cls) if cls else console_at(tmp_path)
+def guideline_document(tmp_path, *, production_console):
+    console = console_at(tmp_path, production_console=production_console)
     select_with_sources(console)
     sid = console.ingest(**command(data=SOURCE_HTML))["snapshot_id"]
     return console, sid, deepcopy(console._accounts[REVIEWER])
 
 
-def tree_document(tmp_path):
-    console = console_at(tmp_path)
+def tree_document(tmp_path, *, production_console):
+    console = console_at(tmp_path, production_console=production_console)
     sid = console.ingest(**command(class_="beslisboom", data=TREE, filename="tree.json",
                                    content_type="application/json"))["snapshot_id"]
     return console, sid, deepcopy(console._accounts[REVIEWER])

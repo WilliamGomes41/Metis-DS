@@ -17,11 +17,14 @@ from types import SimpleNamespace
 import pytest
 
 from src.operations_console_v1 import ConsoleError, SEMANTIC_REPLAY_SPEC_KEY
-from .support import HTML, choice, command, console_at, observe, policy
+from .support import HTML, choice, command, _file_console_at as console_at, observe, policy
 
 TREE = json.dumps({"kind": "beslisboom-freeze", "paths": [{"id": "p", "text": "Bespreek de situatie"}],
                    "nodes": [{"id": "n", "text": "Is er een vraag?"}],
                    "outcomes": [{"id": "o", "text": "Maak een afspraak.", "applies_if": ["n"]}]}).encode()
+# These goldens assert the complete retiring JSON file tree, including writers.
+pytestmark = pytest.mark.file_topology
+
 CASES = ["immutable", "immutable_error", "immutable_value_error", "fetch_html", "fetch_named", "tree",
          "tree_with_policy", "tree_policy_on_guideline", "tree_empty", "tree_story", "tree_live_missing",
          "tree_live_empty", "tree_live_valid", "tree_live_payload_only", "tree_live_fetch_other_url", "tree_pdf_policy",

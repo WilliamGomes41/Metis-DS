@@ -7,6 +7,8 @@
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from copy import deepcopy
 from typing import Any
 
@@ -117,7 +119,7 @@ def _status_from_canonical(
     active_same: int = 0,
     active_other: int = 0,
 ) -> dict[str, str]:
-    console = object.__new__(DurablePublicationConsole)
+    console = SimpleNamespace()
     console.canonical_publication_store = _CanonicalStore(
         release=(
             {
@@ -138,7 +140,7 @@ def _status_from_canonical(
             else None
         ),
     )
-    return console.document_release_serving_status("snap-1")
+    return DurablePublicationConsole.document_release_serving_status(console, "snap-1")
 
 
 def test_canonical_registry_is_the_serving_authority() -> None:

@@ -34,8 +34,8 @@ def _source_id(rows, text):
     return next(r["object_id"] for r in rows if (r.get("content") or {}).get("clean_text") == text and evidence_of(r))
 
 
-def test_guideline_dashboard_has_three_layers_and_counts_duties_not_partition(tmp_path):
-    console, sid, account = guideline_document(tmp_path)
+def test_guideline_dashboard_has_three_layers_and_counts_duties_not_partition(tmp_path, *, production_console):
+    console, sid, account = guideline_document(tmp_path, production_console=production_console)
     rows = console.snapshot_objects(sid)
     content = next(r for r in rows if content_reviewable(r))
     legacy_rest = deepcopy(content)
@@ -61,18 +61,18 @@ def test_guideline_dashboard_has_three_layers_and_counts_duties_not_partition(tm
     assert 'data-open-work-ratio' in html and f'task=history' in html
 
 
-def test_counters_are_bound_to_the_rendered_revision(tmp_path):
-    console, sid, account = guideline_document(tmp_path)
+def test_counters_are_bound_to_the_rendered_revision(tmp_path, *, production_console):
+    console, sid, account = guideline_document(tmp_path, production_console=production_console)
     revision = console.objects_revision(sid)
     html = _room(console, account, sid)
     scope = re.search(r'data-count-scope[^>]*>([^<]+)<', html)
     assert scope and f"versie 1.0 · revisie {revision[:12]}" in scope.group(1)
 
 
-def test_knowledge_progress_and_lane_total_exclude_excluded_source_record(tmp_path):
+def test_knowledge_progress_and_lane_total_exclude_excluded_source_record(tmp_path, *, production_console):
     from src.operations_console_app import _lane_total
     from src.source_context_review_v1 import confirm_source_exclusions
-    console, sid, account = guideline_document(tmp_path)
+    console, sid, account = guideline_document(tmp_path, production_console=production_console)
     rows = console.snapshot_objects(sid)
     confirm_source_exclusions(console, actor_id=REVIEWER, snapshot_id=sid,
         source_object_ids=[_source_id(rows, LEGACY_TEXT)], reason="Documentversie, geen kennis.",
@@ -85,8 +85,8 @@ def test_knowledge_progress_and_lane_total_exclude_excluded_source_record(tmp_pa
     assert _lane_total(rows, review_path="richtlijn", lane="contextual", open_rows=[]) == 0
 
 
-def test_bulk_exclusion_only_for_v1_metadata_and_category_tiles(tmp_path):
-    console, sid, account = guideline_document(tmp_path)
+def test_bulk_exclusion_only_for_v1_metadata_and_category_tiles(tmp_path, *, production_console):
+    console, sid, account = guideline_document(tmp_path, production_console=production_console)
     rows = console.snapshot_objects(sid)
     legacy, unresolved = _source_id(rows, LEGACY_TEXT), _source_id(rows, OPEN_TEXT)
     for task in ("inventory", "disposition"):
@@ -108,20 +108,20 @@ def _assert_tree_overview(html, structure="1 te controleren · 0 afgerond", cont
     assert structure in html and contextual in html
 
 
-def test_tree_document_has_no_knowledge_counter_in_room(tmp_path):
-    console, sid, account = tree_document(tmp_path)
+def test_tree_document_has_no_knowledge_counter_in_room(tmp_path, *, production_console):
+    console, sid, account = tree_document(tmp_path, production_console=production_console)
     _assert_tree_overview(_room(console, account, sid))
 
 
-def test_tree_document_has_no_knowledge_counter_in_workboard_object_path(tmp_path):
+def test_tree_document_has_no_knowledge_counter_in_workboard_object_path(tmp_path, *, production_console):
     from src.review_workboard_v1 import _workboard_page
-    console, sid, account = tree_document(tmp_path)
+    console, sid, account = tree_document(tmp_path, production_console=production_console)
     _assert_tree_overview(_workboard_page(console, account=account, snapshot_id=sid))
 
 
-def test_tree_document_has_no_knowledge_counter_on_native_summary_path(tmp_path, monkeypatch):
+def test_tree_document_has_no_knowledge_counter_on_native_summary_path(tmp_path, monkeypatch, *, production_console):
     import src.review_workboard_v1 as board
-    console, sid, account = tree_document(tmp_path)
+    console, sid, account = tree_document(tmp_path, production_console=production_console)
     calls = install_native_summaries(monkeypatch, console, sid, native_summary(
         console, sid, heading_total=1, heading_pending=1, individual_total=2, individual_pending=2,
         actionable_structure_duties=1, actionable_contextual_duties=2, contextual_review_duties=2))
@@ -130,9 +130,9 @@ def test_tree_document_has_no_knowledge_counter_on_native_summary_path(tmp_path,
     _assert_tree_overview(html)
 
 
-def test_guideline_native_summary_shows_knowledge_counter_without_progress(tmp_path, monkeypatch):
+def test_guideline_native_summary_shows_knowledge_counter_without_progress(tmp_path, monkeypatch, *, production_console):
     import src.review_workboard_v1 as board
-    console, sid, account = guideline_document(tmp_path)
+    console, sid, account = guideline_document(tmp_path, production_console=production_console)
     calls = install_native_summaries(monkeypatch, console, sid, native_summary(
         console, sid, heading_total=1, heading_pending=1, normal_passages=1, normal_batches=1,
         closure_gap_count=2, actionable_structure_duties=1, actionable_batch_duties=1, actionable_contextual_duties=2))

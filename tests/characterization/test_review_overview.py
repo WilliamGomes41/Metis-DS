@@ -16,11 +16,11 @@ CASES = ["guideline_index", "guideline_inventory", "guideline_disposition", "gui
 
 
 @pytest.mark.parametrize("case", CASES)
-def test_review_overview_golden(case, tmp_path, monkeypatch, golden):
+def test_review_overview_golden(case, tmp_path, monkeypatch, golden, production_console):
     import src.operations_console_app as ui
     import src.review_workboard_v1 as board
 
-    console, sid, account = (tree_document if case.startswith("tree") else guideline_document)(tmp_path)
+    console, sid, account = (tree_document if case.startswith("tree") else guideline_document)(tmp_path, production_console=production_console)
     before = console._envelopes.copy()
     calls = []
     if case.endswith("_native"):
@@ -41,15 +41,13 @@ def test_review_overview_golden(case, tmp_path, monkeypatch, golden):
     golden("review_overview", case, {"html": html})
 
 
-def test_review_route_table_golden(tmp_path, golden):
-    """Freeze the console routes, including the four scoped view-check endpoints."""
+def test_review_route_table_golden(tmp_path, golden, production_console, production_app):
+    """Freeze production routes, including the four scoped view-check endpoints."""
     from src.operations_console_app import create_console_app
     from src.proportionate_review_v1 import ProportionateReviewConsole, install_proportionate_review_routes
     from src.review_workboard_v1 import install_review_workboard
     from .support import console_at
-    console = console_at(tmp_path, ProportionateReviewConsole)
-    app = create_console_app(console)
-    install_review_workboard(app, console)
-    install_proportionate_review_routes(app, console)
+    console = console_at(tmp_path, production_console=production_console)
+    app = production_app(console)
     routes = sorted([getattr(r, "path", ""), sorted(getattr(r, "methods", None) or [])] for r in app.router.routes)
     golden("review_overview", "routes", {"routes": routes})

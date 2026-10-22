@@ -407,22 +407,13 @@ def test_t4b_all_review_classes_construct_with_zero_seam_c_refusals(
 
     console_cls = getattr(importlib.import_module(module_name), class_name)
     config = recovery_postgres
-    identity = CutoverPostgresWorkflowIdentityStore(config)
-    documents = PostgresConcurrentWorkflowDocumentStore(config)
-    reviews = PostgresWorkflowReviewStore(config)
-    stores = [identity, documents, reviews]
-    kwargs = dict(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime",
-                  canonical_publication_store=PostgresCanonicalPublicationStore(config),
-                  workflow_identity_store=identity, workflow_document_store=documents,
-                  workflow_review_store=reviews)
-    if "Complete" in class_name:
-        remaining = PostgresWorkflowRemainingStore(config)
-        stores.append(remaining)
-        kwargs["workflow_remaining_store"] = remaining
-    if "Azure" in class_name:
-        kwargs["immutable_source_store"] = MemorySourceStore()
-    bind_workflow_stores(*stores)
-    console = console_cls(**kwargs)
+    from tests.production_support import production_application
+    console = production_application(
+        tmp_path, config, azure="Azure" in class_name,
+        immutable_source_store=MemorySourceStore() if "Azure" in class_name else None,
+    ).state.operations_kernel
+    # Production constructs the supported leaf, exercising each historical ancestor.
+    assert isinstance(console, console_cls)
     assert isinstance(console, _PostgresWorkflowReviewMixin)
     assert refusals == []
 

@@ -10,7 +10,7 @@ HTML = b"<!doctype html><html><body><h1>Voorbeeld</h1><p>Een waarneming is een b
 ACTOR, REVIEWER, OTHER = "author", "reviewer", "other"
 
 
-def console_at(root, cls=OperationsConsole):
+def _file_console_at(root, cls=OperationsConsole):
     console = cls(root=root, source_store=root / "sources", runtime=root / "runtime")
     console._accounts = {
         key: {"account_id": key, "username": key, "display_name": key.title(), "roles": roles}
@@ -18,6 +18,19 @@ def console_at(root, cls=OperationsConsole):
                            (REVIEWER, ["reviewer"]), (OTHER, ["reviewer"]))
     }
     console._save_accounts()
+    return console
+
+
+def console_at(root, *, production_console):
+    """Real production PG with stable, synthetic identity rows for HTML goldens."""
+    console = production_console(root=root, processing_binder=lambda console: None)
+    for key, roles in ((ACTOR, ["researcher", "reviewer"]),
+                       (REVIEWER, ["reviewer"]), (OTHER, ["reviewer"])):
+        console.workflow_identity_store.create_account(dict(
+            account_id=key, username=key, display_name=key.title(), roles=roles,
+            password_salt="unused-characterization-salt", password_hash="unused-characterization-hash",
+            created_at="2026-10-17T08:00:00+00:00"))
+    console._accounts = {row["account_id"]: row for row in console.list_accounts()}
     return console
 
 

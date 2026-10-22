@@ -83,8 +83,8 @@ pytestmark = [
 ]
 
 
-def _console(tmp_path: Path) -> OperationsConsole:
-    return OperationsConsole(
+def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
+    return production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -174,6 +174,10 @@ def _install_alternating_dns(
     A connect to a documented public pin is rewritten to the local server
     so the test never attacks a real internal network.
     """
+    # This synthetic DNS/socket fixture talks only to its local peer.
+    import os
+    for name in ("NO_PROXY", "no_proxy"):
+        monkeypatch.setenv(name, ",".join(filter(None, [os.environ.get(name, ""), *answers])))
     from src.ingest_limits_v1 import _ip_is_blocked
 
     remaining = {key.lower(): list(value) for key, value in answers.items()}
@@ -245,8 +249,8 @@ def test_ssrf_redirect_to_internal_destination_is_rejected() -> None:
     assert caught.value.code == URL_DESTINATION_NOT_ALLOWED
 
 
-def test_url_ingest_rejects_loopback_before_download(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_url_ingest_rejects_loopback_before_download(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     with pytest.raises(ConsoleError) as caught:
         console.ingest(
@@ -290,10 +294,10 @@ def test_url_fetch_still_respects_wave2_max_bytes(
     assert "CONSOLE_INGEST_MAX_BYTES" in source
 
 
-def test_login_cookie_is_secure_httponly_samesite(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_login_cookie_is_secure_httponly_samesite(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    app = create_console_app(console)
+    app = production_app(console)
     client = TestClient(app)
     response = client.post(
         "/login",
@@ -309,22 +313,23 @@ def test_login_cookie_is_secure_httponly_samesite(tmp_path: Path) -> None:
     assert "samesite=lax" in lowered
 
 
-def test_expired_session_rejected_and_stays_invalid_after_restart(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_expired_session_rejected_and_stays_invalid_after_restart(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
     session = console.authenticate("researcher.anne", "anne-secret")
     token = session["token"]
     assert console.session_account(token)["username"] == "researcher.anne"
 
     expired_at = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    console._sessions[token]["expires_at"] = expired_at
-    console._save_sessions()
+    from src.workflows.workflow_identity_postgres_v1 import _token_hash
+    with console.workflow_identity_store._connect() as connection:
+        connection.execute("UPDATE workflow.sessions SET created_at=%s::timestamptz-INTERVAL '1 hour', expires_at=%s WHERE token_hash=%s", (expired_at, expired_at, _token_hash(token)))
 
     with pytest.raises(ConsoleError) as caught:
         console.session_account(token)
     assert caught.value.code == "not_authenticated"
 
-    restarted = OperationsConsole(
+    restarted = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -332,16 +337,16 @@ def test_expired_session_rejected_and_stays_invalid_after_restart(tmp_path: Path
     with pytest.raises(ConsoleError) as restarted_caught:
         restarted.session_account(token)
     assert restarted_caught.value.code == "not_authenticated"
-    stored = json.loads(restarted._sessions_path.read_text(encoding="utf-8"))
-    assert token in stored
-    assert stored[token]["expires_at"] == expired_at
+    with restarted.workflow_identity_store._connect() as connection:
+        row = connection.execute('SELECT expires_at FROM workflow.sessions WHERE token_hash=%s', (_token_hash(token),)).fetchone()
+    assert row['expires_at'] == datetime.strptime(expired_at, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
 
 
-def test_live_session_survives_process_restart(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_live_session_survives_process_restart(tmp_path: Path, *, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
     session = console.authenticate("reviewer.bert", "bert-secret")
-    restarted = OperationsConsole(
+    restarted = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -350,9 +355,10 @@ def test_live_session_survives_process_restart(tmp_path: Path) -> None:
     assert account["username"] == "reviewer.bert"
 
 
+@pytest.mark.file_topology
 def test_old_session_without_expires_at_is_invalid_version_compat(tmp_path: Path) -> None:
     """version-compat: pre-wave-3 session rows without expiry MUST NOT stay immortal."""
-    console = _console(tmp_path)
+    console = _file_console(tmp_path)
     accounts = _accounts(console)
     token = "a" * 64
     payload = {
@@ -375,10 +381,11 @@ def test_old_session_without_expires_at_is_invalid_version_compat(tmp_path: Path
     assert caught.value.code == "not_authenticated"
 
 
-def test_concurrent_login_logout_does_not_lose_sessions(tmp_path: Path) -> None:
-    first = _console(tmp_path)
+
+def test_concurrent_login_logout_does_not_lose_sessions(tmp_path: Path, *, production_console) -> None:
+    first = _console(tmp_path, production_console=production_console)
     _accounts(first)
-    second = OperationsConsole(
+    second = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -407,7 +414,7 @@ def test_concurrent_login_logout_does_not_lose_sessions(tmp_path: Path) -> None:
     assert errors == []
     assert set(tokens) == {"anne", "dirk"}
 
-    third = OperationsConsole(
+    third = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -440,7 +447,7 @@ def test_concurrent_login_logout_does_not_lose_sessions(tmp_path: Path) -> None:
         assert not thread.is_alive()
     assert errors == []
 
-    fourth = OperationsConsole(
+    fourth = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -452,8 +459,9 @@ def test_concurrent_login_logout_does_not_lose_sessions(tmp_path: Path) -> None:
     assert fourth.session_account(tokens["bert"])["username"] == "reviewer.bert"
 
 
+@pytest.mark.file_topology
 def test_session_store_interrupt_does_not_leave_torn_or_empty_file(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+    console = _file_console(tmp_path)
     _accounts(console)
     session = console.authenticate("researcher.anne", "anne-secret")
     path = console._sessions_path
@@ -512,8 +520,10 @@ def test_session_store_interrupt_does_not_leave_torn_or_empty_file(tmp_path: Pat
     assert restarted.session_account(session["token"])["username"] == "researcher.anne"
 
 
+
+@pytest.mark.file_topology
 def test_session_store_retries_after_stale_failed_write(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+    console = _file_console(tmp_path)
     _accounts(console)
     calls = {"n": 0}
     real_save = console._save_sessions
@@ -534,6 +544,7 @@ def test_session_store_retries_after_stale_failed_write(tmp_path: Path) -> None:
         runtime=tmp_path / "output" / "runtime" / "operations-console",
     )
     assert restarted.session_account(session["token"])["username"] == "researcher.anne"
+
 
 
 def test_password_hashing_is_not_weakened() -> None:
@@ -725,11 +736,8 @@ def test_ssrf_redirect_from_pinned_public_to_metadata_is_rejected(
         server.server_close()
 
 
-def test_console_login_attempts_are_throttled_before_password_verification(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    console = _console(tmp_path)
+def test_console_login_attempts_are_throttled_before_password_verification(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
     calls: list[str] = []
     original_authenticate = console.authenticate
@@ -739,7 +747,7 @@ def test_console_login_attempts_are_throttled_before_password_verification(
         return original_authenticate(username, password)
 
     monkeypatch.setattr(console, "authenticate", counted_authenticate)
-    client = TestClient(create_console_app(console))
+    client = TestClient(production_app(console))
 
     for _ in range(10):
         response = client.post(
@@ -764,11 +772,8 @@ def test_console_login_attempts_are_throttled_before_password_verification(
     assert calls[-1] == "reviewer.bert"
 
 
-def test_configured_console_origin_blocks_missing_and_cross_origin_posts(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    console = _console(tmp_path)
+def test_configured_console_origin_blocks_missing_and_cross_origin_posts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
     calls: list[str] = []
     original_authenticate = console.authenticate
@@ -778,7 +783,7 @@ def test_configured_console_origin_blocks_missing_and_cross_origin_posts(
         return original_authenticate(username, password)
 
     monkeypatch.setattr(console, "authenticate", counted_authenticate)
-    app = create_console_app(
+    app = production_app(
         console,
         trusted_origin="https://console.example.test/",
     )
@@ -821,10 +826,10 @@ def test_configured_console_origin_blocks_missing_and_cross_origin_posts(
     assert same_origin.status_code == 303
     assert calls == ["researcher.anne"]
 
-def test_logout_requires_same_origin_post_and_get_is_non_mutating(tmp_path: Path) -> None:
-    console = _console(tmp_path)
+def test_logout_requires_same_origin_post_and_get_is_non_mutating(tmp_path: Path, *, production_app, production_console) -> None:
+    console = _console(tmp_path, production_console=production_console)
     _accounts(console)
-    app = create_console_app(
+    app = production_app(
         console,
         trusted_origin="https://console.example.test/",
     )
@@ -868,3 +873,11 @@ def test_logout_requires_same_origin_post_and_get_is_non_mutating(tmp_path: Path
         console.session_account(token)
     assert caught.value.code == "not_authenticated"
 
+
+
+def _file_console(tmp_path: Path) -> OperationsConsole:
+    return OperationsConsole(
+        root=tmp_path,
+        source_store=tmp_path / "sources" / "private",
+        runtime=tmp_path / "output" / "runtime" / "operations-console",
+    )

@@ -9,6 +9,8 @@
 """
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import os
 import uuid
 from pathlib import Path
@@ -184,13 +186,13 @@ def test_withdrawal_removes_complete_logical_document_without_fallback_or_replay
         assert {str(row["state"]) for row in registry} == {"emergency_unpublished"}
         assert {str(row["unpublish_reason"]) for row in registry} == {"Source withdrawn pending correction"}
 
-        console = object.__new__(DurablePublicationConsole)
+        console = SimpleNamespace()
         console.canonical_publication_store = store
-        assert console.document_release_serving_status(snapshot1) == {
+        assert DurablePublicationConsole.document_release_serving_status(console, snapshot1) == {
             "release_status": "superseded",
             "serving_status": "inactive",
         }
-        assert console.document_release_serving_status(snapshot2) == {
+        assert DurablePublicationConsole.document_release_serving_status(console, snapshot2) == {
             "release_status": "withdrawn",
             "serving_status": "inactive",
         }

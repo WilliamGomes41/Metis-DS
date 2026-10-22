@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 from src.api_access_v1 import PostgresApiAccessStore
 from src.audit_retention_v1 import AuditRetentionService
 from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
-from src.operations_console_app import create_console_app
+from tests.production_support import application_for
 from src.operations_console_v1 import PRE_REVIEW_BLOCKED
 from src.product_api_v1 import create_product_app
 from src.product_security_v1 import TenantRegistry
@@ -45,22 +45,13 @@ from tests.test_workflow_chain_recovery_v1 import _install_schema, recovery_post
 
 
 def _console(root, config, source):
-    identity = CutoverPostgresWorkflowIdentityStore(config)
-    documents = PostgresConcurrentWorkflowDocumentStore(config)
-    reviews = PostgresWorkflowReviewStore(config)
-    remaining = PostgresWorkflowRemainingStore(config)
-    bind_workflow_stores(identity, documents, reviews, remaining)
-    return FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole(
-        root=root, source_store=root / "sources", runtime=root / "runtime",
-        immutable_source_store=source, canonical_publication_store=PostgresCanonicalPublicationStore(config),
-        workflow_identity_store=identity, workflow_document_store=documents,
-        workflow_review_store=reviews, workflow_remaining_store=remaining,
-    )
+    from tests.production_support import production_application
+    return production_application(root, config, azure=True, immutable_source_store=source,
+        processing_binder=lambda console:None, environment={'CONSOLE_PUBLIC_ORIGIN':'https://testserver'}).state.operations_kernel
 
 
 def _client(console, username="publisher.carla"):
-    app = create_console_app(console, trusted_origin="https://testserver")
-    install_publish_readiness_ui(app, console)
+    app = application_for(console, trusted_origin="https://testserver")
     client = TestClient(app, base_url="https://testserver", headers={"Origin": "https://testserver"})
     assert client.post("/login", data={"username": username, "password": TEST_PASSWORD}, follow_redirects=False).status_code == 303
     return client
@@ -71,7 +62,7 @@ def _ingest(console, accounts, title, version, prior=None):
     bind_fixture_selections(console)
     import uuid
     import asyncio
-    with TestClient(create_console_app(console, trusted_origin="https://testserver"),
+    with TestClient(application_for(console, trusted_origin="https://testserver"),
                     base_url="https://testserver", headers={"Origin": "https://testserver"}) as client:
         response = client.post("/login", data={"username": accounts["researcher"]["username"], "password": TEST_PASSWORD},
                                follow_redirects=False)
@@ -182,7 +173,7 @@ def _assert_review_projection(console, client, snapshot_id):
     dashboard = client.get("/review", params={"document": snapshot_id})
     assert dashboard.status_code == 200
     assert "Jouw open werk" in dashboard.text
-    assert 'class="review-workspace-layout"' in dashboard.text
+    assert 'class="doc-card document-disclosure review-document-card"' in dashboard.text
     assert f'href="/inzicht/document?document={snapshot_id}"' in dashboard.text
     repair = client.get("/inzicht/document", params={"document": snapshot_id})
     assert repair.status_code == 200

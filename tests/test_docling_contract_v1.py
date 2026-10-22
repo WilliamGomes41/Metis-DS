@@ -270,8 +270,7 @@ def test_later_extraction_free_runs_keep_accepted_fragments_for_source_readers(m
     def forbidden(*args, **kwargs):
         raise AssertionError("Native parser must not replace retained Docling IDs")
     monkeypatch.setattr(kernel, "extract_pdf", forbidden)
-    console = object.__new__(OperationsConsole)
-    assert console._read_source_fragments(restored, Path("unused.pdf")) == fragments
+    assert OperationsConsole._read_source_fragments(None, restored, Path("unused.pdf")) == fragments
     assert restored == envelope
 
 

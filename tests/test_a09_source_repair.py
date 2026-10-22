@@ -284,27 +284,13 @@ from pathlib import Path
 from tests.test_a09_source_repair import assert_complete
 root, sources, runtime, sid, oid, native = sys.argv[1:]
 kwargs = dict(root=Path(root), source_store=Path(sources), runtime=Path(runtime))
-if native == '1':
-    import os
-    from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig, PostgresCanonicalPublicationStore
-    from src.workflows.workflow_identity_cutover_v1 import CutoverPostgresWorkflowIdentityStore
-    from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
-    from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
-    from src.workflows.workflow_remaining_postgres_v1 import PostgresWorkflowRemainingStore
-    from src.workflows.workflow_badge_counts_postgres_v1 import FastBadgePostgresCompleteWorkflowDurablePublicationConsole
-    from src.workflows.workflow_transaction_v1 import bind_workflow_stores
-    config = PostgresCanonicalConfig(dsn=os.environ['METIS_TEST_POSTGRES_DSN'])
-    identity = CutoverPostgresWorkflowIdentityStore(config)
-    documents = PostgresConcurrentWorkflowDocumentStore(config)
-    reviews = PostgresWorkflowReviewStore(config)
-    remaining = PostgresWorkflowRemainingStore(config)
-    bind_workflow_stores(identity, documents, reviews, remaining)
-    console = FastBadgePostgresCompleteWorkflowDurablePublicationConsole(**kwargs,
-        canonical_publication_store=PostgresCanonicalPublicationStore(config),
-        workflow_identity_store=identity, workflow_document_store=documents,
-        workflow_review_store=reviews, workflow_remaining_store=remaining)
-else:
-    console = ReviewClosureConsole(**kwargs)
+assert native == '1', 'Console restart proofs require PostgreSQL'
+import os
+from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from tests.production_support import production_application
+config = PostgresCanonicalConfig(dsn=os.environ['METIS_TEST_POSTGRES_DSN'])
+console = production_application(config=config, processing_binder=lambda console:None,
+                                 **kwargs).state.operations_kernel
 print(json.dumps(assert_complete(console, sid, oid)))
 '''
     runtime = console.runtime.parent/'process-restart' if native else console.runtime
