@@ -143,7 +143,14 @@ def _question_as_outcome(p):
     _resolve_role(p, "Is er een verhoogd valrisico?", "outcome")
 
 
+def _invented_context_binding(p):
+    context = next(u for u in p["units"] if u["role"] == "context")["ref"]
+    target = next(u for u in p["units"] if u["role"] != "context")["ref"]
+    p["context_bindings"].append({"ref": "bx", "context": context, "applies_to": [target]})
+
+
 @pytest.mark.parametrize("mutate, code", [
+    (_invented_context_binding, "decision_export_context_not_preserved"),
     (_outcome_as_action, "decision_export_role_not_preserved"),
     (_question_as_outcome, "decision_export_role_not_preserved"),
     (_drop_connection, "decision_export_route_not_preserved"),

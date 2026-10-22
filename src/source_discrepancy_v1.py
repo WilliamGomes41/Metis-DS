@@ -26,9 +26,14 @@ FORMATION_KEY = "source_discrepancy_formation"
 
 def formation_of(obj: dict[str, Any]) -> dict[str, str]:
     """Route, formation mode and model of exactly this object version."""
+    from src.decision_tree_construction_v1 import FORMATION_MODE as DECISION_TREE_MODE
     from src.quality_evidence_v1 import route_of
     semantic = (obj.get("metadata") or {}).get("semantic_passage") or {}
-    return {"route": str(route_of(obj)["route"]),
+    route = str(route_of(obj)["route"])
+    if route == "unknown" and semantic.get("formation_mode") == DECISION_TREE_MODE:
+        # Decision trees are formed by their own source-bound model route.
+        route = "semantic"
+    return {"route": route,
             "formation_mode": str(semantic.get("formation_mode") or "unknown"),
             "model": str(semantic.get("model") or "unknown")}
 

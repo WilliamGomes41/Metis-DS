@@ -161,6 +161,9 @@ def verify_export_preserved(construction: dict[str, Any], data: bytes,
         raise DecisionTreeProposalError("decision_export_route_not_preserved")
     if {to for _from, to, *_rest in expected} & set(construction["graph_plan"]["entrypoints"]):
         raise DecisionTreeProposalError("decision_export_route_not_preserved")
+    # The export states no context binding; one would be invented, unreviewed structure.
+    if construction["context_bindings"]:
+        raise DecisionTreeProposalError("decision_export_context_not_preserved")
     bundles = sorted(
         (object_for[str(f["boom_id"])],
          tuple(sorted(object_for[str(m["boom_id"])] for m in fragments

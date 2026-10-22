@@ -104,6 +104,14 @@ def test_reported_discrepancy_blocks_unchanged_approval_and_is_recorded_on_rejec
     assert reported["model"] != "later-model"
 
 
+def test_decision_tree_report_is_attributed_to_the_semantic_route() -> None:
+    from src.decision_tree_construction_v1 import FORMATION_MODE
+    from src.source_discrepancy_v1 import formation_of
+    tree_object = {"metadata": {"semantic_passage": {"formation_mode": FORMATION_MODE, "model": "m",
+                                                     "selection_origin": "proposal_selected"}}}
+    assert formation_of(tree_object) == {"route": "semantic", "formation_mode": FORMATION_MODE, "model": "m"}
+
+
 def test_heading_cannot_carry_a_discrepancy(tmp_path, *, production_console) -> None:
     console, users, snapshot_id, _ = _system(tmp_path, production_console=production_console)
     heading = next(o for o in console.snapshot_objects(snapshot_id) if o["object_type"] == "heading")
