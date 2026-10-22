@@ -355,33 +355,6 @@ def test_live_session_survives_process_restart(tmp_path: Path, *, production_con
     assert account["username"] == "reviewer.bert"
 
 
-@pytest.mark.file_topology
-def test_old_session_without_expires_at_is_invalid_version_compat(tmp_path: Path) -> None:
-    """version-compat: pre-wave-3 session rows without expiry MUST NOT stay immortal."""
-    console = _file_console(tmp_path)
-    accounts = _accounts(console)
-    token = "a" * 64
-    payload = {
-        token: {
-            "token": token,
-            "account_id": accounts["researcher"]["account_id"],
-            "username": "researcher.anne",
-            "roles": ["researcher", "reviewer"],
-            "created_at": "2026-01-01T00:00:00Z",
-        }
-    }
-    console._sessions_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    restarted = OperationsConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources" / "private",
-        runtime=tmp_path / "output" / "runtime" / "operations-console",
-    )
-    with pytest.raises(ConsoleError) as caught:
-        restarted.session_account(token)
-    assert caught.value.code == "not_authenticated"
-
-
-
 def test_concurrent_login_logout_does_not_lose_sessions(tmp_path: Path, *, production_console) -> None:
     first = _console(tmp_path, production_console=production_console)
     _accounts(first)
@@ -459,98 +432,11 @@ def test_concurrent_login_logout_does_not_lose_sessions(tmp_path: Path, *, produ
     assert fourth.session_account(tokens["bert"])["username"] == "reviewer.bert"
 
 
-@pytest.mark.file_topology
-def test_session_store_interrupt_does_not_leave_torn_or_empty_file(tmp_path: Path) -> None:
-    console = _file_console(tmp_path)
-    _accounts(console)
-    session = console.authenticate("researcher.anne", "anne-secret")
-    path = console._sessions_path
-    before = path.read_text(encoding="utf-8")
-    assert before.strip()
-    before_payload = json.loads(before)
-
-    real_write_bytes = Path.write_bytes
-    real_open = open
-
-    def _write_kind(candidate: Path | str) -> str | None:
-        try:
-            resolved = Path(candidate).resolve()
-        except OSError:
-            return None
-        if resolved == path.resolve():
-            return "dest"
-        if resolved.parent == path.parent and resolved.suffix == ".tmp":
-            return "tmp"
-        return None
-
-    def interrupt_write_bytes(self, data):
-        kind = _write_kind(self)
-        if kind in {"dest", "tmp"}:
-            raise OSError("interrupted")
-        return real_write_bytes(self, data)
-
-    def interrupt_open(file, mode="r", *args, **kwargs):
-        writable = any(flag in str(mode) for flag in ("w", "a", "x", "+"))
-        kind = _write_kind(file) if writable else None
-        if kind in {"dest", "tmp"}:
-            raise OSError("interrupted")
-        return real_open(file, mode, *args, **kwargs)
-
-    Path.write_bytes = interrupt_write_bytes  # type: ignore[method-assign]
-    try:
-        import builtins
-
-        builtins.open = interrupt_open  # type: ignore[assignment]
-        with pytest.raises(OSError, match="interrupted"):
-            console.authenticate("researcher.dirk", "dirk-secret")
-    finally:
-        Path.write_bytes = real_write_bytes  # type: ignore[method-assign]
-        import builtins
-
-        builtins.open = real_open  # type: ignore[assignment]
-
-    after = path.read_text(encoding="utf-8")
-    assert after == before
-    assert json.loads(after) == before_payload
-    restarted = OperationsConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources" / "private",
-        runtime=tmp_path / "output" / "runtime" / "operations-console",
-    )
-    assert restarted.session_account(session["token"])["username"] == "researcher.anne"
-
-
-
-@pytest.mark.file_topology
-def test_session_store_retries_after_stale_failed_write(tmp_path: Path) -> None:
-    console = _file_console(tmp_path)
-    _accounts(console)
-    calls = {"n": 0}
-    real_save = console._save_sessions
-
-    def flaky_save() -> None:
-        calls["n"] += 1
-        if calls["n"] == 1:
-            raise OSError("stale handle")
-        return real_save()
-
-    console._save_sessions = flaky_save  # type: ignore[method-assign]
-    session = console.authenticate("researcher.anne", "anne-secret")
-    assert calls["n"] >= 2
-    assert console.session_account(session["token"])["username"] == "researcher.anne"
-    restarted = OperationsConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources" / "private",
-        runtime=tmp_path / "output" / "runtime" / "operations-console",
-    )
-    assert restarted.session_account(session["token"])["username"] == "researcher.anne"
-
-
-
 def test_password_hashing_is_not_weakened() -> None:
     text = (ROOT / "src" / "operations_console_v1.py").read_text(encoding="utf-8")
+    identity = (ROOT / "src" / "workflows" / "workflow_identity_postgres_v1.py").read_text(encoding="utf-8")
     assert "pbkdf2_hmac" in text
-    assert "compare_digest" in text
+    assert "secrets.compare_digest(digest" in identity  # the only authenticator since D6b
     assert "PBKDF2_ROUNDS = 80_000" in text
 
 

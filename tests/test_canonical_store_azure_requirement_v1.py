@@ -24,10 +24,10 @@ pytestmark = [
 
 def test_azure_runtime_refuses_missing_canonical_store(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("WEBSITE_SITE_NAME", "vvn-metis-console")
-    for key in POSTGRES_STORE_SETTINGS:
+    for key in (*POSTGRES_STORE_SETTINGS, *("METIS_CANONICAL_DB_DSN", "METIS_CANONICAL_DB_HOST", "METIS_CANONICAL_DB_NAME", "METIS_CANONICAL_DB_USER")):
         monkeypatch.delenv(key, raising=False)
 
-    with pytest.raises(RuntimeError, match="azure_workflow_authorities_required"):
+    with pytest.raises(RuntimeError, match="postgres_authority_configuration_required"):
         validate_workflow_store_configuration()
 
 
@@ -47,11 +47,15 @@ def test_azure_runtime_refuses_non_azure_source_authority(monkeypatch: pytest.Mo
         _immutable_source_store()
 
 
-def test_local_runtime_may_run_without_durable_authorities(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_local_runtime_requires_postgres_but_may_use_local_source_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D6b: locally PostgreSQL is required; only the source-byte store may stay local."""
     monkeypatch.delenv("WEBSITE_SITE_NAME", raising=False)
-    for key in POSTGRES_STORE_SETTINGS:
+    for key in (*POSTGRES_STORE_SETTINGS, *("METIS_CANONICAL_DB_DSN", "METIS_CANONICAL_DB_HOST", "METIS_CANONICAL_DB_NAME", "METIS_CANONICAL_DB_USER")):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.delenv("CONSOLE_IMMUTABLE_SOURCE_STORE", raising=False)
 
-    assert validate_workflow_store_configuration() is False
+    with pytest.raises(RuntimeError, match="postgres_authority_configuration_required"):
+        validate_workflow_store_configuration()
+    monkeypatch.setenv("METIS_CANONICAL_DB_DSN", "postgresql://unused.invalid/metis")
+    assert validate_workflow_store_configuration() is None
     assert _immutable_source_store() is None

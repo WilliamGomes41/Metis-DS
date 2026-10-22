@@ -14,7 +14,7 @@ import pytest
 
 def pytest_addoption(parser):
     parser.addoption("--record-characterization", action="store_true", default=False)
-    parser.addoption("--characterization-mutation", choices=("ingest", "review"), default=None,
+    parser.addoption("--characterization-mutation", choices=("review",), default=None,
                      help="One temporary in-memory mutation; expected to make goldens red")
 
 
@@ -74,22 +74,15 @@ def temporary_behavior_mutation(request, monkeypatch, offline_clock):
     import ast
     import inspect
     import textwrap
-    import src.operations_console_v1 as op
     import src.operations_console_app as ui
 
-    owner, name, module = (op.OperationsConsole, "ingest", op) if selected == "ingest" else (ui, "_render_review_room", ui)
+    owner, name, module = ui, "_render_review_room", ui
     function = inspect.unwrap(getattr(owner, name))
     source, start = inspect.getsourcelines(function)
     tree = ast.parse(textwrap.dedent("".join(source)))
 
     class Mutate(ast.NodeTransformer):
         count = 0
-
-        def visit_Name(self, node):
-            if selected == "ingest" and node.id == "CAPTURED":
-                self.count += 1
-                return ast.copy_location(ast.Constant("characterization-mutated-state"), node)
-            return node
 
         def visit_Constant(self, node):
             if selected == "review" and isinstance(node.value, str) and "<h1>Review</h1>" in node.value:

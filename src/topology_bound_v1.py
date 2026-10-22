@@ -1,9 +1,9 @@
 """Fail-closed bounds for the supported console process topology.
 
 The default remains one Gunicorn worker. Two workers are supported only on one
-instance with every mutable production authority enabled. HTTP mutations are
-then protected by authoritative PostgreSQL concurrency and the process-shared
-commit lock on that single instance.
+instance with Azure Blob as the immutable source authority; PostgreSQL is always
+the workflow authority (D6b). HTTP mutations are then protected by authoritative
+PostgreSQL concurrency and the process-shared commit lock on that single instance.
 """
 from __future__ import annotations
 
@@ -11,15 +11,12 @@ import os
 import re
 from typing import Mapping
 
-from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
-
 DEFAULT_WORKERS = 1
 SUPPORTED_WORKERS = (1, 2)
 SUPPORTED_INSTANCE_COUNT = 1
 SUPPORTED_WRITE_MODE = "sequential"
 
 DURABLE_MULTI_WORKER_SETTINGS = {
-    **dict.fromkeys(POSTGRES_STORE_SETTINGS, "postgres"),
     "CONSOLE_IMMUTABLE_SOURCE_STORE": "azure",
 }
 

@@ -182,7 +182,8 @@ def test_t1_build_app_refuses_tier_d_before_any_postgres_read(monkeypatch, tmp_p
     if review_kind == "file":
         assert str(info.value) == "unsupported_workflow_review_store"
     else:
-        _assert_refused(info.value)
+        # D6b: selectors no longer choose a tier; without PostgreSQL every start is refused.
+        assert str(info.value) == "postgres_authority_configuration_required"
     assert not data_root.exists() or not any(data_root.rglob("*"))
 
 
@@ -444,7 +445,7 @@ def test_t5_documents_mixin_writes_no_mirror_copy_after_failed_commit(
     original_aw = operations_mod._atomic_write
 
     def spy_aw(path, payload):
-        if Path(path).name == console._bindings_path.name:
+        if Path(path).name == (console.runtime / "publish_authorizations.json").name:
             copy_writes.append("bindings")
         return original_aw(path, payload)
     monkeypatch.setattr(operations_mod, "_atomic_write", spy_aw)
@@ -466,7 +467,8 @@ def test_t5_documents_mixin_writes_no_mirror_copy_after_failed_commit(
     assert truncations == []
     if not remirror_fails:
         reviews = PostgresWorkflowReviewStore(workflow_postgres)
-        assert console._load_map(console._bindings_path) == reviews.read_bindings()
+        assert not (console.runtime / "publish_authorizations.json").exists()
+        assert reviews.read_bindings() == {}
         assert len(read_events(console._ledger_path)) == len(reviews.read_events())
 
 

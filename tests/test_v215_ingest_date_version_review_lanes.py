@@ -839,29 +839,6 @@ def test_safe_filename_still_accepts_plain_basenames() -> None:
     assert safe_store_filename("continentie-v2.html") == "continentie-v2.html"
 
 
-@pytest.mark.file_topology
-def test_objects_path_cannot_escape_runtime_store(tmp_path: Path) -> None:
-    console = _file_console(tmp_path)
-    objects_dir = console._objects_dir.resolve()
-    runtime = objects_dir.parent.resolve()
-    planted = runtime / "pwned.jsonl"
-    planted.write_text("not-objects\n", encoding="utf-8")
-    for bad in ("../pwned", "..", "foo/bar", "snap-../x", "/tmp/x", "..\\pwned"):
-        with pytest.raises(ConsoleError, match="unknown_snapshot|invalid_store_path"):
-            console._objects_path(bad)
-        with pytest.raises(ConsoleError, match="unknown_snapshot|invalid_store_path"):
-            console._load_objects(bad)
-        with pytest.raises(ConsoleError, match="unknown_snapshot|invalid_store_path"):
-            console._save_objects(bad, [{"object_id": "x"}])
-    assert planted.read_text(encoding="utf-8") == "not-objects\n"
-    for path in _files_under(objects_dir):
-        path.resolve().relative_to(objects_dir)
-    extra = [path for path in _files_under(runtime) if path.resolve() != planted.resolve()]
-    for path in extra:
-        path.resolve().relative_to(objects_dir)
-
-
-
 def test_safe_path_under_rejects_traversal(tmp_path: Path) -> None:
     root = (tmp_path / "store").resolve()
     root.mkdir()

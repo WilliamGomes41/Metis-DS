@@ -54,12 +54,6 @@ def _repair_evidence(spec: dict[str, Any]) -> Iterator[None]:
 class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewConsole):
     """One-path Review repair with migration and reconstructable evidence."""
 
-    @contextmanager
-    def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
-        self._require_mutable_working_revision(snapshot_id)
-        with super()._atomic_snapshot_mutation(snapshot_id):
-            yield
-
     def review_object(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
         snapshot_id = str(kwargs.get("snapshot_id") or "")
         self._require_mutable_working_revision(snapshot_id)

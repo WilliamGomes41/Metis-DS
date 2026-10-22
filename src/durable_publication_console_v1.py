@@ -1,24 +1,21 @@
 """Durable-first console publication boundary.
 
-For Azure publication the PostgreSQL canonical store is the authority. Publication
-is committed there first in one transaction. Only after that succeeds are the
-console envelope, release manifest, local ledger and Product API JSONL projection
-updated as rebuildable local copies.
+The PostgreSQL canonical store is the publication authority. Publication is
+committed there first in one transaction. Only after that succeeds does the
+PostgreSQL workflow mixin record the envelope state and audit event; there are
+no local release manifests, projection files or envelope copies (D5, D6b).
 """
 from __future__ import annotations
 
 import json
 import uuid
-from contextlib import suppress
 from copy import deepcopy
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
 from src.document_status_v1 import DocumentStatusReadinessMixin
-from src.operations_console_v1 import PUBLICATION_PROTOCOL_VERSION, RELEASE_MANIFEST_DIRNAME, ConsoleError, _atomic_replace_bytes, _atomic_write
-from src.published_projection_v1 import atomic_replace_projection
+from src.operations_console_v1 import ConsoleError
 from src.publication_evidence_v1 import observe_publication
 from src.retrieval.retrieval_projection_v2 import build_projection
 from src.review_closure_v1 import ReviewClosureConsole
@@ -33,28 +30,13 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
     """Review console whose successful publication is PostgreSQL-first."""
 
     def __init__(self, *args: Any, canonical_publication_store: PostgresCanonicalPublicationStore | None = None, **kwargs: Any) -> None:
+        if canonical_publication_store is None:
+            raise RuntimeError("canonical_publication_store_required")
         super().__init__(*args, **kwargs)
         self.canonical_publication_store = canonical_publication_store
 
-    @staticmethod
-    def _read_optional(path: Path) -> bytes | None:
-        return path.read_bytes() if path.exists() else None
-
-    @staticmethod
-    def _restore_optional(path: Path, prior: bytes | None) -> None:
-        if prior is None:
-            with suppress(OSError): path.unlink()
-            return
-        path.parent.mkdir(parents=True, exist_ok=True)
-        _atomic_replace_bytes(path, prior)
-
-    @staticmethod
-    def _manifest_from_release(release: dict[str, Any]) -> dict[str, Any]:
-        return {"release_id": str(release["release_id"]), "release_version": str(release["release_version"]), "release_owner": str(release["release_owner"]), "published_at": str(release["published_at"]), "protocol_version": PUBLICATION_PROTOCOL_VERSION, "snapshot_id": str(release["snapshot_id"]), "source_sha256": str(release["source_sha256"]), "immutable_storage_locator": str(release["source_locator"]), "objects": deepcopy(release["objects"]), **({"decision_graph_release": deepcopy(release["decision_graph_release"])} if "decision_graph_release" in release else {})}
-
     def _projection_from_authority(self) -> list[dict[str, Any]]:
         store = self.canonical_publication_store
-        if store is None: raise ConsoleError("durable_publication_store_required")
         try: authority_rows = store.active_publication_rows()
         except CanonicalPublicationStoreError as exc: raise ConsoleError("durable_publication_projection_read_failed", str(exc)) from exc
         authority_rows = [row for row in authority_rows if
@@ -91,36 +73,11 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
                     "source_sha256": str(release["source_sha256"]), "authority": "postgres"})
 
     def _apply_release_state(self, release: dict[str, Any], projection: list[dict[str, Any]]) -> None:
-        """File-topology compatibility; the full PG mixin owns its durable view."""
-        self._apply_local_release_copy(release, projection)
-
-    def _local_ledger_has_release(self, release_id: str) -> bool:
-        if not self._ledger_path.is_file(): return False
-        for line in self._ledger_path.read_text(encoding="utf-8").splitlines():
-            if not line.strip(): continue
-            try: event = json.loads(line)
-            except json.JSONDecodeError: continue
-            if event.get("event_type") == "release_published" and str((event.get("details") or {}).get("release_id") or "") == release_id: return True
-        return False
-
-    def _apply_local_release_copy(self, release: dict[str, Any], projection: list[dict[str, Any]]) -> None:
-        if not self._startup_local_mirror_is_authority(self._envelopes_path):
-            # Legacy private callers must use the PG authority path as well.
-            return self._apply_release_state(release, projection)
-        snapshot_id, release_id = str(release["snapshot_id"]), str(release["release_id"])
-        projection_path = self._published_projection_path(); manifest_path = self.runtime / RELEASE_MANIFEST_DIRNAME / f"{release_id}.json"
-        prior_projection = self._read_optional(projection_path); prior_manifest = self._read_optional(manifest_path); prior_envelopes = self._read_optional(self._envelopes_path); prior_ledger = self._read_optional(self._ledger_path); prior_envelope_map = deepcopy(self._envelopes)
-        try:
-            _atomic_write(manifest_path, self._manifest_from_release(release)); atomic_replace_projection(projection_path, projection)
-            current = self._release_envelope(release)
-            self._envelopes[snapshot_id] = current; _atomic_write(self._envelopes_path, self._envelopes)
-            self._record_release_publication(release, current)
-        except Exception:
-            self._restore_optional(projection_path, prior_projection); self._restore_optional(manifest_path, prior_manifest); self._restore_optional(self._envelopes_path, prior_envelopes); self._restore_optional(self._ledger_path, prior_ledger); self._envelopes = prior_envelope_map; raise
+        """The PostgreSQL workflow mixin persists the envelope and audit event."""
+        raise NotImplementedError
 
     def _durable_release_for_snapshot(self, snapshot_id: str) -> dict[str, Any] | None:
         store = self.canonical_publication_store
-        if store is None: return None
         try:
             release = store.release_for_snapshot(snapshot_id)
             if release is not None and isinstance(store, PostgresCanonicalPublicationStore):
@@ -137,11 +94,6 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
     ) -> dict[str, str]:
         """Derive release history and serving eligibility from canonical tables only."""
         store = self.canonical_publication_store
-        if store is None:
-            return super().document_release_serving_status(
-                snapshot_id,
-                envelope=envelope,
-            )
         if not snapshot_id:
             raise ConsoleError("canonical_snapshot_id_required")
         try:
@@ -223,15 +175,12 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
             raise ConsoleError("durable_lifecycle_status_read_failed", str(exc)) from exc
 
     def snapshot_is_published(self, snapshot_id: str) -> bool:
-        """Return durable publication history from the configured authority.
+        """Return durable publication history from the canonical PostgreSQL authority.
 
-        When the canonical PostgreSQL store is configured, it is the exclusive
-        publication authority. Stale local envelope/object/projection state may
-        not manufacture publication truth when the authority has no release.
+        Envelope or object state may not manufacture publication truth when the
+        authority has no release.
         """
-        if self.canonical_publication_store is not None:
-            return self._durable_release_for_snapshot(snapshot_id) is not None
-        return super().snapshot_is_published(snapshot_id)
+        return self._durable_release_for_snapshot(snapshot_id) is not None
 
     def _sync_snapshot_from_authority(self, snapshot_id: str) -> dict[str, Any] | None:
         release = self._durable_release_for_snapshot(snapshot_id)
@@ -246,8 +195,6 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
             self._reload_store_locked()
             account = self._require_role(actor_id, "publisher")
             store = self.canonical_publication_store
-            if store is None:
-                raise ConsoleError("durable_publication_store_required")
             if not str(expected_release_id or "").strip():
                 raise ConsoleError("canonical_expected_release_required")
             release = self._durable_release_for_snapshot(snapshot_id)
@@ -271,7 +218,6 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
 
     def _publish_locked(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         store = self.canonical_publication_store
-        if store is None: return super()._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id)
         self._require_role(actor_id, "publisher")
         existing = self._sync_snapshot_from_authority(snapshot_id)
         if existing is not None:
@@ -324,16 +270,12 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         return {"status":"PASS","state":"published","snapshot_id":snapshot_id,"release_id":release_id,"release_version":release_version,"published_items":len(objects),"g2":"PASS","cutover":True,"canonical_authority":"postgres","local_projection":"derived"}
 
     def reconcile_durable_publications(self) -> dict[str, int]:
-        store = self.canonical_publication_store
-        if store is None: return {"checked":0,"reconciled":0}
         checked = 0; releases: list[dict[str, Any]] = []
         for envelope in self.list_envelopes():
             checked += 1; release = self._durable_release_for_snapshot(str(envelope["snapshot_id"]));
             if release is not None: releases.append(release)
         projection = self._validate_publication_state()
         if not releases:
-            if self._startup_local_mirror_is_authority(self._envelopes_path):
-                atomic_replace_projection(self._published_projection_path(), projection)
             return {"checked": checked, "reconciled": 0}
         releases.sort(key=lambda row: str(row.get("published_at") or ""))
         for release in releases: self._apply_release_state(release, projection)

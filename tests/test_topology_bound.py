@@ -151,7 +151,8 @@ def test_two_workers_fail_closed_without_complete_durable_authority(
 ) -> None:
     _clean_topology_env(monkeypatch)
     _enable_durable_authorities(monkeypatch)
-    monkeypatch.delenv("METIS_WORKFLOW_REVIEW_STORE")
+    # D6b: PostgreSQL is always required; Blob is the remaining multi-worker authority.
+    monkeypatch.delenv("CONSOLE_IMMUTABLE_SOURCE_STORE")
     monkeypatch.setenv("WEB_CONCURRENCY", "2")
     with pytest.raises(TopologyBoundError, match="multi_worker_durable_authority_required"):
         assert_supported_topology(os.environ)
@@ -223,6 +224,7 @@ def test_build_app_fails_closed_when_two_workers_lack_durable_authorities(
 
     _clean_topology_env(monkeypatch)
     monkeypatch.setenv("CONSOLE_DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("METIS_CANONICAL_DB_DSN", "postgresql://unused.invalid/metis")
     monkeypatch.delenv("CONSOLE_BOOTSTRAP_USERNAME", raising=False)
     monkeypatch.delenv("CONSOLE_BOOTSTRAP_PASSWORD", raising=False)
     monkeypatch.setenv("WEB_CONCURRENCY", "2")
@@ -237,6 +239,7 @@ def test_build_app_fails_closed_when_multi_instance_assumed(
 
     _clean_topology_env(monkeypatch)
     monkeypatch.setenv("CONSOLE_DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("METIS_CANONICAL_DB_DSN", "postgresql://unused.invalid/metis")
     monkeypatch.delenv("CONSOLE_BOOTSTRAP_USERNAME", raising=False)
     monkeypatch.delenv("CONSOLE_BOOTSTRAP_PASSWORD", raising=False)
     monkeypatch.setenv("CONSOLE_INSTANCE_COUNT", "3")

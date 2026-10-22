@@ -28,7 +28,6 @@ def test_error_copy_has_no_silently_shadowed_literal_key():
         "De semantische verwerking is niet afgerond.")
 
 
-def test_workflow_mirror_path_annotation_resolves():
-    hints = get_type_hints(_PostgresIdentityMixin._startup_local_mirror_is_authority)
-    assert hints["path"] is Path
-    assert hints["return"] is bool
+def test_workflow_mirror_selection_is_gone():
+    # D6b removed the file topology and with it the startup mirror selection.
+    assert not hasattr(_PostgresIdentityMixin, "_startup_local_mirror_is_authority")

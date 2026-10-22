@@ -48,12 +48,12 @@ def _count_reloads(monkeypatch, console):
 def _spy_mirror_writes_inside_transaction(monkeypatch, console):
     """Record every disk-mirror write that happens while a transaction is open."""
     inside = []
-    mirror_paths = {console._ledger_path.resolve(), console._bindings_path.resolve(),
-                    console._envelopes_path.resolve()}
+    mirror_paths = {console._ledger_path.resolve(), (console.runtime / "publish_authorizations.json").resolve(),
+                    (console.runtime / "envelopes.json").resolve()}
 
     def is_mirror(path):
         path = pathlib.Path(path).resolve()
-        return path in mirror_paths or path.parent == console._objects_dir.resolve()
+        return path in mirror_paths or path.parent == (console.runtime / "objects").resolve()
 
     import os
     original_os_open = os.open
@@ -77,8 +77,8 @@ def _spy_mirror_writes_inside_transaction(monkeypatch, console):
 
 
 def _assert_document_authority_without_mirrors(console, sid):
-    assert not console._objects_path(sid).exists()
-    assert not console._envelopes_path.exists()
+    assert not (console.runtime / "objects" / f"{sid}.jsonl").exists()
+    assert not (console.runtime / "envelopes.json").exists()
     assert console._load_objects(sid) == console.workflow_document_store.list_document_objects(sid)
     assert console._envelope(sid) == console.workflow_document_store.get_envelope(sid)
 
@@ -161,7 +161,7 @@ def test_u3_reprocessing_rollback_leaves_no_uncommitted_envelope_mirror(workflow
             raise RuntimeError("u3_outer_fault")
     assert console.workflow_document_store.get_envelope(sid) == before
     assert console._envelope(sid) == before
-    assert not console._envelopes_path.exists()
+    assert not (console.runtime / "envelopes.json").exists()
     _assert_review_authority_without_mirrors(console)
 
 
@@ -194,7 +194,7 @@ def test_u4_inaccessible_mirror_does_not_affect_committed_command(workflow_postg
     console, rid, sid, (obj_a, _obj_b) = _setup(tmp_path, workflow_postgres)
     from src import operations_console_v1 as operations
     original = operations._atomic_write
-    bindings_path = console._bindings_path.resolve()
+    bindings_path = (console.runtime / "publish_authorizations.json").resolve()
 
     def failing_write(path, *args, **kwargs):
         if pathlib.Path(path).resolve() == bindings_path:

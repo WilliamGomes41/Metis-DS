@@ -66,7 +66,7 @@ def pytest_collection_modifyitems(config, items):
                 or {'production_console','production_app'}.intersection(item.fixturenames)):
             _start_test_postgres(config)
             return
-        if item.get_closest_marker('pure_function') or item.get_closest_marker('file_topology'):
+        if item.get_closest_marker('pure_function'):
             continue
         if inputs.item(item):
             _start_test_postgres(config)
@@ -97,14 +97,11 @@ def pytest_unconfigure(config):
 
 @pytest.fixture(autouse=True)
 def _require_production_console_class(request, monkeypatch):
-    """Catch runtime constructors missed by inventories, including helper aliases."""
-    if request.node.get_closest_marker("file_topology"):
-        # A retiring-topology proof must select that topology explicitly, even
-        # when the developer shell is configured for production PostgreSQL.
-        from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
-        for name in (*POSTGRES_STORE_SETTINGS, "WEBSITE_SITE_NAME"):
-            monkeypatch.delenv(name, raising=False)
-        return
+    """Catch runtime constructors missed by inventories, including helper aliases.
+
+    Production already refuses every class without the complete PostgreSQL
+    authority (D6b); tests are further limited to the two factory classes.
+    """
     from src.operations_console_v1 import OperationsConsole
     from src.workflows.workflow_badge_counts_postgres_v1 import (
         FastBadgePostgresCompleteWorkflowDurablePublicationConsole,
@@ -116,8 +113,7 @@ def _require_production_console_class(request, monkeypatch):
 
     def initialize(console, *args, **kwargs):
         if type(console) not in supported:
-            raise AssertionError("Console tests must use production_console/production_app; "
-                                 "retiring file behavior must be marked file_topology")
+            raise AssertionError("Console tests must use production_console/production_app")
         return original(console, *args, **kwargs)
 
     monkeypatch.setattr(OperationsConsole, "__init__", initialize)

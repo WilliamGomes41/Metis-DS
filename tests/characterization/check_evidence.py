@@ -2,7 +2,7 @@
 
 Usage:
   python tests/characterization/check_evidence.py coverage <coverage.json>
-  python tests/characterization/check_evidence.py mutation <ingest|review> <exitcode> <junit.xml>
+  python tests/characterization/check_evidence.py mutation review <exitcode> <junit.xml>
 
 coverage: when a product file still has the baseline sha256, its executed and
 missing lines/arcs within the range MUST equal the baseline exactly. When the

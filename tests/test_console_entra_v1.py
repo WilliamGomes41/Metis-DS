@@ -119,20 +119,6 @@ def test_invalid_identity_and_role_claims_fail_closed(patch):
         admitted_claims(config(), dict(claims(), **patch))
 
 
-@pytest.mark.file_topology
-def test_activation_requires_explicit_valid_configuration_and_postgres(monkeypatch, tmp_path):
-    state = OperationsConsole(root=tmp_path)
-    assert install_entra(state, None) is None
-    monkeypatch.setenv('METIS_CONSOLE_AUTH', 'entra')
-    with pytest.raises(ValueError, match='configuration'):
-        install_entra(state, None)
-    monkeypatch.setenv('METIS_ENTRA_TENANT_ID', TENANT)
-    monkeypatch.setenv('METIS_ENTRA_CLIENT_ID', CLIENT)
-    monkeypatch.setenv('METIS_ENTRA_CLIENT_SECRET', 'test-only-secret')
-    with pytest.raises(ValueError, match='requires_postgres'):
-        install_entra(state, ORIGIN)
-
-
 def test_http_login_migration_revocation_restart_and_no_password_bypass(recovery_postgres, tmp_path, monkeypatch, *, production_app, production_console):
     state = console(tmp_path, recovery_postgres, production_console=production_console)
     admin = state.create_account('admin', 'local-password', ['publisher'])

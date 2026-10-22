@@ -1,10 +1,9 @@
 """Separate append-only store for publication refusals (outside the review ledger).
 
-Live store: PostgreSQL table workflow.publication_refusals (migration 018). The JSONL file
-store is TIJDELIJK and for the single-worker file topology only: it MAG NIET go live. The
-gate is the topology (assert_supported_topology PASS, one worker, no METIS_* store in
-postgres mode), NOOIT an environment marker such as WEBSITE_SITE_NAME; any other topology
-without the PostgreSQL workflow store raises RefusalStoreUnavailable.
+Store: PostgreSQL table workflow.publication_refusals (migration 018), the only refusal
+store since D6b; a console without the PostgreSQL workflow store raises
+RefusalStoreUnavailable. The JSONL helpers below only read or export files written by
+the retired file topology; no runtime path writes them.
 
 Rules (B18):
 - A publication_refused record MAG NIET enter the review ledger hash chain; it MOET
@@ -16,26 +15,21 @@ Rules (B18):
   maintenance command apply_retention (scripts/publication_refusal_retention.py); it MAG
   NIET run per refusal.
 - Dedup: one record per (snapshot_id, reason_codes, actor) per DEDUP_WINDOW.
-- Bounded: MAX_REASON_CODES per record; the file rotates at MAX_FILE_BYTES (one rotated
-  generation kept) and the table keeps RETENTION_DAYS / MAX_ROWS. A full store MAG NIET
-  permanently refuse new records.
-- No full-file reads on the write path: dedup reads at most TAIL_BYTES.
-- A corrupt record is skipped and reported (on_corrupt) and NOOIT blocks later writes.
+- Bounded: MAX_REASON_CODES per record; the table keeps RETENTION_DAYS / MAX_ROWS. A full
+  store MAG NIET permanently refuse new records.
+- A corrupt legacy file record is skipped and reported (on_corrupt) on export.
 - The actor is stored in clear ONLY under Lex's conditions (account_id only, least-privilege access,
   retention in docs/RETENTION_MATRIX.md) and MAG NIET be exported; the revision only as SHA-256.
 This store is an observation, NOOIT a gate authority.
 """
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
-import os
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS
 
 SCHEMA = 'publication-refusal-audit-v1'
 STORE_STATUS = 'temporary_file_store_pending_postgres_table'
@@ -43,8 +37,6 @@ POSTGRES_STATUS = 'postgres_table'
 FILE_NAME = 'publication_refusal_audit.jsonl'
 DEDUP_WINDOW = timedelta(minutes=10)
 MAX_REASON_CODES = 128
-MAX_FILE_BYTES = 4 * 1024 * 1024
-TAIL_BYTES = 256 * 1024
 RETENTION_DAYS = 400
 MAX_ROWS = 200_000
 RECORDS_LIMIT = 500
@@ -53,7 +45,7 @@ _LOCK = threading.Lock()
 
 
 class RefusalStoreUnavailable(RuntimeError):
-    """No allowed refusal store in this topology (file store MAG NIET go live)."""
+    """No PostgreSQL refusal store on this console."""
 
 
 def store_path(console) -> Path:
@@ -111,46 +103,6 @@ def _record(key, object_version, revision, clock, status):
             'revision_sha256': hashlib.sha256(revision.encode()).hexdigest() if isinstance(revision, str) else None}
 
 
-def append_refusal(path: Path, *, snapshot_id: str, object_version: str, actor: str,
-                   reason_codes: list[str], revision, clock: datetime | None = None, on_corrupt=None) -> str:
-    """File store (TIJDELIJK, local only). Returns 'recorded' or 'deduplicated'."""
-    clock = clock or datetime.now(timezone.utc)
-    key = _key(snapshot_id, reason_codes, actor)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with _LOCK, path.open('a+', encoding='utf-8', errors='replace') as handle:
-        fcntl.flock(handle, fcntl.LOCK_EX)
-        try:
-            handle.seek(0, os.SEEK_END)
-            size = handle.tell()
-            start = max(0, size - TAIL_BYTES)
-            handle.seek(start)
-            lines = handle.read(TAIL_BYTES).splitlines()
-            if start and lines:
-                lines = lines[1:]  # first line may be partial
-            for row in _parse(lines, on_corrupt):
-                try:
-                    recent = clock - datetime.fromisoformat(row['recorded_at']) < DEDUP_WINDOW
-                except Exception:
-                    recent = False
-                if recent and [row.get('snapshot_id'), row.get('reason_codes'), row.get('actor')] == key:
-                    return 'deduplicated'
-            line = json.dumps(_record(key, object_version, revision, clock, STORE_STATUS),
-                              sort_keys=True, separators=(',', ':')) + '\n'
-            if size >= MAX_FILE_BYTES:
-                os.replace(path, rotated_path(path))  # rotation; one generation kept
-                with path.open('a', encoding='utf-8') as fresh:
-                    fresh.write(line)
-                    fresh.flush()
-                    os.fsync(fresh.fileno())
-                return 'recorded'
-            handle.write(line)
-            handle.flush()
-            os.fsync(handle.fileno())
-            return 'recorded'
-        finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
-
-
 class PostgresRefusalStore:
     """workflow.publication_refusals (migration 018). Uses the workflow store's connection."""
 
@@ -204,31 +156,15 @@ def apply_retention(workflow_store, *, clock: datetime | None = None,
     return {'status': 'PASS', 'retention_days': days, 'max_rows': rows}
 
 
-def file_store_allowed(environ=None) -> bool:
-    """Topology gate for the TIJDELIJK file store (single-worker file topology only)."""
-    from src.topology_bound_v1 import TopologyBoundError, assert_supported_topology
-    env = os.environ if environ is None else environ
-    try:
-        topology = assert_supported_topology(env)
-    except TopologyBoundError:
-        return False
-    if topology['workers'] != 1 or topology['instances'] != 1:
-        return False
-    return not any(str(env.get(name, '') or '').strip().lower() == 'postgres' for name in POSTGRES_STORE_SETTINGS)
-
-
 def postgres_store(console):
     workflow = getattr(console, 'workflow_document_store', None)
     return PostgresRefusalStore(workflow) if workflow is not None and hasattr(workflow, '_connect') else None
 
 
 def append(console, *, snapshot_id, object_version, actor, reason_codes, revision, on_corrupt=None) -> str:
-    """Topology dispatch: PostgreSQL table when present; file only in the single-worker file topology (MAG NIET go live)."""
+    """PostgreSQL is the only refusal store (D6b); without it the refusal is not recorded."""
     pg = postgres_store(console)
-    if pg is not None:
-        return pg.append(snapshot_id=snapshot_id, object_version=object_version, actor=actor,
-                         reason_codes=reason_codes, revision=revision)
-    if not file_store_allowed():
-        raise RefusalStoreUnavailable('refusal_file_store_not_allowed_live')
-    return append_refusal(store_path(console), snapshot_id=snapshot_id, object_version=object_version, actor=actor,
-                          reason_codes=reason_codes, revision=revision, on_corrupt=on_corrupt)
+    if pg is None:
+        raise RefusalStoreUnavailable('refusal_postgres_store_required')
+    return pg.append(snapshot_id=snapshot_id, object_version=object_version, actor=actor,
+                     reason_codes=reason_codes, revision=revision)

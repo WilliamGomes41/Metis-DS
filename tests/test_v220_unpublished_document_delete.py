@@ -179,7 +179,7 @@ def _visible_text(html: str) -> str:
 
 
 def _objects_path(console: OperationsConsole, snapshot_id: str) -> Path:
-    return console._objects_path(snapshot_id)
+    return (console.runtime / "objects" / f"{snapshot_id}.jsonl")
 
 
 def _freeze_path(console: OperationsConsole, envelope: dict) -> Path:
@@ -474,44 +474,6 @@ def test_published_objects_must_not_be_deleted(tmp_path: Path, *, production_con
     assert snap in {row["snapshot_id"] for row in console.list_envelopes()}
     assert console.workflow_document_store.list_document_objects(snap)
     assert _freeze_path(console, receipt).is_file()
-
-
-@pytest.mark.file_topology
-def test_published_projection_file_is_not_deleted(tmp_path: Path) -> None:
-    console = _file_console(tmp_path)
-    accounts = _accounts(console)
-    live = _ingest(console, accounts, title="Live unpublished")
-    planted = _ingest(console, accounts, title="In projectie", filename="proj.html")
-    projection = console.runtime / "published_projection.jsonl"
-    payload = [
-        {
-            "snapshot_id": planted["snapshot_id"],
-            "metadata": {"snapshot_id": planted["snapshot_id"], "object_id": "ko-1"},
-            "answerability": "supported",
-        }
-    ]
-    projection.write_text(
-        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in payload),
-        encoding="utf-8",
-    )
-    original = projection.read_bytes()
-    with pytest.raises(ConsoleError, match="published_projection_must_not_be_deleted"):
-        console.delete_unpublished_snapshot(
-            actor_id=accounts["researcher"]["account_id"],
-            snapshot_id=planted["snapshot_id"],
-            confirmed=True,
-            confirm_title="In projectie",
-        )
-    console.delete_unpublished_snapshot(
-        actor_id=accounts["researcher"]["account_id"],
-        snapshot_id=live["snapshot_id"],
-        confirmed=True,
-        confirm_title="Live unpublished",
-    )
-    assert projection.is_file()
-    assert projection.read_bytes() == original
-    assert planted["snapshot_id"] in {row["snapshot_id"] for row in console.list_envelopes()}
-
 
 
 def test_published_envelope_state_must_not_be_deleted(tmp_path: Path, *, production_console) -> None:

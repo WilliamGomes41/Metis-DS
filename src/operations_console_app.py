@@ -3856,22 +3856,21 @@ def _refusal_records(state, snapshot_id, issues=None):
     from src import publication_refusal_store_v1 as refusal_store
     try:
         pg = refusal_store.postgres_store(state)
-        if pg is not None:  # live: PostgreSQL table, bounded per document
-            return pg.records_for(snapshot_id)
-        return refusal_store.read_records(refusal_store.store_path(state),
-                                          on_corrupt=lambda name: report(f'corrupt_record:{name}'))
+        if pg is None:
+            raise refusal_store.RefusalStoreUnavailable('refusal_postgres_store_required')
+        return pg.records_for(snapshot_id)  # PostgreSQL table, bounded per document
     except Exception as error:  # reported with the type only (no message: it can carry secrets)
         report(f'store_unreadable:{type(error).__name__}')
         return None
 
 
 def create_console_app(
-    console: OperationsConsole | None = None,
+    console: OperationsConsole,
     *,
     trusted_origin: str | None = None,
     api_access_store: Any | None = None,
 ) -> FastAPI:
-    state = console or OperationsConsole(root=REPO_ROOT)
+    state = console
     install_ingest_limits(state)
     from src.console_entra_v1 import install_entra
     entra = install_entra(state, trusted_origin)
@@ -6240,7 +6239,3 @@ def create_console_app(
     from src.insight_v1 import install_insight_legacy_routes
     install_insight_legacy_routes(app, _require)
     return app
-
-
-def create_app() -> FastAPI:
-    return create_console_app()

@@ -128,33 +128,6 @@ def test_role_change_is_visible_across_instances(tmp_path: Path, *, production_c
     assert second._account(reviewer["account_id"])["roles"] == ["researcher", "reviewer"]
 
 
-@pytest.mark.file_topology
-def test_legacy_file_identity_is_imported_only_when_shared_store_is_empty(tmp_path: Path) -> None:
-    runtime = tmp_path / "legacy-runtime"
-    legacy = DurablePublicationConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=runtime)
-    legacy.create_account("anne", "correct-horse", ["researcher"])
-    session = legacy.authenticate("anne", "correct-horse")
-
-    shared = SharedIdentityStore()
-    migrated = PostgresIdentityDurablePublicationConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources",
-        runtime=runtime,
-        workflow_identity_store=shared,  # type: ignore[arg-type]
-    )
-    assert migrated.session_account(session["token"])["username"] == "anne"
-
-    # A stale local file must not replay after PostgreSQL has become authority.
-    legacy.create_account("stale-local", "correct-horse", ["researcher"])
-    PostgresIdentityDurablePublicationConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources",
-        runtime=runtime,
-        workflow_identity_store=shared,  # type: ignore[arg-type]
-    )
-    assert shared.account_by_username("stale-local") is None
-
-
 def test_session_tokens_are_one_way_hashed_for_shared_storage() -> None:
     token = "raw-session-token"
     digest = _token_hash(token)
@@ -245,25 +218,6 @@ def test_accounts_page_reads_shared_identity_authority_after_create_and_restart(
     restarted = _console(tmp_path, "runtime-c", production_console=production_console)
     reloaded = next(row for row in restarted.list_accounts() if row["username"] == "new.researcher")
     assert reloaded["roles"] == ["researcher", "reviewer"]
-
-
-@pytest.mark.file_topology
-def test_local_only_account_listing_uses_local_authority(tmp_path: Path) -> None:
-    console = DurablePublicationConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources",
-        runtime=tmp_path / "runtime-local",
-    )
-    created = console.create_account("local-user", "local-secret", ["researcher"])
-
-    assert console.list_accounts() == [
-        {
-            "account_id": created["account_id"],
-            "username": "local-user",
-            "display_name": "local-user",
-            "roles": ["researcher"],
-        }
-    ]
 
 
 def test_runtime_identity_cutover_ignores_corrupt_local_identity_mirrors(tmp_path: Path, *, production_console) -> None:

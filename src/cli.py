@@ -98,42 +98,25 @@ def cmd_serve_api(a: argparse.Namespace) -> dict:
     return {"status": "PASS"}
 
 
-def _require_local_console_configuration() -> None:
-    from src.workflow_store_configuration import validate_workflow_store_configuration
-
-    if validate_workflow_store_configuration():
-        raise RuntimeError("local_console_command_requires_file_harness")
+def _production_console_app(a: argparse.Namespace):
+    """The one PostgreSQL console composition; CLI paths only choose local directories."""
+    for name, value in (("CONSOLE_SOURCE_STORE", getattr(a, "source_store", None)),
+                        ("CONSOLE_RUNTIME", getattr(a, "runtime", None))):
+        if value is not None:
+            os.environ[name] = str(value)
+    from src.console_asgi import build_app
+    return build_app()
 
 
 def cmd_serve_console(a: argparse.Namespace) -> dict:
     import uvicorn
-    from src.operations_console_app import create_console_app
-    from src.operations_console_v1 import OperationsConsole
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-    from src.topology_bound_v1 import assert_supported_topology
 
-    # These local commands must never ignore configured PG authorities.
-    _require_local_console_configuration()
-    assert_supported_topology()
-    console = OperationsConsole(
-        root=ROOT,
-        source_store=a.source_store,
-        runtime=a.runtime,
-    )
-    bind_pre_review_semantic_processing(console)
-    from src.telemetry.install import install_console_observability
-    app = create_console_app(console)
-    install_console_observability(app, console.runtime)
-    uvicorn.run(app, host=a.host, port=a.port)
+    uvicorn.run(_production_console_app(a), host=a.host, port=a.port)
     return {"status": "PASS"}
 
 
 def cmd_console_account(a: argparse.Namespace) -> dict:
-    from src.operations_console_v1 import OperationsConsole
-
-    _require_local_console_configuration()
-
-    console = OperationsConsole(root=ROOT, source_store=a.source_store, runtime=a.runtime)
+    console = _production_console_app(a).state.operations_kernel
     account = console.create_account(a.username, a.password, roles=[item.strip() for item in a.roles.split(",") if item.strip()], display_name=a.display_name)
     return {"status": "PASS", "account": account}
 def cmd_processing_status(a: argparse.Namespace) -> dict:
@@ -159,8 +142,8 @@ def main()->int:
     p=sub.add_parser('semantic-generic'); p.add_argument('--spec',type=Path,required=True); p.add_argument('--manifest',type=Path,required=True); p.add_argument('--raw',type=Path,required=True); p.add_argument('--schema',type=Path,default=ROOT/'schemas/knowledge_object.schema.v1.2.json'); p.add_argument('--out',type=Path,required=True); p.add_argument('--report',type=Path)
     p=sub.add_parser('serve'); p.add_argument('--mode',choices=['real','fixture'],default='real'); p.add_argument('--host',default='0.0.0.0'); p.add_argument('--port',type=int,default=8000)
     p=sub.add_parser('serve-api'); p.add_argument('--mode',choices=['real','fixture'],default='real'); p.add_argument('--host',default='0.0.0.0'); p.add_argument('--port',type=int,default=8080)
-    p=sub.add_parser('serve-console'); p.add_argument('--host',default='127.0.0.1'); p.add_argument('--port',type=int,default=8090); p.add_argument('--source-store',type=Path,default=ROOT/'sources'/'private'); p.add_argument('--runtime',type=Path,default=ROOT/'output'/'runtime'/'operations-console')
-    p=sub.add_parser('console-account'); p.add_argument('--username',required=True); p.add_argument('--password',required=True); p.add_argument('--roles',default='researcher'); p.add_argument('--display-name'); p.add_argument('--source-store',type=Path,default=ROOT/'sources'/'private'); p.add_argument('--runtime',type=Path,default=ROOT/'output'/'runtime'/'operations-console'); p.add_argument('--report',type=Path)
+    p=sub.add_parser('serve-console'); p.add_argument('--host',default='127.0.0.1'); p.add_argument('--port',type=int,default=8090); p.add_argument('--source-store',type=Path); p.add_argument('--runtime',type=Path)
+    p=sub.add_parser('console-account'); p.add_argument('--username',required=True); p.add_argument('--password',required=True); p.add_argument('--roles',default='researcher'); p.add_argument('--display-name'); p.add_argument('--source-store',type=Path); p.add_argument('--runtime',type=Path); p.add_argument('--report',type=Path)
     for name in ('processing-status','processing-retry'):
         p=sub.add_parser(name); p.add_argument('--snapshot-id',required=True); p.add_argument('--actor-id',required=True); p.add_argument('--report',type=Path)
         if name=='processing-retry': p.add_argument('--command-id',required=True)

@@ -36,9 +36,7 @@ def _client(console, *, production_app):
 
 
 def _state(console, sid):
-    bindings = (console.workflow_review_store.read_bindings()
-                if hasattr(console, "workflow_review_store")
-                else console._load_map(console._bindings_path))
+    bindings = console.workflow_review_store.read_bindings()
     storage_revision = None
     if hasattr(console, "workflow_document_store"):
         with console.workflow_document_store._connect() as connection:

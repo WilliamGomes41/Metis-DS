@@ -135,7 +135,7 @@ def test_decision_command_ignores_inaccessible_mirrors(prepared, monkeypatch, ca
     original = operations._atomic_write
 
     def broken(path, *args, **kwargs):
-        if path == console._envelopes_path:
+        if path == (console.runtime / "envelopes.json"):
             raise RuntimeError("decision_mirror_fault")
         return original(path, *args, **kwargs)
 

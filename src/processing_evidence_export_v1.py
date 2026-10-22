@@ -162,7 +162,7 @@ def _refusal_status(refusals, issues):
     """Manifest entry for publication_refusals; corrupt/unreadable records MOETEN be visible."""
     issues = list(issues or [])
     base = ("Publication refusals from the separate append-only refusal store (PostgreSQL table "
-            "workflow.publication_refusals live; the JSONL file store only in the single-worker file topology); "
+            "workflow.publication_refusals, the only refusal store since D6b); "
             "deduplicated per document, reasons and actor (fixed 10-minute window in PostgreSQL). "
             "Observation only, not a gate verdict.")
     corrupt = sum(1 for code in issues if code.startswith('corrupt_record:'))

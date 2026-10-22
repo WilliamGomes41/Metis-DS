@@ -67,45 +67,6 @@ def _ready_console(tmp_path: Path, *, leave_second_candidate_open: bool=False, p
     return _prepare_ready_console(console, store, leave_second_candidate_open=leave_second_candidate_open)
 
 
-@pytest.mark.file_topology
-def test_verified_reviewed_object_can_be_published_once(tmp_path: Path) -> None:
-    console, accounts, receipt, _store = _file_ready_console(tmp_path)
-    snapshot_id = receipt["snapshot_id"]
-
-    considered = console.consider_publish(
-        actor_id=accounts["publisher"]["account_id"], snapshot_id=snapshot_id
-    )
-    assert considered["publish_allowed"] is True
-    assert considered["g2"] == "PASS"
-    assert considered["publishable_object_count"] == 1
-
-    result = console.publish(
-        actor_id=accounts["publisher"]["account_id"], snapshot_id=snapshot_id
-    )
-    assert result["status"] == "PASS"
-    assert result["cutover"] is True
-    assert result["published_items"] == 1
-    assert console.snapshot_is_published(snapshot_id) is True
-
-    projection = [
-        json.loads(line)
-        for line in (console.runtime / "published_projection.jsonl").read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
-    assert len(projection) == 1
-    assert projection[0]["metadata"]["snapshot_id"] == snapshot_id
-    assert projection[0]["metadata"]["object_type"] == "explanation"
-    manifests = list((console.runtime / "release_manifests").glob("*.json"))
-    assert len(manifests) == 1
-
-    again = console.publish(
-        actor_id=accounts["publisher"]["account_id"], snapshot_id=snapshot_id
-    )
-    assert again["status"] == "BLOCKED"
-    assert again["blockers"] == ["already_published"]
-
-
-
 def test_changed_or_unavailable_blob_keeps_g2_closed(tmp_path: Path, *, production_console) -> None:
     console, accounts, receipt, store = _ready_console(tmp_path, production_console=production_console)
     locator = receipt["immutable_storage_locator"]
@@ -151,31 +112,6 @@ def test_independence_is_checked_for_each_published_object(tmp_path: Path, *, pr
     assert "second_named_reviewer_required" in considered["blockers"]
 
 
-@pytest.mark.file_topology
-def test_publish_rolls_back_projection_manifest_and_state_on_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    console, accounts, receipt, _store = _file_ready_console(tmp_path)
-    projection_path = console.runtime / "published_projection.jsonl"
-    prior = '{"retrieval_id":"existing"}\n'
-    projection_path.write_text(prior, encoding="utf-8")
-
-    def fail_event(*args: object, **kwargs: object) -> None:
-        raise OSError("ledger unavailable")
-
-    monkeypatch.setattr(console_module, "append_event", fail_event)
-    with pytest.raises(OSError, match="ledger unavailable"):
-        console.publish(
-            actor_id=accounts["publisher"]["account_id"],
-            snapshot_id=receipt["snapshot_id"],
-        )
-
-    assert projection_path.read_text(encoding="utf-8") == prior
-    assert not list((console.runtime / "release_manifests").glob("*.json"))
-    assert console._envelope(receipt["snapshot_id"])["state"] == "captured_not_published"
-
-
-
 def test_publish_page_requires_explicit_confirmation_and_then_clears_badge(tmp_path: Path, *, production_app, production_console) -> None:
     console, accounts, receipt, _store = _ready_console(tmp_path, production_console=production_console)
     client = TestClient(
@@ -200,21 +136,6 @@ def test_publish_page_requires_explicit_confirmation_and_then_clears_badge(tmp_p
     assert "Publicatie voltooid" in published.text
     assert "Gepubliceerd" in published.text
     assert console.waiting_task_counts(accounts["publisher"]["account_id"])["publish"] == 0
-
-
-def _file_ready_console(
-    tmp_path: Path,
-    *,
-    leave_second_candidate_open: bool = False,
-) -> tuple[OperationsConsole, dict[str, dict], dict, MemoryImmutableStore]:
-    store = MemoryImmutableStore()
-    console = OperationsConsole(
-        root=tmp_path,
-        source_store=tmp_path / "sources" / "private",
-        runtime=tmp_path / "runtime",
-        immutable_source_store=store,
-    )
-    return _prepare_ready_console(console, store, leave_second_candidate_open=leave_second_candidate_open)
 
 
 def _prepare_ready_console(console, store, *, leave_second_candidate_open=False):

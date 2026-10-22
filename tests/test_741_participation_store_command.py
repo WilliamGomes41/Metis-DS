@@ -128,7 +128,7 @@ def test_participation_ignores_inaccessible_mirrors(prepared, monkeypatch, caplo
     original = operations._atomic_write
 
     def broken(path, *args, **kwargs):
-        if path == console._bindings_path:
+        if path == (console.runtime / "publish_authorizations.json"):
             raise RuntimeError("participation_mirror_fault")
         return original(path, *args, **kwargs)
 

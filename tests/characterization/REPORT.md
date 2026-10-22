@@ -8,6 +8,8 @@ Rewrite risk: none
 
 Basis: `e5573878a5bed4a885c6896f88fcb515f964a9d7`, de laatste opgehaalde `main` bij de start op 17 oktober 2026. Branch: `test/characterize-ingest-and-review-room`. Alleen nieuwe bestanden onder `tests/characterization/`. Productcode, bestaande tests en configuratie zijn ongewijzigd. Geen PR; geen deployment.
 
+> **D6b:** `test_ingest.py`, `test_ingest_boundaries.py` en hun goldens legden de JSON-bestandsboom van de verwijderde bestandsopstelling vast en zijn met die opstelling verwijderd. De reviewruimte-goldens draaien op PostgreSQL en blijven. Dit rapport blijft het historische bewijs van die oorspronkelijke run.
+
 ## Bestanden en scenario's
 
 | Bestand/groep | Cases | Wat is vastgelegd |

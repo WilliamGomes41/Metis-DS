@@ -97,7 +97,7 @@ De migratie verplaatst workflow-authority naar een **managed database**. Dit is 
 
 ## Lokale runtime-inventaris
 
-`inventory_runtime_data()` in `src/runtime_data_inventory_v1.py` blijft beschikbaar voor de lokale bestandsopstelling. De volledige PG-topologie roept deze inventaris niet aan voor backup of herstel. Oude workflowspiegels, projectie en manifests zijn ook tijdens code-rollback geen herstelbron; code-rollback moet zijn PG-compatibiliteit afzonderlijk bewijzen.
+`inventory_runtime_data()` in `src/runtime_data_inventory_v1.py` blijft alleen beschikbaar om bestanden van de verwijderde bestandsopstelling (D6b) offline te inventariseren. De console kent sinds D6b alleen de PG-topologie, die deze inventaris niet aanroept voor backup of herstel. Oude workflowspiegels, projectie en manifests zijn ook tijdens code-rollback geen herstelbron; code-rollback moet zijn PG-compatibiliteit afzonderlijk bewijzen.
 
 Historisch rapporteert de inventaris onder meer:
 

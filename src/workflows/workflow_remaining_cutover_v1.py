@@ -138,6 +138,8 @@ class PostgresAuditRegistry:
 
 class _PostgresRemainingWorkflowMixin:
     workflow_remaining_store: PostgresWorkflowRemainingStore
+    # Completes the PostgreSQL authority; the only constructible console runtime (D6b).
+    _metis_complete_postgres_authority = True
 
     def __init__(self, *args: Any, workflow_remaining_store: PostgresWorkflowRemainingStore, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)

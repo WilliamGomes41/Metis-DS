@@ -44,7 +44,6 @@ from src.operations_console_v1 import (
     SNAPSHOT_OBJECT_WRITE_CONFLICT,
     ConsoleError,
     OperationsConsole,
-    _file_revision,
 )
 
 
@@ -230,85 +229,6 @@ def _ingest_form(accounts: dict, *, extra: dict | None = None) -> dict[str, str]
 async def _login(client: httpx.AsyncClient, username: str, password: str) -> None:
     response = await client.post("/login", data={"username": username, "password": password})
     assert response.status_code in {200, 303}
-
-
-@pytest.mark.file_topology
-def test_overlapping_store_commits_keep_both_envelope_mutations(tmp_path: Path) -> None:
-    """Promise 1: two full store transactions MUST NOT half-overlap envelopes."""
-    console = _file_console(tmp_path)
-    accounts = _accounts(console)
-    snap_a = _ingest(console, accounts, title="Snapshot Alpha", version="1.0")["snapshot_id"]
-    snap_b = _ingest(console, accounts, title="Snapshot Beta", version="1.1")["snapshot_id"]
-    assert snap_a != snap_b
-    errors: list[BaseException] = []
-    real_save = OperationsConsole._save_objects
-    write_trace: list[str] = []
-    trace_lock = threading.Lock()
-
-    def traced_save(self: OperationsConsole, target: str, rows: list[dict], **kwargs) -> None:
-        real_save(self, target, rows, **kwargs)
-        if target in {snap_a, snap_b}:
-            with trace_lock:
-                write_trace.append(f"objects:{target}")
-
-    real_env = OperationsConsole._save_envelopes
-
-    def traced_envelopes(self: OperationsConsole) -> None:
-        real_env(self)
-        with trace_lock:
-            write_trace.append("envelopes")
-
-    console._save_objects = traced_save.__get__(console, OperationsConsole)  # type: ignore[method-assign]
-    console._save_envelopes = traced_envelopes.__get__(console, OperationsConsole)  # type: ignore[method-assign]
-
-    def promoter(snapshot_id: str, actor_id: str) -> None:
-        try:
-            console.promote_class(
-                actor_id=actor_id,
-                snapshot_id=snapshot_id,
-                new_class="handreiking",
-            )
-        except Exception as exc:  # pragma: no cover - unexpected unless serialized reject
-            errors.append(exc)
-
-    threads = [
-        threading.Thread(
-            target=promoter,
-            args=(snap_a, accounts["reviewer"]["account_id"]),
-            name="promote-a",
-        ),
-        threading.Thread(
-            target=promoter,
-            args=(snap_b, accounts["reviewer"]["account_id"]),
-            name="promote-b",
-        ),
-    ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(timeout=20)
-        assert not thread.is_alive()
-    unexpected = [
-        exc
-        for exc in errors
-        if not (isinstance(exc, ConsoleError) and exc.code == SNAPSHOT_OBJECT_WRITE_CONFLICT)
-    ]
-    assert unexpected == []
-
-    disk = _file_disk_envelopes(console)
-    restarted = _file_restart(tmp_path)
-    assert restarted._envelopes[snap_a]["class"] == "handreiking"
-    assert restarted._envelopes[snap_b]["class"] == "handreiking"
-    assert disk[snap_a]["class"] == "handreiking"
-    assert disk[snap_b]["class"] == "handreiking"
-    env_indexes = [index for index, item in enumerate(write_trace) if item == "envelopes"]
-    object_indexes = [index for index, item in enumerate(write_trace) if item.startswith("objects:")]
-    if len(object_indexes) >= 2 and len(env_indexes) >= 2:
-        first_env = env_indexes[0]
-        assert not (
-            object_indexes[0] < object_indexes[1] < first_env
-        ), f"half-overlapping multi-file writes: {write_trace}"
-
 
 
 def test_conflict_does_not_rollback_winner_already_committed_work(tmp_path: Path, *, production_console) -> None:
@@ -501,4 +421,4 @@ def _file_restart(tmp_path: Path) -> OperationsConsole:
 
 
 def _file_disk_envelopes(console: OperationsConsole) -> dict:
-    return json.loads(console._envelopes_path.read_text(encoding="utf-8"))
+    return json.loads((console.runtime / "envelopes.json").read_text(encoding="utf-8"))

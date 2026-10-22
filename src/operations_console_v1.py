@@ -14,7 +14,6 @@ import hashlib
 import json
 import os
 import re
-import secrets
 import tempfile
 import threading
 import unicodedata
@@ -110,10 +109,8 @@ from src.review_ledger import append_event, read_events
 from src.review_interaction_v1 import validate_review_interaction_identity
 from src.review_workflow_v3 import _apply_review_state
 from src.revision_workflow import (bump_patch, create_revision, revise_object, current_revisions,
-                                   validate_revision_write, knowledge_revision, reprocessed_history, lineage_evidence,
+                                   knowledge_revision, reprocessed_history, lineage_evidence,
                                    with_current_revision)
-from src.retrieval.retrieval_projection_v2 import build_projection
-from src.published_projection_v1 import atomic_replace_projection
 from src.semantic_replay_v1 import SEMANTIC_REPLAY_SPEC_KEY
 from src.quality_evidence_v1 import record_processing, review_evidence, instant as quality_instant
 from src.semantic_transform_generic_v1 import transform as _transform_generic
@@ -123,7 +120,6 @@ from src.serving_relations_v1 import (
     is_closed_relation_type,
 )
 from src.topic_identity_v1 import normalize_topic_label, topic_identity_key
-from src import publish_refusal_audit_v1 as _publish_refusal_audit
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -136,10 +132,7 @@ CAPTURED = "captured_not_published"
 PRE_REVIEW_BLOCKED = "blocked_pending_pre_review"
 PUBLISHED_ENVELOPE_STATES = frozenset({"published", "superseded", "withdrawn"})
 UNPUBLISHED_DELETE_EVENT = "unpublished_snapshot_deleted"
-CLASS_CHANGE_HISTORY_DIRNAME = "class_change_history"
-PUBLISHED_PROJECTION_FILENAME = "published_projection.jsonl"
 PUBLICATION_PROTOCOL_VERSION = "4.2.0"
-RELEASE_MANIFEST_DIRNAME = "release_manifests"
 ALLOWED_DELETE_NEXT = frozenset({"/ingest", "/review", "/tree"})
 ALLOWED_ROLES = frozenset({"researcher", "reviewer", "publisher"})
 ALLOWED_CLASSES = CLOSED_KLASSEN
@@ -594,12 +587,6 @@ def _objects_jsonl_bytes(rows: list[dict[str, Any]]) -> bytes:
     return "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in rows).encode("utf-8")
 
 
-def _file_revision(path: Path) -> str:
-    if not path.exists():
-        return ""
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def default_url_fetcher(url: str) -> tuple[bytes, str, str]:
     from src.ingest_limits_v1 import fetch_url_limited
 
@@ -700,6 +687,9 @@ def _recorded_authorization(bindings, binding, account):
     except ApproverIdentityError as exc:
         raise ConsoleError(str(exc)) from exc
 
+POSTGRES_WORKFLOW_AUTHORITY_REQUIRED = "postgres_workflow_authority_required"
+
+
 class OperationsConsole:
     @contextmanager
     def source_selection_read_scope(self, *, retained_only=False):
@@ -732,6 +722,9 @@ class OperationsConsole:
         url_fetcher: UrlFetcher | None = None,
         schema_path: Path | None = None,
     ) -> None:
+        # D6b: PostgreSQL is the only workflow authority; the file topology is gone.
+        if not getattr(type(self), "_metis_complete_postgres_authority", False):
+            raise RuntimeError(POSTGRES_WORKFLOW_AUTHORITY_REQUIRED)
         self.root = Path(root)
         self.source_store = Path(source_store or self.root / "sources" / "private")
         self.runtime = Path(runtime or self.root / "output" / "runtime" / "operations-console")
@@ -740,75 +733,19 @@ class OperationsConsole:
         self.schema_path = Path(schema_path or SCHEMA_V14)
         self.source_store.mkdir(parents=True, exist_ok=True)
         self.runtime.mkdir(parents=True, exist_ok=True)
-        self._accounts_path = self.runtime / "accounts.json"
-        self._sessions_path = self.runtime / "sessions.json"
-        self._envelopes_path = self.runtime / "envelopes.json"
-        self._objects_dir = self.runtime / "objects"
-        if self._startup_local_mirror_is_authority(self._envelopes_path):
-            self._objects_dir.mkdir(parents=True, exist_ok=True)
+        # Ledger key for the registered PostgreSQL event backend; never a file authority.
         self._ledger_path = self.runtime / "review_ledger.jsonl"
-        self._bindings_path = self.runtime / "publish_authorizations.json"
-        self._accounts: dict[str, dict[str, Any]] = self._load_map(self._accounts_path)
-        self._sessions: dict[str, dict[str, Any]] = self._load_map(self._sessions_path)
-        self._envelopes: dict[str, dict[str, Any]] = self._load_map(self._envelopes_path)
-        loaded_bindings = self._load_map(self._bindings_path)
-        self._bindings: dict[str, list[dict[str, Any]]] = {
-            key: list(value) for key, value in loaded_bindings.items()
-        }
-        self._objects_lock_guard = threading.Lock()
-        self._objects_thread_locks: dict[str, threading.RLock] = {}
+        # Process views of PostgreSQL state; the workflow mixins refresh them.
+        self._accounts: dict[str, dict[str, Any]] = {}
+        self._sessions: dict[str, dict[str, Any]] = {}
+        self._envelopes: dict[str, dict[str, Any]] = {}
+        self._bindings: dict[str, list[dict[str, Any]]] = {}
         self._objects_tls = threading.local()
-        self._sessions_thread_lock = threading.RLock()
         self._store_thread_lock = threading.RLock()
         self._store_lock_depth = 0
         self._store_lock_handle: Any = None
         self._prepared_envelopes: dict[str, Any] | None = None
         self._prepared_bindings: dict[str, Any] | None = None
-
-    def _startup_local_mirror_is_authority(self, path: Path) -> bool:
-        return True
-
-    def _load_map(self, path: Path) -> dict[str, dict[str, Any]]:
-        if not self._startup_local_mirror_is_authority(path):
-            return {}
-        if not path.exists():
-            return {}
-        return json.loads(path.read_text(encoding="utf-8"))
-
-    def _save_accounts(self) -> None:
-        _atomic_write(self._accounts_path, self._accounts)
-
-    def _save_sessions(self) -> None:
-        _atomic_write(self._sessions_path, self._sessions)
-
-    @contextmanager
-    def _sessions_write_lock(self) -> Iterator[None]:
-        lock_path = self._sessions_path.with_name(self._sessions_path.name + ".lock")
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._sessions_thread_lock:
-            with open(lock_path, "a+b") as handle:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-                try:
-                    yield
-                finally:
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-
-    def _reload_sessions_locked(self) -> None:
-        self._sessions = self._load_map(self._sessions_path)
-
-    def _with_sessions(self, mutator: Callable[[dict[str, dict[str, Any]]], None]) -> None:
-        last_error: OSError | None = None
-        for _attempt in range(SESSION_SAVE_RETRIES):
-            try:
-                with self._sessions_write_lock():
-                    self._reload_sessions_locked()
-                    mutator(self._sessions)
-                    self._save_sessions()
-                return
-            except OSError as exc:
-                last_error = exc
-        if last_error is not None:
-            raise last_error
 
     @contextmanager
     def _store_write_lock(self) -> Iterator[None]:
@@ -863,117 +800,12 @@ class OperationsConsole:
             merged.pop(snapshot_id, None)
         return merged
 
-    def _save_envelopes(self) -> None:
-        with self._store_write_lock():
-            payload = getattr(self, "_prepared_envelopes", None)
-            _atomic_write(self._envelopes_path, self._envelopes if payload is None else payload)
-
-    def _save_bindings(self) -> None:
-        with self._store_write_lock():
-            payload = getattr(self, "_prepared_bindings", None)
-            _atomic_write(self._bindings_path, self._bindings if payload is None else payload)
-
-    def _reload_store_locked(self) -> None:
-        """Refresh shared publication inputs while the store lock is held."""
-        self._envelopes = self._load_map(self._envelopes_path)
-        loaded = self._load_map(self._bindings_path)
-        self._bindings = {key: list(value) for key, value in loaded.items()}
-
-    def _objects_path(self, snapshot_id: str) -> Path:
-        if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
-            raise ConsoleError("unknown_snapshot")
-        token = safe_snapshot_id(snapshot_id)
-        return safe_path_under(self._objects_dir, f"{token}.jsonl")
-
-    def _objects_thread_lock(self, snapshot_id: str) -> threading.RLock:
-        with self._objects_lock_guard:
-            lock = self._objects_thread_locks.get(snapshot_id)
-            if lock is None:
-                lock = threading.RLock()
-                self._objects_thread_locks[snapshot_id] = lock
-            return lock
-
     def _objects_expected_revs(self) -> dict[str, str]:
         revs = getattr(self._objects_tls, "expected", None)
         if revs is None:
             revs = {}
             self._objects_tls.expected = revs
         return revs
-
-    @contextmanager
-    def _objects_write_lock(self, snapshot_id: str) -> Iterator[None]:
-        path = self._objects_path(snapshot_id)
-        lock_path = path.with_name(path.name + ".lock")
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with self._objects_thread_lock(snapshot_id):
-            with open(lock_path, "a+b") as handle:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-                try:
-                    yield
-                finally:
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-
-    def _load_objects(self, snapshot_id: str, *, remember: bool = True) -> list[dict[str, Any]]:
-        if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
-            raise ConsoleError("unknown_snapshot")
-        with self._objects_write_lock(snapshot_id):
-            path = self._objects_path(snapshot_id)
-            exists = path.exists()
-            if not exists:
-                text = ""
-                rows: list[dict[str, Any]] = []
-            else:
-                text = path.read_text(encoding="utf-8")
-                rows = [json.loads(line) for line in text.splitlines() if line.strip()]
-            if remember:
-                expected = self._objects_expected_revs()
-                if snapshot_id not in expected:
-                    expected[snapshot_id] = (
-                        hashlib.sha256(text.encode("utf-8")).hexdigest()
-                        if exists
-                        else ""
-                    )
-            return rows
-
-    def objects_revision(self, snapshot_id: str) -> str:
-        """Current snapshot objects-file revision. Bound to the file, not TLS."""
-        if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
-            raise ConsoleError("unknown_snapshot")
-        return _file_revision(self._objects_path(snapshot_id))
-
-    def _save_objects(
-        self,
-        snapshot_id: str,
-        rows: list[dict[str, Any]],
-        *,
-        expected_revision: str | None = None,
-    ) -> None:
-        if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
-            raise ConsoleError("unknown_snapshot")
-        with self._store_write_lock():
-            self._reload_store_locked()
-            self._guard_prepared_working_revision_mutation(
-                envelopes=None, bindings=None, objects=(snapshot_id, rows), snapshot_id=snapshot_id)
-            with self._objects_write_lock(snapshot_id):
-                path = self._objects_path(snapshot_id)
-                pinned = (
-                    expected_revision
-                    if expected_revision is not None
-                    else self._objects_expected_revs().get(snapshot_id)
-                )
-                current_rev = _file_revision(path)
-                if pinned is not None and current_rev != pinned:
-                    raise ConsoleError(
-                        SNAPSHOT_OBJECT_WRITE_CONFLICT,
-                        current_revision=current_rev,
-                    )
-                # Already holding the file flock: do not reacquire via _load_objects.
-                previous = ([json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
-                             if line.strip()] if path.exists() else [])
-                validate_revision_write(previous, rows, snapshot_id=snapshot_id)
-                payload = _objects_jsonl_bytes(rows)
-                _atomic_replace_bytes(path, payload)
-                self._objects_expected_revs()[snapshot_id] = hashlib.sha256(payload).hexdigest()
 
     def _save_objects_pinned(
         self,
@@ -985,44 +817,6 @@ class OperationsConsole:
             self._save_objects(snapshot_id, rows)
             return
         self._save_objects(snapshot_id, rows, expected_revision=expected_revision)
-
-    def refresh_objects_expected_revision(
-        self,
-        snapshot_id: str,
-        revision: str | None = None,
-    ) -> str:
-        """Remember the current snapshot file revision so a retry can proceed."""
-        if ".." in snapshot_id or "/" in snapshot_id or "\\" in snapshot_id:
-            raise ConsoleError("unknown_snapshot")
-        current = revision if revision else _file_revision(self._objects_path(snapshot_id))
-        self._objects_expected_revs()[snapshot_id] = current
-        return current
-
-    def _rollback_store_files(
-        self,
-        *,
-        objects_snapshot: tuple[str, bytes | None] | None = None,
-        envelopes: dict[str, Any] | None = None,
-        bindings: dict[str, Any] | None = None,
-        ledger_size: int | None = None,
-    ) -> None:
-        if objects_snapshot is not None:
-            snapshot_id, prior = objects_snapshot
-            path = self._objects_path(snapshot_id)
-            if prior is None:
-                with suppress(OSError):
-                    path.unlink()
-            else:
-                _atomic_replace_bytes(path, prior)
-        if envelopes is not None:
-            _atomic_write(self._envelopes_path, envelopes)
-        if bindings is not None:
-            _atomic_write(self._bindings_path, bindings)
-        if ledger_size is not None and self._ledger_path.exists():
-            current = self._ledger_path.stat().st_size
-            if current > ledger_size:
-                with self._ledger_path.open("r+b") as handle:
-                    handle.truncate(ledger_size)
 
     def _require_mutable_working_revision(self, snapshot_id: str) -> None:
         """Published work is historical input, never current review work."""
@@ -1083,85 +877,6 @@ class OperationsConsole:
                     continue
                 raise
 
-    def _commit_prepared_store(
-        self,
-        *,
-        envelopes: dict[str, Any] | None = None,
-        bindings: dict[str, Any] | None = None,
-        objects: tuple[str, list[dict[str, Any]]] | None = None,
-        expected_revision: str | None = None,
-        ledger_fn: Callable[[], None] | None = None,
-        snapshot_id: str | None = None,
-    ) -> None:
-        """Write one complete store transaction, then publish in-process maps.
-
-        Serializes objects/envelopes/bindings/ledger writes. Rebases shared
-        maps so a stale full-map copy cannot clobber another writer's
-        already-committed keys. Conflict or mid-write failure rolls back
-        only files this transaction actually wrote.
-        """
-        with self._store_write_lock():
-            self._reload_store_locked()
-            sid = snapshot_id or (objects[0] if objects is not None else None)
-            if envelopes is not None and sid:
-                envelopes = self._rebase_snapshot_map(self._envelopes, envelopes, sid)
-            if bindings is not None and sid:
-                bindings = self._rebase_snapshot_map(self._bindings, bindings, sid)
-            self._guard_prepared_working_revision_mutation(
-                envelopes=envelopes, bindings=bindings, objects=objects, snapshot_id=snapshot_id)
-            prior_envelopes = deepcopy(self._envelopes)
-            prior_bindings = deepcopy(self._bindings)
-            prior_objects: tuple[str, bytes | None] | None = None
-            if objects is not None:
-                path = self._objects_path(objects[0])
-                prior_objects = (objects[0], path.read_bytes() if path.exists() else None)
-            prior_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
-            self._prepared_envelopes = envelopes
-            self._prepared_bindings = bindings
-            wrote_objects = False
-            wrote_envelopes = False
-            wrote_bindings = False
-            wrote_ledger = False
-            try:
-                if objects is not None:
-                    self._save_objects_pinned(
-                        objects[0],
-                        objects[1],
-                        expected_revision,
-                    )
-                    wrote_objects = True
-                if envelopes is not None:
-                    self._save_envelopes()
-                    wrote_envelopes = True
-                if bindings is not None:
-                    self._save_bindings()
-                    wrote_bindings = True
-                if ledger_fn is not None:
-                    wrote_ledger = True
-                    ledger_fn()
-            except Exception:
-                self._rollback_store_files(
-                    objects_snapshot=prior_objects if wrote_objects else None,
-                    envelopes=prior_envelopes if wrote_envelopes else None,
-                    bindings=prior_bindings if wrote_bindings else None,
-                    ledger_size=prior_ledger if wrote_ledger else None,
-                )
-                raise
-            finally:
-                self._prepared_envelopes = None
-                self._prepared_bindings = None
-            if envelopes is not None:
-                self._envelopes = envelopes
-            if bindings is not None:
-                self._bindings = bindings
-
-    def _account(self, account_id: str, *, current: bool = False) -> dict[str, Any]:
-        accounts = self._load_map(self._accounts_path) if current else self._accounts
-        account = accounts.get(account_id)
-        if not account:
-            raise ConsoleError("unknown_account")
-        return account
-
     def _require_role(self, account_id: str, role: str, *, current: bool = False) -> dict[str, Any]:
         account = self._account(account_id, current=current)
         if role not in account["roles"]:
@@ -1175,39 +890,6 @@ class OperationsConsole:
             raise ConsoleError("unknown_snapshot")
         return envelope
 
-    def create_account(
-        self,
-        username: str,
-        password: str,
-        roles: Iterable[str],
-        display_name: str | None = None,
-    ) -> dict[str, Any]:
-        username = username.strip()
-        display = (display_name or username).strip()
-        if not username or not password:
-            raise ConsoleError("account_fields_required")
-        if _is_forbidden_identity(username) or _is_forbidden_identity(display):
-            raise ConsoleError("forbidden_reviewer_identity")
-        if any(row["username"] == username for row in self._accounts.values()):
-            raise ConsoleError("username_already_exists")
-        role_set = sorted(set(roles))
-        if any(role not in ALLOWED_ROLES for role in role_set):
-            raise ConsoleError("unknown_role")
-        salt, digest = _hash_password(password)
-        account_id = f"acc-{uuid.uuid4().hex[:12]}"
-        record = {
-            "account_id": account_id,
-            "username": username,
-            "display_name": display,
-            "roles": role_set,
-            "password_salt": salt,
-            "password_hash": digest,
-            "created_at": utc_now(),
-        }
-        self._accounts[account_id] = record
-        self._save_accounts()
-        return self._public_account(record)
-
     def public_signup(self, **_kwargs: Any) -> dict[str, Any]:
         raise ConsoleError("public_signup_forbidden")
 
@@ -1218,55 +900,6 @@ class OperationsConsole:
             "display_name": record["display_name"],
             "roles": list(record["roles"]),
         }
-
-    def authenticate(self, username: str, password: str) -> dict[str, Any]:
-        record = next((row for row in self._accounts.values() if row["username"] == username), None)
-        if not record:
-            raise ConsoleError("invalid_credentials")
-        _, digest = _hash_password(password, record["password_salt"])
-        if not secrets.compare_digest(digest, record["password_hash"]):
-            raise ConsoleError("invalid_credentials")
-        token = secrets.token_hex(32)
-        session = {
-            "token": token,
-            "account_id": record["account_id"],
-            "username": record["username"],
-            "roles": list(record["roles"]),
-            "created_at": utc_now(),
-            "expires_at": utc_after(DEFAULT_SESSION_TTL_SECONDS),
-        }
-
-        def add(sessions: dict[str, dict[str, Any]]) -> None:
-            sessions[token] = session
-
-        self._with_sessions(add)
-        return dict(session)
-
-    def session_account(self, token: str | None) -> dict[str, Any]:
-        if not token:
-            raise ConsoleError("not_authenticated")
-        with self._sessions_write_lock():
-            self._reload_sessions_locked()
-            session = self._sessions.get(token)
-            if not session or session_is_expired(session):
-                raise ConsoleError("not_authenticated")
-            account = self._account(session["account_id"])
-            return self._public_account(account)
-
-    def logout(self, token: str | None) -> None:
-        if not token:
-            return
-
-        def remove(sessions: dict[str, dict[str, Any]]) -> None:
-            sessions.pop(token, None)
-
-        self._with_sessions(remove)
-
-    def list_accounts(self) -> list[dict[str, Any]]:
-        return [self._public_account(row) for row in self._accounts.values()]
-
-    def list_reviewer_accounts(self) -> list[dict[str, Any]]:
-        return [row for row in self.list_accounts() if "reviewer" in row["roles"]]
 
     def _resolve_named_reviewers(self, named_reviewers: list[str], uploader_id: str) -> list[str]:
         if not named_reviewers:
@@ -1353,18 +986,6 @@ class OperationsConsole:
     ) -> dict[str, Any]:
         self._require_role(actor_id, "publisher")
         return self.create_account(username, password, roles, display_name=display_name)
-
-    def assign_roles(self, *, actor_id: str, account_id: str, roles: Iterable[str]) -> dict[str, Any]:
-        with self._store_write_lock():
-            self._accounts = self._load_map(self._accounts_path)
-            self._require_role(actor_id, "publisher")
-            account = self._account(account_id)
-            role_set = sorted(set(roles))
-            if any(role not in ALLOWED_ROLES for role in role_set):
-                raise ConsoleError("unknown_role")
-            account["roles"] = role_set
-            self._save_accounts()
-            return self._public_account(account)
 
     def waiting_task_counts(self, account_id: str) -> dict[str, int]:
         account = self._account(account_id)
@@ -2117,8 +1738,7 @@ class OperationsConsole:
         This does not alter shared review-write or rollback semantics.
         """
         source, _ = self._verified_source_bytes(envelope)
-        if (self.immutable_source_store is not None
-                and getattr(self, "workflow_document_store", None) is not None):
+        if self.immutable_source_store is not None:
             # Read back authority, even when a matching filesystem cache exists.
             try:
                 durable = self.immutable_source_store.load_verified(envelope["immutable_storage_locator"])
@@ -2129,8 +1749,6 @@ class OperationsConsole:
             return self._receipt(envelope)
         with self._store_write_lock():
             paths = [source]
-            if getattr(self, "workflow_document_store", None) is None:
-                paths.extend([self._objects_path(envelope["snapshot_id"]), self._envelopes_path])
             for path in paths:
                 with path.open("rb") as stored:
                     os.fsync(stored.fileno())
@@ -2665,37 +2283,6 @@ class OperationsConsole:
             observe('processing_finished', snapshot_id, stored)
         return self._receipt(prepared_envelope)
 
-    def snapshot_is_published(self, snapshot_id: str) -> bool:
-        """True when this snapshot is a published projection or has been published."""
-        envelope = self._envelope(snapshot_id)
-        if envelope.get("state") in PUBLISHED_ENVELOPE_STATES:
-            return True
-        if envelope.get("published") is True:
-            return True
-        rows = self._load_objects(snapshot_id, remember=False)
-        if any((row.get("governance") or {}).get("publication_status") == "published" for row in rows):
-            return True
-        return self._snapshot_in_published_projection(snapshot_id)
-
-    def _published_projection_path(self) -> Path:
-        return self.runtime / PUBLISHED_PROJECTION_FILENAME
-
-    def _snapshot_in_published_projection(self, snapshot_id: str) -> bool:
-        path = self._published_projection_path()
-        if not path.is_file():
-            return False
-        token = safe_snapshot_id(snapshot_id)
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            row = json.loads(line)
-            if row.get("snapshot_id") == token:
-                return True
-            meta = row.get("metadata") or {}
-            if meta.get("snapshot_id") == token:
-                return True
-        return False
-
     def _maybe_remove_unpublished_freeze_bytes(self, envelope: dict[str, Any]) -> bool:
         """Remove unshared unpublished source bytes from local cache and immutable storage.
 
@@ -2803,10 +2390,6 @@ class OperationsConsole:
             raise ConsoleError("delete_title_confirmation_required")
         digest = str(envelope["sha256"])
         self._delete_unpublished_snapshot_authority(token)
-        if self._startup_local_mirror_is_authority(self._envelopes_path):
-            objects_path = self._objects_path(token)
-            if objects_path.is_file():
-                objects_path.unlink()
         self._envelopes.pop(token, None)
         self._bindings.pop(token, None)
         self._save_envelopes()
@@ -3031,36 +2614,6 @@ class OperationsConsole:
                          bindings=self.object_review_bindings(snapshot_id),
                          fragments=self.review_source_fragments(snapshot_id))
 
-    @diagnostic_phase("objects_read")
-    def snapshot_objects_and_revision(
-        self,
-        snapshot_id: str,
-        include_blocked: bool = False,
-    ) -> tuple[list[dict[str, Any]], str]:
-        """Read snapshot objects and the form-bound revision from one file load.
-
-        MUST NOT use ``threading.local`` as the GET→POST pin. The revision is
-        the SHA-256 of the objects file bytes that produced these rows.
-        """
-        self._envelope(snapshot_id)
-        with self._objects_write_lock(snapshot_id):
-            path = self._objects_path(snapshot_id)
-            exists = path.exists()
-            if not exists:
-                text = ""
-                rows: list[dict[str, Any]] = []
-            else:
-                text = path.read_text(encoding="utf-8")
-                rows = [json.loads(line) for line in text.splitlines() if line.strip()]
-            revision = (
-                hashlib.sha256(text.encode("utf-8")).hexdigest()
-                if exists
-                else ""
-            )
-        if include_blocked:
-            return deepcopy(rows), revision
-        return deepcopy(current_revisions(rows, snapshot_id=snapshot_id)), revision
-
     def resolve_family_label(self, value: str | None, *, required_code: str = "family_required") -> str:
         """Reuse the first stored spelling for an equivalent Onderwerp.
 
@@ -3128,11 +2681,6 @@ class OperationsConsole:
             )
         return self._receipt(envelope)
 
-    def _class_change_history_dir(self) -> Path:
-        path = self.runtime / CLASS_CHANGE_HISTORY_DIRNAME
-        path.mkdir(parents=True, exist_ok=True)
-        return path
-
     def _class_change_manifest(self, envelope: dict[str, Any]) -> dict[str, Any]:
         return {
             "canonical_source": {
@@ -3186,49 +2734,6 @@ class OperationsConsole:
                 "model": model,
             },
         )
-
-    def _archive_prior_objects(
-        self,
-        *,
-        snapshot_id: str,
-        rows: list[dict[str, Any]],
-        from_class: str,
-        to_class: str,
-    ) -> dict[str, Any]:
-        token = safe_snapshot_id(snapshot_id)
-        stamp = utc_now().replace(":", "").replace("-", "")
-        filename = safe_store_filename(f"{token}-{stamp}.jsonl")
-        dest = safe_path_under(self._class_change_history_dir(), filename)
-        dest.write_text(
-            "".join(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n" for row in rows),
-            encoding="utf-8",
-        )
-        return {
-            "reason": DOCUMENT_CLASS_CHANGED_EVENT,
-            "from_class": from_class,
-            "to_class": to_class,
-            "changed_at": utc_now(),
-            "object_count": len(rows),
-            "object_ids": [row.get("object_id") for row in rows],
-            "history_file": filename,
-        }
-
-    def prior_object_audit_history(self, snapshot_id: str) -> list[dict[str, Any]]:
-        envelope = self._envelope(snapshot_id)
-        out: list[dict[str, Any]] = []
-        for record in envelope.get("prior_processing_history") or []:
-            objects: list[dict[str, Any]] = []
-            filename = str(record.get("history_file") or "")
-            if filename:
-                path = safe_path_under(self._class_change_history_dir(), safe_store_filename(filename))
-                if path.is_file():
-                    objects = [
-                        json.loads(line)
-                        for line in path.read_text(encoding="utf-8").splitlines()
-                        if line.strip()
-                    ]
-            out.append({**deepcopy(record), "objects": objects})
-        return out
 
     def _reextract_objects_for_klasse(
         self,
@@ -3429,68 +2934,20 @@ class OperationsConsole:
     def _heading_batch_mutation(self, snapshot_id: str) -> Iterator[None]:
         """Own the whole heading command, including late revision conflicts.
 
-        The shared writer lock excludes supported local competing writers. Native
-        stores override this boundary with a transaction; these captures are only
-        files/mirrors, never compensating writes to database authority.
+        The shared writer lock excludes competing local writers. The PostgreSQL
+        workflow mixins wrap this boundary in the native transaction, which is
+        the only rollback; there are no file captures or compensating writes.
         """
         with self._store_write_lock():
             self._reload_store_locked()
             self._require_mutable_working_revision(snapshot_id)
-            path = self._objects_path(snapshot_id)
-            prior_objects = path.read_bytes() if path.exists() else None
-            prior_envelopes = deepcopy(self._envelopes)
-            prior_bindings = deepcopy(self._bindings)
-            prior_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
             previous = getattr(self._objects_tls, "heading_batch_snapshot", None)
             self._objects_tls.heading_batch_snapshot = snapshot_id
             try:
                 yield
-            except Exception:
-                self._rollback_store_files(
-                    objects_snapshot=(snapshot_id, prior_objects),
-                    envelopes=prior_envelopes,
-                    bindings=prior_bindings,
-                    ledger_size=prior_ledger,
-                )
-                self._envelopes = prior_envelopes
-                self._bindings = prior_bindings
-                raise
             finally:
                 self._objects_tls.heading_batch_snapshot = previous
                 self._objects_expected_revs().pop(snapshot_id, None)
-
-    @contextmanager
-    def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
-        """Rollback object/binding/envelope writes together with ledger evidence."""
-        with self._store_write_lock():
-            if getattr(self._objects_tls, "heading_batch_snapshot", None) == snapshot_id:
-                yield
-                return
-            self._reload_store_locked()
-            self._require_mutable_working_revision(snapshot_id)
-            path = self._objects_path(snapshot_id)
-            prior_objects = path.read_bytes() if path.exists() else None
-            prior_envelopes = deepcopy(self._envelopes)
-            prior_bindings = deepcopy(self._bindings)
-            prior_ledger = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
-            try:
-                yield
-            except Exception as exc:
-                if isinstance(exc, ConsoleError) and exc.code == SNAPSHOT_OBJECT_WRITE_CONFLICT:
-                    # Prepared review made no writes. Preserve the competing winner.
-                    self.refresh_objects_expected_revision(snapshot_id)
-                    raise
-                self._rollback_store_files(
-                    objects_snapshot=(snapshot_id, prior_objects),
-                    envelopes=prior_envelopes,
-                    bindings=prior_bindings,
-                    ledger_size=prior_ledger,
-                )
-                self._envelopes = prior_envelopes
-                self._bindings = prior_bindings
-                self.refresh_objects_expected_revision(snapshot_id)
-                raise
-
 
     def review_object(
         self,
@@ -4521,8 +3978,6 @@ class OperationsConsole:
                         pinned_path, _ = self._verified_source_bytes(envelope)
                         if self._read_source_fragments(envelope, pinned_path) != fragments:
                             raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=self.objects_revision(snapshot_id))
-                    if getattr(self, "workflow_identity_store", None) is None:
-                        self._accounts = self._load_map(self._accounts_path)
                     current_actor = self._account(actor_id)
                     if not {"researcher", "reviewer"}.intersection(current_actor["roles"]):
                         raise ConsoleError("correction_role_required")
@@ -4897,153 +4352,6 @@ class OperationsConsole:
                     return self._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id)
             self._reload_store_locked()
             return self._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id)
-
-    def _publish_locked(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
-        considered = self.consider_publish(actor_id=actor_id, snapshot_id=snapshot_id)
-        envelope = self._envelope(snapshot_id)
-        _publish_refusal_audit.record_publish_refusal(self, actor_id=actor_id, snapshot_id=snapshot_id, verdict=considered)
-        if not considered.get("publish_allowed"):
-            return {
-                "status": "BLOCKED",
-                "state": envelope["state"],
-                "snapshot_id": snapshot_id,
-                "blockers": considered.get("blockers") or ["object_tuple_required"],
-                "g2": considered.get("g2", "BLOCKED"),
-                "cutover": False,
-            }
-
-        account = self._require_role(actor_id, "publisher")
-        publish_ids = set(considered["publishable_object_ids"])
-        objects = [
-            obj
-            for obj in self.snapshot_objects(snapshot_id)
-            if obj.get("object_id") in publish_ids
-        ]
-        published_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        release_id = f"release-{uuid.uuid4().hex}"
-        release_version = f"{envelope['version']}-{release_id[-8:]}"
-        publication = {
-            "release_id": release_id,
-            "release_version": release_version,
-            "published_at": published_at,
-        }
-        projected, blocked = build_projection(
-            [{"knowledge_object": deepcopy(obj), "publication": publication} for obj in objects]
-        )
-        if blocked:
-            return {
-                "status": "BLOCKED",
-                "state": envelope["state"],
-                "snapshot_id": snapshot_id,
-                "blockers": ["prepublication_projection_failed"],
-                "projection_errors": blocked,
-                "g2": "PASS",
-                "cutover": False,
-            }
-        for row in projected:
-            row.setdefault("metadata", {})["snapshot_id"] = snapshot_id
-
-        projection_path = self._published_projection_path()
-        previous_projection = projection_path.read_bytes() if projection_path.exists() else None
-        existing_projection = []
-        if previous_projection:
-            existing_projection = [
-                json.loads(line)
-                for line in previous_projection.decode("utf-8").splitlines()
-                if line.strip()
-            ]
-        published_object_ids = {
-            str((row.get("metadata") or {}).get("object_id") or "") for row in projected
-        }
-        next_projection = [
-            row
-            for row in existing_projection
-            if str((row.get("metadata") or {}).get("object_id") or "")
-            not in published_object_ids
-        ] + projected
-        manifest = {
-            "release_id": release_id,
-            "release_version": release_version,
-            "release_owner": account["username"],
-            "published_at": published_at,
-            "protocol_version": PUBLICATION_PROTOCOL_VERSION,
-            "snapshot_id": snapshot_id,
-            "source_sha256": envelope["sha256"],
-            "immutable_storage_locator": envelope["immutable_storage_locator"],
-            "objects": [
-                {
-                    "object_id": obj["object_id"],
-                    "object_version": obj["object_version"],
-                    "canonical_object_hash": (obj.get("provenance") or {}).get("canonical_object_hash"),
-                    "content_hash": (obj.get("provenance") or {}).get("content_hash"),
-                    "confirmed_object_type": obj.get("confirmed_object_type"),
-                }
-                for obj in objects
-            ],
-        }
-        if "decision_graph" in envelope:
-            from src.decision_graph_v1 import release_graph
-            manifest["decision_graph_release"] = release_graph(envelope, self.snapshot_objects(snapshot_id))
-        manifest_path = self.runtime / RELEASE_MANIFEST_DIRNAME / f"{release_id}.json"
-        ledger_size = self._ledger_path.stat().st_size if self._ledger_path.exists() else 0
-        previous_envelopes = self._envelopes_path.read_bytes() if self._envelopes_path.exists() else None
-        try:
-            _atomic_write(manifest_path, manifest)
-            atomic_replace_projection(projection_path, next_projection)
-            published_envelope = deepcopy(envelope)
-            published_envelope.update(
-                {
-                    "state": "published",
-                    "published": True,
-                    "release_id": release_id,
-                    "release_version": release_version,
-                    "published_at": published_at,
-                    "published_by": account["username"],
-                }
-            )
-            self._envelopes[snapshot_id] = published_envelope
-            _atomic_write(self._envelopes_path, self._envelopes)
-            append_event(
-                self._ledger_path,
-                event_type="release_published",
-                object_id=snapshot_id,
-                object_version=str(envelope["version"]),
-                actor=account["username"],
-                details={
-                    "release_id": release_id,
-                    "release_version": release_version,
-                    "published_object_ids": sorted(publish_ids),
-                    "source_sha256": envelope["sha256"],
-                },
-            )
-        except Exception:
-            if previous_projection is None:
-                with suppress(OSError):
-                    projection_path.unlink()
-            else:
-                _atomic_replace_bytes(projection_path, previous_projection)
-            if previous_envelopes is None:
-                with suppress(OSError):
-                    self._envelopes_path.unlink()
-            else:
-                _atomic_replace_bytes(self._envelopes_path, previous_envelopes)
-            self._envelopes = self._load_map(self._envelopes_path)
-            with suppress(OSError):
-                manifest_path.unlink()
-            if self._ledger_path.exists() and self._ledger_path.stat().st_size > ledger_size:
-                with self._ledger_path.open("r+b") as handle:
-                    handle.truncate(ledger_size)
-            raise
-        return {
-            "status": "PASS",
-            "state": "published",
-            "snapshot_id": snapshot_id,
-            "release_id": release_id,
-            "release_version": release_version,
-            "published_items": len(objects),
-            "g2": "PASS",
-            "cutover": True,
-        }
 
     def live_snapshot(self, *, family: str, class_: str) -> dict[str, Any] | None:
         self.list_envelopes()

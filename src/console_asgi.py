@@ -6,8 +6,9 @@ database credentials come from the deployment environment, never from Git.
 Supported console topology is one worker by default or two workers on one
 instance with serialized writes. Multi-instance remains fail-closed. Azure runtime
 requires both the durable PostgreSQL canonical publication store and Azure Blob
-as the authoritative immutable source store; local development may continue
-without either. Azure requires the full PostgreSQL workflow authority; workflow disk mirrors are unused.
+as the authoritative immutable source store; local development may use the
+local source directory. PostgreSQL is the only workflow and canonical authority
+everywhere (D6b); there is no file topology and workflow disk mirrors are unused.
 """
 from __future__ import annotations
 
@@ -21,7 +22,6 @@ from src.closed_review_loop_v1 import install_closed_review_routes
 from src.console_navigation_simplify_v1 import install_navigation_simplification
 from src.deterministic_review_repair_v1 import install_deterministic_review_repair_routes
 from src.document_status_ui_v1 import install_document_status_ui
-from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import AzureBlobSourceStore
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
@@ -48,7 +48,7 @@ from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStor
 from src.workflows.workflow_transaction_v1 import bind_workflow_stores
 
 from src.workflow_store_configuration import (
-    POSTGRES_STORE_SETTINGS, running_in_azure as _running_in_azure,
+    postgres_dsn_configured, running_in_azure as _running_in_azure,
     validate_workflow_store_configuration,
 )
 
@@ -79,8 +79,8 @@ def _console_public_origin(*, running_in_azure: bool) -> str | None:
 
 
 def _postgres_credential() -> CachedAzurePostgresCredential | None:
-    """Create one process-local cached AAD credential for all configured PG stores."""
-    if not any(os.environ.get(name, "").strip().lower() == "postgres" for name in POSTGRES_STORE_SETTINGS):
+    """Create one process-local cached AAD credential for all PG stores without a DSN."""
+    if postgres_dsn_configured():
         return None
     return CachedAzurePostgresCredential()
 
@@ -164,46 +164,40 @@ def bootstrap_accounts(console: OperationsConsole) -> None:
 
 def build_app() -> object:
     install_structured_logging()
-    postgres = validate_workflow_store_configuration()
+    validate_workflow_store_configuration()
     topology = assert_supported_topology()
     data_root = _env_path("CONSOLE_DATA_ROOT", _default_data_root())
     immutable_store = _immutable_source_store()
     postgres_credential = _postgres_credential()
-    canonical_store = _canonical_store(credential=postgres_credential) if postgres else None
-    workflow_identity_store = _workflow_identity_store(credential=postgres_credential) if postgres else None
-    workflow_document_store = _workflow_document_store(credential=postgres_credential) if postgres else None
-    workflow_review_store = _workflow_review_store(credential=postgres_credential) if postgres else None
-    workflow_remaining_store = _workflow_remaining_store(credential=postgres_credential) if postgres else None
+    canonical_store = _canonical_store(credential=postgres_credential)
+    workflow_identity_store = _workflow_identity_store(credential=postgres_credential)
+    workflow_document_store = _workflow_document_store(credential=postgres_credential)
+    workflow_review_store = _workflow_review_store(credential=postgres_credential)
+    workflow_remaining_store = _workflow_remaining_store(credential=postgres_credential)
     running_in_azure = _running_in_azure()
 
-    common = dict(
+    bind_workflow_stores(
+        workflow_identity_store,
+        workflow_document_store,
+        workflow_review_store,
+        workflow_remaining_store,
+    )
+    console_cls = (
+        FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole
+        if running_in_azure
+        else FastBadgePostgresCompleteWorkflowDurablePublicationConsole
+    )
+    console = console_cls(
         root=ROOT,
         source_store=_env_path("CONSOLE_SOURCE_STORE", data_root / "sources" / "private"),
         runtime=_env_path("CONSOLE_RUNTIME", data_root / "output" / "runtime" / "operations-console"),
         immutable_source_store=immutable_store,
         canonical_publication_store=canonical_store,
+        workflow_identity_store=workflow_identity_store,
+        workflow_document_store=workflow_document_store,
+        workflow_review_store=workflow_review_store,
+        workflow_remaining_store=workflow_remaining_store,
     )
-    if postgres:
-        bind_workflow_stores(
-            workflow_identity_store,
-            workflow_document_store,
-            workflow_review_store,
-            workflow_remaining_store,
-        )
-        console_cls = (
-            FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole
-            if running_in_azure
-            else FastBadgePostgresCompleteWorkflowDurablePublicationConsole
-        )
-        console = console_cls(
-            **common,
-            workflow_identity_store=workflow_identity_store,
-            workflow_document_store=workflow_document_store,
-            workflow_review_store=workflow_review_store,
-            workflow_remaining_store=workflow_remaining_store,
-        )
-    else:
-        console = DurablePublicationConsole(**common)
 
     bind_pre_review_semantic_processing(console)
 
