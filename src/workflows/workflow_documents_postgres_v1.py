@@ -127,25 +127,28 @@ class PostgresWorkflowDocumentStore:
     def verify_schema(self) -> None:
         try:
             with self._connect() as con:
-                rows = con.execute(
-                    "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname='workflow'"
-                ).fetchall()
+                self._verify_schema_connection(con)
         except WorkflowDocumentStoreError:
             raise
         except Exception as exc:
             raise WorkflowDocumentStoreError("workflow_document_schema_check_failed") from exc
-        present = {str(row["tablename"]) for row in rows}
-        missing = sorted(REQUIRED_WORKFLOW_DOCUMENT_TABLES - present)
-        if missing:
-            raise WorkflowDocumentStoreError("workflow_document_schema_missing:" + ",".join(missing))
+
+    def _verify_schema_connection(self, con: Any) -> None:
+        """Read the base schema on the caller's startup-verification connection."""
         try:
-            with self._connect() as con:
-                column_rows = con.execute(
-                    "SELECT table_name,column_name FROM information_schema.columns "
-                    "WHERE table_schema='workflow' AND "
-                    "((table_name='documents' AND column_name='topic_id') OR "
-                    "(table_name='topics' AND column_name IN ('topic_id','identity_key','display_name')))"
-                ).fetchall()
+            rows = con.execute(
+                "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname='workflow'"
+            ).fetchall()
+            present = {str(row["tablename"]) for row in rows}
+            missing = sorted(REQUIRED_WORKFLOW_DOCUMENT_TABLES - present)
+            if missing:
+                raise WorkflowDocumentStoreError("workflow_document_schema_missing:" + ",".join(missing))
+            column_rows = con.execute(
+                "SELECT table_name,column_name FROM information_schema.columns "
+                "WHERE table_schema='workflow' AND "
+                "((table_name='documents' AND column_name='topic_id') OR "
+                "(table_name='topics' AND column_name IN ('topic_id','identity_key','display_name')))"
+            ).fetchall()
         except WorkflowDocumentStoreError:
             raise
         except Exception as exc:
