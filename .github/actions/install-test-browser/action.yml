@@ -1,0 +1,24 @@
+name: Install test browser
+description: Install pinned Playwright Chromium with a cache and bounded download retries
+runs:
+  using: composite
+  steps:
+    - name: Install pinned Playwright
+      shell: bash
+      run: npm install --prefix "$RUNNER_TEMP/metis-browser" playwright@1.58.2
+    - name: Restore pinned Chromium cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ runner.arch }}-1.58.2
+    - name: Install Chromium dependencies and browser
+      shell: bash
+      run: |
+        browser="$RUNNER_TEMP/metis-browser/node_modules/.bin/playwright"
+        "$browser" install-deps chromium
+        for attempt in 1 2 3; do
+          if "$browser" install chromium; then exit 0; fi
+          if [ "$attempt" -eq 3 ]; then exit 1; fi
+          echo "Chromium download failed; retrying after $((attempt * 15)) seconds."
+          sleep "$((attempt * 15))"
+        done
