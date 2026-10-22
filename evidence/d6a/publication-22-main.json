@@ -1,0 +1,120 @@
+{
+  "change_class": "C",
+  "rewrite_risk": "none",
+  "source_preparation": "origin/codex/d6a-22-batch-authority@35fba849",
+  "scope": "Real PostgreSQL batch-review commands instead of mutable in-memory authority; synchronized temporary app configuration.",
+  "full_suite": {
+    "commit": "6f1df9ad8d3924c9d0b9e62a9a8f9538b32e194b",
+    "python": "3.13.5",
+    "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+    "seconds": 2082.649,
+    "exit_code": 0,
+    "postgres_version": 160015,
+    "tests": 5644,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 34,
+    "postgres_skips": []
+  },
+  "full_junit": {
+    "file": "d6a22-full313.xml",
+    "tests": 5644,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 34,
+    "sha256": "7efbd1056fcbe2f9a81c9e1889bb9d518f8f3c18ec6647b247206da9798c81f7"
+  },
+  "targeted_python313": {
+    "file": "d6a22-focused313.xml",
+    "tests": 34,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "sha256": "bdaf1ce7bc8da47e1c0b4c8f14ef32b02c42081208b70517564158470c10d200"
+  },
+  "targeted_python312": {
+    "file": "d6a22-focused312.xml",
+    "tests": 40,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "sha256": "7359027fca005aa711f6d9c8e92b6d342d922e79555aaa44dff1a97c81d7f5b0"
+  },
+  "negative_control": {
+    "base": "afcb37ca",
+    "junit": {
+      "file": "d6a22-race-before.xml",
+      "tests": 1,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "sha256": "7f36e9cc6f65e7976361b9e6f892d47cbdfea8371904c26d7089341c6f6ee5c1"
+    },
+    "reason": "The new concurrent app-configuration test detects a foreign console root on unchanged main; it passes with the lock correction."
+  },
+  "preserved_batch_cases": 22,
+  "preserved_original_test_functions": 17,
+  "added_regression_cases": 1,
+  "collection": {
+    "total": 5644,
+    "explicit_file_topology_cases": 130,
+    "inventory": "file-topology-inventory.json"
+  },
+  "source_equivalence": {
+    "tested_commit": "6f1df9ad8d3924c9d0b9e62a9a8f9538b32e194b",
+    "note": "Current src and tests Git trees exactly match the executed full-suite revision; subsequent changes only record evidence."
+  },
+  "server": {
+    "postgres_version": 160015,
+    "fsync": "on",
+    "synchronous_commit": "on",
+    "full_page_writes": "on"
+  },
+  "mandatory_checks": [
+    {
+      "command": [
+        "python",
+        "scripts/repository_preflight.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python",
+        "scripts/release_control_preflight.py",
+        "--base",
+        "origin/main"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python",
+        "scripts/check_architecture_boundaries.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python",
+        "-m",
+        "compileall",
+        "-q",
+        "src",
+        "tests"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "origin/main"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "timing_limit": "Pinned baseline 9fa2004 and 2x limit unchanged; no local baseline ratio claimed. CI measures on the new head.",
+  "ci_status": "Not started on the new publication head; full CI remains required before merge."
+}

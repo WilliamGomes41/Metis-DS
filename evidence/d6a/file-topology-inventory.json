@@ -1,7 +1,7 @@
 {
   "scope": "Explicit retiring file-topology contracts; not current production authority",
   "method": "pytest --collect-only using actual collected file_topology markers",
-  "total_collected": 5643,
+  "total_collected": 5644,
   "file_topology_count": 130,
   "cases": [
     "tests/characterization/test_ingest.py::test_ingest_golden[bad_class]",

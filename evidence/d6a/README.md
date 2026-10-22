@@ -30,6 +30,14 @@ TLS-controle, pinned baseline en 2×-tijdgrens blijven behouden.
 
 ## Bewijsbronnen
 
+De volledige lokale eindsuite op `6f1df9ad` heeft 5.610 geslaagde tests,
+28 bestaande optionele skips, 6 xfails, nul fouten en nul PostgreSQL-skips.
+PostgreSQL 16.15 en Python 3.13.5; 2082,649 seconden. Dit is geen vergelijking
+met een lokale baseline. De gerichte Python 3.12-proef heeft 40 groene tests.
+Zie [publicatie van 22](publication-22-main.json) en
+[publicatie van 21](publication-21-main.json). CI op de nieuwe heads blijft
+een afzonderlijke gate.
+
 - [Portie- en testbestandenindex](batches.json): oorspronkelijke lokale proeven;
   de velden voor 20–22 onderscheiden reeds geleverde en resterende wijzigingen.
 - [Characterization-goldenreview](characterization-golden-review.json):
