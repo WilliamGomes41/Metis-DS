@@ -43,5 +43,6 @@ def test_azure_startup_script_requires_production_authorities() -> None:
         encoding="utf-8"
     )
     assert 'CONSOLE_DATA_ROOT="${CONSOLE_DATA_ROOT:-/home/data/metis-console}"' in script
-    assert '"${METIS_CANONICAL_STORE:-}" != "postgres"' in script
+    # D6b: PostgreSQL is enforced by the application itself; selectors choose nothing.
+    assert "METIS_CANONICAL_STORE" not in script and "METIS_WORKFLOW_STORE" not in script
     assert '"${CONSOLE_IMMUTABLE_SOURCE_STORE:-}" != "azure"' in script

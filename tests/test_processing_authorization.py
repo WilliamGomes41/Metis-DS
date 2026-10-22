@@ -62,18 +62,13 @@ def revoke(console, actor, sid, change):
         author = next(a for a in other.list_accounts() if a["username"] == "author")
         other.assign_roles(actor_id=author["account_id"], account_id=actor, roles=("publisher",))
     else:
-        if hasattr(other, "workflow_identity_store"):
-            from src.workflows.account_retirement_v1 import retire_account
-            author = next(a for a in other.list_accounts() if a["username"] == "author")
-            with other.workflow_identity_store._connect() as connection:
-                connection.execute((Path(__file__).parents[1] / "db/migrations/015_historical_accounts.sql").read_text())
-            with other.workflow_identity_store._connect() as connection:
-                retire_account(connection, account_id=actor, actor_id=author["account_id"],
-                               reason="Synthetic A01 retirement", apply=True)
-        else:
-            rows = other._load_map(other._accounts_path)
-            rows[actor]["retirement"] = {"reason": "Synthetic A01 retirement"}
-            other._accounts_path.write_text(json.dumps(rows))
+        from src.workflows.account_retirement_v1 import retire_account
+        author = next(a for a in other.list_accounts() if a["username"] == "author")
+        with other.workflow_identity_store._connect() as connection:
+            connection.execute((Path(__file__).parents[1] / "db/migrations/015_historical_accounts.sql").read_text())
+        with other.workflow_identity_store._connect() as connection:
+            retire_account(connection, account_id=actor, actor_id=author["account_id"],
+                           reason="Synthetic A01 retirement", apply=True)
 
 
 @pytest.mark.parametrize("entry", ["retry", "reserve", "resume", "reextract", "cli", "execute", "claim", "internal"])

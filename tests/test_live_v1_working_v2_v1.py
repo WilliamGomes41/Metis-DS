@@ -448,13 +448,13 @@ def test_failed_unpublished_delete_rolls_back_postgres_and_local_state(
         snapshots.append(snapshot_id)
         envelope = console._envelope(snapshot_id)
         freeze_path = Path(envelope["binary_path"])
-        objects_path = console._objects_path(snapshot_id)
+        objects_path = (console.runtime / "objects" / f"{snapshot_id}.jsonl")
 
         before = {
             "envelope": console.workflow_document_store.get_envelope(snapshot_id),
             "objects": console.workflow_document_store.list_document_objects(snapshot_id),
-            "bindings": console._bindings_path.read_bytes()
-            if console._bindings_path.exists()
+            "bindings": (console.runtime / "publish_authorizations.json").read_bytes()
+            if (console.runtime / "publish_authorizations.json").exists()
             else None,
             "ledger": console._ledger_path.read_bytes()
             if console._ledger_path.exists()
@@ -478,9 +478,9 @@ def test_failed_unpublished_delete_rolls_back_postgres_and_local_state(
         assert console.workflow_document_store.list_document_objects(snapshot_id)
         assert console.workflow_document_store.get_envelope(snapshot_id) == before["envelope"]
         assert console.workflow_document_store.list_document_objects(snapshot_id) == before["objects"]
-        assert not console._envelopes_path.exists() and not objects_path.exists()
+        assert not (console.runtime / "envelopes.json").exists() and not objects_path.exists()
         assert (
-            console._bindings_path.read_bytes() if console._bindings_path.exists() else None
+            (console.runtime / "publish_authorizations.json").read_bytes() if (console.runtime / "publish_authorizations.json").exists() else None
         ) == before["bindings"]
         assert (
             console._ledger_path.read_bytes() if console._ledger_path.exists() else None

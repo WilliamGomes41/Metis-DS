@@ -6,10 +6,35 @@ Proof: geïsoleerde databases, dezelfde ASGI-klassen/routes, falen bij verzamele
 Touches lifecycle invariants: no
 Rewrite risk: none
 
-Dit is de eerste portie van D6a. De bestandsopstelling blijft bestaan tot D6b;
-deze portie sluit D6a niet af. B-D6-1 vervangt de eerdere HOLD op PostgreSQL
-voor lokaal ontwikkelen en testen. #695 blijft onafhankelijk en gaat voor bij
-capaciteitsgebrek. GNC begint pas na D6b.
+Dit document begon bij de eerste portie van D6a. B-D6-1 vervangt de eerdere
+HOLD op PostgreSQL voor lokaal ontwikkelen en testen. #695 blijft onafhankelijk
+en gaat voor bij capaciteitsgebrek. GNC begint pas na D6b.
+
+**D6b:** de bestandsopstelling is verwijderd. PostgreSQL is lokaal, in tests en
+in Azure de enige opslagautoriteit voor workflow- en canonical state; zie
+[het D6b-contract](../change-contracts/d6b-postgres-only-runtime.md). De
+`file_topology`-marker en alle gevallen daaronder bestaan niet meer. De
+portieteksten hieronder zijn historisch bewijs van D6a.
+
+## Lokaal de console starten (na D6b)
+
+Zonder PostgreSQL start de console niet. Zet een DSN (of de managed-identity-set
+`METIS_CANONICAL_DB_HOST`, `METIS_CANONICAL_DB_NAME`, `METIS_CANONICAL_DB_USER`)
+en pas het schema eenmalig toe:
+
+```bash
+export METIS_CANONICAL_DB_DSN="postgresql://…/metis"   # eigen PostgreSQL 16; scripts/test_postgres.sh geeft een wegwerpserver
+for f in db/schema_v2.sql db/migrations/*.sql; do psql "$METIS_CANONICAL_DB_DSN" -v ON_ERROR_STOP=1 -q -f "$f"; done
+python -m src.cli console-account --username beheer --password '…' --roles researcher,reviewer,publisher
+python -m src.cli serve-console
+```
+
+`serve-console` en `console-account` gebruiken dezelfde compositie als
+`src.console_asgi:app`. `--source-store` en `--runtime` kiezen alleen de lokale
+bronmap en de map voor locks en telemetrie. De oude `METIS_*_STORE`-selectors
+kiezen niets meer; leeg of `postgres` mag, elke andere waarde weigert de start.
+Oude JSON-bestanden in `output/runtime/operations-console` worden genegeerd;
+migreer ze desgewenst eenmalig met `scripts/migrate_workflow_*_postgres.py`.
 
 ## Starten
 
@@ -29,8 +54,7 @@ python -m pytest -q tests/test_pg_console_without_disk_mirrors.py
 `PGBIN` kan naar een andere installatie van PostgreSQL 16 wijzen. De client
 `psql` moet ook in `PATH` staan voor de bestaande SQL-schadeproeven. Een pure
 testselectie zonder console kan zonder database draaien. In gemengde modules
-markeert `pure_function` zulke gevallen; `file_topology` markeert uitsluitend
-bestandsgedrag dat in D6b vervalt. Deze markeringen omzeilen geen expliciet
+markeert `pure_function` zulke gevallen. Die markering omzeilt geen expliciet
 aangevraagde PG-fixture.
 
 Het script schrijft alleen de DSN naar stdout. Wie de server handmatig wil

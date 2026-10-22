@@ -6,7 +6,6 @@ import threading
 from collections import deque
 from contextlib import contextmanager, nullcontext
 from copy import deepcopy
-from pathlib import Path
 from typing import Any, Iterator
 
 from src.operations_console_v1 import ConsoleError
@@ -78,11 +77,6 @@ class _PostgresWorkflowReviewMixin:
         self._bindings = self._refresh_review_runtime()
         self._bindings_baseline = deepcopy(self._bindings)
         register_backend(self._ledger_path, self.workflow_review_store)
-
-    def _startup_local_mirror_is_authority(self, path: Path) -> bool:
-        if path.name == "publish_authorizations.json":
-            return False
-        return super()._startup_local_mirror_is_authority(path)
 
     def _refresh_review_runtime(self) -> dict[str, list[dict[str, Any]]]:
         """Refresh disposable bindings from the PostgreSQL authority."""

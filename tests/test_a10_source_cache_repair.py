@@ -76,8 +76,7 @@ def backend(request, complete_postgres):
 
 
 def state(console, sid):
-    reviews = getattr(console, "workflow_review_store", None)
-    bindings = reviews.read_bindings() if reviews else console._load_map(console._bindings_path)
+    bindings = console.workflow_review_store.read_bindings()
     return deepcopy({"objects": console._load_objects(sid, remember=False),
         "envelope": console._envelope(sid), "bindings": bindings,
         "revision": console.objects_revision(sid), "events": read_events(console._ledger_path)})

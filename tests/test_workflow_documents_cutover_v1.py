@@ -217,23 +217,6 @@ def test_postgres_document_startup_leaves_corrupt_envelope_mirror_untouched(docu
 
 
 
-@pytest.mark.file_topology
-def test_local_only_startup_still_fails_closed_on_corrupt_envelope_json(
-    tmp_path: Path,
-) -> None:
-    runtime = tmp_path / "local-runtime"
-    runtime.mkdir(parents=True)
-    (runtime / "envelopes.json").write_text('{"broken":', encoding="utf-8")
-
-    with pytest.raises(json.JSONDecodeError):
-        OperationsConsole(
-            root=tmp_path,
-            runtime=runtime,
-            source_store=tmp_path / "local-sources",
-        )
-
-
-
 @pytest.mark.parametrize('fail_commit', [True, False])
 def test_delete_source_cleanup_follows_transaction_commit_and_restart(documents,fail_commit):
     import psycopg,traceback

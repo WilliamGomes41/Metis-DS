@@ -177,36 +177,6 @@ def test_refusal_store_dedups_per_document_reason_actor_within_window(tmp_path, 
     assert len(_refusals(events)) == 3  # logs are not deduplicated
 
 
-@pytest.mark.file_topology
-def test_refusal_store_dedup_window_and_key(tmp_path):
-    from datetime import datetime, timezone
-    path = tmp_path / store.FILE_NAME
-    t0 = datetime(2026, 10, 15, tzinfo=timezone.utc)
-    args = dict(snapshot_id='s', object_version='1', reason_codes=['r'], revision='rev')
-    assert store.append_refusal(path, actor='a', clock=t0, **args) == 'recorded'
-    assert store.append_refusal(path, actor='a', clock=t0 + store.DEDUP_WINDOW / 2, **args) == 'deduplicated'
-    assert store.append_refusal(path, actor='b', clock=t0, **args) == 'recorded'
-    assert store.append_refusal(path, actor='a', clock=t0, **{**args, 'reason_codes': ['q']}) == 'recorded'
-    assert store.append_refusal(path, actor='a', clock=t0 + store.DEDUP_WINDOW, **args) == 'recorded'
-    rows = store.read_records(path)
-    assert len(rows) == 4 and all(len(r['revision_sha256']) == 64 and 'rev' != r['revision_sha256'] for r in rows)
-
-
-@pytest.mark.file_topology
-def test_refusal_store_rotates_instead_of_refusing_at_capacity(tmp_path, monkeypatch):
-    # Metis: rotation/retention, NOOIT a permanent refusal at the cap.
-    from datetime import datetime, timezone
-    monkeypatch.setattr(store, 'MAX_FILE_BYTES', 600)
-    path = tmp_path / store.FILE_NAME
-    t0 = datetime(2026, 10, 15, tzinfo=timezone.utc)
-    outcomes = [store.append_refusal(path, snapshot_id='s', object_version='1', actor=f'a{n}', reason_codes=['r'] * 500,
-                                     revision=None, clock=t0) for n in range(6)]
-    assert outcomes == ['recorded'] * 6
-    assert store.rotated_path(path).exists()
-    assert path.stat().st_size < 600 + 2000
-    assert all(len(r['reason_codes']) == store.MAX_REASON_CODES for r in store.read_records(path))
-
-
 # --- #629 F2: bounded publication_refusal_audit_failed diagnostic, no silent except-pass ---
 
 @pytest.fixture
@@ -243,18 +213,6 @@ def test_log_failure_emits_audit_failed_diagnostic(tmp_path, warnings_, monkeypa
     assert [f['stage'] for f in _failures(warnings_)] == ['log']
 
 
-@pytest.mark.file_topology
-def test_corrupt_record_emits_audit_failed_diagnostic_and_still_records(tmp_path, events, warnings_):
-    console, sid, actor = _file_blocked_base(tmp_path)
-    path = store.store_path(console)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text('{not json\n')
-    assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
-    [failure] = _failures(warnings_)
-    assert failure['stage'] == 'corrupt_record' and failure['outcome'] == 'skipped'
-    assert [r['actor'] for r in store.read_records(path)] == [actor]
-
-
 def test_audit_failed_diagnostic_is_bounded_per_process(warnings_, monkeypatch):
     monkeypatch.setattr(audit, '_FAILURE_COUNT', [0])
     monkeypatch.setattr(audit, '_SUPPRESSED_COUNT', [0])
@@ -280,39 +238,6 @@ def test_no_silent_except_pass_in_refusal_audit():
     source = inspect.getsource(audit)
     assert 'except Exception:\n        pass' not in source and 'except Exception:\n            pass' not in source
 
-@pytest.mark.file_topology
-def test_dedup_reads_only_the_tail_not_the_full_file(tmp_path, monkeypatch):
-    from datetime import datetime, timezone
-    path = tmp_path / store.FILE_NAME
-    t0 = datetime(2026, 10, 15, tzinfo=timezone.utc)
-    path.write_text('{"padding":"' + 'x' * (store.TAIL_BYTES * 3) + '"}\n')
-    reads = []
-    real_open = type(path).open
-
-    def spy(self, *a, **k):
-        handle = real_open(self, *a, **k)
-        real_read = handle.read
-        handle.read = lambda n=-1: (reads.append(n), real_read(n))[1]
-        return handle
-    monkeypatch.setattr(type(path), 'open', spy)
-    assert store.append_refusal(path, snapshot_id='s', object_version='1', actor='a', reason_codes=['r'], revision=None, clock=t0) == 'recorded'
-    assert reads and all(0 <= n <= store.TAIL_BYTES for n in reads), reads
-
-
-@pytest.mark.file_topology
-def test_corrupt_record_is_skipped_reported_and_never_blocks_writes(tmp_path):
-    from datetime import datetime, timezone
-    path = tmp_path / store.FILE_NAME
-    t0 = datetime(2026, 10, 15, tzinfo=timezone.utc)
-    store.append_refusal(path, snapshot_id='s', object_version='1', actor='a', reason_codes=['r'], revision=None, clock=t0)
-    with path.open('a') as handle:
-        handle.write('{not json\n{"recorded_at":"garbage","snapshot_id":"s","reason_codes":["r"],"actor":"b"}\n')
-    assert store.append_refusal(path, snapshot_id='s', object_version='1', actor='b', reason_codes=['r'], revision=None, clock=t0) == 'recorded'
-    corrupt = []
-    rows = store.read_records(path, on_corrupt=corrupt.append)
-    assert [r['actor'] for r in rows] == ['a', 'b'] and len(corrupt) == 2
-
-
 def test_file_store_never_goes_live(tmp_path, monkeypatch):
     # Live topology (postgres mode) without a PostgreSQL refusal store: the file store MAG NIET be used.
     monkeypatch.setenv('WEBSITE_SITE_NAME', 'metis-prod')
@@ -323,17 +248,6 @@ def test_file_store_never_goes_live(tmp_path, monkeypatch):
     with pytest.raises(store.RefusalStoreUnavailable):
         store.append(console, snapshot_id=sid, object_version='1', actor=actor, reason_codes=['r'], revision=None)
     assert not store.store_path(console).exists()
-
-
-@pytest.mark.file_topology
-def test_file_store_is_visibly_marked_temporary(tmp_path):
-    # TIJDELIJK until William's GO on a PostgreSQL table: every record MOET carry the marker.
-    path = tmp_path / store.FILE_NAME
-    store.append_refusal(path, snapshot_id='s', object_version='1', actor='a', reason_codes=['r'], revision=None)
-    [row] = store.read_records(path)
-    assert store.STORE_STATUS == 'temporary_file_store_pending_postgres_table'
-    assert row['store_status'] == store.STORE_STATUS
-    assert 'TIJDELIJK' in store.__doc__
 
 
 # --- Sherlock re-audit #636 F2: file store blocked by topology, not by WEBSITE_SITE_NAME ---
@@ -354,17 +268,6 @@ def test_file_store_blocked_by_topology_without_website_site_name(tmp_path, monk
     with pytest.raises(store.RefusalStoreUnavailable):
         store.append(console, snapshot_id=sid, object_version='1', actor=actor, reason_codes=['r'], revision=None)
     assert not store.store_path(console).exists()
-
-
-@pytest.mark.file_topology
-def test_file_store_allowed_in_single_worker_file_topology(tmp_path, monkeypatch):
-    for name in ('WEBSITE_SITE_NAME', 'METIS_WORKFLOW_DOCUMENT_STORE', 'METIS_WORKFLOW_STORE',
-                 'CONSOLE_GUNICORN_WORKERS', 'WEB_CONCURRENCY', 'GUNICORN_WORKERS', 'CONSOLE_INSTANCE_COUNT'):
-        monkeypatch.delenv(name, raising=False)
-    from types import SimpleNamespace
-    console = SimpleNamespace(_ledger_path=tmp_path/'ledger.jsonl', _envelope=lambda sid: {'version': '1'})
-    sid, actor = 'fixture-snapshot', 'fixture-actor'
-    assert store.append(console, snapshot_id=sid, object_version='1', actor=actor, reason_codes=['r'], revision=None) == 'recorded'
 
 
 # --- Sherlock re-audit #636 F3: the refusal path is one transactional INSERT; retention is maintenance ---
@@ -492,21 +395,11 @@ def test_durable_store_failure_emits_audit_failed_diagnostic(tmp_path, monkeypat
     assert 'hunter2' not in json.dumps(warnings)
 
 
-@pytest.mark.file_topology
-def test_read_records_includes_the_rotated_generation_first(tmp_path):
-    # Sherlock #636 P2: after rotation the export/backup reader MOET also read .jsonl.1 (oldest first).
-    from datetime import datetime, timezone
-    path = tmp_path / store.FILE_NAME
-    t0 = datetime(2026, 10, 16, tzinfo=timezone.utc)
-    store.append_refusal(store.rotated_path(path), snapshot_id='s', object_version='1', actor='old', reason_codes=['r'], revision=None, clock=t0)
-    store.append_refusal(path, snapshot_id='s', object_version='1', actor='new', reason_codes=['r'], revision=None, clock=t0)
-    assert [r['actor'] for r in store.read_records(path)] == ['old', 'new']
-
-
-@pytest.mark.parametrize('env', [{'METIS_WORKFLOW_STORE': 'postgres'}, {'METIS_CANONICAL_STORE': 'postgres'}])
-def test_partial_postgres_topology_is_fail_closed_and_reported(tmp_path, monkeypatch, env):
-    # Sherlock thread (partial PostgreSQL routing): no document store + postgres mode -> no file store;
-    # the refusal verdict MOET stand and the lost audit write MOET be reported, NOOIT silent.
+@pytest.mark.parametrize('env', [{}, {'METIS_WORKFLOW_STORE': 'postgres'}, {'METIS_CANONICAL_STORE': 'postgres'}])
+def test_console_without_postgres_refusal_store_is_fail_closed_and_reported(tmp_path, monkeypatch, env):
+    # Sherlock thread (partial PostgreSQL routing), D6b: without the PostgreSQL store there is no
+    # file fallback in any configuration; the refusal verdict MOET stand and the lost audit write
+    # MOET be reported, NOOIT silent.
     warnings = []
     monkeypatch.setattr(_LOGGER, 'warning', lambda fmt, msg: warnings.append(json.loads(msg)))
     monkeypatch.delenv('WEBSITE_SITE_NAME', raising=False)
@@ -515,7 +408,7 @@ def test_partial_postgres_topology_is_fail_closed_and_reported(tmp_path, monkeyp
     from types import SimpleNamespace
     console = SimpleNamespace(_ledger_path=tmp_path/'ledger.jsonl', _envelope=lambda sid: {'version': '1'})
     sid, actor = 'fixture-snapshot', 'fixture-actor'
-    assert store.postgres_store(console) is None and not store.file_store_allowed()
+    assert store.postgres_store(console) is None
     audit._append_durable(console, actor_id=actor, snapshot_id=sid, reason_codes=['r'], revision=None)
     assert [(w['stage'], w['error_class']) for w in warnings if w.get('event') == 'publication_refusal_audit_failed'] \
         == [('durable_store', 'RefusalStoreUnavailable')]
@@ -523,17 +416,6 @@ def test_partial_postgres_topology_is_fail_closed_and_reported(tmp_path, monkeyp
 
 
 # --- Sherlock #637 P2s ---
-
-@pytest.mark.file_topology
-def test_corrupt_record_diagnostic_keeps_the_error_class(tmp_path, events, warnings_):
-    console, sid, actor = _file_blocked_base(tmp_path)
-    path = store.store_path(console)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text('{not json\n')
-    console.publish(actor_id=actor, snapshot_id=sid)
-    [failure] = _failures(warnings_)
-    assert (failure['stage'], failure['error_class']) == ('corrupt_record', 'JSONDecodeError')
-
 
 def test_diagnostic_cap_is_atomic_under_concurrency(warnings_, monkeypatch):
     import threading

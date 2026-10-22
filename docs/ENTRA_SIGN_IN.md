@@ -117,7 +117,7 @@ worden. Een rollback/herstel wordt offline uitgevoerd volgens het bestaande runb
 | `METIS_ENTRA_CLIENT_ID` | Application/client-ID van de appregistratie |
 | `METIS_ENTRA_CLIENT_SECRET` | Secret **waarde**, bij voorkeur via Key Vault-reference |
 | `CONSOLE_PUBLIC_ORIGIN` | `https://metis.venvn.nl` |
-| `METIS_WORKFLOW_STORE` | `postgres` (bestaande identity-store) |
+| `METIS_WORKFLOW_STORE` | `postgres` of leeg; sinds D6b kiest deze selector niets meer (PostgreSQL is altijd de identity-store) |
 | `METIS_ENTRA_ACCOUNT_BINDINGS_JSON` | JSON-object: `{"<Entra-object-ID>":"<bestaand acc-ID>"}` |
 
 De secret hoort nooit in GitHub, een ZIP of een gesprek. Koppelingen worden bij

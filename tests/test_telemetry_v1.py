@@ -123,26 +123,6 @@ def test_prune_keeps_other_workers_current_files_and_unusable_storage_falls_back
     assert failing.directory is None and [e['event'] for e in failing.events()] == ['after_disk_full']
 
 
-@pytest.mark.file_topology
-def test_serve_console_uses_the_same_observability_composition(tmp_path, monkeypatch):
-    import argparse
-    import uvicorn
-    from src import cli
-    from src.structured_logging_v1 import _is_owned
-    served = {}
-    monkeypatch.setattr(logging.getLogger(), 'handlers', [])
-    monkeypatch.setattr(uvicorn, 'run', lambda app, **kwargs: served.setdefault('app', app))
-    monkeypatch.setattr('src.telemetry.install.install_telemetry', lambda directory: served.setdefault('dir', directory))
-    cli.cmd_serve_console(argparse.Namespace(source_store=tmp_path / 'sources', runtime=tmp_path / 'runtime',
-                                             host='127.0.0.1', port=0))
-    assert any(m.cls is RequestDiagnostics for m in served['app'].user_middleware)
-    from src.structured_logging_v1 import install_structured_logging
-    startup = served['app'].router.on_startup
-    assert startup.index(install_structured_logging) < startup.index(install_logging_bridge)
-    assert any(_is_owned(handler) for handler in logging.getLogger().handlers)  # stderr process log kept
-    assert served['dir'] == tmp_path / 'runtime' / 'telemetry'
-
-
 def _app():
     app = FastAPI()
 

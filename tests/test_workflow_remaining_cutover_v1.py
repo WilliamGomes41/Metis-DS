@@ -50,17 +50,22 @@ def test_audit_registry_uses_shared_store_not_runtime_files() -> None:
 
 
 def _refused_partial_configurations(monkeypatch, setting):
-    """#718: a store is opt-in by its setting and never selected without the complete set."""
+    """#718/D6b: a retired selector never chooses a topology; PostgreSQL is always required."""
     assert setting in POSTGRES_STORE_SETTINGS
     monkeypatch.delenv("WEBSITE_SITE_NAME", raising=False)
-    for name in POSTGRES_STORE_SETTINGS:
-        monkeypatch.setenv(name, "postgres")
-    assert validate_workflow_store_configuration() is True
-    for missing in POSTGRES_STORE_SETTINGS:
-        monkeypatch.delenv(missing)
-        with pytest.raises(RuntimeError):
-            validate_workflow_store_configuration()
-        monkeypatch.setenv(missing, "postgres")
+    for name in (*POSTGRES_STORE_SETTINGS, "METIS_CANONICAL_DB_DSN", "METIS_CANONICAL_DB_HOST",
+                 "METIS_CANONICAL_DB_NAME", "METIS_CANONICAL_DB_USER"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(setting, "postgres")
+    with pytest.raises(RuntimeError, match="^postgres_authority_configuration_required$"):
+        validate_workflow_store_configuration()
+    monkeypatch.setenv("METIS_CANONICAL_DB_DSN", "postgresql://unused.invalid/metis")
+    for value in ("", "postgres"):
+        monkeypatch.setenv(setting, value)
+        validate_workflow_store_configuration()
+    monkeypatch.setenv(setting, "file")
+    with pytest.raises(RuntimeError, match="^unsupported_"):
+        validate_workflow_store_configuration()
     asgi = (ROOT / "src" / "console_asgi.py").read_text(encoding="utf-8")
     assert "validate_workflow_store_configuration()" in asgi
 

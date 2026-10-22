@@ -1,11 +1,12 @@
-"""Refusal store (TIJDELIJK file store) is part of the evidence export and the runtime backup.
+"""Refusal records in the evidence export, and retired file-store records in offline backups.
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: opslag durable recovery concurrent stale
 # release-control-evidence: releasebewijs
 
 Rules (B18): the per-document evidence export MOET contain that document's refusal records and
-NOOIT another document's; the runtime backup MOET contain the store file and restore it byte-identical.
+NOOIT another document's. Since D6b no runtime path writes the JSONL file store; the offline runtime
+backup still carries such legacy files byte-identical.
 """
 import json
 import csv
@@ -21,10 +22,20 @@ from src.runtime_data_inventory_v1 import (
 RUNTIME = 'output/runtime/operations-console'
 
 
+def _legacy_append(path, *, snapshot_id, actor):
+    """A record as the retired file store wrote it (no runtime writer since D6b)."""
+    from datetime import datetime, timezone
+    record = store._record(store._key(snapshot_id, ['r'], actor), '1', 'rev', datetime.now(timezone.utc),
+                           store.STORE_STATUS)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open('a', encoding='utf-8') as handle:
+        handle.write(json.dumps(record, sort_keys=True, separators=(',', ':')) + '\n')
+
+
 def _seed(root):
     path = root / RUNTIME / store.FILE_NAME
     for sid, actor in (('snap-a', 'acc-1'), ('snap-b', 'acc-2')):
-        store.append_refusal(path, snapshot_id=sid, object_version='1', actor=actor, reason_codes=['r'], revision='rev')
+        _legacy_append(path, snapshot_id=sid, actor=actor)
     return path
 
 
@@ -82,25 +93,6 @@ def test_export_route_reads_postgres_table_when_present(monkeypatch):
 
 # --- Sherlock FAIL #641 (1): corrupt or unreadable refusal records MOETEN be reported, NOOIT silently dropped ---
 
-def test_corrupt_refusal_records_are_reported_in_the_export_manifest(tmp_path, monkeypatch, caplog):
-    import logging
-    from src import operations_console_app as app_module
-    path = _seed(tmp_path)
-    with path.open('a', encoding='utf-8') as handle:
-        handle.write('{not json\n')
-    monkeypatch.setattr(store, 'postgres_store', lambda state: None)
-    monkeypatch.setattr(store, 'store_path', lambda state: path)
-    issues = []
-    with caplog.at_level(logging.WARNING):
-        records = app_module._refusal_records(object(), 'snap-a', issues=issues)
-    assert len(records) == 2 and issues == ['corrupt_record:JSONDecodeError']
-    assert 'publication_refusal_export_issue' in caplog.text
-    tables, manifest = processing_evidence_tables(snapshot_id='snap-a', revision='rev', envelope={}, objects=[],
-                                                  refusals=records, refusal_issues=issues)
-    [entry] = [m for m in manifest if m['dataset'] == 'publication_refusals.csv']
-    assert entry['availability'] == 'recorded_with_skipped_records' and '1 corrupt' in entry['limitation']
-
-
 def test_unreadable_refusal_store_is_reported_not_swallowed(monkeypatch, caplog):
     import logging
     from src import operations_console_app as app_module
@@ -126,7 +118,7 @@ def test_manifest_text_describes_the_current_store():
     [entry] = [m for m in manifest if m['dataset'] == 'publication_refusals.csv']
     text = entry['limitation']
     assert 'until a PostgreSQL table' not in text and 'within 10 minutes' not in text
-    assert 'workflow.publication_refusals' in text and 'single-worker file topology' in text
+    assert 'workflow.publication_refusals' in text and 'file topology' not in text
     assert 'fixed 10-minute window' in text
 
 
@@ -141,7 +133,7 @@ def test_actor_columns_are_not_in_the_export_schemas():
 def test_no_plain_account_id_appears_anywhere_in_the_export(tmp_path):
     account = 'acc-lex-7f3a91'
     path = tmp_path / store.FILE_NAME
-    store.append_refusal(path, snapshot_id='snap-a', object_version='1', actor=account, reason_codes=['r'], revision='rev')
+    _legacy_append(path, snapshot_id='snap-a', actor=account)
     envelope = {
         'processing_attempts': [{'attempt_id': 'pa-1', 'command_id': 'c-1', 'actor_id': account, 'state': 'failed'}],
         'processing_recovery': {'authorization_id': 'auth-1', 'actor_id': account, 'reason': 'r', 'consumed_by': 'pa-1'},
@@ -166,25 +158,6 @@ def _member_digests_match(archive):
     with zipfile.ZipFile(archive) as zipf:
         manifest = json.loads(zipf.read('inventory_manifest.json'))
         return {m: hashlib.sha256(zipf.read(m)).hexdigest() == d for m, d in manifest['files'].items()}
-
-
-def test_concurrent_append_between_hash_and_archive_keeps_backup_consistent(tmp_path, monkeypatch):
-    # 4288477439: a refusal appended while export_runtime_data runs MAG NIET make the archive
-    # bytes differ from the manifest digest (restore would raise backup_member_hash_mismatch).
-    import src.runtime_data_inventory_v1 as inventory
-    path = _seed(tmp_path)
-    real = inventory._sha256_file
-
-    def hash_then_concurrent_append(target):
-        digest = real(target)
-        if Path(target).name == store.FILE_NAME:
-            store.append_refusal(path, snapshot_id='snap-c', object_version='1', actor='acc-3',
-                                 reason_codes=['late'], revision='rev')
-        return digest
-    monkeypatch.setattr(inventory, '_sha256_file', hash_then_concurrent_append)
-    archive = tmp_path / 'backup.zip'
-    inventory.export_runtime_data(tmp_path, archive)
-    assert all(_member_digests_match(archive).values())
 
 
 def test_stale_rotated_generation_is_archived_byte_identical(tmp_path):

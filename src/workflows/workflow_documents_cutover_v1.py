@@ -395,11 +395,6 @@ class _PostgresWorkflowDocumentsMixin:
         if not same_database:
             raise RuntimeError(REVIEW_STORE_REQUIRED_FOR_DOCUMENT_STORE)
 
-    def _startup_local_mirror_is_authority(self, path: Path) -> bool:
-        if path.name == "envelopes.json":
-            return False
-        return super()._startup_local_mirror_is_authority(path)
-
     def refresh_workflow_documents(self) -> None:
         try:
             envelopes = self.workflow_document_store.list_envelopes()

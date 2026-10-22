@@ -87,7 +87,7 @@ def _assert_review_authority_without_mirrors(console):
     assert _ledger_state_bytes(console) == _serialise(console.workflow_review_store.read_events())
     assert console._bindings == console.workflow_review_store.read_bindings()
     assert not console._ledger_path.exists()
-    assert not console._bindings_path.exists()
+    assert not (console.runtime / "publish_authorizations.json").exists()
 
 
 def _inject_fault(monkeypatch, flag):
@@ -365,9 +365,9 @@ EXPECTED_BOUNDARY_MRO = [
      ("_atomic_snapshot_mutation", "_reload_store_locked")),
     ("src.workflows.workflow_documents_cutover_v1", "_PostgresWorkflowDocumentsMixin",
      ("_atomic_snapshot_mutation", "_reload_store_locked")),
-    ("src.review_closure_v1", "ReviewClosureConsole", ("_atomic_snapshot_mutation",)),
-    ("src.operations_console_v1", "OperationsConsole",
-     ("_atomic_snapshot_mutation", "_store_write_lock", "_reload_store_locked")),
+    # D6b: the file-only base/ReviewClosure mutation contexts and base reload are gone;
+    # Route 1 in the review mixin is the only mutation boundary.
+    ("src.operations_console_v1", "OperationsConsole", ("_store_write_lock",)),
 ]
 
 

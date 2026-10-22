@@ -494,52 +494,6 @@ def test_scoped_commit_discards_stale_unrelated_published_maps(tmp_path, profile
     assert state._envelope(sid)["title"] == "Updated open work"
 
 
-@pytest.mark.file_topology
-def test_legacy_duplicate_versions_keep_append_last_projection_and_strict_cutover(tmp_path):
-    import json
-    from tests.semantic_fixture_support import install_fixture_history
-    from src.revision_workflow import revise_object, current_revisions, validate_revision_write
-    from src.integrity_kernel import stamp_canonical_hashes
-    state, _, sid, candidate = _console(tmp_path, production_console=lambda **options: OperationsConsole(
-        root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime"))
-    first = deepcopy(candidate)
-    last = deepcopy(candidate)
-    last["content"]["clean_text"] += " Historical correction."
-    stamp_canonical_hashes(last)
-    rows = [first, last]
-    install_fixture_history(state, sid, rows)
-    state._envelopes[sid].update(state="published", published=True)
-    state._save_envelopes()
-    projection = state._published_projection_path()
-    projection.write_text(json.dumps({"snapshot_id": sid, **last}) + "\n")
-    published_bytes = projection.read_bytes()
-    restarted = OperationsConsole(root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
-    assert restarted.snapshot_objects(sid) == [last]
-    assert restarted.snapshot_objects(sid, include_blocked=True) == rows
-    assert restarted.snapshot_is_published(sid)
-    assert projection.read_bytes() == published_bytes
-    with pytest.raises(ConsoleError, match="published_working_revision_immutable"):
-        restarted._save_objects(sid, rows)
-    assert projection.read_bytes() == published_bytes
-    # Same historical shape in OPEN work can prove a new direct edge.
-    proposed = deepcopy(last)
-    proposed["content"]["clean_text"] += " New correction."
-    strict = revise_object(last, proposed, snapshot_id=sid, actor="reviewer", reason="correction")
-    validate_revision_write(rows, rows + [strict], snapshot_id=sid)
-    assert current_revisions(rows + [strict], snapshot_id=sid) == [strict]
-    assert strict["metadata"]["revision_lineage"]["previous_lineage"] == "legacy_unverified"
-    with pytest.raises(ValueError):
-        validate_revision_write(rows, rows + [deepcopy(last)], snapshot_id=sid)
-    with pytest.raises(ValueError):
-        validate_revision_write([], rows, snapshot_id=sid)
-    unmarked = deepcopy(last)
-    unmarked["object_version"] = "1.0.1"
-    stamp_canonical_hashes(unmarked)
-    with pytest.raises(ValueError, match="revision_predecessor_required"):
-        validate_revision_write([], [first, unmarked], snapshot_id=sid)
-
-
-
 def test_identical_legacy_duplicate_ancestor_is_immutable_when_successor_is_added(tmp_path, *, production_console):
     from src.revision_workflow import revise_object, validate_revision_write
     _, _, sid, candidate = _console(tmp_path, production_console=production_console)
@@ -553,26 +507,3 @@ def test_identical_legacy_duplicate_ancestor_is_immutable_when_successor_is_adde
     validate_revision_write(rows, rows + [successor], snapshot_id=sid)
 
 
-@pytest.mark.file_topology
-def test_unchanged_legacy_duplicate_review_retry_preserves_prior_occurrences(tmp_path):
-    from tests.semantic_fixture_support import install_fixture_history
-    from src.integrity_kernel import stamp_canonical_hashes
-    state, reviewer, sid, candidate = _console(tmp_path, production_console=lambda **options: OperationsConsole(
-        root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime"))
-    candidate["object_type"] = candidate["confirmed_object_type"] = "definition"
-    stamp_canonical_hashes(candidate)
-    rows = [deepcopy(candidate), deepcopy(candidate)]
-    install_fixture_history(state, sid, rows)
-    for _ in range(2):
-        state.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
-            object_id=candidate["object_id"], decision="later",
-            expected_revision=state.objects_revision(sid))
-        history = state.snapshot_objects(sid, include_blocked=True)
-        assert len(history) == 2
-        assert history[0] == rows[0]
-        assert history[-1]["object_version"] == candidate["object_version"]
-    _approve(state, reviewer, sid, candidate)
-    history = state.snapshot_objects(sid, include_blocked=True)
-    assert len(history) == 2
-    assert history[0] == rows[0]
-    assert history[-1]["governance"]["validation_status"] == "approved"

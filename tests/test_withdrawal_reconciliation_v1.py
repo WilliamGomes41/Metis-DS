@@ -84,45 +84,6 @@ class _Canonical(PostgresCanonicalPublicationStore):
         return []
 
 
-def _file_console(tmp_path: Path) -> DurablePublicationConsole:
-    console = object.__new__(DurablePublicationConsole)
-    console.canonical_publication_store = _Canonical()
-    console.runtime = tmp_path
-    console._envelopes_path = tmp_path / "envelopes.json"
-    console._ledger_path = tmp_path / "review_ledger.jsonl"
-    console._accounts = {
-        "publisher-1": {
-            "account_id": "publisher-1",
-            "username": "publisher",
-            "roles": ["publisher"],
-        }
-    }
-    console._envelopes = {
-        "snap-withdrawn": {
-            "snapshot_id": "snap-withdrawn",
-            "version": "2.0",
-            "state": "published",
-        }
-    }
-    console._published_projection_path = lambda: tmp_path / "published_projection.jsonl"  # type: ignore[method-assign]
-    console._envelope = lambda snapshot_id: console._envelopes[snapshot_id]  # type: ignore[method-assign]
-    return console
-
-
-@pytest.mark.file_topology
-def test_reconciliation_projects_canonical_withdrawn_state_locally(tmp_path: Path) -> None:
-    console = _file_console(tmp_path)
-
-    release = console._durable_release_for_snapshot("snap-withdrawn")
-    assert release is not None
-    assert release["release_status"] == "withdrawn"
-
-    console._apply_local_release_copy(release, [])
-
-    assert console._envelopes["snap-withdrawn"]["state"] == "withdrawn"
-    assert (tmp_path / "published_projection.jsonl").read_text(encoding="utf-8") == ""
-
-
 def test_publish_retry_of_withdrawn_snapshot_fails_closed(tmp_path: Path,production_console) -> None:
     console,accounts,sid,result=_published(tmp_path,production_console)
     console.withdraw_document(actor_id=accounts['publisher']['account_id'],snapshot_id=sid,

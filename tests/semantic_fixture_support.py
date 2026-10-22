@@ -128,6 +128,6 @@ def install_fixture_history(console, snapshot_id, rows):
                     (snapshot_id, row["object_id"], row["object_version"], json.dumps(row), position))
         console.refresh_workflow_documents()
         return
-    path = console._objects_path(snapshot_id)
+    path = (console.runtime / "objects" / f"{snapshot_id}.jsonl")
     path.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
     console.refresh_objects_expected_revision(snapshot_id)

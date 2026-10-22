@@ -2,23 +2,11 @@
 import hashlib
 import json
 from copy import deepcopy
-from pathlib import Path
 
-from src.operations_console_v1 import ConsoleError, OperationsConsole
+from src.operations_console_v1 import ConsoleError
 
 HTML = b"<!doctype html><html><body><h1>Voorbeeld</h1><p>Een waarneming is een beschrijving.</p></body></html>"
 ACTOR, REVIEWER, OTHER = "author", "reviewer", "other"
-
-
-def _file_console_at(root, cls=OperationsConsole):
-    console = cls(root=root, source_store=root / "sources", runtime=root / "runtime")
-    console._accounts = {
-        key: {"account_id": key, "username": key, "display_name": key.title(), "roles": roles}
-        for key, roles in ((ACTOR, ["researcher", "reviewer"]),
-                           (REVIEWER, ["reviewer"]), (OTHER, ["reviewer"]))
-    }
-    console._save_accounts()
-    return console
 
 
 def console_at(root, *, production_console):

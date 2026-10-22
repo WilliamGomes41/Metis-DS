@@ -270,14 +270,19 @@ def test_binding_never_replaces_methods_or_reader_and_catalog_calls_no_provider(
 def test_azure_cannot_use_local_workflow_fallback(monkeypatch):
     from src.workflow_store_configuration import POSTGRES_STORE_SETTINGS, validate_workflow_store_configuration
     monkeypatch.setenv("WEBSITE_SITE_NAME", "synthetic")
+    for key in (*POSTGRES_STORE_SETTINGS, *("METIS_CANONICAL_DB_DSN", "METIS_CANONICAL_DB_HOST", "METIS_CANONICAL_DB_NAME", "METIS_CANONICAL_DB_USER")):
+        monkeypatch.delenv(key, raising=False)
     for key in POSTGRES_STORE_SETTINGS:
         monkeypatch.setenv(key, "postgres")
+    with pytest.raises(RuntimeError, match="postgres_authority_configuration_required"):
+        validate_workflow_store_configuration()
     for key in POSTGRES_STORE_SETTINGS:
-        monkeypatch.delenv(key)
-        with pytest.raises(RuntimeError):
+        monkeypatch.setenv(key, "file")
+        monkeypatch.setenv("METIS_CANONICAL_DB_DSN", "postgresql://unused.invalid/metis")
+        with pytest.raises(RuntimeError, match="^unsupported_"):
             validate_workflow_store_configuration()
         monkeypatch.setenv(key, "postgres")
-    assert validate_workflow_store_configuration() is True
+    assert validate_workflow_store_configuration() is None
 
 
 def test_native_receipt_requires_blob_readback_even_with_valid_cache(workflow_postgres, tmp_path, *, production_console):

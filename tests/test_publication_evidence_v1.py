@@ -15,7 +15,7 @@ import sys
 import pytest
 from src.publication_evidence_v1 import collect_publication, publication_report
 from src.operations_console_v1 import ConsoleError
-from tests.test_durable_publication_console_v1 import MemoryCanonicalStore, _ready_console, _file_ready_console
+from tests.test_durable_publication_console_v1 import MemoryCanonicalStore, _ready_console
 
 pytestmark = [pytest.mark.release_control_scope_belofte, pytest.mark.release_control_opslag,
               pytest.mark.release_control_toegang, pytest.mark.release_control_releasebewijs,
@@ -77,24 +77,6 @@ def test_authorized_collection_after_real_publish_does_not_mutate_domain(tmp_pat
     assert _domain_state(console) == persisted
     with pytest.raises(ConsoleError, match='publisher_role_required'):
         collect_publication(console, actor_id=accounts['reviewer']['account_id'], snapshot_id=sid)
-
-
-@pytest.mark.file_topology
-def test_failed_publication_cannot_be_mistaken_for_absent_commit(tmp_path, monkeypatch):
-    authority = MemoryCanonicalStore()
-    console, accounts, receipt = _file_ready_console(tmp_path, authority)
-    import src.durable_publication_console_v1 as module
-    real_replace = module.atomic_replace_projection
-    monkeypatch.setattr(module, 'atomic_replace_projection', lambda *args: (_ for _ in ()).throw(OSError('private')))
-    with pytest.raises(ConsoleError) as caught:
-        console.publish(actor_id=accounts['publisher']['account_id'], snapshot_id=receipt['snapshot_id'])
-    assert caught.value.code == 'durable_publication_local_copy_failed'
-    read = collect_publication(console, actor_id=accounts['publisher']['account_id'], snapshot_id=receipt['snapshot_id'])
-    assert publication_report(read)['canonical_release_observed'] is True
-    assert len(authority.releases) == 1
-    monkeypatch.setattr(module, 'atomic_replace_projection', real_replace)
-    console.publish(actor_id=accounts['publisher']['account_id'], snapshot_id=receipt['snapshot_id'])
-    assert len(authority.releases) == 1
 
 
 def test_export_joins_publication_without_browser_and_does_not_overwrite(tmp_path):
