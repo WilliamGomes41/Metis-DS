@@ -181,6 +181,7 @@ def test_console_entry_installs_structured_logging_first(monkeypatch):
         raise RuntimeError('stop after install')
 
     monkeypatch.setattr(entry, 'assert_supported_topology', stop)
+    monkeypatch.setenv('METIS_CANONICAL_DB_DSN', 'postgresql://unused.invalid/metis')
     with pytest.raises(RuntimeError, match='stop after install'):
         entry.build_app()
     assert calls == ['install', 'topology']

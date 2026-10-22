@@ -112,6 +112,6 @@ Explicit non-goals: de consoleklassen opsplitsen; `runtime_data_inventory_v1`, g
 
 ## Open punten vóór merge
 
-- Volledige suite en CI op Python 3.12 en 3.13 (zie verificatie in de PR).
+- CI op Python 3.12 en 3.13. Lokaal (Python 3.13, PostgreSQL 16) gaf de volledige suite 5528 geslaagd, 6 gefaald, 29 overgeslagen, nul PostgreSQL-skips. Vier fouten waren verouderde verwijzingen naar verwijderde bestandscode en zijn hersteld. `test_security_sandbox::test_tested_code_cannot_overwrite_control_files` faalt ook op main omdat de container als root draait. `test_native_stall_reserves_before_call_and_recovers_same_source` was een eenmalige timingfout en slaagt bij herhaling.
 - Rollback-proef naar `afcb37c` op dezelfde PG-toestand niet apart uitgevoerd; er is geen schemawijziging.
 - Lex (aanvalsronde), Sherlock (begrensde review) en Argos (gate) vóór de merge; Williams GO.

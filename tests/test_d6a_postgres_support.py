@@ -116,7 +116,7 @@ def test_missing_postgres_fails_once_during_collection_but_pure_cases_can_run():
     pure = subprocess.run([sys.executable, "-m", "pytest", "-q", "tests/test_workflow_postgres_schema.py",
                            "tests/test_v230_phase1_admission_gate.py::test_required_candidate_fields_are_the_section_4_set",
                            "tests/test_console_asgi.py::test_azure_console_requires_explicit_https_public_origin",
-                           "tests/test_workflow_identity_postgres_v1.py::test_local_only_account_listing_uses_local_authority"],
+                           "tests/test_workflow_identity_postgres_v1.py::test_session_tokens_are_one_way_hashed_for_shared_storage"],
                           cwd=ROOT, env=env, capture_output=True, text=True, timeout=30)
     assert pure.returncode == 0, pure.stdout + pure.stderr
 
