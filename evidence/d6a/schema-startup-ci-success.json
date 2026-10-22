@@ -1,0 +1,347 @@
+{
+  "recorded_at": "2026-10-22T10:45:09.879217+00:00",
+  "scope": "Complete exact-head CI verification of the schema-startup performance correction; no merge or deploy",
+  "tested_heads": [
+    {
+      "pr": 813,
+      "head": "ebf4dd2c767dcb5d0644249d639f1a6674837ffb",
+      "run": 39756866196,
+      "jobs": [
+        119751053160,
+        119751053454
+      ],
+      "workflows": [
+        {
+          "id": 39756865961,
+          "name": "source-processing-proof",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 513,
+          "jobs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756865961/jobs",
+          "logs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756865961/logs",
+          "workflow_id": 379487510
+        },
+        {
+          "id": 39756866301,
+          "name": "workflow-topology-proof",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 129,
+          "jobs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756866301/jobs",
+          "logs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756866301/logs",
+          "workflow_id": 387949054
+        },
+        {
+          "id": 39756866068,
+          "name": "docling-acceptance",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 627,
+          "jobs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756866068/jobs",
+          "logs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756866068/logs",
+          "workflow_id": 374189209
+        },
+        {
+          "id": 39756866147,
+          "name": "Bend experiment proof",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 71,
+          "jobs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756866147/jobs",
+          "logs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756866147/logs",
+          "workflow_id": 390213716
+        },
+        {
+          "id": 39756866196,
+          "name": "ci",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 5099,
+          "jobs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756866196/jobs",
+          "logs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756866196/logs",
+          "workflow_id": 338201031
+        }
+      ],
+      "job_metrics": [
+        {
+          "job_id": 119751053160,
+          "records": [
+            {
+              "commit": "9fa200426f715d5b4beb3882a92c81f57026c1d2",
+              "python": "3.13.16",
+              "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+              "seconds": 1241.032,
+              "exit_code": 0,
+              "postgres_version": 160015,
+              "tests": 5674,
+              "failures": 0,
+              "errors": 0,
+              "skipped": 33,
+              "postgres_skips": []
+            },
+            {
+              "commit": "b2ad11a702a1da6d46b71c9fbae8b792c4ed0c9d",
+              "python": "3.13.16",
+              "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+              "seconds": 2310.315,
+              "exit_code": 0,
+              "postgres_version": 160015,
+              "tests": 5669,
+              "failures": 0,
+              "errors": 0,
+              "skipped": 34,
+              "postgres_skips": [],
+              "baseline_seconds": 1241.032,
+              "ratio": 1.8616,
+              "within_twice_baseline": true
+            }
+          ]
+        },
+        {
+          "job_id": 119751053454,
+          "records": [
+            {
+              "commit": "b2ad11a702a1da6d46b71c9fbae8b792c4ed0c9d",
+              "python": "3.12.15",
+              "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+              "seconds": 1669.242,
+              "exit_code": 0,
+              "postgres_version": 160015,
+              "tests": 5669,
+              "failures": 0,
+              "errors": 0,
+              "skipped": 34,
+              "postgres_skips": []
+            }
+          ]
+        }
+      ],
+      "artifact": {
+        "name": "suite-timing-3.13",
+        "zip_sha256": "83be29dcdcacc7372bf2c3a121f8e2628cbb2bed861f82039b26a6c6a856fae8",
+        "before_junit_sha256": "186da07c22a71eb26ed4c16347094e36b442b549846237cc6605be778842ba60",
+        "after_junit_sha256": "07ef60293655763446020345ae646d789850517f822c7b1af1623dff1807e26d",
+        "schema_guard_cases": 26
+      },
+      "baseline": {
+        "commit": "9fa200426f715d5b4beb3882a92c81f57026c1d2",
+        "python": "3.13.16",
+        "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+        "seconds": 1241.032,
+        "exit_code": 0,
+        "postgres_version": 160015,
+        "tests": 5674,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 33,
+        "postgres_skips": []
+      },
+      "after": {
+        "commit": "b2ad11a702a1da6d46b71c9fbae8b792c4ed0c9d",
+        "python": "3.13.16",
+        "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+        "seconds": 2310.315,
+        "exit_code": 0,
+        "postgres_version": 160015,
+        "tests": 5669,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 34,
+        "postgres_skips": [],
+        "baseline_seconds": 1241.032,
+        "ratio": 1.8616,
+        "within_twice_baseline": true
+      },
+      "passed": 5635,
+      "optional_skips": 28,
+      "expected_failures": 6,
+      "url": "https://github.com/WilliamGomes41/Metis-DS/pull/813"
+    },
+    {
+      "pr": 814,
+      "head": "1065f76f37af4dd3ad00656ddfe047f3a15cd7b8",
+      "run": 39756867145,
+      "jobs": [
+        119751038914,
+        119751039175
+      ],
+      "workflows": [
+        {
+          "id": 39756867150,
+          "name": "workflow-topology-proof",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 130,
+          "jobs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756867150/jobs",
+          "logs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756867150/logs",
+          "workflow_id": 387949054
+        },
+        {
+          "id": 39756867134,
+          "name": "docling-acceptance",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 628,
+          "jobs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756867134/jobs",
+          "logs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756867134/logs",
+          "workflow_id": 374189209
+        },
+        {
+          "id": 39756867132,
+          "name": "source-processing-proof",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 514,
+          "jobs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756867132/jobs",
+          "logs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756867132/logs",
+          "workflow_id": 379487510
+        },
+        {
+          "id": 39756867142,
+          "name": "Bend experiment proof",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 72,
+          "jobs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756867142/jobs",
+          "logs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756867142/logs",
+          "workflow_id": 390213716
+        },
+        {
+          "id": 39756867145,
+          "name": "ci",
+          "status": "completed",
+          "conclusion": "success",
+          "run_number": 5100,
+          "jobs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756867145/jobs",
+          "logs_url": "https://api.github.com/repos/WilliamGomes41/Metis-DS/actions/runs/39756867145/logs",
+          "workflow_id": 338201031
+        }
+      ],
+      "job_metrics": [
+        {
+          "job_id": 119751038914,
+          "records": [
+            {
+              "commit": "9fa200426f715d5b4beb3882a92c81f57026c1d2",
+              "python": "3.13.16",
+              "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+              "seconds": 1329.555,
+              "exit_code": 0,
+              "postgres_version": 160015,
+              "tests": 5674,
+              "failures": 0,
+              "errors": 0,
+              "skipped": 33,
+              "postgres_skips": []
+            },
+            {
+              "commit": "4df462c015f374a1f30571de3e5f8769e2217efa",
+              "python": "3.13.16",
+              "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+              "seconds": 2485.438,
+              "exit_code": 0,
+              "postgres_version": 160015,
+              "tests": 5670,
+              "failures": 0,
+              "errors": 0,
+              "skipped": 34,
+              "postgres_skips": [],
+              "baseline_seconds": 1329.555,
+              "ratio": 1.8694,
+              "within_twice_baseline": true
+            }
+          ]
+        },
+        {
+          "job_id": 119751039175,
+          "records": [
+            {
+              "commit": "4df462c015f374a1f30571de3e5f8769e2217efa",
+              "python": "3.12.15",
+              "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+              "seconds": 1706.765,
+              "exit_code": 0,
+              "postgres_version": 160015,
+              "tests": 5670,
+              "failures": 0,
+              "errors": 0,
+              "skipped": 34,
+              "postgres_skips": []
+            }
+          ]
+        }
+      ],
+      "artifact": {
+        "name": "suite-timing-3.13",
+        "zip_sha256": "6bc53586131661868f9cf6ac6c02ba43aa8c8d5c6a49270e0d4f6c05cbfd38b8",
+        "before_junit_sha256": "f777444e04ca8a690e362da60a822bbf8e70a0b4f57842698d56210c9f855b76",
+        "after_junit_sha256": "86e05f292b412f16d132d3044ab147cfcbd7565f92b4aefa312e6996107d097d",
+        "schema_guard_cases": 26
+      },
+      "baseline": {
+        "commit": "9fa200426f715d5b4beb3882a92c81f57026c1d2",
+        "python": "3.13.16",
+        "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+        "seconds": 1329.555,
+        "exit_code": 0,
+        "postgres_version": 160015,
+        "tests": 5674,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 33,
+        "postgres_skips": []
+      },
+      "after": {
+        "commit": "4df462c015f374a1f30571de3e5f8769e2217efa",
+        "python": "3.13.16",
+        "platform": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+        "seconds": 2485.438,
+        "exit_code": 0,
+        "postgres_version": 160015,
+        "tests": 5670,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 34,
+        "postgres_skips": [],
+        "baseline_seconds": 1329.555,
+        "ratio": 1.8694,
+        "within_twice_baseline": true
+      },
+      "passed": 5636,
+      "optional_skips": 28,
+      "expected_failures": 6,
+      "url": "https://github.com/WilliamGomes41/Metis-DS/pull/814"
+    }
+  ],
+  "local_full_suite": {
+    "commit": "1065f76f37af4dd3ad00656ddfe047f3a15cd7b8",
+    "python": "3.13.5",
+    "platform": "Linux-6.18.55-x86_64-with-glibc2.41",
+    "seconds": 2040.202,
+    "exit_code": 0,
+    "postgres_version": 160015,
+    "tests": 5670,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 34,
+    "postgres_skips": [],
+    "junit_sha256": "e703f6493b0b5f5c87a101737ce5b8bd5546c0f98e560147b572d7f14882aaee"
+  },
+  "shared_runtime_source_identical": true,
+  "preserved": {
+    "baseline": "9fa200426f715d5b4beb3882a92c81f57026c1d2",
+    "maximum_ratio": 2,
+    "full_suite_selection": true,
+    "postgresql_durability": true,
+    "production_classes_routes_and_guards": true
+  },
+  "outcome": "All five workflows successful on both PR heads; Python3.12 and3.13 complete, zero test errors and PostgreSQL skips; both unchanged2x timing gates pass.",
+  "evidence_publication": "Metadata is committed on the separate supporting branch so that the green tested PR heads remain unchanged.",
+  "timing_gate_passed": true,
+  "D6a_done": false,
+  "D6b_started": false,
+  "limits": [
+    "This closes the reported CI/timing failures, not the other D6a environment/acceptance gates or the D6b review/cutover conditions.",
+    "28 optional skips and6 existing xfails remain distinct from PostgreSQL proof."
+  ]
+}
