@@ -129,7 +129,23 @@ def _routed_entrypoint(p):
     next(u for u in p["units"] if u["quoted_text"] == "Is er een verhoogd valrisico?")["entry"] = True
 
 
+def _resolve_role(p, text, role):
+    unit = next(u for u in p["units"] if u["quoted_text"] == text)
+    unit["role"] = role
+    p["unresolved"] = [row for row in p["unresolved"] if row["subject"] != unit["ref"]]
+
+
+def _outcome_as_action(p):
+    _resolve_role(p, "Verwijs naar de valpoli.", "action")
+
+
+def _question_as_outcome(p):
+    _resolve_role(p, "Is er een verhoogd valrisico?", "outcome")
+
+
 @pytest.mark.parametrize("mutate, code", [
+    (_outcome_as_action, "decision_export_role_not_preserved"),
+    (_question_as_outcome, "decision_export_role_not_preserved"),
     (_drop_connection, "decision_export_route_not_preserved"),
     (_routed_entrypoint, "decision_export_route_not_preserved"),
     (_add_connection, "decision_export_route_not_preserved"),
@@ -152,6 +168,17 @@ def test_export_root_may_be_proposed_as_entrypoint() -> None:
         next(u for u in p["units"] if u["quoted_text"] == "Screening op valrisico")["entry"] = True
     texts, _edges, _bundles, construction = _graph(_prepare(_faithful(root_entry))[1])
     assert [texts[oid] for oid in construction["graph_plan"]["entrypoints"]] == ["Screening op valrisico"]
+
+
+def test_export_roles_may_stay_open_or_follow_the_exported_kind() -> None:
+    def resolve(p):
+        _resolve_role(p, "Verwijs naar de valpoli.", "outcome")
+        _resolve_role(p, "Screening op valrisico", "start")
+    texts, _edges, _bundles, construction = _graph(_prepare(_faithful(resolve))[1])
+    modes = {texts[n["object_id"]]: n["mode"] for n in construction["graph_plan"]["nodes"]}
+    assert modes["Verwijs naar de valpoli."] == "terminal"
+    assert modes["Screening op valrisico"] == "continue"
+    assert modes["Is er een verhoogd valrisico?"] == "unresolved"
 
 
 def test_model_cannot_add_words_reorder_spans_or_fabricate_a_block() -> None:

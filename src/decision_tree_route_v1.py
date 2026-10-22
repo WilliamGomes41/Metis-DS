@@ -111,6 +111,12 @@ def export_types(proposal: dict[str, Any], fragments: list[dict[str, Any]]) -> d
     return types
 
 
+_EXPORT_MEMBER_MODES = frozenset({"context"})
+_EXPORT_KIND_MODES = {"outcome": frozenset({"terminal", "unresolved"}),
+                      "path": frozenset({"continue", "unresolved"}),
+                      "node": frozenset({"single", "multiple", "continue", "unresolved"})}
+
+
 def verify_export_preserved(construction: dict[str, Any], data: bytes,
                             fragments: list[dict[str, Any]]) -> None:
     """Fail closed unless the construction carries the export's explicit graph exactly.
@@ -118,11 +124,12 @@ def verify_export_preserved(construction: dict[str, Any], data: bytes,
     Every non-empty exported item is one whole unit; every well-formed branch
     between them is one edge with its literal label and only its own evidence;
     no other edge exists; every exported bundle is reproduced with its members;
-    no item that an exported branch leads to is proposed as an entrypoint.
+    no item that an exported branch leads to is proposed as an entrypoint;
+    no node takes a role its exported kind rules out.
     """
     from src.decision_graph_v1 import export_branches
     candidates = construction["spec"]["objects"][1:]
-    object_for = {}
+    object_for, allowed_modes = {}, {}
     for fragment in fragments:
         text = " ".join(str(fragment.get("clean_text") or "").split())
         if not text:
@@ -133,8 +140,15 @@ def verify_export_preserved(construction: dict[str, Any], data: bytes,
             raise DecisionTreeProposalError("decision_export_node_not_preserved",
                                             fragment_id=fragment["fragment_id"])
         object_for[str(fragment.get("boom_id"))] = matches[0]
+        allowed_modes[matches[0]] = (_EXPORT_MEMBER_MODES if fragment.get("bundle_role") == "member"
+                                     else _EXPORT_KIND_MODES.get(str(fragment.get("boom_kind") or "node"),
+                                                                 _EXPORT_KIND_MODES["node"]))
     if len(candidates) != len(object_for):
         raise DecisionTreeProposalError("decision_export_node_not_preserved")
+    # The export states item kinds, not answer semantics: a role may stay open
+    # for review but never contradict the exported kind.
+    if any(node["mode"] not in allowed_modes[node["object_id"]] for node in construction["graph_plan"]["nodes"]):
+        raise DecisionTreeProposalError("decision_export_role_not_preserved")
     expected = sorted(
         (object_for[branch["from"]], object_for[branch["to"]],
          "answer" if branch.get("label") else "continue", branch.get("label") or "",

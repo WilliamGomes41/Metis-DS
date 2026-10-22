@@ -24,7 +24,7 @@ Lifecycle transition: bron vastgelegd → kandidaten gevormd; alleen de vormings
 Initial durable state: bevroren bronsnapshot zonder kandidaten (of met historische kandidaten bij een opvolger).
 Trigger: ingest, retry/resume, reextract_unpublished of Review → Nieuwe werkrevisie.
 Authorization: ongewijzigd.
-Validation: ongewijzigd; daarnaast weigert verify_export_preserved elk exportvoorstel dat knooppunten, takken of bundels niet exact behoudt.
+Validation: ongewijzigd; daarnaast weigert verify_export_preserved elk exportvoorstel dat knooppunten, takken of bundels niet exact behoudt of een rol in strijd met het exporttype voorstelt.
 Mutable entities: ongewijzigd ten opzichte van main.
 Immutable entities: bronsnapshots, gepubliceerde releases, historische objecten en hun revisielijn (T11).
 Workflow state before: verwerking kon deterministisch of semantisch kandidaten vormen.
@@ -151,7 +151,7 @@ Na deze wijziging bestaat er precies één uitvoerbare kandidaatvormingsroute v�
 | Console zonder strategie | `test_unconfigured_runtime_fails_explicitly_and_a_configured_runtime_forms_semantically` |
 | `deterministic-v1` geconfigureerd | `test_runtime_policy_is_instance_bound_and_has_no_rollback_mode`, policy- en protocoltests |
 | Model faalt / ontbreekt (export) | `test_failing_or_missing_model_never_falls_back_for_exports`; proza: bestaande fail-closed-tests |
-| Export: verbinding weggelaten, toegevoegd, omgeleid, label gewijzigd, als onzeker gemarkeerd, zonder bewijs; eenheid ingekort; bundel weg; beginpunt op een item waar een exporttak naartoe leidt | `test_export_proposal_that_changes_the_explicit_graph_fails_closed`, `test_export_root_may_be_proposed_as_entrypoint` |
+| Export: verbinding weggelaten, toegevoegd, omgeleid, label gewijzigd, als onzeker gemarkeerd, zonder bewijs; eenheid ingekort; bundel weg; beginpunt op een item waar een exporttak naartoe leidt; rol in strijd met het exporttype (uitkomst als actie, vraag als uitkomst) | `test_export_proposal_that_changes_the_explicit_graph_fails_closed`, `test_export_root_may_be_proposed_as_entrypoint`, `test_export_roles_may_stay_open_or_follow_the_exported_kind` |
 | Woorden toegevoegd, spans omgekeerd, verzonnen blok | `test_model_cannot_add_words_reorder_spans_or_fabricate_a_block` |
 | Export buiten klasse beslisboom | `test_export_outside_the_decision_tree_class_is_formed_semantically` |
 | Vastgelegd bewijs niet gewijzigd; PDF-verzoek gelijk | `test_export_request_names_export_ids_while_pdf_request_and_recorded_evidence_stay_unchanged` |
