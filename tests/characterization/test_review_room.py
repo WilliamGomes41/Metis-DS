@@ -1,5 +1,8 @@
 """Full HTML/error snapshots of the current review-room orchestration.
 
+CI supplies a native PostgreSQL 16 service for these production-composition
+proofs. Exact snapshots and the recorded review mutation remain the oracle.
+
 # release-control-evidence: scope/belofte
 # release-control-evidence: toegang
 # release-control-evidence: kwaliteit
