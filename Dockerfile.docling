@@ -13,6 +13,31 @@ RUN python -m venv /opt/docling \
  && /opt/docling/bin/pip install --no-cache-dir -r requirements-docling.lock \
  && /opt/docling/bin/pip check \
  && python -m pip install --no-cache-dir -r requirements-console.txt
+# View check (#807): the same pinned Playwright as CI with its headless Chromium,
+# installed at build time; runtime never downloads. npm is removed afterwards.
+# Chromium's font packages are skipped: the Docling render-font inventory
+# (src/docling_render_fonts_v1.py) MUST stay identical, so the build fails if
+# any file under its font roots changes.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+RUN fonts() { find /usr/share/fonts /usr/local/share/fonts /usr/share/texmf/fonts /usr/X11R6/lib/X11/fonts \
+      -type f 2>/dev/null | sort | xargs -r sha256sum | sha256sum; } \
+ && before="$(fonts)" \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends nodejs npm \
+ && npm install --prefix /opt/metis-browser --no-audit --no-fund playwright@1.58.2 \
+ && deps="$(node /opt/metis-browser/node_modules/playwright/cli.js install-deps --dry-run chromium-headless-shell \
+      | sed -n 's/.*--no-install-recommends //p' | tr -d '"' | tr ' ' '\n' \
+      | grep -v -E '^(fonts-.*|xfonts-.*|xvfb)$' | tr '\n' ' ')" \
+ && test -n "$deps" \
+ && apt-get install -y --no-install-recommends $deps \
+ && node /opt/metis-browser/node_modules/playwright/cli.js install --only-shell chromium \
+ && ln -s "$(find /opt/ms-playwright -path '*chrome-headless-shell-linux64/chrome-headless-shell' -type f)" /opt/metis-browser/chrome-headless-shell \
+ && test -x /opt/metis-browser/chrome-headless-shell \
+ && apt-get purge -y npm && apt-get autoremove -y && rm -rf /var/lib/apt/lists/* /root/.npm \
+ && test "$before" = "$(fonts)" \
+ && node -e "const {chromium}=require('/opt/metis-browser/node_modules/playwright');chromium.launch({executablePath:'/opt/metis-browser/chrome-headless-shell'}).then(b=>{console.log('view-check browser', b.version());return b.close();})"
+ENV METIS_PLAYWRIGHT_MODULE=/opt/metis-browser/node_modules/playwright \
+    METIS_BROWSER_EXECUTABLE=/opt/metis-browser/chrome-headless-shell
 COPY scripts/prepare_docling_models.py /app/scripts/
 COPY src/__init__.py src/docling_contract_v1.py src/docling_render_fonts_v1.py /app/src/
 RUN /opt/docling/bin/python scripts/prepare_docling_models.py /opt/docling-models
