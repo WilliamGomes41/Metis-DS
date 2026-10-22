@@ -4,8 +4,43 @@
 Change class: A
 Promise: iedere nieuwe bronverwerking (HTML, PDF, PDF-beslisboom, gestructureerde export) vormt kenniskandidaten uitsluitend via een brongebonden AI-voorstel en materialise_knowledge_candidates; er bestaat geen deterministische vormingsroute, impliciete terugval of rollbackmodus meer, en alle validatie-, admission-, review- en publicatiecontracten blijven ongewijzigd actief.
 Proof: tests/test_semantic_only_formation_v1.py (exportbehoud, bronvertrouwen, geen terugval, geen achtergebleven route), bijgewerkte policy-/protocoltests en de volledige regressiesuite inclusief PostgreSQL.
-Touches lifecycle invariants: yes (restart/recovery van verwerking; publicatieprotocolversie 4.3.0 voor nieuwe releases)
+Touches lifecycle invariants: yes
 Rewrite risk: high
+
+Rewrite target: kandidaatvorming vóór review (OperationsConsole._fragments_and_spec en de gekoppelde strategie), het deterministische exportvoorstel, het in-place klassewijzigingspad en de deterministische vergelijkingsarm.
+Why local patching is insufficient: de deterministische route was tegelijk standaard (console zonder strategie), rollbackmodus (deterministic-v1), exportvoorstel, klassewijzigingspad en vergelijkingsbaseline; één tak verwijderen liet de andere uitvoerbaar.
+Current authority/writer/reader map: enige kandidaatmaker materialise_knowledge_candidates (ongewijzigd); schrijvers via de materialiser: ingest, reextract_unpublished/retry/resume, reviewcorrectie; readers transform, admission, passage register, review, publicatie, serving (ongewijzigd). Zie §1 en §2.
+Supported runtime topologies: één productiecompositie, console_asgi.build_app met bind_pre_review_semantic_processing (PostgreSQL-only, D6b); tests met dezelfde binding en een vast fixturemodel.
+Persisted-state impact: geen schema, migratie of backfill; bestaande snapshots, objecten, reviews, releases en replays ongewijzigd; review_audit_evidence krijgt alleen bij een melding een extra veld source_discrepancy.
+Compatibility/migration plan: historische deterministisch gevormde objecten en deterministic-export-v1-bomen blijven leesbaar en verifieerbaar; geen stille rematerialisatie; PASSAGE_FORMATION_POLICY_VERSION blijft v1.0.0 en kopprovenance blijft byte-gelijk.
+Rollback/recovery plan: softwareterugzetting naar fe0ccf8 (beschreven, niet apart getest); nieuwe kandidaten gebruiken dezelfde contracten; een mislukte vorming laat bron en eerder werk intact, herstel via bestaande retry of reextract_unpublished.
+Cutover trigger: merge van deze wijziging op besluit van de eigenaar; geen omschakelvlag.
+Cleanup/decommission criteria: in dezelfde wijziging uitgevoerd (§3); geen tijdelijke dubbele route; config/legacy_processing_routes.json markeert L01, L04, L06 en L08 als LEGACY-REMOVED.
+Failure blast radius: zonder geconfigureerd model faalt nieuwe verwerking gesloten, ook voor exports; lezen, review en publicatie van bestaand werk blijven beschikbaar.
+Adversarial proof matrix: §6.
+
+Lifecycle entity: kenniskandidaten van een documentsnapshot vóór review (vorming), plus het bestaande reviewbesluit voor de discrepantiemelding.
+Lifecycle transition: bron vastgelegd → kandidaten gevormd; alleen de vormingsmethode verandert (altijd semantisch); klassewijziging over modelgrenzen alleen via de bestaande opvolger.
+Initial durable state: bevroren bronsnapshot zonder kandidaten (of met historische kandidaten bij een opvolger).
+Trigger: ingest, retry/resume, reextract_unpublished of Review → Nieuwe werkrevisie.
+Authorization: ongewijzigd.
+Validation: ongewijzigd; daarnaast weigert verify_export_preserved elk exportvoorstel dat knooppunten, takken of bundels niet exact behoudt.
+Mutable entities: ongewijzigd ten opzichte van main.
+Immutable entities: bronsnapshots, gepubliceerde releases, historische objecten en hun revisielijn (T11).
+Workflow state before: verwerking kon deterministisch of semantisch kandidaten vormen.
+Workflow state after: verwerking vormt kandidaten alleen semantisch of faalt gesloten met een zichtbare foutcode.
+Release state before: publicatieprotocol 4.2.0.
+Release state after: publicatieprotocol 4.3.0 voor nieuwe releases; bestaande releases ongewijzigd.
+Serving state before: publicatieregister.
+Serving state after: publicatieregister, ongewijzigd.
+Expected API result: Product API-antwoorden gelijk voor dezelfde gepubliceerde toestand.
+Expected UI result: geen deterministische modus meer; reviewkaart toont optioneel Rapporteer een discrepantie; klassewijziging over modelgrenzen verwijst naar Review → Nieuwe werkrevisie; nieuwe routevergelijkingen kunnen niet meer worden aangemaakt.
+Failure result: zonder model source_processing_strategy_unconfigured, met deterministic-v1 passage_formation_mode_invalid, bij een export die niet exact behouden blijft decision_export_*_not_preserved; geen terugval.
+Restart result: herstart bindt dezelfde semantische strategie; een onderbroken vorming hervat via de bestaande retry/resume.
+Recovery result: bron en eerder werk blijven intact; herstel via bestaande retry of reextract_unpublished.
+Legacy-data result: historische deterministisch gevormde objecten en bomen blijven leesbaar, reviewbaar volgens bestaande regels en worden niet stil opnieuw gevormd.
+Required black-box scenario: tests/test_semantic_only_formation_v1.py (ongebonden runtime faalt gesloten en gebonden runtime vormt semantisch; getrouwe export behoudt elk knooppunt, elke tak en bundel; gewijzigde export faalt gesloten; falend of ontbrekend model geeft geen terugval; export buiten de beslisboomklasse wordt semantisch gevormd) plus de bestaande ingest → review → publish-lifecycletests in de volledige suite, nu met het fixturemodel gebonden.
+Explicit non-goals: G4 (inhoudelijke acceptatie op een bevroren corpus); test met echte provideruitvoer; wijziging van validatie-, admission-, review- of publicatiecontracten.
 ```
 
 Besluit William 2026-10-22 (opdracht "Eén semantische vormingsroute voor alle kennisobjecten in Metis"), uitgevoerd via Protocol §15 naar het precedent van 4.2.0 (`eac30ca`). Referentierevisie: main `fe0ccf81bf482627bcafe5fa077a04625310e272`.
