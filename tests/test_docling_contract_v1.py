@@ -615,6 +615,25 @@ def test_no_part_of_an_item_reaching_an_unusable_page_is_used():
     assert [b["fragment_id"] for b in fragments.extraction_record["bindings"]] == [f["fragment_id"] for f in fragments]
 
 
+def test_a_heading_on_a_set_aside_page_never_enters_a_later_section_path():
+    payload = result()
+    for number in (2, 3):
+        page(payload, number)
+    heading = dict(text_item("#/texts/1", "Weggelaten kop", (2, 0, 14)), label="section_header", level=1)
+    broken = text_item("#/texts/2", "onvolledig", (2, 0, 4))
+    later = text_item("#/texts/3", "Latere tekst", (3, 0, 12))
+    payload["document"]["texts"] += [heading, broken, later]
+    payload["reading_order"] += ["#/texts/1", "#/texts/2", "#/texts/3"]
+    findings = unresolved(payload)
+    assert findings == [{"page": 2, "reasons": ["docling_text_coverage_incomplete"]}]
+    accounted = [dict(findings[0], source_sha256="a" * 64)]
+    fragments = assessed(payload, accounted_pages=accounted)
+    assert {f["source_page"] for f in fragments} == {1, 3}
+    assert all("Weggelaten kop" not in f["section_path"] for f in fragments)
+    assert "#/texts/1" in [row["item_ref"] for row in fragments.extraction_record["exclusions"]
+                           if row["reason"] == "docling_page_set_aside"]
+
+
 @pytest.mark.parametrize("mutation, code", [
     (lambda p: p["document"]["texts"][0].update(prov=[]), "text_provenance_missing"),
     (lambda p: p["document"]["texts"][0]["prov"][0].update(page_no=9), "page_invalid"),
@@ -719,3 +738,6 @@ def test_unresolved_page_blocks_formation_until_accounted_then_is_left_out(tmp_p
     extracted = stored_extraction(create()._envelope(sid))
     assert {f["source_page"] for f in extracted} == {1}
     assert [row["basis"] for row in extracted.extraction_record["set_aside_pages"]] == ["recorded_accounting"]
+    # The diagnosis names the page the checkpointed extraction left out.
+    from src.docling_contract_v1 import set_aside_pages
+    assert [row["page"] for row in set_aside_pages(create()._envelope(sid))] == [2]

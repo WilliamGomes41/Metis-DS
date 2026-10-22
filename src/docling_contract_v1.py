@@ -253,6 +253,11 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
                 visit(ref, item, provenance)
                 continue
             scope = item_pages(provenance)
+            if scope and scope <= held:
+                # A set-aside page contributes nothing, not even a heading to
+                # the section path of later pages.
+                exclusions.append({"item_ref": ref, "reason": "docling_page_set_aside", "provenance": provenance})
+                continue
             if scope and scope & held:
                 # Never use part of an item whose other page is set aside.
                 for page in scope - held:
@@ -340,6 +345,12 @@ def _accounting_for(accounted_pages, page, reasons, source_sha256):
 
 def set_aside_pages(envelope: dict) -> list[dict]:
     """Pages the accepted extraction left out, with their basis; never text."""
+    from src.source_preparation_context_v1 import stored_extraction
+    # A checkpointed extraction governs later attempts, so it is read first.
+    prepared = stored_extraction(envelope)
+    if prepared is not None:
+        record = getattr(prepared, "extraction_record", None) or {}
+        return deepcopy(record.get("set_aside_pages") or [])
     fragments = stored_fragments(envelope)
     if fragments is None:
         return []

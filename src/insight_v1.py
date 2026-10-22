@@ -369,7 +369,7 @@ def _source_pages_html(envelope: dict, diagnostic: dict, document: str) -> str:
     """Per page: problem, repair action and the accounting form; never source text."""
     from src.docling_contract_v1 import DoclingError, set_aside_pages
     from src.operations_console_app import PAGE_FINDING_COPY
-    from src.operations_console_v1 import SOURCE_PAGE_ACCOUNTING_CATEGORIES
+    from src.operations_console_v1 import ConsoleError, SOURCE_PAGE_ACCOUNTING_CATEGORIES
     parts = []
     findings = diagnostic.get("page_findings") or []
     if findings:
@@ -400,7 +400,7 @@ def _source_pages_html(envelope: dict, diagnostic: dict, document: str) -> str:
                      f'<tbody>{"".join(rows)}</tbody></table></section>')
     try:
         left_out = set_aside_pages(envelope)
-    except DoclingError:
+    except (DoclingError, ConsoleError):
         left_out = []
     if left_out:
         labels = {"pdf_page_without_content": "leeg volgens de PDF", "recorded_accounting": "verantwoord"}
