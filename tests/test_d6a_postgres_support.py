@@ -144,3 +144,19 @@ def test_legacy_fixture_alias_observes_the_factorys_committed_accounts(legacy_po
     console = production_console()
     account = console.create_account('shared-fixture', 'fixture-test-secret', roles=['reviewer'])
     assert PostgresWorkflowIdentityStore(legacy_postgres).account_by_id(account['account_id']) is not None
+
+
+def test_independent_factory_copies_keep_identities_and_sessions_separate(production_console):
+    from src.operations_console_v1 import ConsoleError
+    from tests.production_support import restart_production
+    first = production_console(processing_binder=lambda console: None)
+    other = production_console(processing_binder=lambda console: None, isolated=True)
+    assert first.workflow_document_store.config != other.workflow_document_store.config
+    first.create_account(username='same-name', password='fixture-password', roles=['researcher'])
+    assert other.list_accounts() == []
+    other.create_account(username='same-name', password='fixture-password', roles=['reviewer'])
+    token = first.authenticate('same-name', 'fixture-password')['token']
+    with pytest.raises(ConsoleError, match='not_authenticated'):
+        other.session_account(token)
+    assert restart_production(first).session_account(token)['roles'] == ['researcher']
+    assert restart_production(other).list_accounts()[0]['roles'] == ['reviewer']

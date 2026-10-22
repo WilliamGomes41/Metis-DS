@@ -1,0 +1,95 @@
+{
+  "change_class": "C",
+  "rewrite_risk": "none",
+  "affected_prs": [
+    810,
+    811,
+    812
+  ],
+  "failed_runs": {
+    "810": {
+      "run": 39695621084,
+      "ratio": 2.0659,
+      "test_exit_code": 0
+    },
+    "811": {
+      "run": 39695630323,
+      "ratio": 2.1923,
+      "test_exit_code": 0
+    },
+    "812": {
+      "run": 39695639416,
+      "ratio": 2.2812,
+      "test_exit_code": 0,
+      "source_processing_run": 39695639437,
+      "browser_error": "ERR_TLS_CERT_ALTNAME_INVALID while downloading pinned Chromium"
+    }
+  },
+  "repair": {
+    "database": "Use the existing local socket of the same postgres:16 service for both baseline and head; preserve host authentication, schema, independent committed databases and production composition.",
+    "browser": "Share pinned Playwright 1.58.2 setup with a versioned cache and three bounded download attempts separated by 15 and 30 seconds; keep TLS verification enabled.",
+    "timing_gate": "Unchanged pinned baseline 9fa2004 and ratio <= 2."
+  },
+  "same_server_transport_comparison": {
+    "postgres": "16.2",
+    "python": "3.13.5",
+    "tests": 37,
+    "tcp_scram_seconds": 17.598,
+    "socket_seconds": 12.399,
+    "both_exit_codes": 0,
+    "note": "Local comparison, not a full-suite CI acceptance result."
+  },
+  "ci_image_probe": {
+    "postgres": 160015,
+    "connection_count": 100,
+    "tcp_scram_seconds": 0.614,
+    "socket_seconds": 0.177,
+    "fsync": "on",
+    "synchronous_commit": "on",
+    "full_page_writes": "on",
+    "incorrect_tcp_password_rejected": true
+  },
+  "native_proofs": [
+    {
+      "python": "312",
+      "tests": 18,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "junit_sha256": "044aea3825f0d72a803b59c23ef4e270a51d92d22fce7a4452f7f850901e485e",
+      "test_modules": [
+        "tests.test_console_asgi",
+        "tests.test_d5_two_workers_postgres",
+        "tests.test_d6a_postgres_support",
+        "tests.test_review_batch_atomic_postgres"
+      ]
+    },
+    {
+      "python": "313",
+      "tests": 58,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "junit_sha256": "e7333609b2888cdcecfd2ffe3088f271c382f248ef8b7b1bae04fedcfecb7c3d",
+      "test_modules": [
+        "tests.test_console_asgi",
+        "tests.test_console_ingest_names_review_labels",
+        "tests.test_console_settings_hub_v1",
+        "tests.test_console_workspace_layout",
+        "tests.test_d5_code_rollback_postgres",
+        "tests.test_d5_pg_recovery_and_source_v1",
+        "tests.test_d5_two_workers_postgres",
+        "tests.test_d6a_postgres_support",
+        "tests.test_navigation_reads_postgres",
+        "tests.test_review_batch_atomic_postgres",
+        "tests.test_review_workboard_heading_advance_postgres_v1"
+      ]
+    }
+  ],
+  "browser_retry_control": {
+    "third_attempt_success_exit": 0,
+    "three_failed_attempts_exit": 1,
+    "maximum_attempts": 3
+  },
+  "workflow_validation": "actionlint 1.7.7 and YAML parse passed"
+}

@@ -38,11 +38,9 @@ def _refusals(rows):
     return [r for r in rows if r.get('event') == 'publication_refused']
 
 
-def _blocked_base(tmp_path):
-    from src.review_closure_v1 import ReviewClosureConsole
+def _blocked_base(tmp_path, *, production_console):
     console, sid, actor, reviewer, *_ = system(tmp_path,
-        make_console=lambda: ReviewClosureConsole(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime'),
-        production_console=None)  # partial formation: gate MOET refuse
+        production_console=lambda **options: production_console(isolated=True, **options))
     return console, sid, reviewer
 
 
@@ -55,14 +53,12 @@ def _forced_block(console):
     console.consider_publish = blocked
 
 
-def _durable_blocked(tmp_path):
-    authority = MemoryCanonicalStore()
-    console, accounts, receipt = _ready_console(tmp_path, authority)
+def _durable_blocked(tmp_path, *, production_console):
+    console, accounts, receipt = _ready_console(tmp_path, production_console=production_console, isolated=True)
     _forced_block(console)
     return console, receipt['snapshot_id'], accounts['publisher']['account_id']
 
 
-@pytest.mark.parametrize('build', [_blocked_base, _durable_blocked], ids=['file', 'durable'])
 def test_refusal_emits_one_bounded_audit_event(tmp_path, events, build):
     console, sid, actor = build(tmp_path)
     result = console.publish(actor_id=actor, snapshot_id=sid)
@@ -73,7 +69,7 @@ def test_refusal_emits_one_bounded_audit_event(tmp_path, events, build):
     assert actor not in json.dumps(event) and 'test-audit-key' not in json.dumps(events)
     from src.review_ledger import read_events
     assert [e for e in read_events(console._ledger_path) if e['event_type'] == 'publication_refused'] == []
-    [durable] = store.read_records(store.store_path(console))
+    [durable] = store.postgres_store(console).records_for(sid)
     assert durable['actor'] == actor and durable['snapshot_id'] == sid
     assert durable['reason_codes'] == event['reason_codes']
     assert event['reason_codes'] == [c if audit._CODE.fullmatch(c) else 'unrecognized_reason' for c in result['blockers']]
@@ -81,7 +77,6 @@ def test_refusal_emits_one_bounded_audit_event(tmp_path, events, build):
     assert event['revision_sha256'] is None or len(event['revision_sha256']) == 64
 
 
-@pytest.mark.parametrize('build', [_blocked_base, _durable_blocked], ids=['file', 'durable'])
 def test_refusal_verdict_is_identical_with_and_without_audit(tmp_path, events, monkeypatch, build):
     with_audit, sid_a, actor_a = build(tmp_path / 'a')
     verdict_a = with_audit.publish(actor_id=actor_a, snapshot_id=sid_a)
@@ -96,19 +91,18 @@ def test_refusal_verdict_is_identical_with_and_without_audit(tmp_path, events, m
     assert envelope_a.get('publication_eligibility') == envelope_b.get('publication_eligibility')
 
 
-def test_allowed_publication_emits_no_refusal_and_publishes_identically(tmp_path, events, monkeypatch):
-    authority = MemoryCanonicalStore()
-    console, accounts, receipt = _ready_console(tmp_path, authority)
+def test_allowed_publication_emits_no_refusal_and_publishes_identically(tmp_path, events, monkeypatch, *, production_console):
+    console, accounts, receipt = _ready_console(tmp_path, production_console=production_console, isolated=True)
     result = console.publish(actor_id=accounts['publisher']['account_id'], snapshot_id=receipt['snapshot_id'])
     assert result['status'] == 'PASS'
     assert _refusals(events) == []
 
 
-def test_audit_failure_never_changes_the_verdict(tmp_path, events, monkeypatch):
+def test_audit_failure_never_changes_the_verdict(tmp_path, events, monkeypatch, *, production_console):
     def broken(*args, **kwargs):
         raise OSError('private logging failure')
     monkeypatch.setattr(_LOGGER, 'info', broken)
-    console, sid, actor = _blocked_base(tmp_path)
+    console, sid, actor = _blocked_base(tmp_path, production_console=production_console)
     assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
 
 
@@ -123,16 +117,15 @@ def test_hostile_reason_codes_are_bounded(events):
     assert len(_refusals(events)) == 1  # allowed verdicts MOETEN NOOIT a refusal event produce
 
 
-def test_concurrent_refusals_each_emit_one_event_and_identical_verdicts(tmp_path, events):
+def test_concurrent_refusals_each_emit_one_event_and_identical_verdicts(tmp_path, events, *, production_console):
     from concurrent.futures import ThreadPoolExecutor
-    console, sid, actor = _blocked_base(tmp_path)
+    console, sid, actor = _blocked_base(tmp_path, production_console=production_console)
     with ThreadPoolExecutor(4) as pool:
         verdicts = list(pool.map(lambda _: console.publish(actor_id=actor, snapshot_id=sid), range(4)))
     assert all(v == verdicts[0] for v in verdicts) and verdicts[0]['status'] == 'BLOCKED'
     assert len(_refusals(events)) == 4
 
 
-@pytest.mark.parametrize('build', [_blocked_base, _durable_blocked], ids=['file', 'durable'])
 def test_verdict_identical_when_durable_audit_write_raises(tmp_path, events, monkeypatch, build):
     import src.review_ledger as ledger
     reference, sid_r, actor_r = build(tmp_path / 'ref')
@@ -147,16 +140,16 @@ def test_verdict_identical_when_durable_audit_write_raises(tmp_path, events, mon
     def failing_store(*args, **kwargs):
         raise OSError('private audit store failure')
     monkeypatch.setattr(ledger, 'append_event', failing)
-    monkeypatch.setattr(store, 'append_refusal', failing_store)
+    monkeypatch.setattr(store.PostgresRefusalStore, 'append', failing_store)
     console, sid, actor = build(tmp_path / 'broken')
     verdict = console.publish(actor_id=actor, snapshot_id=sid)
     normalise = lambda v, s: json.loads(json.dumps(v).replace(s, 'SID'))
     assert normalise(verdict, sid) == normalise(expected, sid_r)
 
 
-def test_without_hmac_key_actor_is_not_logged(tmp_path, events, monkeypatch):
+def test_without_hmac_key_actor_is_not_logged(tmp_path, events, monkeypatch, *, production_console):
     monkeypatch.delenv('METIS_AUDIT_HMAC_KEY')
-    console, sid, actor = _blocked_base(tmp_path)
+    console, sid, actor = _blocked_base(tmp_path, production_console=production_console)
     console.publish(actor_id=actor, snapshot_id=sid)
     [event] = _refusals(events)
     assert event['actor_hmac'] is None and actor not in json.dumps(event)
@@ -164,7 +157,6 @@ def test_without_hmac_key_actor_is_not_logged(tmp_path, events, monkeypatch):
 
 # --- #629 F1: separate append-only store, outside the review ledger hash chain ---
 
-@pytest.mark.parametrize('build', [_blocked_base, _durable_blocked], ids=['file', 'durable'])
 def test_refusal_never_enters_the_review_ledger_hash_chain(tmp_path, events, build):
     from src.review_ledger import read_events, verify_ledger
     console, sid, actor = build(tmp_path)
@@ -173,18 +165,19 @@ def test_refusal_never_enters_the_review_ledger_hash_chain(tmp_path, events, bui
     after = [(e['event_type'], e['event_hash'], e.get('previous_event_hash')) for e in read_events(console._ledger_path)]
     assert after == before, 'REFUSAL_IN_LEDGER_CHAIN'
     assert verify_ledger(console._ledger_path) == []
-    [record] = store.read_records(store.store_path(console))
+    [record] = store.postgres_store(console).records_for(sid)
     assert record['event_type'] == 'publication_refused' and record['actor'] == actor
 
 
-def test_refusal_store_dedups_per_document_reason_actor_within_window(tmp_path, events):
-    console, sid, actor = _blocked_base(tmp_path)
+def test_refusal_store_dedups_per_document_reason_actor_within_window(tmp_path, events, *, production_console):
+    console, sid, actor = _blocked_base(tmp_path, production_console=production_console)
     for _ in range(3):
         assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
-    assert len(store.read_records(store.store_path(console))) == 1
+    assert len(store.postgres_store(console).records_for(sid)) == 1
     assert len(_refusals(events)) == 3  # logs are not deduplicated
 
 
+@pytest.mark.file_topology
 def test_refusal_store_dedup_window_and_key(tmp_path):
     from datetime import datetime, timezone
     path = tmp_path / store.FILE_NAME
@@ -199,6 +192,7 @@ def test_refusal_store_dedup_window_and_key(tmp_path):
     assert len(rows) == 4 and all(len(r['revision_sha256']) == 64 and 'rev' != r['revision_sha256'] for r in rows)
 
 
+@pytest.mark.file_topology
 def test_refusal_store_rotates_instead_of_refusing_at_capacity(tmp_path, monkeypatch):
     # Metis: rotation/retention, NOOIT a permanent refusal at the cap.
     from datetime import datetime, timezone
@@ -226,11 +220,10 @@ def _failures(rows):
     return [r for r in rows if r.get('event') == 'publication_refusal_audit_failed']
 
 
-@pytest.mark.parametrize('build', [_blocked_base, _durable_blocked], ids=['file', 'durable'])
 def test_store_failure_emits_bounded_audit_failed_diagnostic(tmp_path, events, warnings_, monkeypatch, build):
     def failing_store(*args, **kwargs):
         raise OSError('private /secret/path failure hunter2')
-    monkeypatch.setattr(store, 'append_refusal', failing_store)
+    monkeypatch.setattr(store.PostgresRefusalStore, 'append', failing_store)
     console, sid, actor = build(tmp_path)
     assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
     [failure] = _failures(warnings_)
@@ -241,17 +234,18 @@ def test_store_failure_emits_bounded_audit_failed_diagnostic(tmp_path, events, w
     assert set(failure) <= {'event', 'stage', 'error_class', 'outcome', 'snapshot_id', 'request_id', 'authority'}
 
 
-def test_log_failure_emits_audit_failed_diagnostic(tmp_path, warnings_, monkeypatch):
+def test_log_failure_emits_audit_failed_diagnostic(tmp_path, warnings_, monkeypatch, *, production_console):
     def broken(*args, **kwargs):
         raise OSError('private logging failure')
     monkeypatch.setattr(_LOGGER, 'info', broken)
-    console, sid, actor = _blocked_base(tmp_path)
+    console, sid, actor = _blocked_base(tmp_path, production_console=production_console)
     assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
     assert [f['stage'] for f in _failures(warnings_)] == ['log']
 
 
+@pytest.mark.file_topology
 def test_corrupt_record_emits_audit_failed_diagnostic_and_still_records(tmp_path, events, warnings_):
-    console, sid, actor = _blocked_base(tmp_path)
+    console, sid, actor = _file_blocked_base(tmp_path)
     path = store.store_path(console)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text('{not json\n')
@@ -259,6 +253,7 @@ def test_corrupt_record_emits_audit_failed_diagnostic_and_still_records(tmp_path
     [failure] = _failures(warnings_)
     assert failure['stage'] == 'corrupt_record' and failure['outcome'] == 'skipped'
     assert [r['actor'] for r in store.read_records(path)] == [actor]
+
 
 def test_audit_failed_diagnostic_is_bounded_per_process(warnings_, monkeypatch):
     monkeypatch.setattr(audit, '_FAILURE_COUNT', [0])
@@ -284,6 +279,8 @@ def test_no_silent_except_pass_in_refusal_audit():
     import inspect
     source = inspect.getsource(audit)
     assert 'except Exception:\n        pass' not in source and 'except Exception:\n            pass' not in source
+
+@pytest.mark.file_topology
 def test_dedup_reads_only_the_tail_not_the_full_file(tmp_path, monkeypatch):
     from datetime import datetime, timezone
     path = tmp_path / store.FILE_NAME
@@ -302,6 +299,7 @@ def test_dedup_reads_only_the_tail_not_the_full_file(tmp_path, monkeypatch):
     assert reads and all(0 <= n <= store.TAIL_BYTES for n in reads), reads
 
 
+@pytest.mark.file_topology
 def test_corrupt_record_is_skipped_reported_and_never_blocks_writes(tmp_path):
     from datetime import datetime, timezone
     path = tmp_path / store.FILE_NAME
@@ -319,11 +317,15 @@ def test_file_store_never_goes_live(tmp_path, monkeypatch):
     # Live topology (postgres mode) without a PostgreSQL refusal store: the file store MAG NIET be used.
     monkeypatch.setenv('WEBSITE_SITE_NAME', 'metis-prod')
     monkeypatch.setenv('METIS_WORKFLOW_DOCUMENT_STORE', 'postgres')
-    console, sid, actor = _blocked_base(tmp_path)
+    from types import SimpleNamespace
+    console = SimpleNamespace(_ledger_path=tmp_path/'ledger.jsonl', _envelope=lambda sid: {'version': '1'})
+    sid, actor = 'fixture-snapshot', 'fixture-actor'
     with pytest.raises(store.RefusalStoreUnavailable):
         store.append(console, snapshot_id=sid, object_version='1', actor=actor, reason_codes=['r'], revision=None)
     assert not store.store_path(console).exists()
 
+
+@pytest.mark.file_topology
 def test_file_store_is_visibly_marked_temporary(tmp_path):
     # TIJDELIJK until William's GO on a PostgreSQL table: every record MOET carry the marker.
     path = tmp_path / store.FILE_NAME
@@ -346,17 +348,22 @@ def test_file_store_blocked_by_topology_without_website_site_name(tmp_path, monk
     monkeypatch.delenv('WEBSITE_SITE_NAME', raising=False)
     for name, value in env.items():
         monkeypatch.setenv(name, value)
-    console, sid, actor = _blocked_base(tmp_path)
+    from types import SimpleNamespace
+    console = SimpleNamespace(_ledger_path=tmp_path/'ledger.jsonl', _envelope=lambda sid: {'version': '1'})
+    sid, actor = 'fixture-snapshot', 'fixture-actor'
     with pytest.raises(store.RefusalStoreUnavailable):
         store.append(console, snapshot_id=sid, object_version='1', actor=actor, reason_codes=['r'], revision=None)
     assert not store.store_path(console).exists()
 
 
+@pytest.mark.file_topology
 def test_file_store_allowed_in_single_worker_file_topology(tmp_path, monkeypatch):
     for name in ('WEBSITE_SITE_NAME', 'METIS_WORKFLOW_DOCUMENT_STORE', 'METIS_WORKFLOW_STORE',
                  'CONSOLE_GUNICORN_WORKERS', 'WEB_CONCURRENCY', 'GUNICORN_WORKERS', 'CONSOLE_INSTANCE_COUNT'):
         monkeypatch.delenv(name, raising=False)
-    console, sid, actor = _blocked_base(tmp_path)
+    from types import SimpleNamespace
+    console = SimpleNamespace(_ledger_path=tmp_path/'ledger.jsonl', _envelope=lambda sid: {'version': '1'})
+    sid, actor = 'fixture-snapshot', 'fixture-actor'
     assert store.append(console, snapshot_id=sid, object_version='1', actor=actor, reason_codes=['r'], revision=None) == 'recorded'
 
 
@@ -471,20 +478,21 @@ def test_apply_retention_refuses_non_positive_max_rows():
 
 # --- Sherlock #636 P2: a failing durable write MOET emit publication_refusal_audit_failed (NOOIT silent) ---
 
-def test_durable_store_failure_emits_audit_failed_diagnostic(tmp_path, monkeypatch):
+def test_durable_store_failure_emits_audit_failed_diagnostic(tmp_path, monkeypatch, *, production_console):
     warnings = []
     monkeypatch.setattr(_LOGGER, 'warning', lambda fmt, msg: warnings.append(json.loads(msg)))
 
     def failing(*args, **kwargs):
         raise OSError('disk gone password=hunter2')
     monkeypatch.setattr(store, 'append', failing)
-    console, sid, actor = _blocked_base(tmp_path)
+    console, sid, actor = _blocked_base(tmp_path, production_console=production_console)
     audit._append_durable(console, actor_id=actor, snapshot_id=sid, reason_codes=['r'], revision=None)
     failed = [w for w in warnings if w.get('event') == 'publication_refusal_audit_failed']
     assert [(w['stage'], w['error_class']) for w in failed] == [('durable_store', 'OSError')]
     assert 'hunter2' not in json.dumps(warnings)
 
 
+@pytest.mark.file_topology
 def test_read_records_includes_the_rotated_generation_first(tmp_path):
     # Sherlock #636 P2: after rotation the export/backup reader MOET also read .jsonl.1 (oldest first).
     from datetime import datetime, timezone
@@ -504,7 +512,9 @@ def test_partial_postgres_topology_is_fail_closed_and_reported(tmp_path, monkeyp
     monkeypatch.delenv('WEBSITE_SITE_NAME', raising=False)
     for name, value in env.items():
         monkeypatch.setenv(name, value)
-    console, sid, actor = _blocked_base(tmp_path)
+    from types import SimpleNamespace
+    console = SimpleNamespace(_ledger_path=tmp_path/'ledger.jsonl', _envelope=lambda sid: {'version': '1'})
+    sid, actor = 'fixture-snapshot', 'fixture-actor'
     assert store.postgres_store(console) is None and not store.file_store_allowed()
     audit._append_durable(console, actor_id=actor, snapshot_id=sid, reason_codes=['r'], revision=None)
     assert [(w['stage'], w['error_class']) for w in warnings if w.get('event') == 'publication_refusal_audit_failed'] \
@@ -514,8 +524,9 @@ def test_partial_postgres_topology_is_fail_closed_and_reported(tmp_path, monkeyp
 
 # --- Sherlock #637 P2s ---
 
+@pytest.mark.file_topology
 def test_corrupt_record_diagnostic_keeps_the_error_class(tmp_path, events, warnings_):
-    console, sid, actor = _blocked_base(tmp_path)
+    console, sid, actor = _file_blocked_base(tmp_path)
     path = store.store_path(console)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text('{not json\n')
@@ -551,9 +562,7 @@ def test_diagnostic_cap_is_atomic_under_concurrency(warnings_, monkeypatch):
     assert audit.suppressed_failure_count() == 16 * 20 - 1
 
 
-def test_real_handler_write_failure_is_detected_and_reported_out_of_band(tmp_path, monkeypatch):
-    # A real StreamHandler swallows write errors in handleError; the failure MOET still be reported,
-    # through an independently observable sink (the logger itself is broken).
+def test_real_handler_write_failure_is_detected_and_reported_out_of_band(tmp_path, monkeypatch, *, production_console):
     import io
     import logging
 
@@ -568,7 +577,7 @@ def test_real_handler_write_failure_is_detected_and_reported_out_of_band(tmp_pat
     _LOGGER.handlers, _LOGGER.propagate = [handler], False
     _LOGGER.setLevel(logging.INFO)  # as installed by request_diagnostics_v1
     try:
-        console, sid, actor = _blocked_base(tmp_path)
+        console, sid, actor = _blocked_base(tmp_path, production_console=production_console)
         assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
     finally:
         _LOGGER.handlers, _LOGGER.propagate = saved[0], saved[2]
@@ -576,3 +585,16 @@ def test_real_handler_write_failure_is_detected_and_reported_out_of_band(tmp_pat
     rows = [json.loads(line) for line in fallback.getvalue().splitlines() if line.strip()]
     assert any(r.get('event') == 'publication_refusal_audit_failed' and r.get('stage') == 'log'
                and r.get('outcome') == 'handler_write_failed' for r in rows), rows
+
+
+@pytest.fixture(params=[_blocked_base, _durable_blocked], ids=['partial-formation', 'ready-durable'])
+def build(request, production_console):
+    return lambda root: request.param(root, production_console=production_console)
+
+
+def _file_blocked_base(tmp_path):
+    from src.review_closure_v1 import ReviewClosureConsole
+    console, sid, actor, reviewer, *_ = system(tmp_path,
+        make_console=lambda: ReviewClosureConsole(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime'),
+        production_console=None)  # partial formation: gate MOET refuse
+    return console, sid, reviewer

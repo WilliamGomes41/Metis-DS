@@ -425,8 +425,8 @@ def test_divergent_legacy_mirror_is_blocked_and_diagnosable() -> None:
     assert processing_issue_family("relation_legacy_mirror_conflict") == "semantic_contract"
 
 
-def test_runtime_current_schema_moves_to_v14_without_rewriting_v13(tmp_path: Path) -> None:
-    console = OperationsConsole(
+def test_runtime_current_schema_moves_to_v14_without_rewriting_v13(tmp_path: Path, *, production_console) -> None:
+    console = production_console(processing_binder=lambda console: None,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",

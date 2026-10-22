@@ -319,3 +319,32 @@ vergelijking met de eerste lokale baseline. CI blijft afzonderlijk vereist.
 Portie 15: 296 unieke cases groen (220 + 76), inclusief drie aanvullende pure
 vlagproeven; geen skips. De T12-proef toetst zowel de productie-dispatch als de
 bestaande basisowner op dezelfde PG-console.
+
+Portie 16 zet de aanbevelings-/relatiebevestiging, reserveringsconfiguratie,
+replay, diagnostiek en oudere kernelproeven over. 270 unieke cases zijn groen,
+zonder skips. De hergebruikte diagnostiekproeven gebruiken nu de productieklasse
+in plaats van de oude bestandsadapter. De ongewijzigde twee JSON-historyproeven
+blijven expliciet `file_topology`; hun dubbele objecttuples zijn geen ondersteund
+PG-schema. De blocked-candidate UI-proef meldt de daadwerkelijk aangewezen reviewer
+aan, zodat de productiepoort de juiste werkpagina toont.
+
+Portie 17 vervangt de geheugenautoriteit van publicatiebewijs, refusal-audit,
+Blob-verificatie en de centrale review-seal door PostgreSQL. 101 unieke cases
+zijn groen, inclusief één nieuwe isolatieproef; geen skips. De observatieproef
+vergelijkt alle geëxporteerde recovery-tabellen exact vóór en na het lezen,
+inclusief workflow-, identity-, canonical- en API-accessgegevens. De gekozen
+release-itemslezer wordt bij een registry-outage gericht onderbroken.
+
+Bestandskopie, manifests en refusal-bestandsrotatie blijven uitsluitend als
+`file_topology` bewaard. Gedeelde fixturevoorbereiding voorkomt een tweede
+review-/ingestopzet. De Azure-proeven lezen echte PG-release-/registryrijen
+en gebruiken de Azure-productieklasse; alleen bron-IO is gecontroleerd.
+
+`production_console(isolated=True)` maakt expliciet een extra sjabloonkopie
+voor proeven die twee onafhankelijke situaties vergelijken. De gewone factory
+blijft dezelfde database delen voor herstart/workerproeven. Een echte login,
+dezelfde accountnaam in beide databases en herstart bewijzen de isolatie.
+
+De ontbrekende factorydoorgifte van de replay-reserveringsafnemer is teruggelegd
+in portie 9 (`fe3b288`) en daar groen uitgevoerd; porties 10–16 zijn daarop
+gebaseerd. Hun oorspronkelijke loghashes blijven het historische gerichte bewijs.
