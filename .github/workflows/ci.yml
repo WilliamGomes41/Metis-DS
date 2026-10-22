@@ -38,6 +38,22 @@ jobs:
   characterization-evidence:
     needs: [change-contract, architecture-boundaries]
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: metis_test
+        volumes:
+          - /tmp/metis-test-postgres-socket:/var/run/postgresql
+        options: >-
+          --health-cmd "pg_isready -U postgres -d metis_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      METIS_TEST_POSTGRES_DSN: host=/tmp/metis-test-postgres-socket dbname=metis_test user=postgres
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

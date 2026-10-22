@@ -420,3 +420,17 @@ characterization/overzicht/lane-proeven slagen; dit is geen volledige suiteclaim
 Een AST-controle van gewijzigde helperargumenten vindt op porties 17, 18 en 19
 respectievelijk 111, 223 en 267 aanroepen zonder ontbrekende nieuwe argumenten.
 De volledige suites en CI-tijdmeting blijven afzonderlijk vereist.
+
+### Resterende porties 21 en 22
+
+Portie 20 is al naar haar oorspronkelijke afnemers teruggeplaatst. De
+characterization-migratie uit 21 is met PR #812 in main gekomen, zodat de
+constructorguard alle bestaande afnemers blijft controleren. De resterende
+portie 21 maakt de PostgreSQL 16-service voor de characterization-CI expliciet
+en gebruikt dezelfde lokale socket als de volledige suites. De exacte goldens,
+beide mutatieproeven en alle 123 productieroutes blijven behouden.
+
+Portie 22 vervangt het muterende in-memory batchreview-harnas door de bestaande
+productiecommando’s op PostgreSQL en bewaart de oorspronkelijke 22 scenario’s.
+Dit blijft testonderhoud (Class C, Rewrite risk: none); productiecode, schema,
+publicatievoorwaarden en de pinned baseline met 2×-tijdgrens wijzigen niet.
