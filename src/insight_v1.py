@@ -244,6 +244,16 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
         diagnostic = (attempts[-1].get("diagnostic") or {}) if attempts else {}
         pages = [str(page) for page in diagnostic.get("unverified_pages") or [] if type(page) is int]
         pages_html = f'<p>Pagina’s zonder verwerkbare brontekst: {escape(", ".join(pages))}</p>' if pages else ""
+        if processing_access:
+            from src.docling_contract_v1 import DoclingError, quarantined_pages
+            try:
+                set_aside = quarantined_pages(envelope)
+            except DoclingError:
+                set_aside = []
+            if set_aside:
+                listed = "; ".join(f'pagina {int(row["page"])} ({", ".join(row["reasons"])})' for row in set_aside)
+                pages_html += (f'<p>Niet verwerkte bronpagina’s: {escape(listed)}. Deze pagina’s zijn niet aan '
+                               'het model of aan Review aangeboden; publiceren is geblokkeerd.</p>')
         detail = escape(json.dumps(diagnostic, ensure_ascii=False, indent=2))
         passages = '<p>Passagediagnostiek en passage-exports zijn beschikbaar voor de aangewezen reviewer.</p>'
         passage_exports = ""

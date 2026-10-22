@@ -59,9 +59,24 @@ def top_left_box(box: dict, size: dict, *, intersect_page: bool = False) -> list
         raise DoclingError("docling_geometry_invalid") from error
 
 
+# Item findings confined to the pages the item's provenance names. Any other
+# failure has no attributable page and keeps blocking the whole document.
+PAGE_SCOPED_CODES = frozenset({
+    "docling_multipage_table_mapping_unresolved", "docling_heading_level_invalid",
+    "docling_charspan_invalid", "docling_text_coverage_incomplete", "docling_geometry_invalid",
+})
+PAGE_TEXT_UNVERIFIED = "docling_page_text_unverified"
+SPANS_QUARANTINED_PAGE = "docling_item_spans_quarantined_page"
+
+
 def translate(result: dict, *, document_id: str, source_id: str, source_sha256: str,
-              pages: list[int] | None = None) -> ExtractedFragments:
-    """Validate before building any prepared domain input. No Markdown export."""
+              pages: list[int] | None = None, quarantine_pages: bool = False) -> ExtractedFragments:
+    """Validate before building any prepared domain input. No Markdown export.
+
+    Without ``quarantine_pages`` the first finding blocks the document. With it,
+    every page-scoped finding is collected in one pass and its pages are left
+    out whole and named in ``quarantined_pages``; they are never partly used.
+    """
     from src.integrity_kernel import stable_hash
     from src.pdf_fragment_contract_v1 import fragment_payload, page_bbox_locator
     from src.source_layout_v1 import text_view
@@ -89,140 +104,197 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
     record["coordinate_mapping"] = "docling_2_132_merged_first_page_origin_to_top_left_intersect_page"
     record["selected_pages"] = sorted(selected)
     extraction_id = stable_hash(record)
-    out, bindings, exclusions, stack = [], [], [], []
-    navigation_pages: set[int] = set()
-    unverified_body_pages: set = set()
 
-    def emit(text: str, prov: dict, ref: str, *, heading=None, cell=None, text_field="text", origin_height=None):
-        page = prov["page_no"]
-        if type(page) is not int or str(page) not in page_data:
-            raise DoclingError("docling_page_invalid")
-        geometry = prov["bbox"]
-        if origin_height is not None:
-            # Pinned SDK 2.132.0 ReadingOrderModel._merge_elements serializes
-            # ALL merged bboxes with the first element's page height. Translate
-            # that declared origin; do not guess a new box or alter SDK output.
-            if geometry.get("coord_origin") != "BOTTOMLEFT":
-                raise DoclingError("docling_geometry_invalid")
-            geometry = {**geometry, "t": origin_height - geometry["t"],
-                        "b": origin_height - geometry["b"], "coord_origin": "TOPLEFT"}
-        box = top_left_box(geometry, page_data[str(page)]["size"], intersect_page=True)
-        if page not in selected or not text.strip():
-            return
-        sequence = len(out) + 1
-        row = {"fragment_id": f"{document_id}-dx-{extraction_id[:16]}-f{sequence:06d}",
-               "document_id": document_id, "source_id": source_id, "source_page": page,
-               "bbox": box, "source_locator": page_bbox_locator(page, box),
-               "raw_text": text, "clean_text": text_view(text, [])["text"],
-               "source_text_view": text_view(text, []), "section_path": [x[1] for x in stack],
-               "heading": heading, "sequence": sequence, "parser_version": CONTRACT + "/" + DOCLING_VERSION}
-        row["fragment_hash"] = stable_hash(fragment_payload(row))
-        out.append(row)
-        # Conservatively classify at page level, retaining exact cell observations.
-        observations = result.get("page_text_origins", {}).get(str(page), [])
-        origin = ("ocr_or_mixed" if True in observations else "digital_text_layer"
-                  if observations and all(v is False for v in observations) else "unknown")
-        bindings.append({"fragment_id": row["fragment_id"], "fragment_hash": row["fragment_hash"],
-                         "item_ref": ref, "provenance": deepcopy(prov), "table_cell": cell,
-                         "charspan_text_field": text_field,
-                         "text_origin": origin, "geometry_precision": "item_bbox",
-                         "docling_origin_height": origin_height,
-                         "geometry_mapping": "intersect_original_page"})
-
-    for ref in ordered:
-        item = items[ref]
-        provenance = item.get("prov") or []
-        label = item.get("label")
-        if item.get("content_layer") == "furniture" or label in {"page_header", "page_footer"}:
-            exclusions.append({"item_ref": ref, "reason": "docling_furniture", "provenance": provenance})
-            continue
-        if label == "document_index":
-            # A positively identified table of contents is navigation, not
-            # clinical source. Preserve it; it accounts only for its own single
-            # page and only when it carries text. Blank/scanned pages still fail.
-            cells = (item.get("data") or {}).get("table_cells") or []
-            if len(provenance) == 1 and any(isinstance(c, dict) and isinstance(c.get("text"), str)
-                                            and c["text"].strip() for c in cells):
-                page = provenance[0].get("page_no")
-                if type(page) is not int or str(page) not in page_data:
-                    raise DoclingError("docling_page_invalid")
-                navigation_pages.add(page)
-            exclusions.append({"item_ref": ref, "reason": "docling_document_index_navigation",
-                               "provenance": provenance})
-            continue
-        if label == "table":
-            cells = item["data"]["table_cells"]
-            for index, cell in enumerate(cells):
-                text = cell.get("text", "")
-                if not text.strip():
-                    continue
-                # Docling cells have no independent page number. Never guess on
-                # a table crossing pages; keep the raw structure but block use.
-                if len(provenance) != 1:
-                    raise DoclingError("docling_multipage_table_mapping_unresolved")
-                cp = deepcopy(provenance[0])
-                if cell.get("bbox") is not None:
-                    cp["bbox"] = cell["bbox"]
-                emit(text, cp, ref, cell=index)
-            continue
-        if "text" not in item:
-            exclusions.append({"item_ref": ref, "reason": "non_text_item_preserved_in_document", "provenance": provenance})
-            unverified_body_pages.update(p.get("page_no") for p in provenance if isinstance(p, dict))
-            continue
-        text = item["text"]
-        if not isinstance(text, str) or (text.strip() and not provenance):
-            raise DoclingError("docling_text_provenance_missing")
-        heading = text_view(text, [])["text"] if label in {"section_header", "title"} else None
-        if heading:
-            level = item.get("level", 1)
-            if type(level) is not int or not 1 <= level <= 20:
-                raise DoclingError("docling_heading_level_invalid")
-            stack = [x for x in stack if x[0] < level] + [(level, heading)]
-        text_field = "text"
-        # Official ListItemMarkerProcessor strips the declared marker from text
-        # without changing the full-original provenance span. Retain orig only
-        # when that exact transformation is proven; do not clamp/guess offsets.
-        original = item.get("orig")
-        marker = item.get("marker")
-        if (label == "list_item" and isinstance(original, str) and text
-                and isinstance(marker, str) and marker and len(provenance) == 1
-                and provenance[0].get("charspan") == [0, len(original)]
-                and len(original) > len(text) and original.endswith(text)
-                and original[:-len(text)].strip() == marker):
-            text, text_field = original, "orig"
-        ranges = []
+    def item_pages(provenance) -> set[int] | None:
+        found = set()
         for prov in provenance:
-            start, end = prov["charspan"]
-            if type(start) is not int or type(end) is not int or not 0 <= start < end <= len(text):
-                raise DoclingError("docling_charspan_invalid")
-            ranges.append((start, end))
-            origin_height = None
-            first_page = provenance[0]["page_no"]
-            if prov["page_no"] != first_page:
-                if type(first_page) is not int or str(first_page) not in page_data:
-                    raise DoclingError("docling_page_invalid")
-                origin_height = page_data[str(first_page)]["size"]["height"]
-            emit(text[start:end], prov, ref, heading=heading, text_field=text_field,
-                 origin_height=origin_height)
-        # Docling merged paragraphs may have a separator between page spans.
-        covered = set(i for lo, hi in ranges for i in range(lo, hi))
-        if any(not ch.isspace() and i not in covered for i, ch in enumerate(text)):
-            raise DoclingError("docling_text_coverage_incomplete")
-    if not out:
-        raise DoclingError("docling_no_source_text")
-    # OCR is disabled. A missing page may be blank, scanned, or missed by the
-    # model; none of those possibilities proves complete source extraction.
-    # Navigation accounts only for a page without other unverified body content.
-    navigation_pages -= unverified_body_pages
-    missing = selected - {row["source_page"] for row in out} - navigation_pages
-    if missing:
-        error = DoclingError("docling_page_text_unverified")
-        error.pages = sorted(missing)  # Page numbers only; never source text.
-        raise error
+            page = prov.get("page_no") if isinstance(prov, dict) else None
+            if type(page) is not int or str(page) not in page_data:
+                return None
+            found.add(page)
+        return found
+
+    def walk(quarantined: set[int]):
+        out, bindings, exclusions, stack = [], [], [], []
+        navigation_pages: set[int] = set()
+        unverified_body_pages: set = set()
+        findings: dict[int, set[str]] = {}
+
+        def emit(text: str, prov: dict, ref: str, *, heading=None, cell=None, text_field="text", origin_height=None):
+            page = prov["page_no"]
+            if type(page) is not int or str(page) not in page_data:
+                raise DoclingError("docling_page_invalid")
+            geometry = prov["bbox"]
+            if origin_height is not None:
+                # Pinned SDK 2.132.0 ReadingOrderModel._merge_elements serializes
+                # ALL merged bboxes with the first element's page height. Translate
+                # that declared origin; do not guess a new box or alter SDK output.
+                if geometry.get("coord_origin") != "BOTTOMLEFT":
+                    raise DoclingError("docling_geometry_invalid")
+                geometry = {**geometry, "t": origin_height - geometry["t"],
+                            "b": origin_height - geometry["b"], "coord_origin": "TOPLEFT"}
+            box = top_left_box(geometry, page_data[str(page)]["size"], intersect_page=True)
+            if page not in selected or page in quarantined or not text.strip():
+                return
+            sequence = len(out) + 1
+            row = {"fragment_id": f"{document_id}-dx-{extraction_id[:16]}-f{sequence:06d}",
+                   "document_id": document_id, "source_id": source_id, "source_page": page,
+                   "bbox": box, "source_locator": page_bbox_locator(page, box),
+                   "raw_text": text, "clean_text": text_view(text, [])["text"],
+                   "source_text_view": text_view(text, []), "section_path": [x[1] for x in stack],
+                   "heading": heading, "sequence": sequence, "parser_version": CONTRACT + "/" + DOCLING_VERSION}
+            row["fragment_hash"] = stable_hash(fragment_payload(row))
+            out.append(row)
+            # Conservatively classify at page level, retaining exact cell observations.
+            observations = result.get("page_text_origins", {}).get(str(page), [])
+            origin = ("ocr_or_mixed" if True in observations else "digital_text_layer"
+                      if observations and all(v is False for v in observations) else "unknown")
+            bindings.append({"fragment_id": row["fragment_id"], "fragment_hash": row["fragment_hash"],
+                             "item_ref": ref, "provenance": deepcopy(prov), "table_cell": cell,
+                             "charspan_text_field": text_field,
+                             "text_origin": origin, "geometry_precision": "item_bbox",
+                             "docling_origin_height": origin_height,
+                             "geometry_mapping": "intersect_original_page"})
+
+        def visit(ref: str, item: dict, provenance: list) -> None:
+            nonlocal stack
+            label = item.get("label")
+            if label == "document_index":
+                # A positively identified table of contents is navigation, not
+                # clinical source. Preserve it; it accounts only for its own single
+                # page and only when it carries text. Blank/scanned pages still fail.
+                cells = (item.get("data") or {}).get("table_cells") or []
+                if len(provenance) == 1 and any(isinstance(c, dict) and isinstance(c.get("text"), str)
+                                                and c["text"].strip() for c in cells):
+                    page = provenance[0].get("page_no")
+                    if type(page) is not int or str(page) not in page_data:
+                        raise DoclingError("docling_page_invalid")
+                    navigation_pages.add(page)
+                exclusions.append({"item_ref": ref, "reason": "docling_document_index_navigation",
+                                   "provenance": provenance})
+                return
+            if label == "table":
+                cells = item["data"]["table_cells"]
+                for index, cell in enumerate(cells):
+                    text = cell.get("text", "")
+                    if not text.strip():
+                        continue
+                    # Docling cells have no independent page number. Never guess on
+                    # a table crossing pages; keep the raw structure but block use.
+                    if len(provenance) != 1:
+                        raise DoclingError("docling_multipage_table_mapping_unresolved")
+                    cp = deepcopy(provenance[0])
+                    if cell.get("bbox") is not None:
+                        cp["bbox"] = cell["bbox"]
+                    emit(text, cp, ref, cell=index)
+                return
+            if "text" not in item:
+                exclusions.append({"item_ref": ref, "reason": "non_text_item_preserved_in_document", "provenance": provenance})
+                unverified_body_pages.update(p.get("page_no") for p in provenance if isinstance(p, dict))
+                return
+            text = item["text"]
+            if not isinstance(text, str) or (text.strip() and not provenance):
+                raise DoclingError("docling_text_provenance_missing")
+            heading = text_view(text, [])["text"] if label in {"section_header", "title"} else None
+            if heading:
+                level = item.get("level", 1)
+                if type(level) is not int or not 1 <= level <= 20:
+                    raise DoclingError("docling_heading_level_invalid")
+                stack = [x for x in stack if x[0] < level] + [(level, heading)]
+            text_field = "text"
+            # Official ListItemMarkerProcessor strips the declared marker from text
+            # without changing the full-original provenance span. Retain orig only
+            # when that exact transformation is proven; do not clamp/guess offsets.
+            original = item.get("orig")
+            marker = item.get("marker")
+            if (label == "list_item" and isinstance(original, str) and text
+                    and isinstance(marker, str) and marker and len(provenance) == 1
+                    and provenance[0].get("charspan") == [0, len(original)]
+                    and len(original) > len(text) and original.endswith(text)
+                    and original[:-len(text)].strip() == marker):
+                text, text_field = original, "orig"
+            ranges = []
+            for prov in provenance:
+                start, end = prov["charspan"]
+                if type(start) is not int or type(end) is not int or not 0 <= start < end <= len(text):
+                    raise DoclingError("docling_charspan_invalid")
+                ranges.append((start, end))
+                origin_height = None
+                first_page = provenance[0]["page_no"]
+                if prov["page_no"] != first_page:
+                    if type(first_page) is not int or str(first_page) not in page_data:
+                        raise DoclingError("docling_page_invalid")
+                    origin_height = page_data[str(first_page)]["size"]["height"]
+                emit(text[start:end], prov, ref, heading=heading, text_field=text_field,
+                     origin_height=origin_height)
+            # Docling merged paragraphs may have a separator between page spans.
+            covered = set(i for lo, hi in ranges for i in range(lo, hi))
+            if any(not ch.isspace() and i not in covered for i, ch in enumerate(text)):
+                raise DoclingError("docling_text_coverage_incomplete")
+
+        for ref in ordered:
+            item = items[ref]
+            provenance = item.get("prov") or []
+            if item.get("content_layer") == "furniture" or item.get("label") in {"page_header", "page_footer"}:
+                exclusions.append({"item_ref": ref, "reason": "docling_furniture", "provenance": provenance})
+                continue
+            if not quarantine_pages:
+                visit(ref, item, provenance)
+                continue
+            scope = item_pages(provenance)
+            if scope and scope & quarantined:
+                # Never use part of an item whose other page is set aside.
+                for page in scope - quarantined:
+                    findings.setdefault(page, set()).add(SPANS_QUARANTINED_PAGE)
+            emitted = len(out)
+            try:
+                visit(ref, item, provenance)
+            except DoclingError as error:
+                if error.code not in PAGE_SCOPED_CODES or not scope:
+                    raise
+                del out[emitted:], bindings[emitted:]
+                for page in scope:
+                    findings.setdefault(page, set()).add(error.code)
+        # OCR is disabled. A missing page may be blank, scanned, or missed by the
+        # model; none of those possibilities proves complete source extraction.
+        # Navigation accounts only for a page without other unverified body content.
+        navigation_pages -= unverified_body_pages
+        missing = selected - quarantined - set(findings) - {row["source_page"] for row in out} - navigation_pages
+        for page in missing:
+            findings.setdefault(page, set()).add(PAGE_TEXT_UNVERIFIED)
+        return out, bindings, exclusions, navigation_pages, findings
+
+    quarantined: dict[int, set[str]] = {}
+    while True:
+        out, bindings, exclusions, navigation_pages, findings = walk(set(quarantined))
+        if not out:
+            raise DoclingError("docling_no_source_text")
+        if not quarantine_pages and findings:
+            error = DoclingError(PAGE_TEXT_UNVERIFIED)
+            error.pages = sorted(findings)  # Page numbers only; never source text.
+            raise error
+        findings = {page: codes for page, codes in findings.items() if page in selected}
+        if all(page in quarantined for page in findings):
+            break
+        # Set the new pages aside and walk again, so no fragment, heading or
+        # neighbour depends on a page that is no longer used.
+        for page, codes in findings.items():
+            quarantined.setdefault(page, set()).update(codes)
     record.update(extraction_id=extraction_id, bindings=bindings, exclusions=exclusions,
                   selected_pages=sorted(selected), navigation_pages=sorted(navigation_pages & selected),
                   metrics=deepcopy(result.get("metrics", {})))
+    if quarantine_pages:
+        record["quarantined_pages"] = [{"page": page, "reasons": sorted(codes)}
+                                       for page, codes in sorted(quarantined.items())]
     return ExtractedFragments(out, record)
+
+
+def quarantined_pages(envelope: dict) -> list[dict]:
+    """Pages the accepted extraction set aside; page numbers and codes only."""
+    fragments = stored_fragments(envelope)
+    if fragments is None:
+        return []
+    return deepcopy(fragments.extraction_record.get("quarantined_pages") or [])
 
 
 def stored_fragments(envelope: dict):

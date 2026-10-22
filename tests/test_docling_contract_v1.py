@@ -482,3 +482,139 @@ def test_decision_tree_pdf_route_keeps_unverified_page_numbers_on_the_semantic_b
             source_id="src", title="Boom", family="test", class_="beslisboom")
     assert raised.value.code == "docling_page_text_unverified"
     assert raised.value.unverified_pages == [3]
+
+
+def page(payload, number):
+    payload["document"]["pages"][str(number)] = {"size": {"width": 600, "height": 800}}
+
+
+def text_item(ref, text, *spans):
+    """A body text item; each span is (page, start, end)."""
+    return {"self_ref": ref, "text": text, "label": "text", "content_layer": "body",
+            "prov": [{"page_no": number, "charspan": [start, end],
+                      "bbox": {"l": 10, "t": 780, "r": 200, "b": 760, "coord_origin": "BOTTOMLEFT"}}
+                     for number, start, end in spans]}
+
+
+def quarantined(payload):
+    return translate(payload, document_id="doc", source_id="src", source_sha256="a" * 64,
+                     quarantine_pages=True)
+
+
+def test_quarantine_collects_every_page_finding_in_one_pass_and_never_uses_part_of_a_page():
+    # Conceptrichtlijn Smetten: one unverifiable page blocked all 46, and each
+    # repair only exposed the next. All findings are now named in one pass.
+    payload = result()
+    for number in range(2, 6):
+        page(payload, number)
+    prov = deepcopy(payload["document"]["texts"][0]["prov"][0])
+    table_prov = [dict(deepcopy(prov), page_no=3), dict(deepcopy(prov), page_no=4)]
+    payload["document"]["tables"] = [{"self_ref": "#/tables/0", "label": "table", "prov": table_prov,
+         "data": {"num_rows": 1, "num_cols": 1, "table_cells": [{"text": "cel", "row_span": 1,
+                  "col_span": 1, "start_row_offset_idx": 0, "start_col_offset_idx": 0}]}}]
+    payload["document"]["texts"] += [text_item("#/texts/1", "goede tekst", (4, 0, 11)),
+                                     text_item("#/texts/2", "kapotte tekst", (5, 0, 99))]
+    payload["reading_order"] += ["#/tables/0", "#/texts/1", "#/texts/2"]
+    with pytest.raises(DoclingError, match="multipage_table_mapping_unresolved"):
+        rows(payload)
+    fragments = quarantined(payload)
+    assert {f["source_page"] for f in fragments} == {1}
+    assert [f["sequence"] for f in fragments] == [1]
+    record = fragments.extraction_record
+    assert record["quarantined_pages"] == [
+        {"page": 2, "reasons": ["docling_page_text_unverified"]},
+        {"page": 3, "reasons": ["docling_multipage_table_mapping_unresolved"]},
+        {"page": 4, "reasons": ["docling_multipage_table_mapping_unresolved"]},
+        {"page": 5, "reasons": ["docling_charspan_invalid"]},
+    ]
+    assert [b["fragment_id"] for b in record["bindings"]] == [f["fragment_id"] for f in fragments]
+    # The record carries page numbers and codes only, never source text.
+    assert "kapotte" not in json.dumps(record["quarantined_pages"])
+
+
+def test_quarantine_sets_aside_every_page_of_an_item_that_reaches_a_set_aside_page():
+    payload = result()
+    for number in (2, 3):
+        page(payload, number)
+    payload["document"]["texts"].append(text_item("#/texts/1", "eerste tweede", (2, 0, 6), (3, 7, 13)))
+    payload["document"]["pictures"] = [{"self_ref": "#/pictures/0", "label": "picture", "content_layer": "body",
+                                        "prov": [dict(deepcopy(payload["document"]["texts"][0]["prov"][0]), page_no=3)]}]
+    payload["reading_order"] += ["#/texts/1", "#/pictures/0"]
+    # Page 3 also holds a picture without text, but the merged paragraph gives
+    # it text; only when page 2 is set aside may page 3 not keep half of it.
+    assert "quarantined_pages" not in rows(payload).extraction_record
+    assert quarantined(payload).extraction_record["quarantined_pages"] == []
+    payload["document"]["texts"][1]["prov"][0]["charspan"] = [0, 99]
+    fragments = quarantined(payload)
+    assert {f["source_page"] for f in fragments} == {1}
+    assert fragments.extraction_record["quarantined_pages"] == [
+        {"page": 2, "reasons": ["docling_charspan_invalid"]},
+        {"page": 3, "reasons": ["docling_charspan_invalid"]},
+    ]
+
+
+@pytest.mark.parametrize("mutation, code", [
+    (lambda p: p["document"]["texts"][0].update(prov=[]), "text_provenance_missing"),
+    (lambda p: p["document"]["texts"][0]["prov"][0].update(page_no=9), "page_invalid"),
+    (lambda p: p.update(reading_order=[]), "inventory_incomplete"),
+])
+def test_quarantine_keeps_document_level_findings_fatal(mutation, code):
+    payload = result()
+    page(payload, 2)
+    payload["document"]["texts"].append(text_item("#/texts/1", "tweede", (2, 0, 6)))
+    payload["reading_order"].append("#/texts/1")
+    mutation(payload)
+    with pytest.raises(DoclingError, match=code):
+        quarantined(payload)
+
+
+def test_quarantine_of_every_page_is_no_source_text():
+    payload = result()
+    payload["document"]["texts"][0]["prov"][0]["charspan"] = [0, 99]
+    with pytest.raises(DoclingError, match="no_source_text"):
+        quarantined(payload)
+
+
+def test_quarantined_page_is_processed_without_it_and_blocks_publication(tmp_path, monkeypatch, *, production_app, production_console):
+    import hashlib
+    import fitz
+    from fastapi.testclient import TestClient
+    import src.docling_pdf_v1 as adapter
+    from src.docling_contract_v1 import quarantined_pages
+    payload = result()
+    page(payload, 2)
+    with fitz.open() as document:
+        document.new_page().insert_text((72, 72), "Brontekst.")
+        document.new_page()
+        data = document.tobytes()
+    payload["source_sha256"] = hashlib.sha256(data).hexdigest()
+    def controlled_extract(path, *, document_id, source_id, quarantine_pages=False, **kwargs):
+        return translate(payload, document_id=document_id, source_id=source_id,
+                         source_sha256=hashlib.sha256(Path(path).read_bytes()).hexdigest(),
+                         quarantine_pages=quarantine_pages)
+    monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
+    monkeypatch.setattr(adapter, "extract", controlled_extract)
+    def create():
+        return production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    console = create()
+    author = console.create_account(username="author", password="test-secret-long", roles=("researcher",))
+    reviewer = console.create_account(username="reviewer", password="test-secret-long", roles=("reviewer",))
+    receipt = console.ingest(actor_id=author["account_id"], filename="source.pdf", data=data,
+                             content_type="application/pdf", ingest_kind="new", title="Bron", version="1.0",
+                             date="2026-10-04", live_url="", class_="richtlijn", family="test",
+                             named_reviewers=[reviewer["account_id"]], command_id="quarantined-page")
+    sid = receipt["snapshot_id"]
+    restarted = create()
+    assert restarted.processing_status(sid)["state"] == "succeeded"
+    assert restarted.snapshot_objects(sid)
+    envelope = restarted._envelope(sid)
+    assert quarantined_pages(envelope) == [{"page": 2, "reasons": ["docling_page_text_unverified"]}]
+    assert {f["source_page"] for f in stored_fragments(envelope)} == {1}
+    readiness = restarted.technical_publication_readiness(snapshot_id=sid)
+    assert "source_pages_quarantined" in readiness["blockers"]
+    assert readiness["publish_allowed"] is False
+    with TestClient(production_app(restarted), base_url="https://testserver") as client:
+        assert client.post("/login", data={"username": "reviewer", "password": "test-secret-long"},
+                           follow_redirects=False).status_code == 303
+        page_html = client.get("/inzicht/document", params={"document": sid}).text
+        assert "Niet verwerkte bronpagina’s: pagina 2 (docling_page_text_unverified)" in page_html

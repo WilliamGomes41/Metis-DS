@@ -2421,7 +2421,8 @@ class OperationsConsole:
             "g2": "BLOCKED",
         }
 
-    def _extract(self, kind: str, path: Path, *, document_id: str, source_id: str, deadline=None) -> list[dict[str, Any]]:
+    def _extract(self, kind: str, path: Path, *, document_id: str, source_id: str, deadline=None,
+                 quarantine_pages: bool = False) -> list[dict[str, Any]]:
         if kind == "html":
             return extract_html(path, document_id=document_id, source_id=source_id)
         if kind == "boom":
@@ -2429,7 +2430,9 @@ class OperationsConsole:
         from src.docling_pdf_v1 import enabled, extract as extract_docling
         from src.docling_contract_v1 import DoclingError
         try:
-            return (extract_docling(path, document_id=document_id, source_id=source_id, deadline=deadline)
+            # Prose callers set unverifiable pages aside; decision trees stay whole.
+            return (extract_docling(path, document_id=document_id, source_id=source_id, deadline=deadline,
+                                    quarantine_pages=quarantine_pages)
                     if enabled() else extract_pdf(path, document_id=document_id, source_id=source_id))
         except DoclingError as exc:
             raise docling_console_error(exc) from exc
@@ -2507,7 +2510,8 @@ class OperationsConsole:
                 from src.docling_pdf_v1 import enabled, release_conversion_capacity
                 extraction_args = {"deadline": context.get("attempt_deadline")} if kind == "pdf" and enabled() else {}
                 fragments = self._extract(kind, path, document_id=command["document_id"],
-                    source_id=command["source_id"], **extraction_args)
+                    source_id=command["source_id"], quarantine_pages=command["class_"] != "beslisboom",
+                    **extraction_args)
                 release_conversion_capacity()
             checkpoint(fragments)
             context["retained_fragments"] = fragments
@@ -2547,7 +2551,8 @@ class OperationsConsole:
         from src.docling_pdf_v1 import enabled
         kwargs = {"deadline": (formation_context or {}).get("attempt_deadline")} if kind == "pdf" and enabled() else {}
         fragments = (retained_fragments if retained_fragments is not None else
-                     self._extract(kind, path, document_id=document_id, source_id=source_id, **kwargs))
+                     self._extract(kind, path, document_id=document_id, source_id=source_id,
+                                   quarantine_pages=True, **kwargs))
         spec = _spec_from_fragments(
             document_id=document_id,
             title=title,
@@ -4249,6 +4254,13 @@ class OperationsConsole:
         from src.source_context_review_v1 import context_issues
         if context_issues(objects):
             blockers.append("source_context_review_incomplete")
+        from src.docling_contract_v1 import DoclingError, quarantined_pages
+        try:
+            # A page set aside at extraction was never offered to review.
+            if quarantined_pages(envelope):
+                blockers.append("source_pages_quarantined")
+        except DoclingError as exc:
+            blockers.append(exc.code)
         if not independence:
             blockers.append("second_named_reviewer_required")
         if not bindings:

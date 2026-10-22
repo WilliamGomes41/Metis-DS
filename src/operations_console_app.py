@@ -227,6 +227,7 @@ BLOCKER_LABELS = {
     "g2_source_verification_failed": "Metis kan het opgeslagen bronbestand niet betrouwbaar controleren. Publiceren is geblokkeerd. Meld dit bij de beheerder.",
     "prepublication_schema_invalid": "Een goedgekeurde passage mist gegevens die nodig zijn voor publicatie. Laat de beheerder controleren welke passage moet worden hersteld.",
     "prepublication_projection_failed": "Metis kon de publicatie niet voorbereiden. Controleer de publicatiestatus en meld dit bij de beheerder voordat je opnieuw probeert.",
+    "source_pages_quarantined": "Een of meer bronpagina’s konden bij het inlezen niet worden gecontroleerd en zijn niet verwerkt. De documentdiagnose noemt de pagina’s. Publiceren is geblokkeerd.",
 }
 ERROR_COPY = {
     "docling_no_source_text": "Er is geen bruikbare brontekst vastgelegd. De verwerking is geblokkeerd. Controleer het bronbestand; lege en gescande pagina’s worden in deze route nog niet automatisch onderscheiden.",

@@ -1143,6 +1143,7 @@ def bind_pre_review_semantic_processing(
             path,
             document_id=document_id,
             source_id=source_id,
+            quarantine_pages=True,
             **extraction_kwargs,
         )
         from src.docling_pdf_v1 import release_conversion_capacity
