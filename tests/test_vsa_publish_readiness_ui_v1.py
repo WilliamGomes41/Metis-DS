@@ -7,6 +7,7 @@
 # release-control-evidence: concurrent stale
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 from pathlib import Path
 from typing import Any
@@ -52,7 +53,7 @@ class MemorySourceStore:
 
 def _console_with_document(tmp_path: Path, *, production_console) -> tuple[DurablePublicationConsole, dict[str, dict[str, Any]], dict[str, Any], MemorySourceStore]:
     source = MemorySourceStore()
-    console = production_console(processing_binder=lambda console: None,
+    console = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime",
@@ -75,7 +76,6 @@ def _console_with_document(tmp_path: Path, *, production_console) -> tuple[Durab
             roles=("publisher",),
         ),
     }
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
     receipt = console.ingest(
         actor_id=accounts["researcher"]["account_id"],

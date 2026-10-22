@@ -449,22 +449,6 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
     assert attempt["diagnostic"]["unverified_pages"] == list(range(1, 1001))
 
 
-def test_decision_tree_pdf_route_keeps_unverified_page_numbers(tmp_path, monkeypatch, *, production_console):
-    import src.decision_graph_v1 as decision_graph
-    from src.operations_console_v1 import OperationsConsole, ConsoleError
-    def unverified(*args, **kwargs):
-        error = DoclingError("docling_page_text_unverified")
-        error.pages = [3]
-        raise error
-    monkeypatch.setattr(decision_graph, "pdf_fragments", unverified)
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
-    with pytest.raises(ConsoleError) as raised:
-        console._deterministic_fragments_and_spec("pdf", tmp_path / "boom.pdf", data=b"%PDF", document_id="doc",
-            source_id="src", title="Boom", family="test", class_="beslisboom")
-    assert raised.value.code == "docling_page_text_unverified"
-    assert raised.value.unverified_pages == [3]
-
-
 def test_decision_tree_pdf_route_keeps_unverified_page_numbers_on_the_semantic_binding(tmp_path, monkeypatch, *, production_console):
     import src.decision_graph_v1 as decision_graph
     from src.operations_console_v1 import OperationsConsole, ConsoleError
@@ -723,14 +707,13 @@ def test_unresolved_page_blocks_formation_until_accounted_then_is_left_out(tmp_p
         assert "Verantwoord; start de verwerking opnieuw." in client.get("/inzicht/document", params={"document": sid}).text
     with pytest.raises(ConsoleError, match="already_recorded"):
         restarted.account_source_page(actor_id=reviewer["account_id"], **command)
-    # After the accounting, extraction passes and formation runs. This fixture's
-    # single fixed sentence forms no admissible candidate on the deterministic
-    # retry route, which is formation's own verdict, not extraction's.
-    with pytest.raises(ConsoleError, match="pre_review_no_reviewable_candidates"):
+    # After the accounting, extraction passes and is checkpointed. This console
+    # has no formation strategy, so formation then fails closed on its own terms.
+    with pytest.raises(ConsoleError, match="source_processing_strategy_unconfigured"):
         restarted.retry_pre_review(actor_id=author["account_id"], snapshot_id=sid, command_id="after-accounting")
     assert calls == [True, True]
     retried = create()._envelope(sid)["processing_attempts"][-1]
-    assert retried["error_code"] == "pre_review_no_reviewable_candidates"
+    assert retried["error_code"] == "source_processing_strategy_unconfigured"
     assert "extraction_checkpoint" in [row["phase"] for row in retried["diagnostic"]["checkpoints"]]
     assert "page_findings" not in retried["diagnostic"]
     # The retained extraction that formation used leaves page 2 out on the recorded accounting.

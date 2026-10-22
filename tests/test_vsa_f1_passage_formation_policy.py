@@ -5,18 +5,16 @@ from __future__ import annotations
 
 import pytest
 
-from src.context_aware_split_v1 import split_context_aware_units
+from src.context_aware_split_v1 import heading_structure_units
 from src.passage_formation_policy_v1 import (
-    DETERMINISTIC_MODE,
-    REASON_AUTHORITATIVE_TREE,
-    REASON_EXPLICIT_ROLLBACK,
     REASON_SEMANTIC_FREE_TEXT,
     SEMANTIC_MODE,
-    STRATEGY_DETERMINISTIC,
     STRATEGY_SEMANTIC,
     PassageFormationPolicyError,
     resolve_passage_formation_strategy,
 )
+from src.source_bound_fields_v2 import MODE as SEMANTIC_V2_MODE
+from src.source_bound_fields_v3 import MODE as SEMANTIC_V3_MODE
 from src.semantic_transform_generic_v1 import transform
 from src.source_occurrence_authority_v1 import (
     REASON_AUTHORITATIVE_SECTION,
@@ -67,39 +65,17 @@ def _unit(
     }
 
 
-def test_policy_keeps_authoritative_tree_deterministic_even_in_semantic_mode() -> None:
-    decision = resolve_passage_formation_strategy(
-        content_kind="boom",
-        deployment_mode=SEMANTIC_MODE,
-    )
-    assert decision.strategy == STRATEGY_DETERMINISTIC
-    assert decision.reason == REASON_AUTHORITATIVE_TREE
-
-
-def test_policy_routes_unstructured_prose_to_semantic_when_enabled() -> None:
-    decision = resolve_passage_formation_strategy(
-        content_kind="html",
-        deployment_mode=SEMANTIC_MODE,
-    )
+@pytest.mark.parametrize("mode", [SEMANTIC_MODE, SEMANTIC_V2_MODE, SEMANTIC_V3_MODE])
+def test_policy_has_only_the_semantic_strategy(mode) -> None:
+    decision = resolve_passage_formation_strategy(deployment_mode=mode)
     assert decision.strategy == STRATEGY_SEMANTIC
     assert decision.reason == REASON_SEMANTIC_FREE_TEXT
 
 
-def test_policy_keeps_explicit_deterministic_rollback() -> None:
-    decision = resolve_passage_formation_strategy(
-        content_kind="pdf",
-        deployment_mode=DETERMINISTIC_MODE,
-    )
-    assert decision.strategy == STRATEGY_DETERMINISTIC
-    assert decision.reason == REASON_EXPLICIT_ROLLBACK
-
-
-def test_policy_rejects_unknown_mode_instead_of_guessing() -> None:
+@pytest.mark.parametrize("mode", ["deterministic-v1", "automatic-fallback", ""])
+def test_policy_rejects_retired_or_unknown_mode_instead_of_mapping_it(mode) -> None:
     with pytest.raises(PassageFormationPolicyError, match="passage_formation_mode_invalid"):
-        resolve_passage_formation_strategy(
-            content_kind="html",
-            deployment_mode="automatic-fallback",
-        )
+        resolve_passage_formation_strategy(deployment_mode=mode)
 
 
 def test_summary_first_primary_later_prefers_primary_and_keeps_alternate() -> None:
@@ -169,31 +145,28 @@ def test_exact_primary_duplicates_collapse_without_fuzzy_matching() -> None:
     assert rows[1]["object_id"] == "doc-c"
 
 
-def test_deterministic_splitter_routes_exact_duplicates_through_source_authority() -> None:
-    summary = _fragment(
-        "summary-fragment",
-        ["Richtlijn", "Samenvatting", "Aanbevelingen"],
-        ordinal=1,
-    )
-    primary = _fragment(
-        "primary-fragment",
-        ["Richtlijn", "2 Aanbevelingen"],
-        ordinal=2,
-    )
+def test_heading_structure_routes_exact_duplicates_through_source_authority() -> None:
+    summary = dict(_fragment("summary-fragment", ["Richtlijn", "Samenvatting", "Aanbevelingen"],
+                             text="Aanbevelingen", ordinal=1), heading="Aanbevelingen")
+    primary = dict(_fragment("primary-fragment", ["Richtlijn", "2 Aanbevelingen"],
+                             text="Aanbevelingen", ordinal=2), heading="Aanbevelingen")
 
-    rows = split_context_aware_units(
-        [summary, primary],
-        document_id="doc-authority",
-    )
+    rows = heading_structure_units([summary, primary], document_id="doc-authority")
 
     assert len(rows) == 1
     row = rows[0]
     assert row["object_id"] == "doc-authority-primary-fragment"
+    assert row["object_type"] == "heading"
     assert row["section_path"] == ["Richtlijn", "2 Aanbevelingen"]
     assert row["source_fragment_ids"] == ["primary-fragment"]
     authority = row["metadata"]["source_occurrence_authority"]
     assert authority["principal_section_role"] == "primary"
     assert authority["alternate_occurrences"][0]["section_role"] == "summary"
+
+
+def test_heading_structure_never_forms_prose() -> None:
+    prose = _fragment("prose-fragment", ["Richtlijn", "2 Aanbevelingen"], ordinal=3)
+    assert heading_structure_units([prose], document_id="doc-prose") == []
 
 
 def test_transform_persists_only_closed_f1_system_evidence() -> None:

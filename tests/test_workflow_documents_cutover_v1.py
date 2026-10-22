@@ -7,6 +7,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import hashlib
 import json
@@ -39,7 +40,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def _seed_documents(production_console, *, paragraphs=1, documents=2):
     from types import SimpleNamespace
     from tests.test_live_v1_working_v2_v1 import MemorySourceStore
-    console = production_console(processing_binder=lambda console:None, immutable_source_store=MemorySourceStore())
+    console = production_console(processing_binder=bind_fixture_selections, immutable_source_store=MemorySourceStore())
     author = console.create_account(username='author',password='fixture-password',roles=['researcher'])
     reviewer = console.create_account(username='reviewer',password='fixture-password',roles=['reviewer'])
     snapshots = []

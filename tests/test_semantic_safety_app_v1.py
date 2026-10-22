@@ -6,6 +6,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
 import time
@@ -39,7 +40,7 @@ def _system(tmp_path, *, commit: str | None=DEPLOYED, post_json=None, roles=('re
         patch.setattr(console_asgi, 'install_semantic_safety_routes',
                       lambda app, console: install_semantic_safety_routes(
                           app, console, post_json=post_json, deployed_commit_path=marker))
-        console = production_console(processing_binder=lambda console: None, root=tmp_path)
+        console = production_console(processing_binder=bind_fixture_selections, root=tmp_path)
     if not any(a['username'] == 'anne' for a in console.list_accounts()):
         console.create_account(username="anne", password="anne-secret", roles=roles, display_name="Anne")
     app = production_app(console)

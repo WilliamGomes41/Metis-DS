@@ -7,6 +7,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from threading import Thread
 
 import pytest
@@ -25,9 +26,8 @@ def _durable(console):
 
 def _ready(production_console, azure=False):
     from tests.test_durable_publication_console_v1 import MemorySourceStore
-    from tests.semantic_fixture_support import bind_fixture_selections
     console = production_console(azure=azure, immutable_source_store=MemorySourceStore(),
-        processing_binder=lambda console: None, environment={'CONSOLE_PUBLIC_ORIGIN':'https://testserver'})
+        processing_binder=bind_fixture_selections, environment={'CONSOLE_PUBLIC_ORIGIN':'https://testserver'})
     author = console.create_account(username='author', password='fixture-password', roles=['researcher'])
     reviewer = console.create_account(username='reviewer', password='fixture-password', roles=['reviewer'])
     bind_fixture_selections(console)
@@ -103,7 +103,7 @@ def test_late_support_audit_failure_rolls_back_all_pg_state(production_console, 
 
 def test_command_buffer_visibility_is_nested_context_local_and_copy_safe(production_console):
     from src.review_ledger import read_command_events
-    console = production_console(processing_binder=lambda console: None)
+    console = production_console(processing_binder=bind_fixture_selections)
     path = console._ledger_path
     def event(name):
         return append_event(path, event_type=name, object_id='fixture', object_version='1', actor='fixture', details={})

@@ -7,6 +7,7 @@ PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here. publish() stays
 G2-BLOCKED.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
 from pathlib import Path
@@ -52,7 +53,7 @@ FALSE_RECOMMENDATION = "Urine-incontinentie komt bij ouderen vaak voor in Nederl
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -91,7 +92,6 @@ def _ingest_richtlijn(console: OperationsConsole, accounts: dict, **overrides) -
         "named_reviewers": [accounts["reviewer"]["account_id"]],
     }
     kwargs.update(overrides)
-    from tests.semantic_fixture_support import bind_fixture_selections
     selections = [
         (ADVISEERT, "recommendation"),
         (REC_PLUS_EXC, "recommendation"),

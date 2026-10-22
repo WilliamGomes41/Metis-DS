@@ -243,18 +243,3 @@ def test_e2e_llm_ingest_extracts_once_when_admission_open(tmp_path, monkeypatch,
     sid, _, _ = ingest(console)
     assert (extracted['n'], provider['n']) == (1, 1)
     assert console._envelope(sid)['processing_attempts'][-1]['state'] == 'succeeded'
-
-
-def test_e2e_non_llm_ingest_and_deterministic_reextract_run_when_admission_closed(tmp_path, monkeypatch, *, production_console):
-    console = _console(tmp_path, production_console=production_console)  # no semantic binding: deterministic, no attempt reserved
-    extracted = _count_extract(console)
-    monkeypatch.setenv(ENV, 'closed')
-    sid, actor, _ = ingest(console)
-    assert extracted['n'] == 1
-    assert console._envelope(sid).get('processing_attempts', []) == []
-    try:
-        console.reextract_unpublished(actor_id=actor, snapshot_id=sid)
-    except ConsoleError as error:
-        assert str(error) != 'processing_admission_closed'
-    assert extracted['n'] == 2
-    assert console._envelope(sid).get('processing_attempts', []) == []

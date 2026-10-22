@@ -12,6 +12,7 @@ G2-BLOCKED. No wave 6. No store/session change.
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 from tests.review_authority_fixture_support import materialised_row, source_fragments
 
 import ast
@@ -266,7 +267,7 @@ def test_heading_chooser_omits_radio_for_self_and_structurally_invalid_parent() 
 
 
 def test_unpublished_delete_control_stays_tree_only(tmp_path: Path, *, production_console) -> None:
-    console = production_console(processing_binder=lambda console: None,
+    console = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -319,7 +320,7 @@ def test_unpublished_delete_control_stays_tree_only(tmp_path: Path, *, productio
 
 
 def test_blocked_candidates_stay_out_of_ordinary_review_lane(tmp_path: Path, *, production_app, production_console) -> None:
-    console = production_console(processing_binder=lambda console: None,
+    console = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -337,7 +338,6 @@ def test_blocked_candidates_stay_out_of_ordinary_review_lane(tmp_path: Path, *, 
         display_name="Bert Reviewer",
     )
     fixture = ROOT / "data/fixtures/v230_phase1_admission_regression.html"
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console, [(ADVISEERT, "recommendation"), (LONE_EXCEPTION, "exception")])
     receipt = console.ingest(
         actor_id=researcher["account_id"],

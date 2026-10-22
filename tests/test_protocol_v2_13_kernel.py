@@ -1,9 +1,10 @@
 """Acceptance tests for Protocol v2.13 kernel implementation.
 
-Atomic split, closed relations, type confirmation, high-risk four-eyes,
+Closed relations, type confirmation, high-risk four-eyes,
 open-original, G2-blocked publish, Documentenhiërarchie.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 from pathlib import Path
 
@@ -11,12 +12,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.retrieval.answerability_gate_v1 import evaluate_answerability
-from src.atomic_split_v1 import (
-    fusion_is_forbidden,
-    is_single_grammatical_claim,
-    split_meaning_units,
-    token_budget_must_not_define_identity,
-)
 from src.four_eyes_v1 import (
     four_eyes_satisfied,
     is_forbidden_reviewer,
@@ -48,7 +43,7 @@ SCHEMA = ROOT / "schemas/knowledge_object.schema.v1.2.json"
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -204,64 +199,6 @@ def _product_client(tmp_path: Path, records_path: Path):
     return TestClient(app), {"Authorization": f"Bearer {key}"}
 
 
-def test_split_at_meaning_boundaries_not_token_budget() -> None:
-    fused = (
-        "Bij een cliënt van 70 jaar of ouder. "
-        "Verwijs naar de huisarts voor aanvullend onderzoek."
-    )
-    units = split_meaning_units(fused)
-    assert len(units) == 2
-    assert fusion_is_forbidden(fused) is True
-    assert is_single_grammatical_claim(fused) is False
-
-    one_claim = "Verwijs bij een cliënt van 70 jaar of ouder naar de huisarts."
-    assert is_single_grammatical_claim(one_claim) is True
-    assert fusion_is_forbidden(one_claim) is False
-    assert split_meaning_units(one_claim) == [one_claim]
-
-
-def test_fusion_of_condition_exception_into_recommendation_rejected_except_one_claim() -> None:
-    fused_exception = (
-        "Verwijs de cliënt naar de huisarts. "
-        "Tenzij samen met de cliënt hiervan wordt afgezien."
-    )
-    assert fusion_is_forbidden(fused_exception) is True
-    assert len(split_meaning_units(fused_exception)) == 2
-
-    grammatical = "Verwijs de cliënt niet bij contra-indicatie naar de huisarts."
-    assert fusion_is_forbidden(grammatical) is False
-    assert split_meaning_units(grammatical) == [grammatical]
-
-
-def test_token_budget_does_not_define_object_identity() -> None:
-    claims = [f"Bespreek onderwerp {i} met de zorgvrager." for i in range(40)]
-    blob = " ".join(claims)
-    units = token_budget_must_not_define_identity(blob)
-    assert len(units) == 40
-    assert all(unit.startswith("Bespreek onderwerp") for unit in units)
-    # A 300–700 token window would merge these. Meaning units must not.
-    assert max(len(unit.split()) for unit in units) < 20
-
-
-def test_ingest_splits_fused_html_into_separate_objects(tmp_path: Path, *, production_console) -> None:
-    html = """<!doctype html><html lang="nl"><body>
-<h1>Voorbeeldrichtlijn</h1>
-<p>Bij een cliënt van 70 jaar of ouder. Verwijs naar de huisarts.</p>
-</body></html>"""
-    console = _console(tmp_path, production_console=production_console)
-    accounts = _accounts(console)
-    receipt = _ingest_html(console, accounts, data=html.encode("utf-8"), filename="fused.html")
-    objects = [
-        obj
-        for obj in console.snapshot_objects(receipt["snapshot_id"])
-        if obj["object_type"] != "document"
-    ]
-    texts = [(obj.get("content") or {}).get("clean_text") or "" for obj in objects]
-    body = [text for text in texts if "Verwijs" in text or "70 jaar" in text]
-    assert len(body) >= 2
-    assert not any("70 jaar" in text and "Verwijs" in text for text in body)
-
-
 def test_unclassified_unconfirmed_not_supported_and_not_published_type() -> None:
     unclassified = _record(
         object_id="u1",
@@ -341,7 +278,6 @@ def test_unconfirmed_relations_do_not_bind() -> None:
 def test_changed_confirmed_relations_invalidate_publish_authorization(tmp_path: Path, *, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console, [("Verwijs naar de huisarts.", "recommendation")])
     html = """<!doctype html><html lang="nl"><body>
 <h1>Voorbeeldrichtlijn</h1>
@@ -458,7 +394,6 @@ def test_published_recommendation_served_with_applies_if_except_if(tmp_path: Pat
 def test_four_eyes_required_for_exception_and_risk_fields_uploader_insufficient(tmp_path: Path, *, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
     html = """<!doctype html><html lang="nl"><body>
 <h1>Voorbeeldrichtlijn</h1>

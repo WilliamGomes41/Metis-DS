@@ -1,13 +1,15 @@
 """The single formation route for decision trees (Protocol §5.4, strategy C).
 
-source extraction -> source-bound proposal -> deterministic construction
+source extraction -> source-bound model proposal -> deterministic construction
 (``materialise_knowledge_candidates`` is the only candidate creator) ->
 existing transform, admission, review and publication.
 
-PDF trees get their proposal from the configured model; JSON exports get a
-deterministic proposal from their explicit records. Both pass through the same
-contract and constructor. A failing proposer fails the attempt; there is no
-other route to fall back to.
+PDF trees and structured exports both get their proposal from the configured
+model and pass through the same contract and constructor. For an export the
+explicit nodes, branches, answer labels and result bundles stay authoritative
+source evidence: a proposal that does not reproduce every one of them exactly,
+or that adds a route, is rejected (``verify_export_preserved``). A failing
+proposer fails the attempt; there is no other route to fall back to.
 """
 from __future__ import annotations
 
@@ -29,7 +31,6 @@ from src.integrity_kernel import sha256_bytes, stamp_canonical_hashes
 POLICY_VERSION = "decision-tree-formation-policy-v1.0.0"
 SPEC_KEY = "_decision_tree_formation"
 ENVELOPE_KEY = "decision_tree_formation"
-EXPORT_MODEL = "deterministic-export-v1"
 PROPOSER_PROMPT = (
     "You propose the structure of one decision tree from frozen source blocks. "
     "Select exact character spans only; never write, repair or summarise source text. "
@@ -38,6 +39,15 @@ PROPOSER_PROMPT = (
     "are route evidence on a connection (label_span), never units. Cite evidence_ids from "
     "evidence_items that support each connection itself. Use to=null for a target you "
     "cannot identify and add an unresolved entry instead of guessing."
+)
+# Appended for structured exports only, so the PDF prompt stays unchanged.
+EXPORT_PROMPT = (
+    " This source is a structured export: each text evidence item names its export_id, and "
+    "export_edge records name the export_id of their from and to items. Propose exactly one unit "
+    "per exported item, selecting its complete text. Propose exactly one connection per "
+    "export_edge evidence item, citing that item alone, between the units of its from and to "
+    "items; never add, drop or redirect a connection. Propose one result bundle per container "
+    "item (bundle_role container) with exactly the member items of its bundle_id."
 )
 
 Proposer = Callable[[dict[str, Any]], tuple[dict[str, Any], str]]
@@ -48,6 +58,22 @@ def _error(code: str, detail: str = ""):
     return ConsoleError(code, detail) if detail else ConsoleError(code)
 
 
+def request_input(frozen: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    """The developer prompt and source view a proposer receives; nothing else."""
+    evidence_items = {key: {k: v for k, v in item.items() if k in {"kind", "text", "page", "bbox", "record"}}
+                      for key, item in frozen["inventory"]["items"].items()}
+    if frozen.get("kind") == "boom":
+        # Request-only view: which exported item each text item is, so export_edge
+        # records can be read. The recorded inventory itself is unchanged.
+        for fragment in frozen["fragments"]:
+            item = evidence_items.get(fragment["fragment_id"])
+            if item is not None and item["kind"] == "text":
+                item["record"] = {"export_id": fragment.get("boom_id"), "export_kind": fragment.get("boom_kind"),
+                                  "bundle_id": fragment.get("bundle_id"), "bundle_role": fragment.get("bundle_role")}
+    prompt = PROPOSER_PROMPT + (EXPORT_PROMPT if frozen.get("kind") == "boom" else "")
+    return prompt, {"source_blocks": proposal_inputs(frozen["fragments"]), "evidence_items": evidence_items}
+
+
 def request_proposal(frozen: dict[str, Any], *, api_key: str, model: str, limits: Any,
                      post_json: Callable | None = None) -> dict[str, Any]:
     """Bounded provider call outside any write transaction; failures never fall back."""
@@ -56,12 +82,10 @@ def request_proposal(frozen: dict[str, Any], *, api_key: str, model: str, limits
     from src.pre_review_semantic_v1 import _bounded_provider_json, _extract_output_text
     if not str(api_key or "").strip():
         raise _error("pre_review_llm_api_key_required")
-    evidence_items = {key: {k: v for k, v in item.items() if k in {"kind", "text", "page", "bbox", "record"}}
-                      for key, item in frozen["inventory"]["items"].items()}
+    prompt, source = request_input(frozen)
     payload = {"model": model, "input": [
-        {"role": "developer", "content": PROPOSER_PROMPT},
-        {"role": "user", "content": json.dumps({"source_blocks": proposal_inputs(frozen["fragments"]),
-                                                "evidence_items": evidence_items}, ensure_ascii=False)}],
+        {"role": "developer", "content": prompt},
+        {"role": "user", "content": json.dumps(source, ensure_ascii=False)}],
         "text": {"format": {"type": "json_schema", "name": "decision_tree_proposal", "strict": True,
                             "schema": proposal_schema()}}}
     headers = {"Authorization": f"Bearer {api_key.strip()}", "Content-Type": "application/json"}
@@ -75,57 +99,79 @@ def request_proposal(frozen: dict[str, Any], *, api_key: str, model: str, limits
         raise _error("pre_review_llm_response_invalid") from exc
 
 
-def export_proposal(data: bytes, fragments: list[dict[str, Any]],
-                    inventory: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str], list[str]]:
-    """Deterministic proposal from an explicit export: one unit per exported item.
+def export_types(proposal: dict[str, Any], fragments: list[dict[str, Any]]) -> dict[str, str]:
+    """The export's explicit item kind is the literal type evidence of its unit."""
+    by_block = {block["block_id"]: block["source_fragment_ids"] for block in proposal_inputs(fragments)}
+    kinds = {f["fragment_id"]: str(f.get("boom_kind") or "node") for f in fragments}
+    types = {}
+    for unit in proposal["units"]:
+        ids = {fid for span in unit["spans"] for fid in by_block[span["block_id"]]}
+        if len(ids) == 1:
+            types[unit["ref"]] = kinds[ids.pop()]
+    return types
 
-    Modes stay for the reviewer (``role_ambiguous``): the export states kinds and
-    branches, not answer semantics. Returns proposal, proposed types, unresolved.
+
+_EXPORT_MEMBER_MODES = frozenset({"context"})
+_EXPORT_KIND_MODES = {"outcome": frozenset({"terminal", "unresolved"}),
+                      "path": frozenset({"continue", "unresolved"}),
+                      "node": frozenset({"single", "multiple", "continue", "unresolved"})}
+
+
+def verify_export_preserved(construction: dict[str, Any], data: bytes,
+                            fragments: list[dict[str, Any]]) -> None:
+    """Fail closed unless the construction carries the export's explicit graph exactly.
+
+    Every non-empty exported item is one whole unit; every well-formed branch
+    between them is one edge with its literal label and only its own evidence;
+    no other edge exists; every exported bundle is reproduced with its members;
+    no item that an exported branch leads to is proposed as an entrypoint;
+    no node takes a role its exported kind rules out.
     """
     from src.decision_graph_v1 import export_branches
-    blocks = proposal_inputs(fragments)
-    by_fragment: dict[str, list[dict[str, Any]]] = {}
-    for block in blocks:
-        for fid in block["source_fragment_ids"]:
-            by_fragment.setdefault(fid, []).append(block)
-    units, types, refs = [], {}, {}
-    for index, fragment in enumerate(fragments):
+    candidates = construction["spec"]["objects"][1:]
+    object_for, allowed_modes = {}, {}
+    for fragment in fragments:
         text = " ".join(str(fragment.get("clean_text") or "").split())
-        candidates = by_fragment.get(fragment["fragment_id"], [])
         if not text:
             continue
-        if len(candidates) != 1 or candidates[0]["text"].count(text) != 1:
-            raise DecisionTreeProposalError("decision_export_fragment_unselectable",
+        matches = [c["object_id"] for c in candidates
+                   if c["source_fragment_ids"] == [fragment["fragment_id"]] and c["clean_text"] == text]
+        if len(matches) != 1:
+            raise DecisionTreeProposalError("decision_export_node_not_preserved",
                                             fragment_id=fragment["fragment_id"])
-        block = candidates[0]
-        start = block["text"].index(text)
-        ref = f"u{index + 1}"
-        member = fragment.get("bundle_role") == "member"
-        units.append({"ref": ref, "role": "context" if member else "outcome" if fragment.get("boom_kind") == "outcome"
-                      else "start" if fragment.get("boom_kind") == "path" else "action",
-                      "selection": None, "entry": False, "quoted_text": text,
-                      "spans": [{"block_id": block["block_id"], "start": start, "end": start + len(text)}]})
-        types[ref] = str(fragment.get("boom_kind") or "node")
-        refs[str(fragment.get("boom_id"))] = ref
-    valid = dict(export_branches(data, fragments))
-    connections = [{"ref": f"c{index}", "from": refs[branch["from"]], "to": refs[branch["to"]],
-                    "kind": "answer" if branch.get("label") else "continue", "label_span": None,
-                    "evidence_ids": [f"export-branch-{index}"]}
-                   for index, branch in valid.items() if branch["from"] in refs and branch["to"] in refs]
-    bundles = []
-    for fragment in fragments:
-        if fragment.get("bundle_role") == "container":
-            members = [refs[str(f["boom_id"])] for f in fragments
-                       if f.get("bundle_role") == "member" and f.get("bundle_id") == fragment["fragment_id"]]
-            bundles.append({"ref": f"b{len(bundles) + 1}", "container": refs[str(fragment["boom_id"])],
-                            "members": members})
-    payload_branches = json.loads(data).get("branches", [])
-    invalid = [f"invalid_export_branch:{i}" for i in range(len(payload_branches)) if i not in valid]
-    proposal = {"contract": PROPOSAL_CONTRACT, "units": units, "connections": connections,
-                "context_bindings": [], "result_bundles": bundles,
-                "unresolved": [{"ref": f"r{i + 1}", "subject": unit["ref"], "code": "role_ambiguous"}
-                               for i, unit in enumerate(u for u in units if u["role"] != "context")]}
-    return proposal, types, invalid
+        object_for[str(fragment.get("boom_id"))] = matches[0]
+        allowed_modes[matches[0]] = (_EXPORT_MEMBER_MODES if fragment.get("bundle_role") == "member"
+                                     else _EXPORT_KIND_MODES.get(str(fragment.get("boom_kind") or "node"),
+                                                                 _EXPORT_KIND_MODES["node"]))
+    if len(candidates) != len(object_for):
+        raise DecisionTreeProposalError("decision_export_node_not_preserved")
+    # The export states item kinds, not answer semantics: a role may stay open
+    # for review but never contradict the exported kind.
+    if any(node["mode"] not in allowed_modes[node["object_id"]] for node in construction["graph_plan"]["nodes"]):
+        raise DecisionTreeProposalError("decision_export_role_not_preserved")
+    expected = sorted(
+        (object_for[branch["from"]], object_for[branch["to"]],
+         "answer" if branch.get("label") else "continue", branch.get("label") or "",
+         (f"export-branch-{index}",))
+        for index, branch in export_branches(data, fragments)
+        if branch["from"] in object_for and branch["to"] in object_for)
+    actual = sorted((e["from"], e["to"], e["kind"], e["label"], tuple(e["evidence_ids"]))
+                    for e in construction["graph_plan"]["edges"])
+    if actual != expected or construction["relation_findings"]:
+        raise DecisionTreeProposalError("decision_export_route_not_preserved")
+    if {to for _from, to, *_rest in expected} & set(construction["graph_plan"]["entrypoints"]):
+        raise DecisionTreeProposalError("decision_export_route_not_preserved")
+    # The export states no context binding; one would be invented, unreviewed structure.
+    if construction["context_bindings"]:
+        raise DecisionTreeProposalError("decision_export_context_not_preserved")
+    bundles = sorted(
+        (object_for[str(f["boom_id"])],
+         tuple(sorted(object_for[str(m["boom_id"])] for m in fragments
+                      if m.get("bundle_role") == "member" and m.get("bundle_id") == f["fragment_id"])))
+        for f in fragments if f.get("bundle_role") == "container")
+    proposed = sorted((b["container"], tuple(sorted(b["members"]))) for b in construction["result_bundles"])
+    if proposed != bundles or construction["result_bundle_issues"]:
+        raise DecisionTreeProposalError("decision_export_bundle_not_preserved")
 
 
 def _export_enrichment(construction: dict[str, Any], fragments: list[dict[str, Any]], document_id: str) -> None:
@@ -190,20 +236,26 @@ def prepare(kind: str, path: Path, *, data: bytes, document_id: str, source_id: 
         release_conversion_capacity()
     source_hash = sha256_bytes(data)
     inventory = source_evidence(path, data, kind, fragments, source_hash)
-    frozen = {"fragments": fragments, "inventory": inventory, "formation_context": context}
+    frozen = {"kind": kind, "fragments": fragments, "inventory": inventory, "formation_context": context}
     invalid: list[str] = []
     types = None
+    if proposer is None:
+        raise _error("pre_review_llm_decision_tree_proposer_unbound")
     try:
+        proposal, model = proposer(frozen)
         if kind == "boom":
-            proposal, types, invalid = export_proposal(data, fragments, inventory)
-            model = EXPORT_MODEL
-        else:
-            if proposer is None:
-                raise _error("pre_review_llm_decision_tree_proposer_unbound")
-            proposal, model = proposer(frozen)
+            from src.decision_graph_v1 import export_branches
+            valid = {index for index, _branch in export_branches(data, fragments)}
+            invalid = [f"invalid_export_branch:{i}" for i in range(len(json.loads(data).get("branches", [])))
+                       if i not in valid]
+            from src.decision_tree_proposal_v1 import validate_proposal
+            validate_proposal(proposal, blocks=proposal_inputs(fragments), inventory=inventory)
+            types = export_types(proposal, fragments)
         construction = construct(proposal, document_id=document_id, title=title, family=family, class_=class_,
                                  content_kind=kind, fragments=fragments, inventory=inventory, model=model,
                                  proposed_types=types)
+        if kind == "boom":
+            verify_export_preserved(construction, data, fragments)
     except DecisionTreeProposalError as exc:
         raise _error("pre_review_llm_proposal_rejected", exc.code) from exc
     except Exception as exc:  # materialisation failures keep their stable code

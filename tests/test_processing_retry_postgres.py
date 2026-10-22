@@ -88,13 +88,15 @@ def test_failure_deduplication_success_http_and_restart(workflow_postgres, tmp_p
     assert final._envelope(sid)["quality_processing_runs"][-1]["attempt_id"] == final._envelope(sid)[KEY][-1]["attempt_id"]
     assert final.snapshot_objects(sid)
     assert final._envelope(sid)["sha256"] == before["sha256"]
-    assert len(final._envelope(sid)[KEY]) == 2
+    # The initial failed ingest attempt plus the failed retry and the success.
+    assert len(final._envelope(sid)[KEY]) == len(before.get(KEY) or []) + 2
     diagnostics = _client(final).get("/review/processing-diagnostics", params={"document": sid}).json()
     assert diagnostics["processing_attempts"][0]["validation_code"] == attempt["validation_code"]
 
 
 def test_concurrent_duplicate_and_other_command_cannot_start_second_attempt(workflow_postgres, tmp_path, monkeypatch):
     console, actor, sid, _ = blocked(tmp_path, workflow_postgres, monkeypatch)
+    initial = console._envelope(sid).get(KEY) or []
     second = _console(tmp_path / "other-runtime", workflow_postgres)
     started, release = Event(), Event()
     original = console._fragments_and_spec
@@ -134,7 +136,7 @@ except ConsoleError as error:
         worker.join(15)
     assert len(results) == 1 and isinstance(results[0], dict), results
     restarted = _console(tmp_path, workflow_postgres)
-    assert len(restarted._envelope(sid)[KEY]) == 1
+    assert len(restarted._envelope(sid)[KEY]) == len(initial) + 1
 
 
 @pytest.mark.parametrize("mutation,code", [
@@ -242,6 +244,7 @@ def test_changes_during_provider_work_block_stale_activation(workflow_postgres, 
 
 def test_expired_worker_cannot_overwrite_recovered_success(workflow_postgres, tmp_path, monkeypatch):
     console, actor, sid, _ = blocked(tmp_path, workflow_postgres, monkeypatch)
+    initial = console._envelope(sid).get(KEY) or []
     second = _console(tmp_path, workflow_postgres)
     original = console._fragments_and_spec
     import src.processing_retry_v1 as retry
@@ -257,7 +260,7 @@ def test_expired_worker_cannot_overwrite_recovered_success(workflow_postgres, tm
     assert error.value.code == "processing_attempt_not_active"
     restarted = _console(tmp_path, workflow_postgres)
     envelope = restarted._envelope(sid)
-    assert [a["state"] for a in envelope[KEY]] == ["interrupted", "succeeded"]
+    assert [a["state"] for a in envelope[KEY][len(initial):]] == ["interrupted", "succeeded"]
     assert envelope["quality_processing_runs"][-1]["attempt_id"] == envelope[KEY][-1]["attempt_id"]
     assert restarted.snapshot_objects(sid)
 

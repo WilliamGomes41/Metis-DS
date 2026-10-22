@@ -23,7 +23,6 @@ from src.operations_console_v1 import PRE_REVIEW_BLOCKED, ConsoleError
 from src.passage_register_v1 import passage_register_of
 from src.review_cockpit_v1 import why_selected
 from src.pre_review_semantic_v1 import (
-    DETERMINISTIC_MODE,
     OPENAI_RESPONSES_URL,
     PASSAGE_FORMATION_MODE_ENV,
     SEMANTIC_MODE,
@@ -278,7 +277,7 @@ def test_semantic_abstention_is_fail_closed_before_review() -> None:
     assert error.value.code == "pre_review_llm_abstained"
 
 
-def test_runtime_policy_is_instance_bound_and_keeps_explicit_rollback_mode(tmp_path: Path, *, production_console) -> None:
+def test_runtime_policy_is_instance_bound_and_has_no_rollback_mode(tmp_path: Path, *, production_console) -> None:
     fragments = [_fragment("p1", "Bespreek samen de behandeling.")]
     env = {
         PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
@@ -294,66 +293,48 @@ def test_runtime_policy_is_instance_bound_and_keeps_explicit_rollback_mode(tmp_p
         source_store=tmp_path / "semantic-sources",
         runtime=tmp_path / "semantic-runtime",
     )
-    deterministic_console = production_console(processing_binder=lambda console: None,
-        root=tmp_path / "deterministic",
-        source_store=tmp_path / "deterministic-sources",
-        runtime=tmp_path / "deterministic-runtime",
+    unconfigured_console = production_console(processing_binder=lambda console: None,
+        root=tmp_path / "unconfigured",
+        source_store=tmp_path / "unconfigured-sources",
+        runtime=tmp_path / "unconfigured-runtime",
     )
     semantic_console._extract = lambda *_args, **_kwargs: fragments
-    deterministic_console._extract = lambda *_args, **_kwargs: fragments
+    unconfigured_console._extract = lambda *_args, **_kwargs: fragments
     bind_pre_review_semantic_processing(
         semantic_console,
         environ=env,
         post_json=fake_post,
     )
+    command = dict(data=b"source", source_id="src-1", title="Titel", family="kwaliteit", class_="richtlijn")
 
     semantic_spec = semantic_console._fragments_and_spec(
-        "html",
-        tmp_path / "source.html",
-        data=b"source",
-        document_id="doc-1",
-        source_id="src-1",
-        title="Titel",
-        family="kwaliteit",
-        class_="richtlijn",
-    )[1]
-    untouched_spec = deterministic_console._fragments_and_spec(
-        "html",
-        tmp_path / "source.html",
-        data=b"source",
-        document_id="doc-2",
-        source_id="src-2",
-        title="Titel",
-        family="kwaliteit",
-        class_="richtlijn",
-    )[1]
-
+        "html", tmp_path / "source.html", document_id="doc-1", **command)[1]
     assert semantic_spec["objects"][1]["semantic_passage"]["source_bound"] is True
     assert semantic_spec["objects"][1]["metadata"]["passage_formation"] == {
         "policy_version": "passage-formation-policy-v1.0.0",
         "strategy": "semantic",
         "reason": "semantic_free_text_required",
     }
-    assert "semantic_passage" not in untouched_spec["objects"][1]
 
-    env[PASSAGE_FORMATION_MODE_ENV] = DETERMINISTIC_MODE
-    rollback_spec = semantic_console._fragments_and_spec(
-        "html",
-        tmp_path / "source.html",
-        data=b"source",
-        document_id="doc-3",
-        source_id="src-3",
-        title="Titel",
-        family="kwaliteit",
-        class_="richtlijn",
-    )[1]
-    assert "semantic_passage" not in rollback_spec["objects"][1]
-    assert rollback_spec["objects"][1]["metadata"]["passage_formation"] == {
-        "policy_version": "passage-formation-policy-v1.0.0",
-        "strategy": "deterministic",
-        "reason": "explicit_operational_rollback",
-    }
+    # A console without an installed strategy has no implicit formation route.
+    with pytest.raises(ConsoleError) as unconfigured:
+        unconfigured_console._fragments_and_spec(
+            "html", tmp_path / "source.html", document_id="doc-2", **command)
+    assert unconfigured.value.code == "source_processing_strategy_unconfigured"
 
+    # The retired rollback mode is a configuration error, never another route.
+    env[PASSAGE_FORMATION_MODE_ENV] = "deterministic-v1"
+    with pytest.raises(ConsoleError) as retired:
+        semantic_console._fragments_and_spec(
+            "html", tmp_path / "source.html", document_id="doc-3", **command)
+    assert retired.value.code == "passage_formation_mode_invalid"
+    # Decision trees take their own route, but never past an invalid configuration.
+    for kind in ("boom", "pdf"):
+        with pytest.raises(ConsoleError) as retired_tree:
+            semantic_console._fragments_and_spec(
+                kind, tmp_path / f"source.{kind}", document_id=f"doc-tree-{kind}",
+                **{**command, "class_": "beslisboom"})
+        assert retired_tree.value.code == "passage_formation_mode_invalid"
 
 
 def test_missing_provider_persists_blocked_capture_and_recovers_same_snapshot(tmp_path: Path, *, production_console) -> None:
@@ -516,16 +497,7 @@ def test_read_only_repair_catalog_does_not_call_llm(tmp_path: Path, monkeypatch,
     calls = 0
 
     def source_fragment_catalog(self) -> list[dict]:
-        self._deterministic_fragments_and_spec(
-            "html",
-            tmp_path / "source.html",
-            data=b"source",
-            document_id="doc-1",
-            source_id="src-1",
-            title="Titel",
-            family="kwaliteit",
-            class_="richtlijn",
-        )
+        self._extract("html", tmp_path / "source.html", document_id="doc-1", source_id="src-1")
         return []
 
     def fake_post(*_args):
@@ -1036,29 +1008,25 @@ def test_source_authority_does_not_erase_selected_semantics_when_primary_is_cove
 
 
 
-def test_boom_export_uses_deterministic_proposal_under_semantic_deployment_mode(tmp_path: Path, *, production_console) -> None:
+def test_boom_export_uses_a_semantic_proposal_bound_to_the_export(tmp_path: Path, *, production_console) -> None:
+    from tests.semantic_fixture_support import _decision_tree_response
     env = {
         PASSAGE_FORMATION_MODE_ENV: SEMANTIC_MODE,
         LLM_API_KEY_ENV: "product-key",
         LLM_MODEL_ENV: "test-model",
     }
-    calls = 0
+    requests = []
 
-    def must_not_call_model(*_args):
-        nonlocal calls
-        calls += 1
-        raise AssertionError("boom passage formation must stay deterministic")
+    def model(_url, _headers, payload, _timeout):
+        requests.append(payload)
+        return _decision_tree_response(json.loads(payload["input"][1]["content"]))
 
     console = production_console(processing_binder=lambda console: None,
         root=tmp_path / "boom",
         source_store=tmp_path / "boom-sources",
         runtime=tmp_path / "boom-runtime",
     )
-    bind_pre_review_semantic_processing(
-        console,
-        environ=env,
-        post_json=must_not_call_model,
-    )
+    bind_pre_review_semantic_processing(console, environ=env, post_json=model)
     payload = {
         "kind": "beslisboom-freeze",
         "paths": [{"id": "path-screening", "text": "Screening op valrisico"}],
@@ -1076,6 +1044,8 @@ def test_boom_export_uses_deterministic_proposal_under_semantic_deployment_mode(
                 "applies_if": ["node-vraag"],
             }
         ],
+        "branches": [{"from": "path-screening", "to": "node-vraag"},
+                     {"from": "node-vraag", "to": "out-verwijs", "label": "Ja"}],
     }
 
     _fragments, spec = console._fragments_and_spec(
@@ -1089,17 +1059,22 @@ def test_boom_export_uses_deterministic_proposal_under_semantic_deployment_mode(
         class_="beslisboom",
     )
 
-    # The explicit export is its own proposal: never a model call, always the
-    # single decision-tree route through the deterministic materialiser.
-    assert calls == 0
+    # The export is proposed by the model, then constructed by the sole materialiser.
+    assert len(requests) == 1
+    assert requests[0]["text"]["format"]["name"] == "decision_tree_proposal"
     content = [obj for obj in spec["objects"] if obj.get("object_type") != "document"]
     assert [obj["clean_text"] for obj in content] == [
         "Screening op valrisico", "Is er een verhoogd valrisico?", "Verwijs naar de valpoli."]
     assert all(obj["semantic_passage"]["formation_mode"] == "decision-tree-source-bound-v1"
-               and obj["semantic_passage"]["model"] == "deterministic-export-v1"
+               and obj["semantic_passage"]["model"] == "test-model"
                and obj["object_id"].startswith("doc-boom-sem-") for obj in content)
-    assert spec["_decision_tree_formation"]["formation"]["route"] == "decision-tree-source-bound-v1"
-
+    formation = spec["_decision_tree_formation"]
+    assert formation["formation"]["route"] == "decision-tree-source-bound-v1"
+    assert formation["formation"]["model"] == "test-model"
+    ids = {obj["clean_text"]: obj["object_id"] for obj in content}
+    assert sorted((e["from"], e["to"], e["label"]) for e in formation["construction"]["graph_plan"]["edges"]) == sorted([
+        (ids["Screening op valrisico"], ids["Is er een verhoogd valrisico?"], ""),
+        (ids["Is er een verhoogd valrisico?"], ids["Verwijs naar de valpoli."], "Ja")])
 
 
 def test_f1_end_to_end_primary_authority_survives_restart(tmp_path: Path, *, production_console) -> None:

@@ -8,6 +8,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
@@ -154,7 +155,7 @@ def test_operator_apply_requires_exact_confirmation_before_connection(monkeypatc
 
 
 def test_historical_account_presentation_and_console_denial(tmp_path, *, production_app, production_console):
-    state = production_console(root=tmp_path, processing_binder=lambda console: None)
+    state = production_console(root=tmp_path, processing_binder=bind_fixture_selections)
     owner = state.create_account('owner', 'password', ['publisher'])
     historical = state.create_account('historical', 'password', ['reviewer'])
     old_token = state.authenticate('historical', 'password')['token']

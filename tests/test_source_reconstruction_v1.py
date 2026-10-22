@@ -12,7 +12,7 @@ from copy import deepcopy
 
 import pytest
 
-from src.context_aware_split_v1 import split_context_aware_units
+from src.knowledge_materialisation_v1 import materialise_knowledge_candidates, selection_source_blocks
 from src.source_reconstruction_v1 import (
     RULE_ADJACENT_GRAMMATICAL_CONTINUATION,
     STATUS_RECONSTRUCTED,
@@ -144,23 +144,29 @@ def test_reconstruction_does_not_mutate_extracted_source_fragments() -> None:
     assert fragments == original
 
 
-def test_splitter_forms_objects_only_after_reconstruction_and_keeps_provenance() -> None:
-    units = split_context_aware_units(
-        [
-            _fragment("f1", FIRST, line=1),
-            _fragment("f2", CONTINUATION, line=2),
-        ],
-        document_id="doc-eenzaamheid",
-    )
+def test_candidates_form_only_after_reconstruction_and_keep_provenance() -> None:
+    fragments = [
+        _fragment("f1", FIRST, line=1),
+        _fragment("f2", CONTINUATION, line=2),
+    ]
+    [block] = selection_source_blocks(fragments)
+    assert block["source_fragment_ids"] == ["f1", "f2"]
+    target = "De werkgroep is van mening"
+    start = block["text"].index(target)
+    first_end = block["text"].index("ernst van de eenzaamheid.") + len("ernst van de eenzaamheid.")
+    assert "Jong Gierveld 6-item versie" in block["text"][start:]
+    decisions = [
+        {"decision_kind": "semantic_selection", "selection_origin": "proposal_selected",
+         "spans": [{"block_id": block["block_id"], "start": 0, "end": first_end}],
+         "source_text": block["text"][:first_end]},
+        {"decision_kind": "semantic_selection", "selection_origin": "proposal_selected",
+         "spans": [{"block_id": block["block_id"], "start": start, "end": len(block["text"])}],
+         "source_text": block["text"][start:]},
+    ]
+    preceding, matching = materialise_knowledge_candidates(
+        decisions, document_id="doc-eenzaamheid", fragments=fragments)
 
-    matching = [unit for unit in units if "Jong Gierveld 6-item" in unit["clean_text"]]
-    assert len(matching) == 1
-    assert matching[0]["clean_text"].endswith("meest geschikte instrument is.")
-    assert matching[0]["source_fragment_ids"] == ["f1", "f2"]
-    assert all(unit["clean_text"] != CONTINUATION for unit in units)
-    preceding = next(
-        unit
-        for unit in units
-        if unit["clean_text"].endswith("ernst van de eenzaamheid.")
-    )
+    assert matching["clean_text"].endswith("meest geschikte instrument is.")
+    assert matching["source_fragment_ids"] == ["f1", "f2"]
+    assert preceding["clean_text"].endswith("ernst van de eenzaamheid.")
     assert preceding["source_fragment_ids"] == ["f1"]

@@ -1,4 +1,5 @@
 """API access settings on the production console and real PostgreSQL authority."""
+from tests.semantic_fixture_support import bind_fixture_selections
 from types import SimpleNamespace
 
 import pytest
@@ -24,7 +25,7 @@ def access(production_console, production_app, complete_postgres, monkeypatch):
         monkeypatch.setattr(store, name, observe)
     # Reuse the real authority for instrumentation; no synthetic state or writer.
     monkeypatch.setattr(operations_console_app, 'PostgresApiAccessStore', lambda:store)
-    console = production_console(processing_binder=lambda console:None,
+    console = production_console(processing_binder=bind_fixture_selections,
                                  environment={'METIS_API_ACCESS_STORE':'postgres'})
     console.create_account(username='publisher.carla', password='publisher-secret', roles=['publisher'])
     console.create_account(username='researcher.rik', password='researcher-secret', roles=['researcher'])

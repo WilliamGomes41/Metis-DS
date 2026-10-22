@@ -1,8 +1,9 @@
 """Frozen semantic passage safety audit.
 
-This module evaluates the existing deterministic passage formation and the
-source-bound semantic candidate on the same frozen source cases. It has no
-persistence and no write path into Review, publication or serving state.
+This module evaluates the source-bound semantic candidate on frozen source
+cases. It has no persistence and no write path into Review, publication or
+serving state. The suite's evaluated baseline commit stays recorded metadata;
+no other formation route is executed for comparison.
 """
 from __future__ import annotations
 
@@ -13,7 +14,6 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from src.context_aware_split_v1 import split_context_aware_units
 from src.operations_console_v1 import ConsoleError
 from src.pre_review_semantic_v1 import PostJson, semantic_units_before_review
 from src.semantic_passage_v1 import SELECTION_ORIGIN_COVERAGE, SELECTION_ORIGIN_PROPOSAL
@@ -206,13 +206,6 @@ def run_frozen_semantic_safety_suite(
     results: list[dict[str, Any]] = []
     for case in suite["cases"]:
         fragment = _fragment(case)
-        baseline_units = split_context_aware_units(
-            [fragment],
-            document_id=f'audit-baseline-{case["case_id"]}',
-        )
-        baseline_texts = [_text_of(unit) for unit in baseline_units if _text_of(unit)]
-        baseline_evaluation = _evaluate(case, baseline_texts)
-
         candidate_units: list[dict[str, Any]] = []
         kernel_reject = ""
         try:
@@ -237,10 +230,6 @@ def run_frozen_semantic_safety_suite(
                 "risk_category": case["risk_category"],
                 "source_hash": case["source_hash"],
                 "source_locator": deepcopy(case["source_locator"]),
-                "baseline": {
-                    "texts": baseline_texts,
-                    "evaluation": baseline_evaluation,
-                },
                 "candidate": {
                     "selected_texts": selected_texts,
                     "coverage_remainders": coverage_texts,

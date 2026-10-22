@@ -8,6 +8,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 import json
@@ -57,7 +58,7 @@ class FakeMicrosoft:
 
 
 def console(root, cfg, *, production_console):
-    state = production_console(root=root, processing_binder=lambda console: None)
+    state = production_console(root=root, processing_binder=bind_fixture_selections)
     assert state.workflow_identity_store.config == cfg
     return state
 

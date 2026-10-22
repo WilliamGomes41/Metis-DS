@@ -1,4 +1,5 @@
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: toegang
@@ -147,11 +148,11 @@ def test_normal_risk_batch_excludes_action_high_risk_second_review_blocked_and_u
 def batch_console(production_console, tmp_path, monkeypatch):
     """Real PG commands; spies observe delegation without replacing authority."""
     from src.integrity_kernel import stamp_canonical_hashes
-    from tests.semantic_fixture_support import bind_fixture_selections, install_fixture_history
+    from tests.semantic_fixture_support import install_fixture_history
     from tests.test_t4_single_knowledge_path_invariants import _project_policy
 
     def make(requested):
-        console = production_console(root=tmp_path, processing_binder=lambda console: None, isolated=True)
+        console = production_console(root=tmp_path, processing_binder=bind_fixture_selections, isolated=True)
         bind_fixture_selections(console, [("Oedeem is een ophoping van vocht.", "definition")])
         author = console.create_account('author', 'fixture-password', ['researcher'])
         reviewer = console.create_account('reviewer', 'fixture-password', ['reviewer'])

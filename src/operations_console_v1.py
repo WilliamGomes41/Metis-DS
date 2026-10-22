@@ -47,7 +47,6 @@ from src.review_cockpit_v1 import (
     review_passage_record,
     review_passage_requested,
 )
-from src.atomic_split_v1 import proposed_relations_for_units
 from src.beslisboom_path_v1 import (
     CLOSED_BOOM_TYPES,
     CLOSED_KLASSEN,
@@ -62,7 +61,6 @@ from src.beslisboom_path_v1 import (
     review_path_for_klasse,
     stamp_boom_flags,
 )
-from src.context_aware_split_v1 import split_context_aware_units
 from src.source_preparation_context_v1 import build_formation_context
 from src.extract_html_v1 import extract as extract_html
 from src.extract_pdf_v2 import extract as extract_pdf
@@ -109,7 +107,7 @@ from src.review_ledger import append_event, read_events
 from src.review_interaction_v1 import validate_review_interaction_identity
 from src.review_workflow_v3 import _apply_review_state
 from src.revision_workflow import (bump_patch, create_revision, revise_object, current_revisions,
-                                   knowledge_revision, reprocessed_history, lineage_evidence,
+                                   reprocessed_history, lineage_evidence,
                                    with_current_revision)
 from src.semantic_replay_v1 import SEMANTIC_REPLAY_SPEC_KEY
 from src.quality_evidence_v1 import record_processing, review_evidence, instant as quality_instant
@@ -132,7 +130,7 @@ CAPTURED = "captured_not_published"
 PRE_REVIEW_BLOCKED = "blocked_pending_pre_review"
 PUBLISHED_ENVELOPE_STATES = frozenset({"published", "superseded", "withdrawn"})
 UNPUBLISHED_DELETE_EVENT = "unpublished_snapshot_deleted"
-PUBLICATION_PROTOCOL_VERSION = "4.2.0"
+PUBLICATION_PROTOCOL_VERSION = "4.3.0"
 ALLOWED_DELETE_NEXT = frozenset({"/ingest", "/review", "/tree"})
 ALLOWED_ROLES = frozenset({"researcher", "reviewer", "publisher"})
 ALLOWED_CLASSES = CLOSED_KLASSEN
@@ -636,38 +634,6 @@ def classify_official_file(data: bytes, filename: str, content_type: str | None)
     ):
         return "html"
     raise ConsoleError("unsupported_official_file")
-
-
-def _spec_from_fragments(
-    *,
-    document_id: str,
-    title: str,
-    family: str,
-    class_: str,
-    fragments: list[dict[str, Any]],
-    content_kind: str,
-) -> dict[str, Any]:
-    objects: list[dict[str, Any]] = [
-        {
-            "object_id": f"{document_id}-document",
-            "object_type": "document",
-            "text": title,
-            "review_track": "technical",
-        }
-    ]
-    meaning_units = split_context_aware_units(fragments, document_id=document_id)
-    proposed_relations_for_units(meaning_units)
-    objects.extend(meaning_units)
-    return {
-        "spec_version": "console-ingest-1.0",
-        "document_id": document_id,
-        "object_version": "1.0",
-        "target_group": [],
-        "care_setting": [],
-        "topic": [family, f"class:{class_}", f"source-kind:{content_kind}"],
-        "objects": objects,
-    }
-
 
 
 def unpublished_delete_permitted(account: dict[str, Any] | None, envelope: dict[str, Any]) -> bool:
@@ -1804,12 +1770,9 @@ class OperationsConsole:
         from src.docling_pdf_v1 import enabled
         if kind == "pdf" and enabled():
             return True
-        from src.passage_formation_policy_v1 import DETERMINISTIC_MODE
         if not getattr(self, "_pre_review_semantic_bound", False):
             return False
-        if class_ == "beslisboom":
-            return kind == "pdf"  # model proposal; the prose rollback mode does not apply
-        return kind in {"html", "pdf"} and self._passage_formation_mode_reader() != DETERMINISTIC_MODE
+        return kind in {"html", "pdf", "boom"}  # every supported source gets a model proposal
 
     @diagnostic_phase("processing_status")
     def processing_status(self, snapshot_id: str, *, actor_id: str | None = None,
@@ -2570,50 +2533,9 @@ class OperationsConsole:
             command["formation_context"] = context
         strategy = getattr(self, "_source_processing_strategy", None)
         if strategy is None:
-            return self._deterministic_fragments_and_spec(kind, path, **command)
+            # No implicit formation route: an unconfigured runtime fails closed.
+            raise ConsoleError("source_processing_strategy_unconfigured")
         return strategy.prepare(kind, path, **command)
-
-    def _deterministic_fragments_and_spec(
-        self,
-        kind: str,
-        path: Path,
-        *,
-        data: bytes,
-        document_id: str,
-        source_id: str,
-        title: str,
-        family: str,
-        class_: str,
-        formation_context: dict[str, Any] | None = None,
-    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-        retained_fragments = (formation_context or {}).get("retained_fragments")
-        if class_ == "beslisboom" and kind in {"pdf", "boom"}:
-            from src.decision_tree_route_v1 import prepare
-            return prepare(kind, path, data=data, document_id=document_id, source_id=source_id,
-                           title=title, family=family, class_=class_, formation_context=formation_context,
-                           proposer=getattr(self, "_decision_tree_proposer", None))
-        if kind == "boom":
-            try:
-                fragments = extract_boom_fragments(data, document_id=document_id, source_id=source_id)
-            except ValueError as exc:
-                raise ConsoleError("invalid_boom_freeze") from exc
-            fragments = [{k: v for k, v in f.items() if k != "boom_kind"} for f in fragments]
-            return fragments, _spec_from_fragments(document_id=document_id, title=title, family=family,
-                class_=class_, fragments=fragments, content_kind=kind)
-        from src.docling_pdf_v1 import enabled
-        kwargs = {"deadline": (formation_context or {}).get("attempt_deadline")} if kind == "pdf" and enabled() else {}
-        fragments = (retained_fragments if retained_fragments is not None else
-                     self._extract(kind, path, document_id=document_id, source_id=source_id, assess_pages=True,
-                                   accounted_pages=(formation_context or {}).get("page_accountings"), **kwargs))
-        spec = _spec_from_fragments(
-            document_id=document_id,
-            title=title,
-            family=family,
-            class_=class_,
-            fragments=fragments,
-            content_kind=kind,
-        )
-        return fragments, spec
 
     def _diff_objects(self, previous: list[dict[str, Any]], current: list[dict[str, Any]]) -> dict[str, Any]:
         def current_candidates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -2738,24 +2660,6 @@ class OperationsConsole:
             )
         return self._receipt(envelope)
 
-    def _class_change_manifest(self, envelope: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "canonical_source": {
-                "source_id": envelope["source_id"],
-                "title": envelope["title"],
-                "publisher": "V&VN",
-                "source_url": envelope.get("live_url") or "",
-                "source_type": "interactive_tree" if envelope["content_kind"] == "boom" else envelope["content_kind"],
-                "source_level": 1,
-                "canonicality": "canonical",
-                "source_checksum": envelope["sha256"],
-                "checksum_algorithm": "sha256",
-                "integrity_status": "verified",
-                "publication_date": envelope["date"],
-                "version": envelope["version"],
-            }
-        }
-
     def _full_rereview_rows(self, rows: list[dict[str, Any]]) -> None:
         for row in current_revisions(rows):
             governance = row.setdefault("governance", {})
@@ -2792,95 +2696,12 @@ class OperationsConsole:
             },
         )
 
-    def _reextract_objects_for_klasse(
-        self,
-        envelope: dict[str, Any],
-        new_class: str,
-        freeze_bytes: bytes,
-    ) -> list[dict[str, Any]]:
-        freeze_path = self._source_cache_path(envelope)
-        if review_path_for_klasse(new_class) == "boom":
-            errors = boom_freeze_errors(
-                data=freeze_bytes,
-                filename=freeze_path.name,
-                live_url=envelope.get("live_url") or "",
-            )
-            if errors:
-                raise ConsoleError(errors[0])
-            fragments, spec = self._fragments_and_spec(
-                "boom",
-                freeze_path,
-                data=freeze_bytes,
-                document_id=envelope["document_id"],
-                source_id=envelope["source_id"],
-                title=envelope["title"],
-                family=envelope["family"],
-                class_=new_class,
-            )
-            objects = transform_generic(spec, self._class_change_manifest(envelope), fragments)
-            stamp_boom_flags(objects, fragments)
-            return objects
-        if envelope["content_kind"] == "boom":
-            try:
-                fragments = extract_boom_fragments(
-                    freeze_bytes,
-                    document_id=envelope["document_id"],
-                    source_id=envelope["source_id"],
-                )
-            except ValueError as exc:
-                raise ConsoleError("invalid_boom_freeze") from exc
-            fragments = [
-                {key: value for key, value in fragment.items() if key != "boom_kind"}
-                for fragment in fragments
-            ]
-            spec = _spec_from_fragments(
-                document_id=envelope["document_id"],
-                title=envelope["title"],
-                family=envelope["family"],
-                class_=new_class,
-                fragments=fragments,
-                content_kind=envelope["content_kind"],
-            )
-            objects = transform_generic(spec, self._class_change_manifest(envelope), fragments)
-            return apply_passage_register(
-                apply_admission_gate(
-                    objects,
-                    klasse=new_class,
-                    fragments=fragments,
-                    document_version=envelope["version"],
-                    source_hash=envelope["sha256"],
-                )
-            )
-        fragments, spec = self._fragments_and_spec(
-            envelope["content_kind"],
-            freeze_path,
-            data=freeze_bytes,
-            document_id=envelope["document_id"],
-            source_id=envelope["source_id"],
-            title=envelope["title"],
-            family=envelope["family"],
-            class_=new_class,
-            formation_context={"retained_fragments": self._read_source_fragments(envelope, freeze_path)}
-                              if envelope["content_kind"] == "pdf" else None,
-        )
-        objects = transform_generic(spec, self._class_change_manifest(envelope), fragments)
-        return apply_passage_register(
-            apply_admission_gate(
-                objects,
-                klasse=new_class,
-                fragments=fragments,
-                document_version=envelope["version"],
-                source_hash=envelope["sha256"],
-            )
-        )
-
     def promote_class(
         self,
         *,
         actor_id: str,
         snapshot_id: str,
         new_class: str,
-        reextract: bool = False,
     ) -> dict[str, Any]:
         account = self._require_role(actor_id, "reviewer")
         if new_class not in ALLOWED_CLASSES:
@@ -2891,61 +2712,18 @@ class OperationsConsole:
         from_class = live["class"]
         if new_class == from_class:
             raise ConsoleError("class_unchanged")
-        if live.get("decision_graph") and is_cross_model_class_change(from_class, new_class):
-            raise ConsoleError("decision_graph_class_change_requires_successor")
+        if is_cross_model_class_change(from_class, new_class):
+            # Re-forming the source for another model is new formation work. It
+            # never rewrites this WorkingRevision in place (T11): it is created as
+            # an explicit successor (create_review_successor with class_).
+            raise ConsoleError("decision_graph_class_change_requires_successor" if live.get("decision_graph")
+                               else "knowledge_class_change_requires_successor")
         identity_before = source_identity_fields(live)
         original_rows, expected_revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
         _, freeze_bytes = self._verified_source_bytes(live)
         envelope = deepcopy(live)
         new_envelopes = deepcopy(self._envelopes)
         new_bindings = deepcopy(self._bindings)
-        if is_cross_model_class_change(from_class, new_class):
-            if any(knowledge_revision(row) for row in original_rows):
-                raise ConsoleError("knowledge_class_change_requires_successor")
-            if not reextract:
-                raise ConsoleError("cross_model_direct_change_blocked")
-            prior = deepcopy(original_rows)
-            processing_started = quality_instant()
-            new_objects = self._reextract_objects_for_klasse(envelope, new_class, freeze_bytes)
-            record_processing(envelope, new_objects, fragments=[], replay=None,
-                              started_at=processing_started)
-            with self._store_write_lock():
-                self._reload_store_locked()
-                self._require_role(actor_id, "reviewer")
-                self._assert_source_work_unchanged(live, expected_revision, "published_class_change_blocked")
-                archived = self._archive_prior_objects(
-                    snapshot_id=snapshot_id,
-                    rows=prior,
-                    from_class=from_class,
-                    to_class=new_class,
-                )
-                envelope["class"] = new_class
-                envelope["clinical_rereview_required"] = True
-                envelope["review_passes"] = {}
-                envelope["state"] = CAPTURED
-                history = list(envelope.get("prior_processing_history") or [])
-                history.append(archived)
-                envelope["prior_processing_history"] = history
-                self._full_rereview_rows(new_objects)
-                new_envelopes[snapshot_id] = envelope
-                new_bindings[snapshot_id] = []
-                self._commit_prepared_store(
-                    objects=(snapshot_id, new_objects),
-                    envelopes=new_envelopes,
-                    bindings=new_bindings,
-                    expected_revision=expected_revision,
-                    ledger_fn=lambda: self._record_class_change_event(
-                        account=account,
-                        envelope=envelope,
-                        from_class=from_class,
-                        to_class=new_class,
-                        model="cross_model",
-                    ),
-                )
-            receipt = self._receipt(envelope)
-            if source_identity_fields(receipt) != identity_before:
-                raise ConsoleError("source_identity_must_not_change")
-            return receipt
         rows = deepcopy(original_rows)
         envelope["class"] = new_class
         envelope["clinical_rereview_required"] = True
@@ -3029,6 +2807,7 @@ class OperationsConsole:
         type_action: str | None = None,
         expected_revision: str | None = None,
         interaction_evidence: dict[str, Any] | None = None,
+        source_discrepancy: Iterable[str] | None = None,
     ) -> list[dict[str, Any]]:
         with self._atomic_snapshot_mutation(snapshot_id):
             reviewer = self._require_role(actor_id, "reviewer")
@@ -3050,6 +2829,9 @@ class OperationsConsole:
                 decision = mapped
             if decision in {"revise", "reject"} and not str(comment or "").strip():
                 raise ConsoleError("review_comment_required")
+            from src.source_discrepancy_v1 import assert_allowed, normalize
+            discrepancy = normalize(source_discrepancy)
+            assert_allowed(discrepancy, decision)
             rejecting = decision == "reject"
             if rejecting:
                 confirmed_object_type = None
@@ -3111,6 +2893,8 @@ class OperationsConsole:
             from src.integrity_kernel import stable_hash
             relation_choices = tuple(relation_choices or ())
             command_hash = stable_hash({
+                # Present only when reported, so earlier command hashes stay valid.
+                **({"source_discrepancy": discrepancy} if discrepancy else {}),
                 "decision": decision, "confirmed_object_type": confirmed_object_type,
                 "recommendation_strength": recommendation_strength,
                 "recommendation_direction": recommendation_direction,
@@ -3156,6 +2940,8 @@ class OperationsConsole:
                     not current_duty or not route or not route.get("actionable")
                 ):
                     raise ConsoleError("content_duty_required")
+            if discrepancy and review_domain != "content":
+                raise ConsoleError("source_discrepancy_not_applicable")
             if (current_duty and current_duty.get("stage") == SECOND_REVIEW
                     and decision != "revise"):
                 raise ConsoleError("second_review_command_required")
@@ -4496,14 +4282,12 @@ class OperationsConsole:
         version: str,
         family: str,
         new_class: str,
-        reextract: bool = False,
     ) -> dict[str, Any]:
         document = self.resolve_document(title=title, version=version, family=family)
         return self.promote_class(
             actor_id=actor_id,
             snapshot_id=document["snapshot_id"],
             new_class=new_class,
-            reextract=reextract,
         )
 
     def researcher_path(self) -> dict[str, Any]:

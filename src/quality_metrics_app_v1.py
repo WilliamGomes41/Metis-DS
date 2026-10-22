@@ -162,6 +162,19 @@ def install_quality_routes(app, state, require, page, *, tabs=lambda current: ""
             body += f'<tr><td>{labels[route]}</td><td>{row["rejections"]}</td><td>{row["corrections_after_approval"]}</td><td>{esc(changes)}</td></tr>'
         body += '</tbody></table><p>Dit zijn waargenomen review- en herstelsignalen. Een wijziging bewijst op zichzelf geen inhoudelijke fout.</p>'
         body += '<p>' + esc(report["readiness_duration"]["reason"]) + '</p><p>' + esc(report["clinical_errors"]["reason"]) + '</p>'
+        discrepancies = report.get("source_discrepancies")  # absent in reports of definition 1.0.0
+        if discrepancies is not None:
+            from src.source_discrepancy_v1 import CATEGORIES
+            body += ('<h2>Gemelde discrepanties met de originele tekst</h2>'
+                     f'<p>{discrepancies["reports"]} gemelde discrepanties, waarvan {discrepancies["critical"]} kritiek '
+                     '(tekst of bronplek wijkt af). Melden is optioneel; geen melding bewijst geen overeenstemming.</p>'
+                     '<table><thead><tr><th>Soort</th><th>Meldingen</th></tr></thead><tbody>')
+            for code, label in CATEGORIES.items():
+                body += f'<tr><td>{esc(label)}</td><td>{discrepancies["categories"].get(code, 0)}</td></tr>'
+            body += '</tbody></table><table><thead><tr><th>Vormingsroute</th><th>Model</th><th>Meldingen</th></tr></thead><tbody>'
+            for row in discrepancies["by_formation"]:
+                body += f'<tr><td>{esc(row["formation_mode"])}</td><td>{esc(row["model"])}</td><td>{row["reports"]}</td></tr>'
+            body += '</tbody></table>'
         body += '<details><summary>Meetdefinities en beperkingen</summary>' + ''.join('<p>' + esc(v) + '</p>' for v in [*report["definitions"].values(), *report["limitations"]]) + '</details>'
         body += '<h2>Rapporthistorie</h2><p>Eerdere beschikbare metingen blijven ongewijzigd bewaard.</p><ul>'
         for old in history[:20]:

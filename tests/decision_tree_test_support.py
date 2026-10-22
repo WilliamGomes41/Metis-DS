@@ -2,8 +2,9 @@
 
 It proposes one unit per source fragment with open roles and no connections,
 so tests exercise the real contract, materialiser, constructor and review
-graph without a provider. Production has no such default: an unbound PDF
-proposer fails closed.
+graph without a provider. For a structured export it answers like a faithful
+model, from the same request input a model receives. Production has no such
+default: an unbound proposer fails closed.
 """
 from __future__ import annotations
 
@@ -12,6 +13,10 @@ from src.decision_tree_proposal_v1 import CONTRACT
 
 
 def fragment_proposal(frozen):
+    if frozen.get("kind") == "boom":
+        from src.decision_tree_route_v1 import request_input
+        from tests.semantic_fixture_support import export_tree_proposal
+        return export_tree_proposal(request_input(frozen)[1]), "test-proposer"
     blocks = proposal_inputs(frozen["fragments"])
     units = []
     for fragment in frozen["fragments"]:
@@ -31,6 +36,9 @@ def fragment_proposal(frozen):
 
 
 def install_fragment_proposer(console):
+    """Install the only source strategy with this test proposer for decision trees."""
+    from tests.semantic_fixture_support import bind_fixture_selections
+    bind_fixture_selections(console)
     console._decision_tree_proposer = fragment_proposal
     return console
 

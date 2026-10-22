@@ -6,6 +6,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 import pytest
 
@@ -35,7 +36,7 @@ def test_review_type_revision_has_real_predecessor_and_preserves_history(tmp_pat
 
 
 def test_source_context_target_has_explicit_predecessor(tmp_path, *, production_console):
-    console, _, _, source, before, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
+    console, _, _, source, before, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     console.confirm_source_context(**command)
     after = current(console, command["snapshot_id"], before["object_id"])
     assert before in console.snapshot_objects(command["snapshot_id"], include_blocked=True)
@@ -69,7 +70,7 @@ def test_unchanged_review_retry_keeps_revision_and_legacy_history(tmp_path, *, p
     _approve(console, reviewer, sid, obj)
     assert console.objects_revision(sid) == token
     assert console.snapshot_objects(sid, include_blocked=True) == rows
-    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    restarted = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted.snapshot_objects(sid, include_blocked=True) == rows
 
 
@@ -85,7 +86,7 @@ def test_stale_review_writes_nothing(tmp_path, *, production_console):
 
 def test_forward_cutover_chain_and_old_approval_does_not_carry(tmp_path, *, production_console):
     from src.revision_workflow import current_revisions, LINEAGE_CONTRACT
-    console, _, reviewer, source, before, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=lambda console: None))
+    console, _, reviewer, source, before, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     sid = command["snapshot_id"]
     initial = deepcopy(console.snapshot_objects(sid, include_blocked=True))
     console.confirm_source_context(**command)
@@ -112,7 +113,7 @@ def test_forward_cutover_chain_and_old_approval_does_not_carry(tmp_path, *, prod
     assert all(obj in rows for obj in initial)
     assert current_revisions(rows, snapshot_id=sid) == console.snapshot_objects(sid)
     from src.review_closure_v1 import ReviewClosureConsole
-    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    restarted = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted.snapshot_objects(sid, include_blocked=True) == rows
 
 
@@ -385,7 +386,7 @@ def test_canonical_publication_seals_type_relation_and_review_after_restart(tmp_
     from tests.semantic_fixture_support import bind_fixture_selections, install_fixture_history
     from src.integrity_kernel import stamp_canonical_hashes
     source = MemorySourceStore()
-    state = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources",
+    state = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources",
                               runtime=tmp_path / "runtime", immutable_source_store=source)
     author = state.create_account(username="anne", password="anne-secret", roles=("researcher",))
     reviewer = state.create_account(username="bert", password="bert-secret", roles=("reviewer",))
@@ -406,7 +407,7 @@ def test_canonical_publication_seals_type_relation_and_review_after_restart(tmp_
     before = deepcopy(state.snapshot_objects(sid, include_blocked=True))
     bindings = deepcopy(state.object_review_bindings(sid))
     projection = deepcopy(state.canonical_publication_store.active_publication_rows())
-    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources",
+    restarted = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources",
                                   runtime=tmp_path / "runtime", immutable_source_store=source)
     assert restarted.snapshot_objects(sid, include_blocked=True) == before
     commands = [
@@ -435,7 +436,6 @@ def test_source_context_rekeys_proposed_relations_before_readmission(tmp_path, *
     from src.knowledge_relations_v1 import validate_knowledge_relation_set
     state = relation_console(tmp_path, production_console=production_console)
     accounts = _accounts(state)
-    from tests.semantic_fixture_support import bind_fixture_selections
     from tests.context_test_support import bind_detected_context
     bind_fixture_selections(state, [(REC, "recommendation"), (COND, "condition"), (EXPL, "explanation")])
     sid = state.ingest(actor_id=accounts["researcher"]["account_id"], filename="relations.html",
@@ -477,7 +477,7 @@ def test_scoped_commit_discards_stale_unrelated_published_maps(tmp_path, profile
     state, reviewer, sid, _ = _console(tmp_path, production_console=production_console)
     if profile == "closure":
         from src.review_closure_v1 import ReviewClosureConsole
-        state = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+        state = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     # Only envelope/binding state is relevant to this cross-snapshot race.
     unrelated = "snap-unrelated-history"
     state._envelopes[unrelated] = {**deepcopy(state._envelope(sid)), "snapshot_id": unrelated}
@@ -485,7 +485,7 @@ def test_scoped_commit_discards_stale_unrelated_published_maps(tmp_path, profile
     stale_envelopes = deepcopy(state._envelopes)
     stale_bindings = deepcopy(state._bindings)
     stale_envelopes[sid]["title"] = "Updated open work"
-    competing = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    competing = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     competing._envelopes[unrelated].update(state="published", published=True)
     competing._save_envelopes()
     published = deepcopy(competing._envelope(unrelated))

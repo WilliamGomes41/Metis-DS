@@ -4,6 +4,7 @@ Release-control markers identify the route, login boundary and the deliberately
 small console extension. They are test metadata, not live-release evidence.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 from pathlib import Path
 
@@ -21,7 +22,7 @@ pytestmark = [
 
 
 def test_metis_dictionary_requires_login_and_renders_read_only_explanations(tmp_path: Path, *, production_app, production_console) -> None:
-    console = production_console(processing_binder=lambda console: None,
+    console = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",

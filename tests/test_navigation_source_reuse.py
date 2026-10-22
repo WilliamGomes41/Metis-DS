@@ -15,7 +15,7 @@ from tests.test_console_navigation_performance import NavigationProbe
 
 @pytest.fixture
 def source_navigation(tmp_path, *, production_console):
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "source",
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "source",
                                    runtime=tmp_path / "runtime")
     author = console.create_account(username="author", password="fixture-only", roles=("researcher",))
     reviewer = console.create_account(username="reviewer", password="fixture-only", roles=("reviewer",))
@@ -246,7 +246,7 @@ def test_source_accountability_reads_source_once_with_unchanged_outcome(tmp_path
     import src.source_context_review_v1 as context_review
     from src.source_accountability_v1 import is_source_record
     from src.source_containers_v1 import source_accountability
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "source",
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "source",
                                    runtime=tmp_path / "runtime")
     author = console.create_account(username="author", password="fixture-only", roles=("researcher",))
     reviewer = console.create_account(username="reviewer", password="fixture-only", roles=("reviewer",))

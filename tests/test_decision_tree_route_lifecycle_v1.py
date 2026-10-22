@@ -7,6 +7,7 @@
 # release-control-evidence: slop
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import ast
 from copy import deepcopy
@@ -33,7 +34,7 @@ def test_pdf_and_export_trees_are_formed_by_the_sole_materialiser_and_record_the
     accounts = _accounts(console)
     pdf = ingest(console, accounts)["snapshot_id"]
     export = _ingest_boom(console, accounts, review_policy=policy(accounts), named_reviewers=[])["snapshot_id"]
-    for sid, model in ((pdf, "test-proposer"), (export, "deterministic-export-v1")):
+    for sid, model in ((pdf, "test-proposer"), (export, "test-proposer")):
         envelope = console._envelope(sid)
         formation = envelope["decision_tree_formation"]
         assert formation["route"] == "decision-tree-source-bound-v1" and formation["model"] == model
@@ -81,7 +82,7 @@ def test_released_route_graph_is_read_whole_and_tampering_is_rejected(tmp_path, 
     source = MemorySourceStore()
 
     def state():
-        return install_fragment_proposer(production_console(processing_binder=lambda console: None,
+        return install_fragment_proposer(production_console(processing_binder=bind_fixture_selections,
             root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime",
             immutable_source_store=source))
     console = state()

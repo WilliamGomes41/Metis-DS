@@ -146,27 +146,6 @@ class _PostgresRemainingWorkflowMixin:
         self.workflow_remaining_store = workflow_remaining_store
         self.workflow_remaining_store.verify_remaining_schema()
 
-    def _archive_prior_objects(
-        self,
-        *,
-        snapshot_id: str,
-        rows: list[dict[str, Any]],
-        from_class: str,
-        to_class: str,
-    ) -> dict[str, Any]:
-        from src.operations_console_v1 import utc_now
-
-        return {
-            "reason": "document_class_changed",
-            "from_class": from_class,
-            "to_class": to_class,
-            "changed_at": utc_now(),
-            "object_count": len(rows),
-            "object_ids": [row.get("object_id") for row in rows],
-            "history_file": "",
-            "objects": deepcopy(rows),
-        }
-
     def prior_object_audit_history(self, snapshot_id: str) -> list[dict[str, Any]]:
         envelope = self._envelope(snapshot_id)
         out: list[dict[str, Any]] = []

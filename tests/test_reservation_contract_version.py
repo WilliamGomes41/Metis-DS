@@ -5,6 +5,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from datetime import timedelta
 
 import pytest
@@ -78,7 +79,7 @@ def test_resume_reservation_equals_contract_of_the_stored_replay(tmp_path, *, pr
 @pytest.fixture
 def blocked(tmp_path, *, production_console):
     from tests.test_attempt_diagnostics_postgres import bound, ingest
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / 'sources' / 'private',
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / 'sources' / 'private',
                                 runtime=tmp_path / 'output' / 'runtime' / 'operations-console')
     bound(console)  # provider rejects: ingest leaves an empty, blocked document
     sid, actor, _ = ingest(console)

@@ -1,4 +1,5 @@
 """Synthetic identities and real local persistence; no authentication material."""
+from tests.semantic_fixture_support import bind_fixture_selections
 import hashlib
 import json
 from copy import deepcopy
@@ -11,7 +12,7 @@ ACTOR, REVIEWER, OTHER = "author", "reviewer", "other"
 
 def console_at(root, *, production_console):
     """Real production PG with stable, synthetic identity rows for HTML goldens."""
-    console = production_console(root=root, processing_binder=lambda console: None)
+    console = production_console(root=root, processing_binder=bind_fixture_selections)
     for key, roles in ((ACTOR, ["researcher", "reviewer"]),
                        (REVIEWER, ["reviewer"]), (OTHER, ["reviewer"])):
         console.workflow_identity_store.create_account(dict(

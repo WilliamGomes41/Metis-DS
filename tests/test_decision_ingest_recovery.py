@@ -4,6 +4,7 @@
 # release-control-evidence: beschikbaarheid
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 import pytest
 
 from tests.test_decision_graph_chain import _accounts, _ingest_boom, policy, source_pdf
@@ -19,7 +20,7 @@ def test_timeout_after_source_storage_then_retry_and_restart(tmp_path, monkeypat
         from tests.test_durable_publication_console_v1 import MemorySourceStore
         source = MemorySourceStore()
         def state():
-            return production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources",
+            return production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources",
                 runtime=tmp_path / "runtime", immutable_source_store=source)
     console = state()
     accounts = _accounts(console)
@@ -34,7 +35,10 @@ def test_timeout_after_source_storage_then_retry_and_restart(tmp_path, monkeypat
     assert len(source.blobs) == 1
     assert next(iter(source.blobs.values())) == data
     restarted = state()
-    assert restarted.list_envelopes() == []
+    # The bound runtime retains the failed attempt; it never activates objects.
+    for envelope in restarted.list_envelopes():
+        assert envelope["processing_attempts"][-1]["state"] == "failed"
+        assert restarted.snapshot_objects(envelope["snapshot_id"]) == []
     receipt = _ingest_boom(restarted, accounts, **kwargs)
     assert _ingest_boom(state(), accounts, **kwargs)["snapshot_id"] == receipt["snapshot_id"]
     assert len(state().list_envelopes()) == 1

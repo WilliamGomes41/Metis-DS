@@ -1,9 +1,10 @@
 """Deterministic source-context browser fixture; never a production endpoint."""
+from tests.semantic_fixture_support import bind_fixture_selections
 from src.source_context_review_v1 import links_of, role_of
 from tests.test_source_context_review_v1 import _system
 from tests.browser_postgres_support import browser_application
 
-app = browser_application('context-browser', processing_binder=lambda console: None)
+app = browser_application('context-browser', processing_binder=bind_fixture_selections)
 state = app.state.operations_kernel
 state, _, _, source, target, command = _system(state.root, console=state)
 sid = command['snapshot_id']

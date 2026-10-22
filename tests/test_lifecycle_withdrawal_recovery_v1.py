@@ -8,6 +8,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from contextlib import contextmanager
 from copy import deepcopy
@@ -47,7 +48,7 @@ from tests.test_workflow_chain_recovery_v1 import _install_schema, recovery_post
 def _console(root, config, source):
     from tests.production_support import production_application
     return production_application(root, config, azure=True, immutable_source_store=source,
-        processing_binder=lambda console:None, environment={'CONSOLE_PUBLIC_ORIGIN':'https://testserver'}).state.operations_kernel
+        processing_binder=bind_fixture_selections, environment={'CONSOLE_PUBLIC_ORIGIN':'https://testserver'}).state.operations_kernel
 
 
 def _client(console, username="publisher.carla"):
@@ -58,7 +59,6 @@ def _client(console, username="publisher.carla"):
 
 
 def _ingest(console, accounts, title, version, prior=None):
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
     import uuid
     import asyncio
@@ -292,7 +292,6 @@ def test_http_withdrawal_complete_recovery_and_open_work_resume(recovery_postgre
     assert target_sources.blobs == source.blobs
 
     fresh = _console(tmp_path / "restored", config, target_sources)
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(fresh)
     fresh.reconcile_durable_publications()
     restarted_client = _client(fresh)

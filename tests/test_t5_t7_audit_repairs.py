@@ -7,6 +7,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 import hashlib
 import json
@@ -126,7 +127,7 @@ def test_source_input_is_required_even_with_a_valid_approval():
 
 
 def test_consider_publish_passes_explicit_boom_path(tmp_path, *, production_console):
-    console = production_console(root=tmp_path, processing_binder=lambda console: None)
+    console = production_console(root=tmp_path, processing_binder=bind_fixture_selections)
     accounts = _accounts(console)
     receipt = _ingest_boom(console, accounts)
     snapshot = receipt["snapshot_id"]
@@ -217,8 +218,7 @@ def test_corrupt_persisted_source_cannot_acquire_review_binding(tmp_path, comman
 
 def test_reviewed_selected_candidate_repeat_is_safe_but_cannot_reclassify(tmp_path, *, production_console):
     from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
-    from tests.semantic_fixture_support import bind_fixture_selections
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     author = console.create_account(username="anne", password="anne-secret", roles=("researcher",))
     reviewer = console.create_account(username="bert", password="bert-secret", roles=("reviewer",))
     bind_fixture_selections(console, [("Oedeem is een ophoping van vocht.", "definition")])

@@ -1,4 +1,5 @@
 """Production PostgreSQL composition, shared fixtures and canonical seeds."""
+from tests.semantic_fixture_support import bind_fixture_selections
 import json
 
 import pytest
@@ -18,7 +19,7 @@ def complete_console(root, config, console_cls=FastBadgePostgresCompleteWorkflow
     options.update(overrides)
     app = production_application(root, config,
         azure=console_cls is FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
-        processing_binder=lambda console: None, **options)
+        processing_binder=bind_fixture_selections, **options)
     return install_fragment_proposer(app.state.operations_kernel)
 
 

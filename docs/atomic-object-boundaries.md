@@ -1,5 +1,7 @@
 # Bronpassages en objectvoorstellen (#595)
 
+> **Vervallen door Protocol 4.3.0 (2026-10-22).** De deterministische splitter (`split_context_aware_units`, `atomic_split_v1`) en `_spec_from_fragments` bestaan niet meer; objectvoorstellen komen uitsluitend uit de semantische routes en `materialise_knowledge_candidates`. Dit document blijft als historisch bewijs voor eerder gevormde objecten. Zie `docs/change-contracts/semantic-only-formation.md`.
+
 Change class: B
 Promise: Nieuwe objectvorming behoudt exacte bronbereiken en maakt begrensde, herhaalbare relatievoorstellen zonder bestaande bronfragmenten of beoordelingen te herschrijven.
 Proof: Regressies voor quotes, afkortingen, bronbereiken, geïntegreerde beperkingen, zelfstandige adviesclausules, sectiegrenzen en dubbele uitvoering; bestaande ingest-, review- en architectuurtests.

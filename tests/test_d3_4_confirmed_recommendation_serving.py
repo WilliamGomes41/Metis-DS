@@ -9,6 +9,7 @@ real source -> review confirmation -> retrieval projection -> Product API.
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import copy
 import json
@@ -32,7 +33,7 @@ RECOMMENDATION_TEXT = "De werkgroep adviseert de verpleegkundige de interventie 
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "runtime" / "console",
@@ -88,7 +89,6 @@ def _semantics_proposal(
 def _reviewed_source_objects(tmp_path: Path, *, direction: str, strength_choice: str, label: str, text: str=RECOMMENDATION_TEXT, production_console) -> tuple[list[dict], str]:
     console = _console(tmp_path, production_console=production_console)
     researcher, reviewer = _accounts(console)
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console, [(text, "recommendation")])
     receipt = console.ingest(
         actor_id=researcher["account_id"],
