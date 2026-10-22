@@ -1,6 +1,6 @@
 # D6b — PostgreSQL als enige runtime-autoriteit
 
-**Status: geïmplementeerd op branch `claude/project-thread-zw16ht` op expliciete opdracht van William. Niet gepusht of gemergd zonder Williams GO. Lex, Sherlock en Argos zijn nog niet uitgevoerd.**
+**Status: geïmplementeerd op branch `claude/project-thread-zw16ht` op expliciete opdracht van William. Gepusht en als PR geopend met Williams akkoord (2026-10-22); niet mergen zonder zijn GO. Lex, Sherlock en Argos zijn nog niet uitgevoerd.**
 
 Basis: `main` op `afcb37c` (D6a portie 19 gemergd).
 
