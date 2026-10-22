@@ -328,6 +328,13 @@ def test_runtime_policy_is_instance_bound_and_has_no_rollback_mode(tmp_path: Pat
         semantic_console._fragments_and_spec(
             "html", tmp_path / "source.html", document_id="doc-3", **command)
     assert retired.value.code == "passage_formation_mode_invalid"
+    # Decision trees take their own route, but never past an invalid configuration.
+    for kind in ("boom", "pdf"):
+        with pytest.raises(ConsoleError) as retired_tree:
+            semantic_console._fragments_and_spec(
+                kind, tmp_path / f"source.{kind}", document_id=f"doc-tree-{kind}",
+                **{**command, "class_": "beslisboom"})
+        assert retired_tree.value.code == "passage_formation_mode_invalid"
 
 
 def test_missing_provider_persists_blocked_capture_and_recovers_same_snapshot(tmp_path: Path, *, production_console) -> None:

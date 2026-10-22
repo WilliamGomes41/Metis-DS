@@ -1081,18 +1081,19 @@ def bind_pre_review_semantic_processing(
             from src.source_selection_v1 import assert_resume_configuration
             assert_resume_configuration(console, console._envelope(formation_context["snapshot_id"]))
 
+        # Validated before any route, so a retired or unknown mode also stops decision trees.
+        mode = active_passage_formation_mode()
+        try:
+            decision = resolve_passage_formation_strategy(deployment_mode=mode)
+        except PassageFormationPolicyError as exc:
+            raise ConsoleError(exc.code) from exc
+
         if class_ == "beslisboom" and kind in {"pdf", "boom"}:
             from src.decision_tree_route_v1 import prepare
             return prepare(kind, path, data=data, document_id=document_id, source_id=source_id,
                            title=title, family=family, class_=class_,
                            formation_context=formation_context,
                            proposer=getattr(console, "_decision_tree_proposer", None))
-
-        mode = active_passage_formation_mode()
-        try:
-            decision = resolve_passage_formation_strategy(deployment_mode=mode)
-        except PassageFormationPolicyError as exc:
-            raise ConsoleError(exc.code) from exc
 
         checkpoint = (formation_context or {}).get("diagnostic_checkpoint")
         if checkpoint:
