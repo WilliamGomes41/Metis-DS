@@ -175,7 +175,7 @@
       "routes": 122,
       "route_sha256": "2eb378a25eec993c97c86b6ca4363e028b11d41d5dd324dcc97286a7ce537486"
     },
-    "command": "python scripts/benchmark_console_startup.py --checkout CHECKOUT --repeats25",
+    "command": "python scripts/benchmark_console_startup.py --checkout CHECKOUT --repeats 25",
     "limit": "Empty isolated database; startup only, not a whole-suite ratio"
   },
   "rejected_experiments": {
@@ -266,5 +266,31 @@
   },
   "new_exact_head_CI": "Pending; no D6a completion or D6b start claimed",
   "D6a_done": false,
-  "D6b_started": false
+  "D6b_started": false,
+  "trigger_ci": [
+    {
+      "pr": 813,
+      "head": "23397b336327e0a890d609d4896942a50ce9c6d0",
+      "run": 39745286181,
+      "job": 119712170441,
+      "seconds": 2607.08,
+      "baseline_seconds": 1277.029,
+      "ratio": 2.0415,
+      "test_failures": 0,
+      "postgres_skips": 0,
+      "timing_gate": "failed"
+    },
+    {
+      "pr": 814,
+      "head": "9ede0dcd66b755eee68e67102b624923161f40ff",
+      "run": 39745283407,
+      "job": 119712195233,
+      "seconds": 2606.898,
+      "baseline_seconds": 1360.112,
+      "ratio": 1.9167,
+      "test_failures": 0,
+      "postgres_skips": 0,
+      "timing_gate": "passed"
+    }
+  ]
 }
