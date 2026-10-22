@@ -5,6 +5,8 @@ full previous_review schema are out of scope. publish() stays G2-BLOCKED.
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 """
 from __future__ import annotations
+
+from copy import deepcopy
 from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
@@ -182,7 +184,7 @@ def test_cross_model_direct_change_blocked_keeps_prior_objects(tmp_path: Path, *
             snapshot_id=richtlijn["snapshot_id"],
             new_class="beslisboom",
         )
-    with pytest.raises(ConsoleError, match="cross_model_direct_change_blocked"):
+    with pytest.raises(ConsoleError, match="knowledge_class_change_requires_successor"):
         console.promote_class(
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=boom["snapshot_id"],
@@ -200,48 +202,41 @@ def test_cross_model_direct_change_blocked_keeps_prior_objects(tmp_path: Path, *
     ]
 
 
-def test_cross_model_requires_reextract_new_graph_prior_objects_audit_history(tmp_path: Path, *, production_console) -> None:
+def test_cross_model_class_change_is_a_successor_and_keeps_prior_work(tmp_path: Path, *, production_console) -> None:
+    from tests.test_explicit_review_policy import policy
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
-    boom = _ingest_boom(console, accounts)
-    prior = console.snapshot_objects(boom["snapshot_id"])
-    prior_ids = [row["object_id"] for row in prior]
-    prior_types = {
-        row.get("confirmed_object_type") or row.get("object_type") or row.get("proposed_object_type")
-        for row in prior
-    } | {
-        row.get("proposed_object_type")
-        for row in prior
-        if row.get("proposed_object_type")
-    }
+    boom = _ingest_boom(console, accounts, named_reviewers=[], review_policy=policy(accounts))
+    sid = boom["snapshot_id"]
+    prior = console.snapshot_objects(sid)
+    assert {"path", "node", "outcome"} & {row.get("proposed_object_type") for row in prior}
+    before = (deepcopy(console._envelope(sid)), prior, console.objects_revision(sid))
     freeze_before = Path(boom["binary_path"]).read_bytes()
     identity = _source_identity(boom)
 
-    changed = console.promote_class(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=boom["snapshot_id"],
-        new_class="richtlijn",
-        reextract=True,
-    )
-    assert changed["class"] == "richtlijn"
-    live = console.snapshot_objects(boom["snapshot_id"])
-    live_ids = [row["object_id"] for row in live]
-    assert live_ids
-    assert live_ids != prior_ids
-    assert not ({"path", "node", "outcome"} & {row.get("object_type") for row in live if row.get("object_type") != "document"})
+    # Re-forming the export as prose never rewrites this WorkingRevision (T11).
+    with pytest.raises(ConsoleError, match="decision_graph_class_change_requires_successor"):
+        console.promote_class(actor_id=accounts["reviewer"]["account_id"], snapshot_id=sid, new_class="richtlijn")
+    assert (console._envelope(sid), console.snapshot_objects(sid), console.objects_revision(sid)) == before
+
+    successor = console.create_review_successor(
+        actor_id=accounts["researcher"]["account_id"], snapshot_id=sid, command_id="to-richtlijn",
+        expected_revision=console.objects_revision(sid), reason="Export als richtlijn beoordelen",
+        class_="richtlijn")
+    new_sid = successor["snapshot_id"]
+    assert new_sid != sid
+    assert successor["class"] == "richtlijn"
+    assert successor["sha256"] == boom["sha256"]
+    live = [row for row in console.snapshot_objects(new_sid) if row.get("object_type") != "document"]
+    assert live
+    assert not {row["object_id"] for row in live} & {row["object_id"] for row in prior}
+    assert not ({"path", "node", "outcome"} & {row.get("object_type") for row in live})
     assert all(obj["governance"]["validation_status"] == "needs_review" for obj in live)
-    assert changed["clinical_rereview_required"] is True
-
-    history = console.prior_object_audit_history(boom["snapshot_id"])
-    assert history
-    archived = history[-1]
-    assert archived["from_class"] == "beslisboom"
-    assert archived["to_class"] == "richtlijn"
-    assert [row["object_id"] for row in archived["objects"]] == prior_ids
-    assert {"path", "node", "outcome"} & prior_types
-
-    assert Path(changed["binary_path"]).read_bytes() == freeze_before
-    assert _source_identity(changed) == identity
+    assert "decision_tree_formation" not in console._envelope(new_sid)
+    # The parent, its objects and its source stay exactly as they were.
+    assert (console._envelope(sid), console.snapshot_objects(sid), console.objects_revision(sid)) == before
+    assert Path(boom["binary_path"]).read_bytes() == freeze_before
+    assert _source_identity(console._receipt(console._envelope(sid))) == identity
 
 
 def test_cross_model_html_to_boom_reextract_required_does_not_relabel(tmp_path: Path, *, production_console) -> None:
@@ -254,13 +249,6 @@ def test_cross_model_html_to_boom_reextract_required_does_not_relabel(tmp_path: 
             actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=receipt["snapshot_id"],
             new_class="beslisboom",
-        )
-    with pytest.raises(ConsoleError, match="knowledge_class_change_requires_successor"):
-        console.promote_class(
-            actor_id=accounts["reviewer"]["account_id"],
-            snapshot_id=receipt["snapshot_id"],
-            new_class="beslisboom",
-            reextract=True,
         )
     live = next(row for row in console.list_envelopes() if row["snapshot_id"] == receipt["snapshot_id"])
     assert live["class"] == "richtlijn"
@@ -308,7 +296,7 @@ def test_preconfirm_consequence_shown_on_documentenhierarchie(tmp_path: Path, *,
     lower = html.lower()
     assert "bron blijft ongewijzigd" in lower or "bron ongewijzigd" in lower
     assert "deze wijziging vereist een nieuwe beoordeling" in lower
-    assert "van of naar een beslisboom wordt de bron opnieuw verwerkt" in lower
+    assert "via review → nieuwe werkrevisie" in lower
     assert "sha-256" not in lower
     assert "same-model" not in lower
     assert "cross-model" not in lower

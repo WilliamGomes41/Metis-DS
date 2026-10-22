@@ -152,7 +152,7 @@ def test_graph_review_form_and_class_conversion_cannot_drop_routes(tmp_path, *, 
     before = deepcopy(console._envelope(sid))
     with pytest.raises(ConsoleError, match="decision_graph_class_change_requires_successor"):
         console.promote_class(actor_id=accounts["researcher"]["account_id"], snapshot_id=sid,
-                              new_class="richtlijn", reextract=True)
+                              new_class="richtlijn")
     assert console._envelope(sid) == before
 
 

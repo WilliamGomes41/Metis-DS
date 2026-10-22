@@ -107,7 +107,7 @@ from src.review_ledger import append_event, read_events
 from src.review_interaction_v1 import validate_review_interaction_identity
 from src.review_workflow_v3 import _apply_review_state
 from src.revision_workflow import (bump_patch, create_revision, revise_object, current_revisions,
-                                   knowledge_revision, reprocessed_history, lineage_evidence,
+                                   reprocessed_history, lineage_evidence,
                                    with_current_revision)
 from src.semantic_replay_v1 import SEMANTIC_REPLAY_SPEC_KEY
 from src.quality_evidence_v1 import record_processing, review_evidence, instant as quality_instant
@@ -2604,24 +2604,6 @@ class OperationsConsole:
             )
         return self._receipt(envelope)
 
-    def _class_change_manifest(self, envelope: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "canonical_source": {
-                "source_id": envelope["source_id"],
-                "title": envelope["title"],
-                "publisher": "V&VN",
-                "source_url": envelope.get("live_url") or "",
-                "source_type": "interactive_tree" if envelope["content_kind"] == "boom" else envelope["content_kind"],
-                "source_level": 1,
-                "canonicality": "canonical",
-                "source_checksum": envelope["sha256"],
-                "checksum_algorithm": "sha256",
-                "integrity_status": "verified",
-                "publication_date": envelope["date"],
-                "version": envelope["version"],
-            }
-        }
-
     def _full_rereview_rows(self, rows: list[dict[str, Any]]) -> None:
         for row in current_revisions(rows):
             governance = row.setdefault("governance", {})
@@ -2658,64 +2640,12 @@ class OperationsConsole:
             },
         )
 
-    def _reextract_objects_for_klasse(
-        self,
-        envelope: dict[str, Any],
-        new_class: str,
-        freeze_bytes: bytes,
-    ) -> list[dict[str, Any]]:
-        freeze_path = self._source_cache_path(envelope)
-        if review_path_for_klasse(new_class) == "boom":
-            errors = boom_freeze_errors(
-                data=freeze_bytes,
-                filename=freeze_path.name,
-                live_url=envelope.get("live_url") or "",
-            )
-            if errors:
-                raise ConsoleError(errors[0])
-            fragments, spec = self._fragments_and_spec(
-                "boom",
-                freeze_path,
-                data=freeze_bytes,
-                document_id=envelope["document_id"],
-                source_id=envelope["source_id"],
-                title=envelope["title"],
-                family=envelope["family"],
-                class_=new_class,
-            )
-            objects = transform_generic(spec, self._class_change_manifest(envelope), fragments)
-            stamp_boom_flags(objects, fragments)
-            return objects
-        fragments, spec = self._fragments_and_spec(
-            envelope["content_kind"],
-            freeze_path,
-            data=freeze_bytes,
-            document_id=envelope["document_id"],
-            source_id=envelope["source_id"],
-            title=envelope["title"],
-            family=envelope["family"],
-            class_=new_class,
-            formation_context={"retained_fragments": self._read_source_fragments(envelope, freeze_path)}
-                              if envelope["content_kind"] == "pdf" else None,
-        )
-        objects = transform_generic(spec, self._class_change_manifest(envelope), fragments)
-        return apply_passage_register(
-            apply_admission_gate(
-                objects,
-                klasse=new_class,
-                fragments=fragments,
-                document_version=envelope["version"],
-                source_hash=envelope["sha256"],
-            )
-        )
-
     def promote_class(
         self,
         *,
         actor_id: str,
         snapshot_id: str,
         new_class: str,
-        reextract: bool = False,
     ) -> dict[str, Any]:
         account = self._require_role(actor_id, "reviewer")
         if new_class not in ALLOWED_CLASSES:
@@ -2726,61 +2656,18 @@ class OperationsConsole:
         from_class = live["class"]
         if new_class == from_class:
             raise ConsoleError("class_unchanged")
-        if live.get("decision_graph") and is_cross_model_class_change(from_class, new_class):
-            raise ConsoleError("decision_graph_class_change_requires_successor")
+        if is_cross_model_class_change(from_class, new_class):
+            # Re-forming the source for another model is new formation work. It
+            # never rewrites this WorkingRevision in place (T11): it is created as
+            # an explicit successor (create_review_successor with class_).
+            raise ConsoleError("decision_graph_class_change_requires_successor" if live.get("decision_graph")
+                               else "knowledge_class_change_requires_successor")
         identity_before = source_identity_fields(live)
         original_rows, expected_revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
         _, freeze_bytes = self._verified_source_bytes(live)
         envelope = deepcopy(live)
         new_envelopes = deepcopy(self._envelopes)
         new_bindings = deepcopy(self._bindings)
-        if is_cross_model_class_change(from_class, new_class):
-            if any(knowledge_revision(row) for row in original_rows):
-                raise ConsoleError("knowledge_class_change_requires_successor")
-            if not reextract:
-                raise ConsoleError("cross_model_direct_change_blocked")
-            prior = deepcopy(original_rows)
-            processing_started = quality_instant()
-            new_objects = self._reextract_objects_for_klasse(envelope, new_class, freeze_bytes)
-            record_processing(envelope, new_objects, fragments=[], replay=None,
-                              started_at=processing_started)
-            with self._store_write_lock():
-                self._reload_store_locked()
-                self._require_role(actor_id, "reviewer")
-                self._assert_source_work_unchanged(live, expected_revision, "published_class_change_blocked")
-                archived = self._archive_prior_objects(
-                    snapshot_id=snapshot_id,
-                    rows=prior,
-                    from_class=from_class,
-                    to_class=new_class,
-                )
-                envelope["class"] = new_class
-                envelope["clinical_rereview_required"] = True
-                envelope["review_passes"] = {}
-                envelope["state"] = CAPTURED
-                history = list(envelope.get("prior_processing_history") or [])
-                history.append(archived)
-                envelope["prior_processing_history"] = history
-                self._full_rereview_rows(new_objects)
-                new_envelopes[snapshot_id] = envelope
-                new_bindings[snapshot_id] = []
-                self._commit_prepared_store(
-                    objects=(snapshot_id, new_objects),
-                    envelopes=new_envelopes,
-                    bindings=new_bindings,
-                    expected_revision=expected_revision,
-                    ledger_fn=lambda: self._record_class_change_event(
-                        account=account,
-                        envelope=envelope,
-                        from_class=from_class,
-                        to_class=new_class,
-                        model="cross_model",
-                    ),
-                )
-            receipt = self._receipt(envelope)
-            if source_identity_fields(receipt) != identity_before:
-                raise ConsoleError("source_identity_must_not_change")
-            return receipt
         rows = deepcopy(original_rows)
         envelope["class"] = new_class
         envelope["clinical_rereview_required"] = True
@@ -4331,14 +4218,12 @@ class OperationsConsole:
         version: str,
         family: str,
         new_class: str,
-        reextract: bool = False,
     ) -> dict[str, Any]:
         document = self.resolve_document(title=title, version=version, family=family)
         return self.promote_class(
             actor_id=actor_id,
             snapshot_id=document["snapshot_id"],
             new_class=new_class,
-            reextract=reextract,
         )
 
     def researcher_path(self) -> dict[str, Any]:

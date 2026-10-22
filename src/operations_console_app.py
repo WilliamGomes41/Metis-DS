@@ -26,7 +26,6 @@ from src.document_status_v1 import DOCUMENT_STATUS_LABELS
 from src.four_eyes_v1 import requires_four_eyes
 from src.api_access_v1 import ApiAccessConflict, ApiAccessError, ApiAccessStoreError, PostgresApiAccessStore, VALID_SCOPES
 from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
-from src.klasse_wijzigen_v1 import is_cross_model_class_change
 from src.heading_parent_list_v1 import (
     heading_visible_text,
     is_heading_object,
@@ -391,7 +390,8 @@ ERROR_COPY = {
     "unpublished_delete_role_required": "Je account heeft geen rechten om dit document te verwijderen. Vraag een onderzoeker of beoordelaar om deze stap uit te voeren.",
     "unpublished_delete_not_permitted": "Alleen de uploader van dit document of een publicatiebeheerder verwijdert een ongepubliceerd document.",
     "hide_selected_objects_forbidden": "Losse passages kunnen niet worden verborgen terwijl dit document in beoordeling blijft. Rond de beoordeling van deze passages af.",
-    "cross_model_direct_change_blocked": "Omzetten tussen een beslisboom en een ander documenttype vereist opnieuw verwerken. Gebruik de actie voor opnieuw verwerken van dit document.",
+    "knowledge_class_change_requires_successor": "Omzetten tussen een beslisboom en een ander documenttype maakt nieuwe kennisobjecten. Maak daarvoor via Review → Nieuwe werkrevisie een opvolgende werkrevisie met het nieuwe documenttype; dit document blijft ongewijzigd.",
+    "decision_graph_class_change_requires_successor": "Omzetten tussen een beslisboom en een ander documenttype maakt nieuwe kennisobjecten. Maak daarvoor via Review → Nieuwe werkrevisie een opvolgende werkrevisie met het nieuwe documenttype; dit document blijft ongewijzigd.",
     "class_change_confirmation_required": "Bevestig eerst de consequentie van Klasse wijzigen.",
     "published_class_change_blocked": "Van een gepubliceerd document kun je het documenttype niet wijzigen. Lever een nieuwe versie in.",
     "cross_model_reextract_required": "Dit document moet opnieuw worden verwerkt om het naar het gekozen documenttype om te zetten.",
@@ -5170,7 +5170,7 @@ def create_console_app(
                           </label>
                           <div class="klasse-wijzigen-consequence">
                             <p>De bron blijft ongewijzigd. Deze wijziging vereist een nieuwe beoordeling.
-                            Bij een overstap van of naar een beslisboom wordt de bron opnieuw verwerkt.</p>
+                            Een overstap van of naar een beslisboom maakt nieuwe kennisobjecten en gebeurt via Review → Nieuwe werkrevisie; dit document blijft dan ongewijzigd.</p>
                           </div>
                           <label class="check">
                             <input type="checkbox" name="confirm" value="1">
@@ -5289,17 +5289,14 @@ def create_console_app(
                 actor_id=account["account_id"],
                 snapshot_id=snapshot_id,
                 new_class=new_class,
-                reextract=is_cross_model_class_change(current["class"], new_class),
             )
         else:
-            document = state.resolve_document(title=title, version=version, family=family)
             state.promote_class_document(
                 actor_id=account["account_id"],
                 title=title,
                 version=version,
                 family=family,
                 new_class=new_class,
-                reextract=is_cross_model_class_change(document["class"], new_class),
             )
         return RedirectResponse("/tree", status_code=303)
 

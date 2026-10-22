@@ -123,19 +123,11 @@ Na deze wijziging bestaat er precies één uitvoerbare kandidaatvormingsroute v�
 | Historische vergelijking / route | `test_route_comparison_v1.py`, `test_route_comparison_http_v1.py` |
 | Restart/retry/concurrency | bestaande suites (`test_source_resume_acceptance`, `test_bounded_processing_lifecycle`, `test_processing_retry_postgres`, `test_workflow_postgres_concurrency`) |
 
-## 7. Concreet conflict: klassewijziging met herextractie van beslisboom-export naar proza (niet opgelost)
+## 7. Klassewijziging tussen beslisboom en ander documenttype (besloten: optie 1)
 
-Volgens de opdracht gestopt bij dit conflict; de invariant is niet gewijzigd.
+Gevonden conflict: een kennisrevisie wordt nooit in-place gewijzigd (T11, `revision_workflow.validate_revision_write`), terwijl semantische hervorming van dezelfde bron dezelfde span-afgeleide `-sem-`identiteiten met andere inhoud oplevert. Het in-place herextractiepad van "Klasse wijzigen" kon daardoor niet meer slagen.
 
-- **Regel:** een kennisrevisie wordt nooit in-place gewijzigd (T11, `revision_workflow.validate_revision_write` → `revision_content_changed_in_place`); een klassewijziging van kennis vereist een opvolger (`knowledge_class_change_requires_successor`, `operations_console_v1.promote_class`). Kandidaatidentiteit is afgeleid van de bronspans (`knowledge_materialisation_v1._candidate_identity`).
-- **Code-eigenaar:** `src/revision_workflow.py` (T11-lijn), `OperationsConsole.promote_class` / `_reextract_objects_for_klasse`, `src/knowledge_materialisation_v1.py`.
-- **Conflict:** de klassewijziging `beslisboom → richtlijn/artikel` met `reextract=True` vormde de export vroeger deterministisch opnieuw met andere identiteiten (`{doc}-{fragment}`). Semantische vorming van dezelfde exportitems levert dezelfde `-sem-`identiteiten als de beslisboomkandidaten, maar met andere inhoud; T11 weigert die in-place wijziging. Voor richtlijnbronnen gold al vóór deze wijziging dat semantisch gevormde kennis een opvolger vereist; nu alle richtlijnbronnen semantisch worden gevormd, geldt die regel voor alle richtlijnbronnen.
-- **Huidig gedrag:** fail-closed. De poging faalt met `workflow_document_bundle_write_failed` (oorzaak `revision_content_changed_in_place`); klasse, objecten, revisie en audithistorie blijven ongewijzigd (gecontroleerd). Er is geen terugval.
-- **Rode tests (bewust niet aangepast):** `tests/test_v226_klasse_wijzigen.py::test_cross_model_requires_reextract_new_graph_prior_objects_audit_history`, `tests/test_source_cache_work_v1.py::test_work_recovers_source_into_current_configured_cache[missing-cross_model]` en `[corrupt-cross_model]`.
-- **Oplossingsrichtingen (beslissing eigenaar, Class A):**
-  1. Klassewijziging tussen modellen altijd via een expliciete opvolger-WorkingRevision (consistent met T11; het in-place pad vervalt ook voor beslisbomen) en een duidelijke foutcode in plaats van de generieke schrijffout.
-  2. In-place herextractie modelleren als nieuwe revisies die de vorige vervangen (supersessie binnen de werkrevisie) — wijzigt T11-lijn en vereist lifecycle-VSA.
-  3. Klasse/route opnemen in het identiteitsmateriaal — wijzigt het identiteitscontract en de replay-/reviewbinding.
+Besluit William 2026-10-22 (optie 1): een klassewijziging van of naar een beslisboom verloopt altijd via de bestaande opvolger (`create_review_successor(..., class_=...)`, UI: Review → Nieuwe werkrevisie). `promote_class` weigert zo'n wijziging met `decision_graph_class_change_requires_successor` (met beslisgraaf) of `knowledge_class_change_requires_successor`, met Nederlandse uitleg in de console. Verwijderd: `_reextract_objects_for_klasse`, `_class_change_manifest`, `_archive_prior_objects` (schrijver), de `reextract`-vlag en `cross_model_direct_change_blocked`. Behouden: `prior_object_audit_history` om eerder gearchiveerde objecten te blijven lezen. De opvolger krijgt een eigen snapshot met eigen identiteiten; ouder, objecten, revisie en bron blijven ongewijzigd (`test_cross_model_class_change_is_a_successor_and_keeps_prior_work`). T11 en het identiteitscontract zijn niet gewijzigd.
 
 ## 8. Niet-geverifieerde risico's
 
@@ -160,7 +152,7 @@ Volgens de opdracht gestopt bij dit conflict; de invariant is niet gewijzigd.
 ## 10. Testresultaten
 
 - Volledige suite met PostgreSQL 16 (gestart via `scripts/test_postgres.sh` door `tests/conftest.py`), 4 workers: 5552 geslaagd, 3 xfailed (B23 fail-first), 29 overgeslagen, 4 gefaald.
-  - 3 × het conflict uit §7 (bewust rood gelaten).
+  - 3 × het conflict uit §7; opgelost met optie 1 (zie §7), deze tests zijn nu groen of vervangen.
   - 1 × `tests/test_security_sandbox.py::test_tested_code_cannot_overwrite_control_files`: faalt ook op `fe0ccf8` in deze container (root negeert alleen-lezen rechten); niet gerelateerd.
 - `python scripts/check_architecture_boundaries.py`: PASS.
 - Byte-gelijkheid kopprojectie oud/nieuw: 23 koppen over alle HTML-fixtures gelijk.

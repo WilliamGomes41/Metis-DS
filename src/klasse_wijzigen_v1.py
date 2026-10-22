@@ -25,7 +25,7 @@ def class_change_consequence(from_class: str, to_class: str) -> dict[str, Any]:
     return {
         "source_unchanged": True,
         "model": "cross_model" if cross else "same_model",
-        "objects": "re_extract_required" if cross else "kept",
+        "objects": "successor_required" if cross else "kept",
         "review": "full_re_review",
         "direct_change_allowed": not cross,
         "from_class": from_class,

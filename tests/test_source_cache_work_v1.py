@@ -16,17 +16,17 @@ from fastapi.testclient import TestClient
 
 from src.g2_source_store import G2SourceStoreError
 from src.operations_console_v1 import ConsoleError, PRE_REVIEW_BLOCKED
-from tests.test_v226_klasse_wijzigen import _accounts, _ingest_richtlijn, _ingest_boom
+from tests.test_v226_klasse_wijzigen import _accounts, _ingest_richtlijn
 from tests.test_vsa_publish_document_v1 import MemorySourceStore
 from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: F401
 from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 
 
-def _system(tmp_path, *, boom=False, production_console):
+def _system(tmp_path, *, production_console):
     source = MemorySourceStore()
     console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime", immutable_source_store=source)
     accounts = _accounts(console)
-    receipt = (_ingest_boom if boom else _ingest_richtlijn)(console, accounts)
+    receipt = _ingest_richtlijn(console, accounts)
     return console, source, accounts, receipt
 
 
@@ -38,13 +38,13 @@ def _act(console, accounts, sid, action):
     actor = accounts["researcher"]["account_id"]
     if action == "extract":
         return console.reextract_unpublished(actor_id=actor, snapshot_id=sid)
-    return console.promote_class(actor_id=actor, snapshot_id=sid, new_class="artikel", reextract=True)
+    return console.promote_class(actor_id=actor, snapshot_id=sid, new_class="artikel")
 
 
-@pytest.mark.parametrize("action", ["extract", "class", "cross_model"])
+@pytest.mark.parametrize("action", ["extract", "class"])
 @pytest.mark.parametrize("cache", ["missing", "corrupt"])
 def test_work_recovers_source_into_current_configured_cache(tmp_path, action, cache, *, production_console):
-    console, source, accounts, receipt = _system(tmp_path, boom=action == "cross_model", production_console=production_console)
+    console, source, accounts, receipt = _system(tmp_path, production_console=production_console)
     sid = receipt["snapshot_id"]
     original = deepcopy(console._envelope(sid))
     old_path = Path(original["binary_path"])
