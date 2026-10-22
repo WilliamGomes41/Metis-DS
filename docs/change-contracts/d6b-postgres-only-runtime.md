@@ -108,6 +108,7 @@ Explicit non-goals: de consoleklassen opsplitsen; `runtime_data_inventory_v1`, g
 - 46 `file_topology`-gevallen in 23 modules verwijderd, plus de marker en de afhandeling in `tests/conftest.py`.
 - `tests/characterization/test_ingest.py` en `test_ingest_boundaries.py` (84 goldens) legden de JSON-boom van de bestandsopstelling vast en zijn verwijderd, met hun goldens, de CI-mutatiestap voor ingest en de bijbehorende baseline-run. De reviewruimte-characterization blijft op PostgreSQL. **Open:** ingest-characterization op PostgreSQL herbouwen is een aparte portie.
 - `tests/test_718_workflow_topology.py` toetst nu de nieuwe weigering, de CLI via de productiecompositie en de productieguard.
+- `scripts/probes/probe_source_repair_mapping.py` (A09) bouwde een losse `ReviewClosureConsole` op bestanden; hij draait nu via `build_app` op een eigen PostgreSQL-database (`METIS_PROBE_ADMIN_DSN`) en slaagt met dezelfde uitkomst.
 
 ## Open punten vóór merge
 

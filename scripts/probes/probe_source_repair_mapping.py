@@ -1,19 +1,23 @@
-"""Actual V3 ingest -> HTTP source-unit repair -> source validation / review."""
+"""Actual V3 ingest -> HTTP source-unit repair -> source validation / review.
+
+Since D6b the console runs only on PostgreSQL: set METIS_PROBE_ADMIN_DSN to a
+PostgreSQL server DSN that may create databases; every scenario gets its own.
+"""
 import os
 import sys,json,tempfile
 from pathlib import Path
 sys.path.insert(0,__import__('os').environ.get('METIS_PROBE_REPO', str(Path(__file__).resolve().parents[2])))
 from fastapi.testclient import TestClient
-from src.review_closure_v1 import ReviewClosureConsole
-from src.operations_console_app import create_console_app
 from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-from src.deterministic_review_repair_v1 import install_deterministic_review_repair_routes
+from tests.postgres_support import database, install_schema
+from tests.production_support import production_application
 from src.knowledge_materialisation_v1 import validate_materialised_candidate
 from tests.test_recommendation_context_v3 import response_for
 
 def scenario(expand, supply_selection=False):
- with tempfile.TemporaryDirectory() as folder:
-  p=Path(folder);s=ReviewClosureConsole(root=p,source_store=p/'sources',runtime=p/'runtime')
+ with tempfile.TemporaryDirectory() as folder, database(os.environ['METIS_PROBE_ADMIN_DSN']) as config:
+  install_schema(config.dsn)
+  p=Path(folder);app=production_application(p,config,processing_binder=lambda console:None);s=app.state.operations_kernel
   a=s.create_account(username='author',password='fixture-only',roles=('researcher',));r=s.create_account(username='reviewer',password='fixture-only',roles=('reviewer',))
   def provider(_url,_headers,payload,_timeout):
    data=json.loads(payload['input'][1]['content'])
@@ -33,7 +37,6 @@ def scenario(expand, supply_selection=False):
     kw['materialisation_decision']={'decision_kind':'semantic_selection','selection_origin':'proposal_selected','spans':[{'block_id':block['block_id'],'start':0,'end':len(block['text'])}],'source_text':block['text']}
    return original(console,**kw)
   OperationsConsole.correct_object=pass_selected_source
-  app=create_console_app(s);install_deterministic_review_repair_routes(app,s)
   with TestClient(app,base_url='https://testserver',raise_server_exceptions=False) as c:
    c.post('/login',data={'username':'reviewer','password':'fixture-only'})
    response=c.post('/review/resolve',data={'snapshot_id':sid,'object_id':obj['object_id'],'snapshot_revision':s.objects_revision(sid),'suitability':'mist_context','comment':'Volledige bronzinnen selecteren.','repair_kind':'source_units','source_unit_ids':[u['unit_id'] for u in (units if expand else units[:1])]},follow_redirects=False)
