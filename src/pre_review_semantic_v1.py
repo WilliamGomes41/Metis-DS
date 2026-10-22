@@ -1143,7 +1143,8 @@ def bind_pre_review_semantic_processing(
             path,
             document_id=document_id,
             source_id=source_id,
-            quarantine_pages=True,
+            assess_pages=True,
+            accounted_pages=(formation_context or {}).get("page_accountings"),
             **extraction_kwargs,
         )
         from src.docling_pdf_v1 import release_conversion_capacity

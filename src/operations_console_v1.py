@@ -213,6 +213,7 @@ def docling_console_error(exc):
     """
     error = ConsoleError(exc.code)
     error.unverified_pages = getattr(exc, "pages", None)
+    error.page_findings = getattr(exc, "page_findings", None)
     return error
 
 
@@ -686,6 +687,14 @@ def _recorded_authorization(bindings, binding, account):
         return record_authorization(bindings, binding, account=account)
     except ApproverIdentityError as exc:
         raise ConsoleError(str(exc)) from exc
+
+# Why a page may be left out of the source; each still requires a written note.
+SOURCE_PAGE_ACCOUNTING_CATEGORIES = {
+    "colofon_of_copyright": "Colofon, copyright of contactgegevens",
+    "lege_of_scheidingspagina": "Lege pagina of scheidingspagina",
+    "navigatie": "Inhoudsopgave of andere navigatie",
+    "geen_kennisinhoud": "Andere inhoud zonder kennis voor Metis",
+}
 
 POSTGRES_WORKFLOW_AUTHORITY_REQUIRED = "postgres_workflow_authority_required"
 
@@ -1983,6 +1992,49 @@ class OperationsConsole:
             self._commit_prepared_store(envelopes={snapshot_id: envelope}, snapshot_id=snapshot_id)
             return deepcopy(grant)
 
+    def account_source_page(self, *, actor_id, snapshot_id, page, category, note):
+        """Record why one unresolved source page holds no knowledge content.
+
+        Append-only and bound to the page's exact current findings and source
+        hash. Extraction then leaves that page out whole; a changed finding is
+        unresolved again. Only before any candidate exists, so no formed work
+        silently loses or gains source.
+        """
+        from src.docling_contract_v1 import PAGES_UNRESOLVED
+        from src.processing_retry_v1 import now
+        from src.source_selection_v1 import authorize
+        if category not in SOURCE_PAGE_ACCOUNTING_CATEGORIES:
+            raise ConsoleError("source_page_accounting_category_invalid")
+        if not isinstance(note, str) or not 10 <= len(note.strip()) <= 500:
+            raise ConsoleError("source_page_accounting_note_required")
+        with self._reprocessing_transaction(snapshot_id):
+            envelope = deepcopy(self._envelope(snapshot_id))
+            authorize(self, actor_id, envelope)
+            if self.snapshot_is_published(snapshot_id):
+                raise ConsoleError("published_objects_must_not_be_rewritten")
+            objects, _ = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
+            if objects:
+                raise ConsoleError("source_page_accounting_requires_unformed_source")
+            attempts = envelope.get("processing_attempts") or []
+            latest = attempts[-1] if attempts else {}
+            if latest.get("state") != "failed" or latest.get("error_code") != PAGES_UNRESOLVED:
+                raise ConsoleError("source_page_accounting_not_required")
+            finding = next((row for row in (latest.get("diagnostic") or {}).get("page_findings") or []
+                            if row.get("page") == page), None)
+            if finding is None:
+                raise ConsoleError("source_page_accounting_not_required")
+            accountings = envelope.setdefault("source_page_accountings", [])
+            if any(row["page"] == page and row["reasons"] == finding["reasons"]
+                   and row["source_sha256"] == envelope["sha256"] for row in accountings):
+                raise ConsoleError("source_page_accounting_already_recorded")
+            row = {"accounting_id": "spa_" + uuid.uuid4().hex, "page": page,
+                   "reasons": list(finding["reasons"]), "source_sha256": envelope["sha256"],
+                   "attempt_id": latest["attempt_id"], "category": category, "note": note.strip(),
+                   "actor_id": actor_id, "recorded_at": now().isoformat()}
+            accountings.append(row)
+            self._commit_prepared_store(envelopes={snapshot_id: envelope}, snapshot_id=snapshot_id)
+            return deepcopy(row)
+
     def _record_processing_failure(self, snapshot_id, attempt_id, error):
         from src.processing_retry_v1 import KEY, finish
         with self._reprocessing_transaction(snapshot_id):
@@ -2422,7 +2474,7 @@ class OperationsConsole:
         }
 
     def _extract(self, kind: str, path: Path, *, document_id: str, source_id: str, deadline=None,
-                 quarantine_pages: bool = False) -> list[dict[str, Any]]:
+                 assess_pages: bool = False, accounted_pages=None) -> list[dict[str, Any]]:
         if kind == "html":
             return extract_html(path, document_id=document_id, source_id=source_id)
         if kind == "boom":
@@ -2430,9 +2482,9 @@ class OperationsConsole:
         from src.docling_pdf_v1 import enabled, extract as extract_docling
         from src.docling_contract_v1 import DoclingError
         try:
-            # Prose callers set unverifiable pages aside; decision trees stay whole.
+            # Prose callers assess pages; decision trees keep the strict first-finding rule.
             return (extract_docling(path, document_id=document_id, source_id=source_id, deadline=deadline,
-                                    quarantine_pages=quarantine_pages)
+                                    assess_pages=assess_pages, accounted_pages=accounted_pages)
                     if enabled() else extract_pdf(path, document_id=document_id, source_id=source_id))
         except DoclingError as exc:
             raise docling_console_error(exc) from exc
@@ -2510,8 +2562,8 @@ class OperationsConsole:
                 from src.docling_pdf_v1 import enabled, release_conversion_capacity
                 extraction_args = {"deadline": context.get("attempt_deadline")} if kind == "pdf" and enabled() else {}
                 fragments = self._extract(kind, path, document_id=command["document_id"],
-                    source_id=command["source_id"], quarantine_pages=command["class_"] != "beslisboom",
-                    **extraction_args)
+                    source_id=command["source_id"], assess_pages=command["class_"] != "beslisboom",
+                    accounted_pages=context.get("page_accountings"), **extraction_args)
                 release_conversion_capacity()
             checkpoint(fragments)
             context["retained_fragments"] = fragments
@@ -2551,8 +2603,8 @@ class OperationsConsole:
         from src.docling_pdf_v1 import enabled
         kwargs = {"deadline": (formation_context or {}).get("attempt_deadline")} if kind == "pdf" and enabled() else {}
         fragments = (retained_fragments if retained_fragments is not None else
-                     self._extract(kind, path, document_id=document_id, source_id=source_id,
-                                   quarantine_pages=True, **kwargs))
+                     self._extract(kind, path, document_id=document_id, source_id=source_id, assess_pages=True,
+                                   accounted_pages=(formation_context or {}).get("page_accountings"), **kwargs))
         spec = _spec_from_fragments(
             document_id=document_id,
             title=title,
@@ -4254,13 +4306,6 @@ class OperationsConsole:
         from src.source_context_review_v1 import context_issues
         if context_issues(objects):
             blockers.append("source_context_review_incomplete")
-        from src.docling_contract_v1 import DoclingError, quarantined_pages
-        try:
-            # A page set aside at extraction was never offered to review.
-            if quarantined_pages(envelope):
-                blockers.append("source_pages_quarantined")
-        except DoclingError as exc:
-            blockers.append(exc.code)
         if not independence:
             blockers.append("second_named_reviewer_required")
         if not bindings:

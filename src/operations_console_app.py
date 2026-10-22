@@ -213,6 +213,27 @@ OBJECT_TYPE_LABELS = {
     "node": "Knoop — vraag of beslispunt",
     "outcome": "Uitkomst — afsluitend advies",
 }
+# Per page finding: what went wrong and the repair action, in that order.
+PAGE_FINDING_COPY = {
+    "docling_page_text_unverified": ("Docling vond op deze pagina geen tekst, maar de PDF zelf toont wel inhoud.",
+                                     "Controleer de pagina. Zonder kennisinhoud: verantwoord haar. Met kennisinhoud: lever een betere bron aan."),
+    "docling_page_text_only_furniture": ("Alle tekst op deze pagina is als kop- of voettekst herkend en daarom niet als bron gebruikt.",
+                                         "Controleer de pagina. Zonder kennisinhoud (bijvoorbeeld colofon of copyright): verantwoord haar. Met kennisinhoud: meld het bij de beheerder."),
+    "docling_page_non_text_content": ("Op deze pagina staat een afbeelding of scan zonder leesbare tekst; tekstherkenning (OCR) staat uit.",
+                                      "Bevat de afbeelding kennis, lever dan een bron met tekst aan. Zo niet: verantwoord de pagina."),
+    "docling_multipage_table_mapping_unresolved": ("Een tabel loopt over meerdere pagina’s; Metis kan de cellen niet aan één pagina koppelen.",
+                                                   "Nog niet ondersteund. Verantwoord de pagina alleen als de tabel geen kennis bevat."),
+    "docling_charspan_invalid": ("De tekstposities die Docling voor deze pagina gaf, kloppen niet met de tekst.",
+                                 "Meld dit bij de beheerder; de adapter moet worden aangepast."),
+    "docling_text_coverage_incomplete": ("Een deel van de tekst op deze pagina heeft geen bronpositie.",
+                                         "Meld dit bij de beheerder; de adapter moet worden aangepast."),
+    "docling_geometry_invalid": ("De paginaplaats van een tekstblok is ongeldig.",
+                                 "Meld dit bij de beheerder; de adapter moet worden aangepast."),
+    "docling_heading_level_invalid": ("Een kop op deze pagina heeft een ongeldig niveau.",
+                                      "Meld dit bij de beheerder; de adapter moet worden aangepast."),
+    "docling_item_spans_set_aside_page": ("Een tekstblok loopt door op een andere pagina die niet gebruikt kan worden.",
+                                          "Los eerst de andere genoemde pagina op."),
+}
 BLOCKER_LABELS = {
     "second_named_reviewer_required": "Nog een andere benoemde reviewer moet goedkeuren.",
     "blocked_pending_immutable_locator": "Duurzame opslag ontbreekt; publicatie blijft geblokkeerd.",
@@ -227,10 +248,15 @@ BLOCKER_LABELS = {
     "g2_source_verification_failed": "Metis kan het opgeslagen bronbestand niet betrouwbaar controleren. Publiceren is geblokkeerd. Meld dit bij de beheerder.",
     "prepublication_schema_invalid": "Een goedgekeurde passage mist gegevens die nodig zijn voor publicatie. Laat de beheerder controleren welke passage moet worden hersteld.",
     "prepublication_projection_failed": "Metis kon de publicatie niet voorbereiden. Controleer de publicatiestatus en meld dit bij de beheerder voordat je opnieuw probeert.",
-    "source_pages_quarantined": "Een of meer bronpagina’s konden bij het inlezen niet worden gecontroleerd en zijn niet verwerkt. De documentdiagnose noemt de pagina’s. Publiceren is geblokkeerd.",
 }
 ERROR_COPY = {
     "docling_no_source_text": "Er is geen bruikbare brontekst vastgelegd. De verwerking is geblokkeerd. Controleer het bronbestand; lege en gescande pagina’s worden in deze route nog niet automatisch onderscheiden.",
+    "docling_pages_unresolved": "Op één of meer pagina’s kon Metis niet vaststellen dat alle inhoud is ingelezen. Er zijn nog geen kennisobjecten gevormd. Per pagina staat hieronder wat er mis is en wat de herstelactie is; daarna kun je opnieuw verwerken.",
+    "source_page_accounting_category_invalid": "Kies waarom deze pagina geen kennisinhoud bevat.",
+    "source_page_accounting_note_required": "Licht in 10 tot 500 tekens toe waarom deze pagina geen kennisinhoud bevat.",
+    "source_page_accounting_requires_unformed_source": "Een pagina verantwoorden kan alleen zolang er nog geen kennisobjecten zijn gevormd.",
+    "source_page_accounting_not_required": "Deze pagina staat niet bij de onopgeloste pagina’s van de laatste verwerkingspoging.",
+    "source_page_accounting_already_recorded": "Deze pagina is voor deze bevindingen al verantwoord. Start de verwerking opnieuw.",
     "docling_page_text_unverified": "Voor één of meer pagina’s is geen bruikbare brontekst vastgelegd. De verwerking is geblokkeerd. Controleer het bronbestand; lege en gescande pagina’s worden in deze route nog niet automatisch onderscheiden.",
     "processing_diagnostic_write_failed": "Het foutbewijs kon niet duurzaam worden opgeslagen. Laat de beheerder de opslag controleren voordat je opnieuw probeert.",
     "processing_recovery_reason_required": "Geef een reden op voor deze eenmalige herstelpoging.",
@@ -5231,6 +5257,15 @@ def create_console_app(
         account = _require(request)
         state.authorize_processing_recovery(actor_id=account["account_id"], snapshot_id=snapshot_id, reason=reason)
         return RedirectResponse("/inzicht/document?" + urlencode({"document": snapshot_id}), status_code=303)
+
+    @app.post("/inzicht/document/pagina-verantwoorden")
+    def account_source_page(request: Request, snapshot_id: str = Form(...), page: int = Form(...),
+                            category: str = Form(...), note: str = Form(...)):
+        account = _require(request)
+        state.account_source_page(actor_id=account["account_id"], snapshot_id=snapshot_id,
+                                  page=page, category=category, note=note)
+        return RedirectResponse("/inzicht/document?" + urlencode({"document": snapshot_id}) + "#paginas",
+                                status_code=303)
 
     @app.get("/inzicht/document/poging", response_class=JSONResponse)
     def review_processing_diagnostic_replay(request: Request, document: str, attempt_id: str):

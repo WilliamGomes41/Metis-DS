@@ -66,16 +66,24 @@ PAGE_SCOPED_CODES = frozenset({
     "docling_charspan_invalid", "docling_text_coverage_incomplete", "docling_geometry_invalid",
 })
 PAGE_TEXT_UNVERIFIED = "docling_page_text_unverified"
-SPANS_QUARANTINED_PAGE = "docling_item_spans_quarantined_page"
+PAGE_NON_TEXT_CONTENT = "docling_page_non_text_content"
+PAGE_TEXT_ONLY_FURNITURE = "docling_page_text_only_furniture"
+SPANS_SET_ASIDE_PAGE = "docling_item_spans_set_aside_page"
+PAGES_UNRESOLVED = "docling_pages_unresolved"
+# Meaning of the set_aside_pages field; records without it predate assessment.
+PAGE_ASSESSMENT = "metis-docling-page-assessment-v1"
 
 
 def translate(result: dict, *, document_id: str, source_id: str, source_sha256: str,
-              pages: list[int] | None = None, quarantine_pages: bool = False) -> ExtractedFragments:
-    """Validate before building any prepared domain input. No Markdown export.
+              pages: list[int] | None = None, assess_pages: bool = False,
+              page_facts: dict | None = None, accounted_pages: list | None = None) -> ExtractedFragments:
+    """Translate, then assess usability. No Markdown export.
 
-    Without ``quarantine_pages`` the first finding blocks the document. With it,
-    every page-scoped finding is collected in one pass and its pages are left
-    out whole and named in ``quarantined_pages``; they are never partly used.
+    Without ``assess_pages`` the first finding blocks the document. With it,
+    translation collects every page-scoped finding in one pass. A page is then
+    left out whole only when the PDF proves it empty (``page_facts``) or a
+    recorded accounting names exactly its current findings; any other finding
+    blocks with ``docling_pages_unresolved`` and names page and reasons.
     """
     from src.integrity_kernel import stable_hash
     from src.pdf_fragment_contract_v1 import fragment_payload, page_bbox_locator
@@ -114,10 +122,11 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
             found.add(page)
         return found
 
-    def walk(quarantined: set[int]):
+    def walk(held: set[int]):
         out, bindings, exclusions, stack = [], [], [], []
         navigation_pages: set[int] = set()
         unverified_body_pages: set = set()
+        furniture_text_pages: set = set()
         findings: dict[int, set[str]] = {}
 
         def emit(text: str, prov: dict, ref: str, *, heading=None, cell=None, text_field="text", origin_height=None):
@@ -134,7 +143,7 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
                 geometry = {**geometry, "t": origin_height - geometry["t"],
                             "b": origin_height - geometry["b"], "coord_origin": "TOPLEFT"}
             box = top_left_box(geometry, page_data[str(page)]["size"], intersect_page=True)
-            if page not in selected or page in quarantined or not text.strip():
+            if page not in selected or page in held or not text.strip():
                 return
             sequence = len(out) + 1
             row = {"fragment_id": f"{document_id}-dx-{extraction_id[:16]}-f{sequence:06d}",
@@ -237,15 +246,17 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
             provenance = item.get("prov") or []
             if item.get("content_layer") == "furniture" or item.get("label") in {"page_header", "page_footer"}:
                 exclusions.append({"item_ref": ref, "reason": "docling_furniture", "provenance": provenance})
+                if isinstance(item.get("text"), str) and item["text"].strip():
+                    furniture_text_pages.update(p.get("page_no") for p in provenance if isinstance(p, dict))
                 continue
-            if not quarantine_pages:
+            if not assess_pages:
                 visit(ref, item, provenance)
                 continue
             scope = item_pages(provenance)
-            if scope and scope & quarantined:
+            if scope and scope & held:
                 # Never use part of an item whose other page is set aside.
-                for page in scope - quarantined:
-                    findings.setdefault(page, set()).add(SPANS_QUARANTINED_PAGE)
+                for page in scope - held:
+                    findings.setdefault(page, set()).add(SPANS_SET_ASIDE_PAGE)
             emitted = len(out)
             try:
                 visit(ref, item, provenance)
@@ -259,42 +270,80 @@ def translate(result: dict, *, document_id: str, source_id: str, source_sha256: 
         # model; none of those possibilities proves complete source extraction.
         # Navigation accounts only for a page without other unverified body content.
         navigation_pages -= unverified_body_pages
-        missing = selected - quarantined - set(findings) - {row["source_page"] for row in out} - navigation_pages
+        missing = selected - held - set(findings) - {row["source_page"] for row in out} - navigation_pages
         for page in missing:
-            findings.setdefault(page, set()).add(PAGE_TEXT_UNVERIFIED)
+            # Name what Docling saw on the page, so the reason is actionable.
+            reason = (PAGE_NON_TEXT_CONTENT if page in unverified_body_pages else PAGE_TEXT_ONLY_FURNITURE
+                      if page in furniture_text_pages else PAGE_TEXT_UNVERIFIED)
+            findings.setdefault(page, set()).add(reason)
         return out, bindings, exclusions, navigation_pages, findings
 
-    quarantined: dict[int, set[str]] = {}
+    held: dict[int, set[str]] = {}
     while True:
-        out, bindings, exclusions, navigation_pages, findings = walk(set(quarantined))
-        if not out:
-            raise DoclingError("docling_no_source_text")
-        if not quarantine_pages and findings:
-            error = DoclingError(PAGE_TEXT_UNVERIFIED)
-            error.pages = sorted(findings)  # Page numbers only; never source text.
-            raise error
+        out, bindings, exclusions, navigation_pages, findings = walk(set(held))
+        if not assess_pages:
+            if not out:
+                raise DoclingError("docling_no_source_text")
+            if findings:
+                error = DoclingError(PAGE_TEXT_UNVERIFIED)
+                error.pages = sorted(findings)  # Page numbers only; never source text.
+                raise error
         findings = {page: codes for page, codes in findings.items() if page in selected}
-        if all(page in quarantined for page in findings):
+        if all(page in held for page in findings):
             break
         # Set the new pages aside and walk again, so no fragment, heading or
         # neighbour depends on a page that is no longer used.
         for page, codes in findings.items():
-            quarantined.setdefault(page, set()).update(codes)
+            held.setdefault(page, set()).update(codes)
+    set_aside, unresolved = [], []
+    for page, codes in sorted(held.items()):
+        reasons = sorted(codes)
+        accounting = _accounting_for(accounted_pages, page, reasons, source_sha256)
+        if reasons == [PAGE_TEXT_UNVERIFIED] and _proven_empty((page_facts or {}).get(page)):
+            set_aside.append({"page": page, "reasons": reasons, "basis": "pdf_page_without_content",
+                              "page_facts": deepcopy(page_facts[page])})
+        elif accounting is not None:
+            set_aside.append({"page": page, "reasons": reasons, "basis": "recorded_accounting",
+                              "accounting": accounting})
+        else:
+            unresolved.append({"page": page, "reasons": reasons})
+    if unresolved:
+        error = DoclingError(PAGES_UNRESOLVED)
+        error.pages = [row["page"] for row in unresolved]
+        error.page_findings = unresolved  # Page numbers and codes only; never source text.
+        raise error
+    if not out:
+        raise DoclingError("docling_no_source_text")
     record.update(extraction_id=extraction_id, bindings=bindings, exclusions=exclusions,
                   selected_pages=sorted(selected), navigation_pages=sorted(navigation_pages & selected),
                   metrics=deepcopy(result.get("metrics", {})))
-    if quarantine_pages:
-        record["quarantined_pages"] = [{"page": page, "reasons": sorted(codes)}
-                                       for page, codes in sorted(quarantined.items())]
+    if assess_pages:
+        record.update(page_assessment=PAGE_ASSESSMENT, set_aside_pages=set_aside)
     return ExtractedFragments(out, record)
 
 
-def quarantined_pages(envelope: dict) -> list[dict]:
-    """Pages the accepted extraction set aside; page numbers and codes only."""
+def _proven_empty(facts) -> bool:
+    """The PDF itself shows no text, image or drawing on the page."""
+    return (isinstance(facts, dict) and set(facts) == {"text_chars", "images", "drawings"}
+            and all(type(facts[key]) is int and facts[key] == 0 for key in facts))
+
+
+def _accounting_for(accounted_pages, page, reasons, source_sha256):
+    """An accounting covers a page only for the exact findings it was given for."""
+    for row in accounted_pages or []:
+        if (isinstance(row, dict) and row.get("page") == page and row.get("reasons") == reasons
+                and row.get("source_sha256") == source_sha256):
+            return {key: deepcopy(row[key]) for key in ("accounting_id", "category", "actor_id", "recorded_at")
+                    if key in row}
+    return None
+
+
+def set_aside_pages(envelope: dict) -> list[dict]:
+    """Pages the accepted extraction left out, with their basis; never text."""
     fragments = stored_fragments(envelope)
     if fragments is None:
         return []
-    return deepcopy(fragments.extraction_record.get("quarantined_pages") or [])
+    return deepcopy(fragments.extraction_record.get("set_aside_pages") or [])
 
 
 def stored_fragments(envelope: dict):

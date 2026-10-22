@@ -81,6 +81,15 @@ def finish_diagnostic(attempt, error=None):
     if (isinstance(pages, list) and 0 < len(pages) <= 1000
             and all(type(p) is int and 0 < p <= 1000 for p in pages)):
         diagnostic["unverified_pages"] = sorted(set(pages))
+    findings = getattr(error, "page_findings", None)
+    if (isinstance(findings, list) and 0 < len(findings) <= 1000
+            and all(isinstance(row, dict) and type(row.get("page")) is int and 0 < row["page"] <= 1000
+                    and isinstance(row.get("reasons"), list)
+                    and all(isinstance(code, str) and code.startswith("docling_") and len(code) <= 95
+                            for code in row["reasons"]) for row in findings)):
+        # Page numbers and bounded codes only; the source text never enters evidence.
+        diagnostic["page_findings"] = [{"page": row["page"], "reasons": sorted(set(row["reasons"]))}
+                                       for row in sorted(findings, key=lambda row: row["page"])]
     diagnostic.update(outcome=attempt["state"], reason_code=code, category=category,
                       recovery_advice=advice,
                       evidence_availability="partial_limit" if diagnostic.get("omitted_evidence") else "recorded" if "validator_input" in diagnostic else "not_recorded")

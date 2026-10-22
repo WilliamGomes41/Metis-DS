@@ -244,16 +244,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
         diagnostic = (attempts[-1].get("diagnostic") or {}) if attempts else {}
         pages = [str(page) for page in diagnostic.get("unverified_pages") or [] if type(page) is int]
         pages_html = f'<p>Pagina’s zonder verwerkbare brontekst: {escape(", ".join(pages))}</p>' if pages else ""
-        if processing_access:
-            from src.docling_contract_v1 import DoclingError, quarantined_pages
-            try:
-                set_aside = quarantined_pages(envelope)
-            except DoclingError:
-                set_aside = []
-            if set_aside:
-                listed = "; ".join(f'pagina {int(row["page"])} ({", ".join(row["reasons"])})' for row in set_aside)
-                pages_html += (f'<p>Niet verwerkte bronpagina’s: {escape(listed)}. Deze pagina’s zijn niet aan '
-                               'het model of aan Review aangeboden; publiceren is geblokkeerd.</p>')
+        pages_html += _source_pages_html(envelope, diagnostic, document) if processing_access else ""
         detail = escape(json.dumps(diagnostic, ensure_ascii=False, indent=2))
         passages = '<p>Passagediagnostiek en passage-exports zijn beschikbaar voor de aangewezen reviewer.</p>'
         passage_exports = ""
@@ -372,3 +363,52 @@ def install_insight_legacy_routes(app: FastAPI, require_account: Callable[[Reque
         from urllib.parse import quote
         target = "/inzicht/routevergelijking/" + quote(comparison_id, safe="")
         return redirect_to(target)(request)
+
+
+def _source_pages_html(envelope: dict, diagnostic: dict, document: str) -> str:
+    """Per page: problem, repair action and the accounting form; never source text."""
+    from src.docling_contract_v1 import DoclingError, set_aside_pages
+    from src.operations_console_app import PAGE_FINDING_COPY
+    from src.operations_console_v1 import SOURCE_PAGE_ACCOUNTING_CATEGORIES
+    parts = []
+    findings = diagnostic.get("page_findings") or []
+    if findings:
+        options = "".join(f'<option value="{escape(key)}">{escape(label)}</option>'
+                          for key, label in SOURCE_PAGE_ACCOUNTING_CATEGORIES.items())
+        rows = []
+        for row in findings:
+            copy = [PAGE_FINDING_COPY.get(code, (code, "Meld dit bij de beheerder.")) for code in row.get("reasons") or []]
+            problem = " ".join(problem for problem, _ in copy)
+            action = " ".join(dict.fromkeys(action for _, action in copy))
+            accounted = any(done["page"] == row["page"] and done["reasons"] == row.get("reasons")
+                            and done["source_sha256"] == envelope.get("sha256")
+                            for done in envelope.get("source_page_accountings") or [])
+            if accounted:
+                rows.append(f'<tr><td>{int(row["page"])}</td><td>{escape(problem)}</td><td>{escape(action)}</td>'
+                            '<td>Verantwoord; start de verwerking opnieuw.</td></tr>')
+                continue
+            rows.append(f'''<tr><td>{int(row["page"])}</td><td>{escape(problem)}</td><td>{escape(action)}</td>
+              <td><form method="post" action="/inzicht/document/pagina-verantwoorden">
+                <input type="hidden" name="snapshot_id" value="{escape(document, quote=True)}">
+                <input type="hidden" name="page" value="{int(row["page"])}">
+                <label>Reden<select name="category" required>{options}</select></label>
+                <label>Toelichting<input name="note" required minlength="10" maxlength="500"></label>
+                <button type="submit">Pagina verantwoorden</button></form></td></tr>''')
+        parts.append('<section id="paginas"><h3>Onopgeloste pagina’s</h3>'
+                     '<p>Verantwoord alleen een pagina zonder kennisinhoud. Start daarna de verwerking opnieuw.</p>'
+                     '<table><thead><tr><th>Pagina</th><th>Probleem</th><th>Herstelactie</th><th>Verantwoorden</th></tr></thead>'
+                     f'<tbody>{"".join(rows)}</tbody></table></section>')
+    try:
+        left_out = set_aside_pages(envelope)
+    except DoclingError:
+        left_out = []
+    if left_out:
+        labels = {"pdf_page_without_content": "leeg volgens de PDF", "recorded_accounting": "verantwoord"}
+        listed = "; ".join(f'pagina {int(row["page"])} ({labels.get(row.get("basis"), "onbekend")})' for row in left_out)
+        parts.append(f'<p>Buiten de bron gelaten pagina’s: {escape(listed)}.</p>')
+    accountings = envelope.get("source_page_accountings") or []
+    if accountings:
+        items = "".join(f'<li>Pagina {int(row["page"])}: {escape(SOURCE_PAGE_ACCOUNTING_CATEGORIES.get(row["category"], row["category"]))}'
+                        f' — {escape(row["note"])} ({escape(row["recorded_at"][:10])})</li>' for row in accountings)
+        parts.append(f'<details><summary>Vastgelegde verantwoordingen ({len(accountings)})</summary><ul>{items}</ul></details>')
+    return "".join(parts)

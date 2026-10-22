@@ -484,6 +484,7 @@ def test_decision_tree_pdf_route_keeps_unverified_page_numbers_on_the_semantic_b
     assert raised.value.unverified_pages == [3]
 
 
+
 def page(payload, number):
     payload["document"]["pages"][str(number)] = {"size": {"width": 600, "height": 800}}
 
@@ -496,20 +497,29 @@ def text_item(ref, text, *spans):
                      for number, start, end in spans]}
 
 
-def quarantined(payload):
+EMPTY = {"text_chars": 0, "images": 0, "drawings": 0}
+
+
+def assessed(payload, **kwargs):
     return translate(payload, document_id="doc", source_id="src", source_sha256="a" * 64,
-                     quarantine_pages=True)
+                     assess_pages=True, **kwargs)
 
 
-def test_quarantine_collects_every_page_finding_in_one_pass_and_never_uses_part_of_a_page():
-    # Conceptrichtlijn Smetten: one unverifiable page blocked all 46, and each
-    # repair only exposed the next. All findings are now named in one pass.
+def unresolved(payload, **kwargs):
+    with pytest.raises(DoclingError, match="docling_pages_unresolved") as raised:
+        assessed(payload, **kwargs)
+    return raised.value.page_findings
+
+
+def test_assessment_names_every_unresolved_page_in_one_pass():
+    # Conceptrichtlijn Smetten: the first finding blocked all 46 pages, and each
+    # repair only exposed the next. Every page finding is now named at once.
     payload = result()
     for number in range(2, 6):
         page(payload, number)
     prov = deepcopy(payload["document"]["texts"][0]["prov"][0])
-    table_prov = [dict(deepcopy(prov), page_no=3), dict(deepcopy(prov), page_no=4)]
-    payload["document"]["tables"] = [{"self_ref": "#/tables/0", "label": "table", "prov": table_prov,
+    payload["document"]["tables"] = [{"self_ref": "#/tables/0", "label": "table",
+         "prov": [dict(deepcopy(prov), page_no=3), dict(deepcopy(prov), page_no=4)],
          "data": {"num_rows": 1, "num_cols": 1, "table_cells": [{"text": "cel", "row_span": 1,
                   "col_span": 1, "start_row_offset_idx": 0, "start_col_offset_idx": 0}]}}]
     payload["document"]["texts"] += [text_item("#/texts/1", "goede tekst", (4, 0, 11)),
@@ -517,81 +527,142 @@ def test_quarantine_collects_every_page_finding_in_one_pass_and_never_uses_part_
     payload["reading_order"] += ["#/tables/0", "#/texts/1", "#/texts/2"]
     with pytest.raises(DoclingError, match="multipage_table_mapping_unresolved"):
         rows(payload)
-    fragments = quarantined(payload)
-    assert {f["source_page"] for f in fragments} == {1}
-    assert [f["sequence"] for f in fragments] == [1]
-    record = fragments.extraction_record
-    assert record["quarantined_pages"] == [
+    findings = unresolved(payload)
+    assert findings == [
         {"page": 2, "reasons": ["docling_page_text_unverified"]},
         {"page": 3, "reasons": ["docling_multipage_table_mapping_unresolved"]},
         {"page": 4, "reasons": ["docling_multipage_table_mapping_unresolved"]},
         {"page": 5, "reasons": ["docling_charspan_invalid"]},
     ]
-    assert [b["fragment_id"] for b in record["bindings"]] == [f["fragment_id"] for f in fragments]
-    # The record carries page numbers and codes only, never source text.
-    assert "kapotte" not in json.dumps(record["quarantined_pages"])
+    # Page numbers and codes only, never source text.
+    assert "kapotte" not in json.dumps(findings)
 
 
-def test_quarantine_sets_aside_every_page_of_an_item_that_reaches_a_set_aside_page():
+def test_only_a_page_the_pdf_proves_empty_is_accepted_without_accounting():
     payload = result()
-    for number in (2, 3):
-        page(payload, number)
-    payload["document"]["texts"].append(text_item("#/texts/1", "eerste tweede", (2, 0, 6), (3, 7, 13)))
-    payload["document"]["pictures"] = [{"self_ref": "#/pictures/0", "label": "picture", "content_layer": "body",
-                                        "prov": [dict(deepcopy(payload["document"]["texts"][0]["prov"][0]), page_no=3)]}]
-    payload["reading_order"] += ["#/texts/1", "#/pictures/0"]
-    # Page 3 also holds a picture without text, but the merged paragraph gives
-    # it text; only when page 2 is set aside may page 3 not keep half of it.
-    assert "quarantined_pages" not in rows(payload).extraction_record
-    assert quarantined(payload).extraction_record["quarantined_pages"] == []
-    payload["document"]["texts"][1]["prov"][0]["charspan"] = [0, 99]
-    fragments = quarantined(payload)
+    page(payload, 2)
+    fragments = assessed(payload, page_facts={1: {"text_chars": 9, "images": 0, "drawings": 0}, 2: EMPTY})
     assert {f["source_page"] for f in fragments} == {1}
-    assert fragments.extraction_record["quarantined_pages"] == [
-        {"page": 2, "reasons": ["docling_charspan_invalid"]},
-        {"page": 3, "reasons": ["docling_charspan_invalid"]},
+    record = fragments.extraction_record
+    assert record["page_assessment"] == "metis-docling-page-assessment-v1"
+    assert record["set_aside_pages"] == [{"page": 2, "reasons": ["docling_page_text_unverified"],
+                                          "basis": "pdf_page_without_content", "page_facts": EMPTY}]
+    for facts in ({}, {2: dict(EMPTY, text_chars=40)}, {2: dict(EMPTY, images=1)}, {2: dict(EMPTY, drawings=3)}):
+        assert unresolved(payload, page_facts=facts) == [{"page": 2, "reasons": ["docling_page_text_unverified"]}]
+    # The strict rule is unchanged and keeps its exact code.
+    with pytest.raises(DoclingError, match="docling_page_text_unverified"):
+        rows(payload)
+
+
+def test_scan_and_header_only_pages_are_not_treated_as_empty():
+    payload = result()
+    page(payload, 2)
+    page(payload, 3)
+    prov = deepcopy(payload["document"]["texts"][0]["prov"][0])
+    payload["document"]["pictures"] = [{"self_ref": "#/pictures/0", "label": "picture", "content_layer": "body",
+                                        "prov": [dict(deepcopy(prov), page_no=2)]}]
+    footer = text_item("#/texts/1", "© Kennisinstituut", (3, 0, 17))
+    footer.update(label="page_footer", content_layer="furniture")
+    payload["document"]["texts"].append(footer)
+    payload["reading_order"] += ["#/pictures/0", "#/texts/1"]
+    # Even PDF facts that look empty do not overrule what Docling saw.
+    assert unresolved(payload, page_facts={2: EMPTY, 3: EMPTY}) == [
+        {"page": 2, "reasons": ["docling_page_non_text_content"]},
+        {"page": 3, "reasons": ["docling_page_text_only_furniture"]},
     ]
+
+
+def test_a_recorded_accounting_covers_only_its_exact_page_findings_and_source():
+    payload = result()
+    page(payload, 2)
+    accounting = {"accounting_id": "spa_1", "page": 2, "reasons": ["docling_page_text_unverified"],
+                  "source_sha256": "a" * 64, "category": "colofon_of_copyright", "note": "Alleen copyrighttekst.",
+                  "actor_id": "acc-1", "recorded_at": "2026-10-22T22:00:00+00:00"}
+    fragments = assessed(payload, accounted_pages=[accounting])
+    assert {f["source_page"] for f in fragments} == {1}
+    assert fragments.extraction_record["set_aside_pages"] == [{
+        "page": 2, "reasons": ["docling_page_text_unverified"], "basis": "recorded_accounting",
+        "accounting": {"accounting_id": "spa_1", "category": "colofon_of_copyright", "actor_id": "acc-1",
+                       "recorded_at": "2026-10-22T22:00:00+00:00"}}]
+    # The free-text note stays with the accounting, never in extraction evidence.
+    assert "copyrighttekst" not in json.dumps(fragments.extraction_record["set_aside_pages"])
+    for changed in (dict(accounting, page=3), dict(accounting, reasons=["docling_page_non_text_content"]),
+                    dict(accounting, source_sha256="b" * 64)):
+        assert unresolved(payload, accounted_pages=[changed])
+
+
+def test_no_part_of_an_item_reaching_an_unusable_page_is_used():
+    payload = result()
+    for number in (2, 3, 4):
+        page(payload, number)
+    prov = deepcopy(payload["document"]["texts"][0]["prov"][0])
+    payload["document"]["tables"] = [{"self_ref": "#/tables/0", "label": "table",
+         "prov": [dict(deepcopy(prov), page_no=2), dict(deepcopy(prov), page_no=3)],
+         "data": {"num_rows": 1, "num_cols": 1, "table_cells": [{"text": "cel", "row_span": 1,
+                  "col_span": 1, "start_row_offset_idx": 0, "start_col_offset_idx": 0}]}}]
+    payload["document"]["texts"].append(text_item("#/texts/1", "eerste tweede", (3, 0, 6), (4, 7, 13)))
+    payload["reading_order"] += ["#/tables/0", "#/texts/1"]
+    findings = unresolved(payload)
+    assert findings == [
+        {"page": 2, "reasons": ["docling_multipage_table_mapping_unresolved"]},
+        {"page": 3, "reasons": ["docling_multipage_table_mapping_unresolved"]},
+        {"page": 4, "reasons": ["docling_item_spans_set_aside_page"]},
+    ]
+    accounted = [{"page": row["page"], "reasons": row["reasons"], "source_sha256": "a" * 64} for row in findings]
+    fragments = assessed(payload, accounted_pages=accounted)
+    assert {f["source_page"] for f in fragments} == {1}
+    assert [f["sequence"] for f in fragments] == [1]
+    assert [b["fragment_id"] for b in fragments.extraction_record["bindings"]] == [f["fragment_id"] for f in fragments]
 
 
 @pytest.mark.parametrize("mutation, code", [
     (lambda p: p["document"]["texts"][0].update(prov=[]), "text_provenance_missing"),
     (lambda p: p["document"]["texts"][0]["prov"][0].update(page_no=9), "page_invalid"),
     (lambda p: p.update(reading_order=[]), "inventory_incomplete"),
+    (lambda p: p.update(source_sha256="b" * 64), "result_identity_invalid"),
 ])
-def test_quarantine_keeps_document_level_findings_fatal(mutation, code):
+def test_unrecoverable_findings_still_reject_the_whole_extraction(mutation, code):
     payload = result()
     page(payload, 2)
     payload["document"]["texts"].append(text_item("#/texts/1", "tweede", (2, 0, 6)))
     payload["reading_order"].append("#/texts/1")
     mutation(payload)
     with pytest.raises(DoclingError, match=code):
-        quarantined(payload)
+        assessed(payload)
 
 
-def test_quarantine_of_every_page_is_no_source_text():
+def test_unresolved_is_named_before_no_source_text_and_all_set_aside_is_no_source_text():
     payload = result()
     payload["document"]["texts"][0]["prov"][0]["charspan"] = [0, 99]
+    assert unresolved(payload) == [{"page": 1, "reasons": ["docling_charspan_invalid"]}]
     with pytest.raises(DoclingError, match="no_source_text"):
-        quarantined(payload)
+        assessed(payload, accounted_pages=[{"page": 1, "reasons": ["docling_charspan_invalid"],
+                                            "source_sha256": "a" * 64}])
 
 
-def test_quarantined_page_is_processed_without_it_and_blocks_publication(tmp_path, monkeypatch, *, production_app, production_console):
+def test_unresolved_page_blocks_formation_until_accounted_then_is_left_out(tmp_path, monkeypatch, *, production_app, production_console):
     import hashlib
     import fitz
     from fastapi.testclient import TestClient
     import src.docling_pdf_v1 as adapter
-    from src.docling_contract_v1 import quarantined_pages
+    from src.operations_console_v1 import ConsoleError
     payload = result()
+    advice = "Beoordeel bij elke zorgvrager dagelijks de huidplooien op roodheid, vocht en schilfering."
+    payload["document"]["texts"][0].update(text=advice, orig=advice)
+    payload["document"]["texts"][0]["prov"][0]["charspan"] = [0, len(advice)]
     page(payload, 2)
     with fitz.open() as document:
-        document.new_page().insert_text((72, 72), "Brontekst.")
-        document.new_page()
+        document.new_page().insert_text((72, 72), advice, fontsize=8)
+        document.new_page().insert_text((72, 72), "Alle rechten voorbehouden.")
         data = document.tobytes()
     payload["source_sha256"] = hashlib.sha256(data).hexdigest()
-    def controlled_extract(path, *, document_id, source_id, quarantine_pages=False, **kwargs):
+    calls = []
+    def controlled_extract(path, *, document_id, source_id, assess_pages=False, accounted_pages=None, **kwargs):
+        calls.append(assess_pages)
         return translate(payload, document_id=document_id, source_id=source_id,
                          source_sha256=hashlib.sha256(Path(path).read_bytes()).hexdigest(),
-                         quarantine_pages=quarantine_pages)
+                         assess_pages=assess_pages, page_facts=adapter.page_facts(Path(path)),
+                         accounted_pages=accounted_pages)
     monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
     monkeypatch.setattr(adapter, "extract", controlled_extract)
     def create():
@@ -599,22 +670,52 @@ def test_quarantined_page_is_processed_without_it_and_blocks_publication(tmp_pat
     console = create()
     author = console.create_account(username="author", password="test-secret-long", roles=("researcher",))
     reviewer = console.create_account(username="reviewer", password="test-secret-long", roles=("reviewer",))
+    outsider = console.create_account(username="outsider", password="test-secret-long", roles=("reviewer",))
     receipt = console.ingest(actor_id=author["account_id"], filename="source.pdf", data=data,
                              content_type="application/pdf", ingest_kind="new", title="Bron", version="1.0",
                              date="2026-10-04", live_url="", class_="richtlijn", family="test",
-                             named_reviewers=[reviewer["account_id"]], command_id="quarantined-page")
+                             named_reviewers=[reviewer["account_id"]], command_id="unresolved-page")
     sid = receipt["snapshot_id"]
+    assert calls == [True]
     restarted = create()
-    assert restarted.processing_status(sid)["state"] == "succeeded"
-    assert restarted.snapshot_objects(sid)
     envelope = restarted._envelope(sid)
-    assert quarantined_pages(envelope) == [{"page": 2, "reasons": ["docling_page_text_unverified"]}]
-    assert {f["source_page"] for f in stored_fragments(envelope)} == {1}
-    readiness = restarted.technical_publication_readiness(snapshot_id=sid)
-    assert "source_pages_quarantined" in readiness["blockers"]
-    assert readiness["publish_allowed"] is False
+    attempt = envelope["processing_attempts"][-1]
+    assert attempt["error_code"] == "docling_pages_unresolved"
+    assert attempt["diagnostic"]["page_findings"] == [{"page": 2, "reasons": ["docling_page_text_unverified"]}]
+    assert not restarted.snapshot_objects(sid)
+    assert stored_fragments(envelope) is None
+    command = dict(snapshot_id=sid, page=2, category="colofon_of_copyright", note="Alleen copyrighttekst, geen kennis.")
+    with pytest.raises(ConsoleError, match="reviewer_not_named_on_snapshot"):
+        restarted.account_source_page(actor_id=outsider["account_id"], **command)
+    for bad, code in ((dict(command, page=1), "not_required"), (dict(command, category="x"), "category_invalid"),
+                      (dict(command, note="kort"), "note_required")):
+        with pytest.raises(ConsoleError, match=code):
+            restarted.account_source_page(actor_id=reviewer["account_id"], **bad)
+    assert "source_page_accountings" not in restarted._envelope(sid)
     with TestClient(production_app(restarted), base_url="https://testserver") as client:
         assert client.post("/login", data={"username": "reviewer", "password": "test-secret-long"},
                            follow_redirects=False).status_code == 303
-        page_html = client.get("/inzicht/document", params={"document": sid}).text
-        assert "Niet verwerkte bronpagina’s: pagina 2 (docling_page_text_unverified)" in page_html
+        html = client.get("/inzicht/document", params={"document": sid}).text
+        assert "Onopgeloste pagina’s" in html and "Pagina verantwoorden" in html
+        assert "Docling vond op deze pagina geen tekst" in html
+        assert "Alle rechten voorbehouden" not in html
+        response = client.post("/inzicht/document/pagina-verantwoorden", data=command, follow_redirects=False)
+        assert response.status_code == 303
+        assert "Verantwoord; start de verwerking opnieuw." in client.get("/inzicht/document", params={"document": sid}).text
+    with pytest.raises(ConsoleError, match="already_recorded"):
+        restarted.account_source_page(actor_id=reviewer["account_id"], **command)
+    # After the accounting, extraction passes and formation runs. This fixture's
+    # single fixed sentence forms no admissible candidate on the deterministic
+    # retry route, which is formation's own verdict, not extraction's.
+    with pytest.raises(ConsoleError, match="pre_review_no_reviewable_candidates"):
+        restarted.retry_pre_review(actor_id=author["account_id"], snapshot_id=sid, command_id="after-accounting")
+    assert calls == [True, True]
+    retried = create()._envelope(sid)["processing_attempts"][-1]
+    assert retried["error_code"] == "pre_review_no_reviewable_candidates"
+    assert "extraction_checkpoint" in [row["phase"] for row in retried["diagnostic"]["checkpoints"]]
+    assert "page_findings" not in retried["diagnostic"]
+    # The retained extraction that formation used leaves page 2 out on the recorded accounting.
+    from src.source_preparation_context_v1 import stored_extraction
+    extracted = stored_extraction(create()._envelope(sid))
+    assert {f["source_page"] for f in extracted} == {1}
+    assert [row["basis"] for row in extracted.extraction_record["set_aside_pages"]] == ["recorded_accounting"]
