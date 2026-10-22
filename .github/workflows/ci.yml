@@ -99,6 +99,8 @@ jobs:
           POSTGRES_DB: metis_test
         ports:
           - 5432:5432
+        volumes:
+          - /tmp/metis-test-postgres-socket:/var/run/postgresql
         options: >-
           --health-cmd "pg_isready -U postgres -d metis_test"
           --health-interval 10s
@@ -106,7 +108,10 @@ jobs:
           --health-retries 5
 
     env:
-      METIS_TEST_POSTGRES_DSN: postgresql://postgres:postgres@127.0.0.1:5432/metis_test
+      # Both timed suites use the same local server and transport. The image's
+      # existing local socket avoids repeating TCP/SCRAM setup for each query
+      # connection; host authentication and durability settings stay unchanged.
+      METIS_TEST_POSTGRES_DSN: host=/tmp/metis-test-postgres-socket dbname=metis_test user=postgres
 
     steps:
       - uses: actions/checkout@v4
@@ -326,9 +331,7 @@ jobs:
           PYCODE
       - name: Install isolated browser test tooling
         if: matrix.python-version == '3.12'
-        run: |
-          npm install --prefix "$RUNNER_TEMP/metis-browser" playwright@1.58.2
-          "$RUNNER_TEMP/metis-browser/node_modules/.bin/playwright" install --with-deps chromium
+        uses: ./.github/actions/install-test-browser
       - name: Verify desktop and mobile review workflows
         if: matrix.python-version == '3.12'
         run: |

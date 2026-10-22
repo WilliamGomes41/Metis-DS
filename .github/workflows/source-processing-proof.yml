@@ -63,11 +63,13 @@ jobs:
           POSTGRES_DB: metis_test
         ports:
           - 5432:5432
+        volumes:
+          - /tmp/metis-test-postgres-socket:/var/run/postgresql
         options: >-
           --health-cmd "pg_isready -U postgres -d metis_test"
           --health-interval 10s --health-timeout 5s --health-retries 5
     env:
-      METIS_TEST_POSTGRES_DSN: postgresql://postgres:postgres@127.0.0.1:5432/metis_test
+      METIS_TEST_POSTGRES_DSN: host=/tmp/metis-test-postgres-socket dbname=metis_test user=postgres
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,9 +79,7 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements-dev.lock
       - name: Require native PostgreSQL and browser tooling
-        run: |
-          npm install --prefix "$RUNNER_TEMP/metis-browser" playwright@1.58.2
-          "$RUNNER_TEMP/metis-browser/node_modules/.bin/playwright" install --with-deps chromium
+        uses: ./.github/actions/install-test-browser
       - name: Reproduce A01 denied mutation on the pinned pre-fix code
         shell: bash
         run: |
