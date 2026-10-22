@@ -13,7 +13,9 @@ from typing import Any, Mapping
 
 from src.audit_retention_v1 import is_archived_reference, is_purging, validate_archived_record, _now
 from src.operations_console_v1 import ConsoleError
-from src.workflows.workflow_documents_postgres_v1 import PostgresWorkflowDocumentStore, _json_text
+from src.workflows.workflow_documents_postgres_v1 import (
+    PostgresWorkflowDocumentStore, WorkflowDocumentStoreError, _json_text,
+)
 
 
 class WorkflowRemainingStoreError(RuntimeError):
@@ -40,9 +42,9 @@ def audit_retention_lock(connect: Any, audit_id: str | None = None):
 
 class PostgresWorkflowRemainingStore(PostgresWorkflowDocumentStore):
     def verify_remaining_schema(self) -> None:
-        self.verify_schema()
         try:
             with self._connect() as con:
+                self._verify_schema_connection(con)
                 rows = con.execute(
                     "SELECT table_name FROM information_schema.tables "
                     "WHERE table_schema='workflow' AND table_name IN ('audit_records','audit_secrets')"
@@ -51,6 +53,8 @@ class PostgresWorkflowRemainingStore(PostgresWorkflowDocumentStore):
                     "SELECT 1 FROM information_schema.columns WHERE table_schema='workflow' "
                     "AND table_name='audit_records' AND column_name='retention_state'"
                 ).fetchone()
+        except WorkflowDocumentStoreError:
+            raise
         except Exception as exc:
             raise WorkflowRemainingStoreError("workflow_remaining_schema_check_failed") from exc
         present = {str(row["table_name"]) for row in rows}

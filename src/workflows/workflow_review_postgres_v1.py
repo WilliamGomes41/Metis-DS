@@ -58,9 +58,9 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
 
 
     def verify_review_schema(self) -> None:
-        self.verify_schema()
         try:
             with self._connect() as con:
+                self._verify_schema_connection(con)
                 rows = con.execute(
                     "SELECT table_name,column_name FROM information_schema.columns "
                     "WHERE table_schema='workflow' AND ("
@@ -68,6 +68,8 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                     "(table_name='publish_authorizations' AND column_name IN "
                     "('position','authorization_payload')))"
                 ).fetchall()
+        except WorkflowDocumentStoreError:
+            raise
         except Exception as exc:
             raise WorkflowReviewStoreError("workflow_review_schema_check_failed") from exc
         present = {(str(row["table_name"]), str(row["column_name"])) for row in rows}
