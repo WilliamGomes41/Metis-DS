@@ -741,6 +741,12 @@
       [
         "POST"
       ]
+    ],
+    [
+      "/zorgmaatje/weergavecontrole",
+      [
+        "GET"
+      ]
     ]
   ]
 }

@@ -818,7 +818,13 @@ def _nav(account: dict[str, Any] | None, current: str = "") -> str:
       <div class="who">{who}</div>
     </header>
     {_session_warning() if account else ""}
+    {_care_companion(current) if account else ""}
     """
+
+
+def _care_companion(current: str) -> str:
+    from src.care_companion_v1 import markup
+    return markup(current)
 
 
 def _diagnosis_access(account: dict[str, Any], envelope: dict[str, Any]) -> bool:
@@ -3960,11 +3966,13 @@ def create_console_app(
     install_insight_routes(app, state, require_account=_require, render_page=_page, nav=_nav)
     from src.view_check import install as install_view_checks
     install_view_checks(app, state, _require, _page, _nav)
+    from src.care_companion_v1 import install as install_care_companion
+    install_care_companion(app, state, _require)
 
     @app.exception_handler(ConsoleError)
     async def console_errors(_request: Request, exc: ConsoleError) -> HTMLResponse:
         from src.console_entra_routes_v1 import identity_unavailable_response
-        from src.request_diagnostics_v1 import note_handled_error
+        from src.request_diagnostics_v1 import current_request_id, note_handled_error
         note_handled_error(exc.code)
         if exc.code == "workflow_identity_unavailable":
             return identity_unavailable_response(_page)
@@ -4007,7 +4015,7 @@ def create_console_app(
             {_nav(account)}
             <section class="room">
               <h1>Actie niet uitgevoerd</h1>
-              <div class="banner err" data-error-code="{_esc(exc.code)}">{_esc(message)}</div>
+              <div class="banner err" data-error-code="{_esc(exc.code)}" data-request-id="{_esc(current_request_id() or "")}">{_esc(message)}</div>
               {hint}
               {technical_details}
               {back}

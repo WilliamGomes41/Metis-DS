@@ -4,6 +4,8 @@
 
 Basis: `main` op `afcb37c` (D6a portie 19 gemergd).
 
+**Merge (2026-10-22):** gemergd als `fe0ccf8` bovenop `main` `99b03c4`, dat D6a/21 (#813) en D6a/22 (#814) al bevatte. De D6b-branch bevatte die porties niet; de combinatie is pas bij de merge ontstaan en is vóór de merge niet getest, ook niet lokaal. Door een GitHub Actions-blokkade (gebruikslimiet) draaide CI niet op de D6b-PR en niet op `main` na de merge. `99b03c4` heeft dezelfde tree als `1065f76`, de groene PR-CI-run van #814.
+
 Change class: A
 Promise: De console start lokaal, in tests en in Azure uitsluitend op de volledige PostgreSQL-compositie; geen configuratie, CLI-commando of consoleklasse kan nog een bestandsopslag voor workflow- of canonical state kiezen of gebruiken.
 Proof: Iedere combinatie van de oude selectors zonder PostgreSQL-configuratie wordt vóór opslagtoegang geweigerd; elke consoleklasse onder de volledige PG-compositie weigert te construeren zonder runtimebestanden te maken; `serve-console` en `console-account` starten de productieklasse en schrijven geen workflowbestanden; de volledige suite slaagt tegen PostgreSQL zonder PG-skips.
@@ -59,7 +61,7 @@ Current authority/writer/reader map: zie de kaart; autoriteit is PostgreSQL plus
 Supported runtime topologies: Azure (Azure-klasse, 1–2 workers, 1 instance), lokaal en CI met volledig PG (Durable-klasse). De bestandsopstelling bestaat niet meer.
 Persisted-state impact: geen schema- of datawijziging in PostgreSQL of Blob. Bestanden op schijf blijven onaangeroerd en ongebruikt.
 Compatibility/migration plan: expand–migrate–contract; D2–D5 en D6a waren expand/migrate, D6b is de contractstap. Lokale bestandsdata gaat expliciet via de bestaande migratiescripts. Azure-instellingen blijven ongewijzigd geldig.
-Rollback/recovery plan: code-rollback naar `afcb37c` vereist geen datawijziging: de PG-toestand is dezelfde en de selectors in Azure blijven `postgres`. Verwijder de selectors daarom niet uit Azure-instellingen zolang rollback mogelijk moet blijven. Herstel blijft `backup_workflow_chain`/`restore_workflow_chain`.
+Rollback/recovery plan: code-rollback naar `99b03c4` (de `main`-stand direct vóór de D6b-merge, met D6a/21 en 22; tree gelijk aan de CI-groene `1065f76`) vereist geen datawijziging: de PG-toestand is dezelfde en de selectors in Azure blijven `postgres`. Verwijder de selectors daarom niet uit Azure-instellingen zolang rollback mogelijk moet blijven. Herstel blijft `backup_workflow_chain`/`restore_workflow_chain`.
 Cutover trigger: merge na groene volledige suite zonder PG-skips, CI op beide Python-versies en de reviewronde (Lex, Sherlock, Argos) met Williams GO.
 Cleanup/decommission criteria: geen `file_topology`-marker of -test meer; geen `_startup_local_mirror_is_authority`, `_load_map`, bestandsrefusal-store of standaardconsole; de enige constructeerbare consoleklassen zijn de volledige PG-klassen; docs noemen geen lokale bestandsopstelling meer als ondersteunde start.
 Failure blast radius: iedere consolestart en de twee lokale CLI-commando's. Een lokale ontwikkelaar zonder PostgreSQL kan de console niet meer starten. Product API (`serve-api`) en `serve` vallen erbuiten.
@@ -76,7 +78,7 @@ Adversarial proof matrix: zie onder.
 | Afwijkende spiegelbestanden aanwezig (gifrun) | geen toegang | bestaande D4/D5-proef `test_pg_console_without_disk_mirrors.py`, beide klassen |
 | Mislukte heading-batch | alleen PG-rollback, geen bestandscompensatie | bestaande A08-proeven op PG |
 | Refusal zonder PG-store | `RefusalStoreUnavailable`, geen JSONL | refusal-audit-proeven |
-| Rollback naar `afcb37c` | ongewijzigde PG-toestand; oude code start met dezelfde selectors | geen schemawijziging; niet apart uitgevoerd (zie open punten) |
+| Rollback naar `99b03c4` | ongewijzigde PG-toestand; oude code start met dezelfde selectors | geen schemawijziging; niet apart uitgevoerd (zie open punten) |
 
 ## Lifecycle
 
@@ -110,8 +112,8 @@ Explicit non-goals: de consoleklassen opsplitsen; `runtime_data_inventory_v1`, g
 - `tests/test_718_workflow_topology.py` toetst nu de nieuwe weigering, de CLI via de productiecompositie en de productieguard.
 - `scripts/probes/probe_source_repair_mapping.py` (A09) bouwde een losse `ReviewClosureConsole` op bestanden; hij draait nu via `build_app` op een eigen PostgreSQL-database (`METIS_PROBE_ADMIN_DSN`) en slaagt met dezelfde uitkomst.
 
-## Open punten vóór merge
+## Open punten (oorspronkelijk vóór merge; gemergd terwijl ze open waren)
 
 - CI op Python 3.12 en 3.13. Lokaal (Python 3.13, PostgreSQL 16) gaf de volledige suite 5528 geslaagd, 6 gefaald, 29 overgeslagen, nul PostgreSQL-skips. Vier fouten waren verouderde verwijzingen naar verwijderde bestandscode en zijn hersteld. `test_security_sandbox::test_tested_code_cannot_overwrite_control_files` faalt ook op main omdat de container als root draait. `test_native_stall_reserves_before_call_and_recovers_same_source` was een eenmalige timingfout en slaagt bij herhaling.
-- Rollback-proef naar `afcb37c` op dezelfde PG-toestand niet apart uitgevoerd; er is geen schemawijziging.
+- Rollback-proef naar `99b03c4` op dezelfde PG-toestand niet apart uitgevoerd; er is geen schemawijziging.
 - Lex (aanvalsronde), Sherlock (begrensde review) en Argos (gate) vóór de merge; Williams GO.
