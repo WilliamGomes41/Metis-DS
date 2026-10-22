@@ -166,3 +166,45 @@ def test_independent_factory_copies_keep_identities_and_sessions_separate(produc
         other.session_account(token)
     assert restart_production(first).session_account(token)['roles'] == ['researcher']
     assert restart_production(other).list_accounts()[0]['roles'] == ['reviewer']
+
+
+def test_concurrent_application_configuration_keeps_each_console_root(
+    production_console, tmp_path, monkeypatch,
+):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    import time
+    from src import console_asgi
+    from tests.production_support import application_for
+
+    consoles = [production_console(root=tmp_path / name, isolated=True,
+                                  processing_binder=lambda console: None)
+                for name in ('first', 'second')]
+    before = os.environ.get('CONSOLE_DATA_ROOT'), console_asgi.ROOT
+    build = console_asgi.build_console_app
+    observations = []
+    ready = Barrier(2)
+
+    def observe(console, **options):
+        initial = os.environ.get('CONSOLE_DATA_ROOT'), console_asgi.ROOT
+        # Give the other caller an opportunity to overwrite the process globals.
+        time.sleep(0.05)
+        final = os.environ.get('CONSOLE_DATA_ROOT'), console_asgi.ROOT
+        observations.append((console.root, initial, final))
+        return build(console, **options)
+
+    monkeypatch.setattr(console_asgi, 'build_console_app', observe)
+
+    def configure(console):
+        ready.wait(timeout=10)
+        return application_for(console, trusted_origin='https://console.example.test')
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        futures = [workers.submit(configure, console) for console in consoles]
+        apps = [future.result(timeout=15) for future in futures]
+
+    assert [app.state.operations_kernel for app in apps] == consoles
+    assert len(observations) == 2
+    for root, initial, final in observations:
+        assert initial == final == (str(root), root), 'Application configuration leaked between consoles'
+    assert (os.environ.get('CONSOLE_DATA_ROOT'), console_asgi.ROOT) == before
