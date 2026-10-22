@@ -2751,6 +2751,7 @@ class OperationsConsole:
         type_action: str | None = None,
         expected_revision: str | None = None,
         interaction_evidence: dict[str, Any] | None = None,
+        source_discrepancy: Iterable[str] | None = None,
     ) -> list[dict[str, Any]]:
         with self._atomic_snapshot_mutation(snapshot_id):
             reviewer = self._require_role(actor_id, "reviewer")
@@ -2772,6 +2773,9 @@ class OperationsConsole:
                 decision = mapped
             if decision in {"revise", "reject"} and not str(comment or "").strip():
                 raise ConsoleError("review_comment_required")
+            from src.source_discrepancy_v1 import assert_allowed, normalize
+            discrepancy = normalize(source_discrepancy)
+            assert_allowed(discrepancy, decision)
             rejecting = decision == "reject"
             if rejecting:
                 confirmed_object_type = None
@@ -2833,6 +2837,8 @@ class OperationsConsole:
             from src.integrity_kernel import stable_hash
             relation_choices = tuple(relation_choices or ())
             command_hash = stable_hash({
+                # Present only when reported, so earlier command hashes stay valid.
+                **({"source_discrepancy": discrepancy} if discrepancy else {}),
                 "decision": decision, "confirmed_object_type": confirmed_object_type,
                 "recommendation_strength": recommendation_strength,
                 "recommendation_direction": recommendation_direction,
@@ -2878,6 +2884,8 @@ class OperationsConsole:
                     not current_duty or not route or not route.get("actionable")
                 ):
                     raise ConsoleError("content_duty_required")
+            if discrepancy and review_domain != "content":
+                raise ConsoleError("source_discrepancy_not_applicable")
             if (current_duty and current_duty.get("stage") == SECOND_REVIEW
                     and decision != "revise"):
                 raise ConsoleError("second_review_command_required")

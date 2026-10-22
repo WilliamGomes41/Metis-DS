@@ -23,6 +23,7 @@ from src.passage_register_v1 import (
 from src.proportionate_review_v1 import ProportionateReviewConsole
 from src.publish_authorization_v1 import invalidate_for_object
 from src.review_cockpit_v1 import broncontext_parts, map_eindoordeel
+from src.source_discrepancy_v1 import normalize as normalize_discrepancy
 from src.review_ledger import append_event, read_events, read_command_events
 from src.serving_relations_v1 import binding_relations
 
@@ -120,9 +121,11 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
         comment: str,
         proposed_correction: str,
         prior_passage_status: str = "",
+        source_discrepancy: list[str] | None = None,
     ) -> dict[str, Any]:
         envelope = self._envelope(snapshot_id)
         actor = self._account(actor_id)
+        from src.source_discrepancy_v1 import DETAILS_KEY
         return append_event(
             self._ledger_path,
             event_type=REVIEW_AUDIT_EVIDENCE_EVENT,
@@ -130,6 +133,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             object_version=str(target.get("object_version") or ""),
             actor=actor["username"],
             details={
+                **({DETAILS_KEY: list(source_discrepancy)} if source_discrepancy else {}),
                 "snapshot_id": snapshot_id,
                 "source_hash": str(envelope.get("sha256") or ""),
                 "source_locator": _source_locator(
@@ -280,6 +284,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                 proposed_correction=str(
                     kwargs.get("proposed_correction") or ""
                 ).strip(),
+                source_discrepancy=normalize_discrepancy(kwargs.get("source_discrepancy")),
             )
             return deepcopy(self.snapshot_objects(snapshot_id))
 

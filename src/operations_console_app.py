@@ -393,6 +393,9 @@ ERROR_COPY = {
     "knowledge_class_change_requires_successor": "Omzetten tussen een beslisboom en een ander documenttype maakt nieuwe kennisobjecten. Maak daarvoor via Review → Nieuwe werkrevisie een opvolgende werkrevisie met het nieuwe documenttype; dit document blijft ongewijzigd.",
     "decision_graph_class_change_requires_successor": "Omzetten tussen een beslisboom en een ander documenttype maakt nieuwe kennisobjecten. Maak daarvoor via Review → Nieuwe werkrevisie een opvolgende werkrevisie met het nieuwe documenttype; dit document blijft ongewijzigd.",
     "class_change_confirmation_required": "Bevestig eerst de consequentie van Klasse wijzigen.",
+    "source_discrepancy_requires_correction_or_rejection": "Je hebt een discrepantie met de originele tekst gemeld. Kies daarom correctie specificeren of afwijzen; ongewijzigd goedkeuren of later beoordelen kan niet.",
+    "source_discrepancy_invalid": "Kies een discrepantie uit de lijst.",
+    "source_discrepancy_not_applicable": "Een discrepantie meld je bij een kennisobject, niet bij een kop of brontekst zonder kennisobject.",
     "published_class_change_blocked": "Van een gepubliceerd document kun je het documenttype niet wijzigen. Lever een nieuwe versie in.",
     "cross_model_reextract_required": "Dit document moet opnieuw worden verwerkt om het naar het gekozen documenttype om te zetten.",
     "source_identity_must_not_change": "Deze actie mag de oorspronkelijke brongegevens niet wijzigen. Lever een nieuw document of een nieuwe versie in.",
@@ -1611,6 +1614,32 @@ def _broncontext_html(
     """
 
 
+def _source_discrepancy_block(obj: dict[str, Any], draft: dict[str, Any], *, review_path: str) -> str:
+    """Optional reviewer report that the knowledge object departs from its source."""
+    from src.knowledge_path_v1 import content_reviewable
+    from src.source_discrepancy_v1 import CATEGORIES
+    if review_path != "boom" and not content_reviewable(obj):
+        return ""
+    chosen = set(draft.get("source_discrepancy") or ())
+    boxes = "".join(
+        f'<label class="check"><input type="checkbox" name="source_discrepancy" value="{_esc(code)}"'
+        f'{" checked" if code in chosen else ""}> {_esc(label)}</label>'
+        for code, label in CATEGORIES.items()
+    )
+    return (
+        '<section class="review-step source-discrepancy" data-review-step="discrepancy">'
+        "<h4>Rapporteer een discrepantie (optioneel)</h4>"
+        '<p class="field-help">Wijkt het kennisobject af van de originele tekst? Kies wat afwijkt. '
+        "Met een gemelde discrepantie kies je daarna correctie of afwijzen; ongewijzigd goedkeuren "
+        "kan dan niet.</p>"
+        + (('<div class="banner err" role="alert">' + _esc(ERROR_COPY.get(draft["discrepancy_error"], ""))
+            + "<p>Je beoordeling is niet opgeslagen. Je invoer staat hieronder nog klaar.</p></div>")
+           if draft.get("discrepancy_error") else "")
+        + f'<fieldset id="discrepancy-{_esc(obj["object_id"])}">{boxes}</fieldset>'
+        "</section>"
+    )
+
+
 _REVIEW_DRAFT_SETS = {
     "suitability": frozenset(SUITABILITY_VALUES),
     "eindoordeel": frozenset(
@@ -1626,13 +1655,19 @@ def _sanitize_review_draft(draft: dict[str, Any] | None) -> dict[str, Any]:
     sanitized = {
         key: str(value or "")
         for key, value in (draft or {}).items()
-        if key != "relation_choice"
+        if key not in {"relation_choice", "source_discrepancy"}
     }
     if draft is not None and "relation_choice" in draft:
         choices = draft["relation_choice"]
         sanitized["relation_choice"] = (
             [str(value) for value in choices] if isinstance(choices, list) else []
         )
+    from src.source_discrepancy_v1 import CATEGORIES
+    reported = (draft or {}).get("source_discrepancy")
+    sanitized["source_discrepancy"] = [str(v) for v in reported if str(v) in CATEGORIES] if isinstance(reported, list) else []
+    if sanitized.get("discrepancy_error") not in {"", "source_discrepancy_requires_correction_or_rejection",
+                                                 "source_discrepancy_invalid", "source_discrepancy_not_applicable"}:
+        sanitized["discrepancy_error"] = ""
     closed_types = frozenset(CLOSED_OBJECT_TYPES) | frozenset(CLOSED_BOOM_TYPES)
     for key, allowed in _REVIEW_DRAFT_SETS.items():
         default = _REVIEW_DRAFT_DEFAULTS.get(key, "")
@@ -3551,6 +3586,7 @@ def _render_review_card(
                         review_path=review_path,
                         draft=draft, bindings=console.object_review_bindings(snapshot_id, objects=snapshot_objects), fragments=console.review_source_fragments(snapshot_id)
                     )}
+                    {_source_discrepancy_block(obj, draft, review_path=review_path)}
                     <section class="review-step" data-review-step="f">
                       <h4>Wat is je besluit?</h4>
                       <fieldset id="decision-{_esc(obj["object_id"])}">
@@ -5590,6 +5626,7 @@ def create_console_app(
         snapshot_revision: str = Form(""),
         return_task: str = Form(""),
         interaction_id: str = Form(""),
+        source_discrepancy: list[str] = Form(default=[]),
     ) -> RedirectResponse:
         account = _require(request)
         mapped = map_eindoordeel(eindoordeel, decision)
@@ -5659,6 +5696,7 @@ def create_console_app(
                 type_action=type_action.strip() or None,
                 expected_revision=snapshot_revision.strip() or None,
                 interaction_evidence=evidence,
+                source_discrepancy=list(source_discrepancy or []),
             )
         except ConsoleError as exc:
             semantic_error = exc.code in {
@@ -5669,15 +5707,21 @@ def create_console_app(
                 "recommendation_strength_not_stated_conflict",
                 "recommendation_semantics_confirmation_invalid",
             }
-            if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT and not semantic_error:
+            discrepancy_error = exc.code in {
+                "source_discrepancy_requires_correction_or_rejection",
+                "source_discrepancy_invalid",
+                "source_discrepancy_not_applicable",
+            }
+            if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT and not (semantic_error or discrepancy_error):
                 raise
             # Render the same object set and revision that we compare here. A
             # second read could silently replace the posted revision after a
             # semantic validation error, hiding another reviewer's change.
             review_snapshot = state.snapshot_objects_and_revision(snapshot_id)
-            if semantic_error and snapshot_revision.strip() and snapshot_revision.strip() != review_snapshot[1]:
-                semantic_error = False
-            if not semantic_error:
+            if snapshot_revision.strip() and snapshot_revision.strip() != review_snapshot[1]:
+                semantic_error = discrepancy_error = False
+            input_error = semantic_error or discrepancy_error
+            if not input_error:
                 state.refresh_objects_expected_revision(snapshot_id, review_snapshot[1])
             return HTMLResponse(
                 _render_review_room(
@@ -5699,16 +5743,18 @@ def create_console_app(
                         "relation_choice": ([relation_choice] if isinstance(relation_choice, str) else list(relation_choice or [])),
                         "relation_review_ack": relation_review_ack,
                         "validation_error": exc.code if semantic_error else "",
+                        "discrepancy_error": exc.code if discrepancy_error else "",
+                        "source_discrepancy": list(source_discrepancy or []),
                         "eindoordeel": eindoordeel,
                         "decision": decision,
                         "comment": comment,
                         "proposed_correction": proposed_correction,
                         "proposed_object_type": proposed_object_type,
                     },
-                    conflict=not semantic_error,
+                    conflict=not input_error,
                     snapshot=review_snapshot,
                 ),
-                status_code=400 if semantic_error else 409,
+                status_code=400 if input_error else 409,
             )
         if mapped == "revise" and proposed_correction.strip():
             state.correct_object(

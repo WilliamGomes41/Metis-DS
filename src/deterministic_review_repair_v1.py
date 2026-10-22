@@ -23,6 +23,7 @@ from src.closed_review_loop_v1 import ClosedLoopReviewConsole
 from src.integrity_kernel import schema_errors, stable_hash, stamp_canonical_hashes
 from src.operations_console_v1 import ConsoleError, OperationsConsole, SNAPSHOT_OBJECT_WRITE_CONFLICT
 from src.admission_gate_v1 import is_admission_blocked
+from src.source_discrepancy_v1 import normalize as normalize_discrepancy
 from src.beslisboom_path_v1 import review_path_for_klasse
 from src.publish_authorization_v1 import invalidate_for_object
 from src.review_cockpit_v1 import map_eindoordeel
@@ -131,6 +132,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             "found_under": str(kwargs.get("found_under") or ""),
             "parent_choice": str(kwargs.get("parent_choice") or ""),
             "type_action": str(kwargs.get("type_action") or ""),
+            "source_discrepancy": normalize_discrepancy(kwargs.get("source_discrepancy")),
         }
         self._preflight_structured_repair(submission)
         raise StructuredRepairRequired(submission)
@@ -393,6 +395,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         comment: str,
         unit_ids: list[str],
         units: list[dict[str, Any]],
+        source_discrepancy: list[str] | None = None,
     ) -> dict[str, Any]:
         text, source_refs, normalized_ids = self._selected_source_material(
             snapshot_id=snapshot_id,
@@ -444,6 +447,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             final_disposition="needs_review",
             comment=comment,
             proposed_correction="",
+            source_discrepancy=source_discrepancy,
         )
         return revised
 
@@ -516,6 +520,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         comment: str,
         merge_object_ids: list[str],
         catalog: list[dict[str, Any]],
+        source_discrepancy: list[str] | None = None,
     ) -> dict[str, Any]:
         target_ids = list(
             dict.fromkeys(
@@ -638,6 +643,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             final_disposition="needs_review",
             comment=comment,
             proposed_correction="",
+            source_discrepancy=source_discrepancy,
         )
         return self._current_object(snapshot_id, object_id)
 
@@ -695,6 +701,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         found_under: str = "",
         parent_choice: str = "",
         type_action: str = "",
+        source_discrepancy: list[str] | None = None,
     ) -> dict[str, Any]:
         """Atomically commit human revise + deterministic repair + re-review state."""
         if repair_kind not in _REPAIR_KINDS:
@@ -714,6 +721,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             "found_under": found_under.strip(),
             "parent_choice": parent_choice.strip(),
             "type_action": type_action.strip(),
+            "source_discrepancy": normalize_discrepancy(source_discrepancy),
         }
         self._preflight_structured_repair(submission)
         expected_kind = self.repair_kind_for_submission(submission)
@@ -769,6 +777,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
                         parent_choice=parent_choice.strip() or None,
                         type_action=None if blocked else (type_action.strip() or None),
                         expected_revision=expected_revision,
+                        source_discrepancy=submission["source_discrepancy"],
                     )
             if repair_kind == REPAIR_SOURCE_UNITS:
                 repaired = self._source_repair(
@@ -778,6 +787,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
                     comment=comment.strip(),
                     unit_ids=list(source_unit_ids or []),
                     units=source_units,
+                    source_discrepancy=submission["source_discrepancy"],
                 )
             elif repair_kind == REPAIR_MERGE_OBJECTS:
                 repaired = self._merge_repair(
@@ -787,6 +797,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
                     comment=comment.strip(),
                     merge_object_ids=list(merge_object_ids or []),
                     catalog=catalog,
+                    source_discrepancy=submission["source_discrepancy"],
                 )
             elif repair_kind == REPAIR_SUPPORT_RELATION:
                 if not claim_object_id.strip():
@@ -864,7 +875,8 @@ def install_deterministic_review_repair_routes(
             "type_action": submission.get("type_action"),
             "repair_kind": repair_kind,
         }
-        return "".join(_hidden(name, value) for name, value in values.items())
+        return "".join(_hidden(name, value) for name, value in values.items()) + "".join(
+            _hidden("source_discrepancy", code) for code in submission.get("source_discrepancy") or [])
 
     def source_units_form(submission: dict[str, Any]) -> str:
         snapshot_id = str(submission["snapshot_id"])
@@ -1005,6 +1017,7 @@ def install_deterministic_review_repair_routes(
         found_under: str = Form(""),
         parent_choice: str = Form(""),
         type_action: str = Form(""),
+        source_discrepancy: list[str] = Form(default=[]),
     ) -> RedirectResponse:
         account = account_for(request)
         console.submit_review_resolution(
@@ -1025,5 +1038,6 @@ def install_deterministic_review_repair_routes(
             found_under=found_under,
             parent_choice=parent_choice,
             type_action=type_action,
+            source_discrepancy=list(source_discrepancy or []),
         )
         return RedirectResponse(_review_url(snapshot_id, object_id), status_code=303)

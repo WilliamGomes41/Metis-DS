@@ -129,6 +129,25 @@ Gevonden conflict: een kennisrevisie wordt nooit in-place gewijzigd (T11, `revis
 
 Besluit William 2026-10-22 (optie 1): een klassewijziging van of naar een beslisboom verloopt altijd via de bestaande opvolger (`create_review_successor(..., class_=...)`, UI: Review → Nieuwe werkrevisie). `promote_class` weigert zo'n wijziging met `decision_graph_class_change_requires_successor` (met beslisgraaf) of `knowledge_class_change_requires_successor`, met Nederlandse uitleg in de console. Verwijderd: `_reextract_objects_for_klasse`, `_class_change_manifest`, `_archive_prior_objects` (schrijver), de `reextract`-vlag en `cross_model_direct_change_blocked`. Behouden: `prior_object_audit_history` om eerder gearchiveerde objecten te blijven lezen. De opvolger krijgt een eigen snapshot met eigen identiteiten; ouder, objecten, revisie en bron blijven ongewijzigd (`test_cross_model_class_change_is_a_successor_and_keeps_prior_work`). T11 en het identiteitscontract zijn niet gewijzigd.
 
+## 7b. Rapporteer een discrepantie (vervangt de deterministische vergelijkingsarm)
+
+```text
+Change class: B (stateful)
+Promise: een beoordelaar kan bij een kennisobject optioneel melden dat het afwijkt van de originele tekst; dan kan het niet ongewijzigd worden goedgekeurd, en Kwaliteit & werkproces telt de meldingen per route en model.
+Proof: tests/test_source_discrepancy_v1.py
+Touches lifecycle invariants: no (geen nieuwe status, publicatie- of servingregel)
+Rewrite risk: none
+```
+
+- Domain entity: het bestaande reviewbesluit op één exacte objectversie (`review_object`, `submit_review_resolution`).
+- Invariant: een gemelde discrepantie laat alleen `revise` of `reject` toe; alleen bij kennisobjecten (niet bij koppen of bronrecords); vaste soorten (`source_discrepancy_v1.CATEGORIES`).
+- Durable state before/after: ongewijzigd behalve één extra veld `source_discrepancy` op het bestaande `review_audit_evidence`-ledgerbewijs van dat besluit.
+- Transaction boundary: hetzelfde besluit- of correctiecommando (inclusief bron- en samenvoegreparatie); een geweigerde melding schrijft niets.
+- Failure/recovery: weigering laat envelope, objecten en bindingen ongewijzigd; de kaart toont de invoer opnieuw.
+- Idempotency: de melding telt mee in de commandohash alleen als zij aanwezig is, zodat bestaande hashes geldig blijven.
+- Concurrency: bestaande `expected_revision`/CAS van het reviewcommando.
+- Audit/evidence: geen tweede waarheid; de kwaliteitsmeting leest het ledgerbewijs en ontdubbelt per objectversie.
+
 ## 8. Niet-geverifieerde risico's
 
 - **G4 niet aangetoond:** inhoudelijke kwaliteit van semantische vorming per bronsegment is niet gemeten op een bevroren corpus; de deterministische vergelijkingsarm bestaat niet meer.
@@ -151,9 +170,9 @@ Besluit William 2026-10-22 (optie 1): een klassewijziging van of naar een beslis
 
 ## 10. Testresultaten
 
-- Volledige suite met PostgreSQL 16 (gestart via `scripts/test_postgres.sh` door `tests/conftest.py`), 4 workers: 5552 geslaagd, 3 xfailed (B23 fail-first), 29 overgeslagen, 4 gefaald.
-  - 3 × het conflict uit §7; opgelost met optie 1 (zie §7), deze tests zijn nu groen of vervangen.
-  - 1 × `tests/test_security_sandbox.py::test_tested_code_cannot_overwrite_control_files`: faalt ook op `fe0ccf8` in deze container (root negeert alleen-lezen rechten); niet gerelateerd.
+- Volledige suite met PostgreSQL 16 (gestart via `scripts/test_postgres.sh` door `tests/conftest.py`), 4 workers, na optie 1 en de discrepantiemelding: 5559 geslaagd, 3 xfailed (B23 fail-first), 29 overgeslagen, 1 gefaald.
+  - Gefaald: `tests/test_security_sandbox.py::test_tested_code_cannot_overwrite_control_files`; faalt ook op `fe0ccf8` in deze container (root negeert alleen-lezen rechten); niet gerelateerd.
+  - Overgeslagen: uitsluitend omgevingsafhankelijk (echte Docling-modellen, Chromium-browserproeven, Bend-toolchain, niet-root POSIX-rechten). De echte Docling-PDF-tests zijn dus niet uitgevoerd.
 - `python scripts/check_architecture_boundaries.py`: PASS.
 - Byte-gelijkheid kopprojectie oud/nieuw: 23 koppen over alle HTML-fixtures gelijk.
-
+- Characterization-goldens: alleen ondoorzichtige revisietokens, de verwijderde `/freeze`-routes en het nieuwe discrepantieblok op de reviewkaart verschillen.

@@ -120,6 +120,7 @@ class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewC
         comment: str,
         proposed_correction: str,
         prior_passage_status: str = "",
+        source_discrepancy: list[str] | None = None,
     ) -> dict[str, Any]:
         envelope = self._envelope(snapshot_id)
         actor = self._account(actor_id)
@@ -144,6 +145,9 @@ class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewC
         repair_spec = _REPAIR_EVIDENCE.get()
         if repair_spec:
             details["repair_spec"] = deepcopy(repair_spec)
+        if source_discrepancy:
+            from src.source_discrepancy_v1 import DETAILS_KEY
+            details[DETAILS_KEY] = list(source_discrepancy)
         return append_event(
             self._ledger_path,
             event_type=REVIEW_AUDIT_EVIDENCE_EVENT,

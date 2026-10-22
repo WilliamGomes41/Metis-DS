@@ -16,8 +16,10 @@ from src.review_interaction_v1 import review_burden_projection
 from src.review_disposition_v1 import definitive_review_disposition
 from src.review_duty_v1 import review_stage, authoritative_review_type
 from src.beslisboom_path_v1 import review_path_for_klasse
+from src.closed_review_loop_v1 import REVIEW_AUDIT_EVIDENCE_EVENT
+from src.source_discrepancy_v1 import CRITICAL, DETAILS_KEY
 
-DEFINITION_VERSION = "quality-workprocess-v1.0.0"
+DEFINITION_VERSION = "quality-workprocess-v1.1.0"
 ROUTES = ("deterministic", "semantic", "remainder", "unknown")
 DEFINITIONS = {
     "direct": "Eerste inhoudelijke besluiten over oorspronkelijke kandidaten; uitstel en structuur uitgesloten. Onbekende vergelijking is geen succes.",
@@ -26,6 +28,7 @@ DEFINITIONS = {
     "open": "Huidige onafgehandelde bronpassages binnen het ingestcohort. Geen historische werkvoorraad.",
     "duration": "Ingest tot vastgelegde publicatie; gereedheid wordt alleen als eerste waarneming gerapporteerd.",
     "problems": "Ontdekte, expliciet geregistreerde inhoudelijke problemen; geen maat voor alle aanwezige fouten.",
+    "source_discrepancies": "Door een beoordelaar gemelde discrepanties tussen kennisobject en originele tekst, één per beoordeelde objectversie. Melden is optioneel: geen melding bewijst geen overeenstemming, dus er is geen foutpercentage.",
 }
 
 
@@ -79,7 +82,9 @@ def build_report(documents: list[dict[str, Any]], *, as_of: str,
     seen = set()
     first = {}
     per_route = {route: {"first_decisions": 0, "known_comparisons": 0, "direct": 0,
-                         "repair_requests": 0, "rejections": 0, "corrections": 0, "corrections_after_approval": 0, "changed_fields": Counter()} for route in ROUTES}
+                         "repair_requests": 0, "rejections": 0, "corrections": 0, "corrections_after_approval": 0, "changed_fields": Counter(),
+                         "source_discrepancy_reports": 0, "source_discrepancy_categories": Counter()} for route in ROUTES}
+    discrepancies: dict[tuple, dict[str, Any]] = {}
     details = []
     publications = []
     pending_age = []
@@ -117,6 +122,16 @@ def build_report(documents: list[dict[str, Any]], *, as_of: str,
                      evidence.get("origin") == candidate_keys.get((evidence.get("run_id"), event.get("object_id")), {}).get("origin"))
             origin = (evidence.get("origin") or {}).get("route") if valid else "unknown"
             route = origin if origin in ROUTES else "unknown"
+            if kind == REVIEW_AUDIT_EVIDENCE_EVENT and payload.get(DETAILS_KEY):
+                # One report per reviewed object version, attributed to its formation.
+                key = (sid, event.get("object_id"), payload.get("review_snapshot_hash"))
+                reviewed = next((o for o in objects if o.get("object_id") == event.get("object_id")), {})
+                semantic = (reviewed.get("metadata") or {}).get("semantic_passage") or {}
+                discrepancies.setdefault(key, {"route": route_of(reviewed)["route"] if reviewed else "unknown",
+                                               "formation_mode": semantic.get("formation_mode") or "unknown",
+                                               "model": semantic.get("model") or "unknown",
+                                               "categories": list(payload[DETAILS_KEY])})
+                continue
             if kind == "quality_object_corrected":
                 per_route[route]["corrections"] += 1
                 per_route[route]["corrections_after_approval"] += int(event.get("object_id") in approved_ids)
@@ -184,11 +199,20 @@ def build_report(documents: list[dict[str, Any]], *, as_of: str,
                         "interactions": burden["review_interactions"], "object_decisions": burden["object_decisions"],
                         "run_count": len(run_by_id), "ready_observed": doc.get("ready_observed"),
                         "processing_blocker": env.get("processing_blocker")})
+    by_formation: Counter = Counter()
+    categories: Counter = Counter()
+    for report in discrepancies.values():
+        metric = per_route[report["route"] if report["route"] in ROUTES else "unknown"]
+        metric["source_discrepancy_reports"] += 1
+        metric["source_discrepancy_categories"].update(report["categories"])
+        categories.update(report["categories"])
+        by_formation[(report["formation_mode"], report["model"])] += 1
     burden = review_burden_projection(events)
     # No reviewer identifiers or per-person rankings in the report.
     burden.pop("interactions", None)
     for row in per_route.values():
         row["changed_fields"] = dict(row["changed_fields"])
+        row["source_discrepancy_categories"] = dict(row["source_discrepancy_categories"])
         row["coverage"] = coverage(row["known_comparisons"], row["first_decisions"])
         row["direct_rate"] = row["direct"] / row["first_decisions"] if row["coverage"] == "measurable" else None
     durations = sorted(publications)
@@ -204,6 +228,11 @@ def build_report(documents: list[dict[str, Any]], *, as_of: str,
                 "p90": durations[max(0, (9 * len(durations) + 9)//10 - 1)] if durations else None},
             "readiness_duration": {"coverage": "not_measurable", "reason": "Exact overgangstijdstip naar publicatiegereed ontbreekt; deze doorlooptijd is niet meetbaar."},
             "clinical_errors": {"coverage": "not_measurable", "reason": "Reviewafwijzing is geen bewezen klinische fout; bestaande redenen zijn niet uniform gecodeerd."},
+            "source_discrepancies": {"coverage": "reported_only", "reports": len(discrepancies),
+                "critical": sum(1 for r in discrepancies.values() if CRITICAL & set(r["categories"])),
+                "categories": dict(categories),
+                "by_formation": [{"formation_mode": mode, "model": model, "reports": count}
+                                 for (mode, model), count in sorted(by_formation.items())]},
             "limitations": ["Vergelijking betreft een ingestcohort; gebeurtenissen beslaan het werk aan deze bronnen tot de gegevensgrens.",
                 "Open werk is een momentopname. Ouderdom betreft de bron, niet het ontstaan van een individuele taak.",
                 "Veldverschillen tellen per vastgelegd besluit of correctie; dit is geen telling van unieke inhoudelijke fouten.",
