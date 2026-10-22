@@ -1,0 +1,92 @@
+{
+  "change_class": "C",
+  "rewrite_risk": "none",
+  "base": "afcb37ca",
+  "tested_candidate": "54dd3d25",
+  "scope": "Residual explicit native characterization CI service; test migration already delivered in #812.",
+  "server": {
+    "postgres_version": 160015,
+    "fsync": "on",
+    "synchronous_commit": "on",
+    "full_page_writes": "on"
+  },
+  "targeted": {
+    "tests": 141,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "junit_sha256": "3626f053af6e2ada6face29bc395bb655a321c0e221f73fb3da78dbcac756b7b"
+  },
+  "mutations": [
+    {
+      "mutation": "ingest",
+      "pytest_exit": 1,
+      "evidence_check_exit": 0,
+      "summary": "ingest mutation: 46/84 red as recorded, exit code 1"
+    },
+    {
+      "mutation": "review",
+      "pytest_exit": 1,
+      "evidence_check_exit": 0,
+      "summary": "review mutation: 24/27 red as recorded, exit code 1"
+    },
+    {
+      "coverage_workflow_exit": 0,
+      "limit": "Historical source-range SHA mismatch still prevents a historical numeric coverage claim."
+    }
+  ],
+  "full_suite_reuse": {
+    "source_pr": 812,
+    "ci_run": 39717829568,
+    "head": "919372b1",
+    "main": "afcb37ca",
+    "note": "Only changed test file is a module documentation addition; AST excluding the module docstring equals main. Production source, dependencies and test behavior unchanged. No new full-suite timing claimed."
+  },
+  "mandatory_checks": [
+    {
+      "command": [
+        "python",
+        "scripts/repository_preflight.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python",
+        "scripts/release_control_preflight.py",
+        "--base",
+        "origin/main"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python",
+        "scripts/check_architecture_boundaries.py"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python",
+        "-m",
+        "compileall",
+        "-q",
+        "src",
+        "tests"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "origin/main"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "workflow_lint": "actionlint 1.7.7 passed",
+  "ci_status": "Not started on the new publication head; required before merge."
+}
