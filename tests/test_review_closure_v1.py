@@ -8,6 +8,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import pytest
 from fastapi.testclient import TestClient
@@ -66,7 +67,7 @@ def test_repair_finalization_preserves_hash_policy_restart_and_stale_replay(tmp_
         resolve(**command)
     assert console.snapshot_objects(sid) == before
     assert read_events(console._ledger_path) == events
-    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    restarted = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted._current_object(sid, obj["object_id"]) == repaired
 
 
@@ -99,12 +100,12 @@ def test_failure_after_prepared_correction_commit_rolls_back_whole_repair(tmp_pa
     assert console.snapshot_objects(sid) == before
     assert console.objects_revision(sid) == revision
     assert read_events(console._ledger_path) == events
-    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    restarted = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted.snapshot_objects(sid) == before
 
 
 def _system(tmp_path, console=None, *, production_app, production_console):
-    console = console or production_console(processing_binder=lambda console: None,
+    console = console or production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",
@@ -324,7 +325,7 @@ def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_p
     repaired = console._current_object(sid, obj["object_id"])
     assert repaired["object_version"] != obj["object_version"]
     assert repaired["governance"]["validation_status"] == "needs_review"
-    restarted = _console(tmp_path, config) if config else production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    restarted = _console(tmp_path, config) if config else production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted._current_object(sid, obj["object_id"]) == repaired
 
 
@@ -332,8 +333,7 @@ def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_p
 def test_approval_ui_uses_existing_admission_policy(tmp_path, gate, *, production_app, production_console):
     import re
 
-    from tests.semantic_fixture_support import bind_fixture_selections
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     bind_fixture_selections(console, [("De verpleegkundige bespreekt passende ondersteuning met de client.", "definition")])
     console, client, _researcher, _reviewer, sid, objects = _system(tmp_path, console, production_app=production_app, production_console=production_console)
     obj = next(row for row in objects if row.get("proposed_object_type") == "definition")

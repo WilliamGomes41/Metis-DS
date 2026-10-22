@@ -1,4 +1,10 @@
-"""Route comparison under Inzicht controls, outside normal Review."""
+"""Route comparison under Inzicht controls, outside normal Review.
+
+The comparison measured the retired deterministic formation route against the
+semantic route. New comparisons are refused and the deterministic arm never
+runs again; recorded comparisons stay readable and can still be assessed,
+analysed, closed or cancelled.
+"""
 from __future__ import annotations
 
 from html import escape
@@ -13,13 +19,13 @@ from starlette.concurrency import run_in_threadpool
 
 from src.route_comparison_v1 import (
     ComparisonError, ComparisonStore, analyze, assess, blind_view, cancel,
-    claim_arm, close, fail_arm, finish_arm, freeze, new_comparison,
+    claim_arm, close, fail_arm, finish_arm,
 )
-from src.context_aware_split_v1 import split_context_aware_units
 from src.llm_provider_v1 import load_llm_provider_config
 from src.pre_review_semantic_v1 import semantic_units_before_review
 
 LOG = logging.getLogger(__name__)
+RETIRED = "comparison_route_retired"
 
 
 def _units(units: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -35,12 +41,9 @@ def _units(units: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def execute_arm(row: dict[str, Any], route: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Call the existing pre-Review formation functions on frozen fragments."""
+    """Call the semantic pre-Review formation on frozen fragments (the only arm that runs)."""
     fragments = row["fragments"]
     document_id = "experiment-" + row["comparison_id"]
-    if route == "deterministic":
-        units = split_context_aware_units(fragments, document_id=document_id)
-        return _units(units), {"strategy": route, "code_version": row["code_version"]}
     if route != "semantic":
         raise ComparisonError("comparison_route_invalid")
     config = load_llm_provider_config(os.environ)
@@ -96,43 +99,25 @@ def install_route_comparison_routes(app, state, require, page) -> None:
     def redirect(comparison_id: str) -> RedirectResponse:
         return RedirectResponse("/inzicht/routevergelijking/" + comparison_id, status_code=303)
 
-    def fragments_for(envelope: dict[str, Any]) -> list[dict[str, Any]]:
-        if envelope.get("content_kind") not in {"html", "pdf"}:
-            raise ComparisonError("comparison_source_kind_unsupported")
-        path, _data = state._verified_source_bytes(envelope)
-        return state._extract(envelope["content_kind"], path,
-                              document_id=str(envelope["document_id"]),
-                              source_id=str(envelope["source_id"]))
-
     @app.get("/inzicht/routevergelijking", response_class=HTMLResponse)
     def home(request: Request):
         account = require(request)
         allowed = scope(account)
         rows = store.list(owner=account["account_id"], allowed_scope=set(allowed))
-        options = ''.join(f'<option value="{escape(sid)}">{escape(str(e.get("title") or sid))}</option>'
-                          for sid, e in allowed.items() if e.get("content_kind") in {"html", "pdf"})
         listing = ''.join(f'<li><a href="/inzicht/routevergelijking/{escape(r["comparison_id"])}">'
                           f'{escape(r["title"])} · {escape(r["state"])}</a></li>' for r in rows)
         return render(request, '<h1>Routevergelijking</h1><p>Experimentele meting op dezelfde bron; '
                       'gewone verwerking en Review blijven gescheiden.</p>'
-                      '<form method="post" action="/inzicht/routevergelijking">'
-                      f'<select name="snapshot_id" required>{options}</select>'
-                      '<button>Vergelijking voorbereiden</button></form><ul>' + listing + '</ul>')
+                      '<p>De deterministische route bestaat niet meer; nieuwe vergelijkingen worden '
+                      'niet gestart. Vastgelegde vergelijkingen blijven hieronder leesbaar.</p>'
+                      '<ul>' + listing + '</ul>')
 
     @app.post("/settings/quality/compare", include_in_schema=False)
     @app.post("/inzicht/routevergelijking")
     async def create(request: Request):
         try:
-            account = require(request)
-            allowed = scope(account)
-            form = await request.form()
-            envelope = allowed.get(str(form.get("snapshot_id") or ""))
-            if envelope is None or envelope.get("content_kind") not in {"html", "pdf"}:
-                raise ComparisonError("comparison_source_not_available")
-            row = new_comparison(owner=account["account_id"], snapshot_id=envelope["snapshot_id"],
-                                 source_hash=envelope["sha256"], title=envelope["title"])
-            store.create(row)
-            return redirect(row["comparison_id"])
+            require(request)
+            raise ComparisonError(RETIRED)
         except Exception as exc:
             return error(request, exc)
 
@@ -144,25 +129,16 @@ def install_route_comparison_routes(app, state, require, page) -> None:
             owner_view = aid == row["owner_account_id"]
             action = f'/inzicht/routevergelijking/{comparison_id}'
             body = f'<h1>{escape(row["title"])}</h1><p>Status: {escape(row["state"])} · versie {version}</p>'
-            if row["state"] == "draft" and owner_view:
-                env = allowed[row["snapshot_id"]]
-                if env["sha256"] != row["source_hash"]:
-                    raise ComparisonError("comparison_source_mismatch")
-                fragments = fragments_for(env)
-                items = ''.join(
-                    '<label><input type="checkbox" name="fragment_id" value="' + escape(str(f["fragment_id"])) + '"> '
-                    + escape(str(f.get("clean_text") or f.get("raw_text") or "")[:300]) + '</label><br>'
-                    for f in fragments if f.get("fragment_id")
-                )
-                body += f'<form method="post" action="{action}/freeze"><input type="hidden" name="version" value="{version}">'
-                body += '<p>Kies bronpassages (maximaal 30; samen maximaal 20.000 tekens).</p>' + items
-                body += '<button>Bronset vastzetten</button></form>'
+            if row["state"] == "draft":
+                body += '<p>Deze vergelijking is nooit vastgezet en kan niet meer starten.</p>'
             elif row["state"] in {"frozen", "running", "blocked"}:
                 body += '<p>Beide routes krijgen exact de vastgezette bronfragmenten.</p>'
                 if owner_view:
                     for route, arm in row["arms"].items():
                         body += f'<p>{escape(route)}: {escape(arm["status"])}'
-                        if arm["status"] in {"pending", "failed", "running"}:
+                        if route == "deterministic" and arm["status"] != "succeeded":
+                            body += ' (route bestaat niet meer; annuleer deze vergelijking)'
+                        elif arm["status"] in {"pending", "failed", "running"}:
                             button = "Opnieuw proberen na onderbreking" if arm["status"] == "running" else "Uitvoeren"
                             body += f' <form method="post" action="{action}/run/{route}"><input type="hidden" name="version" value="{version}"><button>{button}</button></form>'
                         body += '</p>'
@@ -216,34 +192,6 @@ def install_route_comparison_routes(app, state, require, page) -> None:
         return account, allowed, row, form, store.change(
             comparison_id, owner=row["owner_account_id"], allowed_scope=set(allowed),
             expected_version=version, operation=lambda target: operation(target, account, form))
-
-    @app.post("/settings/quality/compare/{comparison_id}/freeze", include_in_schema=False)
-    @app.post("/inzicht/routevergelijking/{comparison_id}/freeze")
-    async def freeze_route(request: Request, comparison_id: str):
-        try:
-            account, allowed, row = current(request, comparison_id)
-            env = allowed[row["snapshot_id"]]
-            if env["sha256"] != row["source_hash"]:
-                raise ComparisonError("comparison_source_mismatch")
-            fragments = fragments_for(env)
-            def operation(target, actor, form):
-                chosen = set(str(x) for x in form.getlist("fragment_id"))
-                selected = [f for f in fragments if str(f.get("fragment_id")) in chosen]
-                if len(selected) != len(chosen):
-                    raise ComparisonError("comparison_fragments_invalid")
-                marker = Path(__file__).resolve().parents[1] / "config" / "deployed_commit.txt"
-                code = marker.read_text().strip() if marker.exists() else "local-unversioned"
-                if os.environ.get("WEBSITE_SITE_NAME") and code == "local-unversioned":
-                    raise ComparisonError("comparison_deployment_identity_missing")
-                config = load_llm_provider_config(os.environ)
-                if not config.configured:
-                    raise ComparisonError("comparison_model_not_configured")
-                freeze(target, actor=actor["account_id"], source_hash=env["sha256"],
-                       fragments=selected, code_version=code, semantic_model=config.model)
-            await mutate(request, comparison_id, operation)
-            return redirect(comparison_id)
-        except Exception as exc:
-            return error(request, exc)
 
     @app.post("/settings/quality/compare/{comparison_id}/run/{route}", include_in_schema=False)
     @app.post("/inzicht/routevergelijking/{comparison_id}/run/{route}")

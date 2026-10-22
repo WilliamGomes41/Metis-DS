@@ -6,8 +6,9 @@ publication state, or serving state. The model may only select exact source
 spans and propose a closed object type; Metis reconstructs candidate text from
 the source through ``semantic_passage_v1``.
 
-The existing deterministic splitter remains available only as an explicit
-rollback mode. Semantic-mode failures never fall back silently.
+This is the only formation route for prose; decision trees use
+``decision_tree_route_v1``. There is no deterministic formation mode and no
+fallback: a failure fails the attempt and leaves prior work untouched.
 """
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ from src.bounded_model_call_v1 import ModelCallLimits, load_limits, post_json as
 # Per execution, including worker threads; never persisted as document authority.
 _PROCESSING_REFERENCE: ContextVar[str] = ContextVar("pre_review_processing_reference", default="-")
 
-from src.context_aware_split_v1 import split_context_aware_units
+from src.context_aware_split_v1 import heading_structure_units
 from src.llm_provider_v1 import OPENAI_RESPONSES_URL, load_llm_provider_config
 from src.object_taxonomy_v1 import (
     extract_object_type,
@@ -39,14 +40,11 @@ from src.object_taxonomy_v1 import (
 from src.operations_console_v1 import ConsoleError
 from src.recommendation_semantics_v1 import is_source_strength_label
 from src.passage_formation_policy_v1 import (
-    DETERMINISTIC_MODE,
     SEMANTIC_MODE,
-    STRATEGY_DETERMINISTIC,
-    STRATEGY_SEMANTIC,
     PASSAGE_FORMATION_POLICY_VERSION,
     PassageFormationDecision,
     PassageFormationPolicyError,
-    deterministic_heading_decision,
+    heading_structure_decision,
     resolve_passage_formation_strategy,
 )
 from src.semantic_passage_v1 import (
@@ -207,14 +205,8 @@ def _stamp_passage_formation(
         if obj.get("object_type") == "document":
             continue
         object_decision = decision
-        if (
-            decision.strategy == STRATEGY_SEMANTIC
-            and (
-                obj.get("object_type") == "heading"
-                or obj.get("proposed_object_type") == "heading"
-            )
-        ):
-            object_decision = deterministic_heading_decision()
+        if obj.get("object_type") == "heading" or obj.get("proposed_object_type") == "heading":
+            object_decision = heading_structure_decision()
         metadata = dict(obj.get("metadata") or {})
         metadata["passage_formation"] = object_decision.as_metadata()
         obj["metadata"] = metadata
@@ -492,26 +484,13 @@ def _evidence_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]
     ]
 
 
-def _heading_units(
-    fragments: list[dict[str, Any]],
-    *,
-    document_id: str,
-) -> list[dict[str, Any]]:
-    headings: list[dict[str, Any]] = []
-    for fragment in fragments:
-        object_type, _proposed = extract_object_type(fragment)
-        if object_type == "heading":
-            headings.append(fragment)
-    return split_context_aware_units(headings, document_id=document_id) if headings else []
-
-
 def _source_ordered_units(
     fragments: list[dict[str, Any]],
     *,
     headings: list[dict[str, Any]],
     content: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Reinsert deterministic headings without moving them ahead of content."""
+    """Reinsert source headings without moving them ahead of content."""
 
     source_position: dict[str, int] = {}
     for index, fragment in enumerate(fragments):
@@ -936,7 +915,7 @@ def _semantic_execution_before_review(
     units = prefer_authoritative_exact_occurrences(
         _source_ordered_units(
             fragments,
-            headings=_heading_units(fragments, document_id=document_id),
+            headings=heading_structure_units(fragments, document_id=document_id),
             content=content_units,
         )
     )
@@ -962,7 +941,7 @@ def semantic_units_before_review(
     field_contract_v3: bool = False,
     model_limits: ModelCallLimits | None = None,
 ) -> list[dict[str, Any]]:
-    """Return deterministic headings plus source-reconstructed semantic candidates."""
+    """Return source headings plus source-reconstructed semantic candidates."""
 
     units, _replay_record = _semantic_execution_before_review(
         fragments,
@@ -1064,9 +1043,10 @@ def bind_pre_review_semantic_processing(
 ) -> None:
     """Bind passage formation to one console instance, never process-global state.
 
-    Normal mutations use an explicitly installed kernel strategy. Decision trees
-    use their single source-bound route (``decision_tree_route_v1``). Source
-    catalogs use their deterministic read boundary and never this strategy.
+    This installs the only source processing strategy. Decision trees use their
+    single source-bound route (``decision_tree_route_v1``); every other source
+    uses the configured semantic contract. Source catalogs only read sources
+    and never invoke this strategy.
     """
 
     if getattr(console, "_pre_review_semantic_bound", False):
@@ -1084,7 +1064,6 @@ def bind_pre_review_semantic_processing(
     console._processing_configuration_reader = lambda: {"mode": active_passage_formation_mode(), "model": env.get("METIS_LLM_MODEL")}
     from src.decision_tree_route_v1 import llm_proposer
     console._decision_tree_proposer = llm_proposer(env, post_json=post_json)
-    original_fragments_and_spec = console._deterministic_fragments_and_spec
 
     def configured_fragments_and_spec(
         kind: str,
@@ -1102,34 +1081,19 @@ def bind_pre_review_semantic_processing(
             from src.source_selection_v1 import assert_resume_configuration
             assert_resume_configuration(console, console._envelope(formation_context["snapshot_id"]))
 
+        # Validated before any route, so a retired or unknown mode also stops decision trees.
+        mode = active_passage_formation_mode()
+        try:
+            decision = resolve_passage_formation_strategy(deployment_mode=mode)
+        except PassageFormationPolicyError as exc:
+            raise ConsoleError(exc.code) from exc
+
         if class_ == "beslisboom" and kind in {"pdf", "boom"}:
             from src.decision_tree_route_v1 import prepare
             return prepare(kind, path, data=data, document_id=document_id, source_id=source_id,
                            title=title, family=family, class_=class_,
-                           formation_context=formation_context, proposer=console._decision_tree_proposer)
-
-        mode = active_passage_formation_mode()
-        try:
-            decision = resolve_passage_formation_strategy(
-                content_kind=kind,
-                deployment_mode=mode,
-            )
-        except PassageFormationPolicyError as exc:
-            raise ConsoleError(exc.code) from exc
-
-        if decision.strategy == STRATEGY_DETERMINISTIC:
-            fragments, spec = original_fragments_and_spec(
-                kind,
-                path,
-                data=data,
-                document_id=document_id,
-                source_id=source_id,
-                title=title,
-                family=family,
-                class_=class_,
-                formation_context=formation_context,
-            )
-            return fragments, _stamp_passage_formation(spec, decision)
+                           formation_context=formation_context,
+                           proposer=getattr(console, "_decision_tree_proposer", None))
 
         checkpoint = (formation_context or {}).get("diagnostic_checkpoint")
         if checkpoint:
@@ -1138,13 +1102,21 @@ def bind_pre_review_semantic_processing(
         extraction_kwargs = ({"deadline": (formation_context or {}).get("attempt_deadline")}
                              if kind == "pdf" and docling_enabled() else {})
         retained_fragments = (formation_context or {}).get("retained_fragments")
-        fragments = retained_fragments if retained_fragments is not None else console._extract(
-            kind,
-            path,
-            document_id=document_id,
-            source_id=source_id,
-            **extraction_kwargs,
-        )
+        if retained_fragments is not None:
+            fragments = retained_fragments
+        elif kind == "boom":
+            from src.beslisboom_path_v1 import extract_boom_fragments
+            try:
+                fragments = extract_boom_fragments(data, document_id=document_id, source_id=source_id)
+            except ValueError as exc:
+                raise ConsoleError("invalid_boom_freeze") from exc
+        else:
+            fragments = console._extract(kind, path, document_id=document_id, source_id=source_id,
+                                         **extraction_kwargs)
+        if kind == "boom":
+            # Outside the decision-tree class an export is read as source text:
+            # its node kinds are not candidate types.
+            fragments = [{k: v for k, v in f.items() if k != "boom_kind"} for f in fragments]
         from src.docling_pdf_v1 import release_conversion_capacity
         release_conversion_capacity()
         if checkpoint:

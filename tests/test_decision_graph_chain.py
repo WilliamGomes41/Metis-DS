@@ -1,3 +1,4 @@
+from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 import os
 import uuid
@@ -151,7 +152,7 @@ def test_graph_review_form_and_class_conversion_cannot_drop_routes(tmp_path, *, 
     before = deepcopy(console._envelope(sid))
     with pytest.raises(ConsoleError, match="decision_graph_class_change_requires_successor"):
         console.promote_class(actor_id=accounts["researcher"]["account_id"], snapshot_id=sid,
-                              new_class="richtlijn", reextract=True)
+                              new_class="richtlijn")
     assert console._envelope(sid) == before
 
 
@@ -173,7 +174,7 @@ def test_durable_release_keeps_graph_out_of_prose_and_restarts(tmp_path, *, prod
 
     def state():
         from tests.decision_tree_test_support import install_fragment_proposer
-        return install_fragment_proposer(production_console(processing_binder=lambda console: None,
+        return install_fragment_proposer(production_console(processing_binder=bind_fixture_selections,
             root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime",
             immutable_source_store=source))
     console = state()

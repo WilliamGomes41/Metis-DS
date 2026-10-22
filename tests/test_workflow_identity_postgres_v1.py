@@ -7,6 +7,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 from copy import deepcopy
 from pathlib import Path
@@ -87,7 +88,7 @@ class SharedIdentityStore:
 
 def _console(tmp_path: Path, name: str, *, production_console):
     return production_console(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/name,
-                              processing_binder=lambda console:None)
+                              processing_binder=bind_fixture_selections)
 
 
 def test_session_created_on_one_instance_is_valid_on_another(tmp_path: Path, *, production_console) -> None:
@@ -222,10 +223,10 @@ def test_accounts_page_reads_shared_identity_authority_after_create_and_restart(
 
 def test_runtime_identity_cutover_ignores_corrupt_local_identity_mirrors(tmp_path: Path, *, production_console) -> None:
     runtime = tmp_path/'cutover-runtime'
-    first = production_console(root=tmp_path, runtime=runtime, processing_binder=lambda console:None)
+    first = production_console(root=tmp_path, runtime=runtime, processing_binder=bind_fixture_selections)
     first.create_account(username='pg-user', password='fixture-password', roles=['researcher'], display_name='PG User')
     for name in ['accounts.json','sessions.json']:
         (runtime/name).write_text('{"broken":', encoding='utf-8')
-    console = production_console(root=tmp_path, runtime=runtime, processing_binder=lambda console:None)
+    console = production_console(root=tmp_path, runtime=runtime, processing_binder=bind_fixture_selections)
     assert [(a['username'],a['display_name'],a['roles']) for a in console.list_accounts()]==[('pg-user','PG User',['researcher'])]
     assert all((runtime/name).read_text()=='{"broken":' for name in ['accounts.json','sessions.json'])

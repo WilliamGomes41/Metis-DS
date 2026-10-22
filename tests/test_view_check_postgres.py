@@ -6,6 +6,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
@@ -89,7 +90,7 @@ def configure(app, state, config, directory, origin='https://testserver', module
 
 def test_http_scope_origin_revision_and_revocation_leave_domain_state_unchanged(production_console, production_app, complete_postgres, tmp_path):
     from tests.test_availability_repair import accounts, bind, provider, login, upload, start
-    state = production_console(processing_binder=lambda state: None)
+    state = production_console(processing_binder=bind_fixture_selections)
     author, reviewer = accounts(state)
     outsider = state.create_account(username='outsider', password='fixture-only', roles=('reviewer',))
     bind(state, provider)
@@ -185,7 +186,7 @@ def test_http_scope_origin_revision_and_revocation_leave_domain_state_unchanged(
 def test_panel_does_not_offer_an_unsupported_scenario(unsupported, production_console, production_app, complete_postgres, tmp_path, monkeypatch):
     from src.view_check import panel
     from tests.test_availability_repair import accounts, bind, provider, login, upload
-    state = production_console(processing_binder=lambda state: None)
+    state = production_console(processing_binder=bind_fixture_selections)
     _, reviewer = accounts(state)
     bind(state, provider)
     app = production_app(state)
@@ -232,7 +233,7 @@ def test_worker_activation_rechecks_authority_and_preserves_document(interruptio
     from types import SimpleNamespace
     from src.view_check import CHECK_IDS
     from tests.test_availability_repair import accounts, bind, provider, login, upload
-    state = production_console(processing_binder=lambda state: None)
+    state = production_console(processing_binder=bind_fixture_selections)
     author, reviewer = accounts(state)
     bind(state, provider)
     app = production_app(state)

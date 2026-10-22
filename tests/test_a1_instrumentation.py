@@ -8,6 +8,7 @@
 # release-control-evidence: releasebewijs
 # Request-local evidence only: no durable state, no responses or verdicts change.
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 import json
 from copy import deepcopy
 from pathlib import Path
@@ -217,7 +218,7 @@ def test_diagnostics_identity_falls_back_to_deployed_commit_file(events, marker,
 
 
 def test_console_health_reports_running_commit(tmp_path, marker, *, production_app, production_console):
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / 'sources' / 'private',
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / 'sources' / 'private',
                                 runtime=tmp_path / 'output' / 'runtime' / 'operations-console')
     client = TestClient(production_app(console))
     assert client.get('/health').json()['deployed_commit'] == 'not_recorded'

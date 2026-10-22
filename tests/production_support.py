@@ -59,6 +59,7 @@ def production_application(root, config, *, azure=False,
             patch.setenv("CONSOLE_PUBLIC_ORIGIN", (environment or {}).get("CONSOLE_PUBLIC_ORIGIN", "https://console.example.test"))
         app = console_asgi.build_app()
         app.state.operations_kernel._metis_test_application = app
+        app.state.operations_kernel._metis_test_processing_binder = processing_binder
         return app
 
 
@@ -84,6 +85,7 @@ def restart_production(console):
     return production_application(
         console.root, console.workflow_document_store.config,
         azure=isinstance(console, FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole),
-        processing_binder=lambda console: None, immutable_source_store=console.immutable_source_store,
+        processing_binder=console._metis_test_processing_binder,
+        immutable_source_store=console.immutable_source_store,
         runtime=console.runtime, source_store=console.source_store,
     ).state.operations_kernel

@@ -5,6 +5,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import hashlib
 from pathlib import Path
@@ -39,7 +40,7 @@ def _console(tmp_path: Path, *, expected: bytes, actual: bytes | None, productio
     digest = hashlib.sha256(expected).hexdigest()
     source = _SourceStore(actual)
     console = production_console(root=tmp_path, azure=True,
-        processing_binder=lambda console: None, immutable_source_store=source)
+        processing_binder=bind_fixture_selections, immutable_source_store=source)
     from tests.test_logical_document_withdrawal_v1 import _object
     console.canonical_publication_store.persist_published_release(
         logical_document_id='fixture-logical', working_revision_id='fixture-working',

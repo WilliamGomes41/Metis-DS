@@ -6,6 +6,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 import json
 import shutil
 import subprocess
@@ -56,7 +57,7 @@ def test_authenticated_home_does_not_load_document_inventory(tmp_path, monkeypat
 
 
 def test_production_composition_navigation_never_requests_badges(tmp_path, monkeypatch, *, production_app, production_console):
-    app = production_app(production_console(root=tmp_path, processing_binder=lambda console: None))
+    app = production_app(production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     console = app.state.operations_kernel
     console.create_account(username="researcher.anne", password=TEST_PASSWORD,
                            roles=("researcher", "reviewer", "publisher"))

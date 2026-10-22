@@ -14,6 +14,7 @@ passage cannot open. Relatie bevestigen is not on the primary surface.
 No graph editor. No new locator scheme.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import re
 from pathlib import Path
@@ -34,7 +35,7 @@ PASSAGE_COL = "review-card-bronpassage"
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",

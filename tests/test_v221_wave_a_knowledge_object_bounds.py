@@ -1,10 +1,12 @@
 """Acceptance tests for Protocol v2.21 wave A knowledge-object bounds.
 
-Context-aware splitter + testable reject function + Continentie regression
-fixtures. Tests hit the real functions. Wave B/C/D are out of scope.
+Continentie regression fixtures through the real ingest; heading structure
+filtering. The v2.21 deterministic splitter itself was removed in Protocol
+4.3.0. Wave B/C/D are out of scope.
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import re
 from html.parser import HTMLParser
@@ -14,26 +16,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.retrieval.answerability_gate_v1 import evaluate_answerability
-from src.atomic_split_v1 import fusion_is_forbidden, split_meaning_units
-from src.context_aware_split_v1 import (
-    KEEP_OFFICIAL_HEADING,
-    KEEP_SHORT_DEFINITION,
-    MINIMUM_MEANING_WORDS,
-    REJECT_BELOW_THRESHOLD,
-    REJECT_CONTINUATION,
-    REJECT_DUPLICATE,
-    REJECT_LABEL_ONLY,
-    REJECT_NAV_ONLY,
-    REJECT_NOT_STANDALONE,
-    REJECT_NUMBER_ONLY,
-    REJECT_STAMP_ONLY,
-    filter_before_object_creation,
-    is_official_heading_text,
-    is_short_real_definition,
-    reject_candidate,
-    split_context_aware_units,
-)
+from src.context_aware_split_v1 import heading_structure_units
 from src.extract_html_v1 import extract as extract_html
+from src.knowledge_path_v1 import content_reviewable
 from src.object_taxonomy_v1 import (
     is_advice_weight,
     is_continuation_fragment,
@@ -72,7 +57,6 @@ FAIL_STANDALONE = (
     "Home",
     "Richtlijnen",
     "Meedenken",
-    EVENTUEEL,
     "1.",
     "1",
     "2.",
@@ -84,7 +68,7 @@ FAIL_STANDALONE = (
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -276,184 +260,26 @@ def _eval(query: str, records: list[dict]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 1. Reject function is unit-testable with explicit exceptions
+# 1. Heading structure: real headings kept, chrome/stamps/numbers are not headings
 # ---------------------------------------------------------------------------
 
 
-def test_reject_function_is_unit_testable_with_explicit_exceptions() -> None:
-    assert MINIMUM_MEANING_WORDS == 3
-    assert reject_candidate("").rejected is True
-    assert reject_candidate("DOEN").reason == REJECT_STAMP_ONLY
-    assert reject_candidate("OVERWEEG").reason == REJECT_STAMP_ONLY
-    assert reject_candidate("NIET DOEN").reason == REJECT_STAMP_ONLY
-    assert reject_candidate("1.").reason == REJECT_NUMBER_ONLY
-    assert reject_candidate("1").reason == REJECT_NUMBER_ONLY
-    assert reject_candidate("Tools").reason == REJECT_NAV_ONLY
-    assert reject_candidate("Home").reason == REJECT_NAV_ONLY
-    assert reject_candidate("Richtlijnen").reason == REJECT_NAV_ONLY
-    assert reject_candidate("Meedenken").reason == REJECT_NAV_ONLY
-    assert reject_candidate(EVENTUEEL).reason == REJECT_CONTINUATION
-    assert reject_candidate(BIJVOORBEELD).reason == REJECT_CONTINUATION
-    assert reject_candidate("problemen.").reason in {
-        REJECT_CONTINUATION,
-        REJECT_LABEL_ONLY,
-        REJECT_BELOW_THRESHOLD,
-        REJECT_NOT_STANDALONE,
-    }
-    assert reject_candidate("Menu").reason in {
-        REJECT_LABEL_ONLY,
-        REJECT_BELOW_THRESHOLD,
-        REJECT_CONTINUATION,
-        REJECT_NOT_STANDALONE,
-    }
-    dup = reject_candidate(OVERWEEG, seen_clean_texts={OVERWEEG})
-    assert dup.rejected is True
-    assert dup.reason == REJECT_DUPLICATE
-
-    heading = reject_candidate("Inleiding")
-    assert heading.rejected is False
-    assert heading.exception == KEEP_OFFICIAL_HEADING
-    assert is_official_heading_text("Inleiding") is True
-    numbered = reject_candidate("1.1 Inleiding")
-    assert numbered.rejected is False
-    assert numbered.exception == KEEP_OFFICIAL_HEADING
-    assert is_official_heading_text("2. Inleiding") is True
-
-    definition = reject_candidate(SHORT_DEFINITION)
-    assert definition.rejected is False
-    assert definition.exception == KEEP_SHORT_DEFINITION
-    short_def = reject_candidate("Continentie is blaaskontrole.")
-    assert short_def.rejected is False
-    assert short_def.exception == KEEP_SHORT_DEFINITION
-    assert is_short_real_definition(SHORT_DEFINITION) is True
-    assert is_short_real_definition("Tools") is False
+def test_heading_structure_keeps_inleiding_and_drops_chrome_stamps_and_numbers() -> None:
     assert is_kennisplatform_chrome_text("Inleiding") is False
-
-
-def test_inleiding_is_kept_home_tools_richtlijnen_meedenken_are_chrome() -> None:
-    assert is_kennisplatform_chrome_text("Inleiding") is False
-    assert is_official_heading_text("Inleiding") is True
-    assert filter_before_object_creation("Inleiding") is None
+    fragments = [
+        _fragment("Inleiding", tag="h2", ordinal=1, fragment_id="h1", heading="Inleiding"),
+        _fragment("1.1 Inleiding", tag="h2", ordinal=2, fragment_id="h2", heading="1.1 Inleiding"),
+        _fragment("DOEN", tag="h2", ordinal=3, fragment_id="s1"),
+        _fragment("1.", tag="h2", ordinal=4, fragment_id="n1"),
+        *(_fragment(label, tag="h2", ordinal=5 + i, fragment_id=f"nav{i}")
+          for i, label in enumerate(CHROME_LABELS)),
+        _fragment(SHORT_DEFINITION, tag="p", ordinal=20, fragment_id="d1"),
+    ]
+    rows = heading_structure_units(fragments, document_id="doc-filter")
+    assert [row["text"] for row in rows] == ["Inleiding", "1.1 Inleiding"]
+    assert all(row["object_type"] == "heading" for row in rows)
     for label in CHROME_LABELS:
         assert is_kennisplatform_chrome_text(label) is True
-        assert reject_candidate(label).reason == REJECT_NAV_ONLY
-        assert filter_before_object_creation(label) == REJECT_NAV_ONLY
-
-
-# ---------------------------------------------------------------------------
-# 2. Splitter: complete meaning units, stamps, trailing clauses, filter first
-# ---------------------------------------------------------------------------
-
-
-def test_splitter_yields_complete_units_with_bronpassage_and_locator(tmp_path: Path) -> None:
-    html_path = tmp_path / "continentie.html"
-    html_path.write_bytes(CONTINENTIE_FIXTURE.read_bytes())
-    fragments = extract_html(
-        html_path, document_id="doc-continentie", source_id="src-continentie"
-    )
-    units = split_context_aware_units(fragments, document_id="doc-continentie")
-    texts = [item["text"] for item in units]
-    assert EVENTUEEL not in texts
-    assert any(OVERWEEG in text and EVENTUEEL in text for text in texts)
-    rec = next(item for item in units if OVERWEEG in item["text"])
-    assert rec["source_fragment_ids"]
-    assert rec["clean_text"] == rec["text"]
-    # Only the summary occurrence has an OVERWEEG stamp. The selected primary
-    # source projection must not inherit that other occurrence's properties.
-    assert rec.get("proposed_recommendation_strength") is None
-    authority = rec["metadata"]["source_occurrence_authority"]
-    assert authority["principal_section_role"] == "primary"
-    assert authority["alternate_occurrences"]
-    fused = split_meaning_units(f"{OVERWEEG} {EVENTUEEL}")
-    assert fused == [FULL_RECOMMENDATION]
-    assert is_continuation_fragment(EVENTUEEL) is True
-
-
-def test_stamps_attach_to_following_advice_and_are_not_objects() -> None:
-    fragments = [
-        _fragment("DOEN", tag="h2", ordinal=1, fragment_id="s1"),
-        _fragment(
-            "Bespreek incontinentie met de cliënt en de mantelzorger.",
-            tag="p",
-            ordinal=2,
-            fragment_id="a1",
-        ),
-        _fragment("OVERWEEG", tag="h2", ordinal=3, fragment_id="s2"),
-        _fragment(OVERWEEG, tag="p", ordinal=4, fragment_id="a2"),
-        _fragment(EVENTUEEL, tag="p", ordinal=5, fragment_id="c1"),
-    ]
-    units = split_context_aware_units(fragments, document_id="doc-stamps")
-    texts = [item["text"] for item in units]
-    assert "DOEN" not in texts
-    assert "OVERWEEG" not in texts
-    assert EVENTUEEL not in texts
-    doen = next(item for item in units if item["text"].startswith("Bespreek"))
-    assert doen.get("proposed_recommendation_strength") == "doen"
-    overweeg = next(item for item in units if OVERWEEG in item["text"])
-    assert EVENTUEEL in overweeg["text"]
-    assert overweeg.get("proposed_recommendation_strength") == "overweeg"
-    assert all(item["object_type"] != "heading" or item["text"] not in {"DOEN", "OVERWEEG"} for item in units)
-
-
-def test_chrome_nav_list_numbers_filtered_before_object_creation() -> None:
-    assert filter_before_object_creation("Tools") == REJECT_NAV_ONLY
-    assert filter_before_object_creation("1.") == REJECT_NUMBER_ONLY
-    assert filter_before_object_creation("") == "empty" or filter_before_object_creation("   ") == "empty"
-    assert reject_candidate("Menu").reason in {
-        REJECT_LABEL_ONLY,
-        REJECT_BELOW_THRESHOLD,
-        REJECT_CONTINUATION,
-        REJECT_NOT_STANDALONE,
-    }
-    assert filter_before_object_creation("Inleiding") is None
-    assert filter_before_object_creation(SHORT_DEFINITION) is None
-    fragments = [
-        _fragment("Tools", tag="li", ordinal=1, fragment_id="nav1"),
-        _fragment("1.", tag="p", ordinal=2, fragment_id="n1"),
-        _fragment("Inleiding", tag="h2", ordinal=3, fragment_id="h1", heading="Inleiding"),
-        _fragment(SHORT_DEFINITION, tag="p", ordinal=4, fragment_id="d1"),
-    ]
-    units = split_context_aware_units(fragments, document_id="doc-filter")
-    texts = [item["text"] for item in units]
-    assert "Tools" not in texts
-    assert "1." not in texts
-    assert "Inleiding" in texts
-    assert SHORT_DEFINITION in texts
-
-
-def test_trailing_clauses_attach_to_previous_sentence() -> None:
-    fragments = [
-        _fragment(OVERWEEG, tag="p", ordinal=1, fragment_id="a1"),
-        _fragment(EVENTUEEL, tag="p", ordinal=2, fragment_id="c1"),
-        _fragment(f"Gebruik een toiletdagboek. {BIJVOORBEELD}", tag="p", ordinal=3, fragment_id="a2"),
-    ]
-    units = split_context_aware_units(fragments, document_id="doc-trail")
-    texts = [item["text"] for item in units]
-    assert EVENTUEEL not in texts
-    assert BIJVOORBEELD not in texts
-    assert any(OVERWEEG in text and EVENTUEEL in text for text in texts)
-    assert any("toiletdagboek" in text and "Bijvoorbeeld" in text for text in texts)
-    fused_exception = (
-        "Verwijs de cliënt naar de huisarts. "
-        "Tenzij samen met de cliënt hiervan wordt afgezien."
-    )
-    assert fusion_is_forbidden(fused_exception) is True
-    assert len(split_meaning_units(fused_exception)) == 2
-
-
-def test_no_duplicate_identical_clean_text_from_same_freeze() -> None:
-    fragments = [
-        _fragment("1.1 Inleiding", tag="h2", ordinal=1, fragment_id="h1", heading="1.1 Inleiding"),
-        _fragment(FULL_RECOMMENDATION, tag="p", ordinal=2, fragment_id="a1"),
-        _fragment("2. Inleiding", tag="h2", ordinal=3, fragment_id="h2", heading="2. Inleiding"),
-        _fragment(FULL_RECOMMENDATION, tag="p", ordinal=4, fragment_id="a2"),
-        _fragment(FULL_RECOMMENDATION, tag="p", ordinal=5, fragment_id="a3"),
-    ]
-    units = split_context_aware_units(fragments, document_id="doc-dedup")
-    texts = [item["text"] for item in units]
-    assert texts.count(FULL_RECOMMENDATION) == 1
-    assert texts.count("1.1 Inleiding") == 1
-    assert texts.count("2. Inleiding") == 1
 
 
 # ---------------------------------------------------------------------------
@@ -467,17 +293,13 @@ def test_continentie_fail_patterns_are_not_standalone_duty_objects(tmp_path: Pat
     receipt = _ingest(console, accounts)
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     texts = [_text_of(obj) for obj in objects]
+    reviewable = [_text_of(obj) for obj in objects if content_reviewable(obj)]
     for pattern in FAIL_STANDALONE:
-        assert pattern not in texts
-        assert all(pattern.casefold() != text.casefold() for text in texts)
+        assert pattern not in reviewable
+        assert all(pattern.casefold() != text.casefold() for text in reviewable)
     assert SHORT_DEFINITION in texts
     assert "1.1 Inleiding" in texts
     assert "2. Inleiding" in texts
-    assert any(OVERWEEG in text and EVENTUEEL in text for text in texts)
-    counts: dict[str, int] = {}
-    for text in texts:
-        counts[text] = counts.get(text, 0) + 1
-    assert {text: count for text, count in counts.items() if count > 1} == {}
 
     koppen, _inhoud = review_stacks(objects)
     koppen_texts = [_text_of(obj) for obj in koppen]
@@ -491,7 +313,6 @@ def test_continentie_fail_patterns_are_not_standalone_duty_objects(tmp_path: Pat
     duty_texts = [_text_of(obj) for obj in duty]
     for pattern in FAIL_STANDALONE:
         assert pattern not in duty_texts
-    assert all(EVENTUEEL not in text or OVERWEEG in text for text in duty_texts)
     html = _client(console, production_app=production_app).get(f"/review?document={receipt['snapshot_id']}").text
     titles = _index_link_titles(html)
     for pattern in FAIL_STANDALONE:
@@ -502,7 +323,7 @@ def test_continentie_fail_patterns_are_not_standalone_duty_objects(tmp_path: Pat
     assert SLOGAN not in html
 
 
-def test_splitter_units_have_locator_and_bronpassage_after_ingest(tmp_path: Path, *, production_app, production_console) -> None:
+def test_candidates_have_locator_and_bronpassage_after_ingest(tmp_path: Path, *, production_app, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
@@ -510,32 +331,11 @@ def test_splitter_units_have_locator_and_bronpassage_after_ingest(tmp_path: Path
     rec = next(obj for obj in objects if OVERWEEG in _text_of(obj))
     assert _locator_of(rec)
     assert _locator_of(rec).get("locator_value")
-    assert EVENTUEEL in _text_of(rec)
     html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
     assert OVERWEEG in _visible_text(html)
-    assert EVENTUEEL in _visible_text(html)
     assert "brxe-" not in html or "review-card-bronpassage" in html
-
-
-def test_pdf_shaped_once_and_html_repeated_modules_do_not_duplicate() -> None:
-    html_shaped = [
-        _fragment("1.1 Inleiding", tag="h2", ordinal=1, fragment_id="h1", heading="1.1 Inleiding"),
-        _fragment(FULL_RECOMMENDATION, tag="p", ordinal=2, fragment_id="html-a"),
-        _fragment("2. Inleiding", tag="h2", ordinal=3, fragment_id="h2", heading="2. Inleiding"),
-        _fragment(FULL_RECOMMENDATION, tag="p", ordinal=4, fragment_id="html-b"),
-    ]
-    pdf_shaped = [
-        _fragment("1.1 Inleiding", tag="h2", ordinal=1, fragment_id="pdf-h", heading="1.1 Inleiding"),
-        _fragment(FULL_RECOMMENDATION, tag="p", ordinal=2, fragment_id="pdf-a"),
-    ]
-    html_units = split_context_aware_units(html_shaped, document_id="doc-html")
-    pdf_units = split_context_aware_units(pdf_shaped, document_id="doc-pdf")
-    html_recs = [item["text"] for item in html_units if OVERWEEG in item["text"]]
-    pdf_recs = [item["text"] for item in pdf_units if OVERWEEG in item["text"]]
-    assert html_recs == [FULL_RECOMMENDATION]
-    assert pdf_recs == [FULL_RECOMMENDATION]
 
 
 def test_short_definition_and_real_headings_survive_extract(tmp_path: Path, *, production_console) -> None:
@@ -568,14 +368,12 @@ def test_v216_tiny_objects_v217_chrome_v218_dedup_still_hold(tmp_path: Path, *, 
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
-    texts = [_text_of(obj) for obj in objects]
+    texts = [_text_of(obj) for obj in objects if content_reviewable(obj)]
     assert "1." not in texts
     assert "DOEN" not in texts
     assert "problemen." not in texts
     for label in CHROME_LABELS:
         assert label not in texts
-    assert texts.count(FULL_RECOMMENDATION) <= 1
-    assert any(OVERWEEG in text and EVENTUEEL in text for text in texts)
     source = APP_SOURCE.read_text(encoding="utf-8")
     assert SLOGAN not in source
     html = _client(console, "researcher.anne", production_app=production_app).get(
@@ -625,8 +423,8 @@ def test_unpublished_reextract_allowed_hiding_without_extract_forbidden(tmp_path
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
     )
-    after = [_text_of(obj) for obj in _non_document(console.snapshot_objects(receipt["snapshot_id"]))]
-    assert EVENTUEEL not in after
+    after = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
+    assert planted["object_id"] not in {obj["object_id"] for obj in after}
 
 
 # ---------------------------------------------------------------------------

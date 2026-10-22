@@ -25,6 +25,7 @@ version-compat.
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import ipaddress
 import json
@@ -84,7 +85,7 @@ pytestmark = [
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -329,7 +330,7 @@ def test_expired_session_rejected_and_stays_invalid_after_restart(tmp_path: Path
         console.session_account(token)
     assert caught.value.code == "not_authenticated"
 
-    restarted = production_console(processing_binder=lambda console: None,
+    restarted = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -346,7 +347,7 @@ def test_live_session_survives_process_restart(tmp_path: Path, *, production_con
     console = _console(tmp_path, production_console=production_console)
     _accounts(console)
     session = console.authenticate("reviewer.bert", "bert-secret")
-    restarted = production_console(processing_binder=lambda console: None,
+    restarted = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -358,7 +359,7 @@ def test_live_session_survives_process_restart(tmp_path: Path, *, production_con
 def test_concurrent_login_logout_does_not_lose_sessions(tmp_path: Path, *, production_console) -> None:
     first = _console(tmp_path, production_console=production_console)
     _accounts(first)
-    second = production_console(processing_binder=lambda console: None,
+    second = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -387,7 +388,7 @@ def test_concurrent_login_logout_does_not_lose_sessions(tmp_path: Path, *, produ
     assert errors == []
     assert set(tokens) == {"anne", "dirk"}
 
-    third = production_console(processing_binder=lambda console: None,
+    third = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -420,7 +421,7 @@ def test_concurrent_login_logout_does_not_lose_sessions(tmp_path: Path, *, produ
         assert not thread.is_alive()
     assert errors == []
 
-    fourth = production_console(processing_binder=lambda console: None,
+    fourth = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",

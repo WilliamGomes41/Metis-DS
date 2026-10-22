@@ -15,6 +15,7 @@ Package migration regression evidence: storage concurrency and stale-write behav
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import html
 import re
@@ -47,7 +48,7 @@ pytestmark = [
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -161,7 +162,7 @@ def _install_concurrent_winner(console: OperationsConsole, snapshot_id: str, oth
     the first console's save callback. The submitted form retains its old revision,
     so this exercises the real stale-request path and preserves the winning write.
     """
-    other = production_console(processing_binder=lambda console: None,
+    other = production_console(processing_binder=bind_fixture_selections,
         root=console.root, source_store=console.source_store, runtime=console.runtime)
     other_rows = other._load_objects(snapshot_id)
     for row in other_rows:
@@ -205,7 +206,7 @@ def test_stale_review_save_does_not_show_success_or_redirect_next(tmp_path: Path
     assert f'name="object_id" value="{object_id}"' in body
     live = next(
         row
-        for row in production_console(processing_binder=lambda console: None,
+        for row in production_console(processing_binder=bind_fixture_selections,
             root=tmp_path,
             source_store=tmp_path / "sources" / "private",
             runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -242,7 +243,7 @@ def test_stale_review_save_retry_applies_input_after_fresh_revision(tmp_path: Pa
     location = retried.headers.get("location") or ""
     if retried.status_code == 303:
         assert "/review" in location
-    console = production_console(processing_binder=lambda console: None,
+    console = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",

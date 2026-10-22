@@ -3,6 +3,7 @@
 # release-control-evidence: scope/belofte opslag concurrent stale interrupt retry version-compat recovery
 # release-control-evidence: toegang beschikbaarheid kwaliteit metrics slop releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 import json
 

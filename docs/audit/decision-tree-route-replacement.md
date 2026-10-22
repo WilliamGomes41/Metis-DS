@@ -100,3 +100,7 @@ Geen featureflag, wrapper of `legacy`-kopie toegevoegd.
 | Herverwerking/correctie van oude-routewerk | gesloten geweigerd; bronverificatie werkt zonder vormingscode |
 | Vervallen code bereikbaar via import/attribuut | AST-proef over `src/`, `ModuleNotFoundError` voor de verwijderde module |
 | Bronreparatie na cachewissel, verouderde revisie, nieuwe revisie | bestaande A10-tests, nu ook voor beslisboom-PDF en -JSON |
+
+## Vervolg Protocol 4.3.0 (2026-10-22)
+
+Het deterministische exportvoorstel (`export_proposal`, model `deterministic-export-v1`) en de beleidsregel `kind=boom → deterministisch` zijn verwijderd. JSON-exports krijgen nu hetzelfde begrensde modelvoorstel als PDF's. De exportitems, verbindingen, antwoordlabels en resultaatbundels blijven gezaghebbend: `decision_tree_route_v1.verify_export_preserved` laat een export alleen door als iedere niet-lege exportitem precies één volledige eenheid is, iedere geldige exportverbinding precies één graafverbinding met letterlijk label en uitsluitend eigen bewijs, er geen andere verbinding bestaat en iedere bundel exact is gereproduceerd; anders `pre_review_llm_proposal_rejected` met `decision_export_node_not_preserved`, `decision_export_route_not_preserved` of `decision_export_bundle_not_preserved`. Het exporttype blijft letterlijk typebewijs uit het exportitem. Snapshots die met het deterministische exportvoorstel zijn gevormd, blijven leesbaar en verifieerbaar onder hun vastgelegde `decision_tree_formation.model`. Zie `docs/change-contracts/semantic-only-formation.md`.

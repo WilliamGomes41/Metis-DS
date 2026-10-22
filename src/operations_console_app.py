@@ -26,7 +26,6 @@ from src.document_status_v1 import DOCUMENT_STATUS_LABELS
 from src.four_eyes_v1 import requires_four_eyes
 from src.api_access_v1 import ApiAccessConflict, ApiAccessError, ApiAccessStoreError, PostgresApiAccessStore, VALID_SCOPES
 from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
-from src.klasse_wijzigen_v1 import is_cross_model_class_change
 from src.heading_parent_list_v1 import (
     heading_visible_text,
     is_heading_object,
@@ -97,7 +96,7 @@ from src.ingest_limits_v1 import (
     read_upload_limited,
 )
 from src.llm_provider_v1 import load_llm_provider_config
-from src.passage_formation_policy_v1 import DETERMINISTIC_MODE, SEMANTIC_MODE, SEMANTIC_V2_MODE, SEMANTIC_V3_MODE
+from src.passage_formation_policy_v1 import SEMANTIC_MODE, SEMANTIC_V2_MODE, SEMANTIC_V3_MODE
 from src.operations_console_v1 import (
     ALLOWED_CLASSES,
     ALLOWED_DELETE_NEXT,
@@ -167,18 +166,12 @@ def normalize_review_task(value: str) -> str:
 
 def _passage_formation_status_html(state: OperationsConsole) -> str:
     reader = getattr(state, "_passage_formation_mode_reader", None)
-    mode = reader() if callable(reader) else DETERMINISTIC_MODE
+    mode = reader() if callable(reader) else ""
     if mode in {SEMANTIC_MODE, SEMANTIC_V2_MODE, SEMANTIC_V3_MODE}:
         label = "Semantisch met bronbewijs" if mode in {SEMANTIC_V2_MODE, SEMANTIC_V3_MODE} else "Semantisch"
         detail = (
             "Nieuwe en opnieuw verwerkte passages worden momenteel brongebonden "
             "semantisch gevormd. Review blijft verplicht."
-        )
-    elif mode == DETERMINISTIC_MODE:
-        label = "Deterministisch"
-        detail = (
-            "Nieuwe en opnieuw verwerkte passages worden momenteel zonder taalmodel "
-            "gevormd. Review blijft verplicht."
         )
     else:
         label = "Configuratiefout"
@@ -397,8 +390,12 @@ ERROR_COPY = {
     "unpublished_delete_role_required": "Je account heeft geen rechten om dit document te verwijderen. Vraag een onderzoeker of beoordelaar om deze stap uit te voeren.",
     "unpublished_delete_not_permitted": "Alleen de uploader van dit document of een publicatiebeheerder verwijdert een ongepubliceerd document.",
     "hide_selected_objects_forbidden": "Losse passages kunnen niet worden verborgen terwijl dit document in beoordeling blijft. Rond de beoordeling van deze passages af.",
-    "cross_model_direct_change_blocked": "Omzetten tussen een beslisboom en een ander documenttype vereist opnieuw verwerken. Gebruik de actie voor opnieuw verwerken van dit document.",
+    "knowledge_class_change_requires_successor": "Omzetten tussen een beslisboom en een ander documenttype maakt nieuwe kennisobjecten. Maak daarvoor via Review → Nieuwe werkrevisie een opvolgende werkrevisie met het nieuwe documenttype; dit document blijft ongewijzigd.",
+    "decision_graph_class_change_requires_successor": "Omzetten tussen een beslisboom en een ander documenttype maakt nieuwe kennisobjecten. Maak daarvoor via Review → Nieuwe werkrevisie een opvolgende werkrevisie met het nieuwe documenttype; dit document blijft ongewijzigd.",
     "class_change_confirmation_required": "Bevestig eerst de consequentie van Klasse wijzigen.",
+    "source_discrepancy_requires_correction_or_rejection": "Je hebt een discrepantie met de originele tekst gemeld. Kies daarom correctie specificeren of afwijzen; ongewijzigd goedkeuren of later beoordelen kan niet.",
+    "source_discrepancy_invalid": "Kies een discrepantie uit de lijst.",
+    "source_discrepancy_not_applicable": "Een discrepantie meld je bij een kennisobject, niet bij een kop of brontekst zonder kennisobject.",
     "published_class_change_blocked": "Van een gepubliceerd document kun je het documenttype niet wijzigen. Lever een nieuwe versie in.",
     "cross_model_reextract_required": "Dit document moet opnieuw worden verwerkt om het naar het gekozen documenttype om te zetten.",
     "source_identity_must_not_change": "Deze actie mag de oorspronkelijke brongegevens niet wijzigen. Lever een nieuw document of een nieuwe versie in.",
@@ -1623,6 +1620,32 @@ def _broncontext_html(
     """
 
 
+def _source_discrepancy_block(obj: dict[str, Any], draft: dict[str, Any], *, review_path: str) -> str:
+    """Optional reviewer report that the knowledge object departs from its source."""
+    from src.knowledge_path_v1 import content_reviewable
+    from src.source_discrepancy_v1 import CATEGORIES
+    if review_path != "boom" and not content_reviewable(obj):
+        return ""
+    chosen = set(draft.get("source_discrepancy") or ())
+    boxes = "".join(
+        f'<label class="check"><input type="checkbox" name="source_discrepancy" value="{_esc(code)}"'
+        f'{" checked" if code in chosen else ""}> {_esc(label)}</label>'
+        for code, label in CATEGORIES.items()
+    )
+    return (
+        '<section class="review-step source-discrepancy" data-review-step="discrepancy">'
+        "<h4>Rapporteer een discrepantie (optioneel)</h4>"
+        '<p class="field-help">Wijkt het kennisobject af van de originele tekst? Kies wat afwijkt. '
+        "Met een gemelde discrepantie kies je daarna correctie of afwijzen; ongewijzigd goedkeuren "
+        "kan dan niet.</p>"
+        + (('<div class="banner err" role="alert">' + _esc(ERROR_COPY.get(draft["discrepancy_error"], ""))
+            + "<p>Je beoordeling is niet opgeslagen. Je invoer staat hieronder nog klaar.</p></div>")
+           if draft.get("discrepancy_error") else "")
+        + f'<fieldset id="discrepancy-{_esc(obj["object_id"])}">{boxes}</fieldset>'
+        "</section>"
+    )
+
+
 _REVIEW_DRAFT_SETS = {
     "suitability": frozenset(SUITABILITY_VALUES),
     "eindoordeel": frozenset(
@@ -1638,13 +1661,19 @@ def _sanitize_review_draft(draft: dict[str, Any] | None) -> dict[str, Any]:
     sanitized = {
         key: str(value or "")
         for key, value in (draft or {}).items()
-        if key != "relation_choice"
+        if key not in {"relation_choice", "source_discrepancy"}
     }
     if draft is not None and "relation_choice" in draft:
         choices = draft["relation_choice"]
         sanitized["relation_choice"] = (
             [str(value) for value in choices] if isinstance(choices, list) else []
         )
+    from src.source_discrepancy_v1 import CATEGORIES
+    reported = (draft or {}).get("source_discrepancy")
+    sanitized["source_discrepancy"] = [str(v) for v in reported if str(v) in CATEGORIES] if isinstance(reported, list) else []
+    if sanitized.get("discrepancy_error") not in {"", "source_discrepancy_requires_correction_or_rejection",
+                                                 "source_discrepancy_invalid", "source_discrepancy_not_applicable"}:
+        sanitized["discrepancy_error"] = ""
     closed_types = frozenset(CLOSED_OBJECT_TYPES) | frozenset(CLOSED_BOOM_TYPES)
     for key, allowed in _REVIEW_DRAFT_SETS.items():
         default = _REVIEW_DRAFT_DEFAULTS.get(key, "")
@@ -3563,6 +3592,7 @@ def _render_review_card(
                         review_path=review_path,
                         draft=draft, bindings=console.object_review_bindings(snapshot_id, objects=snapshot_objects), fragments=console.review_source_fragments(snapshot_id)
                     )}
+                    {_source_discrepancy_block(obj, draft, review_path=review_path)}
                     <section class="review-step" data-review-step="f">
                       <h4>Wat is je besluit?</h4>
                       <fieldset id="decision-{_esc(obj["object_id"])}">
@@ -5184,7 +5214,7 @@ def create_console_app(
                           </label>
                           <div class="klasse-wijzigen-consequence">
                             <p>De bron blijft ongewijzigd. Deze wijziging vereist een nieuwe beoordeling.
-                            Bij een overstap van of naar een beslisboom wordt de bron opnieuw verwerkt.</p>
+                            Een overstap van of naar een beslisboom maakt nieuwe kennisobjecten en gebeurt via Review → Nieuwe werkrevisie; dit document blijft dan ongewijzigd.</p>
                           </div>
                           <label class="check">
                             <input type="checkbox" name="confirm" value="1">
@@ -5303,17 +5333,14 @@ def create_console_app(
                 actor_id=account["account_id"],
                 snapshot_id=snapshot_id,
                 new_class=new_class,
-                reextract=is_cross_model_class_change(current["class"], new_class),
             )
         else:
-            document = state.resolve_document(title=title, version=version, family=family)
             state.promote_class_document(
                 actor_id=account["account_id"],
                 title=title,
                 version=version,
                 family=family,
                 new_class=new_class,
-                reextract=is_cross_model_class_change(document["class"], new_class),
             )
         return RedirectResponse("/tree", status_code=303)
 
@@ -5607,6 +5634,7 @@ def create_console_app(
         snapshot_revision: str = Form(""),
         return_task: str = Form(""),
         interaction_id: str = Form(""),
+        source_discrepancy: list[str] = Form(default=[]),
     ) -> RedirectResponse:
         account = _require(request)
         mapped = map_eindoordeel(eindoordeel, decision)
@@ -5676,6 +5704,7 @@ def create_console_app(
                 type_action=type_action.strip() or None,
                 expected_revision=snapshot_revision.strip() or None,
                 interaction_evidence=evidence,
+                source_discrepancy=list(source_discrepancy or []),
             )
         except ConsoleError as exc:
             semantic_error = exc.code in {
@@ -5686,15 +5715,21 @@ def create_console_app(
                 "recommendation_strength_not_stated_conflict",
                 "recommendation_semantics_confirmation_invalid",
             }
-            if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT and not semantic_error:
+            discrepancy_error = exc.code in {
+                "source_discrepancy_requires_correction_or_rejection",
+                "source_discrepancy_invalid",
+                "source_discrepancy_not_applicable",
+            }
+            if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT and not (semantic_error or discrepancy_error):
                 raise
             # Render the same object set and revision that we compare here. A
             # second read could silently replace the posted revision after a
             # semantic validation error, hiding another reviewer's change.
             review_snapshot = state.snapshot_objects_and_revision(snapshot_id)
-            if semantic_error and snapshot_revision.strip() and snapshot_revision.strip() != review_snapshot[1]:
-                semantic_error = False
-            if not semantic_error:
+            if snapshot_revision.strip() and snapshot_revision.strip() != review_snapshot[1]:
+                semantic_error = discrepancy_error = False
+            input_error = semantic_error or discrepancy_error
+            if not input_error:
                 state.refresh_objects_expected_revision(snapshot_id, review_snapshot[1])
             return HTMLResponse(
                 _render_review_room(
@@ -5716,16 +5751,18 @@ def create_console_app(
                         "relation_choice": ([relation_choice] if isinstance(relation_choice, str) else list(relation_choice or [])),
                         "relation_review_ack": relation_review_ack,
                         "validation_error": exc.code if semantic_error else "",
+                        "discrepancy_error": exc.code if discrepancy_error else "",
+                        "source_discrepancy": list(source_discrepancy or []),
                         "eindoordeel": eindoordeel,
                         "decision": decision,
                         "comment": comment,
                         "proposed_correction": proposed_correction,
                         "proposed_object_type": proposed_object_type,
                     },
-                    conflict=not semantic_error,
+                    conflict=not input_error,
                     snapshot=review_snapshot,
                 ),
-                status_code=400 if semantic_error else 409,
+                status_code=400 if input_error else 409,
             )
         if mapped == "revise" and proposed_correction.strip():
             state.correct_object(

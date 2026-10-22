@@ -8,6 +8,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,7 +29,7 @@ from src.serving_relations_v1 import binding_relations
 
 
 def _system(tmp_path, *, production_app, production_console):
-    console = production_console(processing_binder=lambda console: None,
+    console = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",
@@ -171,6 +172,35 @@ def test_unknown_source_unit_rolls_back_review_and_repair(tmp_path, *, productio
     assert console._load_objects(sid, remember=False) == before_rows
     after_ledger = read_events(console._ledger_path)
     assert after_ledger == before_ledger
+
+
+@pytest.mark.parametrize("repair_kind", [REPAIR_SOURCE_UNITS, REPAIR_MERGE_OBJECTS])
+def test_reported_discrepancy_is_bound_to_the_reviewed_version_not_the_repair(
+        repair_kind, tmp_path, *, production_app, production_console):
+    from src.integrity_kernel import compute_canonical_object_hash
+    console, _client, _researcher, reviewer, sid, objects = _system(tmp_path, production_app=production_app, production_console=production_console)
+    reviewed, absorbed = objects[0], objects[1]
+    own = {str(ref.get("raw_object_id") or "") for ref in reviewed["provenance"]["source_fragments"]}
+    repair = ({"source_unit_ids": [row["unit_id"] for row in console.source_units(snapshot_id=sid, object_id=reviewed["object_id"])
+                                   if row["fragment_id"] in own]}
+              if repair_kind == REPAIR_SOURCE_UNITS else {"merge_object_ids": [absorbed["object_id"]]})
+
+    repaired = console.submit_review_resolution(
+        actor_id=reviewer["account_id"], snapshot_id=sid, object_id=reviewed["object_id"],
+        expected_revision=console.objects_revision(sid), comment="De afbakening klopt niet.",
+        suitability="source_units" if repair_kind == REPAIR_SOURCE_UNITS else "samenvoegen",
+        repair_kind=repair_kind, source_discrepancy=["afbakening_onjuist"], **repair)
+
+    assert repaired["object_version"] != reviewed["object_version"]
+    audit = [e for e in read_events(console._ledger_path) if e["event_type"] == "review_audit_evidence"]
+    reports = [e for e in audit if e["details"].get("source_discrepancy")]
+    assert len(reports) == 1
+    assert reports[0]["object_version"] == reviewed["object_version"]
+    assert reports[0]["details"]["review_snapshot_hash"] == compute_canonical_object_hash(reviewed)
+    assert reports[0]["details"]["current_passage"] == reviewed["content"]["clean_text"]
+    assert reports[0]["details"]["source_discrepancy"] == ["afbakening_onjuist"]
+    assert any(e["details"]["decision"] == f"repair_{'source_units' if repair_kind == REPAIR_SOURCE_UNITS else 'merge_objects'}"
+               and e["object_version"] != reviewed["object_version"] for e in audit)
 
 
 def test_merge_resolution_supersedes_absorbed_object_and_reopens_primary(tmp_path, *, production_app, production_console):

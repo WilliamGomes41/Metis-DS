@@ -14,6 +14,7 @@ regressions the audit reproduced.
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import re
 import threading
@@ -42,7 +43,7 @@ pytestmark = [
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -245,7 +246,7 @@ def test_two_clients_overlapping_forms_conflict_on_stale_revision(tmp_path: Path
     assert BERT_SUIT in body
     after = next(
         row
-        for row in production_console(processing_binder=lambda console: None,
+        for row in production_console(processing_binder=bind_fixture_selections,
             root=tmp_path,
             source_store=tmp_path / "sources" / "private",
             runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -385,7 +386,7 @@ def test_batch_confirm_carries_and_compares_form_revision(tmp_path: Path, *, pro
     if not heading_ids:
         heading_ids = re.findall(r'value="([^"]+)"[^>]*name="object_ids"', index.text)
     assert heading_ids
-    other = production_console(processing_binder=lambda console: None,
+    other = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -417,7 +418,7 @@ def test_form_content_and_revision_are_co_read_not_separate_gets(tmp_path: Path,
 
     def raced(snapshot_id_arg: str, include_blocked: bool = False, *, for_update: bool = False):
         rows, revision = real(snapshot_id_arg, include_blocked)
-        other = production_console(processing_binder=lambda console: None,
+        other = production_console(processing_binder=bind_fixture_selections,
             root=tmp_path,
             source_store=tmp_path / "sources" / "private",
             runtime=tmp_path / "output" / "runtime" / "operations-console",

@@ -7,6 +7,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 from threading import Event
 from concurrent.futures import ThreadPoolExecutor
@@ -25,7 +26,7 @@ def factory(request, tmp_path, *, production_console):
     if request.param == 'postgres':
         from tests.test_review_batch_atomic_postgres import _console
         config = request.getfixturevalue('workflow_postgres')
-        return lambda: production_console(root=tmp_path, processing_binder=lambda console: None)
+        return lambda: production_console(root=tmp_path, processing_binder=bind_fixture_selections)
     return lambda: state(tmp_path, production_console=production_console)
 
 

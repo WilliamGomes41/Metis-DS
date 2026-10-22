@@ -10,7 +10,7 @@ import pytest
 
 from src.route_comparison_v1 import (
     ComparisonError, ComparisonStore, analyze, assess, blind_view, cancel,
-    claim_arm, close, fail_arm, finish_arm, freeze, new_comparison,
+    claim_arm, close, fail_arm, finish_arm, digest,
 )
 
 
@@ -20,15 +20,23 @@ OUTPUT = [{"text": "Voorwaarde A. Advies B.", "type": "recommendation",
            "source_fragment_ids": ["f1"]}]
 
 
-def prepared(tmp_path):
+def recorded_frozen(*, deterministic=None):
+    """A comparison frozen before Protocol 4.3.0; none can be created any more."""
+    deterministic = deterministic or {"status": "pending", "attempts": []}
+    return {"schema_version": "route-comparison-v1", "comparison_id": "rc_" + "1" * 32,
+            "owner_account_id": "owner", "snapshot_id": "snapshot", "source_hash": "a" * 64,
+            "title": "Bron", "state": "frozen", "version": 2, "created_at": "2026-10-01T00:00:00+00:00",
+            "events": [{"actor": "owner", "action": "created", "at": "2026-10-01T00:00:00+00:00", "version": 1},
+                       {"actor": "owner", "action": "frozen", "at": "2026-10-01T00:00:00+00:00", "version": 2}],
+            "arms": {"deterministic": deterministic, "semantic": {"status": "pending", "attempts": []}},
+            "assessments": {}, "analyses": [], "fragments": FRAGMENTS, "input_hash": digest(FRAGMENTS),
+            "code_version": "commit-1", "semantic_model": "model-1",
+            "blind_order": ["semantic", "deterministic"]}
+
+
+def prepared(tmp_path, **recorded):
     store = ComparisonStore(tmp_path)
-    row = store.create(new_comparison(owner="owner", snapshot_id="snapshot",
-                                      source_hash="a" * 64, title="Bron"))
-    row, _ = store.change(row["comparison_id"], owner="owner", allowed_scope={"snapshot"},
-                          expected_version=row["version"], operation=lambda r:
-                          freeze(r, actor="owner", source_hash="a" * 64,
-                                 fragments=FRAGMENTS, code_version="commit-1", semantic_model="model-1"))
-    return store, row
+    return store, store.create(recorded_frozen(**recorded))
 
 
 def change(store, row, operation):
@@ -36,15 +44,27 @@ def change(store, row, operation):
                         expected_version=row["version"], operation=operation)
 
 
-def test_paired_lifecycle_blindness_and_no_normal_quality_events(tmp_path):
+def test_deterministic_arm_is_retired_and_never_claimed(tmp_path):
     store, row = prepared(tmp_path)
+    with pytest.raises(ComparisonError, match="comparison_route_retired"):
+        change(store, row, lambda r: claim_arm(r, actor="owner", route="deterministic"))
+    assert store.get(row["comparison_id"], allowed_scope={"snapshot"}) == row
+
+
+def test_recorded_lifecycle_blindness_and_no_normal_quality_events(tmp_path):
+    recorded = {"status": "succeeded", "output": OUTPUT, "output_hash": digest(OUTPUT),
+                "execution": {"strategy": "deterministic"},
+                "attempts": [{"attempt_id": "a" * 32, "status": "succeeded",
+                              "started_at": "2026-10-01T00:00:00+00:00",
+                              "finished_at": "2026-10-01T00:00:01+00:00"}]}
+    store, row = prepared(tmp_path, deterministic=recorded)
     assert row["state"] == "frozen"
     assert store.get(row["comparison_id"], allowed_scope=set()) is None
-    for route in ("deterministic", "semantic"):
-        row, attempt = change(store, row, lambda r: claim_arm(r, actor="owner", route=route))
-        row, _ = change(store, row, lambda r: finish_arm(
-            r, actor="owner", route=route, attempt_id=attempt, output=OUTPUT,
-            execution={"strategy": route}))
+    assert change(store, row, lambda r: claim_arm(r, actor="owner", route="deterministic"))[1] == ""
+    row, attempt = change(store, row, lambda r: claim_arm(r, actor="owner", route="semantic"))
+    row, _ = change(store, row, lambda r: finish_arm(
+        r, actor="owner", route="semantic", attempt_id=attempt, output=OUTPUT,
+        execution={"strategy": "semantic"}))
     assert row["state"] == "output_ready"
     view = blind_view(row)
     assert set(view["arms"]) == {"A", "B"}

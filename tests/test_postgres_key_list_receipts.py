@@ -4,11 +4,12 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from tests.test_attempt_diagnostics_postgres import bound, ingest
 
 
 def test_postgres_scoped_key_list_never_constructs_full_receipts(production_console, monkeypatch):
-    console = production_console(processing_binder=lambda console: None)
+    console = production_console(processing_binder=bind_fixture_selections)
     bound(console, reject=False)
     sid, *_ = ingest(console)
     def forbidden(*args, **kwargs):

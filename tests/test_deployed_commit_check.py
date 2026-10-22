@@ -6,6 +6,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -239,7 +240,7 @@ def test_packaged_marker_through_real_health_endpoint_and_checker(tmp_path, monk
     marker = tmp_path / "deployed_commit.txt"
     marker.write_text(OLD)
     monkeypatch.setattr(diagnostics, "DEPLOYED_COMMIT_MARKER", marker)
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, runtime=tmp_path / "runtime")
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, runtime=tmp_path / "runtime")
     app = production_app(console)
     server = uvicorn.Server(uvicorn.Config(app, log_level="critical", lifespan="off"))
     sock = socket.socket()

@@ -22,7 +22,7 @@ from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: F40
 
 
 def _system(root, console=None, role='context', multiple=False, *, production_console):
-    console = console or production_console(processing_binder=lambda console: None,
+    console = console or production_console(processing_binder=bind_fixture_selections,
         root=root, source_store=root / "sources", runtime=root / "runtime",
         immutable_source_store=MemorySourceStore(),
     )
@@ -83,7 +83,7 @@ def test_selected_context_follows_current_target_and_survives_restart(tmp_path, 
     before = deepcopy(console.snapshot_objects(sid))
     assert not context_issues(before)
     assert not is_source_record(next(o for o in before if o["object_id"] == source["object_id"]))
-    starts = (lambda: console, lambda: production_console(processing_binder=lambda console: None,
+    starts = (lambda: console, lambda: production_console(processing_binder=bind_fixture_selections,
               root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime"))
     for index, start in enumerate(starts):
         state = start()

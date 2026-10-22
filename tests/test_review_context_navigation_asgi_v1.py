@@ -6,6 +6,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 from html.parser import HTMLParser
 import os
@@ -36,9 +37,9 @@ class Links(HTMLParser):
 
 @pytest.fixture
 def installed(tmp_path, production_console, production_app):
-    initial = production_console(root=tmp_path, processing_binder=lambda console: None)
+    initial = production_console(root=tmp_path, processing_binder=bind_fixture_selections)
     _, researcher, reviewer, source, target, command = _system(tmp_path, console=initial)
-    state = production_console(root=tmp_path, processing_binder=lambda console: None)
+    state = production_console(root=tmp_path, processing_binder=bind_fixture_selections)
     app = production_app(state)
     client = TestClient(app, base_url='https://testserver')
     assert client.post('/login', data={'username': 'bert', 'password': 'bert-secret'},

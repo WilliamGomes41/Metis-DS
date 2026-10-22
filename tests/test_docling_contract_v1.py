@@ -449,22 +449,6 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
     assert attempt["diagnostic"]["unverified_pages"] == list(range(1, 1001))
 
 
-def test_decision_tree_pdf_route_keeps_unverified_page_numbers(tmp_path, monkeypatch, *, production_console):
-    import src.decision_graph_v1 as decision_graph
-    from src.operations_console_v1 import OperationsConsole, ConsoleError
-    def unverified(*args, **kwargs):
-        error = DoclingError("docling_page_text_unverified")
-        error.pages = [3]
-        raise error
-    monkeypatch.setattr(decision_graph, "pdf_fragments", unverified)
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
-    with pytest.raises(ConsoleError) as raised:
-        console._deterministic_fragments_and_spec("pdf", tmp_path / "boom.pdf", data=b"%PDF", document_id="doc",
-            source_id="src", title="Boom", family="test", class_="beslisboom")
-    assert raised.value.code == "docling_page_text_unverified"
-    assert raised.value.unverified_pages == [3]
-
-
 def test_decision_tree_pdf_route_keeps_unverified_page_numbers_on_the_semantic_binding(tmp_path, monkeypatch, *, production_console):
     import src.decision_graph_v1 as decision_graph
     from src.operations_console_v1 import OperationsConsole, ConsoleError

@@ -120,6 +120,8 @@ Opslagtopologieën: de code bevat PostgreSQL-adapters en lokale runtimepaden, me
 
 ## 6. Expliciet legacyregister
 
+> **Stand Protocol 4.3.0 (2026-10-22):** L01, L04, L06 en L08 zijn verwijderd op besluit van de eigenaar, vóór G4 en zonder het hier voorgestelde rollbackvenster van twee releases; rollback is een softwareterugzetting. G4 blijft open als inhoudelijke acceptatie van de semantische route, zonder deterministische vergelijkingsarm. Actuele status: `docs/LEGACY_ROUTES.md` en `docs/change-contracts/semantic-only-formation.md`.
+
 De namen hieronder zijn voorgestelde engineeringstatussen, geen nieuwe documentlevenscyclus. De onderzoeksartikelen wijzigen de acht legacy-items niet. Hun vervanging moet voortaan ook de expliciete toetsen op betekenisbehoud hieronder doorstaan; legacy uitzetten is nooit een manier om resterend curatiewerk te laten verdwijnen.
 
 - **ACTIVE:** ondersteunde doelarchitectuur.

@@ -6,6 +6,7 @@ confirmed closed type. Product API GET knowledge fail-closed without locator
 or with unclassified/historical type.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
 from pathlib import Path
@@ -28,7 +29,7 @@ HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",
@@ -188,6 +189,13 @@ def _fused_html() -> bytes:
     ).encode("utf-8")
 
 
+def _bind_condition_relation(console) -> None:
+    """The model proposes the condition and its applies_if relation; review confirms it."""
+    condition, advice = "Bij een cliënt van 70 jaar of ouder.", "Verwijs naar de huisarts."
+    bind_fixture_selections(console, [(condition, "condition"), (advice, "recommendation")],
+                            relations=[(advice, "applies_if", condition)])
+
+
 # ---------------------------------------------------------------------------
 # 1. Relation confirm on the review card
 # ---------------------------------------------------------------------------
@@ -196,6 +204,7 @@ def _fused_html() -> bytes:
 def test_review_card_posts_relation_checkboxes_to_confirm_relations(tmp_path: Path, *, production_app, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
+    _bind_condition_relation(console)
     receipt = _ingest_html(console, accounts, data=_fused_html(), filename="rel.html")
     objects = [
         obj
@@ -246,6 +255,7 @@ def test_review_card_posts_relation_checkboxes_to_confirm_relations(tmp_path: Pa
 def test_unconfirmed_relation_checkboxes_do_not_bind(tmp_path: Path, *, production_app, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
+    _bind_condition_relation(console)
     receipt = _ingest_html(console, accounts, data=_fused_html(), filename="rel.html")
     objects = [
         obj
@@ -398,7 +408,6 @@ def test_type_and_approve_disabled_when_open_source_passage_fails(tmp_path: Path
 def test_type_confirm_succeeds_after_open_original(tmp_path: Path, *, production_app, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
     receipt = _ingest_html(console, accounts)
     target = next(

@@ -5,6 +5,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 from fastapi.testclient import TestClient
 
@@ -15,7 +16,7 @@ from src.review_ledger import read_events
 
 
 def test_legacy_free_text_repair_post_is_not_routed_and_writes_nothing(tmp_path, *, production_app, production_console):
-    console = production_console(processing_binder=lambda console: None,
+    console = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",
@@ -29,7 +30,6 @@ def test_legacy_free_text_repair_post_is_not_routed_and_writes_nothing(tmp_path,
     publisher = console.create_account(
         username="piet", password="piet-secret", roles=("publisher",)
     )
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
     receipt = console.ingest(
         actor_id=researcher["account_id"],

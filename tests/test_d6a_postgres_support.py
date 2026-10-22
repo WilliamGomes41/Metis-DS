@@ -5,6 +5,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 import os
 import subprocess
 import sys
@@ -155,8 +156,8 @@ def test_legacy_fixture_alias_observes_the_factorys_committed_accounts(legacy_po
 def test_independent_factory_copies_keep_identities_and_sessions_separate(production_console):
     from src.operations_console_v1 import ConsoleError
     from tests.production_support import restart_production
-    first = production_console(processing_binder=lambda console: None)
-    other = production_console(processing_binder=lambda console: None, isolated=True)
+    first = production_console(processing_binder=bind_fixture_selections)
+    other = production_console(processing_binder=bind_fixture_selections, isolated=True)
     assert first.workflow_document_store.config != other.workflow_document_store.config
     first.create_account(username='same-name', password='fixture-password', roles=['researcher'])
     assert other.list_accounts() == []
@@ -178,7 +179,7 @@ def test_concurrent_application_configuration_keeps_each_console_root(
     from tests.production_support import application_for
 
     consoles = [production_console(root=tmp_path / name, isolated=True,
-                                  processing_binder=lambda console: None)
+                                  processing_binder=bind_fixture_selections)
                 for name in ('first', 'second')]
     before = os.environ.get('CONSOLE_DATA_ROOT'), console_asgi.ROOT
     build = console_asgi.build_console_app

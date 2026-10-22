@@ -8,6 +8,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 import json
 import logging
 import time
@@ -175,7 +176,7 @@ def test_write_routes_errors_and_correlation_are_captured(events):
 
 def test_store_lock_wait_and_hold_are_phases(tmp_path, events, *, production_console, production_app):
     from src.operations_console_v1 import OperationsConsole
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, runtime=tmp_path / 'runtime')
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, runtime=tmp_path / 'runtime')
     app = production_app(console)
 
     @app.post('/lock')
@@ -483,7 +484,7 @@ def test_page_and_api_require_login_and_render(hub, *, production_app, productio
     import tempfile
     from pathlib import Path
     root = Path(tempfile.mkdtemp())
-    console = production_console(processing_binder=lambda console: None, root=root, runtime=root / 'runtime')
+    console = production_console(processing_binder=bind_fixture_selections, root=root, runtime=root / 'runtime')
     console.create_account(username='beheer', password='fixture-only', roles=('reviewer',))
     app = production_app(console)
     with TestClient(app, base_url='https://testserver') as client:
@@ -548,7 +549,7 @@ def test_concurrent_store_lock_wait_is_measured_and_stale_request_is_aborted(tmp
     a request whose heartbeats went stale is reported as aborted, not as running."""
     import threading
     from src.operations_console_v1 import OperationsConsole
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, runtime=tmp_path / 'runtime')
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, runtime=tmp_path / 'runtime')
     holding, release = threading.Event(), threading.Event()
 
     def holder():

@@ -2,6 +2,7 @@
 # release-control-evidence: scope/belofte opslag concurrent stale interrupt retry version-compat
 # release-control-evidence: toegang beschikbaarheid kwaliteit slop releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 import asyncio
 from copy import deepcopy
 from datetime import datetime, timedelta
@@ -26,7 +27,7 @@ from tests.complete_workflow_support import complete_postgres as workflow_postgr
 @pytest.fixture(params=["local", "postgres"])
 def console(request, tmp_path, *, production_console):
     if request.param == "postgres":
-        return production_console(root=tmp_path, processing_binder=lambda console: None)
+        return production_console(root=tmp_path, processing_binder=bind_fixture_selections)
     return state(tmp_path, production_console=production_console)
 
 

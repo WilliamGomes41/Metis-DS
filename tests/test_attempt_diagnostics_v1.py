@@ -4,6 +4,7 @@
 # release-control-evidence: opslag concurrent stale interrupt retry version-compat recovery
 # release-control-evidence: toegang beschikbaarheid kwaliteit slop releasebewijs
 """
+from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 from datetime import timedelta
 import json
@@ -144,13 +145,13 @@ def test_only_diagnostic_metadata_is_excluded_from_activation_comparison():
 
 def test_production_adapter_restart_replay_and_activation(tmp_path, monkeypatch, *, production_console):
     from tests import test_attempt_diagnostics_postgres as proof
-    monkeypatch.setattr(proof, "_console", lambda root, _: production_console(processing_binder=lambda console: None, root=root, source_store=root/"sources", runtime=root/"runtime"))
+    monkeypatch.setattr(proof, "_console", lambda root, _: production_console(processing_binder=bind_fixture_selections, root=root, source_store=root/"sources", runtime=root/"runtime"))
     proof.test_failed_initial_ingest_evidence_restart_http_replay_and_success_activation(None, tmp_path)
 
 
 def test_production_adapter_recovery_http_and_concurrent_consumption(tmp_path, monkeypatch, *, production_console):
     from tests import test_attempt_diagnostics_postgres as proof
-    monkeypatch.setattr(proof, "_console", lambda root, _: production_console(processing_binder=lambda console: None, root=root, source_store=root/"sources", runtime=root/"runtime"))
+    monkeypatch.setattr(proof, "_console", lambda root, _: production_console(processing_binder=bind_fixture_selections, root=root, source_store=root/"sources", runtime=root/"runtime"))
     proof.test_recovery_permission_http_restart_and_concurrent_consumption(None, tmp_path)
 
 
@@ -189,7 +190,7 @@ def test_malformed_json_output_survives_before_parsing():
 
 def test_expired_attempt_is_interrupted_and_late_checkpoint_is_rejected(tmp_path, *, production_console):
     from tests.test_attempt_diagnostics_postgres import bound, ingest
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path/"sources", runtime=tmp_path/"runtime")
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path/"sources", runtime=tmp_path/"runtime")
     bound(console)
     sid, actor, reviewer = ingest(console)
     with console._reprocessing_transaction(sid):
@@ -203,7 +204,7 @@ def test_expired_attempt_is_interrupted_and_late_checkpoint_is_rejected(tmp_path
 
 def test_failed_diagnostic_write_stops_before_provider(tmp_path, monkeypatch, *, production_console):
     from tests.test_attempt_diagnostics_postgres import bound, ingest
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path/"sources", runtime=tmp_path/"runtime")
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path/"sources", runtime=tmp_path/"runtime")
     bound(console)
     sid, actor, reviewer = ingest(console)
     with console._reprocessing_transaction(sid):

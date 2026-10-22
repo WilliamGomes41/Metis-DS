@@ -9,6 +9,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import hashlib
 import json
@@ -426,7 +427,7 @@ def test_divergent_legacy_mirror_is_blocked_and_diagnosable() -> None:
 
 
 def test_runtime_current_schema_moves_to_v14_without_rewriting_v13(tmp_path: Path, *, production_console) -> None:
-    console = production_console(processing_binder=lambda console: None,
+    console = production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources",
         runtime=tmp_path / "runtime",

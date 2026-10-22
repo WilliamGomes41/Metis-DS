@@ -241,12 +241,6 @@
       ]
     ],
     [
-      "/inzicht/routevergelijking/{comparison_id}/freeze",
-      [
-        "POST"
-      ]
-    ],
-    [
       "/inzicht/routevergelijking/{comparison_id}/run/{route}",
       [
         "POST"
@@ -618,12 +612,6 @@
     ],
     [
       "/settings/quality/compare/{comparison_id}/close",
-      [
-        "POST"
-      ]
-    ],
-    [
-      "/settings/quality/compare/{comparison_id}/freeze",
       [
         "POST"
       ]

@@ -6,6 +6,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 from copy import deepcopy
 from pathlib import Path
@@ -69,7 +70,7 @@ def test_pre_review_block_cannot_override_canonical_release_or_serving(release, 
 
 
 def test_blocked_empty_capture_has_same_local_and_postgres_list_status_after_restart(tmp_path: Path, *, production_console):
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     actor = console.create_account(username="researcher", password="test-researcher-secret", roles=("researcher",))
     reviewer = console.create_account(username="reviewer", password="test-reviewer-secret", roles=("reviewer",))
 
@@ -83,7 +84,7 @@ def test_blocked_empty_capture_has_same_local_and_postgres_list_status_after_res
         live_url="", class_="richtlijn", family="test", named_reviewers=[reviewer["account_id"]],
     )
     snapshot_id = receipt["snapshot_id"]
-    restarted = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    restarted = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted.snapshot_objects(snapshot_id) == []
     assert restarted.waiting_task_counts(reviewer["account_id"])["review"] == 0
     row = {**restarted._envelope(snapshot_id), "has_open_review": False}

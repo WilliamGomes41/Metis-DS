@@ -5,6 +5,7 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import threading
 from copy import deepcopy
@@ -60,10 +61,9 @@ class Page(HTMLParser):
 
 @pytest.fixture
 def review_system(tmp_path, *, production_app, production_console):
-    console = production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
+    console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     researcher = console.create_account(username="anne", password="anne-secret", roles=("researcher",))
     reviewer = console.create_account(username="bert", password="bert-secret", roles=("reviewer",))
-    from tests.semantic_fixture_support import bind_fixture_selections
     bind_fixture_selections(console)
     receipt = console.ingest(
         actor_id=researcher["account_id"], filename="begrippen.html", content_type="text/html",

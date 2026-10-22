@@ -3,13 +3,13 @@
   "cutover_enabled": false,
   "issue": 455,
   "routes": [
-    {"id":"L01","status":"LEGACY-FROZEN","path":"src/operations_console_v1.py","symbol":"_spec_from_fragments","replacement":"shared v2 proposal contract","removal_gate":"G0-G5; headings, repair and comparisons detached"},
+    {"id":"L01","status":"LEGACY-REMOVED","path":"src/operations_console_v1.py","symbol":"_spec_from_fragments","replacement":"shared v2 proposal contract","removal_gate":"G0-G5; headings, repair and comparisons detached","removed":"Protocol 4.3.0: _spec_from_fragments, split_context_aware_units and atomic_split_v1 removed; headings are projected by context_aware_split_v1.heading_structure_units"},
     {"id":"L02","status":"LEGACY-FROZEN","path":"src/pre_review_semantic_v1.py","symbol":"_proposal_schema(false)","replacement":"_proposal_schema(true)","removal_gate":"G0-G5 and compatible historical readers"},
     {"id":"L03","status":"LEGACY-FROZEN","path":"src/admission_gate_v1.py","symbol":"_enrich_from_text","replacement":"source_bound_fields_v2.bound_values for v2 only","removal_gate":"no necessary v1 admission callers"},
-    {"id":"L04","status":"LEGACY-FROZEN","path":"src/passage_formation_policy_v1.py","symbol":"v1 production mode selection","replacement":"shared processing policy after evaluation","removal_gate":"G0-G5 and rollback window closed"},
+    {"id":"L04","status":"LEGACY-REMOVED","path":"src/passage_formation_policy_v1.py","symbol":"v1 production mode selection","replacement":"shared processing policy after evaluation","removal_gate":"G0-G5 and rollback window closed","removed":"Protocol 4.3.0: deterministic-v1 removed; the mode is a configuration error and rollback is a software revert"},
     {"id":"L05","status":"LEGACY-FROZEN","path":"src/pre_review_semantic_v1.py","symbol":"semantic_suppressed catalog detour","replacement":"direct read-only source catalog","removal_gate":"catalog no longer calls full spec creation"},
-    {"id":"L06","status":"LEGACY-FROZEN","path":"src/route_comparison_app_v1.py","symbol":"execute_arm v1 adapters","replacement":"versioned shared producers","removal_gate":"historical baseline remains reproducible"},
+    {"id":"L06","status":"LEGACY-REMOVED","path":"src/route_comparison_app_v1.py","symbol":"execute_arm v1 adapters","replacement":"versioned shared producers","removal_gate":"historical baseline remains reproducible","removed":"Protocol 4.3.0: the deterministic comparison arm and new comparisons are refused (comparison_route_retired); recorded comparisons stay readable"},
     {"id":"L07","status":"LEGACY-FROZEN","path":"src/semantic_replay_v1.py","symbol":"v1 contract replay writes","replacement":"same replay mechanism with v2 identity","removal_gate":"no new v1 writes; historical readers remain"},
-    {"id":"L08","status":"LEGACY-FROZEN","path":"src/operations_console_v1.py","symbol":"_reextract_objects_for_klasse direct prose conversion","replacement":"shared versioned dispatcher","removal_gate":"class conversion and lifecycle regression proof"}
+    {"id":"L08","status":"LEGACY-REMOVED","path":"src/operations_console_v1.py","symbol":"_reextract_objects_for_klasse direct prose conversion","replacement":"shared versioned dispatcher","removal_gate":"class conversion and lifecycle regression proof","removed":"Protocol 4.3.0: class change of an export into a prose class goes through the installed source processing strategy"}
   ]
 }

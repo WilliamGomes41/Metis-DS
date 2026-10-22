@@ -13,6 +13,7 @@ here. publish() stays G2-BLOCKED. Wave 1 reviewopslag paths stay.
 Package migration regression evidence: availability and access behavior must remain unchanged.
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import asyncio
 import importlib.util
@@ -53,7 +54,7 @@ def _load_preflight():
 
 
 def _console(tmp_path: Path, *, production_console) -> OperationsConsole:
-    return production_console(processing_binder=lambda console: None,
+    return production_console(processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "sources" / "private",
         runtime=tmp_path / "output" / "runtime" / "operations-console",

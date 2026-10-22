@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from src.operations_console_v1 import OperationsConsole
-from src.passage_formation_policy_v1 import DETERMINISTIC_MODE, SEMANTIC_MODE
+from src.passage_formation_policy_v1 import SEMANTIC_MODE
 from src.pre_review_semantic_v1 import (
     PASSAGE_FORMATION_MODE_ENV,
     bind_pre_review_semantic_processing,
@@ -88,7 +88,10 @@ def test_management_runtime_status_tracks_same_bound_configuration_mapping(tmp_p
 
     assert "Actieve verwerkingsmodus: Semantisch" in _management_page(console, production_app=production_app)
 
-    env[PASSAGE_FORMATION_MODE_ENV] = DETERMINISTIC_MODE
+    # The retired rollback mode is shown as the configuration error it is.
+    env[PASSAGE_FORMATION_MODE_ENV] = "deterministic-v1"
 
-    assert console._passage_formation_mode_reader() == DETERMINISTIC_MODE
-    assert "Actieve verwerkingsmodus: Deterministisch" in _management_page(console, production_app=production_app)
+    assert console._passage_formation_mode_reader() == "deterministic-v1"
+    html = _management_page(console, production_app=production_app)
+    assert "Actieve verwerkingsmodus: Configuratiefout" in html
+    assert "Deterministisch" not in html

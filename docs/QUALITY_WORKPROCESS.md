@@ -48,6 +48,21 @@ verbergt eerdere rapporten met die bronnen. Geen ranglijst van individuele revie
 - Inhoudelijke kwaliteit: geen score voor klinische correctheid. Zonder uniforme
   probleemclassificatie wordt de foutfrequentie als niet meetbaar gerapporteerd.
 
+## Meetdefinitie 1.1.0: gemelde discrepanties met de originele tekst
+
+Op de reviewkaart kan de beoordelaar optioneel een discrepantie tussen kennisobject
+en originele tekst melden, in vier vaste soorten: context ontbreekt, betekenis wijkt
+af, selectie te ruim of te krap, tekst of bronplek wijkt af (kritiek: die hoort
+technisch onmogelijk te zijn). Met een melding kan alleen "correctie specificeren"
+of "afwijzen" worden gekozen. De melding wordt in dezelfde transactie als dat besluit
+vastgelegd op het bestaande `review_audit_evidence`-bewijs van de exacte objectversie
+en wijzigt geen tekst, identiteit, Admission of publicatiestatus.
+
+Het rapport telt één melding per beoordeelde objectversie, per soort, per route en
+per vormingsroute/model. Omdat melden optioneel is, is dit een telling van ontdekte
+afwijkingen en geen foutpercentage: geen melding bewijst geen overeenstemming.
+Rapporten met definitie 1.0.0 blijven ongewijzigd leesbaar en tonen dit blok niet.
+
 De periode selecteert het ingestcohort in UTC. Activiteit betreft het werk aan die
 bronnen tot de gegevensgrens; open werk is een momentopname. Routeverschillen zijn
 beschrijvend: verschillen in bronnen, risico en omvang kunnen de uitkomst verklaren.

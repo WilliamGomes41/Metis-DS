@@ -6,6 +6,7 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+from tests.semantic_fixture_support import bind_fixture_selections
 
 import hashlib
 from pathlib import Path
@@ -67,7 +68,7 @@ class _FailingStore:
 
 
 def _console(tmp_path: Path, store: object, *, production_console) -> tuple[OperationsConsole, dict[str, str]]:
-    console = production_console(azure=True, processing_binder=lambda console: None,
+    console = production_console(azure=True, processing_binder=bind_fixture_selections,
         root=tmp_path,
         source_store=tmp_path / "source-cache",
         runtime=tmp_path / "runtime",
@@ -244,6 +245,6 @@ def test_cleanup_io_failure_does_not_undo_committed_deletion(tmp_path, monkeypat
     assert result['deleted'] is True
     assert result['freeze_bytes_removed'] is False
     assert store.load_verified(locator) == HTML_FIXTURE.read_bytes()
-    restarted = production_console(azure=True, processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path/'source-cache',
+    restarted = production_console(azure=True, processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path/'source-cache',
                                   runtime=tmp_path/'runtime', immutable_source_store=store)
     assert restarted.list_envelopes() == []
