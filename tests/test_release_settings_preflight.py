@@ -1,6 +1,7 @@
 """Run the release settings preflight and image build dry run as an operator would.
 
 # release-control-evidence: scope/belofte
+# release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
