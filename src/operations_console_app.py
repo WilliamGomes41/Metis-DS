@@ -5091,10 +5091,11 @@ def create_console_app(
               var optional = document.getElementById("optional-row");
               var optionalSelect = document.getElementById("named_reviewers");
               function syncOptional() {{
+                if (!mode || !optional || !optionalSelect) return;
                 optional.hidden = mode.value !== "optional";
                 optionalSelect.disabled = optional.hidden;
               }}
-              mode.addEventListener("change", syncOptional);
+              if (mode) mode.addEventListener("change", syncOptional);
               syncOptional();
               var date = document.getElementById("date");
               var out = document.querySelector("[data-date-nl]");
