@@ -3,6 +3,10 @@
 The page already reloads the selected running document every five seconds, so a
 link to that same page only reloads it. A running document that is not selected
 keeps the link: it selects that document and starts polling it.
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from fastapi.testclient import TestClient
 
