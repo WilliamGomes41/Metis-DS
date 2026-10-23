@@ -27,20 +27,22 @@ def test_explicit_participation_survives_restart_and_drives_exact_review(tmp_pat
     sid = receipt["snapshot_id"]
     primary = accounts["researcher"]["account_id"]
     secondary = accounts["reviewer"]["account_id"]
-    # A score risk is retained, without silently requiring another reviewer.
+    # Besluit William 2026-10-23: a score risk demands four eyes under every
+    # policy; before, a one-reviewer policy switched that off.
     obj = next(o for o in console.snapshot_objects(sid) if o.get("scorelist"))
     assert obj["risk"]["risk_fields"]
-    assert requires_four_eyes(obj) == (participation == "required")
+    assert requires_four_eyes(obj) is True
     console.review_object(actor_id=primary, snapshot_id=sid, object_id=obj["object_id"],
                           decision="approve", confirmed_object_type="node")
     console = _console(tmp_path, production_console=production_console)
     obj = next(o for o in console.snapshot_objects(sid) if o.get("scorelist"))
     assert console._envelope(sid)["review_policy"] == policy(accounts, participation)
     bindings = console.object_review_bindings(sid)
-    assert review_stage(obj, review_path="boom", bindings=bindings) == ("second_review" if participation == "required" else None)
+    assert review_stage(obj, review_path="boom", bindings=bindings) == "second_review"
     considered = console.consider_publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=sid)
     assert "second_named_reviewer_required" not in considered["blockers"]
     assert ("required_policy_review_missing" in considered["blockers"]) == (participation == "required")
+    assert "four_eyes_required" in considered["blockers"]
     if participation:
         console.approve_second_review(actor_id=secondary, snapshot_id=sid, object_id=obj["object_id"])
         # Repeating a review is idempotent; optional participants can contribute.

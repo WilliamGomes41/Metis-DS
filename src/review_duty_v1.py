@@ -167,7 +167,12 @@ def review_stage(
     if policy is not None:
         if policy["primary"] not in approvers:
             return FIRST_REVIEW
-        return SECOND_REVIEW if required_reviewers(policy) - set(approvers) else None
+        if required_reviewers(policy) - set(approvers):
+            return SECOND_REVIEW
+        from src.four_eyes_v1 import content_requires_four_eyes
+        # Content-bound four eyes holds under every policy.
+        content = content_requires_four_eyes(obj, confirmed_type=str(obj.get("confirmed_object_type") or "") or None)
+        return SECOND_REVIEW if content and len(set(approvers)) < 2 else None
     four_eyes = requires_four_eyes(
         obj,
         confirmed_type=str(obj.get("confirmed_object_type") or "") or None,
