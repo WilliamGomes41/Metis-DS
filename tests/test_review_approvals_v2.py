@@ -312,3 +312,69 @@ def test_kernel_decision_tree_one_of_two_is_refused_explicitly(kernel, source):
         _ingest(console, ids, _choice("two_others", [ids["bert"], ids["carla"]]), class_="beslisboom",
                 filename=name, data=data, content_type=kind, live_url="")
     assert console.list_envelopes() == []
+
+
+# Adversarial review #824: content-bound four eyes through the kernel, up to publish.
+
+def _approve_as_exception(console, sid, reviewer):
+    """Approve the reviewable passage as an exception (content four eyes); settle the rest."""
+    from src.operations_console_v1 import review_lane
+    from src.passage_register_v1 import passage_register_of
+    from src.review_disposition_v1 import definitive_review_disposition
+    target = next(o for o in console.snapshot_objects(sid) if o.get("object_type") == "unclassified")
+    console.review_object(actor_id=reviewer, snapshot_id=sid, object_id=target["object_id"],
+                          decision="approve", confirmed_object_type="exception")
+    for obj in console.snapshot_objects(sid):
+        if obj["object_id"] == target["object_id"]:
+            continue
+        if passage_register_of(obj).get("status") == "selected_as_candidate" and (obj.get("governance") or {}).get(
+                "validation_status") not in {"approved", "rejected", "superseded"}:
+            console.review_object(actor_id=reviewer, snapshot_id=sid, object_id=obj["object_id"],
+                                  decision="reject", comment="Testfixture: kandidaat afgehandeld.")
+    for obj in console.snapshot_objects(sid):
+        if obj["object_id"] == target["object_id"] or obj.get("object_type") == "document" \
+                or review_lane(obj) == "fast" or definitive_review_disposition(obj)["final"]:
+            continue
+        console.review_object(actor_id=reviewer, snapshot_id=sid, object_id=obj["object_id"], decision="reject",
+                              suitability="ja", eindoordeel="afwijzen", comment="Testfixture: afgehandeld.")
+    return target["object_id"]
+
+
+REVIEW_BLOCKERS = {"review_configuration_approval_missing", "four_eyes_required", "required_policy_review_missing"}
+
+
+@pytest.mark.parametrize(("option", "reviewers", "first", "second"), [
+    ("two_others", ["bert", "carla"], "bert", "carla"),
+    ("uploader_and_other", ["bert"], "anne", "bert"),
+    ("uploader_and_other", ["bert"], "bert", "anne"),
+])
+def test_kernel_content_four_eyes_without_four_eyes_choice_needs_the_other_person(kernel, option, reviewers,
+                                                                                  first, second):
+    console, ids = kernel
+    sid = _ingest(console, ids, _choice(option, [ids[r] for r in reviewers]))["snapshot_id"]
+    object_id = _approve_as_exception(console, sid, ids[first])
+    assert "four_eyes_required" in console.publication_readiness(sid)["blockers"]
+    console.approve_second_review(actor_id=ids[second], snapshot_id=sid, object_id=object_id)
+    assert not REVIEW_BLOCKERS & set(console.publication_readiness(sid)["blockers"])
+    publisher = console.create_account(username="pub", password="fixture-only-pub", roles=("publisher",))
+    assert console.publish(actor_id=publisher["account_id"], snapshot_id=sid)["published_items"]
+
+
+@pytest.mark.parametrize(("option", "reviewers", "first"), [
+    ("uploader_sole", [], "anne"), ("one_other", ["bert"], "bert"),
+])
+def test_kernel_content_four_eyes_under_one_reviewer_policy_routes_through_participation(kernel, option,
+                                                                                          reviewers, first):
+    from src import review_participation_v1
+    console, ids = kernel
+    publisher = console.create_account(username="pub", password="fixture-only-pub", roles=("publisher",))
+    sid = _ingest(console, ids, _choice(option, [ids[r] for r in reviewers]))["snapshot_id"]
+    object_id = _approve_as_exception(console, sid, ids[first])
+    assert "four_eyes_required" in console.publication_readiness(sid)["blockers"]
+    review_participation_v1.execute(console, actor_id=publisher["account_id"], snapshot_id=sid,
+                                    command_id="tweede-beoordelaar", expected_revision=console.objects_revision(sid),
+                                    reason="Inhoud vraagt vier ogen.", action="add_required", reviewer_id=ids["dirk"])
+    assert "required_policy_review_missing" in console.publication_readiness(sid)["blockers"]
+    console.approve_second_review(actor_id=ids["dirk"], snapshot_id=sid, object_id=object_id)
+    assert not REVIEW_BLOCKERS & set(console.publication_readiness(sid)["blockers"])
+    assert console.publish(actor_id=publisher["account_id"], snapshot_id=sid)["published_items"]

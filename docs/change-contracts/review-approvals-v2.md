@@ -45,7 +45,8 @@ Compatibility/migration plan:
 - Legacy canonical recovery re-verifies published releases with `historical_requires_four_eyes`, the rule they were published under.
 Rollback/recovery plan:
 - Revert before deployment if proof fails.
-- After deployment, a rollback image reads a v2 configuration as invalid. Such documents fail closed with `review_configuration_invalid`, so nothing is published by mistake, but they stay blocked until the image comes back forward. A rollback also reinstates the old policy override for content four eyes.
+- After deployment, a rollback image reads a v2 configuration as invalid. Policy-less v2 documents ("Een collega en ik" or "Twee collega's" with four eyes Nee) fail closed with `review_configuration_invalid` and stay blocked until the image comes back forward.
+- v2 documents with a derived policy are judged by that policy in the old image, under the old rule. A rollback therefore reinstates the policy override for content four eyes, which is exactly the behaviour of main before this change.
 - Both effects go in the release note. No data repair is needed in either direction.
 Cutover trigger: a separately approved merge of #822 together with this PR, then an approved deployment. Neither is part of this run.
 Cleanup/decommission criteria:
@@ -129,3 +130,10 @@ Explicit non-goals:
 Known limits:
 - **"Een van beiden" for a beslisboom.** The beslisboom graph review requires every required reviewer of a policy (`decision_graph_v1.publication_issues`), and without a policy no graph is stored, so a beslisboom cannot express "een van beiden". It is refused with an explicit message rather than mapped to both required.
 - **Sending back after approval.** Once one designated person has approved and no duty is open, the other cannot send the passage back (`content_duty_required`). Their review is refused, not ignored.
+
+Adversarial review (2026-10-23, on #824):
+- Alternate entry points: the HTTP form, a direct `ingest`/`receive_source` with a v1 or v2 choice, a supplied policy, Reviewdeelname, and `approve_second_review`. Each either derives the same duty or is refused.
+- Override and fallback: the policy is the only authority when present; the chosen configuration only without one. Content four eyes is checked in the policy branch of `publish_authorization_contract`, in `review_stage`, and in the participation floor.
+- Content four eyes end to end through the kernel up to publish: policy-less v2 (the other designated person completes it via second review) and one-reviewer policies (route: a publisher adds a required reviewer via Reviewdeelname). Proof: the two `test_kernel_content_four_eyes_*` tests.
+- Rollback: the claim was corrected above. Only policy-less v2 documents fail closed in the old image.
+- Residual risk: a policy-less v2 document whose designated colleague leaves has no participation route (`review_configuration_chosen_wins`), as for v1 chosen configurations. This is an explicit non-goal.
