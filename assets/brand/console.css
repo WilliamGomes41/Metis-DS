@@ -1898,3 +1898,68 @@ html[data-theme="dark"] .care-owl-pupil { fill: #0b1b34; }
   50% { transform: translateY(-4px); }
 }
 @media print { .care-companion { display: none; } }
+
+/* Shared header readability (docs/change-contracts/console-header-readability.md).
+   Overrides only; the original header rules above stay byte-identical and the
+   home tiles are not touched. */
+.topbar { gap: 18px 24px; }
+
+.rooms { flex: 1 1 auto; align-items: center; gap: 2px; }
+.rooms form { margin: 0; }
+
+.rooms a,
+.rooms button { padding: 8px 10px; white-space: nowrap; }
+
+.rooms a:hover,
+.rooms button:hover { background: var(--water-soft); }
+
+.rooms a:focus-visible,
+.rooms button:focus-visible { outline: 3px solid var(--rood); outline-offset: 2px; }
+
+.theme-toggle {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  color: var(--paars);
+  cursor: pointer;
+}
+
+.theme-toggle:hover { background: var(--water-soft); }
+
+.theme-icon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.theme-icon-sun,
+html[data-theme="dark"] .theme-icon-moon { display: none; }
+
+html[data-theme="dark"] .theme-icon-sun { display: block; }
+
+.who { display: grid; gap: 2px; flex: 0 1 auto; line-height: 1.25; }
+.who-name { color: var(--text); font-weight: 700; }
+.who-roles { font-size: 0.8rem; white-space: nowrap; }
+
+@media (max-width: 1359px) {
+  .topbar { flex-wrap: wrap; }
+  .rooms { order: 3; flex-basis: 100%; margin-left: -10px; }
+  .theme-toggle { margin-left: auto; }
+  .who { margin-left: 0; }
+}
+
+@media (max-width: 860px) {
+  .rooms { order: 2; }
+  .who { order: 3; }
+}
+
+@media (max-width: 560px) {
+  .who { text-align: left; }
+}

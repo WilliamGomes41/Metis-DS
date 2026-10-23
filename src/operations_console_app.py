@@ -630,7 +630,7 @@ if (sessionWarning) {{
 document.querySelectorAll('[data-theme-toggle]').forEach((button) => {{
   const sync = () => {{
     const dark = document.documentElement.dataset.theme === 'dark';
-    button.textContent = dark ? 'Lichte modus' : 'Donkere modus';
+    button.title = dark ? 'Lichte modus' : 'Donkere modus';
     button.setAttribute('aria-pressed', String(dark));
   }};
   button.addEventListener('click', () => {{
@@ -809,7 +809,9 @@ def _session_warning() -> str:
 
 def _nav(account: dict[str, Any] | None, current: str = "") -> str:
     who = (
-        f'{_esc(account.get("display_name"))} · rollen: {", ".join(_esc(r) for r in account.get("roles") or [])}'
+        f'<span class="who-name">{_esc(account.get("display_name"))}</span>'
+        f'<span class="who-roles"><span class="sr-only">rollen: </span>'
+        f'{" · ".join(_esc(r) for r in account.get("roles") or [])}</span>'
         if account
         else "niet aangemeld"
     )
@@ -838,7 +840,10 @@ def _nav(account: dict[str, Any] | None, current: str = "") -> str:
         </span>
       </a>
       <nav class="rooms">{"".join(links)}</nav>
-      <button class="theme-toggle" type="button" data-theme-toggle aria-label="Wissel tussen lichte en donkere modus">Donkere modus</button>
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="Wissel tussen lichte en donkere modus" title="Donkere modus">
+        <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+        <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
       <div class="who">{who}</div>
     </header>
     {_session_warning() if account else ""}
