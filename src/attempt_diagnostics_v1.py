@@ -57,7 +57,8 @@ def deployment_identity():
 def checkpoint(attempt, phase, values):
     diagnostic = attempt.setdefault("diagnostic", {"version": VERSION, "checkpoints": []})
     proposed = {**diagnostic, **deepcopy(values)}
-    if len(json.dumps(proposed, ensure_ascii=False).encode()) > MAX_DIAGNOSTIC_BYTES:
+    size = len(json.dumps(proposed, ensure_ascii=False).encode())
+    if size > MAX_DIAGNOSTIC_BYTES:
         omitted = []
         for key in sorted(values, key=lambda k: len(json.dumps(values[k], ensure_ascii=False)), reverse=True):
             proposed.pop(key, None)
@@ -69,7 +70,8 @@ def checkpoint(attempt, phase, values):
     diagnostic.clear()
     diagnostic.update(proposed)
     diagnostic["phase"] = phase
-    diagnostic["checkpoints"].append({"phase": phase, "at": datetime.now(timezone.utc).isoformat()})
+    # Size before trimming: what this checkpoint asked to persist.
+    diagnostic["checkpoints"].append({"phase": phase, "at": datetime.now(timezone.utc).isoformat(), "bytes": size})
 
 
 def finish_diagnostic(attempt, error=None):

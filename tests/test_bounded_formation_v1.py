@@ -217,3 +217,38 @@ def test_answered_task_clears_transport_failure_but_does_not_dispose_unknown_sou
     assert proposal == {'objects': [], 'source_assessments': []}  # no exclusion or invented knowledge
     evidence['supplementary_calls'][0]['formation']['rejections'] = [{'kind': 'object', 'reason_code': 'semantic_evidence_literal_not_found', 'spans': [span]}]
     assert len(pending_rejections(evidence, proposal)) == 2
+
+
+def test_each_task_records_plan_and_where_its_time_went():
+    fragments = [
+        dict(source(f'Bronpassage {i} met voldoende klinische tekst voor een eigen taak.')[0],
+             fragment_id=str(i), fragment_hash=str(i), section_path=[str(i)])
+        for i in range(3)
+    ]
+    blocks = semantic_source_blocks(fragments)
+    checkpoints = []
+
+    def empty(**kwargs):
+        return {'objects': [], 'relations': [], 'source_assessments': [], 'abstain_reason': 'no_validated_proposals'}
+
+    _, evidence = execute(
+        blocks=blocks, evidence_blocks=blocks,
+        validator_input={'fragments': fragments, 'document_id': 'test', 'evidence_fragments': fragments,
+                         'allowed_candidate_block_ids': [b['block_id'] for b in blocks], 'field_contract_v3': True},
+        provider=empty, limits=ModelCallLimits(),
+        checkpoint=lambda phase, values: checkpoints.append((phase, deepcopy(values))),
+    )
+
+    requests = [values['current_task'] for phase, values in checkpoints if phase == 'model_request']
+    assert [(task['index'], task['planned']) for task in requests[:3]] == [(1, 3), (2, 3), (3, 3)]
+    timings = checkpoints[-1][1]['formation_timings']
+    initial = [row for row in timings if row['phase'] == 'initial']
+    assert [row['index'] for row in initial] == [1, 2, 3]
+    for row in initial:
+        assert row['planned'] == 3 and row['status'] == 'completed'
+        assert all(row[key] >= 0 for key in ('checkpoint_before_seconds', 'model_seconds', 'validation_seconds'))
+    # A write cannot hold its own duration: the last one appears only after a later checkpoint.
+    assert all('checkpoint_after_seconds' in row for row in timings[:-1])
+    # Measurements stay attempt-owned: never in provider evidence or replay identity.
+    assert 'formation_timings' not in json.dumps(evidence)
+    assert 'model_seconds' not in json.dumps(evidence)

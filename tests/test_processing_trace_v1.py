@@ -424,3 +424,31 @@ def test_background_phases_do_not_reopen_finished_http_evidence(console, monkeyp
     assert inherited_metrics == [None]
     assert any(r['event'] == 'processing_finished' and r['request_id'] == rid for r in events)
     assert restart(console)._envelope(sid)['processing_attempts'][-1]['diagnostic']['origin_request_id'] == rid
+
+
+def test_trace_exports_checkpoint_size_and_task_timings_without_text():
+    from src.processing_trace_v1 import processing_trace
+    attempt = recorded_attempt()
+    attempt['diagnostic']['checkpoints'][0]['bytes'] = 52_000
+    attempt['diagnostic']['formation_timings'] = [
+        {'task_id': 'f'*64, 'phase': 'initial', 'status': 'completed', 'index': 1, 'planned': 130,
+         'checkpoint_before_seconds': 1.2, 'model_seconds': 61.5, 'validation_seconds': 4.1,
+         'checkpoint_after_seconds': 1.4, 'note': 'private-source'},
+        {'task_id': 'private', 'phase': 'private', 'model_seconds': 'private'}]
+    envelope = {'snapshot_id':'snap-'+'d'*16+'-'+'e'*8, 'sha256':'b'*64, 'processing_attempts':[attempt]}
+    row = processing_trace(envelope)['attempts'][0]
+    assert row['checkpoints'][0]['bytes'] == 52_000
+    assert row['formation_timings'][0] == {'task_id': 'f'*64, 'phase': 'initial', 'status': 'completed', 'index': 1,
+        'planned': 130, 'checkpoint_before_seconds': 1.2, 'model_seconds': 61.5, 'validation_seconds': 4.1,
+        'checkpoint_after_seconds': 1.4}
+    assert row['formation_timings'][1]['task_id'] is None and row['formation_timings'][1]['model_seconds'] is None
+    assert 'private' not in json.dumps(row)
+
+
+def test_checkpoint_records_the_size_it_asked_to_persist():
+    from src.attempt_diagnostics_v1 import checkpoint
+    attempt = {}
+    checkpoint(attempt, 'model_request', {'current_task': {'task_id': 'x'}})
+    checkpoint(attempt, 'proposal_received', {'provider_evidence': {'tasks': ['y'] * 1000}})
+    small, large = (row['bytes'] for row in attempt['diagnostic']['checkpoints'])
+    assert 0 < small < large
