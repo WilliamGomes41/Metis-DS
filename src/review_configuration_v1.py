@@ -16,6 +16,13 @@ Deze module schrijft NOOIT. ``effective_configuration`` projecteert:
    het gedrag op main; hoog-risico-objecten eisen four-eyes los hiervan.
 Vanaf slice 2b-3 leest de publicatiepoort alleen een ``chosen`` configuratie via
 ``configured_approval``; legacy_default en migrated_policy houden het huidige gedrag.
+
+``review-configuration-v2`` (besluit William 2026-10-23) scheidt wie mag beoordelen
+van hoeveel goedkeuringen verplicht zijn. Opties: ``uploader_sole``, ``one_other``,
+``uploader_and_other`` en ``two_others``. Bij twee aangewezen personen kiest de
+uploader expliciet ``four_eyes_required``: uit betekent één geldige goedkeuring
+van een van beiden, aan betekent beiden. Inhoudsgebonden vier ogen kan die eis
+alleen verhogen. v1-configuraties houden hun oorspronkelijke betekenis.
 """
 from __future__ import annotations
 
@@ -23,11 +30,15 @@ from copy import deepcopy
 from typing import Any
 
 CONTRACT = "review-configuration-v1"
+CONTRACT_V2 = "review-configuration-v2"
 OPTIONS = ("uploader_sole", "two_others", "one_other")
+OPTIONS_V2 = ("uploader_sole", "one_other", "uploader_and_other", "two_others")
+# v2: alleen bij twee aangewezen personen is vier ogen een keuze.
+FOUR_EYES_CHOICE_V2 = frozenset({"uploader_and_other", "two_others"})
 SOURCES = ("chosen", "legacy_default", "migrated_policy")
 FIELDS = frozenset({"contract", "option", "four_eyes_required", "reviewers", "readers", "revision",
                     "locked_at", "source"})
-MINIMUM_REVIEWERS = {"uploader_sole": 0, "one_other": 1, "two_others": 2}
+MINIMUM_REVIEWERS = {"uploader_sole": 0, "one_other": 1, "uploader_and_other": 1, "two_others": 2}
 
 
 def _ids(value: Any, code: str) -> list[str]:
@@ -37,13 +48,19 @@ def _ids(value: Any, code: str) -> list[str]:
 
 
 def validate_configuration(value: Any, *, uploader_id: str) -> dict[str, Any]:
-    if not isinstance(value, dict) or set(value) != FIELDS or value.get("contract") != CONTRACT:
+    if not isinstance(value, dict) or set(value) != FIELDS or value.get("contract") not in {CONTRACT, CONTRACT_V2}:
         raise ValueError("invalid_review_configuration")
     if not isinstance(uploader_id, str) or not uploader_id.strip():
         raise ValueError("uploader_identity_missing")
     option = value["option"]
-    if option not in OPTIONS or type(value["four_eyes_required"]) is not bool:
+    v2 = value["contract"] == CONTRACT_V2
+    if option not in (OPTIONS_V2 if v2 else OPTIONS) or type(value["four_eyes_required"]) is not bool:
         raise ValueError("invalid_review_configuration")
+    if v2 and value["source"] != "chosen":
+        raise ValueError("invalid_review_configuration")
+    if v2 and value["four_eyes_required"] and option not in FOUR_EYES_CHOICE_V2:
+        # Vier ogen is alleen een keuze bij twee aangewezen personen.
+        raise ValueError("review_configuration_four_eyes_needs_two_reviewers")
     if value["source"] not in SOURCES or type(value["revision"]) is not int or value["revision"] < 0:
         raise ValueError("invalid_review_configuration")
     if value["locked_at"] is not None and not isinstance(value["locked_at"], str):
@@ -140,12 +157,63 @@ def effective_configuration(envelope: dict[str, Any]) -> dict[str, Any]:
     return legacy_default(envelope)
 
 
+def eligible_reviewers(configuration: dict[str, Any], *, uploader_id: str) -> set[str]:
+    """Wie mag beoordelen; de uploader alleen als die is aangewezen."""
+    reviewers = set(configuration["reviewers"])
+    option = configuration["option"]
+    if option == "uploader_sole":
+        return {uploader_id}
+    if option == "uploader_and_other" or (configuration["contract"] == CONTRACT and option == "one_other"
+                                          and configuration["four_eyes_required"]):
+        return reviewers | {uploader_id}
+    return reviewers
+
+
+def required_approvals(configuration: dict[str, Any], *, content_four_eyes: bool) -> int:
+    """v2: verplichte goedkeuringen uit de expliciete keuze; inhoud kan alleen verhogen."""
+    return 2 if configuration["four_eyes_required"] or content_four_eyes else 1
+
+
+def policy_for_configuration(configuration: dict[str, Any], *, uploader_id: str) -> dict[str, Any] | None:
+    """v2: de policy die exact dezelfde plicht uitdrukt, of None als geen policy dat kan.
+
+    Een policy vereist iedere verplichte reviewer. Daarom past ze alleen wanneer alle
+    aangewezen personen ook verplicht zijn; twee aangewezen personen zonder vier ogen
+    kan een policy niet uitdrukken.
+    """
+    from src.review_policy_v1 import CONTRACT as POLICY_CONTRACT
+    option, reviewers = configuration["option"], list(configuration["reviewers"])
+    if configuration["contract"] != CONTRACT_V2:
+        return None
+    if option == "uploader_sole":
+        primary, required = uploader_id, []
+    elif option == "one_other":
+        primary, required = reviewers[0], []
+    elif not configuration["four_eyes_required"]:
+        return None
+    elif option == "uploader_and_other":
+        primary, required = uploader_id, reviewers
+    else:
+        primary, required = reviewers[0], reviewers[1:]
+    return {"contract": POLICY_CONTRACT, "revision": 1, "primary": primary,
+            "assignments": [{"reviewer_id": r, "participation": "required"} for r in required]}
+
+
 def configured_approval(configuration: dict[str, Any], approver_ids: set[str], *, uploader_id: str) -> tuple[bool, bool]:
     """2b-3: (reviewplicht vervuld, vier ogen vervuld) voor een gevalideerde ``chosen`` configuratie.
 
     Alleen de uploader (uploader_sole) of de benoemde reviewers tellen; lezers en
     andere goedkeurders tellen NOOIT. Het exacte aantal geldt alleen voor ``chosen``.
+    Onder v2 telt alleen een goedkeuring van een aangewezen persoon; vier ogen is
+    vervuld met twee verschillende aangewezen goedkeurders, onder wie een niet-uploader.
     """
+    if configuration["contract"] == CONTRACT_V2:
+        approved = eligible_reviewers(configuration, uploader_id=uploader_id) & approver_ids
+        four_ok = len(approved) >= 2 and bool(approved - {uploader_id})
+        met = len(approved) >= required_approvals(configuration, content_four_eyes=False)
+        if configuration["option"] == "uploader_sole":
+            return met, False
+        return met, four_ok
     reviewers = set(configuration["reviewers"])
     option = configuration["option"]
     if option == "uploader_sole":

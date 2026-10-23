@@ -905,8 +905,10 @@ class OperationsConsole:
         """H2 2b-2: B10-keuze van de uploader; lezers tellen NOOIT en krijgen geen toegang."""
         if choice is None:
             return None
-        from src.review_configuration_v1 import CONTRACT, validate_configuration
-        if not isinstance(choice, dict) or set(choice) != {"option", "four_eyes_required", "reviewers", "readers"}:
+        from src.review_configuration_v1 import CONTRACT, CONTRACT_V2, validate_configuration
+        keys = {"option", "four_eyes_required", "reviewers", "readers"}
+        if not isinstance(choice, dict) or set(choice) - {"contract"} != keys \
+                or choice.get("contract", CONTRACT) not in {CONTRACT, CONTRACT_V2}:
             raise ConsoleError("invalid_review_configuration")
         value = {"contract": CONTRACT, **choice, "revision": 1, "locked_at": None, "source": "chosen"}
         try:
@@ -1348,6 +1350,20 @@ class OperationsConsole:
             code="invalid_source_date",
         )
         review_configuration = self._chosen_review_configuration(review_choice, actor_id)
+        if review_configuration is not None and review_configuration["contract"] != "review-configuration-v1":
+            # v2: de kernel leidt de policy af uit de keuze; een meegestuurde policy MOET gelijk zijn.
+            from src.review_configuration_v1 import policy_for_configuration
+            derived = policy_for_configuration(review_configuration, uploader_id=actor_id)
+            if review_policy is not None and review_policy != derived:
+                raise ConsoleError("review_configuration_policy_conflict")
+            review_policy = derived
+            if review_policy is None and review_configuration["option"] == "uploader_and_other" \
+                    and not named_reviewers:
+                named_reviewers = [*review_configuration["reviewers"], actor_id]
+            if review_policy is None and review_path_for_klasse(class_) == "boom" \
+                    and (data or b"").startswith(b"%PDF-"):
+                # Een beslisboom-PDF draagt zijn graafreview op een policy; "een van beiden" kan dat niet.
+                raise ConsoleError("decision_tree_pdf_needs_all_reviewers_required")
         if review_policy is None:
             if review_configuration is not None and not named_reviewers:
                 named_reviewers = list(review_configuration["reviewers"])
@@ -1360,6 +1376,11 @@ class OperationsConsole:
             if review_configuration is not None and \
                     {r for r in reviewers if r != actor_id} != set(review_configuration["reviewers"]):
                 raise ConsoleError("review_configuration_policy_conflict")
+            if review_configuration is not None and review_configuration["contract"] != "review-configuration-v1":
+                from src.review_configuration_v1 import eligible_reviewers
+                if set(reviewers) != eligible_reviewers(review_configuration, uploader_id=actor_id):
+                    # v2: alleen aangewezen personen mogen beoordelen, de uploader alleen als aangewezen.
+                    raise ConsoleError("review_configuration_policy_conflict")
         else:
             review_policy = self._validated_review_policy(review_policy)
             from src.review_policy_v1 import participants, required_reviewers
@@ -1369,7 +1390,7 @@ class OperationsConsole:
             required = set(required_reviewers(review_policy))
             if review_configuration is not None and required - {actor_id} != set(review_configuration["reviewers"]):
                 raise ConsoleError("review_configuration_policy_conflict")
-            if review_configuration is not None:
+            if review_configuration is not None and review_configuration["contract"] == "review-configuration-v1":
                 # H2-1 wint: alleen een eenduidige mapping legt vier ogen vast; needs_choice NOOIT.
                 from src.review_configuration_v1 import from_review_policy
                 mapped = from_review_policy(review_policy, uploader_id=actor_id)
