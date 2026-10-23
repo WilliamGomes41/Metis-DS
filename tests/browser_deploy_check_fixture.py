@@ -33,6 +33,9 @@ async def injected_fault(request: Request, call_next):
         # Production Entra sends an expired session to the sign-in flow.
         return RedirectResponse('/auth/microsoft?next=' + request.url.path, status_code=303)
     response = await call_next(request)
+    if fault == 'role':
+        # A regression that refuses a role the account has.
+        return HTMLResponse('<div class="banner err" data-error-code="publisher_role_required">Geen rol.</div>', status_code=403)
     if fault in {'banner', 'script'} and response.headers.get('content-type', '').startswith('text/html'):
         body = b''.join([chunk async for chunk in response.body_iterator]).decode()
         extra = ('<div class="banner err" data-error-code="fixture_failure" data-request-id="req-fixture">Fout</div>'

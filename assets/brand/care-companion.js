@@ -219,6 +219,10 @@
     ['Publicatie', '/publish'], ['Documenten', '/tree'], ['Instellingen', '/settings'], ['Inzicht', '/inzicht']
   ].map(([label, path]) => ({label, path}));
 
+  // The header shows "name · rollen: a, b"; a refusal for a role the account has is a fault.
+  const accountRoles = () => ((document.querySelector('header.topbar .who') || {}).textContent || '')
+    .split('rollen:')[1]?.split(',').map((role) => role.trim()).filter(Boolean) || [];
+
   const probePage = (page) => new Promise((resolve) => {
     const frame = el('iframe', {class: 'care-probe', sandbox: 'allow-same-origin allow-scripts',
       'aria-hidden': 'true', tabindex: '-1', title: 'Deploy-controle'});
@@ -265,7 +269,7 @@
           // Local sign-in answers protected pages with not_authenticated, and / with a login form.
           if (signIn() || code === 'not_authenticated' || doc.querySelector('input[type=password]')) finish({ok: false, problem: 'login'});
           // A page this role may not open is not a deploy fault.
-          else if (/_role_required$/.test(code)) finish({ok: true, skipped: true, code});
+          else if (/_role_required$/.test(code) && !accountRoles().includes(code.replace(/_role_required$/, ''))) finish({ok: true, skipped: true, code});
           else if (banner) finish({ok: false, problem: 'error', code, reference: banner.getAttribute('data-request-id') || ''});
           else if (status >= 400) finish({ok: false, problem: 'status', status});
           else if (!shell) finish({ok: false, problem: 'incomplete', status});
@@ -298,6 +302,11 @@
       + (row.skipped ? 'geen toegang met jouw rol' : row.ok ? row.seconds + ' s' : deployProblem(row)))
   ].join('\n');
 
+  // One run per page; the panel re-renders on reopen, so the run lives here
+  // and reports to whichever section is currently shown.
+  let deployProgress = '';
+  let deployView = null;
+
   const deploySection = () => {
     const status = el('p', {class: 'care-muted', role: 'status'});
     const list = el('ul', {class: 'care-list'});
@@ -322,23 +331,27 @@
         + (run.rows.some((row) => row.problem === 'login') ? ' Gestopt: meld je opnieuw aan en controleer daarna opnieuw.' : '');
       actions.append(copy);
     };
+    const view = {
+      progress: (text) => { start.disabled = true; list.replaceChildren(); copy.remove(); status.textContent = text; },
+      done: (run) => { last = run; start.disabled = false; show(run); }
+    };
+    deployView = view;
     start.addEventListener('click', async () => {
-      start.disabled = true;
-      list.replaceChildren();
-      copy.remove();
+      if (deployProgress) return;
       const pages = DEPLOY_PAGES;
       const rows = [];
       for (const [index, page] of pages.entries()) {
-        status.textContent = 'Bezig: ' + page.label + ' (' + (index + 1) + ' van ' + pages.length + ')…';
+        deployProgress = 'Bezig: ' + page.label + ' (' + (index + 1) + ' van ' + pages.length + ')…';
+        deployView.progress(deployProgress);
         const row = await probePage(page);
         rows.push(row);
         // Further pages would only start more sign-in flows.
         if (row.problem === 'login') break;
       }
-      last = {at: new Date().toISOString(), commit, who, rows};
-      storage((s) => s.setItem(DEPLOY_KEY, JSON.stringify(last)));
-      show(last);
-      start.disabled = false;
+      const run = {at: new Date().toISOString(), commit, who, rows};
+      storage((s) => s.setItem(DEPLOY_KEY, JSON.stringify(run)));
+      deployProgress = '';
+      deployView.done(run);
     });
     copy.addEventListener('click', async () => {
       try {
@@ -348,7 +361,8 @@
         status.textContent = 'Kopiëren lukte niet automatisch.';
       }
     });
-    if (last) show(last);
+    if (deployProgress) view.progress(deployProgress);
+    else if (last) show(last);
     return section('Controle na deploy',
       el('p', {text: "Opent alle hoofdpagina's één keer, met jouw aanmelding, en meldt welke niet laadt of een fout toont. Er wordt niets gewijzigd."}),
       actions, status, list);

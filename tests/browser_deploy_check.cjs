@@ -64,7 +64,19 @@ const fs=require('node:fs');
         if(signin.length!==2||signin[1].path!=='/ingest'||!signin[1].text.includes('aanmelden'))
           throw Error('sign-in redirect not reported or run not stopped: '+JSON.stringify(signin));
         results[username].signin=signin;
-        await post('/browser-faults',{'/ingest':'unauth'});
+        // A publisher refused with publisher_role_required is a fault, not a skip.
+        await post('/browser-faults',{'/publish':'role'});
+        const role=(await run(page)).find(r=>r.path==='/publish');
+        if(role.result!=='problem'||!role.text.includes('publisher_role_required'))throw Error('own role refusal hidden: '+JSON.stringify(role));
+        // Closing and reopening Raad during a run keeps one run and shows its result.
+        await post('/browser-faults',{});
+        await page.getByRole('button',{name:"Controleer alle pagina's",exact:true}).click();
+        await page.getByRole('button',{name:'Sluit Raad'}).click();
+        await page.getByRole('button',{name:/Open Raad/}).click();
+        if(!await page.getByRole('button',{name:"Controleer alle pagina's",exact:true}).isDisabled())throw Error('second run possible while running');
+        await page.getByRole('button',{name:'Kopieer uitslag'}).waitFor({timeout:120000});
+        if(await page.locator('[data-deploy-page]').count()!==8)throw Error('reopened panel missed the result');
+                await post('/browser-faults',{'/ingest':'unauth'});
         const unauth=await run(page);
         if(unauth.length!==2||!unauth[1].text.includes('aanmelden'))
           throw Error('local session expiry not reported or run not stopped: '+JSON.stringify(unauth));
