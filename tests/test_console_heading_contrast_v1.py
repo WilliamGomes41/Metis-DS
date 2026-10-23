@@ -35,3 +35,18 @@ def test_work_page_headings_use_readable_water_and_landing_keeps_brand_water() -
     assert re.search(r"h1, h2,\s*\.dictionary-example span\s*\{\s*color:\s*var\(--heading-ink\)", block)
     assert re.search(r"\.home-room h1,\s*\.login-card h1\s*\{\s*color:\s*var\(--water\)", block)
     assert "--water: #45AAC7;" in css
+
+
+@pytest.mark.pure_function
+def test_no_heading_rule_keeps_brand_water_outside_landing_and_login() -> None:
+    # More specific heading rules (Review, Over Metis) keep their own ink or
+    # purple; none of them may fall back to the low-contrast brand Water.
+    css = (ROOT / "assets/brand/console.css").read_text(encoding="utf-8")
+    kept = {".home-room h1, .login-card h1"}
+    for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+        selector = " ".join(selector.split())
+        if not re.search(r"\bh[12]\b", selector) or selector in kept:
+            continue
+        if re.search(r"(?<![-\w])color\s*:\s*var\(--water\)", body):
+            # Only the base rule, which the Readable headings block overrides.
+            assert selector == "h1, h2", selector
