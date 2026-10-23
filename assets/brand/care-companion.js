@@ -234,14 +234,24 @@
       const seconds = ((loaded || performance.now()) - started) / 1000;
       resolve({...page, ...outcome, seconds: seconds.toLocaleString('nl-NL', {minimumFractionDigits: 1, maximumFractionDigits: 1})});
     };
-    const timer = setTimeout(() => finish({ok: false, problem: 'timeout'}), PAGE_TIMEOUT);
+    // Our pages never leave the origin: a cross-origin frame is the Entra sign-in.
+    const signIn = () => {
+      try {
+        const path = frame.contentWindow.location.pathname;
+        return path === '/login' || path.startsWith('/auth/');
+      } catch (_) {
+        return true;
+      }
+    };
+    const timer = setTimeout(() => finish({ok: false, problem: signIn() ? 'login' : 'timeout'}), PAGE_TIMEOUT);
     frame.addEventListener('load', () => {
       loaded = performance.now();
-      let win;
-      try { win = frame.contentWindow; win.addEventListener('error', () => { lateErrors += 1; }); } catch (_) {
-        finish({ok: false, problem: 'unreadable'});
+      if (signIn()) {
+        finish({ok: false, problem: 'login'});
         return;
       }
+      const win = frame.contentWindow;
+      win.addEventListener('error', () => { lateErrors += 1; });
       setTimeout(() => {
         try {
           const doc = frame.contentDocument;
@@ -252,7 +262,7 @@
           // Raad inside the frame counts from its own start; the listener only after load.
           const errors = Math.max(Number(shell && shell.dataset.errors || 0), lateErrors);
           const code = banner ? banner.getAttribute('data-error-code') || '' : '';
-          if (win.location.pathname === '/login') finish({ok: false, problem: 'login'});
+          if (signIn()) finish({ok: false, problem: 'login'});
           // A page this role may not open is not a deploy fault.
           else if (/_role_required$/.test(code)) finish({ok: true, skipped: true, code});
           else if (banner) finish({ok: false, problem: 'error', code, reference: banner.getAttribute('data-request-id') || ''});
@@ -271,7 +281,7 @@
 
   const deployProblem = (row) => ({
     timeout: 'laadt niet binnen ' + PAGE_TIMEOUT / 1000 + ' seconden',
-    login: 'stuurt door naar inloggen; je sessie is mogelijk verlopen',
+    login: 'stuurt door naar aanmelden; je sessie is verlopen',
     error: 'toont een foutmelding' + (row.code ? ' (' + row.code + ')' : '') + (row.reference ? ', referentie ' + row.reference : ''),
     status: 'geeft foutstatus ' + row.status,
     incomplete: 'is niet volledig geladen' + (row.status ? ' (status ' + row.status + ')' : ''),
@@ -283,7 +293,7 @@
     'Deploy-controle Metis-console',
     'Tijd: ' + run.at,
     'Versie: ' + (run.commit || '-'),
-    ...run.rows.map((row) => (row.ok ? 'OK    ' : 'FOUT  ') + row.label + ' (' + row.path + ') — '
+    ...run.rows.map((row) => (row.skipped ? 'NIET  ' : row.ok ? 'OK    ' : 'FOUT  ') + row.label + ' (' + row.path + ') — '
       + (row.skipped ? 'geen toegang met jouw rol' : row.ok ? row.seconds + ' s' : deployProblem(row)))
   ].join('\n');
 
@@ -291,7 +301,9 @@
     const status = el('p', {class: 'care-muted', role: 'status'});
     const list = el('ul', {class: 'care-list'});
     const start = el('button', {type: 'button', class: 'btn-primary', text: "Controleer alle pagina's"});
-    const copy = el('button', {type: 'button', class: 'btn-secondary', text: 'Kopieer uitslag', hidden: ''});
+    const copy = el('button', {type: 'button', class: 'btn-secondary', text: 'Kopieer uitslag'});
+    // Button classes set display, so the hidden attribute alone would not hide it.
+    const actions = el('div', {class: 'care-actions'}, start);
     let last = storage((s) => JSON.parse(s.getItem(DEPLOY_KEY) || 'null'));
     const show = (run) => {
       list.replaceChildren(...run.rows.map((row) => el('li', {'data-deploy-page': row.path,
@@ -302,18 +314,22 @@
       const failed = run.rows.filter((row) => !row.ok).length;
       status.textContent = (failed ? failed + ' van ' + run.rows.length + " pagina's hebben een probleem."
         : "Alle gecontroleerde pagina's laden zonder fouten.") + ' Versie ' + (run.commit || 'onbekend')
-        + ', gecontroleerd ' + run.at.slice(11, 16) + ' (UTC).';
-      copy.hidden = false;
+        + ', gecontroleerd ' + run.at.slice(11, 16) + ' (UTC).'
+        + (run.rows.some((row) => row.problem === 'login') ? ' Gestopt: meld je opnieuw aan en controleer daarna opnieuw.' : '');
+      actions.append(copy);
     };
     start.addEventListener('click', async () => {
       start.disabled = true;
       list.replaceChildren();
-      copy.hidden = true;
+      copy.remove();
       const pages = DEPLOY_PAGES;
       const rows = [];
       for (const [index, page] of pages.entries()) {
         status.textContent = 'Bezig: ' + page.label + ' (' + (index + 1) + ' van ' + pages.length + ')…';
-        rows.push(await probePage(page));
+        const row = await probePage(page);
+        rows.push(row);
+        // Further pages would only start more sign-in flows.
+        if (row.problem === 'login') break;
       }
       last = {at: new Date().toISOString(), commit, rows};
       storage((s) => s.setItem(DEPLOY_KEY, JSON.stringify(last)));
@@ -331,7 +347,7 @@
     if (last) show(last);
     return section('Controle na deploy',
       el('p', {text: "Opent alle hoofdpagina's één keer, met jouw aanmelding, en meldt welke niet laadt of een fout toont. Er wordt niets gewijzigd."}),
-      el('div', {class: 'care-actions'}, start, copy), status, list);
+      actions, status, list);
   };
 
   const render = () => {

@@ -2,7 +2,7 @@
 
 Change class: B
 Promise: Na een deploy opent een aangemelde gebruiker in Raad met één knop alle hoofdpagina's van de console en ziet per pagina of die laadt, of welke foutmelding, foutstatus of scriptfout zij geeft.
-Proof: Een echte Chromium op de PostgreSQL-console meldt alle hoofdpagina's als geslaagd; drie in de fixture aangebrachte fouten (status 500, foutbanner met code en referentie, scriptfout) worden elk bij de juiste pagina genoemd; een door de rol geweigerde pagina heet "niet gecontroleerd"; alle autoriteitsrijen in PostgreSQL zijn vóór en na gelijk (alleen sessies uitgezonderd).
+Proof: Een echte Chromium op de PostgreSQL-console meldt alle hoofdpagina's als geslaagd; drie in de fixture aangebrachte fouten (status 500, foutbanner met code en referentie, scriptfout) worden elk bij de juiste pagina genoemd; een doorsturing naar de Entra-aanmelding stopt de controle bij die pagina; een door de rol geweigerde pagina heet "niet gecontroleerd"; alle autoriteitsrijen in PostgreSQL zijn vóór en na gelijk (alleen sessies uitgezonderd).
 Touches lifecycle invariants: no
 Rewrite risk: none
 
@@ -18,11 +18,11 @@ Opdracht van William op 23 oktober 2026: "Controle na een deploy. Met één knop
 
 | Onderdeel | Wat | Toestand |
 | --- | --- | --- |
-| `assets/brand/care-companion.js` | Sectie "Controle na deploy": laadt de vaste lijst hoofdpagina's (de kamers van `_nav()` plus Inzicht) één voor één in een verborgen frame in de eigen browser, met de eigen aanmelding | Alleen GET-paginaladingen. De laatste uitslag staat in `sessionStorage` van dat tabblad; niets op de server |
+| `assets/brand/care-companion.js` | Sectie "Controle na deploy": laadt de vaste lijst hoofdpagina's (de kamers van `_nav()` plus Inzicht) één voor één in een verborgen frame in de eigen browser, met de eigen aanmelding | Alleen GET-paginaladingen. De laatste uitslag staat in `sessionStorage` van dat tabblad; niets op de server. In de gekopieerde uitslag staat een niet-gecontroleerde pagina als `NIET`, nooit als `OK` |
 | `assets/brand/console.css` | Verborgen frame buiten beeld (onderaan, als aanvulling) | — |
 | `tests/test_browser_deploy_check.py`, fixture en `.cjs` | Echte browserproef; in CI naast de bestaande browserproef | Fixture-fouten bestaan alleen in de testfixture |
 
-Per pagina: aanmeldpagina na doorsturen → sessie verlopen; `data-error-code` → foutmelding met code en referentie, behalve `*_role_required` (niet gecontroleerd: geen toegang met jouw rol); HTTP-status ≥ 400; ontbrekende Raad-kop → niet volledig geladen; scriptfouten; geen antwoord binnen 20 seconden. Daarna 1,5 seconde wachten op late scriptfouten.
+Per pagina: doorsturen naar `/login`, naar de Entra-aanmelding (`/auth/…`) of naar een andere origin → sessie verlopen, en de controle stopt zodat er geen verdere aanmeldstromen starten; `data-error-code` → foutmelding met code en referentie, behalve `*_role_required` (niet gecontroleerd: geen toegang met jouw rol); HTTP-status ≥ 400; ontbrekende Raad-kop → niet volledig geladen; scriptfouten; geen antwoord binnen 20 seconden. Daarna 1,5 seconde wachten op late scriptfouten.
 
 Het frame heeft `sandbox="allow-same-origin allow-scripts"`: geen formulieren, pop-ups, downloads of navigatie van de hoofdpagina. Raad in het frame opent zijn paneel niet en haalt niets op; het telt alleen scriptfouten. Omdat het frame dezelfde origin heeft, is de sandbox een vangnet tegen per ongeluk versturen, geen beveiligingsgrens tussen pagina's van dezelfde console.
 

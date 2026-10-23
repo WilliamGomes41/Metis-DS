@@ -147,3 +147,5 @@ def test_deploy_check_opens_the_navigation_rooms_in_a_frame_that_cannot_submit()
     # Raad inside a probed page only counts errors; it never opens or fetches.
     assert "if (embedded) return;" in source
     assert source.index("if (embedded) return;") < source.index("setOpen(true, false)")
+    # A page refused for the role is never copied as checked.
+    assert "(row.skipped ? 'NIET  ' : row.ok ? 'OK    ' : 'FOUT  ')" in source

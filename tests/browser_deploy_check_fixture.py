@@ -3,7 +3,7 @@ import json
 from hashlib import sha256
 
 from fastapi import Request
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from psycopg import sql
 from psycopg.rows import tuple_row
 
@@ -26,6 +26,9 @@ async def injected_fault(request: Request, call_next):
     fault = faults.get(request.url.path) if request.method == 'GET' else None
     if fault == 'status':
         return PlainTextResponse('Internal Server Error', status_code=500)
+    if fault == 'signin':
+        # Production Entra sends an expired session to the sign-in flow.
+        return RedirectResponse('/auth/microsoft?next=' + request.url.path, status_code=303)
     response = await call_next(request)
     if fault in {'banner', 'script'} and response.headers.get('content-type', '').startswith('text/html'):
         body = b''.join([chunk async for chunk in response.body_iterator]).decode()

@@ -56,6 +56,14 @@ const fs=require('node:fs');
         await page.reload();
         if(await page.locator('[data-deploy-page]').count()!==faulty.length)throw Error('result not retained after reload');
         results[username].faulty=faulty;
+        const copied=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('metis-care-deploy-check')));
+        if(copied.rows.length!==faulty.length)throw Error('stored result incomplete');
+        // An expired session stops the run at the first sign-in redirect.
+        await post('/browser-faults',{'/ingest':'signin'});
+        const signin=await run(page);
+        if(signin.length!==2||signin[1].path!=='/ingest'||!signin[1].text.includes('aanmelden'))
+          throw Error('sign-in redirect not reported or run not stopped: '+JSON.stringify(signin));
+        results[username].signin=signin;
         await post('/browser-faults',{});
       }
       if(await page.locator('iframe.care-probe').count())throw Error('probe frame left behind');
