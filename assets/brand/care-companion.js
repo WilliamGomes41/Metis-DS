@@ -1,4 +1,4 @@
-// Zorgmaatje: read-only page companion. It only reads existing routes, starts the
+// Raad: read-only page companion. It only reads existing routes, starts the
 // existing view check through its own form and composes reports in the browser.
 // All server data is rendered with textContent; nothing is stored server side.
 (() => {
@@ -171,7 +171,7 @@
 
   const viewCheckSection = (documentId, attempt) => {
     const holder = section('Weergavecontrole', el('p', {class: 'care-muted', text: 'Status wordt opgehaald…'}));
-    fetchJson('/zorgmaatje/weergavecontrole?' + new URLSearchParams({document: documentId, attempt}))
+    fetchJson('/raad/weergavecontrole?' + new URLSearchParams({document: documentId, attempt}))
       .then((data) => {
         const children = [el('h3', {text: 'Weergavecontrole'})];
         if (!data.available || !data.form) {

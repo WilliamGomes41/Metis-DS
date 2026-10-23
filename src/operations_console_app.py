@@ -5035,10 +5035,12 @@ def create_console_app(
                     </select>
                     <label for="primary_reviewer">Verantwoordelijke beoordelaar</label>
                     <select id="primary_reviewer" name="primary_reviewer"><option value="">Uploader</option>{options}</select>
+                    <div id="optional-row" hidden>
+                      <label for="named_reviewers">Wie mag aanvullend beoordelen</label>
+                      <select id="named_reviewers" name="named_reviewers" multiple size="6">{options}</select>
+                    </div>
                     <label for="source_status">Vaststellingsstatus volgens de bron</label>
                     <select id="source_status" name="source_status"><option value="unknown">Niet opgegeven</option><option value="established">Vastgesteld</option><option value="draft">Concept</option></select>
-                    <label for="named_reviewers">Aanvullende beoordelaars</label>
-                    <select id="named_reviewers" name="named_reviewers" multiple size="6">{options}</select>
                     <fieldset id="review-configuration">
                       <legend>Reviewkeuze (verplicht)</legend>
                       <label><input type="radio" name="review_option" value="uploader_sole" required> Alleen ik als uploader</label>
@@ -5085,6 +5087,16 @@ def create_console_app(
               function sync() {{ row.hidden = kind.value !== "new_version"; }}
               kind.addEventListener("change", sync);
               sync();
+              var mode = document.getElementById("review_mode");
+              var optional = document.getElementById("optional-row");
+              var optionalSelect = document.getElementById("named_reviewers");
+              function syncOptional() {{
+                if (!mode || !optional || !optionalSelect) return;
+                optional.hidden = mode.value !== "optional";
+                optionalSelect.disabled = optional.hidden;
+              }}
+              if (mode) mode.addEventListener("change", syncOptional);
+              syncOptional();
               var date = document.getElementById("date");
               var out = document.querySelector("[data-date-nl]");
               function showNl() {{
@@ -5137,6 +5149,11 @@ def create_console_app(
             content_type = file.content_type
         if isinstance(named_reviewers, str):
             named_reviewers = [named_reviewers] if named_reviewers.strip() else []
+        # The form names required reviewers once, in the B10 choice. Optional
+        # participants are neither reviewers nor readers there, so only the
+        # optional mode shows its own list.
+        if not named_reviewers and review_mode == "required":
+            named_reviewers = [i for i in review_reviewers if i.strip()]
         # H2-7 (a): het HTTP-uploadformulier MOET een B10-keuze meekrijgen.
         if not review_option.strip():
             raise ConsoleError("review_configuration_required")

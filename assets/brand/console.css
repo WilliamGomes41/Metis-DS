@@ -1804,7 +1804,7 @@ html[data-theme="dark"] .metis-mark-frame { background: #fff; }
   text-decoration: none;
 }
 
-/* Zorgmaatje: page companion on signed-in pages (src/care_companion_v1.py). */
+/* Raad: page companion on signed-in pages (src/care_companion_v1.py). */
 .care-companion {
   position: fixed;
   right: 1rem;
