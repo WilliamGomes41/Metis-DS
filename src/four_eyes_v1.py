@@ -86,10 +86,31 @@ def present_risk_fields(obj: dict[str, Any]) -> list[str]:
 
 
 def requires_four_eyes(obj: dict[str, Any], *, confirmed_type: str | None = None) -> bool:
+    """Policy with two required reviewers, or content that demands two approvals.
+
+    Content-bound four eyes holds regardless of the review policy (besluit William
+    2026-10-23): a policy can raise the requirement, never lower it.
+    """
+    from src.review_policy_v1 import object_policy, required_reviewers
+    policy = object_policy(obj)
+    if policy is not None and len(required_reviewers(policy)) > 1:
+        return True
+    return content_requires_four_eyes(obj, confirmed_type=confirmed_type)
+
+
+def historical_requires_four_eyes(obj: dict[str, Any], *, confirmed_type: str | None = None) -> bool:
+    """The rule before 2026-10-23, where a policy replaced the content check.
+
+    Only for re-verifying releases that were published under that rule.
+    """
     from src.review_policy_v1 import object_policy, required_reviewers
     policy = object_policy(obj)
     if policy is not None:
         return len(required_reviewers(policy)) > 1
+    return content_requires_four_eyes(obj, confirmed_type=confirmed_type)
+
+
+def content_requires_four_eyes(obj: dict[str, Any], *, confirmed_type: str | None = None) -> bool:
     confirmed = confirmed_type or obj.get("confirmed_object_type")
     if confirmed == "exception":
         return True
@@ -264,7 +285,10 @@ def publish_authorization_contract(
     four_eyes_needed = requires_four_eyes(obj) or bool(configured and configured["four_eyes_required"])
     four_ok = four_eyes_satisfied(eligible, object_id=object_id, uploader_id=uploader_id) if four_eyes_needed else True
     if policy is not None:
-        four_ok = not missing
+        # Required reviewers first; content-bound four eyes also needs two
+        # distinct approvers, one of them not the uploader.
+        four_ok = not missing and (not content_requires_four_eyes(obj) or four_eyes_satisfied(
+            eligible, object_id=object_id, uploader_id=uploader_id))
     elif configured is not None:
         four_ok = configured_four_ok
     if four_eyes_needed and not four_ok:

@@ -92,8 +92,9 @@ def _execute(console, *, actor_id: str, snapshot_id: str, command_id: str,
                       "assignments": [{**r, "status": "active"} for r in (old["assignments"] if old else
                           [{"reviewer_id": i, "participation": "required"} for i in ids[1:]])],
                       "review_basis": old,
-                      "minimum_required": len(required_reviewers(old)) if old else
-                          max(len(ids), 2 if any(requires_four_eyes(o) for o in objects) else 1)}
+                      # Content-bound four eyes raises the floor under an existing policy too.
+                      "minimum_required": max(len(required_reviewers(old)) if old else len(ids),
+                                              2 if any(requires_four_eyes(o) for o in objects) else 1)}
         rows = policy["assignments"]
         target = next((r for r in rows if r["reviewer_id"] == reviewer_id), None)
         before = deepcopy(policy)

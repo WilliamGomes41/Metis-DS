@@ -6,6 +6,8 @@ Proof: tests/test_review_configuration_upload_v1.py — `test_upload_form_names_
 Touches lifecycle invariants: no
 Rewrite risk: none
 
+Superseded in part by `review-approvals-v2.md` (Class A, decided 2026-10-23): the form now asks four options plus an explicit four-eyes question and the kernel derives any policy. This PR MUST NOT merge without that change.
+
 Requested by William (2026-10-23 11:51): "best part is no part, dit onderdeel 'Ingest' heeft teveel parts" and "Het is echt dubbel". Follows `820-upload-reviewers-once.md`.
 
 ## Program design (Class B gate)

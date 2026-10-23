@@ -232,7 +232,10 @@ BLOCKER_LABELS = {
     "blocked_pending_immutable_locator": "Duurzame opslag ontbreekt; publicatie blijft geblokkeerd.",
     "object_tuple_required": "Nog niet alle vereiste passagebeoordelingen zijn afgerond. Ga naar Review en rond de open beoordelingen af.",
     "pre_review_processing_incomplete": "Pre-review is nog niet afgerond; verwerk het document eerst opnieuw vanuit Documenten.",
-    "four_eyes_required": "High-risk objecten vereisen four-eyes: een tweede benoemde reviewer op hetzelfde objecttupel.",
+    "four_eyes_required": "High-risk objecten vereisen four-eyes: een tweede benoemde reviewer op hetzelfde objecttupel. Ontbreekt die, wijs dan bij Reviewdeelname een tweede verplichte beoordelaar toe.",
+    "review_four_eyes_choice_required": "Kies bij twee personen of het vierogenprincipe verplicht is.",
+    "review_configuration_four_eyes_needs_two_reviewers": "Het vierogenprincipe kan alleen bij twee aangewezen personen.",
+    "decision_tree_needs_all_reviewers_required": "Een beslisboom met twee personen vraagt nu nog het vierogenprincipe. Kies Ja of één beoordelaar.",
     "review_configuration_source_text_unavailable": "De opgeslagen brontekst is niet te laden; daardoor is niet te controleren of alle passages volgens de reviewkeuze zijn beoordeeld. Publiceren is geblokkeerd. Meld dit bij de beheerder.",
     "review_configuration_uploader_sole_high_risk": "Dit hoog-risico-object vereist een tweede benoemde reviewer. Met de reviewkeuze 'alleen de uploader' is publiceren daarom geblokkeerd.",
     "already_published": "Dit document is al gepubliceerd.",
@@ -5037,13 +5040,20 @@ def create_console_app(
                       <legend>Wie beoordeelt dit document?</legend>
                       <input type="hidden" name="review_mode" value="choice">
                       <label><input type="radio" name="review_option" value="uploader_sole" required> Alleen ik</label>
-                      <label><input type="radio" name="review_option" value="one_other" required> Eén collega</label>
+                      <label><input type="radio" name="review_option" value="one_other" required> Een collega</label>
+                      <label><input type="radio" name="review_option" value="uploader_and_other" required> Een collega en ik</label>
                       <label><input type="radio" name="review_option" value="two_others" required> Twee collega's</label>
                       <label for="review_reviewers">Welke collega's (niet nodig bij Alleen ik)</label>
                       <select id="review_reviewers" name="review_reviewers" multiple size="6">{options}</select>
+                    </fieldset>
+                    <fieldset id="review-four-eyes">
+                      <legend>Is het vierogenprincipe verplicht?</legend>
+                      <label><input type="radio" name="four_eyes" value="no"> Nee, één beoordeling is voldoende</label>
+                      <label><input type="radio" name="four_eyes" value="yes"> Ja, beide personen moeten goedkeuren</label>
+                    </fieldset>
+                    <fieldset>
                       <details id="review-more">
                         <summary>Meer opties</summary>
-                        <label><input type="checkbox" name="four_eyes" value="yes"> Vier ogen: bij Eén collega beoordeel ik zelf ook mee</label>
                         <label for="review_readers">Lezers (lezen mee, keuren niet goed)</label>
                         <select id="review_readers" name="review_readers" multiple size="6">{options}</select>
                       </details>
@@ -5070,6 +5080,19 @@ def create_console_app(
                 status.hidden = false;
                 status.textContent = "Je document wordt veilig opgeslagen. Daarna opent Bronselectie met je document geselecteerd. Bronselectie start pas wanneer je op Starten klikt.";
               }});
+              var fourEyes = document.getElementById("review-four-eyes");
+              function showFourEyes() {{
+                if (!fourEyes || !form.querySelectorAll) return;
+                var picked = form.querySelector("[name=review_option]:checked");
+                var two = !!picked && (picked.value === "uploader_and_other" || picked.value === "two_others");
+                fourEyes.hidden = !two;
+                fourEyes.disabled = !two;
+                fourEyes.querySelectorAll("input").forEach(function (input) {{ input.required = two; }});
+              }}
+              if (form.querySelectorAll) form.querySelectorAll("[name=review_option]").forEach(function (input) {{
+                input.addEventListener("change", showFourEyes);
+              }});
+              showFourEyes();
               window.addEventListener("pageshow", function () {{
                 submitting = false;
                 form.removeAttribute("aria-busy");
@@ -5101,33 +5124,6 @@ def create_console_app(
             </script>
             """
         )
-
-    def _policy_from_choice(choice: dict[str, Any], uploader: str, *, boom: bool) -> dict[str, Any] | None:
-        """Policy for a choice with two required reviewers; None leaves the chosen path.
-
-        Four eyes on one colleague needs the uploader named as primary, and two
-        colleagues map to primary plus one required. A single-reviewer choice
-        gets no policy, because a one-reviewer policy would override the
-        content-driven four-eyes check in ``requires_four_eyes``. A decision
-        tree is the exception: ``receive_source`` only accepts its PDF with a
-        policy, as the old "Eén beoordelaar" mode gave it.
-        """
-        from src.review_policy_v1 import CONTRACT
-        option, others = choice["option"], choice["reviewers"]
-        if boom and option == "uploader_sole" and not others:
-            primary, required = uploader, []
-        elif boom and option == "one_other" and not choice["four_eyes_required"] and len(others) == 1:
-            primary, required = others[0], []
-        elif option == "one_other" and choice["four_eyes_required"] and len(others) == 1:
-            primary, required = uploader, others
-        elif option == "two_others" and len(others) == 2:
-            # Two colleagues already give four eyes; the mapped policy says so too.
-            choice["four_eyes_required"] = False
-            primary, required = others[0], others[1:]
-        else:
-            return None
-        return {"contract": CONTRACT, "revision": 1, "primary": primary,
-                "assignments": [{"reviewer_id": i, "participation": "required"} for i in required]}
 
     @app.post("/ingest", response_class=HTMLResponse)
     async def ingest_post(
@@ -5175,8 +5171,12 @@ def create_console_app(
                          "readers": [i for i in review_readers if i.strip()]}
         policy = None
         if review_mode == "choice":
-            policy = _policy_from_choice(review_choice, account["account_id"],
-                                         boom=review_path_for_klasse(class_) == "boom")
+            # v2: wie beoordeelt en of vier ogen verplicht is zijn twee keuzes; de kernel
+            # leidt de goedkeuringseis af. Bij twee personen MOET vier ogen expliciet gekozen zijn.
+            from src.review_configuration_v1 import CONTRACT_V2, FOUR_EYES_CHOICE_V2
+            if review_choice["option"] in FOUR_EYES_CHOICE_V2 and four_eyes not in {"yes", "no"}:
+                raise ConsoleError("review_four_eyes_choice_required")
+            review_choice["contract"] = CONTRACT_V2
         elif review_mode != "legacy":
             if review_mode not in {"single", "optional", "required"}:
                 raise ConsoleError("invalid_review_policy")

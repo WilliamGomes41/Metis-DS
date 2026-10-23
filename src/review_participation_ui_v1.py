@@ -70,6 +70,7 @@ def roster(console, env, names=None):
 
 
 OPTION_LABELS = {'uploader_sole': 'alleen de uploader', 'one_other': 'één andere reviewer',
+                 'uploader_and_other': 'een collega en de uploader',
                  'two_others': 'twee andere reviewers'}
 SOURCE_LABELS = {'chosen': 'gekozen bij uploaden', 'legacy_default': 'standaard voor bestaande regels (legacy_default)',
                  'migrated_policy': 'afgeleid van de reviewdeelname (migrated_policy)'}
