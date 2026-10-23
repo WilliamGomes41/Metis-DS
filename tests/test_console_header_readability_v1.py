@@ -1,4 +1,9 @@
-"""Shared console header: one line on wide screens, readable name and roles."""
+"""Shared console header: one line on wide screens, readable name and roles.
+
+Release-control evidence: presentation-only change to the logged-in header
+(scope/belofte, slop); routes and login are exercised unchanged (toegang);
+these executable regressions are the release proof (releasebewijs).
+"""
 from __future__ import annotations
 
 import re
@@ -7,6 +12,13 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 import pytest
 
+
+pytestmark = [
+    pytest.mark.release_control_scope_belofte,
+    pytest.mark.release_control_toegang,
+    pytest.mark.release_control_slop,
+    pytest.mark.release_control_releasebewijs,
+]
 
 ROOT = Path(__file__).resolve().parents[1]
 
