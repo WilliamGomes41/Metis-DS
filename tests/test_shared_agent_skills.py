@@ -75,6 +75,17 @@ class SharedSkillSyncTests(unittest.TestCase):
         result = self.run_sync("--check")
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_opt_in_upstream_skill_stays_opt_in_for_claude(self):
+        opt_in = b'---\nname: fixture\ndescription: "Verify a fixture claim."\ndisable-model-invocation: true\n---\n\nBody.\n'
+        (self.source / "SKILL.md").write_bytes(opt_in)
+        self.commit()
+        self.lock["commit"] = self.git("rev-parse", "HEAD")
+        self.lock["files"][0]["sha256"] = hashlib.sha256(opt_in).hexdigest()
+        self.write_lock()
+        self.install()
+        adapter = (self.checkout / ".claude/skills/fixture/SKILL.md").read_text()
+        self.assertIn("\ndisable-model-invocation: true\n---", adapter)
+
     def test_changed_upstream_worktree_and_head_do_not_upgrade_the_pin(self):
         (self.source / "SKILL.md").write_bytes(self.original + b"Unreviewed change\n")
         self.commit()

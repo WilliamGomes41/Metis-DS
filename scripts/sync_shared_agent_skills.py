@@ -28,6 +28,9 @@ def claude_adapter(relative: str, content: bytes) -> bytes:
               if line.startswith(("name:", "description:"))]
     if len(fields) != 2:
         raise ValueError(f"Expected name and description in {relative}")
+    # Keep upstream opt-in skills unloaded until a user names them.
+    fields += [line for line in header.splitlines()
+               if line.strip() == "disable-model-invocation: true"]
     text = "---\n" + "\n".join(fields) + "\n---\n\n"
     text += "Read repository-root `AGENTS.md` and `docs/agents/shared-skills.md`.\n"
     text += f"Then follow the [shared skill](../../../{relative}).\n"

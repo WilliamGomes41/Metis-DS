@@ -26,8 +26,8 @@ existing instruments (`scripts/trace_recorded_formation.py`,
 It is pinned without `scripts/`: where `show-me-your-work` names
 `scripts/log.sh`, append the row with `printf` and apply the same cell cleaning
 it describes. Sibling skills that these files link to, such as
-`benchmark-checklist`, `unslop` or `arena`, are not included. Upstream
-`disable-model-invocation` metadata is not repeated in the Claude adapters.
+`benchmark-checklist`, `unslop` or `arena`, are not included. The Claude adapters keep upstream
+`disable-model-invocation: true`, so these skills load only when named.
 Model names and `pstack-models.mdc` routing in `how` and `why` do not apply;
 use the session's own models, and spawn subagents only where the user or host
 instructions allow it.
@@ -54,7 +54,7 @@ or autonomous shipping loops are included in this selection.
 | Claude Code | Root `CLAUDE.md` and `.claude/skills/` adapters linking to canonical skills |
 | Other agents with repository file access | Read `AGENTS.md`, this index and the selected `SKILL.md` explicitly |
 
-The adapters repeat only discovery metadata and a link, not workflow bodies.
+The adapters repeat only discovery metadata (including opt-in invocation) and a link, not workflow bodies.
 They are plain files, so Git symlink support is unnecessary. Host settings,
 versions and trust policies can still affect loading. This change makes the
 same instructions available; it does not prove every host or model follows
