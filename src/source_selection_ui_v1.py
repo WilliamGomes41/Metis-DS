@@ -25,6 +25,23 @@ def _range(values):
     return f"ongeveer {_minutes(values[0])}–{_minutes(values[1])} (onzeker)"
 
 
+def _size(count):
+    """File size in Dutch notation: bytes below 1 kB, then kB or MB with one decimal."""
+    if count < 1000:
+        return f"{count}\u00a0bytes"
+    value, unit = (count / 1_000_000, "MB") if count >= 1_000_000 else (count / 1000, "kB")
+    return f"{value:.1f}\u00a0{unit}".replace(".", ",")
+
+
+def _estimate(estimate):
+    """One sentence: the range, or that there is none yet, then its basis."""
+    if estimate["range_seconds"] is None:
+        return (f'Geschatte verwerkingstijd: nog geen schatting. '
+                f'{estimate["basis"].rstrip(".")} ({estimate["sample_count"]}).')
+    return (f'Geschatte verwerkingstijd: {_range(estimate["range_seconds"])}. '
+            f'{estimate["basis"]} Op basis van {estimate["sample_count"]} metingen.')
+
+
 def _blockage_html(report, esc):
     stages = {'source_formation':'Bronverwerking', 'publication_conditions':'Publicatievoorwaarden',
               'identity_verification':'Eerst controleren of het bewijs bij hetzelfde document hoort',
@@ -158,23 +175,24 @@ def install(app, console, require, page, nav, esc):
                            f'Volledige bronverwerking: {"ja" if result["formation_complete"] else "nog niet bevestigd"}.</p>')
             diagnosis_link = f'<a class="btn-secondary" href="/inzicht/document?{esc(urlencode({"document": sid}))}">Bekijk diagnose in Inzicht</a>'
             review = f'<a class="btn-primary" href="/review?document={esc(sid)}">Naar Review</a>' if result['review_available'] else ''
-            extent = f'{result["bytes"]:,} bytes' if result['bytes'] is not None else 'Bestandsgrootte onbekend'
+            extent = _size(result["bytes"]) if result['bytes'] is not None else 'Bestandsgrootte onbekend'
             records = (envelope.get('quality_processing_runs') or [])
             if records:
                 extent += f' · {len(records[-1].get("source_fragments", []))} opgeslagen bronfragmenten'
             cards.append(f'<article class="doc-card" id="source-{esc(sid)}" data-source-document="{esc(sid)}" data-selected="{str(sid == selected).lower()}">'
-                         f'<h2>{esc(result["title"])}</h2><p>{esc(result["filename"])} · Bronversie {esc(result["version"])} · {esc(extent)}</p>'
+                         f'<h2>{esc(result["title"])}</h2><p class="source-meta">{esc(result["filename"])} · Bronversie {esc(result["version"])} · {esc(extent)}</p>'
                          f'<p role="status">Status: {esc(result["state"])}</p>'
-                         f'<p>Geschatte verwerkingstijd: {esc(_range(result["estimate"]["range_seconds"]))} '
-                         f'{esc(result["estimate"]["basis"])} ({result["estimate"]["sample_count"]} metingen)</p>'
-                         f'{progress}{summary}{action}{review}{diagnosis_link}</article>')
+                         f'<p class="source-estimate">{esc(_estimate(result["estimate"]))}</p>'
+                         f'{progress}{summary}<div class="source-actions">{action}{review}{diagnosis_link}</div></article>')
         notice = '<div class="banner ok">Document veilig ontvangen. Start bronselectie wanneer je wilt.</div>' if request.query_params.get('received') == 'yes' else ''
         # Only a selected running document is polled. Every refresh reads the
         # durable authority; no browser state can start another attempt.
         script = '<script>setTimeout(function(){ window.location.reload(); }, 5000);</script>' if running_selected else ''
         script += '<script>document.querySelectorAll("form[action=\\"/source-selection/start\\"]").forEach(function(form){form.addEventListener("submit",function(event){if(form.dataset.submitting){event.preventDefault();return;}form.dataset.submitting="yes";form.querySelector("button").disabled=true;});});</script>'
         return page(nav(actor, 'selection') + '<section class="room" id="source-selection"><h1>Bronselectie</h1>' + notice
-                    + '<form method="get"><label>Document<select name="document">' + options + '</select></label><button>Document selecteren</button></form>'
+                    + '<form method="get" class="source-picker"><label for="source-document">Document</label>'
+                    + '<div class="source-picker-row"><select id="source-document" name="document">' + options + '</select>'
+                    + '<button class="btn-secondary" type="submit">Document selecteren</button></div></form>'
                     + ''.join(sorted(cards, key=lambda card: 'data-selected="true"' not in card)) + '</section>' + script)
 
     @app.get('/inzicht/document/verwerkingsspoor')
