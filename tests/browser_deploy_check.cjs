@@ -64,7 +64,20 @@ const fs=require('node:fs');
         if(signin.length!==2||signin[1].path!=='/ingest'||!signin[1].text.includes('aanmelden'))
           throw Error('sign-in redirect not reported or run not stopped: '+JSON.stringify(signin));
         results[username].signin=signin;
+        await post('/browser-faults',{'/ingest':'unauth'});
+        const unauth=await run(page);
+        if(unauth.length!==2||!unauth[1].text.includes('aanmelden'))
+          throw Error('local session expiry not reported or run not stopped: '+JSON.stringify(unauth));
         await post('/browser-faults',{});
+        // Another account in the same tab never sees this account's stored run.
+        await page.getByRole('button',{name:'Uitloggen'}).click();
+        await page.goto(base+'/login');
+        await page.locator('[name=username]').fill(manifest.reviewer);
+        await page.locator('[name=password]').fill(manifest.password);
+        await Promise.all([page.waitForURL(base+'/'),page.locator('button[type=submit]').click()]);
+        if(await page.locator('[data-care-body]').isHidden())await page.getByRole('button',{name:/Open Raad/}).click();
+        await page.getByRole('heading',{name:'Controle na deploy'}).waitFor();
+        if(await page.locator('[data-deploy-page]').count())throw Error('previous account result shown');
       }
       if(await page.locator('iframe.care-probe').count())throw Error('probe frame left behind');
       await page.close();

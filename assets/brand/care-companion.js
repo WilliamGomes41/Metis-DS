@@ -262,7 +262,8 @@
           // Raad inside the frame counts from its own start; the listener only after load.
           const errors = Math.max(Number(shell && shell.dataset.errors || 0), lateErrors);
           const code = banner ? banner.getAttribute('data-error-code') || '' : '';
-          if (signIn()) finish({ok: false, problem: 'login'});
+          // Local sign-in answers protected pages with not_authenticated, and / with a login form.
+          if (signIn() || code === 'not_authenticated' || doc.querySelector('input[type=password]')) finish({ok: false, problem: 'login'});
           // A page this role may not open is not a deploy fault.
           else if (/_role_required$/.test(code)) finish({ok: true, skipped: true, code});
           else if (banner) finish({ok: false, problem: 'error', code, reference: banner.getAttribute('data-request-id') || ''});
@@ -304,7 +305,10 @@
     const copy = el('button', {type: 'button', class: 'btn-secondary', text: 'Kopieer uitslag'});
     // Button classes set display, so the hidden attribute alone would not hide it.
     const actions = el('div', {class: 'care-actions'}, start);
+    // sessionStorage survives a sign-out in this tab: only show a run of the same account and roles.
+    const who = (document.querySelector('header.topbar .who') || {}).textContent || '';
     let last = storage((s) => JSON.parse(s.getItem(DEPLOY_KEY) || 'null'));
+    if (last && last.who !== who) last = null;
     const show = (run) => {
       list.replaceChildren(...run.rows.map((row) => el('li', {'data-deploy-page': row.path,
         'data-deploy-result': row.skipped ? 'skipped' : row.ok ? 'ok' : 'problem'},
@@ -331,7 +335,7 @@
         // Further pages would only start more sign-in flows.
         if (row.problem === 'login') break;
       }
-      last = {at: new Date().toISOString(), commit, rows};
+      last = {at: new Date().toISOString(), commit, who, rows};
       storage((s) => s.setItem(DEPLOY_KEY, JSON.stringify(last)));
       show(last);
       start.disabled = false;
