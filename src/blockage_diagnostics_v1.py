@@ -34,6 +34,7 @@ EXPLANATIONS = {
     'semantic_span_hidden_gap': ('Niet-verantwoorde onderbreking', 'Het bronbereik moet voldoen aan het geldende aaneengeslotenheidscontract.'),
     'semantic_dependency_rejected': ('Afhankelijk voorstel afgewezen', 'De benodigde afhankelijkheid moet door de bestaande controle worden geaccepteerd.'),
     'docling_page_text_unverified': ('Pagina zonder verwerkbare brontekst', 'Elke geselecteerde pagina moet verwerkbare brontekst of een herkende inhoudsopgave opleveren; lege en gescande pagina\u2019s blokkeren. De verwerkingsdiagnose noemt de paginanummers.'),
+    'docling_pages_unresolved': ('Pagina’s met onopgeloste inhoud', 'Elke geselecteerde pagina moet controleerbare brontekst opleveren, aantoonbaar leeg zijn of door een onderzoeker zijn verantwoord. De documentdiagnose noemt per pagina het probleem en de herstelactie.'),
     'source_task_budget_exhausted': ('Taakbudget bereikt', 'Verwerking moet binnen het geldende taakbudget blijven; de uitvoerhistorie bepaalt welk werk nog openstaat.'),
     'source_formation_incomplete': ('Bronverwerking nog onvolledig', 'Alle vereiste bronverwerking moet volgens de bestaande controles zijn verantwoord.'),
     'review_work_incomplete': ('Review nog niet afgerond', 'De bestaande reviewverplichtingen moeten zijn afgerond.'),

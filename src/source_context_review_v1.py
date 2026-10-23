@@ -362,7 +362,9 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
         from src.admission_gate_v1 import apply_admission_gate
         path, data = console._verified_source_bytes(envelope)
         extracted = console._extract(envelope["content_kind"], path,
-                                     document_id=envelope["document_id"], source_id=envelope["source_id"])
+                                     document_id=envelope["document_id"], source_id=envelope["source_id"],
+                                     assess_pages=envelope["class"] != "beslisboom",
+                                     accounted_pages=envelope.get("source_page_accountings"))
         if not verify_literal_source(source, extracted, envelope["sha256"]):
             raise ConsoleError("source_context_evidence_invalid")
         for oid, updated in changed.items():

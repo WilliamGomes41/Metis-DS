@@ -1112,6 +1112,8 @@ def bind_pre_review_semantic_processing(
                 raise ConsoleError("invalid_boom_freeze") from exc
         else:
             fragments = console._extract(kind, path, document_id=document_id, source_id=source_id,
+                                         assess_pages=True,
+                                         accounted_pages=(formation_context or {}).get("page_accountings"),
                                          **extraction_kwargs)
         if kind == "boom":
             # Outside the decision-tree class an export is read as source text:

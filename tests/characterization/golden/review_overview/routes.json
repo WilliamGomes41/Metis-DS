@@ -157,6 +157,12 @@
       ]
     ],
     [
+      "/inzicht/document/pagina-verantwoorden",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/inzicht/document/passages",
       [
         "GET"

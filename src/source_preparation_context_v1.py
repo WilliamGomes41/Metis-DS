@@ -47,6 +47,7 @@ class FormationContext(TypedDict):
     attempt_deadline: float | None
     diagnostic_checkpoint: Callable | None
     processing_reference: str | None
+    page_accountings: NotRequired[list]
     retained_fragments: NotRequired[list]
     extraction_checkpoint: NotRequired[Callable[[list], None]]
 
@@ -136,6 +137,8 @@ def build_formation_context(console, *, envelope, actor_id, expected_revision,
         'attempt_deadline': deadline,
         'diagnostic_checkpoint': console._diagnostic_writer(source.snapshot_id, attempt['attempt_id'] if attempt else None),
         'processing_reference': attempt.get('processing_reference') if attempt else None,
+        # Recorded accountings for unresolved pages; extraction re-checks each binding.
+        'page_accountings': deepcopy(envelope.get('source_page_accountings') or []),
     }
     # Dedicated decision-tree construction retains its existing extraction path.
     if source.content_kind not in {'html', 'pdf'} or envelope['class'] == 'beslisboom':

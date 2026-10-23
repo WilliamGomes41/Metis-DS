@@ -56,7 +56,7 @@ def test_true_pipeline_preserves_text_hash_and_original_geometry(tmp_path):
     assert TEXT in " ".join(r["clean_text"] for r in legacy(source, document_id="doc", source_id="src"))
 
 
-def test_real_mixed_digital_and_scanned_pdf_blocks_before_activation(tmp_path, monkeypatch, *, production_console):
+def test_real_mixed_digital_and_scanned_pdf_names_the_scanned_page_before_activation(tmp_path, monkeypatch, *, production_console):
     source = tmp_path / "mixed.pdf"
     with fitz.open() as scan:
         scan.new_page().insert_text((72, 140), "Deze tekst bestaat alleen als afbeelding.")
@@ -77,11 +77,23 @@ def test_real_mixed_digital_and_scanned_pdf_blocks_before_activation(tmp_path, m
         live_url="", class_="richtlijn", family="test", named_reviewers=[reviewer["account_id"]])
     sid = receipt["snapshot_id"]
     restarted = create()
+    # A scanned page is never treated as empty: formation waits, and the
+    # failure names page and reason, never text.
     assert restarted.processing_status(sid)["state"] == "failed"
-    assert restarted._envelope(sid)["processing_attempts"][-1]["error_code"] == "docling_page_text_unverified"
+    attempt = restarted._envelope(sid)["processing_attempts"][-1]
+    assert attempt["error_code"] == "docling_pages_unresolved"
+    # Docling may report the scan as a picture or report nothing; the PDF's own
+    # image keeps it unresolved either way.
+    [finding] = attempt["diagnostic"]["page_findings"]
+    assert finding["page"] == 2
+    assert finding["reasons"] in (["docling_page_non_text_content"], ["docling_page_text_unverified"])
     assert not restarted.snapshot_objects(sid)
     assert stored_fragments(restarted._envelope(sid)) is None
     assert restarted._verified_source_bytes(restarted._envelope(sid))[1] == source.read_bytes()
+    # The strict extraction that decision trees use still blocks with its own code.
+    with pytest.raises(DoclingError, match="page_text_unverified") as raised:
+        extract(source, document_id="doc", source_id="src")
+    assert raised.value.pages == [2]
 
 
 def test_real_structure_columns_labels_table_and_cross_page(tmp_path):

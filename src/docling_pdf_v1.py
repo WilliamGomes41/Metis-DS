@@ -146,7 +146,7 @@ def supervise(command: list[str], *, pass_fds: tuple[int, ...], env: dict,
 
 
 def extract(pdf: Path, *, document_id: str, source_id: str, pages=None,
-            deadline: float | None = None):
+            deadline: float | None = None, assess_pages: bool = False, accounted_pages=None):
     if sys.platform != "linux":
         raise DoclingError("docling_requires_linux")
     python = os.environ.get("METIS_DOCLING_PYTHON", "")
@@ -206,4 +206,25 @@ def extract(pdf: Path, *, document_id: str, source_id: str, pages=None,
             raise DoclingError(code)
         payload["result"]["metrics"].update(metrics)
         return translate(payload["result"], document_id=document_id, source_id=source_id,
-                         source_sha256=digest.hexdigest(), pages=pages)
+                         source_sha256=digest.hexdigest(), pages=pages, assess_pages=assess_pages,
+                         page_facts=(lambda page: page_fact(pdf, page, deadline)) if assess_pages else None,
+                         accounted_pages=accounted_pages)
+
+
+def page_fact(pdf: Path, page: int, deadline: float | None = None) -> dict[str, int]:
+    """Counts from the PDF itself, so an empty page is proven, not assumed.
+
+    Read one page at a time within the attempt deadline. Images are counted
+    with ``get_image_info``, which also lists inline images.
+    """
+    import fitz
+    if deadline is not None and time.monotonic() >= deadline:
+        raise DoclingError("docling_timeout")
+    try:
+        with fitz.open(pdf) as document:
+            found = document[page - 1]
+            return {"text_chars": len(found.get_text().strip()), "images": len(found.get_image_info()),
+                    "drawings": len(found.get_drawings())}
+    except Exception as error:
+        raise DoclingError("docling_page_facts_unavailable") from error
+
