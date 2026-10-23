@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.g2_source_store import load_g2_store
 from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV, load_llm_provider_config
 from src.passage_formation_policy_v1 import PassageFormationPolicyError, resolve_passage_formation_strategy
 from src.source_bound_fields_v2 import MODE as DEFAULT_FORMATION_MODE
@@ -62,8 +63,10 @@ def view_check_findings(settings: dict[str, str]) -> list[str]:
             or parsed.path or parsed.query or parsed.fragment):
         findings.append("view_check_origin_invalid")
     container = settings.get(VIEW_CHECK_CONTAINER_ENV, "")
+    # Same resolution as effective_g2_store(): the app setting, else the file baseline.
+    source_container = settings.get(SOURCE_CONTAINER_ENV, "").strip() or str(load_g2_store().get("container") or "")
     if (not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]", container)
-            or container == settings.get(SOURCE_CONTAINER_ENV, "").strip()):
+            or container == source_container):
         findings.append("view_check_evidence_container_invalid")
     return findings
 

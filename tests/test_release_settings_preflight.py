@@ -86,6 +86,9 @@ def test_view_check_off_needs_no_view_check_settings():
     ({"METIS_VIEW_CHECK_ORIGIN": "https://metis.example"}, ["view_check_evidence_container_invalid"]),
     ({"METIS_VIEW_CHECK_ORIGIN": "https://metis.example", "METIS_VIEW_CHECK_EVIDENCE_CONTAINER": "canonical-sources",
       "G2_BLOB_CONTAINER": "canonical-sources"}, ["view_check_evidence_container_invalid"]),
+    # Without G2_BLOB_CONTAINER the runtime takes the source container from the file baseline.
+    ({"METIS_VIEW_CHECK_ORIGIN": "https://metis.example", "METIS_VIEW_CHECK_EVIDENCE_CONTAINER": "canonical-sources"},
+     ["view_check_evidence_container_invalid"]),
 ])
 def test_enabled_view_check_settings_match_its_startup_refusals(change, findings):
     code, result = run_preflight({**READY, **change})

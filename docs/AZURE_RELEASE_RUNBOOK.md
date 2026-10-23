@@ -54,4 +54,13 @@ Daarna in de console: aanmelden, Documenten openen, en één bekend document in 
 
 ## Rollback
 
-Wissel terug naar de referentie uit stap 1.1. De PostgreSQL-toestand blijft geldig: 019 is alleen-toevoegen en oudere code negeert de tabel. Een gewijzigde `METIS_PASSAGE_FORMATION_MODE` mag na een rollback blijven staan; een semantische modus wordt door oudere code ook gelezen.
+Wissel terug naar de referentie uit stap 1.1. Die heeft de vorm `DOCKER|<login-server>/<repo>@sha256:…`; `--container-image-name` neemt alleen het deel na `DOCKER|`. Met de waarde uit stap 1.1 in `rollback`:
+
+```bash
+rollback='<volledige waarde uit stap 1.1, inclusief DOCKER|>'
+az webapp config container set -g <rg> -n <app> \
+  --container-image-name "${rollback#DOCKER|}"
+python scripts/verify_console_deployment.py --health-url <url>/health --expected-commit <vorige sha>
+```
+
+De PostgreSQL-toestand blijft geldig: 019 is alleen-toevoegen en oudere code negeert de tabel. Een gewijzigde `METIS_PASSAGE_FORMATION_MODE` mag na een rollback blijven staan; een semantische modus wordt door oudere code ook gelezen.
