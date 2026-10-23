@@ -1967,5 +1967,17 @@ html[data-theme="dark"] .theme-icon-sun { display: block; }
   .who { text-align: left; }
 }
 
+/* Readable headings (docs/change-contracts/console-heading-contrast.md).
+   Work-page headings use a darker shade of Water (#237f99, 4.6:1 on white).
+   The landing page and the login card keep the brand Water. */
+:root { --heading-ink: #237f99; }
+html[data-theme="dark"] { --heading-ink: var(--water); }
+
+h1, h2,
+.dictionary-example span { color: var(--heading-ink); }
+
+.home-room h1,
+.login-card h1 { color: var(--water); }
+
 /* Raad deploy-controle: verborgen frame per gecontroleerde pagina. */
 .care-probe { position: absolute; left: -10000px; top: 0; width: 1280px; height: 800px; border: 0; visibility: hidden; }
