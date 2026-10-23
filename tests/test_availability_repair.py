@@ -137,6 +137,9 @@ def test_a26_short_selection_request_health_reads_writer_refresh_duplicate(backe
             progress=client.get('/source-selection',params={'document':sid})
             assert 'Fase: Bronpassages selecteren' in progress.text
             assert 'Verstreken:' in progress.text and 'Geschat resterend:' in progress.text
+            # The selected running document is already polled: no self-link that only reloads.
+            assert 'Voortgang bekijken' not in progress.text
+            assert 'ververst elke 5 seconden' in progress.text and 'window.location.reload()' in progress.text
             for path in ('/health','/source-selection','/ingest','/'):
                 assert pool.submit(client.get,path).result(timeout=1).status_code==200
             assert client.post('/source-selection/start',data={'document':sid,'command_id':'start','expected_revision':rev},follow_redirects=False).status_code==303
