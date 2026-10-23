@@ -219,9 +219,10 @@
     ['Publicatie', '/publish'], ['Documenten', '/tree'], ['Instellingen', '/settings'], ['Inzicht', '/inzicht']
   ].map(([label, path]) => ({label, path}));
 
-  // The header shows "name · rollen: a, b"; a refusal for a role the account has is a fault.
-  const accountRoles = () => ((document.querySelector('header.topbar .who') || {}).textContent || '')
-    .split('rollen:')[1]?.split(',').map((role) => role.trim()).filter(Boolean) || [];
+  // The header lists the roles after "rollen:" (separated by "·" or ","); a refusal
+  // for a role the account has is a fault.
+  const accountRoles = () => (((document.querySelector('header.topbar .who') || {}).textContent || '')
+    .split('rollen:')[1] || '').split(/[,·]/).map((role) => role.trim()).filter(Boolean);
 
   const probePage = (page) => new Promise((resolve) => {
     const frame = el('iframe', {class: 'care-probe', sandbox: 'allow-same-origin allow-scripts',
