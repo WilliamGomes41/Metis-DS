@@ -5165,10 +5165,6 @@ def create_console_app(
         policy = None
         if review_mode == "choice":
             policy = _policy_from_choice(review_choice, account["account_id"])
-            if policy is None and review_choice["option"] == "one_other" and "reviewer" in account["roles"]:
-                # Name the uploader too: if the content later demands four eyes,
-                # the uploader is the second reviewer one_other counts.
-                named_reviewers = [*review_choice["reviewers"], account["account_id"]]
         elif review_mode != "legacy":
             if review_mode not in {"single", "optional", "required"}:
                 raise ConsoleError("invalid_review_policy")

@@ -229,8 +229,7 @@ def test_http_form_choice_sets_matching_policy(system, option, four_eyes, picked
     policy = envelope.get("review_policy")
     if primary is None:
         assert policy is None
-        # The uploader is named too, so content-driven four eyes stays reachable.
-        assert set(envelope["named_reviewers"]) == {*(ids[k] for k in picked), ids["uploader"]}
+        assert set(envelope["named_reviewers"]) == ({ids[k] for k in picked} or {ids["uploader"]})
     else:
         assert policy["primary"] == ids[primary]
         assert [a["reviewer_id"] for a in policy["assignments"]] == [ids[k] for k in required]
