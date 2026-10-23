@@ -28,7 +28,7 @@ def navigation(actor, document=None):
     links = '<a href="/review?work=all">Terug naar reviewoverzicht</a>'
     if document:
         links += f' · <a href="/review/trajectory?{esc(urlencode({"document": document}))}">Terug naar traject</a>'
-    return _nav(actor, 'review') + '<nav aria-label="Reviewnavigatie">'+links+'</nav>'
+    return _nav(actor, 'review') + '<nav class="review-backlinks" aria-label="Reviewnavigatie">'+links+'</nav>'
 
 
 def participation_choices(console, env):
@@ -106,7 +106,7 @@ def _roster(env, names):
 def filters(console, *, work, theme, q='', rows=None):
     rows = console.list_envelopes() if rows is None else rows
     themes = sorted({str(e.get('family') or '') for e in rows} - {''})
-    return ('<form method="get" action="/review"><label>Werk<select name="work">' +
+    return ('<form method="get" action="/review" class="review-filters"><label>Werk<select name="work">' +
             options([('mine', 'Mijn werk'), ('all', 'Alle reviewtrajecten')], work) +
             '</select></label><label>Thema<select name="theme">' +
             options([('', 'Alle thema’s'), *[(t, t) for t in themes]], theme) +
@@ -137,8 +137,8 @@ def overview(console, account, *, theme='', q='', page=1):
         action = f'<a href="/review?{esc(urlencode({"document":sid}))}">Mijn reviewwerk</a>' if assigned else '<span>Alleen lezen</span>'
         cards.append('<article class="doc-card">'+ui._document_summary(env)+roster(console,env,names)+action+
                      f' · <a href="/review/trajectory?{esc(urlencode({"document":sid}))}">Traject bekijken</a></article>')
-    return ui._page(ui._nav(account, 'review')+'<h1>Review</h1>'+filters(console,work='all',theme=theme,q=q)+pagination+
-                    ''.join(cards)+('' if cards else '<p>Geen reviewtrajecten gevonden.</p>'), title='Review — Metis')
+    return ui._page(ui._nav(account, 'review')+'<section class="room review-room"><h1>Review</h1>'+filters(console,work='all',theme=theme,q=q)+pagination+
+                    '<div class="doc-list">'+''.join(cards)+('' if cards else '<p class="review-empty">Geen reviewtrajecten gevonden.</p>')+'</div></section>', title='Review — Metis')
 
 
 def install_routes(app, console, require, page):
@@ -171,9 +171,15 @@ def install_routes(app, console, require, page):
         bindings = console.object_review_bindings(document)
         decisions = ''.join('<li>'+esc(f'{names.get(b.get("reviewer_id"), b.get("reviewer") or "Voormalige reviewer")}: {DECISION_LABELS.get(b.get("decision"), "Beoordeling vastgelegd")} — {numbers.get(b.get("object_id"), "Eerdere passage")} (versie {b.get("object_version")}) — '+('actueel' if b.get('valid') else 'historisch'))+'</li>' for b in bindings)
         summary = '; '.join(f'{count} {STATUS_LABELS.get(status, "status onbekend")}' for status,count in counts.items()) or 'Nog geen passages beschikbaar.'
-        return page(navigation(actor)+'<h1>'+esc(env['title'])+'</h1><p>Trajectoverzicht — alleen lezen. Bekijken geldt niet als beoordeling.</p>'+roster(console,env,names)+
-                    '<p>'+esc(summary)+'</p>'+manage+'<h2>Passages</h2><ul>'+content+'</ul><h2>Routes</h2><ul>'+routes+
-                    '</ul><h2>Beoordelingen</h2><ul>'+decisions+'</ul><h2>Deelnamehistorie</h2><ul>'+''.join(history)+'</ul>')
+        def part(title, items):
+            body = '<ul>'+items+'</ul>' if items else '<p class="review-empty">Nog niets vastgelegd.</p>'
+            return '<section class="review-trajectory-part"><h2>'+title+'</h2>'+body+'</section>'
+        manage = manage.replace('<a href=', '<a class="btn-secondary" href=', 1)
+        return page(navigation(actor)+'<section class="room review-room review-trajectory"><h1>'+esc(env['title'])+'</h1>'
+                    '<p class="lead">Trajectoverzicht — alleen lezen. Bekijken geldt niet als beoordeling.</p>'
+                    '<div class="doc-card review-about">'+roster(console,env,names)+'<p>'+esc(summary)+'</p>'+manage+'</div>'
+                    +part('Passages', content)+part('Routes', routes)+part('Beoordelingen', decisions)
+                    +part('Deelnamehistorie', ''.join(history))+'</section>')
 
     @app.get('/review/participants', response_class=HTMLResponse)
     def manage(request: Request, document: str):

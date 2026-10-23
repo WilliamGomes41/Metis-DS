@@ -2338,3 +2338,185 @@ h1, h2,
   #documents .document-row > .banner { margin: 16px 16px 0; }
   #documents .document-danger { margin: 0 16px; padding: 8px 0 12px; }
 }
+
+/* Review room: space and hierarchy (docs/change-contracts/console-review-layout.md).
+   impeccable critique 2026-10-23: one spacing scale, tight inside a group and generous
+   between groups; a compact document bar; the passage as reading text; Rood only for
+   real blocks. Everything below overrides earlier review rules without changing them. */
+:root {
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
+}
+
+.review-room { position: relative; }
+.review-room > h1 { margin: 0 0 var(--space-5); }
+.review-room > .task-secondary-nav { margin: calc(-1 * var(--space-4)) 0 var(--space-5); }
+.review-task-workspace .task-secondary-nav { display: none; }
+
+/* Document bar: neutral, one compact block; red is kept for real blocks. */
+.review-room > .review-document-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--wit);
+  padding: var(--space-4) var(--space-5);
+  margin: 0 0 var(--space-6);
+  gap: var(--space-1) var(--space-5);
+}
+details.review-document-card { border-left: 1px solid var(--line); background: var(--wit); }
+.review-document-kicker { color: var(--muted); font-size: 0.75rem; letter-spacing: 0.06em; }
+.review-document-card .doc-title { color: var(--text); font-size: 1.15rem; margin: 0; }
+.review-room > .review-document-card .meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); color: var(--muted); }
+.review-room > .review-document-card .btn-secondary { margin: 0; }
+
+/* Task screens: back link, then the task title, then the work. */
+.review-task-workspace { margin: 0 0 var(--space-6); }
+.review-task-workspace h2 { margin: var(--space-3) 0 0; }
+.review-task-back,
+.review-room > p > a.btn-secondary[href*="document="]:only-child { margin: 0 0 var(--space-5); }
+
+/* Overview: groups breathe, counts sit beside their label. */
+.review-next-step { margin: 0 0 var(--space-7); }
+.review-work-header { margin: 0 0 var(--space-4); }
+.review-count-scope { margin: 0 0 var(--space-5); color: var(--muted); font-size: 0.85rem; }
+.review-layer { margin: 0 0 var(--space-6); padding: 0; }
+.review-layer > h3 { margin: 0 0 var(--space-4); }
+.review-group {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: var(--space-3);
+  row-gap: var(--space-2);
+  margin: 0 0 var(--space-6);
+}
+.review-group > * { grid-column: 1 / -1; margin: 0; }
+.review-group > h4 { grid-column: 1; margin: 0; }
+.review-group > .review-group-count {
+  grid-column: 2;
+  justify-self: start;
+  min-width: 1.75rem;
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: var(--water-soft);
+  color: var(--text);
+  font-weight: 700;
+  text-align: center;
+}
+.review-group-lead { color: var(--muted); max-width: 60ch; }
+.review-group progress,
+.review-open-work-ratio progress {
+  appearance: none;
+  width: 100%;
+  max-width: 24rem;
+  height: 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.review-group progress::-webkit-progress-bar,
+.review-open-work-ratio progress::-webkit-progress-bar { background: var(--line); border-radius: 999px; }
+.review-group progress::-webkit-progress-value,
+.review-open-work-ratio progress::-webkit-progress-value { background: var(--paars); border-radius: 999px; }
+.review-group progress::-moz-progress-bar,
+.review-open-work-ratio progress::-moz-progress-bar { background: var(--paars); border-radius: 999px; }
+.review-task-grid:empty { display: none; }
+.review-task-card { min-height: 0; display: grid; gap: var(--space-2); }
+.review-layer > summary { min-height: 44px; display: flex; align-items: center; }
+.review-sidebar .review-progress-overview { padding: var(--space-5); }
+.review-room > p:last-child { margin-top: var(--space-6); }
+
+/* Passage review: source on the left as reading text, a calm decision rail on the right. */
+.review-decision-layout { gap: var(--space-6); }
+.review-source-column, .review-choices-column { display: grid; gap: var(--space-5); align-content: start; }
+.review-room .eyebrow { color: var(--muted); }
+[data-full-knowledge-passage] {
+  margin: var(--space-2) 0 var(--space-4);
+  max-width: 65ch;
+  color: var(--text);
+  font-family: var(--font-body, inherit);
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.6;
+}
+[data-essential-context] h4 {
+  margin: 0 0 var(--space-1);
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+/* The section keeps markup whitespace out of view; its text keeps its own line breaks. */
+[data-essential-context] { white-space: normal; }
+[data-essential-context] p { margin: 0; white-space: pre-wrap; }
+.review-choices-column fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.review-choices-column .review-step {
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  padding: var(--space-5) 0 0;
+  margin: 0;
+}
+.review-choices-column .review-step:first-of-type { border-top: 0; padding-top: 0; }
+.review-choices-column .review-step h4 { color: var(--text); font-size: 1.05rem; margin: 0 0 var(--space-3); }
+.review-choices-column .review-step > p { margin: 0 0 var(--space-3); color: var(--muted); }
+.review-room label.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  margin: 0;
+}
+.review-room label.check input[type="radio"],
+.review-room label.check input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--paars); }
+
+/* Warnings look like warnings; info stays quiet. */
+.review-room .banner.warn {
+  background: var(--alert-bg);
+  border-color: var(--alert-line);
+  color: var(--alert-text);
+}
+
+/* Dark mode: the highlighted source text must stay readable on its light mark. */
+html[data-theme="dark"] mark.broncontext-marked { color: #1f2933; }
+
+/* Filters on one row in a single block. */
+.review-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3) var(--space-4);
+  margin: 0 0 var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--wit);
+}
+.review-filters label { flex: 1 1 13rem; margin: 0; }
+.review-filters .btn-secondary { margin: 0; }
+.review-room .document-pagination { margin: 0 0 var(--space-4); color: var(--muted); }
+.review-room .doc-list { gap: var(--space-4); }
+.review-empty {
+  margin: 0;
+  padding: var(--space-5);
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+}
+
+/* Trajectory (read-only): about card, then one block per part. */
+.review-backlinks { max-width: 1240px; margin: 0 auto var(--space-5); }
+.review-trajectory > .lead { margin: 0 0 var(--space-5); }
+.review-about { display: grid; gap: var(--space-2); margin: 0 0 var(--space-7); }
+.review-about p { margin: 0; }
+.review-about .btn-secondary { justify-self: start; margin-top: var(--space-3); }
+.review-trajectory-part { margin: 0 0 var(--space-6); }
+.review-trajectory-part h2 { margin: 0 0 var(--space-3); }
+.review-trajectory-part ul { margin: 0; padding-left: 1.2rem; display: grid; gap: var(--space-2); }
+
+@media (max-width: 860px) {
+  .review-room > .task-secondary-nav { margin-top: 0; }
+  .review-filters { padding: var(--space-4); }
+}

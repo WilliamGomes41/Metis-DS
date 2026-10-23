@@ -700,7 +700,7 @@ def _workboard_page(
           </summary>{dashboard}</details>''')
     return _page(_nav(account, "review") + '<section class="room review-room"><h1>Review</h1>'
                  + console_ui._task_links("review") + controls + '<div class="doc-list">' + ''.join(cards)
-                 + (('<p>Geen documenten gevonden.</p>' if q else '<p>Geen aan jou toegewezen reviewdocumenten.</p>') if not cards else '')
+                 + (('<p class="review-empty">Geen documenten gevonden.</p>' if q else '<p class="review-empty">Geen aan jou toegewezen reviewdocumenten. Nieuw werk verschijnt hier zodra iemand je als reviewer kiest.</p>') if not cards else '')
                  + '</div></section>', title="Review — Metis")
 
 
