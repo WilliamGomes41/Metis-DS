@@ -4,3 +4,14 @@
 .agents/licenses/cursor-team-kit.txt text eol=lf
 .claude/skills/verify-this/SKILL.md text eol=lf
 .claude/skills/make-pr-easy-to-review/SKILL.md text eol=lf
+.agents/skills/how/** text eol=lf
+.agents/skills/why/** text eol=lf
+.agents/skills/blast-radius/** text eol=lf
+.agents/skills/show-me-your-work/** text eol=lf
+.agents/skills/principle-explain-the-number/** text eol=lf
+.agents/licenses/pstack.txt text eol=lf
+.claude/skills/how/SKILL.md text eol=lf
+.claude/skills/why/SKILL.md text eol=lf
+.claude/skills/blast-radius/SKILL.md text eol=lf
+.claude/skills/show-me-your-work/SKILL.md text eol=lf
+.claude/skills/principle-explain-the-number/SKILL.md text eol=lf
