@@ -196,7 +196,7 @@ from src.source_reconstruction_v1 import with_reconstruction_cache
 
 @with_reconstruction_cache
 def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
-            proposal=None, evidence=None, checkpoint=None):
+            proposal=None, evidence=None, checkpoint=None, timings=None):
     """Initial bounded pass, one targeted recovery pass; resume unfinished work.
 
     Validated earlier selections remain context-only. Every task result must
@@ -246,7 +246,8 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
     # Attempt-owned measurements only: never part of provider evidence or replay identity.
     # provider_seconds includes the provider's own preparation and validation;
     # transport_seconds (when the provider reports it) is the model call alone.
-    timings = []
+    # A caller-owned list lets a later checkpoint persist the last task's write time.
+    timings = [] if timings is None else timings
 
     def timed_checkpoint(phase, values):
         begun = time.monotonic()

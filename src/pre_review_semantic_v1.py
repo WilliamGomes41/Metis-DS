@@ -825,9 +825,11 @@ def _semantic_execution_before_review(
         def provider(**kwargs):
             return _provider_proposal(api_key=api_key, model=safe_model, post_json=post_json,
                 field_contract_v3=True, checkpoint=None, **kwargs)
+        formation_timings = []
         proposal, provider_evidence = execute(blocks=blocks, evidence_blocks=evidence_blocks,
             validator_input=validator_input, provider=provider, limits=limits,
-            proposal=proposal, evidence=(replay_record or {}).get("provider_evidence"), checkpoint=checkpoint)
+            proposal=proposal, evidence=(replay_record or {}).get("provider_evidence"), checkpoint=checkpoint,
+            timings=formation_timings)
         errors = [call["error_code"] for call in [provider_evidence, *provider_evidence.get("supplementary_calls", [])]
                   if call.get("error_code")]
         if not proposal["objects"] and errors:
@@ -877,7 +879,11 @@ def _semantic_execution_before_review(
             provider_evidence["pending_rejections"] = pending_rejections(provider_evidence, proposal)
             provider_evidence["formation_incomplete"] = bool(provider_evidence["pending_rejections"])
             if checkpoint:
-                checkpoint("formation_accounted", {"provider_evidence": provider_evidence})
+                accounted = {"provider_evidence": provider_evidence}
+                if locals().get("formation_timings"):
+                    # Includes the last task's checkpoint_after_seconds, set after its own write.
+                    accounted["formation_timings"] = formation_timings
+                checkpoint("formation_accounted", accounted)
         if execution != EXECUTION_REPLAY or (formation_context or {}).get("resume_formation"):
             execution = EXECUTION_INFERENCE
         if identity is not None and execution != EXECUTION_REPLAY:

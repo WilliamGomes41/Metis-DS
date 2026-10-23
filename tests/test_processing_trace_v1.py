@@ -384,6 +384,9 @@ def test_semantic_resume_trace_keeps_completed_candidate_and_targets_only_open_w
         assert trace['attempts'][-1]['origin_request_id'] == response.headers['x-metis-request-id']
         assert trace['attempts'][-1]['stored_state'] == 'succeeded'
         assert trace['artifacts']['semantic_identity_hash']
+        # The last task's write time reaches the trace through the formation_accounted checkpoint.
+        timings = trace['attempts'][-1]['formation_timings']
+        assert timings and all(row['checkpoint_after_seconds'] is not None for row in timings)
     final = make()
     assert next(o for o in final.snapshot_objects(sid) if o['object_id'] == complete['object_id']) == complete
     assert len(calls) == 3
