@@ -207,11 +207,12 @@ def test_http_choice_reviewers_alone_assign_the_document(system, mode, four_eyes
     assert envelope["review_configuration"]["reviewers"] == [ids["first"]]
 
 
-# The one form question also sets the policy, so the uploader stays eligible
-# under four eyes and participants can be managed after upload.
+# Two required reviewers get a matching policy, so the uploader stays eligible
+# under four eyes. A single reviewer gets none: a one-reviewer policy would
+# override the content-driven four-eyes check.
 @pytest.mark.parametrize(("option", "four_eyes", "picked", "primary", "required"), [
-    ("uploader_sole", "", [], "uploader", []),
-    ("one_other", "", ["first"], "first", []),
+    ("uploader_sole", "", [], None, []),
+    ("one_other", "", ["first"], None, []),
     ("one_other", "yes", ["first"], "uploader", ["first"]),
     ("two_others", "yes", ["first", "second"], "first", ["second"]),
 ])
@@ -225,12 +226,22 @@ def test_http_form_choice_sets_matching_policy(system, option, four_eyes, picked
     assert response.status_code == 303, response.text
     sid = response.headers["location"].split("document=")[1].split("&")[0]
     envelope = console._envelope(sid)
-    policy = envelope["review_policy"]
-    assert policy["primary"] == ids[primary]
-    assert [a["reviewer_id"] for a in policy["assignments"]] == [ids[k] for k in required]
-    assert set(envelope["named_reviewers"]) == {ids[primary], *(ids[k] for k in required)}
+    policy = envelope.get("review_policy")
+    if primary is None:
+        assert policy is None
+        assert set(envelope["named_reviewers"]) == ({ids[k] for k in picked} or {ids["uploader"]})
+    else:
+        assert policy["primary"] == ids[primary]
+        assert [a["reviewer_id"] for a in policy["assignments"]] == [ids[k] for k in required]
+        assert set(envelope["named_reviewers"]) == {ids[primary], *(ids[k] for k in required)}
     assert envelope["review_configuration"]["reviewers"] == [ids[k] for k in picked]
     assert envelope["review_configuration"]["four_eyes_required"] is (option == "one_other" and four_eyes == "yes")
+
+
+def test_form_choice_for_one_reviewer_keeps_content_four_eyes():
+    from src.four_eyes_v1 import requires_four_eyes
+    # Without a policy the object's own risk still demands a second review.
+    assert requires_four_eyes({"confirmed_object_type": "exception"}) is True
 
 
 def test_http_form_choice_with_wrong_count_is_refused(system, *, production_app):

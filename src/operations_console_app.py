@@ -5098,21 +5098,20 @@ def create_console_app(
         )
 
     def _policy_from_choice(choice: dict[str, Any], uploader: str) -> dict[str, Any] | None:
-        """The one upload question also sets the review policy, so participants stay manageable.
+        """Policy for a choice with two required reviewers; None leaves the chosen path.
 
-        It mirrors ``from_review_policy``: four eyes on one colleague keeps the
-        uploader as primary; two colleagues already give four eyes. A choice that
-        does not fit returns None and the kernel refuses it.
+        Four eyes on one colleague needs the uploader named as primary, and two
+        colleagues map to primary plus one required. A single-reviewer choice
+        gets no policy, because a one-reviewer policy would override the
+        content-driven four-eyes check in ``requires_four_eyes``.
         """
         from src.review_policy_v1 import CONTRACT
         option, others = choice["option"], choice["reviewers"]
-        if option == "two_others":
-            choice["four_eyes_required"] = False
-        if option == "uploader_sole" and not others:
-            primary, required = uploader, []
-        elif option == "one_other" and len(others) == 1:
-            primary, required = (uploader, others) if choice["four_eyes_required"] else (others[0], [])
+        if option == "one_other" and choice["four_eyes_required"] and len(others) == 1:
+            primary, required = uploader, others
         elif option == "two_others" and len(others) == 2:
+            # Two colleagues already give four eyes; the mapped policy says so too.
+            choice["four_eyes_required"] = False
             primary, required = others[0], others[1:]
         else:
             return None
