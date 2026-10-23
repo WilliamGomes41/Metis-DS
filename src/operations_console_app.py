@@ -5030,6 +5030,7 @@ def create_console_app(
                     <h3>Reviewers</h3>
                     <fieldset id="review-configuration">
                       <legend>Wie beoordeelt dit document?</legend>
+                      <input type="hidden" name="review_mode" value="choice">
                       <label><input type="radio" name="review_option" value="uploader_sole" required> Alleen ik</label>
                       <label><input type="radio" name="review_option" value="one_other" required> Eén collega</label>
                       <label><input type="radio" name="review_option" value="two_others" required> Twee collega's</label>
@@ -5037,7 +5038,7 @@ def create_console_app(
                       <select id="review_reviewers" name="review_reviewers" multiple size="6">{options}</select>
                       <details id="review-more">
                         <summary>Meer opties</summary>
-                        <label><input type="checkbox" name="four_eyes" value="yes"> Vier ogen verplicht</label>
+                        <label><input type="checkbox" name="four_eyes" value="yes"> Vier ogen: bij Eén collega beoordeel ik zelf ook mee</label>
                         <label for="review_readers">Lezers (lezen mee, keuren niet goed)</label>
                         <select id="review_readers" name="review_readers" multiple size="6">{options}</select>
                       </details>
@@ -5096,6 +5097,28 @@ def create_console_app(
             """
         )
 
+    def _policy_from_choice(choice: dict[str, Any], uploader: str) -> dict[str, Any] | None:
+        """The one upload question also sets the review policy, so participants stay manageable.
+
+        It mirrors ``from_review_policy``: four eyes on one colleague keeps the
+        uploader as primary; two colleagues already give four eyes. A choice that
+        does not fit returns None and the kernel refuses it.
+        """
+        from src.review_policy_v1 import CONTRACT
+        option, others = choice["option"], choice["reviewers"]
+        if option == "two_others":
+            choice["four_eyes_required"] = False
+        if option == "uploader_sole" and not others:
+            primary, required = uploader, []
+        elif option == "one_other" and len(others) == 1:
+            primary, required = (uploader, others) if choice["four_eyes_required"] else (others[0], [])
+        elif option == "two_others" and len(others) == 2:
+            primary, required = others[0], others[1:]
+        else:
+            return None
+        return {"contract": CONTRACT, "revision": 1, "primary": primary,
+                "assignments": [{"reviewer_id": i, "participation": "required"} for i in required]}
+
     @app.post("/ingest", response_class=HTMLResponse)
     async def ingest_post(
         request: Request,
@@ -5141,7 +5164,9 @@ def create_console_app(
                          "reviewers": [i for i in review_reviewers if i.strip()],
                          "readers": [i for i in review_readers if i.strip()]}
         policy = None
-        if review_mode != "legacy":
+        if review_mode == "choice":
+            policy = _policy_from_choice(review_choice, account["account_id"])
+        elif review_mode != "legacy":
             if review_mode not in {"single", "optional", "required"}:
                 raise ConsoleError("invalid_review_policy")
             primary = primary_reviewer.strip() or account["account_id"]

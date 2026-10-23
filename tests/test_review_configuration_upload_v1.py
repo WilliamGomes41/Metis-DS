@@ -185,9 +185,10 @@ def test_upload_form_names_reviewers_once(system, *, production_app):
     page = _client(console, password, production_app=production_app).get("/ingest").text
     assert page.count('name="review_reviewers"') == 1
     # One question, one list of colleagues; no second reviewer selection.
-    for gone in ('name="named_reviewers"', 'name="review_mode"', 'name="primary_reviewer"'):
+    for gone in ('name="named_reviewers"', 'id="review_mode"', 'name="primary_reviewer"'):
         assert gone not in page
     assert "Wie beoordeelt dit document?" in page
+    assert '<input type="hidden" name="review_mode" value="choice">' in page
     assert '<details id="review-more">' in page
 
 
@@ -204,6 +205,40 @@ def test_http_choice_reviewers_alone_assign_the_document(system, mode, four_eyes
     envelope = console._envelope(sid)
     assert ids["first"] in envelope["named_reviewers"]
     assert envelope["review_configuration"]["reviewers"] == [ids["first"]]
+
+
+# The one form question also sets the policy, so the uploader stays eligible
+# under four eyes and participants can be managed after upload.
+@pytest.mark.parametrize(("option", "four_eyes", "picked", "primary", "required"), [
+    ("uploader_sole", "", [], "uploader", []),
+    ("one_other", "", ["first"], "first", []),
+    ("one_other", "yes", ["first"], "uploader", ["first"]),
+    ("two_others", "yes", ["first", "second"], "first", ["second"]),
+])
+def test_http_form_choice_sets_matching_policy(system, option, four_eyes, picked, primary, required, *,
+                                               production_app):
+    console, password, ids = system
+    response = _client(console, password, production_app=production_app).post("/ingest", data=_form(
+        ids, named_reviewers=[], review_mode="choice", review_option=option, four_eyes=four_eyes,
+        review_reviewers=[ids[k] for k in picked]), files={"file": ("bron.html", HTML, "text/html")},
+        follow_redirects=False)
+    assert response.status_code == 303, response.text
+    sid = response.headers["location"].split("document=")[1].split("&")[0]
+    envelope = console._envelope(sid)
+    policy = envelope["review_policy"]
+    assert policy["primary"] == ids[primary]
+    assert [a["reviewer_id"] for a in policy["assignments"]] == [ids[k] for k in required]
+    assert set(envelope["named_reviewers"]) == {ids[primary], *(ids[k] for k in required)}
+    assert envelope["review_configuration"]["reviewers"] == [ids[k] for k in picked]
+    assert envelope["review_configuration"]["four_eyes_required"] is (option == "one_other" and four_eyes == "yes")
+
+
+def test_http_form_choice_with_wrong_count_is_refused(system, *, production_app):
+    console, password, ids = system
+    response = _client(console, password, production_app=production_app).post("/ingest", data=_form(
+        ids, named_reviewers=[], review_mode="choice", review_option="two_others",
+        review_reviewers=[ids["first"]]), files={"file": ("bron.html", HTML, "text/html")}, follow_redirects=False)
+    assert response.status_code == 400
 
 
 def test_http_optional_participants_stay_separate_from_choice_reviewers(system, *, production_app):
