@@ -1,4 +1,4 @@
-"""Zorgmaatje: shell only after sign-in, read-only route, existing view-check gates.
+"""Raad: shell only after sign-in, read-only route, existing view-check gates.
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: toegang
@@ -78,13 +78,13 @@ def client(service=None, signed_in=True):
 
 
 def test_route_requires_sign_in():
-    assert client(signed_in=False).get("/zorgmaatje/weergavecontrole?document=doc-1").status_code == 401
+    assert client(signed_in=False).get("/raad/weergavecontrole?document=doc-1").status_code == 401
 
 
 @pytest.mark.parametrize("query,reason", [("", "no_document"), ("document=" + "x" * 201, "no_document"),
                                           ("document=doc-1", "not_configured")])
 def test_route_reports_unavailable_without_document_or_service(query, reason):
-    response = client().get("/zorgmaatje/weergavecontrole?" + query)
+    response = client().get("/raad/weergavecontrole?" + query)
     assert response.json() == {"available": False, "reason": reason}
     assert response.headers["cache-control"] == "no-store"
 
@@ -93,7 +93,7 @@ def test_route_uses_the_existing_reviewer_authorization(monkeypatch):
     def deny(_state, _actor, _document):
         raise view_check.ViewCheckAccessDenied("reviewer_not_named_on_snapshot")
     monkeypatch.setattr(view_check, "authorize", deny)
-    body = client(type("Service", (), {"store": Store()})()).get("/zorgmaatje/weergavecontrole?document=doc-1").json()
+    body = client(type("Service", (), {"store": Store()})()).get("/raad/weergavecontrole?document=doc-1").json()
     assert body == {"available": False, "reason": "not_named_reviewer"}
 
 
@@ -101,7 +101,7 @@ def test_route_offers_the_existing_form_and_bounded_history(monkeypatch):
     monkeypatch.setattr(view_check, "authorize", lambda *_args: (ACCOUNT, {}))
     monkeypatch.setattr(view_check, "context", lambda _s, actor, document, attempt: {"revision": "rev-7"})
     body = client(type("Service", (), {"store": Store()})()).get(
-        "/zorgmaatje/weergavecontrole?document=doc-1&attempt=att-1").json()
+        "/raad/weergavecontrole?document=doc-1&attempt=att-1").json()
     form = body["form"]
     assert body["available"] is True
     assert {k: form[k] for k in ("document", "attempt", "expected_revision")} == {
@@ -118,7 +118,7 @@ def test_route_keeps_history_but_no_form_when_the_scenario_is_unsupported(monkey
     def unsupported(*_args):
         raise ValueError("scenario_not_supported")
     monkeypatch.setattr(view_check, "context", unsupported)
-    body = client(type("Service", (), {"store": Store()})()).get("/zorgmaatje/weergavecontrole?document=doc-1").json()
+    body = client(type("Service", (), {"store": Store()})()).get("/raad/weergavecontrole?document=doc-1").json()
     assert body["form"] is None and body["reason"] == "not_supported" and len(body["checks"]) == 2
 
 

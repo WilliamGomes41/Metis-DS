@@ -181,6 +181,28 @@ def test_http_upload_with_choice_stores_chosen(system, *, production_app):
     assert console._envelope(sid)["named_reviewers"] == [ids["first"]]
 
 
+def test_upload_form_names_reviewers_once(system, *, production_app):
+    console, password, ids = system
+    page = _client(console, password, production_app=production_app).get("/ingest").text
+    assert 'name="review_reviewers"' in page
+    assert 'name="named_reviewers"' not in page
+
+
+# Required participation keeps the uploader as primary, so the mapped choice is
+# one other reviewer with four eyes.
+@pytest.mark.parametrize(("mode", "four_eyes"), [("legacy", ""), ("required", "yes")])
+def test_http_choice_reviewers_alone_assign_the_document(system, mode, four_eyes, *, production_app):
+    console, password, ids = system
+    response = _client(console, password, production_app=production_app).post("/ingest", data=_form(
+        ids, named_reviewers=[], review_mode=mode, review_option="one_other", four_eyes=four_eyes,
+        review_reviewers=[ids["first"]]), files={"file": ("bron.html", HTML, "text/html")}, follow_redirects=False)
+    assert response.status_code == 303, response.text
+    sid = response.headers["location"].split("document=")[1].split("&")[0]
+    envelope = console._envelope(sid)
+    assert ids["first"] in envelope["named_reviewers"]
+    assert envelope["review_configuration"]["reviewers"] == [ids["first"]]
+
+
 def test_http_non_legacy_mode_disagreeing_with_choice_is_refused(system, *, production_app):
     console, password, ids = system
     response = _client(console, password, production_app=production_app).post("/ingest", data=_form(

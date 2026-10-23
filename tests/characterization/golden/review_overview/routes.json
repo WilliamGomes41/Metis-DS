@@ -340,6 +340,12 @@
       ]
     ],
     [
+      "/raad/weergavecontrole",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/redoc",
       [
         "GET",
@@ -734,12 +740,6 @@
       "/tree/resume-formation",
       [
         "POST"
-      ]
-    ],
-    [
-      "/zorgmaatje/weergavecontrole",
-      [
-        "GET"
       ]
     ]
   ]
