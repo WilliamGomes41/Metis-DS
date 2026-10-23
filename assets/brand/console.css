@@ -2378,7 +2378,7 @@ details.review-document-card { border-left: 1px solid var(--line); background: v
 .review-next-step { margin: 0 0 var(--space-7); }
 .review-work-header { margin: 0 0 var(--space-4); }
 .review-count-scope { margin: 0 0 var(--space-5); color: var(--muted); font-size: 0.85rem; }
-.review-layer { margin: 0 0 var(--space-6); padding: 0; }
+.review-layer { margin: 0 0 var(--space-6); padding: var(--space-4) 0 0; }
 .review-layer > h3 { margin: 0 0 var(--space-4); }
 .review-group {
   display: grid;
@@ -2421,7 +2421,8 @@ details.review-document-card { border-left: 1px solid var(--line); background: v
 .review-open-work-ratio progress::-moz-progress-bar { background: var(--paars); border-radius: 999px; }
 .review-task-grid:empty { display: none; }
 .review-task-card { min-height: 0; display: grid; gap: var(--space-2); }
-.review-layer > summary { min-height: 44px; display: flex; align-items: center; }
+.review-room details > summary { padding-block: 12px; cursor: pointer; }
+.review-room .task-secondary-nav a { display: inline-flex; align-items: center; min-height: 44px; }
 .review-sidebar .review-progress-overview { padding: var(--space-5); }
 .review-room > p:last-child { margin-top: var(--space-6); }
 
@@ -2464,13 +2465,15 @@ details.review-document-card { border-left: 1px solid var(--line); background: v
 .review-choices-column .review-step > p { margin: 0 0 var(--space-3); color: var(--muted); }
 .review-room label.check {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-3);
   min-height: 44px;
   margin: 0;
+  padding-block: var(--space-2);
 }
 .review-room label.check input[type="radio"],
-.review-room label.check input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 auto; accent-color: var(--paars); }
+.review-room label.check input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 auto; margin: 2px 0 0; accent-color: var(--paars); }
+.review-room .object .banner { margin-top: var(--space-3); }
 
 /* Warnings look like warnings; info stays quiet. */
 .review-room .banner.warn {
