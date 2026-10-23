@@ -150,10 +150,9 @@ def test_kernel_invalid_choice_is_refused_before_any_write(system, choice, code)
     assert console.list_envelopes() == []
 
 
-def test_http_form_requires_choice_next_to_old_fields(system, *, production_app):
+def test_http_form_requires_choice(system, *, production_app):
     console, password, _ = system
     page = _client(console, password, production_app=production_app).get("/ingest").text
-    assert 'name="review_mode"' in page and 'name="primary_reviewer"' in page
     for option in ("uploader_sole", "two_others", "one_other"):
         assert f'name="review_option" value="{option}" required' in page
     assert 'name="four_eyes"' in page and 'name="review_reviewers"' in page and 'name="review_readers"' in page
@@ -184,10 +183,12 @@ def test_http_upload_with_choice_stores_chosen(system, *, production_app):
 def test_upload_form_names_reviewers_once(system, *, production_app):
     console, password, ids = system
     page = _client(console, password, production_app=production_app).get("/ingest").text
-    assert 'name="review_reviewers"' in page
-    assert page.count('name="named_reviewers"') == 1
-    # The separate list is only for optional participants and starts hidden.
-    assert '<div id="optional-row" hidden>' in page
+    assert page.count('name="review_reviewers"') == 1
+    # One question, one list of colleagues; no second reviewer selection.
+    for gone in ('name="named_reviewers"', 'name="review_mode"', 'name="primary_reviewer"'):
+        assert gone not in page
+    assert "Wie beoordeelt dit document?" in page
+    assert '<details id="review-more">' in page
 
 
 # Required participation keeps the uploader as primary, so the mapped choice is

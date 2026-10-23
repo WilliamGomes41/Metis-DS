@@ -5023,34 +5023,24 @@ def create_console_app(
                     </div>
                     <label for="live_url">Link naar de online bron (optioneel)</label>
                     <input id="live_url" name="live_url">
+                    <label for="source_status">Vaststellingsstatus volgens de bron</label>
+                    <select id="source_status" name="source_status"><option value="unknown">Niet opgegeven</option><option value="established">Vastgesteld</option><option value="draft">Concept</option></select>
                   </div>
                   <div class="section">
                     <h3>Reviewers</h3>
-                    <label for="review_mode">Reviewdeelname</label>
-                    <select id="review_mode" name="review_mode">
-                      <option value="legacy">Bestaande reviewregels</option>
-                      <option value="single">Eén beoordelaar</option>
-                      <option value="optional">Aanvullende beoordeling mogelijk</option>
-                      <option value="required">Onafhankelijke aanvullende beoordeling verplicht</option>
-                    </select>
-                    <label for="primary_reviewer">Verantwoordelijke beoordelaar</label>
-                    <select id="primary_reviewer" name="primary_reviewer"><option value="">Uploader</option>{options}</select>
-                    <div id="optional-row" hidden>
-                      <label for="named_reviewers">Wie mag aanvullend beoordelen</label>
-                      <select id="named_reviewers" name="named_reviewers" multiple size="6">{options}</select>
-                    </div>
-                    <label for="source_status">Vaststellingsstatus volgens de bron</label>
-                    <select id="source_status" name="source_status"><option value="unknown">Niet opgegeven</option><option value="established">Vastgesteld</option><option value="draft">Concept</option></select>
                     <fieldset id="review-configuration">
-                      <legend>Reviewkeuze (verplicht)</legend>
-                      <label><input type="radio" name="review_option" value="uploader_sole" required> Alleen ik als uploader</label>
-                      <label><input type="radio" name="review_option" value="one_other" required> Eén andere reviewer</label>
-                      <label><input type="radio" name="review_option" value="two_others" required> Twee andere reviewers</label>
-                      <label><input type="checkbox" name="four_eyes" value="yes"> Vier ogen verplicht</label>
-                      <label for="review_reviewers">Reviewers voor deze keuze</label>
+                      <legend>Wie beoordeelt dit document?</legend>
+                      <label><input type="radio" name="review_option" value="uploader_sole" required> Alleen ik</label>
+                      <label><input type="radio" name="review_option" value="one_other" required> Eén collega</label>
+                      <label><input type="radio" name="review_option" value="two_others" required> Twee collega's</label>
+                      <label for="review_reviewers">Welke collega's (niet nodig bij Alleen ik)</label>
                       <select id="review_reviewers" name="review_reviewers" multiple size="6">{options}</select>
-                      <label for="review_readers">Lezers (tellen NOOIT mee voor goedkeuring)</label>
-                      <select id="review_readers" name="review_readers" multiple size="6">{options}</select>
+                      <details id="review-more">
+                        <summary>Meer opties</summary>
+                        <label><input type="checkbox" name="four_eyes" value="yes"> Vier ogen verplicht</label>
+                        <label for="review_readers">Lezers (lezen mee, keuren niet goed)</label>
+                        <select id="review_readers" name="review_readers" multiple size="6">{options}</select>
+                      </details>
                     </fieldset>
 
                   </div>
@@ -5087,16 +5077,6 @@ def create_console_app(
               function sync() {{ row.hidden = kind.value !== "new_version"; }}
               kind.addEventListener("change", sync);
               sync();
-              var mode = document.getElementById("review_mode");
-              var optional = document.getElementById("optional-row");
-              var optionalSelect = document.getElementById("named_reviewers");
-              function syncOptional() {{
-                if (!mode || !optional || !optionalSelect) return;
-                optional.hidden = mode.value !== "optional";
-                optionalSelect.disabled = optional.hidden;
-              }}
-              if (mode) mode.addEventListener("change", syncOptional);
-              syncOptional();
               var date = document.getElementById("date");
               var out = document.querySelector("[data-date-nl]");
               function showNl() {{

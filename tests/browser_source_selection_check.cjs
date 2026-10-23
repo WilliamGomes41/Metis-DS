@@ -23,8 +23,6 @@ const fs = require('fs');
   await page.locator('[name=version]').fill('1');
   await page.locator('[name=date]').fill('2026-10-09');
   await page.locator('[name=family]').fill('fixture');
-  await page.locator('[name=review_mode]').selectOption('single');
-  await page.locator('[name=primary_reviewer]').selectOption(manifest.reviewer);
   await page.locator('[name=review_option][value=one_other]').check();
   await page.locator('[name=review_reviewers]').selectOption(manifest.reviewer);
   await Promise.all([page.waitForURL('**/source-selection?**'), page.locator('#ingest-submit').click()]);
