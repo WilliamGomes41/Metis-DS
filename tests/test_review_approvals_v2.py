@@ -300,9 +300,15 @@ def test_kernel_decision_tree_pdf_route_kept(kernel, option, reviewers, four_eye
     assert console._envelope(receipt["snapshot_id"])["review_policy"] is not None
 
 
-def test_kernel_decision_tree_pdf_one_of_two_is_refused_explicitly(kernel):
+# Without a policy a decision tree would lose its graph review, PDF and JSON freeze alike.
+@pytest.mark.parametrize("source", ["pdf", "json"])
+def test_kernel_decision_tree_one_of_two_is_refused_explicitly(kernel, source):
     from tests.decision_tree_test_support import pdf_data
+    from tests.test_v225_beslisboom_path import _boom_freeze_bytes
     console, ids = kernel
-    with pytest.raises(ConsoleError, match="decision_tree_pdf_needs_all_reviewers_required"):
+    data, name, kind = (pdf_data(), "boom.pdf", "application/pdf") if source == "pdf" else \
+        (_boom_freeze_bytes(), "boom.json", "application/json")
+    with pytest.raises(ConsoleError, match="decision_tree_needs_all_reviewers_required"):
         _ingest(console, ids, _choice("two_others", [ids["bert"], ids["carla"]]), class_="beslisboom",
-                filename="boom.pdf", data=pdf_data(), content_type="application/pdf", live_url="")
+                filename=name, data=data, content_type=kind, live_url="")
+    assert console.list_envelopes() == []

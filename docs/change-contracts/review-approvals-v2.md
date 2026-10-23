@@ -67,7 +67,7 @@ Adversarial proof matrix:
 - Content risk under v2 off, under a one-reviewer policy, and under historical recovery.
 - Supplied policy differing from the derived one.
 - Four eyes for one person.
-- Beslisboom PDF with and without an expressible policy.
+- Beslisboom (PDF and JSON freeze) with and without an expressible policy.
 - Restart.
 - File and PostgreSQL.
 
@@ -85,7 +85,7 @@ Validation:
 - The uploader is never in `reviewers`.
 - Readers are disjoint from reviewers.
 - The derived policy must equal any supplied policy.
-- A beslisboom PDF needs an expressible policy (`decision_tree_pdf_needs_all_reviewers_required`).
+- A beslisboom upload (PDF or JSON freeze) needs an expressible policy (`decision_tree_needs_all_reviewers_required`); without one it would lose its graph review.
 Mutable entities: envelope and objects of the new WorkingRevision, through the existing ingest and review transactions.
 Immutable entities: source bytes, review bindings already recorded, published releases and serving rows.
 Workflow state before: in review.
@@ -122,10 +122,10 @@ Required black-box scenario:
 - A v1 `two_others` document with the same approvals stays blocked.
 Explicit non-goals:
 - Adding participants afterwards on a policy-less v2 document (the chosen path still refuses participant management, as before #820).
-- A beslisboom PDF with "een van beiden".
+- A beslisboom with "een van beiden".
 - Managed-review-v2 semantics.
 - Merge and deployment.
 
 Known limits:
-- **"Een van beiden" for a beslisboom PDF.** The beslisboom graph review requires every required reviewer of a policy (`decision_graph_v1.publication_issues`), so a beslisboom PDF cannot express "een van beiden". It is refused with an explicit message rather than mapped to both required.
+- **"Een van beiden" for a beslisboom.** The beslisboom graph review requires every required reviewer of a policy (`decision_graph_v1.publication_issues`), and without a policy no graph is stored, so a beslisboom cannot express "een van beiden". It is refused with an explicit message rather than mapped to both required.
 - **Sending back after approval.** Once one designated person has approved and no duty is open, the other cannot send the passage back (`content_duty_required`). Their review is refused, not ignored.

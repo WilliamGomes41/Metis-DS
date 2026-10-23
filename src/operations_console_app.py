@@ -235,7 +235,7 @@ BLOCKER_LABELS = {
     "four_eyes_required": "High-risk objecten vereisen four-eyes: een tweede benoemde reviewer op hetzelfde objecttupel. Ontbreekt die, wijs dan bij Reviewdeelname een tweede verplichte beoordelaar toe.",
     "review_four_eyes_choice_required": "Kies bij twee personen of het vierogenprincipe verplicht is.",
     "review_configuration_four_eyes_needs_two_reviewers": "Het vierogenprincipe kan alleen bij twee aangewezen personen.",
-    "decision_tree_pdf_needs_all_reviewers_required": "Een beslisboom-PDF met twee personen vraagt nu nog het vierogenprincipe. Kies Ja of één beoordelaar.",
+    "decision_tree_needs_all_reviewers_required": "Een beslisboom met twee personen vraagt nu nog het vierogenprincipe. Kies Ja of één beoordelaar.",
     "review_configuration_source_text_unavailable": "De opgeslagen brontekst is niet te laden; daardoor is niet te controleren of alle passages volgens de reviewkeuze zijn beoordeeld. Publiceren is geblokkeerd. Meld dit bij de beheerder.",
     "review_configuration_uploader_sole_high_risk": "Dit hoog-risico-object vereist een tweede benoemde reviewer. Met de reviewkeuze 'alleen de uploader' is publiceren daarom geblokkeerd.",
     "already_published": "Dit document is al gepubliceerd.",

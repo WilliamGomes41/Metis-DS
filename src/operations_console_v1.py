@@ -1360,10 +1360,9 @@ class OperationsConsole:
             if review_policy is None and review_configuration["option"] == "uploader_and_other" \
                     and not named_reviewers:
                 named_reviewers = [*review_configuration["reviewers"], actor_id]
-            if review_policy is None and review_path_for_klasse(class_) == "boom" \
-                    and (data or b"").startswith(b"%PDF-"):
-                # Een beslisboom-PDF draagt zijn graafreview op een policy; "een van beiden" kan dat niet.
-                raise ConsoleError("decision_tree_pdf_needs_all_reviewers_required")
+            if review_policy is None and review_path_for_klasse(class_) == "boom":
+                # Een beslisboom draagt zijn graafreview op een policy; "een van beiden" kan dat niet.
+                raise ConsoleError("decision_tree_needs_all_reviewers_required")
         if review_policy is None:
             if review_configuration is not None and not named_reviewers:
                 named_reviewers = list(review_configuration["reviewers"])
