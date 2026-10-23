@@ -106,8 +106,12 @@ def install(app, console, require, page, nav, esc):
                                 deep=bool(document) and sid == document, observations=observations)
             action = ''
             if result['state'] in {'bezig', 'wacht op uitvoering'}:
-                action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Voortgang bekijken</a>'
-                running_selected = running_selected or sid == selected
+                if sid == selected:
+                    # This page already polls the selected document; a link to itself only reloads.
+                    action = '<p class="progress-refresh">Deze pagina ververst elke 5 seconden zolang de verwerking loopt.</p>'
+                    running_selected = True
+                else:
+                    action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Voortgang bekijken</a>'
             elif result['state'] == 'voltooid':
                 action = ''  # The primary Naar Review action below owns continuation.
             elif result['state'] == UNCHECKED:
