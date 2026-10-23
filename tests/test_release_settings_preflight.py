@@ -71,6 +71,29 @@ def test_each_runtime_refusal_blocks_the_release(change, finding):
     assert result["blocking"] == [finding]
 
 
+def test_view_check_off_needs_no_view_check_settings():
+    code, result = run_preflight(READY)
+    assert code == 0
+    assert result["view_check"] == "off"
+
+
+@pytest.mark.parametrize("change, findings", [
+    ({"METIS_VIEW_CHECK_ORIGIN": "https://metis.example", "METIS_VIEW_CHECK_EVIDENCE_CONTAINER": "view-evidence"}, []),
+    ({"METIS_VIEW_CHECK_ORIGIN": "http://metis.example", "METIS_VIEW_CHECK_EVIDENCE_CONTAINER": "view-evidence"},
+     ["view_check_origin_invalid"]),
+    ({"METIS_VIEW_CHECK_ORIGIN": "https://metis.example/console", "METIS_VIEW_CHECK_EVIDENCE_CONTAINER": "view-evidence"},
+     ["view_check_origin_invalid"]),
+    ({"METIS_VIEW_CHECK_ORIGIN": "https://metis.example"}, ["view_check_evidence_container_invalid"]),
+    ({"METIS_VIEW_CHECK_ORIGIN": "https://metis.example", "METIS_VIEW_CHECK_EVIDENCE_CONTAINER": "canonical-sources",
+      "G2_BLOB_CONTAINER": "canonical-sources"}, ["view_check_evidence_container_invalid"]),
+])
+def test_enabled_view_check_settings_match_its_startup_refusals(change, findings):
+    code, result = run_preflight({**READY, **change})
+    assert code == (2 if findings else 0)
+    assert result["blocking"] == findings
+    assert result["view_check"] == "enabled"
+
+
 @pytest.mark.parametrize("raw", ["not json", "{}", "[{\"value\": \"x\"}]"])
 def test_unreadable_settings_fail_closed(raw):
     code, result = run_preflight({}, raw=raw)

@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -29,6 +31,9 @@ RETIRED_FORMATION_MODE = "deterministic-v1"
 PDF_EXTRACTOR_ENV = "METIS_PDF_EXTRACTOR"
 PDF_EXTRACTORS = ("docling", "legacy-comparison")
 SOURCE_STORE_ENV = "CONSOLE_IMMUTABLE_SOURCE_STORE"
+VIEW_CHECK_ORIGIN_ENV = "METIS_VIEW_CHECK_ORIGIN"
+VIEW_CHECK_CONTAINER_ENV = "METIS_VIEW_CHECK_EVIDENCE_CONTAINER"
+SOURCE_CONTAINER_ENV = "G2_BLOB_CONTAINER"
 
 
 def settings_map(rows: Any) -> dict[str, str]:
@@ -40,6 +45,27 @@ def settings_map(rows: Any) -> dict[str, str]:
             raise ValueError("release_settings_row_invalid")
         settings[row["name"]] = "" if row.get("value") is None else str(row["value"])
     return settings
+
+
+def view_check_findings(settings: dict[str, str]) -> list[str]:
+    """Startup refusals of src/view_check.py::install for an enabled view check.
+
+    Restated here because that module needs the console dependencies; the
+    browser paths live inside the image and are not checked offline.
+    """
+    origin = settings.get(VIEW_CHECK_ORIGIN_ENV, "").rstrip("/")
+    if not origin:
+        return []
+    findings = []
+    parsed = urlsplit(origin)
+    if (parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password
+            or parsed.path or parsed.query or parsed.fragment):
+        findings.append("view_check_origin_invalid")
+    container = settings.get(VIEW_CHECK_CONTAINER_ENV, "")
+    if (not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]", container)
+            or container == settings.get(SOURCE_CONTAINER_ENV, "").strip()):
+        findings.append("view_check_evidence_container_invalid")
+    return findings
 
 
 def assess(settings: dict[str, str]) -> dict[str, Any]:
@@ -61,6 +87,7 @@ def assess(settings: dict[str, str]) -> dict[str, Any]:
         blocking.append("docling_route_invalid")
     if settings.get(SOURCE_STORE_ENV, "") != "azure":
         blocking.append("azure_blob_source_store_required_in_azure")
+    blocking.extend(view_check_findings(settings))
     return {
         "preflight": "release_settings",
         "status": "blocked" if blocking else "ready",
@@ -70,6 +97,7 @@ def assess(settings: dict[str, str]) -> dict[str, Any]:
         "pdf_extractor": extractor if extractor in PDF_EXTRACTORS else "invalid",
         LLM_MODEL_ENV: provider.model or None,
         LLM_API_KEY_ENV: "present" if provider.api_key else "missing",
+        "view_check": "enabled" if settings.get(VIEW_CHECK_ORIGIN_ENV, "").strip() else "off",
     }
 
 

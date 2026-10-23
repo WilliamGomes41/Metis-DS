@@ -14,6 +14,7 @@ Elke stap die Azure wijzigt (build, migratie, app settings, image-wissel) gebeur
 
 1. Leg de huidige image-referentie vast als rollbackpunt:
    `az webapp config show -g <rg> -n <app> --query linuxFxVersion -o tsv`
+   Begint die waarde niet met `DOCKER|` (bijvoorbeeld `PYTHON|3.13`, de ZIP-route), stop dan. Dit runbook wisselt alleen van container naar container; een eerste overstap van ZIP naar container vraagt een eigen plan met een eigen rollback (`az webapp config set --linux-fx-version`) en een capaciteitsproef voor Docling.
 2. Controleer de app settings:
    `az webapp config appsettings list -g <rg> -n <app> -o json | python scripts/release_settings_preflight.py`
    Exit 0 is klaar. Exit 2 blokkeert de release. De belangrijkste weigering is `passage_formation_mode_retired`: `METIS_PASSAGE_FORMATION_MODE=deterministic-v1` laat sinds #817 elke nieuwe verwerking falen, ook beslisbomen. Zet de waarde dan op een semantische modus (`semantic-source-bound-v1`, `-v2` of `-v3`) of verwijder haar (leeg betekent `semantic-source-bound-v2`). De uitvoer toont geen geheime waarden.
