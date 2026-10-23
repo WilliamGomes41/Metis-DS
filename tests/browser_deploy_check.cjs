@@ -71,6 +71,9 @@ const fs=require('node:fs');
         // Closing and reopening Raad during a run keeps one run and shows its result.
         await post('/browser-faults',{});
         await page.getByRole('button',{name:"Controleer alle pagina's",exact:true}).click();
+        // The probe frame is off screen and invisible while it loads a page.
+        const frameStyle=await page.locator('iframe.care-probe').evaluate(f=>{const c=getComputedStyle(f);return {visibility:c.visibility,left:parseInt(c.left)};});
+        if(frameStyle.visibility!=='hidden'||frameStyle.left>-1000)throw Error('probe frame visible: '+JSON.stringify(frameStyle));
         await page.getByRole('button',{name:'Sluit Raad'}).click();
         await page.getByRole('button',{name:/Open Raad/}).click();
         if(!await page.getByRole('button',{name:"Controleer alle pagina's",exact:true}).isDisabled())throw Error('second run possible while running');

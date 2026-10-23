@@ -1899,10 +1899,6 @@ html[data-theme="dark"] .care-owl-pupil { fill: #0b1b34; }
 }
 @media print { .care-companion { display: none; } }
 
-<<<<<<< HEAD
-/* Raad deploy-controle: verborgen frame per gecontroleerde pagina. */
-.care-probe { position: absolute; left: -10000px; top: 0; width: 1280px; height: 800px; border: 0; visibility: hidden; }
-=======
 /* Shared header readability (docs/change-contracts/console-header-readability.md).
    Overrides only; the original header rules above stay byte-identical and the
    home tiles are not touched. */
@@ -1970,4 +1966,6 @@ html[data-theme="dark"] .theme-icon-sun { display: block; }
 @media (max-width: 560px) {
   .who { text-align: left; }
 }
->>>>>>> origin/main
+
+/* Raad deploy-controle: verborgen frame per gecontroleerde pagina. */
+.care-probe { position: absolute; left: -10000px; top: 0; width: 1280px; height: 800px; border: 0; visibility: hidden; }
