@@ -15,6 +15,7 @@ MAX_ATTEMPTS = 64
 MAX_CHECKPOINTS = 128
 MAX_CHECKPOINT_EVENTS = 64
 MAX_TASK_TIMINGS = 512
+PROGRESS_KEYS = ('task_count', 'planned_task_count', 'terminal_task_count', 'pending_task_count', 'failed_task_count')
 TIMING_KEYS = ('index', 'planned', 'checkpoint_before_seconds', 'model_seconds', 'validation_seconds', 'checkpoint_after_seconds')
 PHASES = frozenset({'reserved', 'source_reconstructed', 'model_request', 'response_received',
     'model_response', 'proposal_parsed', 'proposal_gate_rejected', 'validation_rejected',
@@ -129,7 +130,7 @@ def processing_trace(envelope):
             'semantic_identity_hash': sha(mapping(replay.get('identity')).get('hash')),
             'semantic_validation': choice(replay.get('validation'), {'passed'}),
             'formation_incomplete':provider.get('formation_incomplete') if type(provider.get('formation_incomplete')) is bool else None,
-            'formation_progress': {key:number(progress.get(key)) for key in ('task_count', 'planned_task_count', 'terminal_task_count', 'pending_task_count', 'failed_task_count')},
+            'formation_progress': {key:number(progress.get(key)) for key in PROGRESS_KEYS},
             'verification': 'not_revalidated_by_trace'},
         'limitations': ['diagnostic_checkpoints_do_not_authorize_resume',
             'checkpoint_payload_history_not_retained', 'formation_and_publication_not_assessed',
@@ -174,7 +175,7 @@ def clean_trace(raw):
             'semantic_identity_hash':sha(artifacts.get('semantic_identity_hash')),
             'semantic_validation':choice(artifacts.get('semantic_validation'), {'passed'}),
             'formation_incomplete':artifacts.get('formation_incomplete') if type(artifacts.get('formation_incomplete')) is bool else None,
-            'formation_progress': {key:number(mapping(artifacts.get('formation_progress')).get(key)) for key in ('task_count', 'terminal_task_count', 'pending_task_count', 'failed_task_count')},
+            'formation_progress': {key:number(mapping(artifacts.get('formation_progress')).get(key)) for key in PROGRESS_KEYS},
             'verification':'not_revalidated_by_trace'}}
 
 

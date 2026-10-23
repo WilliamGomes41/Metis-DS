@@ -326,7 +326,10 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                 except (ConsoleError, SemanticPassageError) as exc:
                     if exc.code.startswith("processing_"):
                         raise
-                    timing.setdefault("model_seconds", round(time.monotonic() - called, 3))
+                    if "model_seconds" in timing:
+                        timing["validation_seconds"] = round(time.monotonic() - validated, 3)
+                    else:
+                        timing["model_seconds"] = round(time.monotonic() - called, 3)
                     call.update(error_code=exc.code, failure_reason=getattr(exc, "pre_review_diagnostics", {}).get("reason_code", exc.code))
                     task_record["status"] = "failed"
             evidence["tasks"].append(task_record)

@@ -452,3 +452,15 @@ def test_checkpoint_records_the_size_it_asked_to_persist():
     checkpoint(attempt, 'proposal_received', {'provider_evidence': {'tasks': ['y'] * 1000}})
     small, large = (row['bytes'] for row in attempt['diagnostic']['checkpoints'])
     assert 0 < small < large
+
+
+def test_cleaned_trace_keeps_planned_tasks_and_timings():
+    from src.processing_trace_v1 import processing_trace, clean_trace
+    attempt = recorded_attempt()
+    attempt['diagnostic']['formation_timings'] = [{'task_id': 'f'*64, 'phase': 'initial', 'status': 'completed',
+                                                   'index': 1, 'planned': 130, 'model_seconds': 61.5}]
+    envelope = {'snapshot_id':'snap-'+'d'*16+'-'+'e'*8, 'sha256':'b'*64, 'processing_attempts':[attempt],
+                'semantic_replay': {'provider_evidence': {'formation_progress': {'planned_task_count': 130}}}}
+    cleaned = clean_trace(processing_trace(envelope))
+    assert cleaned['artifacts']['formation_progress']['planned_task_count'] == 130
+    assert cleaned['attempts'][0]['formation_timings'][0]['model_seconds'] == 61.5

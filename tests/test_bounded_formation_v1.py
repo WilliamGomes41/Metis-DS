@@ -252,3 +252,25 @@ def test_each_task_records_plan_and_where_its_time_went():
     # Measurements stay attempt-owned: never in provider evidence or replay identity.
     assert 'formation_timings' not in json.dumps(evidence)
     assert 'model_seconds' not in json.dumps(evidence)
+
+
+def test_task_rejected_in_validation_keeps_its_validation_time(monkeypatch):
+    import src.bounded_formation_v1 as bounded
+    from src.semantic_passage_v1 import SemanticPassageError
+    fragments = [dict(source('Bronpassage met voldoende klinische tekst voor een eigen taak.')[0],
+                      fragment_id='0', fragment_hash='0', section_path=['0'])]
+    blocks = semantic_source_blocks(fragments)
+    checkpoints = []
+
+    def rejecting(*args, **kwargs):
+        raise SemanticPassageError('semantic_fixture_rejected')
+    monkeypatch.setattr(bounded, 'restrict_supplement', rejecting)
+    execute(blocks=blocks, evidence_blocks=blocks,
+        validator_input={'fragments': fragments, 'document_id': 'test', 'evidence_fragments': fragments,
+                         'allowed_candidate_block_ids': [b['block_id'] for b in blocks], 'field_contract_v3': True},
+        provider=lambda **kwargs: {'objects': [], 'relations': [], 'source_assessments': [], 'abstain_reason': 'x'},
+        limits=ModelCallLimits(),
+        checkpoint=lambda phase, values: checkpoints.append((phase, deepcopy(values))))
+    first = checkpoints[-1][1]['formation_timings'][0]
+    assert first['status'] == 'failed'
+    assert first['model_seconds'] >= 0 and first['validation_seconds'] >= 0
