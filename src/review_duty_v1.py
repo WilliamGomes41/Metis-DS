@@ -381,10 +381,18 @@ def reviewer_route_for(
     already_approved = reviewer_id in set(approvers)
     stage = str(duty["stage"])
     actionable = not already_approved and not reviewer_is_agent({"reviewer_id": reviewer_id})
-    from src.review_policy_v1 import object_policy, required_reviewers
+    from src.review_policy_v1 import object_policy, participants, required_reviewers
     policy = object_policy(obj)
     if policy is not None:
-        actionable = actionable and (reviewer_id == policy["primary"] if stage == FIRST_REVIEW else reviewer_id in required_reviewers(policy))
+        required = required_reviewers(policy)
+        if stage == FIRST_REVIEW:
+            allowed = reviewer_id == policy["primary"]
+        elif required - set(approvers):
+            allowed = reviewer_id in required
+        else:
+            # Content-bound four eyes: any active participant may give the independent second review.
+            allowed = reviewer_id in participants(policy)
+        actionable = actionable and allowed
     canonical_task = (
         "second_review"
         if stage == SECOND_REVIEW

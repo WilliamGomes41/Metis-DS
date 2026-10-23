@@ -378,3 +378,14 @@ def test_kernel_content_four_eyes_under_one_reviewer_policy_routes_through_parti
     console.approve_second_review(actor_id=ids["dirk"], snapshot_id=sid, object_id=object_id)
     assert not REVIEW_BLOCKERS & set(console.publication_readiness(sid)["blockers"])
     assert console.publish(actor_id=publisher["account_id"], snapshot_id=sid)["published_items"]
+
+
+def test_kernel_content_four_eyes_optional_participant_can_give_the_second_review(kernel):
+    console, ids = kernel
+    policy = {"contract": POLICY, "revision": 1, "primary": ids["bert"],
+              "assignments": [{"reviewer_id": ids["carla"], "participation": "optional"}]}
+    sid = _ingest(console, ids, {}, review_choice=None, review_policy=policy)["snapshot_id"]
+    object_id = _approve_as_exception(console, sid, ids["bert"])
+    assert "four_eyes_required" in console.publication_readiness(sid)["blockers"]
+    console.approve_second_review(actor_id=ids["carla"], snapshot_id=sid, object_id=object_id)
+    assert not REVIEW_BLOCKERS & set(console.publication_readiness(sid)["blockers"])
