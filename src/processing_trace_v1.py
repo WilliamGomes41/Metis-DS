@@ -16,7 +16,7 @@ MAX_CHECKPOINTS = 128
 MAX_CHECKPOINT_EVENTS = 64
 MAX_TASK_TIMINGS = 512
 PROGRESS_KEYS = ('task_count', 'planned_task_count', 'terminal_task_count', 'pending_task_count', 'failed_task_count')
-TIMING_KEYS = ('index', 'planned', 'checkpoint_before_seconds', 'model_seconds', 'validation_seconds', 'checkpoint_after_seconds')
+TIMING_KEYS = ('index', 'planned', 'checkpoint_before_seconds', 'transport_seconds', 'provider_seconds', 'validation_seconds', 'checkpoint_after_seconds')
 PHASES = frozenset({'reserved', 'source_reconstructed', 'model_request', 'response_received',
     'model_response', 'proposal_parsed', 'proposal_gate_rejected', 'validation_rejected',
     'evidence_resolved', 'proposal_received', 'formation_accounted', 'validation_started',

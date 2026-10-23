@@ -244,6 +244,8 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
     phases = ["recovery"] if resuming else ["initial", "recovery"]
     budget_exhausted = False
     # Attempt-owned measurements only: never part of provider evidence or replay identity.
+    # provider_seconds includes the provider's own preparation and validation;
+    # transport_seconds (when the provider reports it) is the model call alone.
     timings = []
 
     def timed_checkpoint(phase, values):
@@ -305,8 +307,8 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                                             "start": s["start"], "end": s["end"]} for s in task["target_spans"]] if phase == "recovery" else None,
                         task={"version": VERSION, "task_id": task["task_id"], "phase": phase,
                               "selectable_ranges": task["target_spans"], "context_only_block_ids": [b["block_id"] for b in task["evidence_blocks"]]},
-                        model_limits=call_limits, evidence=call, validator_input=task_validator)
-                    timing["model_seconds"] = round(time.monotonic() - called, 3)
+                        model_limits=call_limits, evidence=call, validator_input=task_validator, timing=timing)
+                    timing["provider_seconds"] = round(time.monotonic() - called, 3)
                     validated = time.monotonic()
                     result, rejected = restrict_supplement(result, primary=proposal,
                         targets=[{"span": s} for s in task["target_spans"]])
@@ -326,10 +328,10 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                 except (ConsoleError, SemanticPassageError) as exc:
                     if exc.code.startswith("processing_"):
                         raise
-                    if "model_seconds" in timing:
+                    if "provider_seconds" in timing:
                         timing["validation_seconds"] = round(time.monotonic() - validated, 3)
                     else:
-                        timing["model_seconds"] = round(time.monotonic() - called, 3)
+                        timing["provider_seconds"] = round(time.monotonic() - called, 3)
                     call.update(error_code=exc.code, failure_reason=getattr(exc, "pre_review_diagnostics", {}).get("reason_code", exc.code))
                     task_record["status"] = "failed"
             evidence["tasks"].append(task_record)

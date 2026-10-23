@@ -617,6 +617,7 @@ def _provider_proposal(
     evidence: dict[str, Any] | None = None,
     checkpoint=None,
     validator_input=None,
+    timing: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     safe_key = str(api_key or "").strip()
     if not safe_key:
@@ -649,6 +650,9 @@ def _provider_proposal(
         # Production uses the supervised native transport; custom transports must
         # honor this contract themselves. This guard still forbids late activation.
         response = post_json(OPENAI_RESPONSES_URL, headers, payload, limits.total)
+    if timing is not None:
+        # Attempt-owned measurement; never provider evidence.
+        timing["transport_seconds"] = round(time.monotonic() - started, 3)
     if time.monotonic() - started >= limits.total:
         raise ConsoleError("pre_review_llm_processing_timeout")
     if not isinstance(response, dict):

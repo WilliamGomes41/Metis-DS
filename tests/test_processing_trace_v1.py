@@ -432,16 +432,16 @@ def test_trace_exports_checkpoint_size_and_task_timings_without_text():
     attempt['diagnostic']['checkpoints'][0]['bytes'] = 52_000
     attempt['diagnostic']['formation_timings'] = [
         {'task_id': 'f'*64, 'phase': 'initial', 'status': 'completed', 'index': 1, 'planned': 130,
-         'checkpoint_before_seconds': 1.2, 'model_seconds': 61.5, 'validation_seconds': 4.1,
+         'checkpoint_before_seconds': 1.2, 'provider_seconds': 61.5, 'validation_seconds': 4.1,
          'checkpoint_after_seconds': 1.4, 'note': 'private-source'},
-        {'task_id': 'private', 'phase': 'private', 'model_seconds': 'private'}]
+        {'task_id': 'private', 'phase': 'private', 'provider_seconds': 'private'}]
     envelope = {'snapshot_id':'snap-'+'d'*16+'-'+'e'*8, 'sha256':'b'*64, 'processing_attempts':[attempt]}
     row = processing_trace(envelope)['attempts'][0]
     assert row['checkpoints'][0]['bytes'] == 52_000
     assert row['formation_timings'][0] == {'task_id': 'f'*64, 'phase': 'initial', 'status': 'completed', 'index': 1,
-        'planned': 130, 'checkpoint_before_seconds': 1.2, 'model_seconds': 61.5, 'validation_seconds': 4.1,
-        'checkpoint_after_seconds': 1.4}
-    assert row['formation_timings'][1]['task_id'] is None and row['formation_timings'][1]['model_seconds'] is None
+        'planned': 130, 'checkpoint_before_seconds': 1.2, 'transport_seconds': None, 'provider_seconds': 61.5,
+        'validation_seconds': 4.1, 'checkpoint_after_seconds': 1.4}
+    assert row['formation_timings'][1]['task_id'] is None and row['formation_timings'][1]['provider_seconds'] is None
     assert 'private' not in json.dumps(row)
 
 
@@ -458,9 +458,9 @@ def test_cleaned_trace_keeps_planned_tasks_and_timings():
     from src.processing_trace_v1 import processing_trace, clean_trace
     attempt = recorded_attempt()
     attempt['diagnostic']['formation_timings'] = [{'task_id': 'f'*64, 'phase': 'initial', 'status': 'completed',
-                                                   'index': 1, 'planned': 130, 'model_seconds': 61.5}]
+                                                   'index': 1, 'planned': 130, 'provider_seconds': 61.5}]
     envelope = {'snapshot_id':'snap-'+'d'*16+'-'+'e'*8, 'sha256':'b'*64, 'processing_attempts':[attempt],
                 'semantic_replay': {'provider_evidence': {'formation_progress': {'planned_task_count': 130}}}}
     cleaned = clean_trace(processing_trace(envelope))
     assert cleaned['artifacts']['formation_progress']['planned_task_count'] == 130
-    assert cleaned['attempts'][0]['formation_timings'][0]['model_seconds'] == 61.5
+    assert cleaned['attempts'][0]['formation_timings'][0]['provider_seconds'] == 61.5

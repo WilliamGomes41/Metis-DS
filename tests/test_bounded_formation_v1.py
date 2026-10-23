@@ -246,12 +246,12 @@ def test_each_task_records_plan_and_where_its_time_went():
     assert [row['index'] for row in initial] == [1, 2, 3]
     for row in initial:
         assert row['planned'] == 3 and row['status'] == 'completed'
-        assert all(row[key] >= 0 for key in ('checkpoint_before_seconds', 'model_seconds', 'validation_seconds'))
+        assert all(row[key] >= 0 for key in ('checkpoint_before_seconds', 'provider_seconds', 'validation_seconds'))
     # A write cannot hold its own duration: the last one appears only after a later checkpoint.
     assert all('checkpoint_after_seconds' in row for row in timings[:-1])
     # Measurements stay attempt-owned: never in provider evidence or replay identity.
     assert 'formation_timings' not in json.dumps(evidence)
-    assert 'model_seconds' not in json.dumps(evidence)
+    assert 'provider_seconds' not in json.dumps(evidence)
 
 
 def test_task_rejected_in_validation_keeps_its_validation_time(monkeypatch):
@@ -273,4 +273,16 @@ def test_task_rejected_in_validation_keeps_its_validation_time(monkeypatch):
         checkpoint=lambda phase, values: checkpoints.append((phase, deepcopy(values))))
     first = checkpoints[-1][1]['formation_timings'][0]
     assert first['status'] == 'failed'
-    assert first['model_seconds'] >= 0 and first['validation_seconds'] >= 0
+    assert first['provider_seconds'] >= 0 and first['validation_seconds'] >= 0
+
+
+def test_provider_reports_model_transport_time_apart_from_its_own_validation():
+    import pytest
+    from src.operations_console_v1 import ConsoleError
+    from src.pre_review_semantic_v1 import _provider_proposal
+    blocks = semantic_source_blocks(source('Bronpassage met voldoende klinische tekst.'))
+    timing = {}
+    with pytest.raises(ConsoleError):
+        _provider_proposal(api_key='fixture', model='fixture', blocks=blocks, evidence_blocks=blocks,
+                           post_json=lambda *args: 'not a response', field_contract_v3=True, timing=timing)
+    assert timing['transport_seconds'] >= 0
