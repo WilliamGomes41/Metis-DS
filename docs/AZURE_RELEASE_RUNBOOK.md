@@ -18,7 +18,7 @@ Elke stap die Azure wijzigt (build, migratie, app settings, image-wissel) gebeur
    `az webapp config appsettings list -g <rg> -n <app> -o json | python scripts/release_settings_preflight.py`
    Exit 0 is klaar. Exit 2 blokkeert de release. De belangrijkste weigering is `passage_formation_mode_retired`: `METIS_PASSAGE_FORMATION_MODE=deterministic-v1` laat sinds #817 elke nieuwe verwerking falen, ook beslisbomen. Zet de waarde dan op een semantische modus (`semantic-source-bound-v1`, `-v2` of `-v3`) of verwijder haar (leeg betekent `semantic-source-bound-v2`). De uitvoer toont geen geheime waarden.
 3. Controleer dat er geen verwerking loopt. Een image-wissel herstart de app; een lopende poging wordt dan afgebroken en telt mee als poging.
-4. Controleer dat de app een image uit deze ACR mag trekken en op de goede poort luistert. Begint de referentie uit stap 1.1 al met `DOCKER|<acr>.azurecr.io/`, dan is dit eerder ingericht; controleer het toch:
+4. Controleer dat de app een image uit deze ACR mag trekken en op de goede poort luistert. Begint de referentie uit stap 1.1 al met `DOCKER|` en de login-server van de ACR, dan is dit eerder ingericht; controleer het toch:
    - `az webapp config show -g <rg> -n <app> --query acrUseManagedIdentityCreds` geeft `true`, en de identiteit van de app heeft de rol `AcrPull` op de ACR (`az role assignment list --assignee <principal-id> --scope <acr-resource-id>`). Anders kan de app het nieuwe image niet ophalen.
    - De app setting `WEBSITES_PORT` is `8000`. Gunicorn luistert in het image op `${PORT:-8000}`; App Service gaat zonder deze setting uit van poort 80.
 5. Migratie 019 (`workflow.view_checks`, alleen-toevoegen). Let op: `apply_workflow_postgres_migrations.py verify` controleert 019 niet. Controleer daarom als database-beheerder:
@@ -33,13 +33,13 @@ bash scripts/build_azure_release_image.sh --registry <acr> --repository <repo> -
 bash scripts/build_azure_release_image.sh --registry <acr> --repository <repo>
 ```
 
-Zonder `--commit` neemt het script `origin/main`. Het weigert een commit die niet op `main` staat. De build-context is een schone `git archive` plus `config/deployed_commit.txt`. Het script voegt alleen een tag toe aan de ACR en drukt `release_image_reference=<acr>.azurecr.io/<repo>@sha256:…` af.
+Zonder `--commit` neemt het script `origin/main`. Het weigert een commit die niet op `main` staat. De build-context is een schone `git archive` plus `config/deployed_commit.txt`. Het script voegt alleen een tag toe aan de ACR en drukt `release_image_reference=<login-server>/<repo>@sha256:…` af. De login-server komt uit `az acr show --query loginServer`; met een domeinlabel is dat niet `<acr>.azurecr.io` maar bijvoorbeeld `<acr>-<hash>.azurecr.io`. Gebruik altijd de afgedrukte referentie.
 
 ## 3. Wisselen
 
 ```bash
 az webapp config container set -g <rg> -n <app> \
-  --container-image-name <acr>.azurecr.io/<repo>@sha256:<digest>
+  --container-image-name <release_image_reference>
 ```
 
 ## 4. Controleren

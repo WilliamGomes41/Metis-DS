@@ -47,7 +47,7 @@ printf '%s\n' "${commit}" > "${context}/config/deployed_commit.txt"
 image="${repository}:${commit}"
 
 echo "release_image_commit=${commit}"
-echo "release_image_tag=${registry}.azurecr.io/${image}"
+echo "release_image_tag=${image}"
 if [ "${dry_run}" -eq 1 ]; then
   echo "release_image_dry_run: context prepared, no build started"
   exit 0
@@ -61,5 +61,7 @@ az acr build \
   --build-arg "METIS_BUILD_COMMIT=${commit}" \
   "${context}"
 digest="$(az acr repository show --name "${registry}" --image "${image}" --query digest --output tsv)"
+# The login server is not always <name>.azurecr.io (domain name label scope).
+login_server="$(az acr show --name "${registry}" --query loginServer --output tsv)"
 echo "release_image_digest=${digest}"
-echo "release_image_reference=${registry}.azurecr.io/${repository}@${digest}"
+echo "release_image_reference=${login_server}/${repository}@${digest}"
