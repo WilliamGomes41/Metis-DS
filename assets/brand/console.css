@@ -1904,7 +1904,8 @@ html[data-theme="dark"] .care-owl-pupil { fill: #0b1b34; }
    home tiles are not touched. */
 .topbar { gap: 18px 24px; }
 
-.rooms { flex: 1 1 auto; align-items: center; gap: 2px; }
+/* The links never break inside the row: the account text gives way first. */
+.rooms { flex: 1 1 auto; flex-wrap: nowrap; align-items: center; gap: 2px; }
 .rooms form { margin: 0; }
 
 .rooms a,
@@ -1944,13 +1945,13 @@ html[data-theme="dark"] .theme-icon-moon { display: none; }
 
 html[data-theme="dark"] .theme-icon-sun { display: block; }
 
-.who { display: grid; gap: 2px; flex: 0 1 auto; line-height: 1.25; }
+.who { display: grid; gap: 2px; flex: 0 1 auto; min-width: 0; line-height: 1.25; }
 .who-name { color: var(--text); font-weight: 700; }
-.who-roles { font-size: 0.8rem; white-space: nowrap; }
+.who-roles { font-size: 0.8rem; }
 
 @media (max-width: 1359px) {
   .topbar { flex-wrap: wrap; }
-  .rooms { order: 3; flex-basis: 100%; margin-left: -10px; }
+  .rooms { order: 3; flex-basis: 100%; flex-wrap: wrap; margin-left: -10px; }
   .theme-toggle { margin-left: auto; }
   .who { margin-left: 0; }
 }

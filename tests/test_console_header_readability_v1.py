@@ -16,10 +16,11 @@ def test_header_css_keeps_nav_on_one_line_until_it_cannot_fit() -> None:
     css = (ROOT / "assets/brand/console.css").read_text(encoding="utf-8")
     header = css.split("/* Shared header readability")[1]
     assert ".home-tile" not in header
-    assert re.search(r"\.rooms\s*\{[^}]*flex:\s*1 1 auto", header)
+    assert re.search(r"\.rooms\s*\{[^}]*flex:\s*1 1 auto;\s*flex-wrap:\s*nowrap", header)
+    assert re.search(r"\.who\s*\{[^}]*min-width:\s*0", header)
     assert re.search(r"\.rooms a,\s*\.rooms button\s*\{[^}]*white-space:\s*nowrap", header)
     narrow = re.search(r"@media \(max-width: 1359px\)\s*\{(.*?)\n\}", header, re.S)
-    assert narrow and "flex-basis: 100%" in narrow.group(1)
+    assert narrow and "flex-basis: 100%; flex-wrap: wrap" in narrow.group(1)
     assert re.search(r"\.theme-toggle\s*\{[^}]*width:\s*44px;[^}]*height:\s*44px", header)
     assert re.search(r'html\[data-theme="dark"\] \.theme-icon-sun\s*\{\s*display:\s*block', header)
 
