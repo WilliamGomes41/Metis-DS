@@ -1948,6 +1948,8 @@ html[data-theme="dark"] .theme-icon-sun { display: block; }
 .who { display: grid; gap: 2px; flex: 0 1 auto; min-width: 0; line-height: 1.25; }
 .who-name { color: var(--text); font-weight: 700; }
 .who-roles { font-size: 0.8rem; }
+.who-name,
+.who-roles { overflow-wrap: anywhere; }
 
 @media (max-width: 1359px) {
   .topbar { flex-wrap: wrap; }

@@ -30,6 +30,7 @@ def test_header_css_keeps_nav_on_one_line_until_it_cannot_fit() -> None:
     assert ".home-tile" not in header
     assert re.search(r"\.rooms\s*\{[^}]*flex:\s*1 1 auto;\s*flex-wrap:\s*nowrap", header)
     assert re.search(r"\.who\s*\{[^}]*min-width:\s*0", header)
+    assert re.search(r"\.who-name,\s*\.who-roles\s*\{\s*overflow-wrap:\s*anywhere", header)
     assert re.search(r"\.rooms a,\s*\.rooms button\s*\{[^}]*white-space:\s*nowrap", header)
     narrow = re.search(r"@media \(max-width: 1359px\)\s*\{(.*?)\n\}", header, re.S)
     assert narrow and "flex-basis: 100%; flex-wrap: wrap" in narrow.group(1)
