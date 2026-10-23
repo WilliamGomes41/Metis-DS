@@ -5097,17 +5097,23 @@ def create_console_app(
             """
         )
 
-    def _policy_from_choice(choice: dict[str, Any], uploader: str) -> dict[str, Any] | None:
+    def _policy_from_choice(choice: dict[str, Any], uploader: str, *, boom: bool) -> dict[str, Any] | None:
         """Policy for a choice with two required reviewers; None leaves the chosen path.
 
         Four eyes on one colleague needs the uploader named as primary, and two
         colleagues map to primary plus one required. A single-reviewer choice
         gets no policy, because a one-reviewer policy would override the
-        content-driven four-eyes check in ``requires_four_eyes``.
+        content-driven four-eyes check in ``requires_four_eyes``. A decision
+        tree is the exception: ``receive_source`` only accepts its PDF with a
+        policy, as the old "Eén beoordelaar" mode gave it.
         """
         from src.review_policy_v1 import CONTRACT
         option, others = choice["option"], choice["reviewers"]
-        if option == "one_other" and choice["four_eyes_required"] and len(others) == 1:
+        if boom and option == "uploader_sole" and not others:
+            primary, required = uploader, []
+        elif boom and option == "one_other" and not choice["four_eyes_required"] and len(others) == 1:
+            primary, required = others[0], []
+        elif option == "one_other" and choice["four_eyes_required"] and len(others) == 1:
             primary, required = uploader, others
         elif option == "two_others" and len(others) == 2:
             # Two colleagues already give four eyes; the mapped policy says so too.
@@ -5164,7 +5170,8 @@ def create_console_app(
                          "readers": [i for i in review_readers if i.strip()]}
         policy = None
         if review_mode == "choice":
-            policy = _policy_from_choice(review_choice, account["account_id"])
+            policy = _policy_from_choice(review_choice, account["account_id"],
+                                         boom=review_path_for_klasse(class_) == "boom")
         elif review_mode != "legacy":
             if review_mode not in {"single", "optional", "required"}:
                 raise ConsoleError("invalid_review_policy")

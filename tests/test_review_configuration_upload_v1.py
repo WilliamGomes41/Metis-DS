@@ -244,6 +244,27 @@ def test_form_choice_for_one_reviewer_keeps_content_four_eyes():
     assert requires_four_eyes({"confirmed_object_type": "exception"}) is True
 
 
+# A decision-tree PDF is only received with a policy, so a single-reviewer
+# choice still gets one there, as the old single-reviewer mode gave it.
+@pytest.mark.parametrize(("option", "picked", "primary"), [
+    ("uploader_sole", [], "uploader"),
+    ("one_other", ["first"], "first"),
+])
+def test_http_form_single_reviewer_choice_keeps_decision_pdf_route(system, option, picked, primary, *,
+                                                                   production_app):
+    from tests.decision_tree_test_support import pdf_data
+    console, password, ids = system
+    response = _client(console, password, production_app=production_app).post("/ingest", data=_form(
+        ids, named_reviewers=[], class_="beslisboom", review_mode="choice", review_option=option,
+        review_reviewers=[ids[k] for k in picked]), files={"file": ("boom.pdf", pdf_data(), "application/pdf")},
+        follow_redirects=False)
+    assert response.status_code == 303, response.text
+    sid = response.headers["location"].split("document=")[1].split("&")[0]
+    policy = console._envelope(sid)["review_policy"]
+    assert policy["primary"] == ids[primary]
+    assert policy["assignments"] == []
+
+
 def test_http_form_choice_with_wrong_count_is_refused(system, *, production_app):
     console, password, ids = system
     response = _client(console, password, production_app=production_app).post("/ingest", data=_form(
