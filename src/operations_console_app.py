@@ -5023,34 +5023,25 @@ def create_console_app(
                     </div>
                     <label for="live_url">Link naar de online bron (optioneel)</label>
                     <input id="live_url" name="live_url">
+                    <label for="source_status">Vaststellingsstatus volgens de bron</label>
+                    <select id="source_status" name="source_status"><option value="unknown">Niet opgegeven</option><option value="established">Vastgesteld</option><option value="draft">Concept</option></select>
                   </div>
                   <div class="section">
                     <h3>Reviewers</h3>
-                    <label for="review_mode">Reviewdeelname</label>
-                    <select id="review_mode" name="review_mode">
-                      <option value="legacy">Bestaande reviewregels</option>
-                      <option value="single">Eén beoordelaar</option>
-                      <option value="optional">Aanvullende beoordeling mogelijk</option>
-                      <option value="required">Onafhankelijke aanvullende beoordeling verplicht</option>
-                    </select>
-                    <label for="primary_reviewer">Verantwoordelijke beoordelaar</label>
-                    <select id="primary_reviewer" name="primary_reviewer"><option value="">Uploader</option>{options}</select>
-                    <div id="optional-row" hidden>
-                      <label for="named_reviewers">Wie mag aanvullend beoordelen</label>
-                      <select id="named_reviewers" name="named_reviewers" multiple size="6">{options}</select>
-                    </div>
-                    <label for="source_status">Vaststellingsstatus volgens de bron</label>
-                    <select id="source_status" name="source_status"><option value="unknown">Niet opgegeven</option><option value="established">Vastgesteld</option><option value="draft">Concept</option></select>
                     <fieldset id="review-configuration">
-                      <legend>Reviewkeuze (verplicht)</legend>
-                      <label><input type="radio" name="review_option" value="uploader_sole" required> Alleen ik als uploader</label>
-                      <label><input type="radio" name="review_option" value="one_other" required> Eén andere reviewer</label>
-                      <label><input type="radio" name="review_option" value="two_others" required> Twee andere reviewers</label>
-                      <label><input type="checkbox" name="four_eyes" value="yes"> Vier ogen verplicht</label>
-                      <label for="review_reviewers">Reviewers voor deze keuze</label>
+                      <legend>Wie beoordeelt dit document?</legend>
+                      <input type="hidden" name="review_mode" value="choice">
+                      <label><input type="radio" name="review_option" value="uploader_sole" required> Alleen ik</label>
+                      <label><input type="radio" name="review_option" value="one_other" required> Eén collega</label>
+                      <label><input type="radio" name="review_option" value="two_others" required> Twee collega's</label>
+                      <label for="review_reviewers">Welke collega's (niet nodig bij Alleen ik)</label>
                       <select id="review_reviewers" name="review_reviewers" multiple size="6">{options}</select>
-                      <label for="review_readers">Lezers (tellen NOOIT mee voor goedkeuring)</label>
-                      <select id="review_readers" name="review_readers" multiple size="6">{options}</select>
+                      <details id="review-more">
+                        <summary>Meer opties</summary>
+                        <label><input type="checkbox" name="four_eyes" value="yes"> Vier ogen: bij Eén collega beoordeel ik zelf ook mee</label>
+                        <label for="review_readers">Lezers (lezen mee, keuren niet goed)</label>
+                        <select id="review_readers" name="review_readers" multiple size="6">{options}</select>
+                      </details>
                     </fieldset>
 
                   </div>
@@ -5087,16 +5078,6 @@ def create_console_app(
               function sync() {{ row.hidden = kind.value !== "new_version"; }}
               kind.addEventListener("change", sync);
               sync();
-              var mode = document.getElementById("review_mode");
-              var optional = document.getElementById("optional-row");
-              var optionalSelect = document.getElementById("named_reviewers");
-              function syncOptional() {{
-                if (!mode || !optional || !optionalSelect) return;
-                optional.hidden = mode.value !== "optional";
-                optionalSelect.disabled = optional.hidden;
-              }}
-              if (mode) mode.addEventListener("change", syncOptional);
-              syncOptional();
               var date = document.getElementById("date");
               var out = document.querySelector("[data-date-nl]");
               function showNl() {{
@@ -5115,6 +5096,33 @@ def create_console_app(
             </script>
             """
         )
+
+    def _policy_from_choice(choice: dict[str, Any], uploader: str, *, boom: bool) -> dict[str, Any] | None:
+        """Policy for a choice with two required reviewers; None leaves the chosen path.
+
+        Four eyes on one colleague needs the uploader named as primary, and two
+        colleagues map to primary plus one required. A single-reviewer choice
+        gets no policy, because a one-reviewer policy would override the
+        content-driven four-eyes check in ``requires_four_eyes``. A decision
+        tree is the exception: ``receive_source`` only accepts its PDF with a
+        policy, as the old "Eén beoordelaar" mode gave it.
+        """
+        from src.review_policy_v1 import CONTRACT
+        option, others = choice["option"], choice["reviewers"]
+        if boom and option == "uploader_sole" and not others:
+            primary, required = uploader, []
+        elif boom and option == "one_other" and not choice["four_eyes_required"] and len(others) == 1:
+            primary, required = others[0], []
+        elif option == "one_other" and choice["four_eyes_required"] and len(others) == 1:
+            primary, required = uploader, others
+        elif option == "two_others" and len(others) == 2:
+            # Two colleagues already give four eyes; the mapped policy says so too.
+            choice["four_eyes_required"] = False
+            primary, required = others[0], others[1:]
+        else:
+            return None
+        return {"contract": CONTRACT, "revision": 1, "primary": primary,
+                "assignments": [{"reviewer_id": i, "participation": "required"} for i in required]}
 
     @app.post("/ingest", response_class=HTMLResponse)
     async def ingest_post(
@@ -5161,7 +5169,10 @@ def create_console_app(
                          "reviewers": [i for i in review_reviewers if i.strip()],
                          "readers": [i for i in review_readers if i.strip()]}
         policy = None
-        if review_mode != "legacy":
+        if review_mode == "choice":
+            policy = _policy_from_choice(review_choice, account["account_id"],
+                                         boom=review_path_for_klasse(class_) == "boom")
+        elif review_mode != "legacy":
             if review_mode not in {"single", "optional", "required"}:
                 raise ConsoleError("invalid_review_policy")
             primary = primary_reviewer.strip() or account["account_id"]

@@ -150,10 +150,9 @@ def test_kernel_invalid_choice_is_refused_before_any_write(system, choice, code)
     assert console.list_envelopes() == []
 
 
-def test_http_form_requires_choice_next_to_old_fields(system, *, production_app):
+def test_http_form_requires_choice(system, *, production_app):
     console, password, _ = system
     page = _client(console, password, production_app=production_app).get("/ingest").text
-    assert 'name="review_mode"' in page and 'name="primary_reviewer"' in page
     for option in ("uploader_sole", "two_others", "one_other"):
         assert f'name="review_option" value="{option}" required' in page
     assert 'name="four_eyes"' in page and 'name="review_reviewers"' in page and 'name="review_readers"' in page
@@ -184,10 +183,13 @@ def test_http_upload_with_choice_stores_chosen(system, *, production_app):
 def test_upload_form_names_reviewers_once(system, *, production_app):
     console, password, ids = system
     page = _client(console, password, production_app=production_app).get("/ingest").text
-    assert 'name="review_reviewers"' in page
-    assert page.count('name="named_reviewers"') == 1
-    # The separate list is only for optional participants and starts hidden.
-    assert '<div id="optional-row" hidden>' in page
+    assert page.count('name="review_reviewers"') == 1
+    # One question, one list of colleagues; no second reviewer selection.
+    for gone in ('name="named_reviewers"', 'id="review_mode"', 'name="primary_reviewer"'):
+        assert gone not in page
+    assert "Wie beoordeelt dit document?" in page
+    assert '<input type="hidden" name="review_mode" value="choice">' in page
+    assert '<details id="review-more">' in page
 
 
 # Required participation keeps the uploader as primary, so the mapped choice is
@@ -203,6 +205,72 @@ def test_http_choice_reviewers_alone_assign_the_document(system, mode, four_eyes
     envelope = console._envelope(sid)
     assert ids["first"] in envelope["named_reviewers"]
     assert envelope["review_configuration"]["reviewers"] == [ids["first"]]
+
+
+# Two required reviewers get a matching policy, so the uploader stays eligible
+# under four eyes. A single reviewer gets none: a one-reviewer policy would
+# override the content-driven four-eyes check.
+@pytest.mark.parametrize(("option", "four_eyes", "picked", "primary", "required"), [
+    ("uploader_sole", "", [], None, []),
+    ("one_other", "", ["first"], None, []),
+    ("one_other", "yes", ["first"], "uploader", ["first"]),
+    ("two_others", "yes", ["first", "second"], "first", ["second"]),
+])
+def test_http_form_choice_sets_matching_policy(system, option, four_eyes, picked, primary, required, *,
+                                               production_app):
+    console, password, ids = system
+    response = _client(console, password, production_app=production_app).post("/ingest", data=_form(
+        ids, named_reviewers=[], review_mode="choice", review_option=option, four_eyes=four_eyes,
+        review_reviewers=[ids[k] for k in picked]), files={"file": ("bron.html", HTML, "text/html")},
+        follow_redirects=False)
+    assert response.status_code == 303, response.text
+    sid = response.headers["location"].split("document=")[1].split("&")[0]
+    envelope = console._envelope(sid)
+    policy = envelope.get("review_policy")
+    if primary is None:
+        assert policy is None
+        assert set(envelope["named_reviewers"]) == ({ids[k] for k in picked} or {ids["uploader"]})
+    else:
+        assert policy["primary"] == ids[primary]
+        assert [a["reviewer_id"] for a in policy["assignments"]] == [ids[k] for k in required]
+        assert set(envelope["named_reviewers"]) == {ids[primary], *(ids[k] for k in required)}
+    assert envelope["review_configuration"]["reviewers"] == [ids[k] for k in picked]
+    assert envelope["review_configuration"]["four_eyes_required"] is (option == "one_other" and four_eyes == "yes")
+
+
+def test_form_choice_for_one_reviewer_keeps_content_four_eyes():
+    from src.four_eyes_v1 import requires_four_eyes
+    # Without a policy the object's own risk still demands a second review.
+    assert requires_four_eyes({"confirmed_object_type": "exception"}) is True
+
+
+# A decision-tree PDF is only received with a policy, so a single-reviewer
+# choice still gets one there, as the old single-reviewer mode gave it.
+@pytest.mark.parametrize(("option", "picked", "primary"), [
+    ("uploader_sole", [], "uploader"),
+    ("one_other", ["first"], "first"),
+])
+def test_http_form_single_reviewer_choice_keeps_decision_pdf_route(system, option, picked, primary, *,
+                                                                   production_app):
+    from tests.decision_tree_test_support import pdf_data
+    console, password, ids = system
+    response = _client(console, password, production_app=production_app).post("/ingest", data=_form(
+        ids, named_reviewers=[], class_="beslisboom", review_mode="choice", review_option=option,
+        review_reviewers=[ids[k] for k in picked]), files={"file": ("boom.pdf", pdf_data(), "application/pdf")},
+        follow_redirects=False)
+    assert response.status_code == 303, response.text
+    sid = response.headers["location"].split("document=")[1].split("&")[0]
+    policy = console._envelope(sid)["review_policy"]
+    assert policy["primary"] == ids[primary]
+    assert policy["assignments"] == []
+
+
+def test_http_form_choice_with_wrong_count_is_refused(system, *, production_app):
+    console, password, ids = system
+    response = _client(console, password, production_app=production_app).post("/ingest", data=_form(
+        ids, named_reviewers=[], review_mode="choice", review_option="two_others",
+        review_reviewers=[ids["first"]]), files={"file": ("bron.html", HTML, "text/html")}, follow_redirects=False)
+    assert response.status_code == 400
 
 
 def test_http_optional_participants_stay_separate_from_choice_reviewers(system, *, production_app):
