@@ -273,6 +273,8 @@
           else if (/_role_required$/.test(code) && !accountRoles().includes(code.replace(/_role_required$/, ''))) finish({ok: true, skipped: true, code});
           else if (banner) finish({ok: false, problem: 'error', code, reference: banner.getAttribute('data-request-id') || ''});
           else if (status >= 400) finish({ok: false, problem: 'status', status});
+          // A page that lands elsewhere in the console did not load itself.
+          else if (win.location.pathname !== page.path) finish({ok: false, problem: 'redirect', landed: win.location.pathname});
           else if (!shell) finish({ok: false, problem: 'incomplete', status});
           else if (errors) finish({ok: false, problem: 'script', errors});
           else finish({ok: true});
@@ -290,6 +292,7 @@
     login: 'stuurt door naar aanmelden; je sessie is verlopen',
     error: 'toont een foutmelding' + (row.code ? ' (' + row.code + ')' : '') + (row.reference ? ', referentie ' + row.reference : ''),
     status: 'geeft foutstatus ' + row.status,
+    redirect: 'stuurt door naar ' + row.landed,
     incomplete: 'is niet volledig geladen' + (row.status ? ' (status ' + row.status + ')' : ''),
     script: row.errors + ' scriptfout(en) in de pagina',
     unreadable: 'kon niet worden uitgelezen'

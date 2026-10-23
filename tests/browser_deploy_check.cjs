@@ -42,7 +42,7 @@ const fs=require('node:fs');
       if(username===manifest.author){
         if(healthy.some(r=>r.result!=='ok'))throw Error('healthy console reported a problem: '+JSON.stringify(healthy));
         await page.screenshot({path:directory+'/deploy-check-healthy.png'});
-        await post('/browser-faults',{'/tree':'status','/publish':'banner','/review':'script'});
+        await post('/browser-faults',{'/tree':'status','/publish':'banner','/review':'script','/settings':'redirect'});
         const faulty=await run(page);
         const byPath=Object.fromEntries(faulty.map(r=>[r.path,r]));
         const expect=(path,needle)=>{ if(byPath[path].result!=='problem'||!byPath[path].text.includes(needle))throw Error(path+' not reported: '+JSON.stringify(byPath[path])); };
@@ -50,7 +50,8 @@ const fs=require('node:fs');
         expect('/publish','fixture_failure');
         expect('/publish','req-fixture');
         expect('/review','1 scriptfout');
-        if(faulty.filter(r=>r.result!=='ok').length!==3)throw Error('unexpected failures: '+JSON.stringify(faulty));
+        expect('/settings','stuurt door naar /');
+        if(faulty.filter(r=>r.result!=='ok').length!==4)throw Error('unexpected failures: '+JSON.stringify(faulty));
         await page.screenshot({path:directory+'/deploy-check-faults.png'});
         // The result survives reopening the panel in the same tab.
         await page.reload();

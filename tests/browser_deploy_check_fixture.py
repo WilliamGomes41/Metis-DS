@@ -29,6 +29,8 @@ async def injected_fault(request: Request, call_next):
     if fault == 'unauth':
         # Local sign-in: the console error page for an expired session.
         return HTMLResponse('<div class="banner err" data-error-code="not_authenticated">Meld je aan.</div>', status_code=401)
+    if fault == 'redirect':
+        return RedirectResponse('/', status_code=303)
     if fault == 'signin':
         # Production Entra sends an expired session to the sign-in flow.
         return RedirectResponse('/auth/microsoft?next=' + request.url.path, status_code=303)
