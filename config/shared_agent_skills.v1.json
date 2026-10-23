@@ -17,6 +17,111 @@
       "source": "cursor-team-kit/LICENSE",
       "destination": ".agents/licenses/cursor-team-kit.txt",
       "sha256": "702f5f331b56aff0e33d8c7826df5202559f894145eb70355c6477b55b5bb8a0"
+    },
+    {
+      "source": "pstack/skills/blast-radius/SKILL.md",
+      "destination": ".agents/skills/blast-radius/SKILL.md",
+      "sha256": "2e10745b97f5862323dcda3b29ca60d56b5c3c98e37020085d26b48efbe0a436"
+    },
+    {
+      "source": "pstack/skills/how/SKILL.md",
+      "destination": ".agents/skills/how/SKILL.md",
+      "sha256": "47cfe3e6fe55c49c3bdf8ad1b645dcd5fece8f0c36fd22d2e7221f9faa71f648"
+    },
+    {
+      "source": "pstack/skills/how/references/explainer-prompt.md",
+      "destination": ".agents/skills/how/references/explainer-prompt.md",
+      "sha256": "ddb89cebefc24e2b54517a331aedfe045b6971e101f45c71b8cef4cccff45bff"
+    },
+    {
+      "source": "pstack/skills/how/references/explorer-prompt.md",
+      "destination": ".agents/skills/how/references/explorer-prompt.md",
+      "sha256": "6300128385ee940fd42ecb84b0e623435440a2dc283eae54ee4a52ba56947ba1"
+    },
+    {
+      "source": "pstack/skills/principle-explain-the-number/SKILL.md",
+      "destination": ".agents/skills/principle-explain-the-number/SKILL.md",
+      "sha256": "cd5a25f9e7cf023627ccb470dc5faa97542f29b4319496a32b839a8e1e988047"
+    },
+    {
+      "source": "pstack/skills/show-me-your-work/SKILL.md",
+      "destination": ".agents/skills/show-me-your-work/SKILL.md",
+      "sha256": "bcff5f7f9fd23f92c12b251f9cd6b947e9485e1055cfacb6fdd9cae0789d7550"
+    },
+    {
+      "source": "pstack/skills/show-me-your-work/references/decision-log-template.tsv",
+      "destination": ".agents/skills/show-me-your-work/references/decision-log-template.tsv",
+      "sha256": "6779378006a2f5225e8c06deb84f1d913fb532041ebbb6e50d94600bfe3f4b76"
+    },
+    {
+      "source": "pstack/skills/why/SKILL.md",
+      "destination": ".agents/skills/why/SKILL.md",
+      "sha256": "fa1d1e9dec14b15381c1ccccad74044d6b6ea3b4af56821f59ba2d8e59b07545"
+    },
+    {
+      "source": "pstack/skills/why/references/epistemics.md",
+      "destination": ".agents/skills/why/references/epistemics.md",
+      "sha256": "d54a2361b2d5973bc3fe2edf62f446d87935974d4b40d47f23b9529f956ca758"
+    },
+    {
+      "source": "pstack/skills/why/references/investigator-prompt.md",
+      "destination": ".agents/skills/why/references/investigator-prompt.md",
+      "sha256": "c44afba186f899094f3694e6c9d6de5d14ff7c4ce28b787a9f50fc789c9a7fc3"
+    },
+    {
+      "source": "pstack/skills/why/references/source-playbook.md",
+      "destination": ".agents/skills/why/references/source-playbook.md",
+      "sha256": "9ae9dcb9d09111c9facc68510331c5aba4aed9b1b057314ff1fc0e166ad3993a"
+    },
+    {
+      "source": "pstack/skills/why/references/sources/code-archaeology.md",
+      "destination": ".agents/skills/why/references/sources/code-archaeology.md",
+      "sha256": "a4a3970e9db448054aed676f3f7feeee667b4b69f0bd57c8fd72b751be687cc7"
+    },
+    {
+      "source": "pstack/skills/why/references/sources/databricks.md",
+      "destination": ".agents/skills/why/references/sources/databricks.md",
+      "sha256": "236ede7aab6454662a992db088a5393537a5233a4c26719c93188f9e174488f6"
+    },
+    {
+      "source": "pstack/skills/why/references/sources/datadog.md",
+      "destination": ".agents/skills/why/references/sources/datadog.md",
+      "sha256": "b139faac5dc11b8f26c8255dce6033c1a6ac143b038d3dd103f2034c5dbec9cd"
+    },
+    {
+      "source": "pstack/skills/why/references/sources/incident-postmortem.md",
+      "destination": ".agents/skills/why/references/sources/incident-postmortem.md",
+      "sha256": "bf2661f1a81c37700884a45b77d6289be0c802b065febced31990e6564510839"
+    },
+    {
+      "source": "pstack/skills/why/references/sources/linear.md",
+      "destination": ".agents/skills/why/references/sources/linear.md",
+      "sha256": "01304e7f1badfcfb78babbb0edcadeb3cc8dd3f713793420cdff24ba190f907c"
+    },
+    {
+      "source": "pstack/skills/why/references/sources/notion.md",
+      "destination": ".agents/skills/why/references/sources/notion.md",
+      "sha256": "3bcfa695c49dfad4ac036d5d7181c12585f55ac04f1936198d16ab75a2788997"
+    },
+    {
+      "source": "pstack/skills/why/references/sources/sentry.md",
+      "destination": ".agents/skills/why/references/sources/sentry.md",
+      "sha256": "2d4f83048eac1df530b399e2aed75dd7c9c18577b7665420aaeb96d0ceb0b702"
+    },
+    {
+      "source": "pstack/skills/why/references/sources/slack.md",
+      "destination": ".agents/skills/why/references/sources/slack.md",
+      "sha256": "3bc6309f5c7b26ace3b919dbd7f7b048861dd2020f910fe24f656cc74b3b661c"
+    },
+    {
+      "source": "pstack/skills/why/references/synthesizer-prompt.md",
+      "destination": ".agents/skills/why/references/synthesizer-prompt.md",
+      "sha256": "11c62671aa7b7a6e3d36929ffe2b59bf95e6ca664eee4d93e6ee527dd3390ddb"
+    },
+    {
+      "source": "pstack/LICENSE",
+      "destination": ".agents/licenses/pstack.txt",
+      "sha256": "bc957ca6bee02792566a1a028d105e02e247c6e77cf057061674273da77b200e"
     }
   ]
 }
