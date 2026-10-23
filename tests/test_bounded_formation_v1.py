@@ -297,3 +297,25 @@ def test_provider_reports_model_transport_time_apart_from_its_own_validation():
         _provider_proposal(api_key='fixture', model='fixture', blocks=blocks, evidence_blocks=blocks,
                            post_json=unreachable, field_contract_v3=True, timing=timing)
     assert timing['transport_seconds'] >= 0
+
+
+def test_final_rejection_still_persists_the_last_task_write_time(monkeypatch):
+    import pytest
+    import src.pre_review_semantic_v1 as semantic
+    from src.operations_console_v1 import ConsoleError
+    from src.semantic_passage_v1 import SemanticPassageError
+    text = 'Gebruik geen zalf'
+    fragments = [dict(source(text)[0], fragment_id='0', fragment_hash='0', section_path=['Same'])]
+    def provider(_url, _headers, payload, _timeout):
+        return {'output': [{'content': [{'type': 'output_text', 'text': json.dumps(response_for(payload, text))}]}]}
+    def rejecting(**kwargs):
+        raise SemanticPassageError('semantic_fixture_rejected')
+    monkeypatch.setattr(semantic, '_materialised_content', rejecting)
+    checkpoints = []
+    with pytest.raises(ConsoleError):
+        _semantic_execution_before_review(fragments, document_id='test', api_key='fixture', model='fixture',
+            field_contract_v3=True, post_json=provider, formation_context={'snapshot_id': 'snap', 'source_sha256': 'a'*64,
+                'diagnostic_checkpoint': lambda phase, values: checkpoints.append((phase, deepcopy(values)))})
+    phase, values = checkpoints[-1]
+    assert phase == 'validation_rejected'
+    assert values['formation_timings'] and all('checkpoint_after_seconds' in row for row in values['formation_timings'])

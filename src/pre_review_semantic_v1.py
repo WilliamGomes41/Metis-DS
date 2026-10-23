@@ -840,7 +840,7 @@ def _semantic_execution_before_review(
             content_units = _materialised_content(**validator_input, proposal=proposal)
         except SemanticPassageError as exc:
             if checkpoint:
-                checkpoint("validation_rejected", {"finding": exc.finding})
+                checkpoint("validation_rejected", {"finding": exc.finding, "formation_timings": formation_timings})
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
     if blocks and proposal is None:
         provider_evidence: dict[str, Any] = {}
