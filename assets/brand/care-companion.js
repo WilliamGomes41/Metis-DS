@@ -221,8 +221,14 @@
 
   // The header lists the roles after "rollen:" (separated by "·" or ","); a refusal
   // for a role the account has is a fault.
-  const accountRoles = () => (((document.querySelector('header.topbar .who') || {}).textContent || '')
-    .split('rollen:')[1] || '').split(/[,·]/).map((role) => role.trim()).filter(Boolean);
+  // Read the dedicated role element, so a display name containing "rollen:" cannot mislead.
+  const accountRoles = () => {
+    const holder = document.querySelector('header.topbar .who-roles') || document.querySelector('header.topbar .who');
+    const text = (holder && holder.textContent) || '';
+    const marker = text.lastIndexOf('rollen:');
+    return text.slice(marker < 0 ? 0 : marker + 'rollen:'.length)
+      .split(/[,·]/).map((role) => role.trim()).filter(Boolean);
+  };
 
   const probePage = (page) => new Promise((resolve) => {
     const frame = el('iframe', {class: 'care-probe', sandbox: 'allow-same-origin allow-scripts',
