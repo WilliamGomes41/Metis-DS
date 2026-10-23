@@ -10,7 +10,7 @@ Elke stap die Azure wijzigt (build, migratie, app settings, image-wissel) gebeur
 - Namen: ACR (`<acr>`), image-repository (`<repo>`), resourcegroep (`<rg>`), web app (`<app>`), app-URL (`<url>`).
 - Een checkout van deze repository met `origin/main` bijgewerkt.
 
-## 1. Vooraf (alleen lezen)
+## 1. Vooraf
 
 1. Leg de huidige image-referentie vast als rollbackpunt:
    `az webapp config show -g <rg> -n <app> --query linuxFxVersion -o tsv`
@@ -18,7 +18,13 @@ Elke stap die Azure wijzigt (build, migratie, app settings, image-wissel) gebeur
    `az webapp config appsettings list -g <rg> -n <app> -o json | python scripts/release_settings_preflight.py`
    Exit 0 is klaar. Exit 2 blokkeert de release. De belangrijkste weigering is `passage_formation_mode_retired`: `METIS_PASSAGE_FORMATION_MODE=deterministic-v1` laat sinds #817 elke nieuwe verwerking falen, ook beslisbomen. Zet de waarde dan op een semantische modus (`semantic-source-bound-v1`, `-v2` of `-v3`) of verwijder haar (leeg betekent `semantic-source-bound-v2`). De uitvoer toont geen geheime waarden.
 3. Controleer dat er geen verwerking loopt. Een image-wissel herstart de app; een lopende poging wordt dan afgebroken en telt mee als poging.
-4. Migraties: `python scripts/apply_workflow_postgres_migrations.py verify --host <pg-host> --database <db> --user <entra-user>`. Alleen als 019 (`workflow.view_checks`) ontbreekt: `plan`, daarna `apply` met `--confirm-target` en `--confirm-digest`, daarna opnieuw `verify`. 019 is alleen-toevoegen.
+4. Controleer dat de app een image uit deze ACR mag trekken en op de goede poort luistert. Begint de referentie uit stap 1.1 al met `DOCKER|<acr>.azurecr.io/`, dan is dit eerder ingericht; controleer het toch:
+   - `az webapp config show -g <rg> -n <app> --query acrUseManagedIdentityCreds` geeft `true`, en de identiteit van de app heeft de rol `AcrPull` op de ACR (`az role assignment list --assignee <principal-id> --scope <acr-resource-id>`). Anders kan de app het nieuwe image niet ophalen.
+   - De app setting `WEBSITES_PORT` is `8000`. Gunicorn luistert in het image op `${PORT:-8000}`; App Service gaat zonder deze setting uit van poort 80.
+5. Migratie 019 (`workflow.view_checks`, alleen-toevoegen). Let op: `apply_workflow_postgres_migrations.py verify` controleert 019 niet. Controleer daarom als database-beheerder:
+   - `SELECT to_regclass('workflow.view_checks');` mag niet leeg zijn. Is hij leeg: `plan`, daarna `apply` met `--confirm-target` en `--confirm-digest`, daarna `verify`.
+   - `SELECT bool_and(has_table_privilege('vvn-metis-console', 'workflow.view_checks', p)) FROM unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE']) AS p;` geeft `true` (één lijst in één aanroep zou al `true` geven bij één recht). Anders: `GRANT SELECT, INSERT, UPDATE, DELETE ON workflow.view_checks TO "vvn-metis-console";`
+   Zonder tabel of recht start de app niet zodra `METIS_VIEW_CHECK_ORIGIN` gezet is.
 
 ## 2. Image bouwen
 
