@@ -1898,3 +1898,6 @@ html[data-theme="dark"] .care-owl-pupil { fill: #0b1b34; }
   50% { transform: translateY(-4px); }
 }
 @media print { .care-companion { display: none; } }
+
+/* Raad deploy-controle: verborgen frame per gecontroleerde pagina. */
+.care-probe { position: absolute; left: -10000px; top: 0; width: 1280px; height: 800px; border: 0; visibility: hidden; }

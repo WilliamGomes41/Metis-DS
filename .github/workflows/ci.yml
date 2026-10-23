@@ -348,7 +348,7 @@ jobs:
         run: |
           export METIS_PLAYWRIGHT_MODULE="$RUNNER_TEMP/metis-browser/node_modules/playwright"
           export METIS_BROWSER_EXECUTABLE="$(node -e 'process.stdout.write(require(process.env.METIS_PLAYWRIGHT_MODULE).chromium.executablePath())')"
-          pytest -q tests/test_browser_knowledge_context.py --basetemp="$RUNNER_TEMP/metis-browser-proof"
+          pytest -q tests/test_browser_knowledge_context.py tests/test_browser_deploy_check.py --basetemp="$RUNNER_TEMP/metis-browser-proof"
       - name: Upload synthetic browser evidence
         if: always() && matrix.python-version == '3.12'
         uses: actions/upload-artifact@v4

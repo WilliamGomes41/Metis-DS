@@ -14,6 +14,9 @@
   const commit = root.dataset.commit || '';
   const browserErrors = [];
   const OPEN_KEY = 'metis-care-open';
+  const DEPLOY_KEY = 'metis-care-deploy-check';
+  // Inside the deploy check's hidden frame Raad only counts errors for the parent.
+  const embedded = window.self !== window.top;
 
   const HELP = {
     home: 'Mijn werk is je startpunt. Kies de volgende stap: inleveren, bronselectie, review, publicatie of documenten.',
@@ -72,6 +75,7 @@
   const refreshMood = () => {
     const troubled = Boolean(pageError()) || browserErrors.length > 0;
     root.dataset.mood = troubled ? 'concerned' : 'calm';
+    root.dataset.errors = String(browserErrors.length);
     dot.hidden = !troubled;
   };
 
@@ -204,6 +208,132 @@
     return holder;
   };
 
+  // Deploy check: open every main page once, in this browser with this sign-in,
+  // in a hidden sandboxed frame without forms, popups or top navigation. Only
+  // GET page loads; it reads what a person would see and stores nothing server side.
+  const PAGE_TIMEOUT = 20000;
+  const SETTLE = 1500;
+  // Same rooms as the server-side navigation (_nav), plus Inzicht.
+  const DEPLOY_PAGES = [
+    ['Mijn werk', '/'], ['Inleveren', '/ingest'], ['Bronselectie', '/source-selection'], ['Review', '/review'],
+    ['Publicatie', '/publish'], ['Documenten', '/tree'], ['Instellingen', '/settings'], ['Inzicht', '/inzicht']
+  ].map(([label, path]) => ({label, path}));
+
+  const probePage = (page) => new Promise((resolve) => {
+    const frame = el('iframe', {class: 'care-probe', sandbox: 'allow-same-origin allow-scripts',
+      'aria-hidden': 'true', tabindex: '-1', title: 'Deploy-controle'});
+    const started = performance.now();
+    let settled = false;
+    let loaded = 0;
+    let lateErrors = 0;
+    const finish = (outcome) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      frame.remove();
+      const seconds = ((loaded || performance.now()) - started) / 1000;
+      resolve({...page, ...outcome, seconds: seconds.toLocaleString('nl-NL', {minimumFractionDigits: 1, maximumFractionDigits: 1})});
+    };
+    const timer = setTimeout(() => finish({ok: false, problem: 'timeout'}), PAGE_TIMEOUT);
+    frame.addEventListener('load', () => {
+      loaded = performance.now();
+      let win;
+      try { win = frame.contentWindow; win.addEventListener('error', () => { lateErrors += 1; }); } catch (_) {
+        finish({ok: false, problem: 'unreadable'});
+        return;
+      }
+      setTimeout(() => {
+        try {
+          const doc = frame.contentDocument;
+          const nav = win.performance.getEntriesByType('navigation')[0];
+          const status = nav && nav.responseStatus ? nav.responseStatus : 0;
+          const banner = doc.querySelector('[data-error-code]');
+          const shell = doc.querySelector('[data-care-companion]');
+          // Raad inside the frame counts from its own start; the listener only after load.
+          const errors = Math.max(Number(shell && shell.dataset.errors || 0), lateErrors);
+          const code = banner ? banner.getAttribute('data-error-code') || '' : '';
+          if (win.location.pathname === '/login') finish({ok: false, problem: 'login'});
+          // A page this role may not open is not a deploy fault.
+          else if (/_role_required$/.test(code)) finish({ok: true, skipped: true, code});
+          else if (banner) finish({ok: false, problem: 'error', code, reference: banner.getAttribute('data-request-id') || ''});
+          else if (status >= 400) finish({ok: false, problem: 'status', status});
+          else if (!shell) finish({ok: false, problem: 'incomplete', status});
+          else if (errors) finish({ok: false, problem: 'script', errors});
+          else finish({ok: true});
+        } catch (_) {
+          finish({ok: false, problem: 'unreadable'});
+        }
+      }, SETTLE);
+    });
+    frame.setAttribute('src', page.path);
+    document.body.append(frame);
+  });
+
+  const deployProblem = (row) => ({
+    timeout: 'laadt niet binnen ' + PAGE_TIMEOUT / 1000 + ' seconden',
+    login: 'stuurt door naar inloggen; je sessie is mogelijk verlopen',
+    error: 'toont een foutmelding' + (row.code ? ' (' + row.code + ')' : '') + (row.reference ? ', referentie ' + row.reference : ''),
+    status: 'geeft foutstatus ' + row.status,
+    incomplete: 'is niet volledig geladen' + (row.status ? ' (status ' + row.status + ')' : ''),
+    script: row.errors + ' scriptfout(en) in de pagina',
+    unreadable: 'kon niet worden uitgelezen'
+  }[row.problem] || 'onbekend probleem');
+
+  const deployText = (run) => [
+    'Deploy-controle Metis-console',
+    'Tijd: ' + run.at,
+    'Versie: ' + (run.commit || '-'),
+    ...run.rows.map((row) => (row.ok ? 'OK    ' : 'FOUT  ') + row.label + ' (' + row.path + ') — '
+      + (row.skipped ? 'geen toegang met jouw rol' : row.ok ? row.seconds + ' s' : deployProblem(row)))
+  ].join('\n');
+
+  const deploySection = () => {
+    const status = el('p', {class: 'care-muted', role: 'status'});
+    const list = el('ul', {class: 'care-list'});
+    const start = el('button', {type: 'button', class: 'btn-primary', text: "Controleer alle pagina's"});
+    const copy = el('button', {type: 'button', class: 'btn-secondary', text: 'Kopieer uitslag', hidden: ''});
+    let last = storage((s) => JSON.parse(s.getItem(DEPLOY_KEY) || 'null'));
+    const show = (run) => {
+      list.replaceChildren(...run.rows.map((row) => el('li', {'data-deploy-page': row.path,
+        'data-deploy-result': row.skipped ? 'skipped' : row.ok ? 'ok' : 'problem'},
+        el('strong', {text: (row.skipped ? '– ' : row.ok ? '✓ ' : '✗ ') + row.label}),
+        el('span', {class: 'care-muted', text: ' — ' + (row.skipped ? 'niet gecontroleerd: geen toegang met jouw rol'
+          : row.ok ? 'geladen in ' + row.seconds + ' s' : deployProblem(row))}))));
+      const failed = run.rows.filter((row) => !row.ok).length;
+      status.textContent = (failed ? failed + ' van ' + run.rows.length + " pagina's hebben een probleem."
+        : "Alle gecontroleerde pagina's laden zonder fouten.") + ' Versie ' + (run.commit || 'onbekend')
+        + ', gecontroleerd ' + run.at.slice(11, 16) + ' (UTC).';
+      copy.hidden = false;
+    };
+    start.addEventListener('click', async () => {
+      start.disabled = true;
+      list.replaceChildren();
+      copy.hidden = true;
+      const pages = DEPLOY_PAGES;
+      const rows = [];
+      for (const [index, page] of pages.entries()) {
+        status.textContent = 'Bezig: ' + page.label + ' (' + (index + 1) + ' van ' + pages.length + ')…';
+        rows.push(await probePage(page));
+      }
+      last = {at: new Date().toISOString(), commit, rows};
+      storage((s) => s.setItem(DEPLOY_KEY, JSON.stringify(last)));
+      show(last);
+      start.disabled = false;
+    });
+    copy.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(deployText(last));
+        status.textContent = 'Uitslag gekopieerd.';
+      } catch (_) {
+        status.textContent = 'Kopiëren lukte niet automatisch.';
+      }
+    });
+    if (last) show(last);
+    return section('Controle na deploy',
+      el('p', {text: "Opent alle hoofdpagina's één keer, met jouw aanmelding, en meldt welke niet laadt of een fout toont. Er wordt niets gewijzigd."}),
+      el('div', {class: 'care-actions'}, start, copy), status, list);
+  };
+
   const render = () => {
     const params = new URLSearchParams(location.search);
     const documentId = params.get('document') || '';
@@ -213,6 +343,7 @@
       section('Op deze pagina', el('p', {text: HELP[room] || HELP.page})),
       documentId ? viewCheckSection(documentId, params.get('attempt') || '') : null,
       documentsSection(),
+      deploySection(),
       reportSection(error)
     ];
     body.replaceChildren(...parts.filter(Boolean));
@@ -237,5 +368,6 @@
     if (event.key === 'Escape' && !panel.hidden) setOpen(false);
   });
   refreshMood();
+  if (embedded) return;
   if (storage((s) => s.getItem(OPEN_KEY)) === '1') setOpen(true, false);
 })();
