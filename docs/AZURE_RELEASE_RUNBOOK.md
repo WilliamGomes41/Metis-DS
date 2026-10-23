@@ -26,6 +26,7 @@ Elke stap die Azure wijzigt (build, migratie, app settings, image-wissel) gebeur
    - `SELECT to_regclass('workflow.view_checks');` mag niet leeg zijn. Is hij leeg: `plan`, daarna `apply` met `--confirm-target` en `--confirm-digest`, daarna `verify`.
    - `SELECT bool_and(has_table_privilege('vvn-metis-console', 'workflow.view_checks', p)) FROM unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE']) AS p;` geeft `true` (één lijst in één aanroep zou al `true` geven bij één recht). Anders: `GRANT SELECT, INSERT, UPDATE, DELETE ON workflow.view_checks TO "vvn-metis-console";`
    Zonder tabel of recht start de app niet zodra `METIS_VIEW_CHECK_ORIGIN` gezet is.
+6. Weergavecontrole: dit runbook zet haar niet aan. Rapporteert de preflight `"view_check": "enabled"`, controleer dan ook wat de preflight niet kan zien, volgens `docs/change-contracts/zorgmaatje.md`: de private evidence-container bestaat, heeft een lifecycle-regel van 7 dagen, en de app-identiteit heeft daarop `Storage Blob Data Contributor`. Doe na de wissel één weergavecontrole. Aanzetten is een aparte stap met GO.
 
 ## 2. Image bouwen
 
