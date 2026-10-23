@@ -75,6 +75,17 @@ class SharedSkillSyncTests(unittest.TestCase):
         result = self.run_sync("--check")
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_opt_in_upstream_skill_stays_opt_in_for_claude(self):
+        opt_in = b'---\nname: fixture\ndescription: "Verify a fixture claim."\ndisable-model-invocation: true\n---\n\nBody.\n'
+        (self.source / "SKILL.md").write_bytes(opt_in)
+        self.commit()
+        self.lock["commit"] = self.git("rev-parse", "HEAD")
+        self.lock["files"][0]["sha256"] = hashlib.sha256(opt_in).hexdigest()
+        self.write_lock()
+        self.install()
+        adapter = (self.checkout / ".claude/skills/fixture/SKILL.md").read_text()
+        self.assertIn("\ndisable-model-invocation: true\n---", adapter)
+
     def test_changed_upstream_worktree_and_head_do_not_upgrade_the_pin(self):
         (self.source / "SKILL.md").write_bytes(self.original + b"Unreviewed change\n")
         self.commit()
@@ -119,7 +130,8 @@ class SharedInstructionContractTests(unittest.TestCase):
     def test_checksummed_files_have_stable_checkout_line_endings(self):
         lock = json.loads((ROOT / "config/shared_agent_skills.v1.json").read_text())
         paths = [item["destination"] for item in lock["files"]]
-        paths += [".claude/skills/verify-this/SKILL.md", ".claude/skills/make-pr-easy-to-review/SKILL.md"]
+        paths += [f".claude/skills/{Path(path).parent.name}/SKILL.md"
+                  for path in paths if path.endswith("/SKILL.md")]
         for path in paths:
             attribute = subprocess.check_output(["git", "check-attr", "eol", "--", path], cwd=ROOT, text=True)
             self.assertTrue(attribute.strip().endswith(": lf"), attribute)
@@ -131,7 +143,16 @@ class SharedInstructionContractTests(unittest.TestCase):
         self.assertEqual(lock["repository"], "https://github.com/WilliamGomes41/plugins.git")
         names = {Path(item["destination"]).parent.name for item in lock["files"]
                  if item["destination"].endswith("/SKILL.md")}
-        self.assertEqual(names, {"verify-this", "make-pr-easy-to-review"})
+        self.assertEqual(names, {
+            "verify-this", "make-pr-easy-to-review",
+            "how", "why", "blast-radius", "show-me-your-work", "principle-explain-the-number",
+        })
+
+    def test_selection_ships_no_executable_plugin_code(self):
+        lock = json.loads((ROOT / "config/shared_agent_skills.v1.json").read_text())
+        for item in lock["files"]:
+            self.assertNotIn("/scripts/", item["destination"])
+            self.assertFalse(item["destination"].endswith((".sh", ".py", ".js", ".ts")), item)
 
     def test_agent_entrypoints_retain_metis_authority(self):
         for relative in ("CLAUDE.md", ".github/copilot-instructions.md"):
@@ -141,7 +162,9 @@ class SharedInstructionContractTests(unittest.TestCase):
         index = (ROOT / "docs/agents/shared-skills.md").read_text()
         self.assertIn("not execution, merge, deployment, or\npublication authority", index)
         self.assertIn("do not add a duplicate mandatory verification pass", index)
-        for relative in (".agents/skills/verify-this/SKILL.md", ".agents/skills/make-pr-easy-to-review/SKILL.md"):
+        lock = json.loads((ROOT / "config/shared_agent_skills.v1.json").read_text())
+        for relative in [item["destination"] for item in lock["files"]
+                         if item["destination"].endswith("/SKILL.md")]:
             header = (ROOT / relative).read_text().split("---", 2)[1]
             self.assertNotIn("allowed-tools:", header)
             self.assertNotIn("hooks:", header)
