@@ -185,7 +185,9 @@ def test_upload_form_names_reviewers_once(system, *, production_app):
     console, password, ids = system
     page = _client(console, password, production_app=production_app).get("/ingest").text
     assert 'name="review_reviewers"' in page
-    assert 'name="named_reviewers"' not in page
+    assert page.count('name="named_reviewers"') == 1
+    # The separate list is only for optional participants and starts hidden.
+    assert '<div id="optional-row" hidden>' in page
 
 
 # Required participation keeps the uploader as primary, so the mapped choice is
@@ -201,6 +203,19 @@ def test_http_choice_reviewers_alone_assign_the_document(system, mode, four_eyes
     envelope = console._envelope(sid)
     assert ids["first"] in envelope["named_reviewers"]
     assert envelope["review_configuration"]["reviewers"] == [ids["first"]]
+
+
+def test_http_optional_participants_stay_separate_from_choice_reviewers(system, *, production_app):
+    console, password, ids = system
+    response = _client(console, password, production_app=production_app).post("/ingest", data=_form(
+        ids, named_reviewers=[ids["first"]], review_mode="optional", review_option="uploader_sole"),
+        files={"file": ("bron.html", HTML, "text/html")}, follow_redirects=False)
+    assert response.status_code == 303, response.text
+    sid = response.headers["location"].split("document=")[1].split("&")[0]
+    envelope = console._envelope(sid)
+    assert ids["first"] in envelope["named_reviewers"]
+    assert envelope["review_configuration"]["option"] == "uploader_sole"
+    assert envelope["review_configuration"]["reviewers"] == []
 
 
 def test_http_non_legacy_mode_disagreeing_with_choice_is_refused(system, *, production_app):
