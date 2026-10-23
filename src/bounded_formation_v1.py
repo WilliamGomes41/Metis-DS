@@ -268,7 +268,9 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                 # separate durable checkpoints. Record every unstarted source
                 # range in memory so recovery remains complete, persist once,
                 # then return control to the caller immediately.
-                for pending_task in phase_tasks[index:]:
+                for offset, pending_task in enumerate(phase_tasks[index:], start=index + 1):
+                    timings.append({"task_id": pending_task["task_id"], "phase": phase, "index": offset,
+                                    "planned": len(phase_tasks), "status": "not_started"})
                     pending_record = {key: deepcopy(pending_task[key])
                                       for key in ("task_id", "section_path", "target_spans")}
                     pending_record.update(phase=phase, status="not_started")

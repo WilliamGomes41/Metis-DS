@@ -643,16 +643,18 @@ def _provider_proposal(
     if checkpoint:
         checkpoint("model_request", {"provider_evidence": evidence})
     headers = {"Authorization": f"Bearer {safe_key}", "Content-Type": "application/json"}
-    if post_json is None:
-        response = _bounded_provider_json(OPENAI_RESPONSES_URL, headers, payload, limits, transport)
-    else:
-        # Injection for deterministic proposal tests / existing instrumentation.
-        # Production uses the supervised native transport; custom transports must
-        # honor this contract themselves. This guard still forbids late activation.
-        response = post_json(OPENAI_RESPONSES_URL, headers, payload, limits.total)
-    if timing is not None:
-        # Attempt-owned measurement; never provider evidence.
-        timing["transport_seconds"] = round(time.monotonic() - started, 3)
+    try:
+        if post_json is None:
+            response = _bounded_provider_json(OPENAI_RESPONSES_URL, headers, payload, limits, transport)
+        else:
+            # Injection for deterministic proposal tests / existing instrumentation.
+            # Production uses the supervised native transport; custom transports must
+            # honor this contract themselves. This guard still forbids late activation.
+            response = post_json(OPENAI_RESPONSES_URL, headers, payload, limits.total)
+    finally:
+        if timing is not None:
+            # Attempt-owned measurement, also for failed calls; never provider evidence.
+            timing["transport_seconds"] = round(time.monotonic() - started, 3)
     if time.monotonic() - started >= limits.total:
         raise ConsoleError("pre_review_llm_processing_timeout")
     if not isinstance(response, dict):

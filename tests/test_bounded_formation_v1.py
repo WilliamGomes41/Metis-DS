@@ -98,6 +98,9 @@ def test_budget_exhaustion_bulk_records_remaining_tasks_with_single_checkpoint()
     assert all(task['status'] == 'not_started' for task in evidence['tasks'])
     assert len(checkpoints) == 1
     assert checkpoints[0][0] == 'proposal_received'
+    skipped = checkpoints[0][1]['formation_timings']
+    assert [row['index'] for row in skipped] == list(range(1, 51))
+    assert all(row['status'] == 'not_started' and row['planned'] == 50 for row in skipped)
     checkpoint_evidence = checkpoints[0][1]['provider_evidence']
     calls = [checkpoint_evidence, *checkpoint_evidence.get('supplementary_calls', [])]
     assert len(calls) == 50
@@ -285,4 +288,12 @@ def test_provider_reports_model_transport_time_apart_from_its_own_validation():
     with pytest.raises(ConsoleError):
         _provider_proposal(api_key='fixture', model='fixture', blocks=blocks, evidence_blocks=blocks,
                            post_json=lambda *args: 'not a response', field_contract_v3=True, timing=timing)
+    assert timing['transport_seconds'] >= 0
+
+    def unreachable(*args):
+        raise ConsoleError('pre_review_llm_connection_failed')
+    timing = {}
+    with pytest.raises(ConsoleError):
+        _provider_proposal(api_key='fixture', model='fixture', blocks=blocks, evidence_blocks=blocks,
+                           post_json=unreachable, field_contract_v3=True, timing=timing)
     assert timing['transport_seconds'] >= 0
