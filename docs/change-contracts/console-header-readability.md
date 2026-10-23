@@ -11,7 +11,7 @@ Requested by William (2026-10-23): "De rest is eigenlijk suboptimaal, niet intui
 ## Before / after
 
 - **Before:** at 1440px the room links wrapped onto a second line (Instellingen and Uitloggen under the others) because the "Donkere modus" text button and the one-line "Naam · rollen: a, b, c" account text took the room. Rooms had no hover or keyboard-focus style.
-- **After:** the toggle is a moon/sun icon, the account is two short lines, and room links get a hover tint and the existing red focus ring. Between 861px and 1359px the links sit on a full second row; the existing 860px and 560px rules are unchanged.
+- **After:** from 1360px the room links never wrap inside their row; a long display name or role list wraps in the account block instead (review finding on #826). The toggle is a moon/sun icon, the account is two short lines, and room links get a hover tint and the existing red focus ring. Between 861px and 1359px the links sit on a full second row; the existing 860px and 560px rules are unchanged.
 
 ## Out of scope
 
