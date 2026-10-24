@@ -18,7 +18,13 @@ def main():
     parser.add_argument("--ref")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--compare", type=Path)
+    parser.add_argument("--shard-index", type=int)
+    parser.add_argument("--shard-count", type=int)
     args = parser.parse_args()
+    sharded = args.shard_index is not None or args.shard_count is not None
+    if sharded and (args.ref or args.shard_index is None or args.shard_count is None
+                    or not 0 <= args.shard_index < args.shard_count):
+        parser.error('shards require a current checkout and 0 <= index < count')
     root = Path(__file__).resolve().parents[1]
     output = args.output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -42,10 +48,23 @@ def main():
                 suite_env["METIS_TEST_POSTGRES_DSN"] = owned.dsn
             commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=cwd, text=True).strip()
             start = time.perf_counter()
-            result = subprocess.run([sys.executable, "-m", "pytest", "-q", f"--junitxml={xml}"], cwd=cwd, env=suite_env)
+            command = [sys.executable, "-m", "pytest", "-v", "--durations=30", f"--junitxml={xml}"]
+            if sharded:
+                command.extend(['-p', 'scripts.ci_test_shards',
+                    '--metis-shard-index', str(args.shard_index),
+                    '--metis-shard-count', str(args.shard_count),
+                    '--metis-shard-manifest', str(output.with_suffix('.selection.json'))])
+            result = subprocess.run(command, cwd=cwd, env=suite_env)
             elapsed = time.perf_counter() - start
             report = dict(commit=commit, python=platform.python_version(), platform=platform.platform(),
                           seconds=round(elapsed, 3), exit_code=result.returncode)
+            if sharded:
+                selection = output.with_suffix('.selection.json')
+                if selection.exists():
+                    report.update(json.loads(selection.read_text()))
+                else:
+                    report['selection_missing'] = True
+                    report['exit_code'] = report['exit_code'] or 1
             if suite_env.get("METIS_TEST_POSTGRES_DSN"):
                 import psycopg
                 with psycopg.connect(suite_env["METIS_TEST_POSTGRES_DSN"], connect_timeout=3) as con:
@@ -70,7 +89,7 @@ def main():
                 report["within_twice_baseline"] = ratio <= 2
             output.write_text(json.dumps(report, indent=2) + "\n")
             print(json.dumps(report), flush=True)
-            return result.returncode or int(bool(report.get("postgres_skips")) or
+            return report['exit_code'] or int(bool(report.get("postgres_skips")) or
                                            report.get("junit_missing", False) or
                                            not report.get("within_twice_baseline", True))
     finally:

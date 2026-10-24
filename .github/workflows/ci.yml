@@ -90,14 +90,59 @@ jobs:
           path: output/char*
           if-no-files-found: warn
 
-  test:
+
+  preflight:
     needs: [change-contract, architecture-boundaries]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         python-version: ['3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch main for release-control path mapping
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.lock
+            requirements.lock
+            requirements-console.txt
+            requirements-retrieval.txt
+            pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-dev.lock
+      - run: pip install --no-deps --no-build-isolation -e .
+      - run: python scripts/repository_preflight.py
+      - name: Release-control skill mapping
+        run: python scripts/release_control_preflight.py --base origin/main
+      - name: Generate Product API v1 contract
+        run: python scripts/product_api_contract.py --write
+      - name: Upload Product API contract evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-api-v1-openapi-${{ matrix.python-version }}
+          path: output/runtime/product_api_v1.openapi.json
+          if-no-files-found: error
+      - name: Product API v1 backward compatibility
+        run: python scripts/product_api_contract.py --check --base-ref origin/main
+      - run: python -m compileall -q src tests
 
+  suite:
+    needs: [preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.13']
+        shard: [0, 1, 2, 3]
     services:
       postgres:
         image: postgres:16
@@ -140,31 +185,161 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -r requirements-dev.lock
       - run: pip install --no-deps --no-build-isolation -e .
-      - run: python scripts/repository_preflight.py
-      - name: Release-control skill mapping
-        run: python scripts/release_control_preflight.py --base origin/main
-      - name: Generate Product API v1 contract
-        run: python scripts/product_api_contract.py --write
-      - name: Upload Product API contract evidence
+      - name: Measure unchanged database fixture alternatives once per Python
+        if: matrix.shard == 0
+        run: |
+          mkdir -p output/shard
+          python scripts/benchmark_test_database.py > output/shard/d6a-database-benchmark.json
+      - name: Execute complete suite partition with live test names and timings
+        env:
+          SHARD_INDEX: ${{ matrix.shard }}
+        run: |
+          mkdir -p output/shard
+          python scripts/measure_test_suite.py --output output/shard/result.json \
+            --shard-index "$SHARD_INDEX" --shard-count 4
+      - name: Preserve executed shard evidence even on failure
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: product-api-v1-openapi-${{ matrix.python-version }}
-          path: output/runtime/product_api_v1.openapi.json
+          name: suite-shard-${{ matrix.python-version }}-${{ matrix.shard }}
+          path: output/shard/
           if-no-files-found: error
-      - name: Product API v1 backward compatibility
-        run: python scripts/product_api_contract.py --check --base-ref origin/main
-      - run: python -m compileall -q src tests
+
+  browser:
+    needs: [preflight]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: metis_test
+        ports:
+          - 5432:5432
+        volumes:
+          - /tmp/metis-test-postgres-socket:/var/run/postgresql
+        options: >-
+          --health-cmd "pg_isready -U postgres -d metis_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Both timed suites use the same local server and transport. The image's
+      # existing local socket avoids repeating TCP/SCRAM setup for each query
+      # connection; host authentication and durability settings stay unchanged.
+      METIS_TEST_POSTGRES_DSN: host=/tmp/metis-test-postgres-socket dbname=metis_test user=postgres
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch main for release-control path mapping
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.lock
+            requirements.lock
+            requirements-console.txt
+            requirements-retrieval.txt
+            pyproject.toml
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements-dev.lock
+      - run: pip install --no-deps --no-build-isolation -e .
+      - name: Install isolated browser test tooling
+        uses: ./.github/actions/install-test-browser
+      - name: Verify desktop, mobile and document workflows independently
+        run: |
+          export METIS_PLAYWRIGHT_MODULE="$RUNNER_TEMP/metis-browser/node_modules/playwright"
+          export METIS_BROWSER_EXECUTABLE="$(node -e 'process.stdout.write(require(process.env.METIS_PLAYWRIGHT_MODULE).chromium.executablePath())')"
+          pytest -v --junitxml=output/browser.xml --basetemp="$RUNNER_TEMP/metis-browser-proof" \
+            tests/test_browser_knowledge_context.py tests/test_browser_deploy_check.py \
+            tests/test_browser_source_selection.py tests/test_browser_view_check.py \
+            tests/test_section_incident.py::test_real_authenticated_browser_route_exports_correlated_evidence
+          python - <<'PYCODE'
+          import xml.etree.ElementTree as ET
+          root = ET.parse('output/browser.xml')
+          assert list(root.iter('testcase')), 'Missing executed browser proof'
+          assert not list(root.iter('skipped')), 'Browser proof must execute'
+          PYCODE
+      - name: Upload synthetic browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-browser-desktop-mobile
+          path: |
+            output/browser.xml
+            ${{ runner.temp }}/metis-browser-proof/
+          if-no-files-found: error
+
+  # Preserve the existing required check names; these aggregate executed proof.
+  test:
+    if: ${{ !cancelled() }}
+    needs: [preflight, suite, browser, characterization-evidence]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.12', '3.13']
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: metis_test
+        ports:
+          - 5432:5432
+        volumes:
+          - /tmp/metis-test-postgres-socket:/var/run/postgresql
+        options: >-
+          --health-cmd "pg_isready -U postgres -d metis_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Both timed suites use the same local server and transport. The image's
+      # existing local socket avoids repeating TCP/SCRAM setup for each query
+      # connection; host authentication and durability settings stay unchanged.
+      METIS_TEST_POSTGRES_DSN: host=/tmp/metis-test-postgres-socket dbname=metis_test user=postgres
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies for conditional historical reproduction
+        if: github.event_name == 'pull_request' && (startsWith(github.head_ref, 'codex/d6a') || github.head_ref == 'fix/a08-review-completion')
+        run: pip install -r requirements-dev.lock && pip install --no-deps --no-build-isolation -e .
       - name: D6a baseline on the unchanged main base
         if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'codex/d6a') && matrix.python-version == '3.13'
         run: python scripts/measure_test_suite.py --ref 9fa2004 --output output/d6a-before.json
-      - name: Full suite with timing and zero PostgreSQL skips
+      - name: Download all executed suite shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: suite-shard-${{ matrix.python-version }}-*
+          path: ${{ runner.temp }}/suite-shards
+      - name: Require complete executed suite with zero PostgreSQL skips
         if: ${{ !cancelled() }}
+        env:
+          EXPECTED_PYTHON: ${{ matrix.python-version }}
         run: |
-          python scripts/benchmark_test_database.py > output/d6a-database-benchmark.json
           args=()
-          if [ -f output/d6a-before.json ]; then args+=(--compare output/d6a-before.json); fi
-          python scripts/measure_test_suite.py --output output/d6a-after.json "${args[@]}"
+          if [ -f output/d6a-before.json ]; then args+=(--baseline output/d6a-before.json); fi
+          mkdir -p output
+          cp "$RUNNER_TEMP/suite-shards/suite-shard-$EXPECTED_PYTHON-0/d6a-database-benchmark.json" output/
+          python scripts/ci_test_shards.py merge --directory "$RUNNER_TEMP/suite-shards" \
+            --count 4 --python-version "$EXPECTED_PYTHON" --commit "$(git rev-parse HEAD)" \
+            --output output/d6a-after.json "${args[@]}"
       - name: Upload suite timing and executed test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -340,21 +515,45 @@ jobs:
           assert not list(root.iter("skipped")), "Processing trace proof must execute every backend"
           assert not list(root.iter("failure")) and not list(root.iter("error")), "Processing trace proof failed"
           PYCODE
-      - name: Install isolated browser test tooling
-        if: matrix.python-version == '3.12'
-        uses: ./.github/actions/install-test-browser
-      - name: Verify desktop and mobile review workflows
-        if: matrix.python-version == '3.12'
+      - name: Require every existing CI gate
+        if: ${{ !cancelled() }}
+        env:
+          REQUIRED_RESULTS: ${{ join(needs.*.result, ',') }}
         run: |
-          export METIS_PLAYWRIGHT_MODULE="$RUNNER_TEMP/metis-browser/node_modules/playwright"
-          export METIS_BROWSER_EXECUTABLE="$(node -e 'process.stdout.write(require(process.env.METIS_PLAYWRIGHT_MODULE).chromium.executablePath())')"
-          pytest -q tests/test_browser_knowledge_context.py tests/test_browser_deploy_check.py --basetemp="$RUNNER_TEMP/metis-browser-proof"
-      - name: Upload synthetic browser evidence
-        if: always() && matrix.python-version == '3.12'
+          python - <<'PYCODE'
+          import os
+          assert all(r == 'success' for r in os.environ['REQUIRED_RESULTS'].split(',')), 'An upstream CI gate failed or was skipped'
+          PYCODE
+
+  package:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, browser, characterization-evidence]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-console.txt
+      - name: Create fully deployable package once
+        run: bash scripts/create_azure_deploy_package.sh "$RUNNER_TEMP/verified-package/metis-console.zip"
+      - name: Verify packaged imports and bind package to CI identity
+        env:
+          PACKAGE_COMMIT: ${{ github.sha }}
+          PACKAGE_REPOSITORY: ${{ github.repository }}
+          PACKAGE_RUN_ID: ${{ github.run_id }}
+          PACKAGE_ATTEMPT: ${{ github.run_attempt }}
+        run: >-
+          python scripts/verified_deploy_artifact.py seal
+          --directory "$RUNNER_TEMP/verified-package"
+          --commit "$PACKAGE_COMMIT" --repository "$PACKAGE_REPOSITORY"
+          --run-id "$PACKAGE_RUN_ID" --attempt "$PACKAGE_ATTEMPT"
+      - name: Preserve immutable deploy package and manifest
         uses: actions/upload-artifact@v4
         with:
-          name: review-browser-desktop-mobile
-          path: |
-            ${{ runner.temp }}/metis-browser-proof/**/*.png
-            ${{ runner.temp }}/metis-browser-proof/**/*.json
-          if-no-files-found: warn
+          name: metis-console-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/verified-package/
+          retention-days: 30
+          if-no-files-found: error

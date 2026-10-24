@@ -347,27 +347,35 @@ def test_ci_runs_release_control_after_repository_preflight() -> None:
 def test_ci_retains_required_matrix_and_full_verification() -> None:
     """Scheduling/cache optimizations must preserve both required test checks."""
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    test_job = workflow.split("\n  test:\n", 1)[1]
-    assert "python-version: ['3.12', '3.13']" in test_job
+    import yaml
+    jobs = yaml.safe_load(workflow)['jobs']
+    for name in ('preflight', 'suite', 'test'):
+        assert jobs[name]['strategy']['matrix']['python-version'] == ['3.12', '3.13']
+    preflight = '\n'.join(s.get('run', '') for s in jobs['preflight']['steps'])
     for command in (
         "python scripts/repository_preflight.py",
         "python scripts/release_control_preflight.py --base origin/main",
         "python scripts/product_api_contract.py --check --base-ref origin/main",
         "python -m compileall -q src tests",
-        "python scripts/measure_test_suite.py --output output/d6a-after.json",
     ):
-        assert command in test_job, f"Required CI verification removed: {command}"
-    # The timed runner must execute the whole suite, without paths or filters.
+        assert command in preflight, f"Required CI verification removed: {command}"
+    assert 'preflight' in jobs['suite']['needs']
+    assert {'suite', 'browser', 'characterization-evidence'} <= set(jobs['test']['needs'])
+    suite = '\n'.join(s.get('run', '') for s in jobs['suite']['steps'])
+    assert 'python scripts/measure_test_suite.py --output output/shard/result.json' in suite
+    assert '--shard-count 4' in suite
+    assert 'python scripts/benchmark_test_database.py' in suite
+    # The timed runner's base invocation still collects the entire suite,
+    # without file/module/-k/-m filters. Sharding happens after full collection.
     runner = ast.parse((ROOT / "scripts/measure_test_suite.py").read_text())
-    commands = [node.args[0].elts for node in ast.walk(runner)
-                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "run" and node.args and isinstance(node.args[0], ast.List)
-                and any(isinstance(arg, ast.Constant) and arg.value == "pytest" for arg in node.args[0].elts)]
+    commands = [node.value.elts for node in ast.walk(runner)
+                if isinstance(node, ast.Assign) and isinstance(node.value, ast.List)
+                and any(isinstance(arg, ast.Constant) and arg.value == 'pytest' for arg in node.value.elts)]
     assert len(commands) == 1
     command, = commands
-    assert len(command) == 5
-    assert [ast.literal_eval(arg) for arg in command[1:4]] == ["-m", "pytest", "-q"]
-    assert isinstance(command[4], ast.JoinedStr) and command[4].values[0].value == "--junitxml="
+    assert len(command) == 6
+    assert [ast.literal_eval(arg) for arg in command[1:5]] == ["-m", "pytest", "-v", '--durations=30']
+    assert isinstance(command[5], ast.JoinedStr) and command[5].values[0].value == "--junitxml="
 
 
 @pytest.mark.parametrize("outcome", [None, "failure", "error", "skipped"])
@@ -403,13 +411,12 @@ def test_ci_reuses_full_suite_for_native_proof_artifacts() -> None:
     for step in re.split(r"(?m)^      - name: ", workflow):
         if "python scripts/export_test_evidence.py" in step:
             assert "if: ${{ !cancelled() }}" in step, step.splitlines()[0]
-    # The full measured run precedes every native export; only the conditional
-    # old-code reproduction and the separately installed browser may rerun pytest.
-    assert workflow.index("python scripts/measure_test_suite.py --output") < workflow.index("export_test_evidence.py")
+    # All partitions must merge before native exports; only conditional old-code
+    # reproduction may rerun pytest in this aggregation job. Browser is separate.
+    assert workflow.index("python scripts/ci_test_shards.py merge") < workflow.index("export_test_evidence.py")
     pytest_commands = re.findall(r"(?m)^          pytest ([^\n]+)", workflow)
-    assert len(pytest_commands) == 2
+    assert len(pytest_commands) == 1
     assert "a08-before.xml" in pytest_commands[0]
-    assert "test_browser_knowledge_context.py" in pytest_commands[1]
 
 
 def test_contributing_names_skill_checks_and_ci_must_not_forget_them() -> None:

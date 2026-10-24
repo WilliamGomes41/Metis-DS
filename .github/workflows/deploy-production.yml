@@ -9,12 +9,17 @@ on:
   workflow_dispatch:
     inputs:
       commit_sha:
-        description: 'Volledige SHA van een eerder op test geteste commit op main'
+        description: 'Volledige SHA van de geslaagde main-CI-run; testvereiste blijft gelden'
+        required: true
+        type: string
+      ci_run_id:
+        description: 'Run-ID van de geslaagde ci-workflow op main met het deploymentpakket'
         required: true
         type: string
 
 permissions:
   contents: read
+  actions: read
   id-token: write
 
 concurrency:
@@ -25,6 +30,7 @@ jobs:
   deploy:
     name: Deploy ${{ inputs.commit_sha }} to production
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: production
     env:
       AZURE_PRODUCTION_WEBAPP_NAME: ${{ vars.AZURE_PRODUCTION_WEBAPP_NAME }}
@@ -49,13 +55,35 @@ jobs:
       - name: Fail-closed production identity and target gate
         run: |
           python -c "from src.deploy_identity_v1 import assert_deploy_allowed; assert_deploy_allowed(environment='production', identity='${METIS_DEPLOY_IDENTITY}', target_app='${AZURE_PRODUCTION_WEBAPP_NAME}')"
-      - run: python -m pip install --upgrade pip
-      - run: pip install -r requirements-dev.lock
-      - run: pip install --no-deps --no-build-isolation -e .
-      - run: python scripts/repository_preflight.py
-      - run: pytest -q
-      - name: Create fully deployable package with dependencies
-        run: bash scripts/create_azure_deploy_package.sh "$RUNNER_TEMP/metis-console.zip"
+      - name: Verify successful exact main CI run
+        id: proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_SHA: ${{ inputs.commit_sha }}
+          REQUESTED_RUN: ${{ inputs.ci_run_id }}
+          REQUESTED_REPOSITORY: ${{ github.repository }}
+        run: >-
+          python scripts/verified_deploy_artifact.py run
+          --commit "$REQUESTED_SHA" --repository "$REQUESTED_REPOSITORY"
+          --run-id "$REQUESTED_RUN"
+      - name: Download the package from the verified CI attempt
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.proof.outputs.artifact_name }}
+          path: ${{ runner.temp }}/verified-package
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.ci_run_id }}
+      - name: Verify package hash and embedded commit before Azure
+        env:
+          REQUESTED_SHA: ${{ inputs.commit_sha }}
+          REQUESTED_RUN: ${{ inputs.ci_run_id }}
+          REQUESTED_REPOSITORY: ${{ github.repository }}
+          VERIFIED_ATTEMPT: ${{ steps.proof.outputs.attempt }}
+        run: >-
+          python scripts/verified_deploy_artifact.py verify
+          --directory "$RUNNER_TEMP/verified-package"
+          --commit "$REQUESTED_SHA" --repository "$REQUESTED_REPOSITORY"
+          --run-id "$REQUESTED_RUN" --attempt "$VERIFIED_ATTEMPT"
       - name: Sign in to Azure using the production deploy identity
         uses: azure/login@v2
         with:
@@ -79,7 +107,7 @@ jobs:
           az webapp deploy
           --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}"
           --name "${{ vars.AZURE_PRODUCTION_WEBAPP_NAME }}"
-          --src-path "$RUNNER_TEMP/metis-console.zip"
+          --src-path "$RUNNER_TEMP/verified-package/metis-console.zip"
           --type zip
           --clean true
           --async false

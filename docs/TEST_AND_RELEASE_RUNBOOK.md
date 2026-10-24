@@ -99,18 +99,31 @@ in de repository.
 
 ## Werking
 
-1. Een pull request voert CI uit op Python 3.12 en 3.13.
+1. Een pull request voert de volledige suite uit op Python 3.12 en 3.13,
+   verdeeld over vier zelfstandige jobs per versie. De bestaande checks
+   `test (3.12)` en `test (3.13)` controleren de volledige verzameling en het
+   samengevoegde bewijs. Browserproeven draaien parallel in een eigen job.
 2. `deploy-test` en `deploy-production` hebben **geen** `on.push`. Merge naar
    `main` start geen deploy. Zolang `vvn-metis-console-test` niet bestaat blijft
    de testworkflow fail-closed. Productie kan tijdelijk handmatig via v2.29.
-3. Packaging: `bash scripts/create_azure_deploy_package.sh` (executable of via
-   bash). Het ZIP bevat vendored `.python_packages` uit `requirements-console.txt`
+3. Alleen een geslaagde push-CI op main bouwt het deploymentpakket met
+   `bash scripts/create_azure_deploy_package.sh`. Een Python 3.12-proef importeert
+   applicatie en native dependencies uitsluitend uit het uitgepakte ZIP.
+   Het ZIP bevat vendored `.python_packages` uit `requirements-console.txt`
    (Protocol v2.24; MUST NOT numpy/sklearn/scipy). `requirements-retrieval.txt`
    blijft de zwaardere extra voor Product API / TF-IDF en gaat niet in het
    console-pakket.
 4. `--clean true` wist `wwwroot` en MUST NOT `/home/data` wissen.
-5. Production is handmatig: `deploy-production` met een volledige SHA die al
-   op `main` ligt, na protection/approval, met de production-identiteit.
+5. Deployment blijft handmatig: vul bij `deploy-test` of `deploy-production`
+   **commit_sha** (volledige SHA op main) en **ci_run_id** (het nummer uit de
+   URL `/actions/runs/<nummer>` van de geslaagde main-ci-run) in. Productie
+   behoudt protection/approval en de production-identiteit. De workflow eist
+   een voltooide geslaagde main-push van ci.yml voor die exacte repository en
+   commit. Daarna downloadt hij het pakket van die CI-poging en controleert
+   manifest, SHA-256 en de ingesloten commit vóór Azure-login. Dezelfde ZIP
+   wordt voor test en productie gebruikt; er draait geen tweede volledige
+   suite of pakketbouw in deployment. Verlopen/ontbrekend bewijs blokkeert;
+   er wordt nooit stil naar een andere commit of nieuw gebouwd pakket uitgeweken.
 6. Beide workflows en de handmatige ZIP-route gebruiken
    `scripts/verify_console_deployment.py`: `status=ok`,
    `service=operations-console` en `deployed_commit` gelijk aan de volledige
@@ -118,6 +131,19 @@ in de repository.
    De controle herhaalt maximaal 13 keer met vijf seconden tussenruimte,
    tien seconden per HTTP-call en maximaal 64 KiB antwoord. De afzonderlijke
    geautoriseerde database-/ketenproef blijft nodig.
+
+Een main-CI-run bewaart het pakket 30 dagen onder
+`metis-console-<sha>-attempt-<poging>`. Oudere runs zonder dit pakket zijn niet
+bruikbaar voor de nieuwe deploymentworkflow. Een herbouw vereist opnieuw
+geslaagde CI en pakketcontrole; verander geen manifest om bewijs te omzeilen.
+
+Bij een incidentele infrastructuurfout: **Actions → run → Re-run jobs → Re-run
+failed jobs**. Een browserherpoging herhaalt dan geen geslaagde suitedelen.
+Een gewijzigd programma vraagt een nieuwe run; eerdere groene jobs van een
+andere commit gelden niet als bewijs. Controleer bij langdurige suitejobs de
+laatste zichtbare testnaam. Iedere shard bewaart JUnit en timing; de samengevoegde
+rapportage noemt totale testkosten en de langzaamste shard afzonderlijk.
+Wachtrij- en installatietijd tellen mee voor de uiteindelijke GitHub-doorlooptijd.
 
 ## Herstel
 
