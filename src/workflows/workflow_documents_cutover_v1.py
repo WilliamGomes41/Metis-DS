@@ -149,7 +149,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         envelope["family"] = display_name
         if envelope.get("processing_storage") == "task-v1":
             from src.workflows.formation_task_store_v1 import FormationTaskStore
-            envelope["processing_attempts"] = FormationTaskStore.attempts(con, snapshot_id)
+            envelope["processing_attempts"] = FormationTaskStore.attempts(con, snapshot_id,include_versions=True)
         return envelope
 
     @diagnostic_phase("document_store_read")

@@ -101,6 +101,7 @@ def comparable_envelope(envelope):
     result = deepcopy(envelope)
     for attempt in result.get("processing_attempts", []):
         attempt.pop("diagnostic", None)
+        attempt.pop("_record_version",None)
     return result
 
 
@@ -110,6 +111,8 @@ def merge_diagnostics(prepared, current):
         recorded = by_id.get(attempt["attempt_id"], {})
         if "diagnostic" in recorded:
             attempt["diagnostic"] = deepcopy(recorded["diagnostic"])
+        if "_record_version" in recorded:
+            attempt["_record_version"] = recorded["_record_version"]
 
 
 def resolve_validator_input(diagnostic, resolver=None):

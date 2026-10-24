@@ -67,9 +67,15 @@ class FormationTaskStore:
                     "VALUES(%s,%s,%s,%s::jsonb,%s,%s) ON CONFLICT DO NOTHING",
                     (context_id,envelope["snapshot_id"],artifact_id,_json_text(semantic_identity),semantic_hash,expected_revision))
         return {"version": 1, "artifact_id": artifact_id, "context_id": context_id,
+                "snapshot_id":envelope["snapshot_id"],"source_hash":envelope["sha256"],
+                "source_version":envelope["version"],
                 "validator_input_hash": payload["validator_input_hash"]}
 
-    def resolve_input(self, reference):
+    def resolve_input(self, reference, *, expected_snapshot_id=None):
+        if reference.get("version") != STORAGE_VERSION:
+            raise WorkflowDocumentStoreError("formation_input_version_unsupported")
+        if expected_snapshot_id is not None and reference.get("snapshot_id") != expected_snapshot_id:
+            raise WorkflowDocumentStoreError("formation_input_source_mismatch")
         with self.documents._connect() as con:
             row = con.execute("SELECT i.payload,e.payload AS extraction FROM workflow.formation_inputs i "
                               "JOIN workflow.prepared_extraction_versions e ON e.record_hash=i.extraction_hash "
@@ -77,6 +83,10 @@ class FormationTaskStore:
         if not row:
             raise WorkflowDocumentStoreError("formation_input_missing")
         payload = integrity(row["payload"], reference["artifact_id"])
+        if payload.get("version") != STORAGE_VERSION:
+            raise WorkflowDocumentStoreError("formation_input_version_unsupported")
+        if any(reference.get(k) != payload.get(k) for k in ("snapshot_id","source_hash","source_version")):
+            raise WorkflowDocumentStoreError("formation_input_source_mismatch")
         extraction = row["extraction"]
         from src.source_preparation_context_v1 import KEY, stored_extraction
         from src.pre_review_semantic_v1 import _content_fragments, _evidence_fragments
@@ -194,24 +204,37 @@ class FormationTaskStore:
                     (attempt_id,phase,_json_text(values)))
 
     @staticmethod
-    def attempts(con, snapshot_id):
-        return [row["payload"] for row in con.execute(
-            "SELECT payload FROM workflow.processing_attempts WHERE snapshot_id=%s ORDER BY started_at,attempt_id",
+    def attempts(con, snapshot_id, *, include_versions=False):
+        return [{**row["payload"], **({"_record_version":row["record_version"]} if include_versions else {})} for row in con.execute(
+            "SELECT payload,record_version FROM workflow.processing_attempts WHERE snapshot_id=%s ORDER BY started_at,attempt_id",
             (snapshot_id,)).fetchall()]
 
     @staticmethod
     def save_attempts(con, snapshot_id, attempts):
         for attempt in attempts:
-            existing = con.execute("SELECT snapshot_id,command_id FROM workflow.processing_attempts WHERE attempt_id=%s",
+            attempt = dict(attempt)
+            expected_version = attempt.pop("_record_version",None)
+            existing = con.execute("SELECT snapshot_id,command_id,payload,record_version FROM workflow.processing_attempts WHERE attempt_id=%s FOR UPDATE",
                                    (attempt["attempt_id"],)).fetchone()
             if existing and (existing["snapshot_id"] != snapshot_id or existing["command_id"] != attempt["command_id"]):
                 raise WorkflowDocumentStoreError("processing_command_conflict")
+            if existing:
+                if existing["payload"] == attempt:
+                    continue
+                if expected_version != existing["record_version"]:
+                    # An unchanged historical/active view is not an instruction
+                    # to overwrite newer checkpoint diagnostics.
+                    if {k:v for k,v in attempt.items() if k != "diagnostic"} == {
+                            k:v for k,v in existing["payload"].items() if k != "diagnostic"}:
+                        continue
+                    raise WorkflowDocumentStoreError("processing_attempt_write_conflict")
             con.execute("INSERT INTO workflow.processing_attempts(attempt_id,snapshot_id,command_id,started_at,object_generation,payload) "
                         "SELECT %s,snapshot_id,%s,%s,object_generation,%s::jsonb FROM workflow.documents WHERE snapshot_id=%s "
-                        "ON CONFLICT(attempt_id) DO UPDATE SET payload=EXCLUDED.payload",
+                        "ON CONFLICT(attempt_id) DO UPDATE SET payload=EXCLUDED.payload,record_version=workflow.processing_attempts.record_version+1",
                         (attempt["attempt_id"],attempt["command_id"],attempt["started_at"],_json_text(attempt),snapshot_id))
         if attempts:
-            latest = attempts[-1]
+            latest = con.execute("SELECT payload FROM workflow.processing_attempts WHERE attempt_id=%s",
+                                 (attempts[-1]["attempt_id"],)).fetchone()["payload"]
             summary = {"processing_attempts": [{k: deepcopy(v) for k,v in latest.items() if k != "diagnostic"}],
                        "ingest_observations": [{k: a.get(k) for k in ("started_at","finished_at")}
                            for a in attempts if a.get("state") == "succeeded" and a.get("kind") == "ingest"]}
@@ -229,9 +252,11 @@ class FormationTaskStore:
     @staticmethod
     def checkpoint_summary(con, snapshot_id, active):
         phase = (active.get("diagnostic") or {}).get("phase")
+        compact = {k:v for k,v in active.items() if k not in {"diagnostic","_record_version"}}
+        compact["diagnostic"] = {"phase":phase}
         con.execute("UPDATE workflow.processing_document_summaries SET payload=jsonb_set(payload,"
-                    "'{processing_attempts,0,diagnostic}',%s::jsonb) WHERE snapshot_id=%s",
-                    (_json_text({"phase":phase}),snapshot_id))
+                    "'{processing_attempts,0}',%s::jsonb) WHERE snapshot_id=%s",
+                    (_json_text(compact),snapshot_id))
         reference = (active.get("diagnostic") or {}).get("validator_input_ref")
         if reference:
             row = con.execute("SELECT planned_task_count,completed_task_count FROM workflow.formation_contexts WHERE context_id=%s",

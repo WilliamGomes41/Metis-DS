@@ -67,7 +67,7 @@ class TaskCheckpointWriter:
                 yield con, active
                 # Expiry may occur while waiting for another actor's row lock.
                 assert_active({"processing_attempts": [active]}, self.attempt_id, now())
-                con.execute("UPDATE workflow.processing_attempts SET payload=%s::jsonb WHERE attempt_id=%s",
+                con.execute("UPDATE workflow.processing_attempts SET payload=%s::jsonb,record_version=record_version+1 WHERE attempt_id=%s",
                             (_json_text(active),self.attempt_id))
                 self.store.checkpoint_summary(con,self.snapshot_id,active)
 
@@ -174,3 +174,42 @@ def task_checkpoint_writer(console, snapshot_id, attempt_id):
             raise ConsoleError("processing_attempt_not_active")
         return TaskCheckpointWriter(console,snapshot_id,row["payload"])
     return None
+
+
+def record_task_failure(console,snapshot_id,attempt_id,error,*,claim_token):
+    """Stop an owned new-format attempt without archive reload on error.
+
+    Recording failure consumes no new processing/publication authority. A
+    revoked actor's already accepted worker may record its stop; it cannot
+    checkpoint results, activate work or fail another claim.
+    """
+    store = FormationTaskStore(console.workflow_document_store)
+    enclosing_transaction = workflow_transaction_active()
+    with store.documents._connect() as con:
+        with con.transaction():
+            document = con.execute("SELECT processing_storage_version FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
+                                   (snapshot_id,)).fetchone()
+            if not document or document["processing_storage_version"] != 1:
+                return False
+            if enclosing_transaction:
+                raise ConsoleError("formation_checkpoint_requires_independent_transaction")
+            row = con.execute("SELECT payload FROM workflow.processing_attempts WHERE snapshot_id=%s AND attempt_id=%s FOR UPDATE",
+                              (snapshot_id,attempt_id)).fetchone()
+            if not row:
+                raise ConsoleError("processing_attempt_not_active")
+            active = row["payload"]
+            if active["state"] != "running" or (active.get("dispatch") or {}).get("token") != claim_token:
+                return True
+            budget = getattr(error,"code",None) == "source_task_budget_exhausted"
+            from src.processing_retry_v1 import finish
+            finish({"processing_attempts":[active]},attempt_id,state="incomplete_budget" if budget else "failed",error=error)
+            if budget:
+                active["stop_reason"] = "budget_exhausted"
+                active["formation_progress_made"] = con.execute("SELECT EXISTS(SELECT 1 FROM workflow.formation_task_results WHERE attempt_id=%s) AS made",
+                                                                (attempt_id,)).fetchone()["made"]
+            con.execute("UPDATE workflow.processing_attempts SET payload=%s::jsonb,record_version=record_version+1 WHERE attempt_id=%s",
+                        (_json_text(active),attempt_id))
+            store.checkpoint_summary(con,snapshot_id,active)
+    from src.processing_trace_v1 import observe
+    observe("processing_finished",snapshot_id,active)
+    return True

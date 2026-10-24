@@ -2070,29 +2070,19 @@ class OperationsConsole:
 
     def _record_processing_failure(self, snapshot_id, attempt_id, error, *, claim_token=None):
         from src.processing_retry_v1 import KEY, finish
+        from src.formation_checkpoint_v1 import record_task_failure
+        if record_task_failure(self,snapshot_id,attempt_id,error,claim_token=claim_token):
+            return
         with self._reprocessing_transaction(snapshot_id):
             current = deepcopy(self._envelope(snapshot_id))
             active = next(a for a in current[KEY] if a["attempt_id"] == attempt_id)
-            if (current.get("processing_storage") == "task-v1"
-                    and (active.get("dispatch") or {}).get("token") != claim_token):
-                return  # A stale worker cannot fail the winning claim either.
             if active["state"] == "running":
-                budget_stop = current.get("processing_storage") == "task-v1" and getattr(error,"code",None) == "source_task_budget_exhausted"
-                finish(current, attempt_id, state="incomplete_budget" if budget_stop else "failed", error=error)
-                if budget_stop:
-                    active["stop_reason"] = "budget_exhausted"
-                    with self.workflow_document_store._connect() as connection:
-                        active["formation_progress_made"] = connection.execute(
-                            "SELECT EXISTS(SELECT 1 FROM workflow.formation_task_results WHERE attempt_id=%s) AS made",
-                            (attempt_id,)).fetchone()["made"]
+                finish(current, attempt_id, state="failed", error=error)
                 if active.get("kind") == "ingest" and (current.get("processing_blocker") == "pre_review_llm_processing_in_progress"
                         or current.get("received_source")) and not self.snapshot_objects(snapshot_id):
                     current["processing_blocker"] = active["error_code"]
-                    if current.get("processing_storage") != "task-v1":
-                        record_processing(current, [], fragments=[], replay=None, started_at=active["started_at"],
-                                          outcome="blocked", reason=active["error_code"])
-                    # New contexts retain failure/audit in their own durable
-                    # attempt/checkpoint records, not an envelope run per retry.
+                    record_processing(current, [], fragments=[], replay=None, started_at=active["started_at"],
+                                      outcome="blocked", reason=active["error_code"])
                 self._commit_prepared_store(envelopes={snapshot_id:current}, snapshot_id=snapshot_id)
 
         from src.processing_trace_v1 import observe

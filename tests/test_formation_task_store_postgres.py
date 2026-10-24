@@ -55,6 +55,12 @@ def test_input_reference_survives_replacement_and_detects_corruption(tmp_path, p
         reference = store.retain_input(con, envelope=envelope, validator_input=data,
             semantic_identity=envelope["semantic_replay"]["identity"], expected_revision=console.objects_revision(envelope["snapshot_id"]))
     assert store.resolve_input(reference) == data
+    with pytest.raises(WorkflowDocumentStoreError,match="formation_input_version_unsupported"):
+        store.resolve_input({**reference,"version":2})
+    with pytest.raises(WorkflowDocumentStoreError,match="formation_input_source_mismatch"):
+        store.resolve_input(reference,expected_snapshot_id="another-document")
+    with pytest.raises(WorkflowDocumentStoreError,match="formation_input_missing"):
+        store.resolve_input({**reference,"artifact_id":"missing"})
     changed = deepcopy(envelope)
     changed.pop("prepared_source_extraction")
     console.workflow_document_store.write_bundle(envelope=changed)
@@ -115,6 +121,10 @@ def test_new_checkpoint_does_not_reload_archive_or_take_global_write_lock(tmp_pa
         row = con.execute("SELECT envelope_payload FROM workflow.documents WHERE snapshot_id=%s", (sid,)).fetchone()
     assert "processing_attempts" not in row["envelope_payload"]
     assert console._envelope(sid)["processing_attempts"][-1]["diagnostic"]["phase"] == "model_request"
+    from src.operations_console_v1 import ConsoleError
+    console._record_processing_failure(sid,claimed["attempt_id"],ConsoleError("processing_test_failure"),
+        claim_token=claimed["dispatch"]["token"])
+    assert console._envelope(sid)["processing_attempts"][-1]["state"] == "failed"
 
 
 @pytest.mark.parametrize("stop",["provider","joint"])
@@ -214,6 +224,8 @@ def test_explicit_migration_preserves_history_and_blocks_old_writers(tmp_path,pr
     result = migrate(store,sid,apply=True)
     assert result["applied"]
     after = store.get_envelope(sid)
+    for attempt in after["processing_attempts"]:
+        attempt.pop("_record_version")  # storage CAS metadata, not historical evidence
     assert after["processing_attempts"] == before["processing_attempts"]
     assert {k:v for k,v in after.items() if k != "processing_storage"} == before
     assert migrate(store,sid,apply=True)["status"] == "already_migrated"
@@ -373,6 +385,9 @@ def test_checkpoint_fencing_rejects_without_writing(tmp_path,production_console,
         writer("model_request",{"current_task":{"task_id":"forbidden"}})
     with console.workflow_document_store._connect() as con:
         assert con.execute("SELECT COUNT(*) AS n FROM workflow.processing_checkpoints").fetchone()["n"] == before
+    if mutation == "claim":
+        console._record_processing_failure(writer.snapshot_id,writer.attempt_id,ConsoleError("processing_test_failure"),claim_token=writer.claim_token)
+        assert console._envelope(writer.snapshot_id)["processing_attempts"][-1]["state"] == "running"
 
 
 def test_live_checkpoint_keeps_overview_and_document_readable(tmp_path,production_console,production_app,monkeypatch):
@@ -475,3 +490,15 @@ def test_concurrent_task_commits_keep_one_durable_result(tmp_path,production_con
             future.result(timeout=10)
     assert len(first.task_results()) == 1
     assert first.store.progress(first.input_reference["context_id"])["terminal_task_count"] == 1
+
+
+def test_stale_document_write_cannot_erase_newer_checkpoint(tmp_path,production_console):
+    console,envelope,data = prepared(tmp_path,production_console)
+    writer = checkpoint_context(console,envelope,data)
+    stale = console._envelope(writer.snapshot_id)
+    writer("model_request",{"current_task":{"task_id":"newer-checkpoint"}})
+    stale["title"] = "Independent document metadata edit"
+    console.workflow_document_store.write_bundle(envelope=stale)
+    current = console._envelope(writer.snapshot_id)
+    assert current["title"] == stale["title"]
+    assert current["processing_attempts"][-1]["diagnostic"]["phase"] == "model_request"

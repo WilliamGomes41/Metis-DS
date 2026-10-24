@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS workflow.processing_attempts (
     command_id TEXT NOT NULL,
     started_at TIMESTAMPTZ NOT NULL,
     object_generation BIGINT NOT NULL,
+    record_version BIGINT NOT NULL DEFAULT 1,
     payload JSONB NOT NULL,
     UNIQUE(snapshot_id,command_id)
 );
