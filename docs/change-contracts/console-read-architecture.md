@@ -565,3 +565,12 @@ An existing timeout test depended on random-ID ordering when acquired_at timesta
 tied at whole-second precision. Its fixture now explicitly orders the documents;
 production ordering and domain clocks are unchanged. Intermediate fixture-route
 and extra-query budget failures were resolved before the final full-suite run.
+
+### Native graph input closure
+
+The first broad run found three failures in PostgreSQL graph restart/confirmation
+scenarios: the targeted native Review selection omitted decision_graph_evidence,
+which the existing publication_issues graph kernel needs when computing duties.
+The projection now retains that exact evidence alongside graph/policy/reviews;
+no graph validation or review/publication condition was changed. The final full
+run must use this corrected selection; the earlier run is not green evidence.

@@ -320,7 +320,7 @@ class _PostgresBadgeCountsMixin:
                            COALESCE((SELECT jsonb_object_agg(k,d.envelope_payload->k)
                              FROM unnest(ARRAY['content_kind','binary_path','immutable_storage_locator',
                                'prepared_source_extraction','decision_tree_formation','decision_unit_contract',
-                               'decision_graph','decision_graph_reviews']) k
+                               'decision_graph','decision_graph_evidence','decision_graph_reviews']) k
                              WHERE d.envelope_payload ? k), '{{}}'::jsonb)
                            || jsonb_build_object('quality_processing_runs', COALESCE((
                                SELECT jsonb_agg((SELECT jsonb_object_agg(k,a->k)

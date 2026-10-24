@@ -2092,6 +2092,18 @@
       "Test fixture registered an obsolete GET before invoking the new clean-slot installer; removed that test-only route.",
       "Batch timeout fixture had tied whole-second timestamps; explicit fixture ordering added.",
       "Separate card metadata query cost one extra connection; shared SQL shape restores the unchanged six-connection budget."
-    ]
+    ],
+    "graph_input_regression": {
+      "red_revision": "b9014f20ac1fd7e9740acfda37e5449e84819f51",
+      "red_failed": 3,
+      "red_log": "work/834-cleanup-graph-failure.log",
+      "cause": "Targeted native input omitted decision_graph_evidence required by existing graph publication_issues during duty projection.",
+      "repair": "Select the existing graph evidence unchanged; retain graph validation and reviewer confirmation authority.",
+      "green": {
+        "passed": 21,
+        "seconds": 11.65,
+        "log": "work/834-cleanup-graph-GREEN.log"
+      }
+    }
   }
 }
