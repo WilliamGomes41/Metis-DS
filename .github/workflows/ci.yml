@@ -86,6 +86,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: characterization-evidence
           path: output/char*
           if-no-files-found: warn
@@ -127,6 +128,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: product-api-v1-openapi-${{ matrix.python-version }}
           path: output/runtime/product_api_v1.openapi.json
           if-no-files-found: error
@@ -203,6 +205,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: suite-shard-${{ matrix.python-version }}-${{ matrix.shard }}
           path: output/shard/
           if-no-files-found: error
@@ -273,6 +276,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: review-browser-desktop-mobile
           path: |
             output/browser.xml
@@ -346,6 +350,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: suite-timing-${{ matrix.python-version }}
           path: output/d6a-*
           if-no-files-found: warn
@@ -375,6 +380,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: pg-without-mirrors-${{ matrix.python-version }}
           path: output/pg-without-mirrors.xml
           if-no-files-found: error
@@ -436,6 +442,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: a10-native-${{ matrix.python-version }}
           path: output/a10-native.xml
           if-no-files-found: error
@@ -470,6 +477,7 @@ jobs:
         if: always() && (github.head_ref == 'fix/a08-review-completion' || github.ref == 'refs/heads/fix/a08-review-completion')
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: a08-before-${{ matrix.python-version }}
           path: output/a08-before.xml
           if-no-files-found: error
@@ -502,6 +510,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: a08-native-${{ matrix.python-version }}
           path: output/a08-native.xml
           if-no-files-found: error

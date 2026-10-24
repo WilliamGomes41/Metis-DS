@@ -32,6 +32,9 @@ verdeeld. De verzamelaar eist alle vier delen, dezelfde commit/Python/collectie,
 geen ontbrekende of dubbele test-ID's, afgesloten uitvoering en nul PG-skips.
 Bestanden blijven bijeen en behouden hun testvolgorde. JUnit wordt samengevoegd;
 de zeven bestaande native bewijscontroles blijven dat bewijs gebruiken.
+Bewijsuploads gebruiken `overwrite: true`: upload-artifact v4 zou anders bij
+een herpoging van een mislukte job op de al bestaande naam met HTTP 409 stoppen.
+De pakketnaam bevat de runpoging en het deploymentpakket wordt niet overschreven.
 
 Gebruik: `measure_test_suite.py --shard-index 0 --shard-count 4 --output ...`;
 `ci_test_shards.py merge --directory ... --count 4 --python-version 3.12

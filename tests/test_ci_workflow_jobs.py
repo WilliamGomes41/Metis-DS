@@ -22,6 +22,14 @@ def test_browser_is_independent_and_existing_required_checks_gate_all_shards():
     assert {'suite', 'browser', 'characterization-evidence'} <= set(jobs['test']['needs'])
     assert jobs['test']['strategy']['matrix']['python-version'] == ['3.12', '3.13']
     assert not any('pytest ' in s.get('run','') and 'browser' in s['run'] for s in jobs['test']['steps'])
+    # upload-artifact v4 otherwise returns HTTP 409 when a failed job already
+    # uploaded evidence. Retrying that job must replace its proof, not fail again.
+    for name, job in jobs.items():
+        if name == 'package':
+            continue
+        for step in job['steps']:
+            if step.get('uses') == 'actions/upload-artifact@v4':
+                assert step['with'].get('overwrite') is True, (name, step.get('name'))
 
 
 def test_deployments_download_verified_package_before_azure_without_rerunning_suite():
