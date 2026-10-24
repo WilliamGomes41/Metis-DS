@@ -150,3 +150,36 @@ def test_read_benchmark(tmp_path, production_console, production_app, monkeypatc
     finally:
         set_json_loads(native_loads)
         endpoint.dependant.call = original_call
+
+
+def test_large_toasted_diagnostic_batches(tmp_path, production_console):
+    """Synthetic storage/batch cost, never a claim about representative Azure TOAST."""
+    from copy import deepcopy
+    import hashlib
+    from src.workflows.workflow_transaction_v1 import workflow_read_transaction
+    console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    store = console.workflow_document_store
+    envelope = store.get_envelope(sid)
+    objects = store.list_document_objects(sid)
+    # Deterministic, poorly compressible metadata; candidate text/identity untouched.
+    padding = ''.join(hashlib.sha256(str(i).encode()).hexdigest() for i in range(4000))
+    for obj in objects:
+        obj.setdefault('metadata', {})['benchmark_payload'] = padding
+    snapshots = []
+    for i in range(101):
+        env = deepcopy(envelope)
+        env['snapshot_id'] = f'diagnostic-batch-{i:03}'
+        store.write_bundle(envelope=env, objects=objects)
+        snapshots.append(env['snapshot_id'])
+    with store._connect() as con:
+        documents = dict(con.execute('SELECT max(pg_column_size(envelope_payload)) AS largest_document_bytes, sum(pg_column_size(envelope_payload)) AS total_document_bytes FROM workflow.documents').fetchone())
+        payloads = dict(con.execute('SELECT count(*) AS object_rows, max(pg_column_size(payload)) AS largest_object_bytes, sum(pg_column_size(payload)) AS total_object_bytes FROM workflow.document_objects').fetchone())
+    batches = []
+    for start in range(0, len(snapshots), 50):
+        ids = snapshots[start:start+50]
+        started = time.perf_counter()
+        with workflow_read_transaction(store):
+            captured = store.document_diagnostic_inputs(ids)
+        batches.append({'documents': len(ids), 'seconds': round(time.perf_counter()-started, 6)})
+        assert set(captured) == set(ids)
+    print('READ_ARCHITECTURE_STORAGE_BATCHES', json.dumps({'fixture': '101 documents; 4000 SHA256 strings/object metadata; PG16 local', 'pg_column_size': {**documents, **payloads}, 'batches': batches}, sort_keys=True))

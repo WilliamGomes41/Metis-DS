@@ -421,3 +421,9 @@ Regression proof: `test_new_and_running_documents_are_not_processing_blocks,test
 Unknown candidate counts cause a notice only for an account with processing access. Publishers receive stored-block/error notices without processing details; missing access alone produces no notice. The new publisher probe and updated revocation/unknown-count probe pass (2 cases).
 
 Regression proof: `test_publisher_missing_processing_access_is_not_a_notice,test_notices_revocation_and_explicit_unknown_count`. Red on `56488c0`; green after repair.
+
+### Repair 4
+
+Raad captures at most 50 documents per SQL batch and stops at 8 notices or its cooperative 4s operation budget. Each batch closes before telemetry/filtering; SQL statement deadlines are lowered to the remaining budget. Failed/timed-out batches log an explicit diagnostic and return earlier rows with complete=false and the first unexamined offset. Four error/timeout/budget/scan-limit probes pass. Synthetic PG storage: 78,864,936 total object bytes; 50/50/1-document batches took 0.033869/0.036487/0.003597 seconds. Not representative Azure evidence.
+
+Regression proof: `test_notices_second_diagnostic_batch_failure_is_explicit_partial,test_notices_statement_timeout_preserves_previous_batch,test_notices_budget_returns_cursor_without_open_transaction,test_bounded_notices_do_not_claim_complete_when_later_documents_are_unchecked`. Red on `56488c0`; green after repair.

@@ -25,10 +25,14 @@ class DocumentOverviewInputs:
 
     def select(self, snapshot_ids):
         missing = [sid for sid in snapshot_ids if sid not in self.diagnostics]
-        if missing:
-            self.processing.update(self.state.workflow_document_store.document_processing_inputs(missing))
-            self.diagnostics.update(self.state.workflow_document_store.document_diagnostic_inputs(missing))
-            self.published.update(self.state.published_snapshot_ids(missing))
+        for start in range(0, len(missing), 50):
+            batch = missing[start:start + 50]
+            processing = self.state.workflow_document_store.document_processing_inputs(batch)
+            diagnostics = self.state.workflow_document_store.document_diagnostic_inputs(batch)
+            published = self.state.published_snapshot_ids(batch)
+            self.processing.update(processing)
+            self.diagnostics.update(diagnostics)
+            self.published.update(published)
 
     def status_and_diagnostics(self, envelope):
         from src.processing_retry_v1 import status

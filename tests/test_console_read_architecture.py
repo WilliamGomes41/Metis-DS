@@ -306,7 +306,7 @@ def test_bounded_notices_do_not_claim_complete_when_later_documents_are_unchecke
     assert notices['complete'] is False
     full = client.get('/inzicht/api/documents').json()
     assert full['total'] == 2
-    assert any(row['processing_blocked'] for row in full['documents'])
+    assert not any(row['processing_blocked'] for row in full['documents'])
 
 
 def test_json_volume_uses_native_decoder_bytes_without_reencoding(tmp_path, production_console):
@@ -502,3 +502,52 @@ def test_quality_source_and_ledger_io_outside_read_transaction(tmp_path, product
     monkeypatch.setattr(quality, 'read_events', events)
     assert quality.capture(console, users['researcher'])['documents']
     assert observed and not any(observed)
+
+
+def test_notices_budget_returns_cursor_without_open_transaction(tmp_path, production_console, production_app, monkeypatch, caplog):
+    import src.insight_v1 as insight
+    from src.workflows.workflow_transaction_v1 import workflow_transaction_active
+    console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    monkeypatch.setattr(insight, 'NOTICE_TIME_BUDGET_SECONDS', 0)
+    calls = []
+    monkeypatch.setattr(console.workflow_document_store, 'document_diagnostic_inputs', lambda ids: calls.append(ids))
+    response = _login(console, users['researcher']['username'], production_app=production_app).get('/raad/meldingen')
+    assert response.status_code == 200
+    assert response.json() == {'documents': [], 'complete': False, 'next_offset': 0}
+    assert not calls and 'document_diagnostic_budget_exhausted' in caplog.text
+    assert not workflow_transaction_active()
+
+
+def test_notices_statement_timeout_preserves_previous_batch(tmp_path, production_console, production_app, monkeypatch, caplog):
+    import src.insight_v1 as insight
+    from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+    console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    store = console.workflow_document_store
+    later = _received(console, users)
+    env = store.get_envelope(sid)
+    env['processing_blocker'] = 'processing_dependency_failed'
+    store.write_bundle(envelope=env)
+    monkeypatch.setattr(insight, 'DIAGNOSTIC_BATCH_SIZE', 1)
+    original = store.document_diagnostic_inputs
+    calls = []
+    def diagnostic(ids):
+        calls.append(ids)
+        if len(calls) == 2:
+            try:
+                with store._connect() as con:
+                    con.execute("SET LOCAL statement_timeout='20ms'")
+                    con.execute('SELECT pg_sleep(1)')
+            except Exception as exc:
+                raise WorkflowDocumentStoreError('workflow_document_diagnostics_read_failed') from exc
+        return original(ids)
+    monkeypatch.setattr(store, 'document_diagnostic_inputs', diagnostic)
+    response = _login(console, users['researcher']['username'], production_app=production_app).get('/raad/meldingen')
+    assert response.status_code == 200
+    body = response.json()
+    assert body['complete'] is False and body['next_offset'] == 1
+    assert [r['snapshot_id'] for r in body['documents']] == [sid]
+    assert 'document_diagnostic_batch_unavailable' in caplog.text
+    # The failed transaction closed; the independent next request can read again.
+    monkeypatch.setattr(store, 'document_diagnostic_inputs', original)
+    again = _login(console, users['researcher']['username'], production_app=production_app).get('/raad/meldingen?offset=1')
+    assert again.status_code == 200 and again.json()['complete'] is True

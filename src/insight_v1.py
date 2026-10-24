@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import time
 import json
+import logging
 from html import escape
 from typing import Any, Callable
 from urllib.parse import parse_qsl, urlencode, urlsplit
@@ -24,6 +25,9 @@ _HEADERS = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
 MAX_DOCUMENTS = 200
 # Documents examined per request when a state filter is active; the cursor continues the scan.
 MAX_SCAN = 1000
+DIAGNOSTIC_BATCH_SIZE = 50
+NOTICE_TIME_BUDGET_SECONDS = 4.0
+LOG = logging.getLogger(__name__)
 DOCUMENT_STATES = ("blocked", "errors", "retry", "attention")
 
 
@@ -87,19 +91,24 @@ def _state_matches(row: dict[str, Any], state_filter: str) -> bool:
 
 
 def documents_projection(state, account, *, query: str = "", state_filter: str = "", offset: int = 0,
-                         limit: int = MAX_DOCUMENTS, scan_limit: int | None = None) -> dict[str, Any]:
+                         limit: int = MAX_DOCUMENTS, scan_limit: int | None = None, partial_on_error: bool = False) -> dict[str, Any]:
     """One page of authorized documents; search and state filter run over the whole authorized list.
 
     ``offset`` and ``next_offset`` index the searched authorized list. Without a state
     filter ``total`` is exact; with one it is unknown until the scan reaches the end.
     """
     from src.console_read_operations_v1 import document_overview_operation
+    started = time.monotonic()
     with document_overview_operation(state, account, scan_limit=scan_limit) as (actor, inputs):
         window = _document_window(inputs, actor, query, state_filter, offset, limit)
         authorized, offset, limit, scan_end = window
-        inputs.select([e["snapshot_id"] for e in authorized[offset:scan_end]
-                       if _processing_access(actor, e)])
+        if not partial_on_error:
+            inputs.select([e["snapshot_id"] for e in authorized[offset:scan_end]
+                           if _processing_access(actor, e)])
     # File-backed telemetry and all rendering/filtering happen after SQL closes.
+    if partial_on_error:
+        return _notice_documents_page(inputs, actor, window=window, state_filter=state_filter,
+                                      deadline=started + NOTICE_TIME_BUDGET_SECONDS)
     return _documents_page(inputs, actor, state_filter=state_filter, window=window)
 
 
@@ -130,6 +139,53 @@ def _documents_page(inputs, account, *, query="", state_filter="", offset=0, lim
     return {"documents": rows, "total": None if state_filter or inputs.metadata_partial else len(authorized), "offset": offset,
             "limit": limit, "next_offset": position if position < len(authorized) else None,
             "telemetry_partial": partial, "metadata_partial": inputs.metadata_partial}
+
+
+def _notice_documents_page(inputs, account, *, window, state_filter, deadline):
+    """Independent bounded SQL batches, with external work between transactions.
+
+    Earlier successful batches survive a failed/expired batch. next_offset points
+    to the first unexamined row, so failure never masquerades as an empty success.
+    Each batch has its own SQL snapshot; no cross-batch atomicity is claimed.
+    """
+    from src.workflows.workflow_transaction_v1 import workflow_read_transaction
+    from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+    authorized, offset, limit, scan_end = window
+    position, rows = offset, []
+    telemetry, telemetry_partial = None, False
+    diagnostic_partial = False
+    while position < scan_end and len(rows) < limit:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            diagnostic_partial = True
+            LOG.warning("document_diagnostic_budget_exhausted")
+            break
+        batch = authorized[position:min(scan_end, position + DIAGNOSTIC_BATCH_SIZE)]
+        ids = [e["snapshot_id"] for e in batch if _processing_access(account, e)]
+        try:
+            if ids:
+                with workflow_read_transaction(inputs.state.workflow_document_store) as con:
+                    # Lower the existing statement limit to this operation's remainder.
+                    con.execute("SELECT set_config('statement_timeout', %s, true)",
+                                (str(max(1, min(5000, int(remaining * 1000)))),))
+                    inputs.select(ids)
+        except WorkflowDocumentStoreError:
+            diagnostic_partial = True
+            LOG.warning("document_diagnostic_batch_unavailable")
+            break
+        if telemetry is None:
+            telemetry, telemetry_partial = _telemetry_by_document(time.time() - 86400)
+        for envelope in batch:
+            row = _document_row(inputs, account, envelope, telemetry)
+            position += 1
+            if _state_matches(row, state_filter):
+                rows.append(row)
+                if len(rows) >= limit:
+                    break
+    return {"documents": rows, "total": None, "offset": offset, "limit": limit,
+            "next_offset": position if diagnostic_partial or position < len(authorized) else None,
+            "telemetry_partial": telemetry_partial, "metadata_partial": inputs.metadata_partial,
+            "diagnostic_partial": diagnostic_partial}
 
 
 def _document_row(inputs, account, envelope: dict[str, Any], telemetry: dict[str, dict[str, int]]) -> dict[str, Any]:

@@ -1093,7 +1093,37 @@
       },
       "4": {
         "red_on_56488c0": "failed",
-        "green": "pending"
+        "green": "Raad captures at most 50 documents per SQL batch and stops at 8 notices or its cooperative 4s operation budget. Each batch closes before telemetry/filtering; SQL statement deadlines are lowered to the remaining budget. Failed/timed-out batches log an explicit diagnostic and return earlier rows with complete=false and the first unexamined offset. Four error/timeout/budget/scan-limit probes pass. Synthetic PG storage: 78,864,936 total object bytes; 50/50/1-document batches took 0.033869/0.036487/0.003597 seconds. Not representative Azure evidence.",
+        "storage_benchmark": {
+          "batches": [
+            {
+              "documents": 50,
+              "seconds": 0.033869
+            },
+            {
+              "documents": 50,
+              "seconds": 0.036487
+            },
+            {
+              "documents": 1,
+              "seconds": 0.003597
+            }
+          ],
+          "fixture": "101 documents; 4000 SHA256 strings/object metadata; PG16 local",
+          "pg_column_size": {
+            "largest_document_bytes": 15853,
+            "largest_object_bytes": 263088,
+            "object_rows": 306,
+            "total_document_bytes": 1616971,
+            "total_object_bytes": 78864936
+          }
+        },
+        "tests": [
+          "test_notices_second_diagnostic_batch_failure_is_explicit_partial",
+          "test_notices_statement_timeout_preserves_previous_batch",
+          "test_notices_budget_returns_cursor_without_open_transaction",
+          "test_bounded_notices_do_not_claim_complete_when_later_documents_are_unchecked"
+        ]
       },
       "5": {
         "red_on_56488c0": "failed",
