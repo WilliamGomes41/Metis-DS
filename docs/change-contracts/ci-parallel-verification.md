@@ -38,7 +38,7 @@ Gebruik: `measure_test_suite.py --shard-index 0 --shard-count 4 --output ...`;
 --commit <sha> --output output/d6a-after.json`. Zonder shardargumenten blijft
 de runner de volledige suite uitvoeren. `seconds` van het gezamenlijke rapport
 is de som van de delen voor de bestaande kostenvergelijking; `wall_seconds`
-is de langzaamste suite, exclusief queue/installatie/collectie buiten de meting.
+is de langzaamste suite, exclusief queue/installatie. Pytest-collectie telt mee.
 
 ## Pakket en deployment
 

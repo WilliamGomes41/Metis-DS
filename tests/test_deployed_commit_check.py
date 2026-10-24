@@ -225,7 +225,7 @@ def test_cli_rejects_invalid_health_target_without_echoing_credentials(url):
 
 
 @pytest.mark.parametrize("environment,sha_source", [
-    ("production", "inputs.commit_sha"), ("test", "github.sha"),
+    ("production", "inputs.commit_sha"), ("test", "inputs.commit_sha"),
 ])
 def test_workflow_binds_expected_commit_to_selected_release(environment, sha_source):
     text = (ROOT / ".github/workflows" / f"deploy-{environment}.yml").read_text()

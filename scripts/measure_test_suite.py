@@ -30,6 +30,7 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     xml = output.with_suffix(".xml")
     xml.unlink(missing_ok=True)
+    output.with_suffix('.selection.json').unlink(missing_ok=True)
     cwd = root
     worktree = None
     if args.ref:
@@ -88,7 +89,8 @@ def main():
                 report["ratio"] = round(ratio, 4)
                 report["within_twice_baseline"] = ratio <= 2
             output.write_text(json.dumps(report, indent=2) + "\n")
-            print(json.dumps(report), flush=True)
+            print(json.dumps({key: value for key, value in report.items()
+                              if key not in {'selected', 'finished'}}), flush=True)
             return report['exit_code'] or int(bool(report.get("postgres_skips")) or
                                            report.get("junit_missing", False) or
                                            not report.get("within_twice_baseline", True))
