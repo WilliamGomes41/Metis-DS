@@ -1,6 +1,6 @@
 {
-  "current_application_revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
-  "current_evidence_section": "repair_review_2026_10_24",
+  "current_application_revision": "d843e8a8c5be1a0e75f81ad7a707e246e0618f09",
+  "current_evidence_section": "pre_deployment_cleanup",
   "change_class": "B",
   "rewrite_risk": "high",
   "release_verdict": "NO-GO",
@@ -2030,7 +2030,7 @@
       "note": "Observed before the evidence-only followup commit. Local full suite passed; remote general CI is not claimed complete."
     }
   },
-  "evidence_scope": "Original recovery evidence stays historical at the top level; repair_review_2026_10_24 contains the current application revision and final six-point proof.",
+  "evidence_scope": "Top-level recovery and repair_review_2026_10_24 stay historical; pre_deployment_cleanup contains the latest tested application, cleanup and complete verification.",
   "pre_deployment_cleanup": {
     "base_revision": "02e19ab462c02e002d73d377dbfed9771cda63ed",
     "classification": "Class B; Rewrite risk: high",
@@ -2038,10 +2038,128 @@
     "red_probes": {
       "failed": 8,
       "passed": 1,
-      "log": "work/834-cleanup-RED-02e19ab.log"
+      "log": "work/834-cleanup-RED-02e19ab.log",
+      "summary": "8 failed, 1 passed, 29 deselected, 1 warning in 12.54s",
+      "native_json_bytes": 444855,
+      "review_method_level_probe_passed_but_native_SQL_volume_failed": true
     },
     "plan": "A1–A4 and C1–C2; remove B1–B5, keep B6 one release; preserve writer/lifecycle/source integrity contracts. Native review SQL also needs targeted inputs.",
-    "final_verification": "pending",
+    "final_verification": {
+      "status": "PASS",
+      "application_revision": "d843e8a8c5be1a0e75f81ad7a707e246e0618f09",
+      "test_suite_revision": "1bfd07d629abebc7f037c149aab2512167b0697b",
+      "summary": "5755 passed, 23 skipped, 3 xfailed, 8 warnings, 3 subtests passed in 1421.55s (0:23:41)",
+      "passed": 5755,
+      "skipped": 23,
+      "xfailed": 3,
+      "warnings": 8,
+      "subtests_passed": 3,
+      "postgres_required": true,
+      "browser_enabled": true,
+      "postgres_skips": 0,
+      "log": "work/834-cleanup-VERIFIED.log",
+      "junit": "work/834-cleanup-VERIFIED.xml",
+      "skips_are_not_proof": true,
+      "skipped_cases": [
+        {
+          "name": "tests.test_bend_experiment.BendExperimentTests::test_d3_python_and_bend_reject_same_live_relative_import",
+          "reason": "Optional Bend toolchain is not installed"
+        },
+        {
+          "name": "tests.test_bend_experiment.BendExperimentTests::test_d3_source_derived_import_boundary",
+          "reason": "Optional Bend toolchain is not installed"
+        },
+        {
+          "name": "tests.test_bend_experiment.BendExperimentTests::test_example_and_standard_proof",
+          "reason": "Optional Bend toolchain is not installed"
+        },
+        {
+          "name": "tests.test_bend_experiment.BendExperimentTests::test_law_rejects_incorrect_implementation",
+          "reason": "Optional Bend toolchain is not installed"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_true_pipeline_preserves_text_hash_and_original_geometry",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_mixed_digital_and_scanned_pdf_names_the_scanned_page_before_activation",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_structure_columns_labels_table_and_cross_page",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_line_numbers_cross_page_text_and_unequal_page_sizes",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_upload_semantic_source_review_restart_existing_publication_gate",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_pdf_postgres_chain",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_pdf_postgres_successful_publication_and_restart[v2]",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_pdf_postgres_successful_publication_and_restart[v3]",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_acceptance_requires_native_postgres",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_converter_timeout_restart_retry_no_partial_activation[local]",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_converter_timeout_restart_retry_no_partial_activation[postgres]",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_pdf_postgres_commit_rollback_and_concurrent_retry",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_laws_hold",
+          "reason": "Bend is optional outside its dedicated CI job"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_rejects_a_semantic_violation[standalone]",
+          "reason": "Bend is optional outside its dedicated CI job"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_rejects_a_semantic_violation[same_reviewer]",
+          "reason": "Bend is optional outside its dedicated CI job"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_matches_existing_pending_second_review_route[False-Standalone]",
+          "reason": "Bend is optional outside its dedicated CI job"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_matches_existing_pending_second_review_route[False-Console]",
+          "reason": "Bend is optional outside its dedicated CI job"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_matches_existing_pending_second_review_route[True-Standalone]",
+          "reason": "Bend is optional outside its dedicated CI job"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_matches_existing_pending_second_review_route[True-Console]",
+          "reason": "Bend is optional outside its dedicated CI job"
+        }
+      ],
+      "expected_failures": [
+        "tests.test_b23_richtlijn_vormingscontract_failfirst::test_rl_f1_04_intro_yields_no_objects_and_is_excluded_with_reason[semantic-source-bound-v3]",
+        "tests.test_b23_richtlijn_vormingscontract_failfirst::test_order_recommendation_then_consideration_then_condition[semantic-source-bound-v3]",
+        "tests.test_b23_richtlijn_vormingscontract_failfirst::test_weak_recommendation_without_target_group_is_rejected[semantic-source-bound-v3]"
+      ]
+    },
     "focused": {
       "final_surface": {
         "passed": 106,
@@ -2074,7 +2192,9 @@
       "review_native_json_bytes": 15367,
       "maximum_bytes_guard": 65536,
       "before": "guard failed on 02e19ab",
-      "measurement_scope": "Local JSON/JSONB decoder bytes, not Azure storage/latency."
+      "measurement_scope": "Local JSON/JSONB decoder bytes, not Azure storage/latency.",
+      "current_native_probe_bytes": 15368,
+      "current_probe_log": "work/834-cleanup-current-native-volume.log"
     },
     "changes": {
       "A1": "Card scope; no command lock/reload on GET.",
@@ -3232,6 +3352,121 @@
         "seconds": 0.75,
         "log": "work/834-cleanup-parity-fixture-GREEN.log"
       }
-    }
+    },
+    "final_probe_results": [
+      {
+        "name": "tests.test_console_read_architecture::test_compact_page_routes_do_not_fetch_full_envelopes",
+        "result": "passed",
+        "seconds": 0.437
+      },
+      {
+        "name": "tests.test_postgres_document_cards::test_postgres_scoped_cards_never_construct_full_receipts",
+        "result": "passed",
+        "seconds": 0.948
+      },
+      {
+        "name": "tests.test_postgres_document_cards::test_scoped_cards_do_not_alias_the_process_cache",
+        "result": "passed",
+        "seconds": 0.314
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_cleanup_compact_gets_do_not_read_full_envelopes[/review]",
+        "result": "passed",
+        "seconds": 0.882
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_cleanup_compact_gets_do_not_read_full_envelopes[/review/repair]",
+        "result": "passed",
+        "seconds": 0.317
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_cleanup_compact_gets_do_not_read_full_envelopes[/inzicht/routevergelijking]",
+        "result": "passed",
+        "seconds": 0.327
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_console_gets_never_take_command_write_lock",
+        "result": "passed",
+        "seconds": 0.586
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_class_change_reads_only_its_selected_snapshot",
+        "result": "passed",
+        "seconds": 0.312
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_slow_canonical_status_is_outside_workflow_transaction",
+        "result": "passed",
+        "seconds": 12.375
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_deleted_document_between_summary_and_capture_is_partial[/inzicht/api/documents]",
+        "result": "passed",
+        "seconds": 0.375
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_deleted_document_between_summary_and_capture_is_partial[/raad/meldingen]",
+        "result": "passed",
+        "seconds": 0.361
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_review_overview_does_not_decode_unrelated_envelope_replay",
+        "result": "passed",
+        "seconds": 0.435
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_installed_review_and_publish_gets_have_single_explicit_owner",
+        "result": "passed",
+        "seconds": 0.794
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_native_review_targeted_inputs_preserve_full_domain_result",
+        "result": "passed",
+        "seconds": 0.328
+      },
+      {
+        "name": "tests.test_browser_deploy_check::test_deploy_check_names_each_failing_page_and_changes_nothing",
+        "result": "passed",
+        "seconds": 70.623
+      }
+    ],
+    "final_graph_probe_results": [
+      {
+        "name": "test_pdf_requires_passage_and_graph_review_after_restart[postgres-None]",
+        "result": "passed",
+        "seconds": 0.505
+      },
+      {
+        "name": "test_pdf_requires_passage_and_graph_review_after_restart[postgres-optional]",
+        "result": "passed",
+        "seconds": 0.465
+      },
+      {
+        "name": "test_pdf_requires_passage_and_graph_review_after_restart[postgres-required]",
+        "result": "passed",
+        "seconds": 0.573
+      }
+    ],
+    "final_preflights": {
+      "repository": {
+        "status": "PASS",
+        "checked_files": 1597
+      },
+      "release_control": "PASS; live_release_evidence=false",
+      "architecture": "Architecture boundaries: PASS",
+      "compileall_src": "PASS",
+      "javascript": "Actual Chromium and node --check passed"
+    },
+    "proof_logs_sha256": {
+      "834-cleanup-RED-02e19ab.log": "235d7cc2433811d5a4731a383f9922a038f175554fc7be453c1e7acd82f60db7",
+      "834-cleanup-graph-failure.log": "392f1b3fa1c1aa37912a05752010e81d1e661cd4eb6c13d0c8c85b721d7fa9f3",
+      "834-cleanup-partial-ui-RED-final.log": "f053b7c4421ac2c470c3046c3d0c78d9a876619ccf94eb8d0cccbcb4efab96bb",
+      "834-cleanup-VERIFIED.log": "68345f754f7f2630f626fa96c837f1daed5fd0d03eb35699088b8621c912ae9d"
+    },
+    "application_commits": [
+      "b9014f2",
+      "147818a",
+      "d843e8a"
+    ]
   }
 }

@@ -212,7 +212,7 @@ counting textual occurrences as runtime calls.
 | `src/workflows/workflow_documents_cutover_v1.py:547` · `_PostgresWorkflowDocumentsMixin._save_envelopes` | Existing command/recovery owner; current reload under locks, revision/transaction rules unchanged | Commands detach read inputs; map-dependent readers replaced; checkpoint copies touch submitted document only; StoreCommand, concurrency and lifecycle suites |
 | `src/workflows/workflow_documents_cutover_v1.py:418` · `_PostgresWorkflowDocumentsMixin._scoped_envelopes` | PG document store owns data; operation owns snapshots; no shared writer mutation | First single read populates reuse; narrow IDs never load envelopes; cost/isolation/key suites. Base bodies are overridden in every supported constructor |
 | `src/workflows/workflow_documents_cutover_v1.py:411` · `_PostgresWorkflowDocumentsMixin.list_envelopes` | PG document store owns data; operation owns snapshots; no shared writer mutation | First single read populates reuse; narrow IDs never load envelopes; cost/isolation/key suites. Base bodies are overridden in every supported constructor |
-| `src/workflows/workflow_documents_cutover_v1.py:429` · `_PostgresWorkflowDocumentsMixin.list_snapshot_ids` | PG document store owns data; operation owns snapshots; no shared writer mutation | First single read populates reuse; narrow IDs never load envelopes; cost/isolation/key suites. Base bodies are overridden in every supported constructor |
+| `src/workflows/workflow_documents_cutover_v1.py` · retired `list_snapshot_ids` | Retired; no production caller remains | Removed in cleanup; live compact cards preserve scope/process isolation; `test_postgres_document_cards` |
 | `src/workflows/workflow_documents_cutover_v1.py:400` · `_PostgresWorkflowDocumentsMixin.refresh_workflow_documents` | Explicit command/startup/rollback work map; mutable only at its existing owner | No GET refresh dependency; native transaction, StoreCommand and recovery suites |
 | `src/workflows/workflow_review_cutover_v1.py:373` · `_PostgresWorkflowReviewMixin._atomic_snapshot_mutation` | Existing command/recovery owner; current reload under locks, revision/transaction rules unchanged | Commands detach read inputs; map-dependent readers replaced; checkpoint copies touch submitted document only; StoreCommand, concurrency and lifecycle suites |
 | `src/workflows/workflow_review_cutover_v1.py:314` · `_PostgresWorkflowReviewMixin._commit_prepared_store` | Existing command/recovery owner; current reload under locks, revision/transaction rules unchanged | Commands detach read inputs; map-dependent readers replaced; checkpoint copies touch submitted document only; StoreCommand, concurrency and lifecycle suites |
@@ -606,3 +606,21 @@ and the metadata columns consumed by the now-shared card query. That fixture
 now supplies those columns/topic row; all queue/duty/admission assertions remain
 unchanged. Both parity cases pass (0.75s), without changing application code.
 A fresh complete run follows; the two-failure run is not represented as green.
+
+### Cleanup final joint verification
+
+Application revision: `d843e8a8c5be1a0e75f81ad7a707e246e0618f09`.
+5755 passed, 23 skipped, 3 xfailed, 8 warnings, 3 subtests passed in 1421.55s (0:23:41)
+
+PostgreSQL and Chromium were enabled; no PostgreSQL test was skipped. Optional
+Docling/Bend tooling skips and expected failures are listed separately and are
+not counted as proof. All compact-GET, GET lock, selected-lookup, canonical-
+timeout, deletion/partial-response, native Review and visible-completeness probes
+passed in this complete run. The three native graph restart probes also passed.
+Earlier interrupted/failed runs are not completion evidence.
+
+Architecture boundaries, release-control preflight, repository preflight, compile
+and JS/browser checks pass. No golden updates were needed. B6 remains for one
+deployed release. No schema/data migration, rebase, force push, merge or deployment
+was performed. The joint release verdict remains **NO-GO** pending the required
+representative Azure/storage/load and real full content-trajectory evidence.
