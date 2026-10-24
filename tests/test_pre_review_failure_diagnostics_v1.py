@@ -99,7 +99,7 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
         reader = _ListStatusReader({sid: {**envelope, "has_open_review": False}})
         console.list_document_lifecycle_statuses = reader.list_document_lifecycle_statuses
         tree = client.get("/tree")
-        assert "status <b>geblokkeerd</b>" in tree.text
+        assert 'data-tone="warn"><span class="visually-hidden">Status: </span>geblokkeerd</span>' in tree.text
         assert "Technische diagnose bekijken" not in tree.text
         management = client.get(f"/settings/technical/processing?document={sid}")
         assert management.status_code == 200

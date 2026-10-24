@@ -190,7 +190,7 @@ def _assert_room_statuses(
     review = client.get("/review")
     assert tree.status_code == 200
     assert review.status_code == 200
-    assert f"status <b>{list_label}</b>" in tree.text
+    assert f'<span class="visually-hidden">Status: </span>{list_label}</span>' in tree.text
     assert f"status <b>{list_label}</b>" in review.text
 
     _login(client, publisher_username)

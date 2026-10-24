@@ -1281,7 +1281,8 @@ def _coverage_panel(objects: list[dict[str, Any]]) -> str:
     """
 
 
-def _document_list_page(rows: list[dict[str, Any]], *, q: str, page: int, path: str) -> tuple[list[dict[str, Any]], str]:
+def _document_list_page(rows: list[dict[str, Any]], *, q: str, page: int, path: str,
+                        quiet_single_page: bool = False) -> tuple[list[dict[str, Any]], str]:
     """Bound rendered document lists; search the complete authorized collection."""
     query = q.strip()
     terms = query.casefold().split()
@@ -1299,17 +1300,30 @@ def _document_list_page(rows: list[dict[str, Any]], *, q: str, page: int, path: 
       <label>Zoek documenten<input type="search" name="q" value="{_esc(query)}" placeholder="Titel of onderwerp"></label>
       <button class="btn-secondary" type="submit">Zoeken</button>
     </form><nav class="document-pagination" aria-label="Documentpagina’s">
-      <span>{len(matches)} documenten · pagina {page} van {pages}</span> {" · ".join(links)}</nav>'''
+      <span>{len(matches)} documenten{"" if quiet_single_page and pages == 1 else f" · pagina {page} van {pages}"}</span> {" · ".join(links)}</nav>'''
     return matches[(page - 1) * size:page * size], controls
 
 
-def _document_summary(row: dict[str, Any]) -> str:
+def _document_status(row: dict[str, Any]) -> str:
     from src.document_status_ui_v1 import current_document_lifecycle_status
     lifecycle = current_document_lifecycle_status(str(row.get("snapshot_id") or "")) or {}
-    status = row.get("meaningful_status") or lifecycle.get("presentation_status") or row.get("status") or row.get("state") or ""
+    return row.get("meaningful_status") or lifecycle.get("presentation_status") or row.get("status") or row.get("state") or ""
+
+
+def _document_summary(row: dict[str, Any]) -> str:
+    status = _document_status(row)
     return (f'<span class="doc-title">{_esc(row["title"])}</span>'
             f'<span class="meta">Versie {_esc(row["version"])} · {_esc(row.get("family"))} · '
             f'{_esc(row.get("class"))} · status <b>{_esc(_status_label(status))}</b></span>')
+
+
+def _document_row_summary(row: dict[str, Any], *, blocked: bool) -> str:
+    """Documenten row: title and version on the left, the status as a label on the right."""
+    tone = "warn" if blocked else "neutral"
+    return (f'<span class="document-row-text"><span class="doc-title">{_esc(row["title"])}</span>'
+            f'<span class="meta">Versie {_esc(row["version"])} · {_esc(row.get("class"))}</span></span>'
+            f'<span class="document-status" data-tone="{tone}">'
+            f'<span class="visually-hidden">Status: </span>{_esc(_status_label(_document_status(row)))}</span>')
 
 
 def _document_card_heading(row: dict[str, Any]) -> str:
@@ -1324,6 +1338,12 @@ def _document_card_heading(row: dict[str, Any]) -> str:
         <span>status <b>{_esc(_status_label(row.get("status") or row.get("state") or ""))}</b></span>
       </p>
     """
+
+
+def _document_action_row(label: str, body: str) -> str:
+    """One Documenten action: a fixed label column and its content."""
+    return (f'<section class="document-action"><h3 class="document-action-label">{_esc(label)}</h3>'
+            f'<div class="document-action-body">{body}</div></section>')
 
 
 def _can_delete_unpublished(account: dict[str, Any] | None, row: dict[str, Any]) -> bool:
@@ -1363,6 +1383,8 @@ def _unpublished_delete_control(
     title = str(row.get("title") or "")
     target = next_path if next_path in ALLOWED_DELETE_NEXT else "/tree"
     return f"""
+      <details class="document-danger">
+      <summary>Document verwijderen</summary>
       <form class="delete-unpublished" method="post" action="/documents/delete">
         <input type="hidden" name="snapshot_id" value="{_esc(snap)}">
         <input type="hidden" name="next" value="{_esc(target)}">
@@ -1379,6 +1401,7 @@ def _unpublished_delete_control(
         </label>
         <button class="btn-secondary" type="submit">Verwijder unpublished document</button>
       </form>
+      </details>
     """
 
 
@@ -5250,7 +5273,7 @@ def create_console_app(
         )
         visible, list_controls = _document_list_page(
             [child for node in payload["families"].values() for child in node["children"]],
-            q=q, page=page, path="/tree",
+            q=q, page=page, path="/tree", quiet_single_page=True,
         )
         visible_ids = {row["snapshot_id"] for row in visible}
         blocks: list[str] = []
@@ -5259,37 +5282,42 @@ def create_console_app(
             for child in node["children"]:
                 if child["snapshot_id"] not in visible_ids:
                     continue
-                actions = []
+                rows = []
                 pre_review_notice = ""
                 try:
                     mutable = not state.snapshot_is_published(child["snapshot_id"])
                 except ConsoleError:
                     mutable = False
+                blocked = mutable and child.get("publication_eligibility") == PRE_REVIEW_BLOCKED
                 if not mutable:
-                    actions.append('<p class="muted">Voor deze versie zijn wijzigacties niet beschikbaar. Gepubliceerde versies blijven ongewijzigd.</p>')
+                    locked = ['<p class="muted">Voor deze versie zijn wijzigacties niet beschikbaar. Gepubliceerde versies blijven ongewijzigd.</p>']
                     if "researcher" in account["roles"]:
-                        actions.append('<a class="btn-secondary" href="/ingest">Nieuwe bronversie inleveren</a>')
-                if mutable and child.get("publication_eligibility") == PRE_REVIEW_BLOCKED:
-                    pre_review_notice = '<p class="banner warn">Verwerking niet afgerond. Beoordelen is nog niet beschikbaar.</p>'
+                        locked.append('<a class="btn-secondary" href="/ingest">Nieuwe bronversie inleveren</a>')
+                    rows.append(_document_action_row("Wijzigen", "".join(locked)))
+                if blocked:
+                    next_step = (
+                        f' <a href="/source-selection?{_esc(urlencode({"document": child["snapshot_id"]}))}">Naar Bronselectie</a> om de verwerking te starten of te hervatten.'
+                        if can_move else ""
+                    )
+                    pre_review_notice = f'<p class="banner warn">Verwerking niet afgerond. Beoordelen is nog niet beschikbaar.{next_step}</p>'
                 if can_move and mutable:
-                    actions.append(
-                        f"""
-                        <form method="post" action="/tree/move">
+                    rows.append(_document_action_row("Onderwerp", f"""
+                        <p class="document-current">Nu: <b>{_esc(child["family"])}</b></p>
+                        <form method="post" action="/tree/move" class="document-action-form">
                           <input type="hidden" name="snapshot_id" value="{_esc(child["snapshot_id"])}">
                           <input type="hidden" name="title" value="{_esc(child["title"])}">
                           <input type="hidden" name="version" value="{_esc(child["version"])}">
                           <input type="hidden" name="family" value="{_esc(child["family"])}">
-                          <label>Onderwerp
+                          <label>Ander onderwerp
                             <input name="new_family" required list="move-family-options" placeholder="Kies bestaand of typ nieuw onderwerp" autocomplete="off">
                           </label>
                           <button class="btn-secondary" type="submit">Verplaatsen</button>
                         </form>
-                        """
-                    )
+                        """))
                 if can_promote and mutable:
-                    actions.append(
-                        f"""
-                        <form method="post" action="/tree/promote">
+                    rows.append(_document_action_row("Klasse", f"""
+                        <p class="document-current">Nu: <b>{_esc(child["class"])}</b></p>
+                        <form method="post" action="/tree/promote" class="document-action-form">
                           <input type="hidden" name="snapshot_id" value="{_esc(child["snapshot_id"])}">
                           <input type="hidden" name="title" value="{_esc(child["title"])}">
                           <input type="hidden" name="version" value="{_esc(child["version"])}">
@@ -5298,8 +5326,8 @@ def create_console_app(
                             <select name="new_class">{_class_options(child["class"])}</select>
                           </label>
                           <div class="klasse-wijzigen-consequence">
-                            <p>De bron blijft ongewijzigd. Deze wijziging vereist een nieuwe beoordeling.
-                            Een overstap van of naar een beslisboom maakt nieuwe kennisobjecten en gebeurt via Review → Nieuwe werkrevisie; dit document blijft dan ongewijzigd.</p>
+                            <p>Deze wijziging vereist een nieuwe beoordeling. De bron blijft ongewijzigd.</p>
+                            <p>Van of naar een beslisboom gaat via Review → Nieuwe werkrevisie.</p>
                           </div>
                           <label class="check">
                             <input type="checkbox" name="confirm" value="1">
@@ -5307,15 +5335,18 @@ def create_console_app(
                           </label>
                           <button class="btn-secondary" type="submit">Klasse wijzigen</button>
                         </form>
-                        """
-                    )
+                        """))
+                if can_move or child['snapshot_id'] in named_on:
+                    rows.append(_document_action_row(
+                        "Diagnose",
+                        f'<p><a href="/inzicht/document?{_esc(urlencode({"document": child["snapshot_id"]}))}">Bekijk diagnose in Inzicht</a></p>',
+                    ))
                 cards.append(
                     f"""
-                    <details class="doc-card document-disclosure">
-                      <summary>{_document_summary(child)}</summary>
+                    <details class="doc-card document-disclosure document-row">
+                      <summary>{_document_row_summary(child, blocked=blocked)}</summary>
                       {pre_review_notice}
-                      <div class="doc-actions">{"".join(actions)}</div>
-                      {f'<p><a href="/inzicht/document?{_esc(urlencode({"document": child["snapshot_id"]}))}">Bekijk diagnose in Inzicht</a></p>' if can_move or child['snapshot_id'] in named_on else ''}
+                      <div class="doc-actions document-actions">{"".join(rows)}</div>
                       {_unpublished_delete_control(child, account=account, console=state, next_path="/tree", mutable=mutable)}
                     </details>
                     """
@@ -5329,12 +5360,12 @@ def create_console_app(
         return _page(
             f"""
             {_nav(account, "tree")}
-            <section class="room">
+            <section class="room" id="documents">
               <h1>Documenten</h1>
               {_task_links("documents")}
               <datalist id="move-family-options">{move_family_options}</datalist>
               {list_controls}
-              {"".join(blocks) or ('<p>Geen documenten gevonden.</p>' if q else empty)}
+              {"".join(blocks) or (f'<p class="document-empty">Geen documenten gevonden voor ‘{_esc(q.strip())}’. <a href="/tree">Wis zoekopdracht</a></p>' if q else empty)}
             </section>
             """,
             title="Documenten — V&amp;VN Data Services",
