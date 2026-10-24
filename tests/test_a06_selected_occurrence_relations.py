@@ -87,7 +87,11 @@ def system(root, make=None, *, reverse=False, swap_sections=False, direction='bo
 
 def assert_bundle(state, sid):
     rows = state.snapshot_objects(sid, include_blocked=True)
-    candidates = [o for o in rows if content_reviewable(o)]
+    # A3-3: a contract-change retry appends superseded successors (history stays
+    # visible); the bundle under test is the current revision of each candidate.
+    from src.revision_workflow import current_revisions
+    candidates = [o for o in current_revisions(rows, snapshot_id=sid) if content_reviewable(o)]
+    assert all(o['governance'].get('validation_status') != 'superseded' for o in candidates)
     envelope = state._envelope(sid)
     assert len(candidates) == 3, [(a.get('state'), a.get('error_code'), a.get('validation_code'))
         for a in envelope.get('processing_attempts', [])]
@@ -286,6 +290,8 @@ def test_older_occurrence_replay_requires_fresh_inference(tmp_path, *, productio
     assert len(calls) > count
     assert restored._envelope(sid)['semantic_replay']['identity']['components']['semantic_contract_version'].endswith('/' + SOURCE_OCCURRENCE_AUTHORITY_VERSION)
     assert_bundle(restored, sid)
+    history = restored.snapshot_objects(sid, include_blocked=True)
+    assert sum(o['governance'].get('validation_status') == 'superseded' for o in history) >= 1  # A3-3: visible, never deleted
 
 
 def test_older_occurrence_checkpoint_cannot_resume_silently(tmp_path, *, production_console):
