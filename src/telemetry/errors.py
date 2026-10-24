@@ -1,7 +1,8 @@
 """Safe exception evidence: where it broke, never what the data said.
 
-Only the exception type, a validated ``ConsoleError`` code and in-repository
-frames (``src/module.py:function:line``) leave this module. No message text,
+Only exception types, validated codes/SQLSTATE and in-repository frames
+(``src/module.py:function:line``) leave this module, including bounded explicit
+causes. No message text,
 locals, arguments or third-party paths: those may carry clinical content,
 credentials or personal data.
 """
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 MAX_FRAMES = 12
+MAX_CAUSES = 4
 _REPO_SRC = Path(__file__).resolve().parents[1]
 _CODE = re.compile(r"[a-z][a-z0-9_]{1,80}")
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_.<>]{0,120}")
@@ -40,7 +42,7 @@ def _frame(entry: traceback.FrameSummary) -> str | None:
     return f"{relative.as_posix()}:{function}:{int(entry.lineno or 0)}"
 
 
-def exception_evidence(exc: BaseException) -> dict[str, Any]:
+def _exception_details(exc: BaseException) -> dict[str, Any]:
     """Type, code, in-repo frames (deepest last) and a stable fingerprint."""
     error_type = type(exc).__name__
     code = getattr(exc, "code", None)
@@ -59,3 +61,22 @@ def exception_evidence(exc: BaseException) -> dict[str, Any]:
     digest = hashlib.sha256("|".join([error_type, code or "", *anchor]).encode()).hexdigest()[:12]
     return {"type": error_type if _NAME.fullmatch(error_type) else "Exception",
             "code": code, "frames": frames, "fingerprint": digest}
+
+
+def exception_evidence(exc: BaseException) -> dict[str, Any]:
+    """Preserve bounded explicit causes, never exception messages or SQL text."""
+    evidence = _exception_details(exc)
+    causes = []
+    seen = {id(exc)}
+    cause = exc.__cause__
+    while cause is not None and id(cause) not in seen and len(causes) < MAX_CAUSES:
+        seen.add(id(cause))
+        detail = _exception_details(cause)
+        sqlstate = getattr(cause, 'sqlstate', None)
+        if isinstance(sqlstate, str) and re.fullmatch(r'[0-9A-Z]{5}', sqlstate):
+            detail['sqlstate'] = sqlstate
+        causes.append(detail)
+        cause = cause.__cause__
+    if causes:
+        evidence['causes'] = causes
+    return evidence

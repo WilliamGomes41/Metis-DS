@@ -4061,7 +4061,11 @@ def create_console_app(
     async def console_errors(_request: Request, exc: ConsoleError) -> HTMLResponse:
         from src.console_entra_routes_v1 import identity_unavailable_response
         from src.request_diagnostics_v1 import current_request_id, note_handled_error
-        note_handled_error(exc.code)
+        if exc.code == "workflow_document_unavailable":
+            from src.request_diagnostics_v1 import note_handled_exception
+            note_handled_exception(exc)
+        else:
+            note_handled_error(exc.code)
         if exc.code == "workflow_identity_unavailable":
             return identity_unavailable_response(_page)
         try:

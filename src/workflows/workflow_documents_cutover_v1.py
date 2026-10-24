@@ -272,34 +272,44 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             raise WorkflowDocumentStoreError("workflow_document_diagnostics_read_failed") from exc
 
     def list_source_selection_summaries(self) -> list[dict[str, Any]]:
-        """Stored progress/estimate inputs only, without objects or review tokens."""
+        """Stored progress/estimate inputs only, without objects or review tokens.
+
+        Extract overview inputs once: separate JSONB operators on the TOASTed
+        envelope repeatedly decompress the entire growing attempt history.
+        Keep the reviewer checks on the original value so explicit JSON null
+        remains invalid rather than becoming a missing/empty reviewer list.
+        """
         try:
             with self._connect() as con:
                 rows = con.execute("""
                     SELECT d.snapshot_id,d.title,d.source_version AS version,d.class,d.content_kind,
                            d.publication_eligibility,
-                           d.envelope_payload->>'binary_path' AS binary_path,
-                           d.envelope_payload->'received_source' AS received_source,
-                           d.envelope_payload->'processing_configuration' AS processing_configuration,
+                           e.binary_path AS binary_path,
+                           e.received_source AS received_source,
+                           e.processing_configuration AS processing_configuration,
                            jsonb_build_object('provider_evidence', jsonb_build_object(
-                               'formation_incomplete', d.envelope_payload->'semantic_replay'->'provider_evidence'->'formation_incomplete',
-                               'formation_progress', d.envelope_payload->'semantic_replay'->'provider_evidence'->'formation_progress')) AS semantic_replay,
-                           jsonb_array_length(COALESCE(NULLIF(d.envelope_payload->'semantic_replay'->'provider_evidence'->'pending_rejections','null'::jsonb),'[]'::jsonb)) AS pending_rejection_count,
-                           CASE WHEN jsonb_array_length(COALESCE(NULLIF(d.envelope_payload->'quality_processing_runs','null'::jsonb),'[]'::jsonb))>0
-                                THEN jsonb_array_length(COALESCE(NULLIF(d.envelope_payload->'quality_processing_runs'->-1->'source_fragments','null'::jsonb),'[]'::jsonb))
+                               'formation_incomplete', e.semantic_replay->'provider_evidence'->'formation_incomplete',
+                               'formation_progress', e.semantic_replay->'provider_evidence'->'formation_progress')) AS semantic_replay,
+                           jsonb_array_length(COALESCE(NULLIF(e.semantic_replay->'provider_evidence'->'pending_rejections','null'::jsonb),'[]'::jsonb)) AS pending_rejection_count,
+                           CASE WHEN jsonb_array_length(COALESCE(NULLIF(e.quality_processing_runs,'null'::jsonb),'[]'::jsonb))>0
+                                THEN jsonb_array_length(COALESCE(NULLIF(e.quality_processing_runs->-1->'source_fragments','null'::jsonb),'[]'::jsonb))
                                 ELSE NULL END AS source_fragment_count,
                            COALESCE((SELECT jsonb_agg(jsonb_build_object(
                                'state', a->'state', 'kind', a->'kind', 'started_at', a->'started_at',
                                'finished_at', a->'finished_at', 'expires_at', a->'expires_at',
                                'phase', a->'phase', 'diagnostic', jsonb_build_object('phase',a->'diagnostic'->'phase'),
                                'dispatch', jsonb_build_object('state',a->'dispatch'->'state')
-                           ) ORDER BY n) FROM jsonb_array_elements(COALESCE(NULLIF(d.envelope_payload->'processing_attempts','null'::jsonb),'[]'::jsonb))
+                           ) ORDER BY n) FROM jsonb_array_elements(COALESCE(NULLIF(e.processing_attempts,'null'::jsonb),'[]'::jsonb))
                              WITH ORDINALITY AS attempts(a,n)), '[]'::jsonb) AS processing_attempts,
                            d.envelope_payload->'named_reviewers' AS named_reviewers,
                            ARRAY(SELECT r.account_id FROM workflow.document_reviewers r
                                  WHERE r.snapshot_id=d.snapshot_id ORDER BY r.account_id)
                            = ARRAY(SELECT jsonb_array_elements_text(COALESCE(d.envelope_payload->'named_reviewers','[]'::jsonb)) ORDER BY 1) AS reviewers_consistent
-                    FROM workflow.documents d ORDER BY d.acquired_at,d.snapshot_id
+                    FROM workflow.documents d
+                    CROSS JOIN LATERAL jsonb_to_record(d.envelope_payload) AS e(
+                        binary_path text, received_source jsonb, processing_configuration jsonb,
+                        semantic_replay jsonb, quality_processing_runs jsonb, processing_attempts jsonb)
+                    ORDER BY d.acquired_at,d.snapshot_id
                 """).fetchall()
             if any(not row['reviewers_consistent'] for row in rows):
                 raise WorkflowDocumentStoreError('workflow_document_reviewers_authority_mismatch')
