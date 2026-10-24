@@ -338,7 +338,7 @@ Smetten source/envelope data and Azure credentials are not present in this manag
 instance; the checked-in Smetten fixtures are partial forensic/reference evidence,
 not a representative production database.
 
-## Final evidence
+## Original recovery evidence (before review repair)
 
 See `console-read-architecture-evidence.json` for the exact comparison protocol,
 measurements, final application revision and executed verification.
@@ -358,7 +358,7 @@ MRO/route tests and domain scenarios; it cannot prove arbitrary reflective calle
 Every changed read surface is migrated in the table above; explicit writer maps
 remain writer-owned. No lifecycle authority or stored representation was replaced.
 
-### Executed closure results
+### Original closure results (28af06f)
 
 Application revision: `28af06f254d5791098694af5a71f9b674629c663`.
 Full suite: **5723 passed, 29 skipped, 3 xfailed, 6 warnings, 3 subtests passed**
@@ -468,3 +468,28 @@ transaction. Metadata and detail batches are independent database snapshots;
 within each, native rows are captured consistently and remain operation-owned.
 No cross-capture atomicity or cross-authority consistency is claimed.
 The final focused Inzicht/quality/read suite passes all 43 tests.
+
+## Review repair: final joint verification
+
+Application revision: `8397e5357362d34ac15286b79e87e83e1bf3ad23`.
+5744 passed, 23 skipped, 3 xfailed, 8 warnings, 3 subtests passed in 1414.49s (0:23:34)
+
+All six exact-head red probes pass in this complete run. PostgreSQL and Chromium
+were enabled; skipped acceptance cases are listed separately in the evidence JSON
+and do not count as passes. The prior interrupted run is not completion evidence.
+Architecture boundaries, release-control preflight, repository preflight, compile
+and JS syntax checks pass. Draft and release NO-GO remain unchanged.
+
+Current local synthetic Inzicht: zero full envelope/object reads, 443 native JSON
+bytes, 5 connections/14 queries. The additional short SQL capture replaces holding
+a transaction open across caller computations. Five profiled samples are
+0.026–0.032s. Latest 101-document storage sample: 78,864,936 total objectpayload
+bytes; pg_column_size maxima/totals and 50/50/1 batch durations (including separate
+capture timings) are recorded in the JSON. No representative Azure claim.
+
+Skip audit: 12 local Docling acceptance cases and 11 optional Bend cases; zero
+PostgreSQL skips. The separate GitHub Docling and Bend workflows, plus source
+processing and topology proofs, report success on the tested application head.
+General remote CI was still running when this evidence was finalized; no result
+for it is inferred from the local full suite. The two extra warnings versus the
+original run concern JUnit record_property compatibility, not background failures.

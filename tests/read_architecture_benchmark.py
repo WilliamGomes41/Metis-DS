@@ -179,7 +179,10 @@ def test_large_toasted_diagnostic_batches(tmp_path, production_console):
         ids = snapshots[start:start+50]
         started = time.perf_counter()
         with workflow_read_transaction(store):
+            query_started = time.perf_counter()
             captured = store.document_diagnostic_inputs(ids)
-        batches.append({'documents': len(ids), 'seconds': round(time.perf_counter()-started, 6)})
+            capture_seconds = time.perf_counter() - query_started
+        batches.append({'documents': len(ids), 'seconds': round(time.perf_counter()-started, 6),
+                        'capture_seconds': round(capture_seconds, 6)})
         assert set(captured) == set(ids)
     print('READ_ARCHITECTURE_STORAGE_BATCHES', json.dumps({'fixture': '101 documents; 4000 SHA256 strings/object metadata; PG16 local', 'pg_column_size': {**documents, **payloads}, 'batches': batches}, sort_keys=True))

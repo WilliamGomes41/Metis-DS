@@ -1,4 +1,6 @@
 {
+  "current_application_revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+  "current_evidence_section": "repair_review_2026_10_24",
   "change_class": "B",
   "rewrite_risk": "high",
   "release_verdict": "NO-GO",
@@ -1068,32 +1070,115 @@
     "points": {
       "1": {
         "red_on_56488c0": "failed",
-        "green": "Capture the entire selected SQL scan window before telemetry; quality captures SQL first and reads sources/ledger afterwards. The source-selection caller already closes SQL before authorization/projection. All 3 transaction-boundary probes pass, including both HTTP routes with 6s telemetry. Additional quality I/O probe was red on the base.",
         "tests": [
           "test_slow_telemetry_outside_read_transaction",
           "test_telemetry_has_no_open_read_transaction",
           "test_quality_source_and_ledger_io_outside_read_transaction"
-        ]
+        ],
+        "repair": "Capture the entire selected SQL scan window before telemetry; quality captures SQL first and reads sources/ledger afterwards. The source-selection caller already closes SQL before authorization/projection. All 3 transaction-boundary probes pass, including both HTTP routes with 6s telemetry. Additional quality I/O probe was red on the base.",
+        "commits": [
+          "045222b",
+          "5bf600c",
+          "8397e53"
+        ],
+        "red": {
+          "revision": "56488c00b05e17d21854623a7c2df2bf00105dc1",
+          "result": "failed",
+          "observation": "6s telemetry: HTTP 400; telemetry transaction flags [True, True]; quality source/ledger flags [True, True].",
+          "log": [
+            "work/834-repair-RED-56488c0.log",
+            "work/834-quality-RED-56488c0.log"
+          ]
+        },
+        "green": {
+          "revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+          "result": "passed",
+          "junit": "work/834-FINAL-suite.xml",
+          "cases": [
+            {
+              "test": "tests.test_console_read_architecture::test_slow_telemetry_outside_read_transaction",
+              "result": "passed",
+              "seconds": 12.349
+            },
+            {
+              "test": "tests.test_console_read_architecture::test_telemetry_has_no_open_read_transaction",
+              "result": "passed",
+              "seconds": 0.328
+            },
+            {
+              "test": "tests.test_console_read_architecture::test_quality_source_and_ledger_io_outside_read_transaction",
+              "result": "passed",
+              "seconds": 0.278
+            }
+          ]
+        }
       },
       "2": {
         "red_on_56488c0": "failed",
-        "green": "Normal not-started and in-progress reasons share one definition beside the receipt/formation writers. Only stored failure reasons or failed/interrupted/expired latest attempts count as processing blocks; compact summaries expose only attempt state/expiry, never processing details. Both new/running probes and the existing stored-block/revocation probe pass (3 cases).",
         "tests": [
           "test_new_and_running_documents_are_not_processing_blocks",
           "test_notices_revocation_and_explicit_unknown_count"
-        ]
+        ],
+        "repair": "Normal not-started and in-progress reasons share one definition beside the receipt/formation writers. Only stored failure reasons or failed/interrupted/expired latest attempts count as processing blocks; compact summaries expose only attempt state/expiry, never processing details. Both new/running probes and the existing stored-block/revocation probe pass (3 cases).",
+        "commits": [
+          "b4b6206"
+        ],
+        "red": {
+          "revision": "56488c00b05e17d21854623a7c2df2bf00105dc1",
+          "result": "failed",
+          "observation": "New/running rows both reported processing_blocked=True.",
+          "log": "work/834-repair-RED-56488c0.log"
+        },
+        "green": {
+          "revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+          "result": "passed",
+          "junit": "work/834-FINAL-suite.xml",
+          "cases": [
+            {
+              "test": "tests.test_console_read_architecture::test_new_and_running_documents_are_not_processing_blocks[False]",
+              "result": "passed",
+              "seconds": 0.844
+            },
+            {
+              "test": "tests.test_console_read_architecture::test_new_and_running_documents_are_not_processing_blocks[True]",
+              "result": "passed",
+              "seconds": 0.364
+            }
+          ]
+        }
       },
       "3": {
         "red_on_56488c0": "failed",
-        "green": "Unknown candidate counts cause a notice only for an account with processing access. Publishers receive stored-block/error notices without processing details; missing access alone produces no notice. The new publisher probe and updated revocation/unknown-count probe pass (2 cases).",
         "tests": [
           "test_publisher_missing_processing_access_is_not_a_notice",
           "test_notices_revocation_and_explicit_unknown_count"
-        ]
+        ],
+        "repair": "Unknown candidate counts cause a notice only for an account with processing access. Publishers receive stored-block/error notices without processing details; missing access alone produces no notice. The new publisher probe and updated revocation/unknown-count probe pass (2 cases).",
+        "commits": [
+          "3385b0e",
+          "0a716dc"
+        ],
+        "red": {
+          "revision": "56488c00b05e17d21854623a7c2df2bf00105dc1",
+          "result": "failed",
+          "observation": "Publisher with no processing access received an unknown-count notice for a normal document.",
+          "log": "work/834-repair-RED-56488c0.log"
+        },
+        "green": {
+          "revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+          "result": "passed",
+          "junit": "work/834-FINAL-suite.xml",
+          "cases": [
+            {
+              "test": "tests.test_console_read_architecture::test_publisher_missing_processing_access_is_not_a_notice",
+              "result": "passed",
+              "seconds": 0.326
+            }
+          ]
+        }
       },
       "4": {
         "red_on_56488c0": "failed",
-        "green": "Raad captures at most 50 documents per SQL batch and stops at 8 notices or its cooperative 4s operation budget. Each batch closes before telemetry/filtering; SQL statement deadlines are lowered to the remaining budget. Failed/timed-out batches log an explicit diagnostic and return earlier rows with complete=false and the first unexamined offset. Four error/timeout/budget/scan-limit probes pass. Synthetic PG storage: 78,864,936 total object bytes; 50/50/1-document batches took 0.033869/0.036487/0.003597 seconds. Not representative Azure evidence.",
         "storage_benchmark": {
           "batches": [
             {
@@ -1123,23 +1208,87 @@
           "test_notices_statement_timeout_preserves_previous_batch",
           "test_notices_budget_returns_cursor_without_open_transaction",
           "test_bounded_notices_do_not_claim_complete_when_later_documents_are_unchecked"
-        ]
+        ],
+        "repair": "Raad captures at most 50 documents per SQL batch and stops at 8 notices or its cooperative 4s operation budget. Each batch closes before telemetry/filtering; SQL statement deadlines are lowered to the remaining budget. Failed/timed-out batches log an explicit diagnostic and return earlier rows with complete=false and the first unexamined offset. Four error/timeout/budget/scan-limit probes pass. Synthetic PG storage: 78,864,936 total object bytes; 50/50/1-document batches took 0.033869/0.036487/0.003597 seconds. Not representative Azure evidence.",
+        "commits": [
+          "99b38f6"
+        ],
+        "red": {
+          "revision": "56488c00b05e17d21854623a7c2df2bf00105dc1",
+          "result": "failed",
+          "observation": "Old code selected all 51 documents in one batch and returned complete=True; second-batch failure never exercised.",
+          "log": "work/834-repair-RED-56488c0.log"
+        },
+        "green": {
+          "revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+          "result": "passed",
+          "junit": "work/834-FINAL-suite.xml",
+          "cases": [
+            {
+              "test": "tests.test_console_read_architecture::test_notices_second_diagnostic_batch_failure_is_explicit_partial",
+              "result": "passed",
+              "seconds": 0.313
+            }
+          ]
+        }
       },
       "5": {
         "red_on_56488c0": "failed",
-        "green": "Any visible busy/waiting source document now enables the existing 5s reload and refresh text, including the overview without a document parameter. No overview buttons added. Recorded pending/claimed characterization goldens with --record-characterization; all 45 characterization/source cases pass. Diff audit: 32 existing goldens changed only the Raad asset hash; two new source-overview goldens capture the requested behavior. The asset also hides unavailable candidate-count text for publisher-only notices.",
         "tests": [
           "test_source_overview_refreshes_running_document",
           "test_source_overview_running_golden"
-        ]
+        ],
+        "repair": "Any visible busy/waiting source document now enables the existing 5s reload and refresh text, including the overview without a document parameter. No overview buttons added. Recorded pending/claimed characterization goldens with --record-characterization; all 45 characterization/source cases pass. Diff audit: 32 existing goldens changed only the Raad asset hash; two new source-overview goldens capture the requested behavior. The asset also hides unavailable candidate-count text for publisher-only notices.",
+        "commits": [
+          "0a716dc"
+        ],
+        "red": {
+          "revision": "56488c00b05e17d21854623a7c2df2bf00105dc1",
+          "result": "failed",
+          "observation": "Overview omitted window.location.reload() and the existing refresh text.",
+          "log": "work/834-repair-RED-56488c0.log"
+        },
+        "green": {
+          "revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+          "result": "passed",
+          "junit": "work/834-FINAL-suite.xml",
+          "cases": [
+            {
+              "test": "tests.test_console_read_architecture::test_source_overview_refreshes_running_document",
+              "result": "passed",
+              "seconds": 0.333
+            }
+          ]
+        }
       },
       "6": {
         "red_on_56488c0": "failed",
-        "green": "Discovery looks ahead through at least 50 documents while pending still limits returned tasks. An expired document no longer hides the following pending task in the same round; expiry work remains bounded to 50 documents for limit=1. Both the supplied expired-then-pending probe and a 51-expired-document bound/progress probe pass.",
         "tests": [
           "test_pending_finds_task_after_expired_document_in_same_round",
           "test_dispatch_expiry_scan_respects_bound"
-        ]
+        ],
+        "repair": "Discovery looks ahead through at least 50 documents while pending still limits returned tasks. An expired document no longer hides the following pending task in the same round; expiry work remains bounded to 50 documents for limit=1. Both the supplied expired-then-pending probe and a 51-expired-document bound/progress probe pass.",
+        "commits": [
+          "51b94b1"
+        ],
+        "red": {
+          "revision": "56488c00b05e17d21854623a7c2df2bf00105dc1",
+          "result": "failed",
+          "observation": "pending(limit=1) returned [] instead of the waiting task after an expired document.",
+          "log": "work/834-repair-RED-56488c0.log"
+        },
+        "green": {
+          "revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+          "result": "passed",
+          "junit": "work/834-FINAL-suite.xml",
+          "cases": [
+            {
+              "test": "tests.test_console_read_architecture::test_pending_finds_task_after_expired_document_in_same_round",
+              "result": "passed",
+              "seconds": 0.352
+            }
+          ]
+        }
       }
     },
     "quality_boundary_closure": {
@@ -1175,8 +1324,711 @@
       "metadata_and_detail_consistency": "Independent SQL captures, each with repeatable-read ownership; no atomic cross-capture claim."
     },
     "final_verification": {
-      "status": "pending",
-      "note": "Previous full-suite evidence remains historical; final suite reruns after all repairs."
+      "status": "PASS",
+      "application_revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+      "summary": "5744 passed, 23 skipped, 3 xfailed, 8 warnings, 3 subtests passed in 1414.49s (0:23:34)",
+      "suite_attributes": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "0",
+          "skipped": "26",
+          "tests": "5773",
+          "time": "1414.437",
+          "timestamp": "2026-10-24T12:54:15.828685+00:00",
+          "hostname": "4028259c64d3"
+        }
+      ],
+      "log": "work/834-FINAL-suite.log",
+      "junit": "work/834-FINAL-suite.xml",
+      "browser_enabled": true,
+      "postgres_required": true,
+      "skips_are_not_proof": true,
+      "skipped_cases": [
+        {
+          "name": "tests.test_bend_experiment.BendExperimentTests::test_d3_python_and_bend_reject_same_live_relative_import",
+          "reason": "Optional Bend toolchain is not installed",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_bend_experiment.BendExperimentTests::test_d3_source_derived_import_boundary",
+          "reason": "Optional Bend toolchain is not installed",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_bend_experiment.BendExperimentTests::test_example_and_standard_proof",
+          "reason": "Optional Bend toolchain is not installed",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_bend_experiment.BendExperimentTests::test_law_rejects_incorrect_implementation",
+          "reason": "Optional Bend toolchain is not installed",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_true_pipeline_preserves_text_hash_and_original_geometry",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_mixed_digital_and_scanned_pdf_names_the_scanned_page_before_activation",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_structure_columns_labels_table_and_cross_page",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_line_numbers_cross_page_text_and_unequal_page_sizes",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_upload_semantic_source_review_restart_existing_publication_gate",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_pdf_postgres_chain",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_pdf_postgres_successful_publication_and_restart[v2]",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_pdf_postgres_successful_publication_and_restart[v3]",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_acceptance_requires_native_postgres",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_converter_timeout_restart_retry_no_partial_activation[local]",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_converter_timeout_restart_retry_no_partial_activation[postgres]",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_pdf_postgres_commit_rollback_and_concurrent_retry",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_laws_hold",
+          "reason": "Bend is optional outside its dedicated CI job",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_rejects_a_semantic_violation[standalone]",
+          "reason": "Bend is optional outside its dedicated CI job",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_rejects_a_semantic_violation[same_reviewer]",
+          "reason": "Bend is optional outside its dedicated CI job",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_matches_existing_pending_second_review_route[False-Standalone]",
+          "reason": "Bend is optional outside its dedicated CI job",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_matches_existing_pending_second_review_route[False-Console]",
+          "reason": "Bend is optional outside its dedicated CI job",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_matches_existing_pending_second_review_route[True-Standalone]",
+          "reason": "Bend is optional outside its dedicated CI job",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_matches_existing_pending_second_review_route[True-Console]",
+          "reason": "Bend is optional outside its dedicated CI job",
+          "type": "pytest.skip"
+        }
+      ],
+      "expected_failures": [
+        "tests.test_b23_richtlijn_vormingscontract_failfirst::test_rl_f1_04_intro_yields_no_objects_and_is_excluded_with_reason[semantic-source-bound-v3]",
+        "tests.test_b23_richtlijn_vormingscontract_failfirst::test_order_recommendation_then_consideration_then_condition[semantic-source-bound-v3]",
+        "tests.test_b23_richtlijn_vormingscontract_failfirst::test_weak_recommendation_without_target_group_is_rejected[semantic-source-bound-v3]"
+      ],
+      "passed": 5744,
+      "skipped": 23,
+      "xfailed": 3,
+      "warnings": 8,
+      "subtests_passed": 3,
+      "postgres_skips": 0,
+      "skip_reasons": {
+        "Optional Bend toolchain is not installed": 4,
+        "Real Docling/models acceptance environment required; not proven by unit tests": 12,
+        "Bend is optional outside its dedicated CI job": 7
+      }
+    },
+    "red_logs_sha256": {
+      "834-repair-RED-56488c0.log": "db79d0fd166a05a32eae741cbbae9c87575ee66e4271224f30a27080669e2fc1",
+      "834-quality-RED-56488c0.log": "6f4bc6db028cacb754ac0e9257f3d5e7fe9242cb4b020b2bf3c9700586a520dc"
+    },
+    "current_measurement": {
+      "routes": [
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 1.1254119999648537,
+            "db_connections": 1,
+            "db_json_bytes": 4,
+            "db_queries": 1,
+            "db_query_ms": 0.9275930005969713
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 4,
+          "route": "/",
+          "seconds": 0.006179,
+          "store_reads": {}
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 2.9371429973252816,
+            "db_connections": 3,
+            "db_json_bytes": 428,
+            "db_queries": 3,
+            "db_query_ms": 4.212853000353789
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 428,
+          "route": "/ingest",
+          "seconds": 0.011681,
+          "store_reads": {
+            "list_document_cards": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 2.8988859994569793,
+            "db_connections": 3,
+            "db_json_bytes": 513,
+            "db_queries": 6,
+            "db_query_ms": 5.24964200303657
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 513,
+          "route": "/source-selection",
+          "seconds": 0.013643,
+          "store_reads": {
+            "list_source_selection_summaries": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 11.056473998905858,
+            "db_connections": 10,
+            "db_json_bytes": 392844,
+            "db_queries": 10,
+            "db_query_ms": 10.612272999424022
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 392844,
+          "route": "/review",
+          "seconds": 0.035208,
+          "store_reads": {}
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 3.2668010007910198,
+            "db_connections": 3,
+            "db_json_bytes": 416,
+            "db_queries": 3,
+            "db_query_ms": 5.519859001651639
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 416,
+          "route": "/publish",
+          "seconds": 0.013287,
+          "store_reads": {
+            "list_document_cards": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 5.346252995877876,
+            "db_connections": 5,
+            "db_json_bytes": 420,
+            "db_queries": 5,
+            "db_query_ms": 8.458484999209759
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 420,
+          "route": "/tree",
+          "seconds": 0.020358,
+          "store_reads": {
+            "list_document_cards": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 3.2950750010058982,
+            "db_connections": 1,
+            "db_json_bytes": 4,
+            "db_queries": 1,
+            "db_query_ms": 0.8212329994421452
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 4,
+          "route": "/settings",
+          "seconds": 0.00857,
+          "store_reads": {}
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 1.0330630011594621,
+            "db_connections": 1,
+            "db_json_bytes": 4,
+            "db_queries": 1,
+            "db_query_ms": 0.827511999887065
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 4,
+          "route": "/inzicht",
+          "seconds": 0.006116,
+          "store_reads": {}
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 6.8523859972629,
+            "db_connections": 5,
+            "db_json_bytes": 443,
+            "db_queries": 14,
+            "db_query_ms": 11.596291995374486
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 443,
+          "route": "/inzicht/api/documents",
+          "seconds": 0.02765,
+          "store_reads": {
+            "document_diagnostic_inputs": 1,
+            "document_processing_inputs": 1,
+            "list_document_summaries": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 10.854031999770086,
+            "db_connections": 7,
+            "db_json_bytes": 436769,
+            "db_queries": 26,
+            "db_query_ms": 22.71638099773554
+          },
+          "detail": false,
+          "full_reads": {
+            "get_envelope": 1,
+            "list_document_objects": 1
+          },
+          "native_json_bytes": 436769,
+          "route": "/inzicht/api/quality",
+          "seconds": 0.05518,
+          "store_reads": {
+            "get_envelope": 1,
+            "list_document_cards": 2,
+            "list_document_objects": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 11.027971997464192,
+            "db_connections": 7,
+            "db_json_bytes": 392832,
+            "db_queries": 8,
+            "db_query_ms": 8.438716000455315
+          },
+          "detail": true,
+          "full_reads": {
+            "get_envelope": 1,
+            "list_document_objects": 1
+          },
+          "native_json_bytes": 392832,
+          "route": "/inzicht/document",
+          "seconds": 0.032728,
+          "store_reads": {
+            "get_envelope": 1,
+            "list_document_objects": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 10.765594000986312,
+            "db_connections": 8,
+            "db_json_bytes": 393240,
+            "db_queries": 9,
+            "db_query_ms": 13.144144002581015
+          },
+          "detail": true,
+          "full_reads": {
+            "get_envelope": 1,
+            "list_document_objects": 1
+          },
+          "native_json_bytes": 393240,
+          "route": "/review",
+          "seconds": 0.037665,
+          "store_reads": {
+            "get_envelope": 1,
+            "list_document_cards": 1,
+            "list_document_objects": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 8.914335998269962,
+            "db_connections": 8,
+            "db_json_bytes": 393240,
+            "db_queries": 9,
+            "db_query_ms": 11.483643000246957
+          },
+          "detail": true,
+          "full_reads": {
+            "get_envelope": 1,
+            "list_document_objects": 1
+          },
+          "native_json_bytes": 393240,
+          "route": "/publish",
+          "seconds": 0.032012,
+          "store_reads": {
+            "get_envelope": 1,
+            "list_document_cards": 1,
+            "list_document_objects": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 9.522985999865341,
+            "db_connections": 7,
+            "db_json_bytes": 393341,
+            "db_queries": 12,
+            "db_query_ms": 15.840047997699003
+          },
+          "detail": true,
+          "full_reads": {
+            "get_envelope": 1,
+            "list_document_objects": 1
+          },
+          "native_json_bytes": 393341,
+          "route": "/source-selection",
+          "seconds": 0.039313,
+          "store_reads": {
+            "get_envelope": 1,
+            "list_document_objects": 1,
+            "list_source_selection_summaries": 1
+          }
+        }
+      ],
+      "query_plans": {
+        "document_diagnostic_inputs": {
+          "execution_ms": 0.15,
+          "planning_ms": 0.192,
+          "shared_hit_blocks": 44,
+          "shared_read_blocks": 0
+        },
+        "document_processing_inputs": {
+          "execution_ms": 1.118,
+          "planning_ms": 0.284,
+          "shared_hit_blocks": 94,
+          "shared_read_blocks": 0
+        }
+      },
+      "benchmark": {
+        "fixture": {
+          "database": "PostgreSQL16",
+          "documents": 1,
+          "envelope_bytes": 380745,
+          "replay_records": 4000,
+          "roles": [
+            "researcher",
+            "assigned_reviewer"
+          ],
+          "source": "synthetic HTML"
+        },
+        "revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+        "samples": [
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 8.742203999645426,
+              "db_connections": 5,
+              "db_json_bytes": 443,
+              "db_queries": 14,
+              "db_query_ms": 10.998425999787287
+            },
+            "decoded_payload_bytes": 1781,
+            "deepcopy_calls": 0,
+            "deepcopy_seconds": 0,
+            "full_payload_bytes": 0,
+            "full_reads": {},
+            "mode": "first",
+            "native_json_bytes": 443,
+            "sample": 0,
+            "seconds": 0.02877,
+            "store_reads": {
+              "document_diagnostic_inputs": 1,
+              "document_processing_inputs": 1,
+              "list_document_summaries": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 8.620249998784857,
+              "db_connections": 5,
+              "db_json_bytes": 443,
+              "db_queries": 14,
+              "db_query_ms": 12.238133995197131
+            },
+            "decoded_payload_bytes": 1781,
+            "deepcopy_calls": 0,
+            "deepcopy_seconds": 0,
+            "full_payload_bytes": 0,
+            "full_reads": {},
+            "mode": "repeat",
+            "native_json_bytes": 443,
+            "sample": 1,
+            "seconds": 0.029315,
+            "store_reads": {
+              "document_diagnostic_inputs": 1,
+              "document_processing_inputs": 1,
+              "list_document_summaries": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 8.834273998218123,
+              "db_connections": 5,
+              "db_json_bytes": 443,
+              "db_queries": 14,
+              "db_query_ms": 10.85918700300681
+            },
+            "decoded_payload_bytes": 1781,
+            "deepcopy_calls": 0,
+            "deepcopy_seconds": 0,
+            "full_payload_bytes": 0,
+            "full_reads": {},
+            "mode": "repeat",
+            "native_json_bytes": 443,
+            "sample": 2,
+            "seconds": 0.026222,
+            "store_reads": {
+              "document_diagnostic_inputs": 1,
+              "document_processing_inputs": 1,
+              "list_document_summaries": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 10.11562400162802,
+              "db_connections": 5,
+              "db_json_bytes": 443,
+              "db_queries": 14,
+              "db_query_ms": 11.444751997260028
+            },
+            "decoded_payload_bytes": 1781,
+            "deepcopy_calls": 0,
+            "deepcopy_seconds": 0,
+            "full_payload_bytes": 0,
+            "full_reads": {},
+            "mode": "repeat",
+            "native_json_bytes": 443,
+            "sample": 3,
+            "seconds": 0.032046,
+            "store_reads": {
+              "document_diagnostic_inputs": 1,
+              "document_processing_inputs": 1,
+              "list_document_summaries": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 8.610744001998683,
+              "db_connections": 5,
+              "db_json_bytes": 443,
+              "db_queries": 14,
+              "db_query_ms": 11.234864001380629
+            },
+            "decoded_payload_bytes": 1781,
+            "deepcopy_calls": 0,
+            "deepcopy_seconds": 0,
+            "full_payload_bytes": 0,
+            "full_reads": {},
+            "mode": "repeat",
+            "native_json_bytes": 443,
+            "sample": 4,
+            "seconds": 0.029107,
+            "store_reads": {
+              "document_diagnostic_inputs": 1,
+              "document_processing_inputs": 1,
+              "list_document_summaries": 1
+            }
+          },
+          {
+            "db": [
+              {
+                "badge_ms": 0.0,
+                "db_connect_ms": 10.995152997566038,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 11.659568002869491
+              },
+              {
+                "badge_ms": 0.0,
+                "db_connect_ms": 13.705072999073309,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 15.166912997301552
+              }
+            ],
+            "full_reads": {},
+            "mode": "two_readers",
+            "seconds": 0.030417,
+            "store_reads": {
+              "document_diagnostic_inputs": 2,
+              "document_processing_inputs": 2,
+              "list_document_summaries": 2
+            }
+          },
+          {
+            "db": [
+              {
+                "badge_ms": 0.0,
+                "db_connect_ms": 10.995152997566038,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 11.659568002869491
+              },
+              {
+                "badge_ms": 0.0,
+                "db_connect_ms": 13.705072999073309,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 15.166912997301552
+              }
+            ],
+            "full_reads": {},
+            "mode": "formation_with_two_readers",
+            "seconds": 0.33074
+          }
+        ]
+      },
+      "storage_batches": {
+        "batches": [
+          {
+            "documents": 50,
+            "seconds": 0.043882
+          },
+          {
+            "documents": 50,
+            "seconds": 0.036329
+          },
+          {
+            "documents": 1,
+            "seconds": 0.004049
+          }
+        ],
+        "fixture": "101 documents; 4000 SHA256 strings/object metadata; PG16 local",
+        "pg_column_size": {
+          "largest_document_bytes": 15858,
+          "largest_object_bytes": 263088,
+          "object_rows": 306,
+          "total_document_bytes": 1617484,
+          "total_object_bytes": 78864936
+        }
+      },
+      "storage_batch_breakdown": {
+        "batches": [
+          {
+            "capture_seconds": 0.038516,
+            "documents": 50,
+            "seconds": 0.04072
+          },
+          {
+            "capture_seconds": 0.033924,
+            "documents": 50,
+            "seconds": 0.035568
+          },
+          {
+            "capture_seconds": 0.003478,
+            "documents": 1,
+            "seconds": 0.005299
+          }
+        ],
+        "fixture": "101 documents; 4000 SHA256 strings/object metadata; PG16 local",
+        "pg_column_size": {
+          "largest_document_bytes": 15865,
+          "largest_object_bytes": 263088,
+          "object_rows": 306,
+          "total_document_bytes": 1618196,
+          "total_object_bytes": 78864936
+        }
+      },
+      "storage_batch_timing_scope": "seconds includes connection + read transaction setup/close; capture_seconds measures document_diagnostic_inputs inside that transaction, including SQL fetch/decode. pg_column_size excludes table/index/protocol overhead. Local synthetic, not Azure.",
+      "instrumentation_note": "Final followup adds separate capture_seconds to the explicit benchmark; application code remains at 8397e53."
+    },
+    "preflights": {
+      "architecture_boundaries": "Architecture boundaries: PASS",
+      "release_control": "PASS; live_release_evidence=false",
+      "repository": {
+        "status": "PASS",
+        "checked_files": 1557
+      },
+      "compileall_src": "PASS",
+      "node_check_care_companion_js": "PASS"
+    },
+    "github_observation": {
+      "application_revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+      "source-processing-proof": "success",
+      "workflow-topology-proof": "success",
+      "docling-acceptance": "success",
+      "Bend experiment proof": "success",
+      "ci": "in_progress",
+      "note": "Observed before the evidence-only followup commit. Local full suite passed; remote general CI is not claimed complete."
     }
-  }
+  },
+  "evidence_scope": "Original recovery evidence stays historical at the top level; repair_review_2026_10_24 contains the current application revision and final six-point proof."
 }
