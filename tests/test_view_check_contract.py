@@ -60,7 +60,7 @@ console.log(JSON.stringify({good:compareInventory(expected,good,['b']),wrong:com
 def test_nested_read_scope_cannot_reenable_native_source_extraction():
     from src.operations_console_v1 import OperationsConsole
     state = OperationsConsole.__new__(OperationsConsole)
-    with state.source_selection_read_scope(retained_only=True):
-        with state.source_selection_read_scope():
-            assert state._source_selection_reads()['retained_only']
-    assert state._source_selection_reads() is None
+    with state.document_read_operation(retained_only=True):
+        with state.document_read_operation():
+            assert state._document_reads().retained_only
+    assert state._document_reads() is None

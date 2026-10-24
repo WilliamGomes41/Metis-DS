@@ -16,6 +16,7 @@ from src.request_diagnostics_v1 import diagnostic_phase
 class ConsolePerformance:
     connections: int = 0
     queries: int = 0
+    json_bytes: int = 0
     badge_ms: float = 0.0
     connect_ms: float = 0.0
     query_ms: float = 0.0
@@ -109,7 +110,23 @@ def connect_postgres(psycopg: Any, *args: Any, **kwargs: Any) -> Any:
     start = time.perf_counter()
     try:
         with diagnostic_phase("db_connect"):
-            return psycopg.connect(*args, **kwargs)
+            connection = psycopg.connect(*args, **kwargs)
+            adapters = getattr(connection, "adapters", None)
+            if adapters is not None:
+                def measured_loader(base):
+                    class JsonBytesLoader(base):
+                        def load(self, data):
+                            # The driver already owns these bytes. Keep its exact
+                            # decoder/customization; no encoding or extra JSON pass.
+                            metrics.json_bytes += len(data)
+                            return super().load(data)
+                    return JsonBytesLoader
+                for oid in (114, 3802):  # PostgreSQL json / jsonb, both wire formats
+                    for format_ in (0, 1):
+                        base = adapters.get_loader(oid, format_)
+                        if base is not None:
+                            adapters.register_loader(oid, measured_loader(base))
+            return connection
     finally:
         metrics.connect_ms += (time.perf_counter() - start) * 1000
 
@@ -145,7 +162,7 @@ def install_console_performance(app: Any) -> None:
                 try:
                     from src.request_diagnostics_v1 import note_request_metrics
                     note_request_metrics(
-                        db_connections=metrics.connections, db_queries=metrics.queries,
+                        db_connections=metrics.connections, db_queries=metrics.queries, db_json_bytes=metrics.json_bytes,
                         db_connect_ms=metrics.connect_ms, db_query_ms=metrics.query_ms,
                         badge_ms=metrics.badge_ms)
                 except Exception:
@@ -154,10 +171,10 @@ def install_console_performance(app: Any) -> None:
                     _LOGGER.info(
                         "console_performance route=%s status=%d duration_ms=%.3f "
                         "badge_ms=%.3f db_connections=%d db_queries=%d "
-                        "db_connect_ms=%.3f db_query_ms=%.3f",
+                        "db_connect_ms=%.3f db_query_ms=%.3f db_json_bytes=%d",
                         route, status, (time.perf_counter() - start) * 1000,
                         metrics.badge_ms, metrics.connections, metrics.queries,
-                        metrics.connect_ms, metrics.query_ms,
+                        metrics.connect_ms, metrics.query_ms, metrics.json_bytes,
                     )
                 except Exception:
                     # Diagnostics must not change the result of a domain request.

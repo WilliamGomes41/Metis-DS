@@ -15,7 +15,8 @@ def test_postgres_scoped_key_list_never_constructs_full_receipts(production_cons
     def forbidden(*args, **kwargs):
         raise AssertionError('key-only read constructed a full document receipt')
     monkeypatch.setattr(console, '_receipt', forbidden)
-    with console.source_selection_read_scope():
+    monkeypatch.setattr(console.workflow_document_store, 'list_envelopes', forbidden)
+    with console.document_read_operation():
         assert console.list_snapshot_ids() == [sid]
         assert console._envelope(sid)['snapshot_id'] == sid
         assert console.list_snapshot_ids() == [sid]
@@ -26,9 +27,9 @@ def test_scoped_key_list_does_not_alias_the_process_cache(production_console):
     console = production_console(processing_binder=lambda console: None)
     bound(console, reject=False)
     sid, *_ = ingest(console)
-    with console.source_selection_read_scope():
+    with console.document_read_operation():
         assert console.list_snapshot_ids() == [sid]
-        assert console._source_selection_reads()['envelopes'] is not console._envelopes
+        assert console._document_reads().envelopes is not console._envelopes
         console._envelopes.clear()
         console._envelopes['other-operation'] = {'snapshot_id': 'other-operation'}
         assert console.list_snapshot_ids() == [sid]

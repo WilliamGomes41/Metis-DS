@@ -536,6 +536,27 @@ class _PostgresBadgeCountsMixin:
         except CanonicalPublicationStoreError as exc:
             raise ConsoleError("durable_publication_lookup_failed", str(exc)) from exc
 
+    def publication_summaries(self, snapshot_ids: list[str]) -> dict[str, dict[str, Any]]:
+        """Stored release/serving dimensions for display, without canonical payloads."""
+        reads = self._document_reads()
+        cached = reads.publication_summaries if reads is not None else {}
+        if reads is not None and reads.publication_summary_failed:
+            raise ConsoleError("durable_lifecycle_status_read_failed")
+        missing = [sid for sid in snapshot_ids if sid not in cached]
+        if missing:
+            try:
+                rows = self._canonical_list_release_rows(missing)
+                for sid in missing:
+                    row = rows.get(sid)
+                    release_status, serving_status = self._release_dimensions(row)
+                    cached[sid] = {**(row or {}), "release_status": release_status,
+                                   "serving_status": serving_status}
+            except CanonicalPublicationStoreError as exc:
+                if reads is not None:
+                    reads.publication_summary_failed = True
+                raise ConsoleError("durable_lifecycle_status_read_failed") from exc
+        return {sid: dict(cached[sid]) for sid in snapshot_ids}
+
     def family_tree(self) -> dict[str, Any]:
         """Prefetch publication history once for the existing per-card delete checks."""
         payload = super().family_tree()
@@ -574,6 +595,12 @@ class _PostgresBadgeCountsMixin:
                     None if not next_remaining else (all_ids, published, next_remaining)
                 )
                 return snapshot_id in published
+        reads = self._document_reads()
+        if reads is not None:
+            history = reads.publication_history
+            if snapshot_id not in history:
+                history[snapshot_id] = snapshot_id in self.published_snapshot_ids([snapshot_id])
+            return history[snapshot_id]
         return super().snapshot_is_published(snapshot_id)
 
     @measure_badges

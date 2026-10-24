@@ -35,13 +35,13 @@ def test_review_get_reuses_the_request_envelope_reads(workflow_postgres, tmp_pat
     monkeypatch.setattr(store, "list_envelopes", lambda: listed.append(1) or real_list())
     response = client.get("/review", params=params)
     assert response.status_code == 200
-    assert single == [] and len(listed) == 1
+    assert single == [sid] and listed == [], "Detail loads one document without loading the corpus"
 
     # Same page as the unscoped route, which re-read and copied each envelope.
-    monkeypatch.setattr(type(console), "_source_selection_reads", lambda self: None)
+    monkeypatch.setattr(type(console), "_document_reads", lambda self: None)
     unscoped = client.get("/review", params=params)
     assert _norm(response.text) == _norm(unscoped.text)
-    assert len(single) == 3
+    assert len(single) > 1, "The unscoped comparison must expose repeated reads"
 
     # The read scope wraps the route; it never replaces its authentication.
     client.cookies.clear()

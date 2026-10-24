@@ -449,7 +449,7 @@ def review_stacks(
     return koppen, inhoud
 
 
-_SOURCE_SELECTION_READS = ContextVar("source_selection_reads", default=None)
+from src.console_read_snapshot_v1 import ConsoleReadSnapshot, CURRENT_READ as _DOCUMENT_READS
 
 _STRUCTURE_CONFIRMATION = ContextVar("metis_structure_confirmation", default=False)
 
@@ -667,25 +667,25 @@ POSTGRES_WORKFLOW_AUTHORITY_REQUIRED = "postgres_workflow_authority_required"
 
 class OperationsConsole:
     @contextmanager
-    def source_selection_read_scope(self, *, retained_only=False):
-        """Borrow authoritative read data only during one source-selection GET.
+    def document_read_operation(self, *, retained_only=False):
+        """Own authoritative document inputs for one read operation.
 
         Do not use around commands. Each request owns its state; even nested
         scopes are independent. PostgreSQL uses this to avoid repeated reads.
         Diagnostic callers can forbid native extraction when retained evidence
         disappears during the read. Other callers keep the existing fallback.
         """
-        parent = self._source_selection_reads()
-        token = _SOURCE_SELECTION_READS.set({"console": self, "envelopes": None, "objects": {},
-                                           "retained_only": retained_only or bool(parent and parent.get('retained_only'))})
+        parent = self._document_reads()
+        token = _DOCUMENT_READS.set(ConsoleReadSnapshot(
+            console=self, retained_only=retained_only or bool(parent and parent.retained_only)))
         try:
             yield
         finally:
-            _SOURCE_SELECTION_READS.reset(token)
+            _DOCUMENT_READS.reset(token)
 
-    def _source_selection_reads(self):
-        reads = _SOURCE_SELECTION_READS.get()
-        return reads if reads is not None and reads["console"] is self else None
+    def _document_reads(self):
+        reads = _DOCUMENT_READS.get()
+        return reads if reads is not None and reads.console is self else None
 
     def __init__(
         self,
@@ -1034,11 +1034,11 @@ class OperationsConsole:
         }
 
     @diagnostic_phase("review_bindings")
-    def object_review_bindings(self, snapshot_id: str, *, objects=None) -> list[dict[str, Any]]:
+    def object_review_bindings(self, snapshot_id: str, *, objects=None, bindings=None) -> list[dict[str, Any]]:
         self._envelope(snapshot_id)
-        current = {row["object_id"]: row for row in (self.snapshot_objects(snapshot_id) if objects is None else objects)}
+        current = {row["object_id"]: row for row in (self._read_current_objects(snapshot_id) if objects is None else objects)}
         out = []
-        for row in self._bindings.get(snapshot_id, []):
+        for row in (self._bindings.get(snapshot_id, []) if bindings is None else bindings):
             item = dict(row)
             obj = current.get(item.get("object_id"))
             item["valid"] = bool(obj) and still_matches(item, obj)
@@ -1460,8 +1460,12 @@ class OperationsConsole:
                     "replaces_snapshot_id": replaces_snapshot_id, "revision_reason": revision_reason})}
             identity_hash = stable_hash({"actor_id": actor_id, "command_id": command_id})
             command_snapshot = f"snap-{identity_hash[:16]}-{identity_hash[16:24]}"
-            self.list_envelopes()
-            prior = self._envelopes.get(command_snapshot)
+            try:
+                prior = self._envelope(command_snapshot)
+            except ConsoleError as exc:
+                if exc.code != "unknown_snapshot":
+                    raise
+                prior = None
             if prior is not None:
                 if prior.get("ingest_command") != ingest_command:
                     raise ConsoleError("ingest_command_conflict")
@@ -1713,8 +1717,12 @@ class OperationsConsole:
             except ConsoleError:
                 if not ingest_command or attempt_id:
                     raise
-                self.list_envelopes()
-                prior = self._envelopes.get(snapshot_id)
+                try:
+                    prior = self._envelope(snapshot_id)
+                except ConsoleError as exc:
+                    if exc.code != "unknown_snapshot":
+                        raise
+                    prior = None
                 if prior and prior.get("ingest_command") == ingest_command:
                     return self._durable_receipt(prior) if _receive_only else self._receipt(prior)
                 raise
@@ -1813,8 +1821,8 @@ class OperationsConsole:
         # Compact: één alleen-lezen objectread zonder deepcopy (D-PERF-4).
         overview_rows = None if deep else self._overview_rows(snapshot_id)
         if (self.snapshot_is_published(snapshot_id)
-                or (self.snapshot_objects(snapshot_id) if deep else overview_rows)
-                or self._bindings.get(snapshot_id) or self._envelope(snapshot_id).get("review_passes")):
+                or (self._read_current_objects(snapshot_id) if deep else overview_rows)
+                or self.object_review_bindings(snapshot_id, objects=(self._read_current_objects(snapshot_id) if deep else overview_rows)) or self._envelope(snapshot_id).get("review_passes")):
             result["retry_allowed"] = False
         from src.recoverable_formation_v1 import incomplete
         envelope = self._envelope(snapshot_id)
@@ -1825,7 +1833,7 @@ class OperationsConsole:
             result["formation_incomplete"] = stored_incomplete
             result["formation_checked"] = not stored_incomplete
         else:
-            objects = self.snapshot_objects(snapshot_id)
+            objects = self._read_current_objects(snapshot_id)
             from src.source_preparation_context_v1 import stored_extraction
             try:
                 formation_fragments = stored_extraction(envelope)
@@ -1851,14 +1859,23 @@ class OperationsConsole:
             and result["reason_code"] not in {"processing_retry_cooldown", "processing_structural_limit"})
         return result
 
-    def _overview_rows(self, snapshot_id: str) -> list[dict[str, Any]]:
-        """Huidige objectrevisies voor overzichten, zonder deepcopy (D-PERF-4).
+    def _read_current_objects(self, snapshot_id: str) -> list[dict[str, Any]]:
+        """Borrow operation-owned immutable inputs for pure domain calculations.
 
-        De rijen zijn gedeelde opgeslagen staat: aanroepers MOETEN ze alleen
-        lezen; wijzigen of doorgeven aan schrijfpaden MAG NIET.
+        Public snapshot_objects keeps its detached caller copy. Commands never
+        borrow these rows; remember=True always loads/pins current working data.
         """
         self._envelope(snapshot_id)
-        return current_revisions(self._load_objects(snapshot_id, remember=False), snapshot_id=snapshot_id)
+        reads = self._document_reads()
+        if reads is None:
+            return current_revisions(self._load_objects(snapshot_id, remember=False), snapshot_id=snapshot_id)
+        if snapshot_id not in reads.current_objects:
+            reads.current_objects[snapshot_id] = current_revisions(
+                self._load_objects(snapshot_id, remember=False), snapshot_id=snapshot_id)
+        return reads.current_objects[snapshot_id]
+
+    def _overview_rows(self, snapshot_id: str) -> list[dict[str, Any]]:
+        return self._read_current_objects(snapshot_id)
 
     def _can_resume_formation(self, snapshot_id, *, rows=None):
         from src.recoverable_formation_v1 import incomplete, VERSION
@@ -1874,7 +1891,7 @@ class OperationsConsole:
                               and (lineage_evidence(row) or {}).get("reason") == "same-source candidate retirement"))
                 or ROLE_KEY in (row.get("metadata") or {}) or LINKS_KEY in (row.get("metadata") or {})
                     or ((row.get("metadata") or {}).get("passage_register") or {}).get("source") == "review"
-                for row in (rows if rows is not None else self.snapshot_objects(snapshot_id))))
+                for row in (rows if rows is not None else self._read_current_objects(snapshot_id))))
 
     def resume_formation(self, *, actor_id, snapshot_id, command_id, expected_revision):
         """Resume open producer work; reviewed/published work requires successor."""
@@ -1924,7 +1941,8 @@ class OperationsConsole:
             from src.attempt_diagnostics_v1 import checkpoint
             from src.source_selection_v1 import authorize
             with self._reprocessing_transaction(snapshot_id):
-                current = deepcopy(self._envelope(snapshot_id))
+                # Command reads already own detached decoded JSON.
+                current = self._envelope(snapshot_id)
                 active = assert_active(current, attempt_id, now())
                 authorize(self, active["actor_id"], current)
                 checkpoint(active, phase, values)
@@ -2481,8 +2499,8 @@ class OperationsConsole:
             retained = stored_fragments(envelope)
         if retained is not None:
             return retained
-        reads = self._source_selection_reads()
-        if reads is not None and reads.get('retained_only'):
+        reads = self._document_reads()
+        if reads is not None and reads.retained_only:
             raise ConsoleError('retained_source_not_recorded')
         args = {"document_id": envelope["document_id"], "source_id": envelope["source_id"]}
         if envelope.get("decision_tree_formation"):
@@ -2584,7 +2602,8 @@ class OperationsConsole:
 
     @diagnostic_phase("document_summary")
     def _receipt(self, envelope: dict[str, Any]) -> dict[str, Any]:
-        return deepcopy({key: value for key, value in envelope.items() if key != "semantic_replay"})
+        with diagnostic_phase("payload_copy"):
+            return deepcopy({key: value for key, value in envelope.items() if key != "semantic_replay"})
 
     @diagnostic_phase("objects_read")
     def snapshot_objects(
@@ -2599,10 +2618,13 @@ class OperationsConsole:
             envelope = self._envelope(snapshot_id)
         elif str(envelope.get("snapshot_id") or "") != snapshot_id:
             raise ConsoleError("unknown_snapshot")
-        rows = self._load_objects(snapshot_id, remember=for_update)
+        if include_blocked or for_update:
+            rows = self._load_objects(snapshot_id, remember=for_update)
         if include_blocked:
-            return deepcopy(rows)
-        return deepcopy(current_revisions(rows, snapshot_id=snapshot_id))
+            with diagnostic_phase("payload_copy"):
+                return deepcopy(rows)
+        with diagnostic_phase("payload_copy"):
+            return deepcopy(self._read_current_objects(snapshot_id) if not for_update else current_revisions(rows, snapshot_id=snapshot_id))
 
     def snapshot_containers(self, snapshot_id: str) -> dict[str, Any]:
         """Typed knowledge/source access over the current atomic revision."""
@@ -2627,7 +2649,7 @@ class OperationsConsole:
         identity = topic_identity_key(label)
         matches = [
             row
-            for row in self.list_envelopes()
+            for row in self.list_document_cards()
             if topic_identity_key(str(row.get("family") or "")) == identity
         ]
         if not matches:
@@ -2643,7 +2665,7 @@ class OperationsConsole:
 
     def family_tree(self) -> dict[str, Any]:
         families: dict[str, dict[str, Any]] = {}
-        for envelope in self.list_envelopes():
+        for envelope in self.list_document_cards():
             family = envelope["family"]
             bucket = families.setdefault(family, {"family": family, "children": []})
             bucket["children"].append(
@@ -2658,6 +2680,7 @@ class OperationsConsole:
                     "sha256": envelope["sha256"],
                     "parent": family,
                     "is_live_capture": envelope["is_live_capture"],
+                    "uploader_account_id": envelope["uploader_account_id"],
                 }
             )
         for bucket in families.values():
@@ -4217,29 +4240,29 @@ class OperationsConsole:
             return self._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id)
 
     def live_snapshot(self, *, family: str, class_: str) -> dict[str, Any] | None:
-        self.list_envelopes()
+        envelopes = self.list_document_cards()
         live = [
             envelope
-            for envelope in self._envelopes.values()
+            for envelope in envelopes
             if envelope["family"] == family and envelope["class"] == class_ and envelope.get("is_live_capture")
         ]
         if not live:
             return None
         live.sort(key=lambda row: row["acquired_at"])
-        return self._receipt(live[-1])
+        return self._receipt(self._envelope(live[-1]["snapshot_id"]))
 
     def select_for_question(self, *, family: str, asked_class: str) -> list[dict[str, Any]]:
-        self.list_envelopes()
+        envelopes = self.list_document_cards()
         if asked_class not in ALLOWED_CLASSES:
             raise ConsoleError("invalid_class")
         matching = [
             envelope
-            for envelope in self._envelopes.values()
+            for envelope in envelopes
             if envelope["family"] == family and envelope["class"] == asked_class
         ]
         heavier_present = any(
             CLASS_ORDER[envelope["class"]] > CLASS_ORDER[asked_class]
-            for envelope in self._envelopes.values()
+            for envelope in envelopes
             if envelope["family"] == family
         )
         if not matching and heavier_present:
@@ -4265,18 +4288,18 @@ class OperationsConsole:
 
     def resolve_document(self, *, title: str, version: str, family: str) -> dict[str, Any]:
         """Map researcher-visible document identity onto the kernel snapshot."""
-        self.list_envelopes()
+        envelopes = self.list_document_cards()
         wanted = (title.strip(), version.strip(), family.strip())
         matches = [
             row
-            for row in self._envelopes.values()
+            for row in envelopes
             if (row["title"], row["version"], row["family"]) == wanted
         ]
         if not matches:
             raise ConsoleError("unknown_document")
         if len(matches) > 1:
             raise ConsoleError("document_not_unique")
-        return self._receipt(matches[0])
+        return self._receipt(self._envelope(matches[0]["snapshot_id"]))
 
     def move_family_document(
         self,

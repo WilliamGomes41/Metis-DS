@@ -105,3 +105,19 @@ def workflow_transaction(owner: Any) -> Iterator[Any]:
                 yield connection
         finally:
             _ACTIVE_CONNECTION.reset(token)
+
+
+@contextmanager
+def workflow_read_transaction(owner: Any) -> Iterator[Any]:
+    """A bounded pure operation, using the existing participant connection binding.
+
+    Authorization that requires row locks runs before this boundary. Never promote
+    an enclosing command to read-only or weaken an existing transaction's isolation.
+    """
+    if workflow_transaction_active():
+        raise WorkflowTransactionError("workflow_read_requires_independent_transaction")
+    with workflow_transaction(owner) as connection:
+        connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        connection.execute("SET LOCAL statement_timeout='5s'")
+        connection.execute("SET LOCAL idle_in_transaction_session_timeout='5s'")
+        yield connection

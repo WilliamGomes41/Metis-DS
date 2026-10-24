@@ -269,7 +269,7 @@ def install(app, state, require, render_page, nav):
             except Exception:
                 return JSONResponse({'error': 'view_check_denied'}, status_code=403, headers=HEADERS)
             # Nested read scopes must retain this prohibition on native extraction.
-            with state.source_selection_read_scope(retained_only=True):
+            with state.document_read_operation(retained_only=True):
                 return await call_next(request)
         return await call_next(request)
 

@@ -50,7 +50,6 @@ def execute(console: Any, *, actor_id: str, snapshot_id: str, command_id: str,
     # Read/verify bytes outside the parent row lock. Registration rechecks the
     # exact parent revision and policy; neither published history nor review is
     # mutated by this command.
-    console.list_envelopes()
     env = deepcopy(console._envelope(snapshot_id))
     _authorized(console, actor_id, env)
     successor_policy = deepcopy(policy or env.get("review_policy"))

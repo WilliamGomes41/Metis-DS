@@ -105,8 +105,8 @@ def test_http_output_matches_unscoped_read_and_next_request_is_fresh(postgres_se
     assert actual.status_code == expected.status_code == 200
     assert actual.text == expected.text
     assert durable == before
-    assert calls['list_envelopes'] == calls['objects'] == 1
-    assert calls['get_envelope'] == 0
+    assert calls['list_envelopes'] == 0 and calls['objects'] == 1
+    assert calls['get_envelope'] == 1
     assert _durable(console, sid) == before
     durable['envelope']['title'] = 'Updated authoritative title'
     _persist(console, durable)
@@ -162,12 +162,12 @@ def test_overlapping_http_reads_are_isolated_and_exceptions_clear_scope(postgres
             return scoped(*args, **kwargs)
         finally:
             # Check in the worker that ran the scope, not the caller thread.
-            cleaned.append(console._source_selection_reads() is None)
+            cleaned.append(console._document_reads() is None)
     endpoint.dependant.call = observed
     try:
-        assert client.get('/source-selection').status_code >= 400
+        assert client.get('/source-selection', params={'document': sid}).status_code >= 400
         monkeypatch.setattr(ui,'projection',original)
-        assert client.get('/source-selection').status_code == 200
+        assert client.get('/source-selection', params={'document': sid}).status_code == 200
     finally:
         endpoint.dependant.call = scoped
     assert cleaned == [True, True]
@@ -197,7 +197,7 @@ def test_render_revision_stays_with_rows_and_stale_post_is_rejected(postgres_sel
     command = console.reserve_source_selection
     errors = []
     def observed_command(**kwargs):
-        assert console._source_selection_reads() is None
+        assert console._document_reads() is None
         try:
             return command(**kwargs)
         except ConsoleError as exc:
@@ -220,7 +220,7 @@ def test_receipt_remains_detached_and_write_reads_do_not_use_render_data(postgre
     receipt['named_reviewers'].clear()
     assert durable['envelope']['named_reviewers']
     before_pin = dict(console._objects_expected_revs())
-    with console.source_selection_read_scope():
+    with console.document_read_operation():
         console.list_envelopes()
         original = console.snapshot_objects(sid)
         original_revision = console.objects_revision(sid)
@@ -232,4 +232,4 @@ def test_receipt_remains_detached_and_write_reads_do_not_use_render_data(postgre
         write_rows = console._load_objects(sid, remember=True)
         assert write_rows[0]['text'] == 'Fresh write-side value'
         assert console._objects_expected_revs()[sid] != original_revision
-    assert console._source_selection_reads() is None
+    assert console._document_reads() is None

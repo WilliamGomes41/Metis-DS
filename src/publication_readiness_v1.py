@@ -185,8 +185,17 @@ class PublicationReadinessMixin:
             "review_path": review_path,
         }
 
-    @source_reconstruction_scope(reuse_existing=True)
     def publication_readiness(self, snapshot_id: str) -> dict[str, Any]:
+        """The outcome owns its read inputs, also when invoked without HTTP."""
+        from contextlib import nullcontext
+        from src.workflows.workflow_transaction_v1 import workflow_transaction_active
+        scope = getattr(self, "document_read_operation", None)
+        active = getattr(self, "_document_reads", lambda: None)()
+        with scope() if scope is not None and active is None and not workflow_transaction_active() else nullcontext():
+            return PublicationReadinessMixin._read_publication_readiness(self, snapshot_id)
+
+    @source_reconstruction_scope(reuse_existing=True)
+    def _read_publication_readiness(self, snapshot_id: str) -> dict[str, Any]:
         """Derive readiness without actor identity, writes, or cached authority."""
         try:
             inputs = PublicationReadinessMixin._publication_readiness_inputs(

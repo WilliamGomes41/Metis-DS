@@ -78,7 +78,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
     @staticmethod
     def _payload(value: Any) -> dict[str, Any]:
         if isinstance(value, dict):
-            return deepcopy(value)
+            return value  # psycopg decoded this JSON for this read only
         if isinstance(value, str):
             parsed = json.loads(value)
             if isinstance(parsed, dict):
@@ -129,6 +129,195 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             raise
         except Exception as exc:
             raise WorkflowDocumentStoreError("workflow_documents_read_failed") from exc
+
+    def list_document_cards(self, snapshot_ids: list[str] | None = None) -> list[dict[str, Any]]:
+        """List/chooser data, without replay, extraction, attempts or object rows."""
+        if snapshot_ids == []:
+            return []
+        try:
+            with self._connect() as con:
+                rows = con.execute("""
+                    SELECT d.snapshot_id,d.document_id,d.source_id,d.title,d.class,d.state,
+                           to_char(d.source_date,'YYYY-MM-DD') AS date,
+                           d.replaces_snapshot_id,
+                           d.source_version AS version,d.source_sha256 AS sha256,
+                           d.publication_eligibility,d.uploader_account_id,
+                           d.topic_id,t.display_name AS family,
+                           d.envelope_payload->'is_live_capture' AS is_live_capture,
+                           d.envelope_payload->>'acquired_at' AS acquired_at,
+                           (SELECT jsonb_object_agg(k,d.envelope_payload->k)
+                            FROM unnest(ARRAY['review_policy','processing_blocker','source_declaration',
+                                             'review_configuration','configuration_source']) k
+                            WHERE d.envelope_payload ? k) AS details,
+                           d.envelope_payload->'named_reviewers' AS named_reviewers,
+                           (SELECT COALESCE(jsonb_agg(v ORDER BY v),'[]'::jsonb)
+                            FROM jsonb_array_elements(COALESCE(d.envelope_payload->'named_reviewers','[]'::jsonb)) v)
+                           = (SELECT COALESCE(jsonb_agg(r.account_id ORDER BY r.account_id),'[]'::jsonb)
+                              FROM workflow.document_reviewers r WHERE r.snapshot_id=d.snapshot_id) AS reviewers_consistent
+                    FROM workflow.documents d LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id
+                """ + (" WHERE d.snapshot_id=ANY(%s)" if snapshot_ids is not None else "")
+                    + " ORDER BY d.acquired_at,d.snapshot_id",
+                    ((snapshot_ids,) if snapshot_ids is not None else ())).fetchall()
+            if any(not row['topic_id'] or not row['family'] for row in rows):
+                raise WorkflowDocumentStoreError("workflow_topic_identity_not_prepared")
+            if any(not row['reviewers_consistent'] for row in rows):
+                raise WorkflowDocumentStoreError('workflow_document_reviewers_authority_mismatch')
+            return [{**{key: value for key, value in row.items() if key not in {'details', 'reviewers_consistent'}},
+                     **(row['details'] or {})} for row in rows]
+        except WorkflowDocumentStoreError:
+            raise
+        except Exception as exc:
+            raise WorkflowDocumentStoreError("workflow_document_cards_read_failed") from exc
+
+    def list_document_summaries(self, *, limit: int | None = None) -> list[dict[str, Any]]:
+        """Metadata only; status history is selected separately for the visible page."""
+        try:
+            with self._connect() as con:
+                rows = con.execute("""
+                    SELECT d.snapshot_id,d.title,d.source_version AS version,d.class,d.state,
+                           d.publication_eligibility,
+                           d.envelope_payload->>'processing_blocker' AS processing_blocker,
+                           ARRAY(SELECT r.account_id FROM workflow.document_reviewers r
+                                 WHERE r.snapshot_id=d.snapshot_id ORDER BY r.account_id) AS named_reviewers,
+                           (SELECT COALESCE(jsonb_agg(v ORDER BY v),'[]'::jsonb)
+                            FROM jsonb_array_elements(COALESCE(d.envelope_payload->'named_reviewers','[]'::jsonb)) v)
+                           = (SELECT COALESCE(jsonb_agg(r.account_id ORDER BY r.account_id),'[]'::jsonb)
+                              FROM workflow.document_reviewers r WHERE r.snapshot_id=d.snapshot_id) AS reviewers_consistent
+                    FROM workflow.documents d ORDER BY d.acquired_at,d.snapshot_id
+                """ + (" LIMIT %s" if limit is not None else ""), ((limit,) if limit is not None else ())).fetchall()
+            if any(not row['reviewers_consistent'] for row in rows):
+                raise WorkflowDocumentStoreError("workflow_document_reviewers_authority_mismatch")
+            return [dict(row) for row in rows]
+        except WorkflowDocumentStoreError:
+            raise
+        except Exception as exc:
+            raise WorkflowDocumentStoreError("workflow_document_summaries_read_failed") from exc
+
+    def document_processing_inputs(self, snapshot_ids: list[str]) -> dict[str, dict[str, Any]]:
+        """Stored retry/status fields only for the selected authorized page."""
+        if not snapshot_ids:
+            return {}
+        try:
+            with self._connect() as con:
+                rows = con.execute("""
+                    SELECT d.snapshot_id, d.title, d.source_version AS version,
+                           d.class, d.state, d.publication_eligibility,
+                           d.source_sha256 AS sha256,
+                           d.envelope_payload->>'processing_blocker' AS processing_blocker,
+                           COALESCE(d.envelope_payload->'review_passes', '{}'::jsonb)<>'{}'::jsonb AS has_review_passes,
+                           jsonb_strip_nulls(jsonb_build_object('consumed_by', d.envelope_payload->'processing_recovery'->'consumed_by',
+                               'source_hash', d.envelope_payload->'processing_recovery'->'source_hash',
+                               'source_version', d.envelope_payload->'processing_recovery'->'source_version')) AS processing_recovery,
+                           COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                               'state', a->'state', 'kind', a->'kind',
+                               'attempt_id', a->'attempt_id', 'expires_at', a->'expires_at',
+                               'error_code', a->'error_code', 'retry_not_before', a->'retry_not_before',
+                               'formation_progress_made', a->'formation_progress_made',
+                               'limits', jsonb_strip_nulls(jsonb_build_object('max_attempts', a->'limits'->'max_attempts')),
+                               'transport', jsonb_build_object('external_cancellation', a->'transport'->'external_cancellation')
+                           ) ORDER BY n)
+                             FROM jsonb_array_elements(COALESCE(d.envelope_payload->'processing_attempts', '[]'::jsonb))
+                                  WITH ORDINALITY AS attempts(a,n)), '[]'::jsonb) AS processing_attempts,
+                           ARRAY(SELECT r.account_id FROM workflow.document_reviewers r
+                                 WHERE r.snapshot_id=d.snapshot_id ORDER BY r.account_id) AS named_reviewers
+                    FROM workflow.documents d WHERE d.snapshot_id=ANY(%s) ORDER BY d.acquired_at,d.snapshot_id
+                """, (snapshot_ids,)).fetchall()
+            return {str(row["snapshot_id"]): dict(row) for row in rows}
+        except Exception as exc:
+            raise WorkflowDocumentStoreError("workflow_document_summaries_read_failed") from exc
+
+    def document_diagnostic_inputs(self, snapshot_ids: list[str]) -> dict[str, dict[str, Any]]:
+        """Small stored-admission projection; no source/candidate text or hashing."""
+        if not snapshot_ids:
+            return {}
+        try:
+            with self._connect() as con:
+                invalid = con.execute(
+                    "SELECT 1 FROM workflow.document_objects WHERE snapshot_id=ANY(%s) AND position IS NULL LIMIT 1",
+                    (snapshot_ids,)).fetchone()
+                if invalid:
+                    raise WorkflowDocumentStoreError("workflow_document_cutover_not_prepared")
+                rows = con.execute("""
+                    WITH latest AS (
+                        SELECT DISTINCT ON (snapshot_id,object_id)
+                               snapshot_id,object_id,payload
+                        FROM workflow.document_objects WHERE snapshot_id=ANY(%s)
+                        ORDER BY snapshot_id,object_id,position DESC NULLS LAST
+                    )
+                    SELECT snapshot_id,object_id,
+                           jsonb_build_object('gate_result',payload->'metadata'->'admission'->'gate_result',
+                                              'reason_codes',payload->'metadata'->'admission'->'reason_codes') AS admission
+                    FROM latest ORDER BY snapshot_id,object_id
+                """, (snapshot_ids,)).fetchall()
+                bindings = con.execute(
+                    "SELECT DISTINCT snapshot_id FROM workflow.publish_authorizations WHERE snapshot_id=ANY(%s)",
+                    (snapshot_ids,)).fetchall()
+            result = {sid: {"objects": [], "has_bindings": False} for sid in snapshot_ids}
+            for row in rows:
+                result[str(row["snapshot_id"])]["objects"].append({
+                    "object_id": row["object_id"], "metadata": {"admission": row["admission"] or {}}})
+            for row in bindings:
+                result[str(row["snapshot_id"])]["has_bindings"] = True
+            return result
+        except Exception as exc:
+            raise WorkflowDocumentStoreError("workflow_document_diagnostics_read_failed") from exc
+
+    def list_source_selection_summaries(self) -> list[dict[str, Any]]:
+        """Stored progress/estimate inputs only, without objects or review tokens."""
+        try:
+            with self._connect() as con:
+                rows = con.execute("""
+                    SELECT d.snapshot_id,d.title,d.source_version AS version,d.class,d.content_kind,
+                           d.publication_eligibility,
+                           d.envelope_payload->>'binary_path' AS binary_path,
+                           d.envelope_payload->'received_source' AS received_source,
+                           d.envelope_payload->'processing_configuration' AS processing_configuration,
+                           jsonb_build_object('provider_evidence', jsonb_build_object(
+                               'formation_incomplete', d.envelope_payload->'semantic_replay'->'provider_evidence'->'formation_incomplete',
+                               'formation_progress', d.envelope_payload->'semantic_replay'->'provider_evidence'->'formation_progress')) AS semantic_replay,
+                           jsonb_array_length(COALESCE(NULLIF(d.envelope_payload->'semantic_replay'->'provider_evidence'->'pending_rejections','null'::jsonb),'[]'::jsonb)) AS pending_rejection_count,
+                           CASE WHEN jsonb_array_length(COALESCE(NULLIF(d.envelope_payload->'quality_processing_runs','null'::jsonb),'[]'::jsonb))>0
+                                THEN jsonb_array_length(COALESCE(NULLIF(d.envelope_payload->'quality_processing_runs'->-1->'source_fragments','null'::jsonb),'[]'::jsonb))
+                                ELSE NULL END AS source_fragment_count,
+                           COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                               'state', a->'state', 'kind', a->'kind', 'started_at', a->'started_at',
+                               'finished_at', a->'finished_at', 'expires_at', a->'expires_at',
+                               'phase', a->'phase', 'diagnostic', jsonb_build_object('phase',a->'diagnostic'->'phase'),
+                               'dispatch', jsonb_build_object('state',a->'dispatch'->'state')
+                           ) ORDER BY n) FROM jsonb_array_elements(COALESCE(NULLIF(d.envelope_payload->'processing_attempts','null'::jsonb),'[]'::jsonb))
+                             WITH ORDINALITY AS attempts(a,n)), '[]'::jsonb) AS processing_attempts,
+                           d.envelope_payload->'named_reviewers' AS named_reviewers,
+                           ARRAY(SELECT r.account_id FROM workflow.document_reviewers r
+                                 WHERE r.snapshot_id=d.snapshot_id ORDER BY r.account_id)
+                           = ARRAY(SELECT jsonb_array_elements_text(COALESCE(d.envelope_payload->'named_reviewers','[]'::jsonb)) ORDER BY 1) AS reviewers_consistent
+                    FROM workflow.documents d ORDER BY d.acquired_at,d.snapshot_id
+                """).fetchall()
+            if any(not row['reviewers_consistent'] for row in rows):
+                raise WorkflowDocumentStoreError('workflow_document_reviewers_authority_mismatch')
+            return [{k: v for k, v in row.items() if k != 'reviewers_consistent'} for row in rows]
+        except Exception as exc:
+            raise WorkflowDocumentStoreError("workflow_source_summaries_read_failed") from exc
+
+    def dispatched_snapshot_ids(self, *, clock, limit=None, after_snapshot=None) -> list[str]:
+        """Bound discovery to pending work and expiry candidates, never claimed live work."""
+        if limit is not None and limit <= 0:
+            return []
+        try:
+            with self._connect() as con:
+                rows = con.execute("""
+                    SELECT d.snapshot_id FROM workflow.documents d
+                    WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(
+                        COALESCE(NULLIF(d.envelope_payload->'processing_attempts','null'::jsonb),'[]'::jsonb)) AS a
+                        WHERE a->>'state'='running' AND a->'dispatch' IS NOT NULL
+                          AND (a->'dispatch'->>'state'='pending' OR (a->>'expires_at')::timestamptz<=%s))
+                    ORDER BY CASE WHEN (d.acquired_at,d.snapshot_id) <=
+                        (SELECT p.acquired_at,p.snapshot_id FROM workflow.documents p WHERE p.snapshot_id=%s)
+                        THEN 1 ELSE 0 END, d.acquired_at,d.snapshot_id
+                """ + (" LIMIT %s" if limit is not None else ""),
+                    ((clock, after_snapshot, limit) if limit is not None else (clock, after_snapshot))).fetchall()
+            return [str(row["snapshot_id"]) for row in rows]
+        except Exception as exc:
+            raise WorkflowDocumentStoreError("workflow_dispatch_discovery_failed") from exc
 
     def get_envelope(self, snapshot_id: str) -> dict[str, Any] | None:
         try:
@@ -405,59 +594,118 @@ class _PostgresWorkflowDocumentsMixin:
     @diagnostic_phase("document_list")
     def list_envelopes(self) -> list[dict[str, Any]]:
         """Read the authoritative list instead of a process-local startup cache."""
-        reads = self._source_selection_reads()
+        reads = self._document_reads()
         if reads is not None:
             return [self._receipt(row) for row in self._scoped_envelopes(reads).values()]
-        self.refresh_workflow_documents()
-        return [self._receipt(row) for row in self._envelopes.values()]
+        try:
+            return [self._receipt(row) for row in self.workflow_document_store.list_envelopes()]
+        except WorkflowDocumentStoreError as exc:
+            raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
 
-    def _scoped_envelopes(self, reads: dict[str, Any]) -> dict[str, dict[str, Any]]:
-        """One request-local store read; never alias the process-wide ``_envelopes`` cache."""
-        if reads["envelopes"] is None:
+    def _scoped_envelopes(self, reads) -> dict[str, dict[str, Any]]:
+        """Populate automatically; earlier single-document snapshots keep ownership."""
+        if not reads.listed:
             try:
                 rows = self.workflow_document_store.list_envelopes()
             except WorkflowDocumentStoreError as exc:
                 raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
-            reads["envelopes"] = {str(row["snapshot_id"]): row for row in rows}
-        return reads["envelopes"]
+            existing = reads.envelopes
+            reads.envelopes = {str(row["snapshot_id"]): existing.get(str(row["snapshot_id"]), row) for row in rows}
+            # A document removed after its first read is still part of this operation.
+            reads.envelopes.update({sid: row for sid, row in existing.items() if sid not in reads.envelopes})
+            reads.listed = True
+        return reads.envelopes
+
+    @diagnostic_phase("document_list")
+    def source_selection_documents(self, *, actor_id: str, document: str = "") -> list[dict[str, Any]]:
+        from src.workflows.workflow_transaction_v1 import workflow_read_transaction
+        from src.source_selection_v1 import authorize_account
+        actor = self._account(actor_id, current=True)
+        if actor.get("retirement"):
+            raise ConsoleError("not_authenticated")
+        try:
+            with workflow_read_transaction(self.workflow_document_store):
+                selected = self._envelope(document) if document else None
+                documents = self.workflow_document_store.list_source_selection_summaries()
+        except WorkflowDocumentStoreError as exc:
+            raise ConsoleError("workflow_document_unavailable") from exc
+        if selected is not None:
+            authorize_account(actor, selected)
+        visible = []
+        for row in documents:
+            try:
+                authorize_account(actor, row)
+            except ConsoleError as exc:
+                if exc.code not in {"reviewer_not_named_on_snapshot", "researcher_role_required"}:
+                    raise
+            else:
+                visible.append(row)
+        return visible
+
+    @diagnostic_phase("document_list")
+    def list_document_cards(self) -> list[dict[str, Any]]:
+        reads = self._document_reads()
+        try:
+            if reads is None:
+                return self.workflow_document_store.list_document_cards()
+            if reads.cards is None:
+                reads.cards = self.workflow_document_store.list_document_cards()
+            # Public list callers keep their own small mutable output.
+            return deepcopy(reads.cards)
+        except WorkflowDocumentStoreError as exc:
+            raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
 
     def list_snapshot_ids(self) -> list[str]:
-        """PR-a: the same authoritative read as list_envelopes, without per-row receipts."""
-        reads = self._source_selection_reads()
+        reads = self._document_reads()
         if reads is not None:
-            return list(self._scoped_envelopes(reads))
-        self.refresh_workflow_documents()
-        return list(self._envelopes)
+            if reads.listed:
+                return list(reads.envelopes)
+            if reads.snapshot_ids is not None:
+                return list(reads.snapshot_ids)
+        try:
+            with self.workflow_document_store._connect() as con:
+                ids = [str(row["snapshot_id"]) for row in con.execute(
+                    "SELECT snapshot_id FROM workflow.documents ORDER BY acquired_at,snapshot_id").fetchall()]
+        except Exception as exc:
+            raise ConsoleError("workflow_document_unavailable") from exc
+        if reads is not None:
+            reads.snapshot_ids = ids
+        return list(ids)
 
     @diagnostic_phase("document_load")
     def _envelope(self, snapshot_id: str) -> dict[str, Any]:
-        reads = self._source_selection_reads()
-        if reads is not None and reads["envelopes"] is not None:
-            if snapshot_id not in reads["envelopes"]:
-                raise ConsoleError("unknown_snapshot")
-            return reads["envelopes"][snapshot_id]
+        reads = self._document_reads()
+        if reads is not None and snapshot_id in reads.envelopes:
+            from src.request_diagnostics_v1 import diagnostic_count
+            diagnostic_count("document_snapshot_reused")
+            return reads.envelopes[snapshot_id]
+        if reads is not None and reads.listed:
+            raise ConsoleError("unknown_snapshot")
         try:
             envelope = self.workflow_document_store.get_envelope(snapshot_id)
         except WorkflowDocumentStoreError as exc:
             raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
         if envelope is None:
             raise ConsoleError("unknown_snapshot")
-        self._envelopes[snapshot_id] = deepcopy(envelope)
-        return deepcopy(envelope)
+        # The store already returns caller-owned decoded JSON. No process mirror,
+        # no second/third defensive copy. Commands still reload under their lock.
+        if reads is not None:
+            reads.envelopes[snapshot_id] = envelope
+        return envelope
 
     def _load_objects(self, snapshot_id: str, *, remember: bool = True) -> list[dict[str, Any]]:
-        reads = self._source_selection_reads() if not remember else None
-        if reads is not None and snapshot_id in reads["objects"]:
-            return reads["objects"][snapshot_id][0]
+        reads = self._document_reads() if not remember else None
+        if reads is not None and snapshot_id in reads.objects:
+            return reads.objects[snapshot_id][0]
         try:
             rows = self.workflow_document_store.list_document_objects(snapshot_id)
-            revision = self.workflow_document_store.revision_for_rows(rows)
+            revision = self.workflow_document_store.revision_for_rows(rows) if remember else None
         except WorkflowDocumentStoreError as exc:
             raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
         if remember:
             self._objects_expected_revs()[snapshot_id] = revision
         elif reads is not None:
-            reads["objects"][snapshot_id] = (rows, revision)
+            reads.objects[snapshot_id] = (rows, revision)
         return rows
 
     @diagnostic_phase("objects_read")
@@ -468,20 +716,23 @@ class _PostgresWorkflowDocumentsMixin:
     ) -> tuple[list[dict[str, Any]], str]:
         """Read authoritative PostgreSQL objects once and derive their revision."""
         self._envelope(snapshot_id)
-        try:
-            rows = self.workflow_document_store.list_document_objects(snapshot_id)
-            revision = self.workflow_document_store.revision_for_rows(rows)
-        except WorkflowDocumentStoreError as exc:
-            raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
+        rows = self._load_objects(snapshot_id, remember=False)
+        reads = self._document_reads()
+        revision = (self.objects_revision(snapshot_id) if reads is not None
+                    else self.workflow_document_store.revision_for_rows(rows))
         if include_blocked:
             return deepcopy(rows), revision
         return deepcopy(current_revisions(rows, snapshot_id=snapshot_id)), revision
 
     def objects_revision(self, snapshot_id: str) -> str:
-        reads = self._source_selection_reads()
+        reads = self._document_reads()
         if reads is not None:
             self._load_objects(snapshot_id, remember=False)
-            return reads["objects"][snapshot_id][1]
+            rows, revision = reads.objects[snapshot_id]
+            if revision is None:
+                revision = self.workflow_document_store.revision_for_rows(rows)
+                reads.objects[snapshot_id] = (rows, revision)
+            return revision
         try:
             return self.workflow_document_store.objects_revision(snapshot_id)
         except WorkflowDocumentStoreError as exc:
@@ -606,8 +857,14 @@ class _PostgresWorkflowDocumentsMixin:
             sid = snapshot_id or (objects[0] if objects is not None else None)
             if sid is None:
                 raise ConsoleError("unknown_snapshot")
-            current = deepcopy(self._envelopes)
-            target_envelopes = current if envelopes is None else self._rebase_snapshot_map(current, envelopes, sid)
+            # Unchanged documents remain owned by the command's freshly loaded
+            # map. Only the submitted snapshot crosses a mutation/copy boundary.
+            target_envelopes = dict(self._envelopes)
+            if envelopes is not None:
+                if sid in envelopes:
+                    target_envelopes[sid] = deepcopy(envelopes[sid])
+                else:
+                    target_envelopes.pop(sid, None)
             target_bindings = deepcopy(self._bindings)
             if bindings is not None:
                 target_bindings = self._rebase_snapshot_map(self._bindings, bindings, sid)

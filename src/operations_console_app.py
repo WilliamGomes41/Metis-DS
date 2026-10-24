@@ -3756,7 +3756,7 @@ def _render_review_room(
             '</div>'
         )
     snapshot_revision = ""
-    envelopes = console.list_envelopes()
+    envelopes = console.list_document_cards()
     chosen_row = next((row for row in envelopes if row["snapshot_id"] == chosen), None)
     cards = []
     if not chosen:
@@ -4989,7 +4989,7 @@ def create_console_app(
             f'<option value="{_esc(row["account_id"])}">{_esc(row["display_name"])} ({_esc(row["username"])})</option>'
             for row in reviewers
         )
-        documents = state.list_envelopes()
+        documents = state.list_document_cards()
         family_options = "".join(
             f'<option value="{_esc(family)}"></option>'
             for family in sorted({str(row.get("family") or "") for row in documents if row.get("family")}, key=str.casefold)
@@ -5264,7 +5264,7 @@ def create_console_app(
         can_move = "researcher" in account["roles"] or "publisher" in account["roles"]
         can_promote = "reviewer" in account["roles"]
         payload = state.family_tree()
-        named_on = ({row["snapshot_id"] for row in state.list_envelopes()
+        named_on = ({row["snapshot_id"] for row in state.list_document_cards()
                      if account["account_id"] in (row.get("named_reviewers") or [])}
                     if can_promote and not can_move else set())
         move_family_options = "".join(
@@ -5499,7 +5499,6 @@ def create_console_app(
         return RedirectResponse(target, status_code=303)
 
     @app.get("/review", response_class=HTMLResponse)
-    @state.source_selection_read_scope()
     def review_get(request: Request, document: str = "", object: str = "", task: str = "",
                    context_target: str = "", context_mode: str = "", context_saved: str = "") -> str:
         with diagnostic_phase("authorization"):

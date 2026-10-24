@@ -43,6 +43,8 @@ Document-id's, gebruikers-id's, querystrings, SQL, broninhoud en foutteksten wor
 | Fout in een verzoek | `request_finished.error` | `type`, `code` (ConsoleError), `frames` (`src/…:functie:regel`), `fingerprint` |
 | Afgehandelde fout | `request_finished.error.handled` | ConsoleError-code, zonder tekst |
 | Database | `request_finished.db` en fasen `db_connect`/`db_execute`/`db_fetch` | aantal verbindingen en queries, tijden |
+| JSON-ophaalvolume | `request_finished.db.db_json_bytes` | native JSON/JSONB-veldbytes, zonder hercoderen; exclusief overige kolommen en protocoloverhead |
+| Kopieën / hergebruik | fase `payload_copy`, teller `document_snapshot_reused` | noodzakelijke uitgaande kopieën en logische hergebruiktreffers; een `document_load`-aanroep is niet automatisch een fysieke store-read |
 | Store-lock | fasen `store_lock_wait`, `store_lock_hold` | wachttijd tot de lock; hoe lang de lock vastzat |
 | Storeopdracht (#678) | fase `store_transaction` | transactietijd van de eigenaar; PG gebruikt geen schijfspiegels |
 | Logs ≥ WARNING | `log_record` | logger, geredigeerd bericht (max. 240 tekens), vingerafdruk bij een exceptie |

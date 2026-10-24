@@ -137,39 +137,39 @@
     return response.json();
   };
 
+  // Share only an active request in this tab. Protected titles are never saved
+  // in sessionStorage or reused after authorization may have changed.
+  let noticesInFlight = null;
+  const notices = () => {
+    if (!noticesInFlight) {
+      noticesInFlight = fetchJson('/raad/meldingen').finally(() => { noticesInFlight = null; });
+    }
+    return noticesInFlight;
+  };
+
   const documentsSection = () => {
     const list = el('ul', {class: 'care-list'});
     const status = el('p', {class: 'care-muted', text: 'Meldingen worden opgehaald…'});
-    const cached = storage((s) => JSON.parse(s.getItem('metis-care-notices') || 'null'));
-    const render = (rows) => {
+    storage((s) => s.removeItem('metis-care-notices'));
+    const render = (page) => {
+      const rows = page.documents || [];
       list.replaceChildren();
       if (!rows.length) {
-        status.textContent = 'Geen geblokkeerde documenten of recente fouten in jouw documenten.';
+        status.textContent = page.complete ? 'Geen opgeslagen verwerkingsblokkades, geblokkeerde kandidaten of recente fouten gevonden.' : 'Het overzicht is onvolledig; overige meldingen zijn nog niet gecontroleerd.';
         return;
       }
-      status.textContent = rows.length + ' document(en) vragen aandacht:';
+      status.textContent = rows.length + ' document(en) vragen aandacht:' + (page.complete ? '' : ' Het overzicht is onvolledig.');
       for (const row of rows) {
         const link = el('a', {href: '/inzicht/document?' + new URLSearchParams({document: row.snapshot_id}), text: row.title || row.snapshot_id});
         const detail = [row.code, ...(row.reasons || []).map((reason) => reason.code)].filter(Boolean).slice(0, 3).join(', ');
-        const why = [row.blocked ? row.blocked + ' geblokkeerd' : '',
+        const why = [row.processing_blocked ? 'opgeslagen verwerkingsblokkade' : '',
+          row.blocked === null ? 'aantal geblokkeerde kandidaten niet vastgesteld' : row.blocked + ' geblokkeerde kandidaten',
           row.telemetry && row.telemetry.errors ? row.telemetry.errors + ' fout(en) in 24 uur' : '', detail].filter(Boolean).join(' · ');
         list.append(el('li', {}, link, why ? el('span', {class: 'care-muted', text: ' — ' + why}) : null));
       }
     };
-    if (cached && Date.now() - cached.at < 60000) {
-      render(cached.rows);
-    } else {
-      Promise.all(['blocked', 'errors'].map((filter) =>
-        fetchJson('/inzicht/api/documents?' + new URLSearchParams({state: filter, limit: '5'}))
-          .then((page) => page.documents || [])))
-        .then(([blocked, errors]) => {
-          const seen = new Set();
-          const rows = [...blocked, ...errors].filter((row) => !seen.has(row.snapshot_id) && seen.add(row.snapshot_id)).slice(0, 8);
-          storage((s) => s.setItem('metis-care-notices', JSON.stringify({at: Date.now(), rows})));
-          render(rows);
-        })
-        .catch(() => { status.textContent = 'Meldingen zijn nu niet op te halen. Open Inzicht voor het volledige overzicht.'; });
-    }
+    notices().then(render)
+      .catch(() => { status.textContent = 'Meldingen zijn nu niet op te halen. Open Inzicht voor het volledige overzicht.'; });
     return section('Meldingen', status, list, el('a', {class: 'care-link', href: '/inzicht', text: 'Naar Inzicht'}));
   };
 

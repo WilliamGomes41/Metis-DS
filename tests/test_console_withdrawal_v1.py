@@ -80,7 +80,7 @@ def test_inactive_unknown_or_legacy_release_never_offers_withdrawal(tmp_path, mo
     if state == "unavailable":
         def fail(*args):
             raise CanonicalPublicationStoreError("offline")
-        monkeypatch.setattr(authority, "release_for_snapshot", fail)
+        monkeypatch.setattr(console, "_canonical_list_release_rows", fail)
     elif state == "superseded":
         from tests.test_live_v1_working_v2_v1 import _complete_review
         accounts = {a['username']: a for a in console.list_accounts()}

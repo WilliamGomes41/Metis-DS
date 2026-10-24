@@ -143,7 +143,8 @@ def test_actual_authenticated_routes_report_owner_phases(review_client,events):
         assert response.status_code==200
         finished=[r for r in events if r['event']=='request_finished' and r['route']==route][-1]
         assert finished['phases'][phase]['calls']>=1
-        assert finished['phases']['document_list']['calls']>=1
+        # Selected detail reads own one document; a list warmup is unnecessary.
+        assert finished['phases']['document_load']['calls']>=1
     assert before==json.dumps(console.snapshot_objects(sid),sort_keys=True)
     assert sid not in json.dumps(events)
 

@@ -302,17 +302,18 @@ def _apply_release_state(console: OperationsConsole, envelope: dict[str, Any], v
         console.canonical_publication_store, PostgresCanonicalPublicationStore,
     ):
         try:
-            release = console.canonical_publication_store.release_for_snapshot(envelope["snapshot_id"])
-            if release:
-                lifecycle = console.document_release_serving_status(envelope["snapshot_id"])
-                if lifecycle["serving_status"] == "active":
+            summary = console.publication_summaries([str(envelope["snapshot_id"])])[str(envelope["snapshot_id"])]
+            if summary.get("release_id"):
+                if summary["serving_status"] == "active":
                     view["overall_state"] = "published"
-                    if release.get("logical_document_id"):
-                        view["withdraw_release_id"] = release["release_id"]
+                    if summary.get("logical_document_id"):
+                        view["withdraw_release_id"] = summary["release_id"]
                 else:
-                    state = lifecycle["release_status"]
+                    state = summary["release_status"]
                     view["overall_state"] = state if state in {"withdrawn", "superseded"} else "inactive"
-        except (ConsoleError, CanonicalPublicationStoreError):
+        except (ConsoleError, CanonicalPublicationStoreError) as exc:
+            from src.request_diagnostics_v1 import note_handled_exception
+            note_handled_exception(exc)
             view["overall_state"] = "authority_unavailable"
 
 
@@ -330,18 +331,11 @@ def _compact_card(console: OperationsConsole, envelope: dict[str, Any]) -> str:
     """Overzichtskaart uit opgeslagen envelope- en releasestatus (D-PERF-1).
 
     MAG NIET ``consider_publish``/``publication_readiness`` of bronreconstructie
-    aanroepen. Een gepubliceerde envelope blijft gepubliceerd; elke andere
-    toestand MOET "volledigheid nog niet gecontroleerd" tonen.
+    aanroepen. Alleen opgeslagen canonieke releasestatus toont publicatie;
+    zonder release blijft volledigheid ongecontroleerd.
     """
     snapshot_id = str(envelope["snapshot_id"])
-    if str(envelope.get("state") or "") == "published":
-        view = publish_readiness_view(
-            snapshot_id=snapshot_id, envelope_state="published",
-            considered={"state": "published", "technical_ready": False,
-                        "technical_blockers": ["already_published"], "curation_ready": True},
-        )
-    else:
-        view = unchecked_publish_view(snapshot_id=snapshot_id)
+    view = unchecked_publish_view(snapshot_id=snapshot_id)
     _apply_release_state(console, envelope, view)
     return _card(envelope, view, _RELEASE_DISPLAY[view["overall_state"]])
 
@@ -367,7 +361,14 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
     def publish_get(request: Request, document: str = "") -> str:
         account = _publisher_account(console, request)
         rows: list[str] = []
-        for envelope in console.list_envelopes():
+        documents = console.list_document_cards()
+        # One canonical metadata read for the complete overview. Failure remains
+        # visible as unknown on each card, never a fictional readiness result.
+        try:
+            console.publication_summaries([str(e["snapshot_id"]) for e in documents])
+        except ConsoleError:
+            pass  # _apply_release_state renders the existing explicit unknown state
+        for envelope in documents:
             if str(envelope["snapshot_id"]) != document:
                 rows.append(_compact_card(console, envelope))
                 continue

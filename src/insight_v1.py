@@ -24,7 +24,7 @@ _HEADERS = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
 MAX_DOCUMENTS = 200
 # Documents examined per request when a state filter is active; the cursor continues the scan.
 MAX_SCAN = 1000
-DOCUMENT_STATES = ("blocked", "errors", "retry")
+DOCUMENT_STATES = ("blocked", "errors", "retry", "attention")
 
 
 def insight_tabs(current: str) -> str:
@@ -46,17 +46,11 @@ _TAB_STYLE = """<style>
 </style>"""
 
 
-def _authorized_documents(state, account) -> list[dict[str, Any]]:
+def _authorized_documents(state, account, documents) -> list[dict[str, Any]]:
     """Processing scope plus publishers' existing publication document list."""
     roles = set(account.get("roles") or [])
-    if "publisher" in roles:
-        from src.operations_console_v1 import ConsoleError
-        try:
-            state._require_role(account["account_id"], "publisher", current=True)
-        except ConsoleError:
-            roles.discard("publisher")
     rows = []
-    for envelope in state.list_envelopes():
+    for envelope in documents:
         if roles & {"researcher", "publisher"} or ("reviewer" in roles and account["account_id"] in (envelope.get("named_reviewers") or [])):
             rows.append(envelope)
     return rows
@@ -85,50 +79,59 @@ def _telemetry_by_document(since: float) -> tuple[dict[str, dict[str, int]], boo
 
 
 def _state_matches(row: dict[str, Any], state_filter: str) -> bool:
-    return (not state_filter or (state_filter == "blocked" and bool(row["blocked"]))
+    return (not state_filter or (state_filter == "blocked" and (bool(row["blocked"]) or row.get("processing_blocked")))
             or (state_filter == "errors" and bool(row["telemetry"]["errors"]))
-            or (state_filter == "retry" and row["retry_allowed"]))
+            or (state_filter == "retry" and row["retry_allowed"])
+            or (state_filter == "attention" and (row.get("processing_blocked") or row["blocked"] is None
+                or bool(row["blocked"]) or bool(row["telemetry"]["errors"]))))
 
 
 def documents_projection(state, account, *, query: str = "", state_filter: str = "", offset: int = 0,
-                         limit: int = MAX_DOCUMENTS) -> dict[str, Any]:
+                         limit: int = MAX_DOCUMENTS, scan_limit: int | None = None) -> dict[str, Any]:
     """One page of authorized documents; search and state filter run over the whole authorized list.
 
     ``offset`` and ``next_offset`` index the searched authorized list. Without a state
     filter ``total`` is exact; with one it is unknown until the scan reaches the end.
     """
+    from src.console_read_operations_v1 import document_overview_operation
+    with document_overview_operation(state, account, scan_limit=scan_limit) as (actor, inputs):
+        return _documents_page(inputs, actor, query=query, state_filter=state_filter, offset=offset, limit=limit)
+
+
+def _documents_page(inputs, account, *, query="", state_filter="", offset=0, limit=MAX_DOCUMENTS):
+    state = inputs.state
     query = query.strip().lower()
     state_filter = state_filter if state_filter in DOCUMENT_STATES else ""
-    authorized = [envelope for envelope in _authorized_documents(state, account)
+    authorized = [envelope for envelope in _authorized_documents(state, account, inputs.documents)
                   if not query or _matches_document(envelope, query)]
     offset, limit = max(0, offset), max(1, min(limit, MAX_DOCUMENTS))
     telemetry, partial = _telemetry_by_document(time.time() - 86400) if offset < len(authorized) else ({}, False)
     rows, position = [], offset
     scan_end = min(len(authorized), offset + (MAX_SCAN if state_filter else limit))
+    processing = [e["snapshot_id"] for e in authorized[offset:scan_end]
+                  if "researcher" in set(account.get("roles") or [])
+                  or ("reviewer" in set(account.get("roles") or []) and account["account_id"] in (e.get("named_reviewers") or []))]
+    inputs.select(processing)
     while position < scan_end and len(rows) < limit:
-        row = _document_row(state, account, authorized[position], telemetry)
+        row = _document_row(inputs, account, authorized[position], telemetry)
         position += 1
         if _state_matches(row, state_filter):
             rows.append(row)
-    return {"documents": rows, "total": None if state_filter else len(authorized), "offset": offset,
+    return {"documents": rows, "total": None if state_filter or inputs.metadata_partial else len(authorized), "offset": offset,
             "limit": limit, "next_offset": position if position < len(authorized) else None,
-            "telemetry_partial": partial}
+            "telemetry_partial": partial, "metadata_partial": inputs.metadata_partial}
 
 
-def _document_row(state, account, envelope: dict[str, Any], telemetry: dict[str, dict[str, int]]) -> dict[str, Any]:
+def _document_row(inputs, account, envelope: dict[str, Any], telemetry: dict[str, dict[str, int]]) -> dict[str, Any]:
     from src.processing_diagnostics_v1 import processing_diagnostics
     from src.request_diagnostics_v1 import doc_ref
     sid = envelope["snapshot_id"]
     roles = set(account.get("roles") or [])
     processing_access = "researcher" in roles or ("reviewer" in roles and account["account_id"] in envelope.get("named_reviewers", []))
-    try:
-        status = state.processing_status(sid, actor_id=account["account_id"], deep=False) if processing_access else {}
-    except Exception:
-        status = {}
-    try:
-        diagnostics = processing_diagnostics(state.snapshot_objects(sid)) if processing_access else {"blocked_candidate_count": None, "by_reason_code": {}}
-    except Exception:
-        diagnostics = {"blocked_candidate_count": None, "by_reason_code": {}}
+    if processing_access:
+        status, diagnostics = inputs.status_and_diagnostics(envelope)
+    else:
+        status, diagnostics = {}, {"blocked_candidate_count": None, "by_reason_code": {}}
     ref = doc_ref(sid)
     reasons = list((diagnostics.get("by_reason_code") or {}).items())[:3]
     return {
@@ -138,6 +141,7 @@ def _document_row(state, account, envelope: dict[str, Any], telemetry: dict[str,
         "code": status.get("error_code") or status.get("reason_code"),
         "retry_allowed": bool(status.get("retry_allowed")),
         "blocked": diagnostics.get("blocked_candidate_count"),
+        "processing_blocked": bool(envelope.get("processing_blocker") or envelope.get("publication_eligibility") == "blocked_pending_pre_review"),
         "reasons": [{"code": code, "count": values.get("candidate_count")} for code, values in reasons],
         "telemetry": telemetry.get(ref or "", {"requests": 0, "errors": 0}),
         "named_reviewer": account["account_id"] in (envelope.get("named_reviewers") or []),
@@ -198,7 +202,6 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
         return HTMLResponse(html, headers=_HEADERS)
 
     @app.get("/inzicht/document", response_class=HTMLResponse)
-    @state.source_selection_read_scope()
     def document_diagnosis(request: Request, document: str = "") -> HTMLResponse:
         from src.operations_console_app import ERROR_COPY, _processing_diagnostics_html, _coverage_panel
         from src.review_interaction_v1 import review_burden_projection

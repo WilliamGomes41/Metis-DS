@@ -25,7 +25,23 @@ const fs=require('node:fs');
       await page.locator('[name=password]').fill(manifest.password);
       await Promise.all([page.waitForURL(base+'/'),page.locator('button[type=submit]').click()]);
       await post('/browser-faults',{});
+      let releaseNotices;
+      let noticeRequests=0;
+      const gate=new Promise(resolve=>{releaseNotices=resolve;});
+      await page.route('**/raad/meldingen',async route=>{noticeRequests++;await gate;await route.continue();});
+      const noticesStarted=page.waitForRequest(request=>request.url().endsWith('/raad/meldingen'));
       await page.getByRole('button',{name:/Open Raad/}).click();
+      await noticesStarted;
+      await page.getByRole('button',{name:'Sluit Raad'}).click();
+      await page.getByRole('button',{name:/Open Raad/}).click();
+      await page.evaluate(()=>new Promise(requestAnimationFrame));
+      if(noticeRequests!==1)throw Error('reopening Raad duplicated its in-flight notices request');
+      const noticesFinished=page.waitForResponse(response=>response.url().endsWith('/raad/meldingen'));
+      releaseNotices();
+      await noticesFinished;
+      await page.unroute('**/raad/meldingen');
+      if(await page.evaluate(()=>sessionStorage.getItem('metis-care-notices'))!==null)
+        throw Error('protected notices persisted in session storage');
       const healthy=await run(page);
       const paths=healthy.map(r=>r.path);
       for(const expected of ['/','/ingest','/source-selection','/review','/publish','/tree','/settings','/inzicht'])

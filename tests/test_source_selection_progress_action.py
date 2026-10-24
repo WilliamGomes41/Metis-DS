@@ -23,6 +23,9 @@ def test_progress_link_only_for_running_documents_that_are_not_selected(tmp_path
         family='second', named_reviewers=[reviewer])['snapshot_id']
     real = ui.projection
     monkeypatch.setattr(ui, 'projection', lambda *args, **kwargs: {**real(*args, **kwargs), 'state': 'bezig'})
+    import src.source_selection_v1 as selection
+    summary = selection.summary_projection
+    monkeypatch.setattr(selection, 'summary_projection', lambda *args, **kwargs: {**summary(*args, **kwargs), 'state': 'bezig'})
     client = TestClient(production_app(console))
     client.cookies.set(COOKIE, console.authenticate('author', 'strong-test-password')['token'])
 

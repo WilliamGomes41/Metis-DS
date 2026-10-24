@@ -13,7 +13,12 @@ UNCHECKED = "volledigheid nog niet gecontroleerd"
 
 
 def authorize(console, actor_id, envelope):
-    account = console._account(actor_id, current=True)
+    return authorize_account(console._account(actor_id, current=True), envelope)
+
+
+def authorize_account(account, envelope):
+    """The existing selection rule over explicitly supplied current identity/data."""
+    actor_id = account["account_id"]
     if account.get("retirement"):
         raise ConsoleError("not_authenticated")
     if not {"researcher", "reviewer"}.intersection(account["roles"]):
@@ -172,7 +177,7 @@ def projection(console, *, actor_id, snapshot_id, documents, deep=True, observat
     authorize(console, actor_id, envelope)
     processing = console.processing_status(snapshot_id, actor_id=actor_id, deep=deep)
     # Overzicht: alleen-lezen rijen zonder deepcopy; het gekozen document leest volledig.
-    objects = console.snapshot_objects(snapshot_id) if deep else console._overview_rows(snapshot_id)
+    objects = console._read_current_objects(snapshot_id)
     attempt = next(reversed(envelope.get("processing_attempts") or []), {})
     budget_stopped = attempt.get("state") == "incomplete_budget"
     succeeded = bool(attempt.get("state") == "succeeded" or (not attempt and envelope.get("quality_processing_runs")))
@@ -214,3 +219,34 @@ def projection(console, *, actor_id, snapshot_id, documents, deep=True, observat
             "can_start": processing["retry_allowed"] or processing["resume_allowed"],
             "budget_stopped": budget_stopped,
             "revision": console.objects_revision(snapshot_id), "progress": processing.get("formation_progress", {})}
+
+
+def summary_projection(console, *, envelope, observations):
+    """Stored progress only. Counts, review availability and start rights need detail."""
+    from pathlib import Path
+    attempt = next(reversed(envelope.get("processing_attempts") or []), {})
+    current = attempt.get("state", "not_recorded")
+    if current == "running" and attempt.get("expires_at") and datetime.fromisoformat(attempt["expires_at"]) <= now():
+        current = "expired"
+    succeeded = current == "succeeded" or (not attempt and envelope.get("source_fragment_count") is not None)
+    waiting = current == "running" and (attempt.get("dispatch") or {}).get("state") == "pending"
+    state = ("wacht op uitvoering" if waiting else "bezig" if current == "running"
+             else "onderbroken" if current in {"expired", "interrupted", "incomplete_budget"}
+             else "mislukt" if current == "failed" else UNCHECKED if succeeded else "nog niet gestart")
+    elapsed = _duration(attempt.get("started_at"), attempt.get("finished_at") or now().isoformat())
+    timing = estimate({**envelope, "processing_configuration": configuration(console)}, [], observations=observations)
+    remaining = None
+    if state == "bezig" and timing["range_seconds"] and elapsed is not None and elapsed < timing["range_seconds"][1]:
+        lo, hi = timing["range_seconds"]
+        remaining = [max(0, lo-elapsed), hi-elapsed]
+    evidence = (envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
+    return {"snapshot_id": envelope["snapshot_id"], "title": envelope["title"], "version": envelope["version"],
+            "filename": (envelope.get("received_source") or {}).get("filename") or Path(envelope["binary_path"]).name,
+            "bytes": (envelope.get("received_source") or {}).get("bytes"), "state": state,
+            "attempt_succeeded": bool(succeeded), "formation_complete": False, "formation_checked": False,
+            "phase": (attempt.get("diagnostic") or {}).get("phase") or attempt.get("phase") or "Nog niet gestart",
+            "elapsed_seconds": elapsed, "deadline_seconds": _duration(now().isoformat(),attempt.get("expires_at")),
+            "estimate": timing, "remaining_seconds": remaining, "candidates": None, "source_passages": None,
+            "blocked": None, "formation_blockers": (envelope.get("pending_rejection_count") or 0) + int(state == "mislukt"),
+            "review_available": False, "can_start": False, "revision": None,
+            "budget_stopped": current == "incomplete_budget", "progress": evidence.get("formation_progress") or {}}

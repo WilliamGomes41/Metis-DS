@@ -164,7 +164,8 @@ def test_real_authenticated_browser_route_exports_correlated_evidence(review_cli
     monkeypatch.setattr(_LOGGER, 'info', lambda fmt, msg: rows.append(json.loads(msg)))
     before = json.dumps(console.snapshot_objects(sid), sort_keys=True)
     sock = socket.socket(); sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]
-    server = uvicorn.Server(uvicorn.Config(RequestDiagnostics(client.app), log_level='critical', access_log=False))
+    # Production already owns diagnostics; double wrapping emits two request IDs.
+    server = uvicorn.Server(uvicorn.Config(client.app, log_level='critical', access_log=False))
     thread = threading.Thread(target=lambda: server.run(sockets=[sock]), daemon=True)
     state = tmp_path / 'session.json'
     state.write_text(json.dumps({'cookies':[{'name':cookie.name, 'value':cookie.value,
