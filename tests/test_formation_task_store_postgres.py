@@ -540,3 +540,10 @@ def test_diagnostic_keeps_every_rejected_call_in_recorded_order(tmp_path,product
     assert [call["response"]["output_text"] for call in calls] == [f"recorded-output-{i}" for i in range(3)]
     assert "validator_input" not in diagnostic
     assert writer.store.resolve_input(diagnostic["validator_input_ref"]) == data
+    from src.metis_mcp_queries_v1 import McpQueries
+    before = console._envelope(writer.snapshot_id)
+    account = console._account(envelope["uploader_account_id"],current=True)
+    result = McpQueries(console,"https://console.example.test").read(account,"get_processing_evidence",
+        {"snapshot_id":writer.snapshot_id,"table":"validator_inputs"})
+    assert result["items"][0]["validator_input"] == data
+    assert console._envelope(writer.snapshot_id) == before
