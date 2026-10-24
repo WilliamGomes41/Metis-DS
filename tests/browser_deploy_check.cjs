@@ -42,6 +42,18 @@ const fs=require('node:fs');
       await page.unroute('**/raad/meldingen');
       if(await page.evaluate(()=>sessionStorage.getItem('metis-care-notices'))!==null)
         throw Error('protected notices persisted in session storage');
+      // Missing processing access must not display a candidate count/unknown count.
+      await page.getByRole('button',{name:'Sluit Raad'}).click();
+      await page.route('**/raad/meldingen',route=>route.fulfill({json:{complete:true,next_offset:null,documents:[{
+        snapshot_id:'publisher-fixture',title:'Publisher-only notice',processing_access:false,
+        processing_blocked:true,blocked:null,reasons:[],telemetry:{errors:0}}]}}));
+      await page.getByRole('button',{name:/Open Raad/}).click();
+      const publisherNotice=page.getByRole('link',{name:'Publisher-only notice'}).locator('..');
+      await publisherNotice.waitFor();
+      const publisherText=await publisherNotice.textContent();
+      if(!publisherText.includes('opgeslagen verwerkingsblokkade')||publisherText.includes('kandidaten'))
+        throw Error('publisher notice exposed unavailable processing details: '+publisherText);
+      await page.unroute('**/raad/meldingen');
       const healthy=await run(page);
       const paths=healthy.map(r=>r.path);
       for(const expected of ['/','/ingest','/source-selection','/review','/publish','/tree','/settings','/inzicht'])

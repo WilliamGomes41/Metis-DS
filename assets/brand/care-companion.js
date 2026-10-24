@@ -163,7 +163,7 @@
         const link = el('a', {href: '/inzicht/document?' + new URLSearchParams({document: row.snapshot_id}), text: row.title || row.snapshot_id});
         const detail = [row.code, ...(row.reasons || []).map((reason) => reason.code)].filter(Boolean).slice(0, 3).join(', ');
         const why = [row.processing_blocked ? 'opgeslagen verwerkingsblokkade' : '',
-          row.blocked === null ? 'aantal geblokkeerde kandidaten niet vastgesteld' : row.blocked + ' geblokkeerde kandidaten',
+          row.processing_access ? (row.blocked === null ? 'aantal geblokkeerde kandidaten niet vastgesteld' : row.blocked + ' geblokkeerde kandidaten') : '',
           row.telemetry && row.telemetry.errors ? row.telemetry.errors + ' fout(en) in 24 uur' : '', detail].filter(Boolean).join(' · ');
         list.append(el('li', {}, link, why ? el('span', {class: 'care-muted', text: ' — ' + why}) : null));
       }

@@ -104,7 +104,7 @@ def install(app, console, require, page, nav, esc):
         selected = document or (visible[-1]['snapshot_id'] if visible else '')
         options = ''.join(f'<option value="{esc(row["snapshot_id"])}" {"selected" if row["snapshot_id"] == selected else ""}>{esc(row["title"])} — {esc(row["version"])}</option>' for row in visible)
         cards = []
-        running_selected = False
+        running_visible = False
         # Eén keer per verzoek (PR-b): vergelijkbare metingen over alle documenten.
         observations = comparable_observations(documents)
         for envelope in visible:
@@ -116,14 +116,18 @@ def install(app, console, require, page, nav, esc):
                                  deep=True, observations=observations) if detail
                       else summary_projection(console, envelope=envelope, observations=observations))
             action = ''
+            if result['state'] in {'bezig', 'wacht op uitvoering'}:
+                running_visible = True
             if not detail:
                 label = 'Voortgang bekijken' if result['state'] in {'bezig', 'wacht op uitvoering'} else 'Document openen'
                 action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">{label}</a>'
+                if result['state'] in {'bezig', 'wacht op uitvoering'}:
+                    action += '<p class="progress-refresh">Deze pagina ververst elke 5 seconden zolang de verwerking loopt.</p>'
             elif result['state'] in {'bezig', 'wacht op uitvoering'}:
                 if sid == selected:
                     # This page already polls the selected document; a link to itself only reloads.
                     action = '<p class="progress-refresh">Deze pagina ververst elke 5 seconden zolang de verwerking loopt.</p>'
-                    running_selected = True
+                    running_visible = True
                 else:
                     action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Voortgang bekijken</a>'
             elif result['state'] == 'voltooid':
@@ -184,9 +188,10 @@ def install(app, console, require, page, nav, esc):
                          f'<p class="source-estimate">{esc(_estimate(result["estimate"]))}</p>'
                          f'{progress}{summary}<div class="source-actions">{action}{review}{diagnosis_link}</div></article>')
         notice = '<div class="banner ok">Document veilig ontvangen. Start bronselectie wanneer je wilt.</div>' if request.query_params.get('received') == 'yes' else ''
-        # Only a selected running document is polled. Every refresh reads the
+        # Any visible running/waiting document keeps the overview current.
+        # Every refresh reads the
         # durable authority; no browser state can start another attempt.
-        script = '<script>setTimeout(function(){ window.location.reload(); }, 5000);</script>' if running_selected else ''
+        script = '<script>setTimeout(function(){ window.location.reload(); }, 5000);</script>' if running_visible else ''
         script += '<script>document.querySelectorAll("form[action=\\"/source-selection/start\\"]").forEach(function(form){form.addEventListener("submit",function(event){if(form.dataset.submitting){event.preventDefault();return;}form.dataset.submitting="yes";form.querySelector("button").disabled=true;});});</script>'
         return page(nav(actor, 'selection') + '<section class="room" id="source-selection"><h1>Bronselectie</h1>' + notice
                     + '<form method="get" class="source-picker"><label for="source-document">Document</label>'

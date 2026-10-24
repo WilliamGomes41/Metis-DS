@@ -1127,7 +1127,11 @@
       },
       "5": {
         "red_on_56488c0": "failed",
-        "green": "pending"
+        "green": "Any visible busy/waiting source document now enables the existing 5s reload and refresh text, including the overview without a document parameter. No overview buttons added. Recorded pending/claimed characterization goldens with --record-characterization; all 45 characterization/source cases pass. Diff audit: 32 existing goldens changed only the Raad asset hash; two new source-overview goldens capture the requested behavior. The asset also hides unavailable candidate-count text for publisher-only notices.",
+        "tests": [
+          "test_source_overview_refreshes_running_document",
+          "test_source_overview_running_golden"
+        ]
       },
       "6": {
         "red_on_56488c0": "failed",
