@@ -1167,6 +1167,16 @@
         "pending",
         "claimed"
       ]
+    },
+    "boundary_closure": {
+      "passed": 43,
+      "seconds": 32.59,
+      "log": "work/834-boundary-closure-GREEN.log",
+      "metadata_and_detail_consistency": "Independent SQL captures, each with repeatable-read ownership; no atomic cross-capture claim."
+    },
+    "final_verification": {
+      "status": "pending",
+      "note": "Previous full-suite evidence remains historical; final suite reruns after all repairs."
     }
   }
 }

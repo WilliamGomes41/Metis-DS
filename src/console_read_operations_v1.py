@@ -55,15 +55,16 @@ def document_overview_operation(state, account, *, scan_limit=None):
     actor = state._account(account['account_id'], current=True)
     if actor.get('retirement'):
         raise ConsoleError('not_authenticated')
-    with workflow_read_transaction(state.workflow_document_store):
-        try:
+    try:
+        with workflow_read_transaction(state.workflow_document_store):
             documents = state.workflow_document_store.list_document_summaries(
                 limit=scan_limit + 1 if scan_limit is not None else None)
-            partial = scan_limit is not None and len(documents) > scan_limit
-            yield actor, DocumentOverviewInputs(documents[:scan_limit] if scan_limit is not None else documents,
-                                               state, metadata_partial=partial)
-        except WorkflowDocumentStoreError as exc:
-            raise ConsoleError('workflow_document_unavailable') from exc
+    except WorkflowDocumentStoreError as exc:
+        raise ConsoleError('workflow_document_unavailable') from exc
+    # Never yield control to a consumer while holding a SQL transaction open.
+    partial = scan_limit is not None and len(documents) > scan_limit
+    yield actor, DocumentOverviewInputs(documents[:scan_limit] if scan_limit is not None else documents,
+                                       state, metadata_partial=partial)
 
 
 def install_console_read_operations(app, console):

@@ -30,13 +30,18 @@ def current_quality_scope(state, account):
 
 
 def capture(state, account):
-    """Freeze explicitly assigned/owned sources in one pure PG snapshot."""
+    """Own metadata, then freeze assigned SQL inputs before external work.
+
+    Metadata and detail capture are independent SQL snapshots. No consumer or
+    source computation runs with an open read transaction.
+    """
     owner = state.workflow_document_store
     with state.document_read_operation():
         with workflow_read_transaction(owner):
-            aid = account["account_id"]
             cards = state.list_document_cards()
-            envelopes = [state._envelope(e["snapshot_id"]) for e in _quality_documents(cards, aid)]
+        owned = _quality_documents(cards, account["account_id"])
+        with workflow_read_transaction(owner):
+            envelopes = [state._envelope(e["snapshot_id"]) for e in owned]
             # Capture native rows only. Revision validation and detached copies may
             # be CPU-heavy and belong after the transaction, just like source I/O.
             reads = state._document_reads()
@@ -51,10 +56,11 @@ def capture(state, account):
                 raise ConsoleError("workflow_review_unavailable", str(exc)) from exc
             reads.bindings.update({sid: bindings.get(sid, []) for sid in ids})
             # Attribution needs IDs only; never fetch another source's object payloads.
-            ownership = {e["snapshot_id"]: {e["snapshot_id"]} for e in cards}
             with owner._connect() as con:
-                for obj in con.execute("SELECT DISTINCT snapshot_id,object_id FROM workflow.document_objects").fetchall():
-                    ownership.setdefault(obj["object_id"], set()).add(obj["snapshot_id"])
+                object_ids = con.execute("SELECT DISTINCT snapshot_id,object_id FROM workflow.document_objects").fetchall()
+        ownership = {e["snapshot_id"]: {e["snapshot_id"]} for e in cards}
+        for obj in object_ids:
+            ownership.setdefault(obj["object_id"], set()).add(obj["snapshot_id"])
         # Source verification/reconstruction may touch disk/Blob or extract data.
         # Ledger dispatch may also be file-backed. Neither belongs in a SQL read.
         docs = [{"envelope": state._receipt(e), "objects": state.snapshot_objects(e["snapshot_id"]),

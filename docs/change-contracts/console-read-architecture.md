@@ -457,3 +457,14 @@ reason or candidate details. Per-batch SQL snapshots are independent: command
 checks remain current and never authorize from the notices snapshot. The time
 budget is cooperative between captures; external telemetry retains its existing
 bounded reader and is never cancelled by leaving detached work running.
+
+### Repair 1 operation-boundary guard
+
+The metadata overview context now closes SQL before yielding to any consumer.
+Metadata ownership/authorization selection runs outside SQL; explicit bounded
+status captures finish before telemetry and state filtering/pagination. Quality
+likewise selects owned metadata outside SQL and captures details in a second
+transaction. Metadata and detail batches are independent database snapshots;
+within each, native rows are captured consistently and remain operation-owned.
+No cross-capture atomicity or cross-authority consistency is claimed.
+The final focused Inzicht/quality/read suite passes all 43 tests.

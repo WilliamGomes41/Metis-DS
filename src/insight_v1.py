@@ -98,13 +98,20 @@ def documents_projection(state, account, *, query: str = "", state_filter: str =
     filter ``total`` is exact; with one it is unknown until the scan reaches the end.
     """
     from src.console_read_operations_v1 import document_overview_operation
+    from src.workflows.workflow_transaction_v1 import workflow_read_transaction
+    from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
     started = time.monotonic()
     with document_overview_operation(state, account, scan_limit=scan_limit) as (actor, inputs):
         window = _document_window(inputs, actor, query, state_filter, offset, limit)
         authorized, offset, limit, scan_end = window
         if not partial_on_error:
-            inputs.select([e["snapshot_id"] for e in authorized[offset:scan_end]
-                           if _processing_access(actor, e)])
+            try:
+                with workflow_read_transaction(state.workflow_document_store):
+                    inputs.select([e["snapshot_id"] for e in authorized[offset:scan_end]
+                                   if _processing_access(actor, e)])
+            except WorkflowDocumentStoreError as exc:
+                from src.operations_console_v1 import ConsoleError
+                raise ConsoleError('workflow_document_unavailable') from exc
     # File-backed telemetry and all rendering/filtering happen after SQL closes.
     if partial_on_error:
         return _notice_documents_page(inputs, actor, window=window, state_filter=state_filter,
