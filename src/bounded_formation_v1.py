@@ -196,7 +196,7 @@ from src.source_reconstruction_v1 import with_reconstruction_cache
 
 @with_reconstruction_cache
 def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
-            proposal=None, evidence=None, checkpoint=None):
+            proposal=None, evidence=None, checkpoint=None, timings=None):
     """Initial bounded pass, one targeted recovery pass; resume unfinished work.
 
     Validated earlier selections remain context-only. Every task result must
@@ -243,6 +243,16 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                 max(s["start"], r["span"]["start"]) < min(s["end"], r["span"]["end"]) for s in scope)]
     phases = ["recovery"] if resuming else ["initial", "recovery"]
     budget_exhausted = False
+    # Attempt-owned measurements only: never part of provider evidence or replay identity.
+    # provider_seconds includes the provider's own preparation and validation;
+    # transport_seconds (when the provider reports it) is the model call alone.
+    # A caller-owned list lets a later checkpoint persist the last task's write time.
+    timings = [] if timings is None else timings
+
+    def timed_checkpoint(phase, values):
+        begun = time.monotonic()
+        checkpoint(phase, {**values, "formation_timings": timings})
+        return round(time.monotonic() - begun, 3)
     for phase in phases:
         if phase == "recovery" and not resuming:
             targets = _remaining_targets(units())
@@ -250,6 +260,7 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
         for index, task in enumerate(phase_tasks):
             task_record = {key: deepcopy(task[key]) for key in ("task_id", "section_path", "target_spans")}
             task_record["phase"] = phase
+            timing = {"task_id": task["task_id"], "phase": phase, "index": index + 1, "planned": len(phase_tasks)}
             remaining = limits.total - (time.monotonic() - started)
             call = {"task_id": task["task_id"], "target_spans": task["target_spans"]}
 
@@ -258,7 +269,9 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                 # separate durable checkpoints. Record every unstarted source
                 # range in memory so recovery remains complete, persist once,
                 # then return control to the caller immediately.
-                for pending_task in phase_tasks[index:]:
+                for offset, pending_task in enumerate(phase_tasks[index:], start=index + 1):
+                    timings.append({"task_id": pending_task["task_id"], "phase": phase, "index": offset,
+                                    "planned": len(phase_tasks), "status": "not_started"})
                     pending_record = {key: deepcopy(pending_task[key])
                                       for key in ("task_id", "section_path", "target_spans")}
                     pending_record.update(phase=phase, status="not_started")
@@ -275,7 +288,7 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                         evidence.setdefault("supplementary_calls", []).append(pending_call)
                 budget_exhausted = True
                 if checkpoint:
-                    checkpoint("proposal_received", {"provider_evidence": evidence,
+                    timed_checkpoint("proposal_received", {"provider_evidence": evidence,
                         "resolved_proposal": proposal, "resolved_proposal_hash": stable_json_hash(proposal)})
                 break
 
@@ -288,14 +301,18 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                     connect=min(limits.connect, remaining, MAX_CALL_SECONDS), idle=min(limits.idle, remaining, MAX_CALL_SECONDS))
                 task_validator = {**validator_input, "allowed_candidate_block_ids": [b["block_id"] for b in task["source_blocks"]]}
                 if checkpoint:
-                    checkpoint("model_request", {"current_task": {**task_record, "status": "running"}})
+                    timing["checkpoint_before_seconds"] = timed_checkpoint("model_request", {"current_task": {
+                        **task_record, "status": "running", "index": index + 1, "planned": len(phase_tasks)}})
                 try:
+                    called = time.monotonic()
                     result = provider(blocks=task["source_blocks"], evidence_blocks=task["evidence_blocks"],
                         selection_targets=[{"block_id": s["block_id"], "literal": next(b["text"] for b in blocks if b["block_id"] == s["block_id"])[s["start"]:s["end"]],
                                             "start": s["start"], "end": s["end"]} for s in task["target_spans"]] if phase == "recovery" else None,
                         task={"version": VERSION, "task_id": task["task_id"], "phase": phase,
                               "selectable_ranges": task["target_spans"], "context_only_block_ids": [b["block_id"] for b in task["evidence_blocks"]]},
-                        model_limits=call_limits, evidence=call, validator_input=task_validator)
+                        model_limits=call_limits, evidence=call, validator_input=task_validator, timing=timing)
+                    timing["provider_seconds"] = round(time.monotonic() - called, 3)
+                    validated = time.monotonic()
                     result, rejected = restrict_supplement(result, primary=proposal,
                         targets=[{"span": s} for s in task["target_spans"]])
                     call.setdefault("formation", {}).setdefault("rejections", []).extend(rejected)
@@ -309,10 +326,15 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                     if merged != proposal:
                         semantic_units_from_proposal(**validator_input, proposal=merged)
                     proposal = merged
+                    timing["validation_seconds"] = round(time.monotonic() - validated, 3)
                     task_record["status"] = "partial" if call["formation"]["rejections"] else "completed"
                 except (ConsoleError, SemanticPassageError) as exc:
                     if exc.code.startswith("processing_"):
                         raise
+                    if "provider_seconds" in timing:
+                        timing["validation_seconds"] = round(time.monotonic() - validated, 3)
+                    else:
+                        timing["provider_seconds"] = round(time.monotonic() - called, 3)
                     call.update(error_code=exc.code, failure_reason=getattr(exc, "pre_review_diagnostics", {}).get("reason_code", exc.code))
                     task_record["status"] = "failed"
             evidence["tasks"].append(task_record)
@@ -322,8 +344,11 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                 evidence.update(call)
             else:
                 evidence.setdefault("supplementary_calls", []).append(call)
+            timing["status"] = task_record["status"]
+            timings.append(timing)
             if checkpoint:
-                checkpoint("proposal_received", {"provider_evidence": evidence,
+                # Recorded in the next checkpoint: a write cannot contain its own duration.
+                timing["checkpoint_after_seconds"] = timed_checkpoint("proposal_received", {"provider_evidence": evidence,
                     "resolved_proposal": proposal, "resolved_proposal_hash": stable_json_hash(proposal)})
         if budget_exhausted:
             break

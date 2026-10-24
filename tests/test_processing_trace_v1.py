@@ -384,6 +384,9 @@ def test_semantic_resume_trace_keeps_completed_candidate_and_targets_only_open_w
         assert trace['attempts'][-1]['origin_request_id'] == response.headers['x-metis-request-id']
         assert trace['attempts'][-1]['stored_state'] == 'succeeded'
         assert trace['artifacts']['semantic_identity_hash']
+        # The last task's write time reaches the trace through the formation_accounted checkpoint.
+        timings = trace['attempts'][-1]['formation_timings']
+        assert timings and all(row['checkpoint_after_seconds'] is not None for row in timings)
     final = make()
     assert next(o for o in final.snapshot_objects(sid) if o['object_id'] == complete['object_id']) == complete
     assert len(calls) == 3
@@ -424,3 +427,43 @@ def test_background_phases_do_not_reopen_finished_http_evidence(console, monkeyp
     assert inherited_metrics == [None]
     assert any(r['event'] == 'processing_finished' and r['request_id'] == rid for r in events)
     assert restart(console)._envelope(sid)['processing_attempts'][-1]['diagnostic']['origin_request_id'] == rid
+
+
+def test_trace_exports_checkpoint_size_and_task_timings_without_text():
+    from src.processing_trace_v1 import processing_trace
+    attempt = recorded_attempt()
+    attempt['diagnostic']['checkpoints'][0]['bytes'] = 52_000
+    attempt['diagnostic']['formation_timings'] = [
+        {'task_id': 'f'*64, 'phase': 'initial', 'status': 'completed', 'index': 1, 'planned': 130,
+         'checkpoint_before_seconds': 1.2, 'provider_seconds': 61.5, 'validation_seconds': 4.1,
+         'checkpoint_after_seconds': 1.4, 'note': 'private-source'},
+        {'task_id': 'private', 'phase': 'private', 'provider_seconds': 'private'}]
+    envelope = {'snapshot_id':'snap-'+'d'*16+'-'+'e'*8, 'sha256':'b'*64, 'processing_attempts':[attempt]}
+    row = processing_trace(envelope)['attempts'][0]
+    assert row['checkpoints'][0]['bytes'] == 52_000
+    assert row['formation_timings'][0] == {'task_id': 'f'*64, 'phase': 'initial', 'status': 'completed', 'index': 1,
+        'planned': 130, 'checkpoint_before_seconds': 1.2, 'transport_seconds': None, 'provider_seconds': 61.5,
+        'validation_seconds': 4.1, 'checkpoint_after_seconds': 1.4}
+    assert row['formation_timings'][1]['task_id'] is None and row['formation_timings'][1]['provider_seconds'] is None
+    assert 'private' not in json.dumps(row)
+
+
+def test_checkpoint_records_the_size_it_asked_to_persist():
+    from src.attempt_diagnostics_v1 import checkpoint
+    attempt = {}
+    checkpoint(attempt, 'model_request', {'current_task': {'task_id': 'x'}})
+    checkpoint(attempt, 'proposal_received', {'provider_evidence': {'tasks': ['y'] * 1000}})
+    small, large = (row['bytes'] for row in attempt['diagnostic']['checkpoints'])
+    assert 0 < small < large
+
+
+def test_cleaned_trace_keeps_planned_tasks_and_timings():
+    from src.processing_trace_v1 import processing_trace, clean_trace
+    attempt = recorded_attempt()
+    attempt['diagnostic']['formation_timings'] = [{'task_id': 'f'*64, 'phase': 'initial', 'status': 'completed',
+                                                   'index': 1, 'planned': 130, 'provider_seconds': 61.5}]
+    envelope = {'snapshot_id':'snap-'+'d'*16+'-'+'e'*8, 'sha256':'b'*64, 'processing_attempts':[attempt],
+                'semantic_replay': {'provider_evidence': {'formation_progress': {'planned_task_count': 130}}}}
+    cleaned = clean_trace(processing_trace(envelope))
+    assert cleaned['artifacts']['formation_progress']['planned_task_count'] == 130
+    assert cleaned['attempts'][0]['formation_timings'][0]['provider_seconds'] == 61.5
