@@ -818,7 +818,8 @@ def _semantic_execution_before_review(
             "validator_input_hash": _stable_json_hash(validator_input),
             "validator_identity": validator_identity(), "semantic_identity": identity})
     if field_contract_v3 and blocks and (proposal is None or (formation_context or {}).get("resume_formation")):
-        if (formation_context or {}).get("resume_formation") and proposal is None:
+        if ((formation_context or {}).get("resume_formation") and proposal is None
+                and not hasattr(checkpoint, "task_results")):
             raise ConsoleError("semantic_replay_policy_mismatch")
         from src.bounded_formation_v1 import execute
         limits = model_limits or ModelCallLimits(total=DEFAULT_TIMEOUT_SECONDS)
@@ -830,6 +831,15 @@ def _semantic_execution_before_review(
             validator_input=validator_input, provider=provider, limits=limits,
             proposal=proposal, evidence=(replay_record or {}).get("provider_evidence"), checkpoint=checkpoint,
             timings=formation_timings)
+        if hasattr(checkpoint, "commit_task") and provider_evidence.get("formation_incomplete"):
+            # Retain provisional results, but do not activate a partial slice
+            # merely to manufacture an envelope semantic_replay for resume.
+            error = ConsoleError("source_task_budget_exhausted" if any(
+                c.get("error_code") == "source_task_budget_exhausted" for c in
+                [provider_evidence, *provider_evidence.get("supplementary_calls", [])])
+                else "source_formation_incomplete")
+            error.formation_progress = provider_evidence.get("formation_progress")
+            raise error
         errors = [call["error_code"] for call in [provider_evidence, *provider_evidence.get("supplementary_calls", [])]
                   if call.get("error_code")]
         if not proposal["objects"] and errors:
@@ -839,9 +849,13 @@ def _semantic_execution_before_review(
         try:
             content_units = _materialised_content(**validator_input, proposal=proposal)
         except SemanticPassageError as exc:
+            if hasattr(checkpoint,"reject_final"):
+                checkpoint.reject_final(proposal,exc.finding)
             if checkpoint:
                 checkpoint("validation_rejected", {"finding": exc.finding, "formation_timings": formation_timings})
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
+        if hasattr(checkpoint,"final_validation"):
+            checkpoint.final_validation(proposal)
     if blocks and proposal is None:
         provider_evidence: dict[str, Any] = {}
         proposal = _provider_proposal(
@@ -872,6 +886,8 @@ def _semantic_execution_before_review(
                 checkpoint("validation_rejected", {"finding": exc.finding})
             LOGGER.error("METIS_VALIDATION rejected code=%s reference=%s", exc.code, _PROCESSING_REFERENCE.get())
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
+        if hasattr(checkpoint,"final_validation"):
+            checkpoint.final_validation(proposal)
     if proposal is not None and blocks:
         provider_evidence = locals().get("provider_evidence") or deepcopy((replay_record or {}).get("provider_evidence") or {})
         if field_contract_v3:

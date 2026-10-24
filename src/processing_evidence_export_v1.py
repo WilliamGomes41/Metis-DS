@@ -17,10 +17,11 @@ from src.processing_diagnostics_v1 import passage_export_rows
 from src.source_bound_fields_v2 import bound_values
 
 
-VERSION = "processing-evidence-export-v15"
-PROJECTOR_VERSION = "processing-evidence-export-v15"
+VERSION = "processing-evidence-export-v16"
+PROJECTOR_VERSION = "processing-evidence-export-v16"
 COMMON = ("snapshot_id", "objects_revision")
 SCHEMAS = {
+    "validator_inputs": ("artifact_id", "reference", "validator_input"),
     "blockage_report": ("report",),
     "processing_trace": ("trace",),
     "source_usage": ("object_id", "object_version", "container", "kind", "reason", "target_ids", "accounted", "policy_version", "role", "closure", "human_action"),
@@ -179,6 +180,7 @@ def _refusal_status(refusals, issues):
 def processing_evidence_tables(
     *, snapshot_id: str, revision: str, envelope: dict[str, Any],
     objects: list[dict[str, Any]], bindings=None, fragments=None, refusals=None, refusal_issues=None,
+    input_resolver=None, diagnostic_reader=None,
 ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
     """Project stored values; absent data is not reconstructed from current code."""
     # Exports never reread/reextract native sources. Only accepted retained
@@ -195,6 +197,21 @@ def processing_evidence_tables(
             source_inputs = "invalid"
     tables: dict[str, list[dict[str, Any]]] = {name: [] for name in SCHEMAS}
     common = {"snapshot_id": snapshot_id, "objects_revision": revision}
+    if envelope.get("processing_storage") == "task-v1":
+        from copy import deepcopy
+        from src.attempt_diagnostics_v1 import resolve_validator_input
+        envelope = deepcopy(envelope)
+        seen_inputs = set()
+        for attempt in envelope.get("processing_attempts") or []:
+            if diagnostic_reader is not None:
+                attempt["diagnostic"] = diagnostic_reader(attempt)
+            diagnostic = attempt.get("diagnostic") or {}
+            reference = diagnostic.get("validator_input_ref")
+            if reference and reference["artifact_id"] not in seen_inputs:
+                data = resolve_validator_input(diagnostic,input_resolver)
+                tables["validator_inputs"].append({**common,"artifact_id":reference["artifact_id"],
+                    "reference":reference,"validator_input":data})
+                seen_inputs.add(reference["artifact_id"])
 
     def add(name: str, **values: Any) -> None:
         tables[name].append({**common, **values})
@@ -322,6 +339,8 @@ def processing_evidence_tables(
     if any(tables[name] for name in ('processing_attempts', 'semantic_proposals', 'validation_findings')):
         add('blockage_report', report=blockage_report({'revision':[revision_context(snapshot_id, revision, envelope)], **tables}))
     statuses = {
+        "validator_inputs": ("recorded" if tables["validator_inputs"] else "not_recorded",
+            "Exact validator input resolved from immutable references; stored once per artifact for offline replay."),
         "blockage_report": ("derived" if tables["blockage_report"] else "not_recorded",
             "Bounded recorded-evidence explanation, not current action permission or a new gate. Missing checks remain explicit."),
         "processing_trace": ("recorded" if "processing_attempts" in envelope else "not_recorded", "Bounded stored command/attempt/checkpoint projection; no source reconstruction, historical backfill or resume/publication authority. Observed independently from objects."),

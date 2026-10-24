@@ -47,6 +47,11 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
         raise ConsoleError("processing_command_id_invalid")
     from src.bounded_model_call_v1 import ModelCallLimits
     limits = limits or ModelCallLimits()
+    # Explicit staged admission for new contexts only; historical attempts are
+    # migrated by the operator, never incidentally by a read or retry.
+    import os
+    if not envelope.get(KEY) and os.environ.get("METIS_FORMATION_TASK_STORAGE") == "v1":
+        envelope["processing_storage"] = "task-v1"
     attempts = envelope.setdefault(KEY, [])
     expire_running(envelope, clock)
     for attempt in attempts:
@@ -90,6 +95,11 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
     checkpoint(attempt, "reserved", {"source_hash": envelope["sha256"], "source_version": envelope["version"],
                "expected_revision": revision, "actor_id": actor_id, "deployed_commit": deployment_identity(),
                "processing_reference": attempt["processing_reference"]})
+    if envelope.get("processing_storage") == "task-v1" and kind == "resume" and attempts:
+        previous_context = attempts[-1].get("diagnostic") or {}
+        for key in ("validator_input_ref", "validator_input_hash", "validator_identity", "semantic_identity"):
+            if key in previous_context:
+                attempt["diagnostic"][key] = deepcopy(previous_context[key])
     from src.request_diagnostics_v1 import current_request_id
     from src.processing_trace_v1 import runtime_identity
     attempt['diagnostic']['origin_request_id'] = current_request_id()

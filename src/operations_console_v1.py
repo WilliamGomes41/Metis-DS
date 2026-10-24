@@ -1864,6 +1864,15 @@ class OperationsConsole:
             )
         else:
             result["formation_progress"] = {}
+        if envelope.get("processing_storage") == "task-v1":
+            latest = next(reversed(envelope.get("processing_attempts") or []), {})
+            reference = (latest.get("diagnostic") or {}).get("validator_input_ref")
+            if reference:
+                from src.workflows.formation_task_store_v1 import FormationTaskStore
+                result["formation_progress"] = FormationTaskStore(self.workflow_document_store).progress(reference["context_id"])
+                result["formation_incomplete"] = latest.get("state") != "succeeded"
+                result["formation_state"] = "pending" if result["formation_incomplete"] else "complete"
+                result["formation_checked"] = not result["formation_incomplete"]
         from src.source_selection_v1 import resume_contract_current
         result["resume_allowed"] = bool(self._can_resume_formation(snapshot_id)
             and resume_contract_current(envelope) and result["state"] != "running"
@@ -1893,6 +1902,13 @@ class OperationsConsole:
         from src.recoverable_formation_v1 import incomplete, VERSION
         from src.source_context_review_v1 import ROLE_KEY, LINKS_KEY
         envelope = self._envelope(snapshot_id)
+        if envelope.get("processing_storage") == "task-v1" and any(
+                (a.get("diagnostic") or {}).get("validator_input_ref") for a in envelope.get("processing_attempts") or []):
+            latest = next(reversed(envelope.get("processing_attempts") or []), {})
+            return bool((latest.get("diagnostic") or {}).get("validator_input_ref")
+                and latest.get("state") != "succeeded" and not self.snapshot_is_published(snapshot_id)
+                and not self._read_current_objects(snapshot_id)
+                and not self.object_review_bindings(snapshot_id) and not envelope.get("review_passes"))
         contract = ((envelope.get("semantic_replay") or {}).get("identity") or {}).get("components", {}).get("semantic_contract_version", "")
         from src.bounded_formation_v1 import VERSION as TASK_VERSION
         return bool(incomplete(envelope) and VERSION in contract and TASK_VERSION in contract
@@ -1948,6 +1964,10 @@ class OperationsConsole:
     def _diagnostic_writer(self, snapshot_id, attempt_id):
         if not attempt_id:
             return None
+        from src.formation_checkpoint_v1 import task_checkpoint_writer
+        targeted = task_checkpoint_writer(self, snapshot_id, attempt_id)
+        if targeted is not None:
+            return targeted
         def write(phase, values):
             from src.processing_retry_v1 import assert_active, now
             from src.attempt_diagnostics_v1 import checkpoint
@@ -2048,30 +2068,43 @@ class OperationsConsole:
             self._commit_prepared_store(envelopes={snapshot_id: envelope}, snapshot_id=snapshot_id)
             return deepcopy(row)
 
-    def _record_processing_failure(self, snapshot_id, attempt_id, error):
+    def _record_processing_failure(self, snapshot_id, attempt_id, error, *, claim_token=None):
         from src.processing_retry_v1 import KEY, finish
         with self._reprocessing_transaction(snapshot_id):
             current = deepcopy(self._envelope(snapshot_id))
             active = next(a for a in current[KEY] if a["attempt_id"] == attempt_id)
+            if (current.get("processing_storage") == "task-v1"
+                    and (active.get("dispatch") or {}).get("token") != claim_token):
+                return  # A stale worker cannot fail the winning claim either.
             if active["state"] == "running":
-                finish(current, attempt_id, state="failed", error=error)
+                budget_stop = current.get("processing_storage") == "task-v1" and getattr(error,"code",None) == "source_task_budget_exhausted"
+                finish(current, attempt_id, state="incomplete_budget" if budget_stop else "failed", error=error)
+                if budget_stop:
+                    active["stop_reason"] = "budget_exhausted"
+                    with self.workflow_document_store._connect() as connection:
+                        active["formation_progress_made"] = connection.execute(
+                            "SELECT EXISTS(SELECT 1 FROM workflow.formation_task_results WHERE attempt_id=%s) AS made",
+                            (attempt_id,)).fetchone()["made"]
                 if active.get("kind") == "ingest" and (current.get("processing_blocker") == "pre_review_llm_processing_in_progress"
                         or current.get("received_source")) and not self.snapshot_objects(snapshot_id):
                     current["processing_blocker"] = active["error_code"]
-                    record_processing(current, [], fragments=[], replay=None, started_at=active["started_at"],
-                                      outcome="blocked", reason=active["error_code"])
+                    if current.get("processing_storage") != "task-v1":
+                        record_processing(current, [], fragments=[], replay=None, started_at=active["started_at"],
+                                          outcome="blocked", reason=active["error_code"])
+                    # New contexts retain failure/audit in their own durable
+                    # attempt/checkpoint records, not an envelope run per retry.
                 self._commit_prepared_store(envelopes={snapshot_id:current}, snapshot_id=snapshot_id)
 
         from src.processing_trace_v1 import observe
         observe('processing_finished', snapshot_id, active)
 
     @contextmanager
-    def _source_attempt_failure(self, snapshot_id, attempt_id):
+    def _source_attempt_failure(self, snapshot_id, attempt_id, *, claim_token=None):
         try:
             yield
         except Exception as error:
             if attempt_id is not None:
-                self._record_processing_failure(snapshot_id, attempt_id, error)
+                self._record_processing_failure(snapshot_id, attempt_id, error,claim_token=claim_token)
             raise
 
     def _execute_source_attempt(self, *, actor_id, snapshot_id, attempt, deadline):
@@ -2083,19 +2116,23 @@ class OperationsConsole:
             current = self._envelope(snapshot_id)
             authorize(self, actor_id, current)
             stored = assert_active(current, attempt["attempt_id"], now())
+            if (current.get("processing_storage") == "task-v1"
+                    and (stored.get("dispatch") or {}).get("token") != (attempt.get("dispatch") or {}).get("token")):
+                raise ConsoleError("processing_command_conflict")
             if stored["actor_id"] != actor_id or any(
                 attempt.get(key) != stored.get(key) for key in
                 ("actor_id", "source_hash", "source_version", "expected_revision",
                  "command_id", "kind", "processing_configuration")
             ):
                 raise ConsoleError("processing_command_conflict")
-        with self._source_attempt_failure(snapshot_id, attempt["attempt_id"]):
+        with self._source_attempt_failure(snapshot_id, attempt["attempt_id"],claim_token=(attempt.get("dispatch") or {}).get("token")):
             if attempt.get("processing_configuration"):
                 from src.source_selection_v1 import configuration
                 if attempt["processing_configuration"] != configuration(self):
                     raise ConsoleError("processing_configuration_changed")
             return self.reextract_unpublished(actor_id=actor_id, snapshot_id=snapshot_id,
-                 _attempt_id=attempt["attempt_id"], _attempt_deadline=deadline)
+                 _attempt_id=attempt["attempt_id"], _attempt_deadline=deadline,
+                 _claim_token=(attempt.get("dispatch") or {}).get("token"))
 
     def retry_pre_review(self, *, actor_id: str, snapshot_id: str, command_id: str) -> dict[str, Any]:
         """Retry an empty blocked source without losing evidence or prior work."""
@@ -2138,7 +2175,7 @@ class OperationsConsole:
         return self._execute_source_attempt(actor_id=actor_id, snapshot_id=snapshot_id,
                                             attempt=attempt, deadline=deadline)
 
-    def reextract_unpublished(self, *, actor_id: str, snapshot_id: str, _attempt_id: str | None = None, _attempt_deadline: float | None = None) -> dict[str, Any]:
+    def reextract_unpublished(self, *, actor_id: str, snapshot_id: str, _attempt_id: str | None = None, _attempt_deadline: float | None = None, _claim_token: str | None = None) -> dict[str, Any]:
         """Replace unpublished object identities with a new extract of the same freeze.
 
         Source hash stays. Published objects MUST NOT be rewritten. MUST NOT hide
@@ -2159,6 +2196,9 @@ class OperationsConsole:
         if _attempt_id is not None:
             from src.processing_retry_v1 import assert_active, now
             attempt = assert_active(envelope, _attempt_id, now())
+            if (envelope.get("processing_storage") == "task-v1"
+                    and (attempt.get("dispatch") or {}).get("token") != _claim_token):
+                raise ConsoleError("processing_command_conflict")
             if attempt["actor_id"] != actor_id or attempt["source_hash"] != envelope["sha256"]:
                 raise ConsoleError("processing_command_conflict")
             if attempt["expected_revision"] != expected_revision:
@@ -2293,6 +2333,9 @@ class OperationsConsole:
             if _attempt_id is not None:
                 from src.processing_retry_v1 import assert_active, now
                 active = assert_active(self._envelope(snapshot_id), _attempt_id, now())
+                if (envelope.get("processing_storage") == "task-v1"
+                        and (active.get("dispatch") or {}).get("token") != (attempt.get("dispatch") or {}).get("token")):
+                    raise ConsoleError("processing_command_conflict")
                 if active["actor_id"] != actor_id or active["source_hash"] != envelope["sha256"] or active.get("source_version", envelope["version"]) != envelope["version"]:
                     raise ConsoleError("processing_command_conflict")
                 if _attempt_deadline is not None and time.monotonic() >= _attempt_deadline:

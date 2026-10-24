@@ -31,8 +31,17 @@ def authorize_account(account, envelope):
 def resume_contract_current(envelope):
     """A resume MAG NIET continue a checkpoint formed under another full contract identifier."""
     from src.pre_review_semantic_v1 import semantic_contract_version
-    components = ((envelope.get("semantic_replay") or {}).get("identity") or {}).get("components") or {}
+    components = _resume_components(envelope)
     return components.get("semantic_contract_version") == semantic_contract_version(field_contract_v3=True)
+
+
+def _resume_components(envelope):
+    if envelope.get("processing_storage") == "task-v1":
+        latest = next(reversed(envelope.get("processing_attempts") or []), {})
+        diagnostic = latest.get("diagnostic") or {}
+        if diagnostic.get("validator_input_ref"):
+            return (diagnostic.get("semantic_identity") or {}).get("components") or {}
+    return ((envelope.get("semantic_replay") or {}).get("identity") or {}).get("components") or {}
 
 
 def assert_resume_configuration(console, envelope):
@@ -46,7 +55,7 @@ def assert_resume_configuration(console, envelope):
     """
     from src.source_bound_fields_v3 import MODE
     current = configuration(console)
-    components = ((envelope.get("semantic_replay") or {}).get("identity") or {}).get("components") or {}
+    components = _resume_components(envelope)
     if (current.get("mode") != MODE
             or str(current.get("model") or "").strip() != components.get("model_id")
             or "source-bound-fields-v3" not in components.get("semantic_contract_version", "")):
@@ -251,4 +260,4 @@ def summary_projection(console, *, envelope, observations):
             "estimate": timing, "remaining_seconds": remaining, "candidates": None, "source_passages": None,
             "blocked": None, "formation_blockers": (envelope.get("pending_rejection_count") or 0) + int(state == "mislukt"),
             "review_available": False, "can_start": False, "revision": None,
-            "budget_stopped": current == "incomplete_budget", "progress": evidence.get("formation_progress") or {}}
+            "budget_stopped": current == "incomplete_budget", "progress": envelope.get("formation_progress") or evidence.get("formation_progress") or {}}

@@ -94,7 +94,7 @@ def finish_diagnostic(attempt, error=None):
                                        for row in sorted(findings, key=lambda row: row["page"])]
     diagnostic.update(outcome=attempt["state"], reason_code=code, category=category,
                       recovery_advice=advice,
-                      evidence_availability="partial_limit" if diagnostic.get("omitted_evidence") else "recorded" if "validator_input" in diagnostic else "not_recorded")
+                      evidence_availability="partial_limit" if diagnostic.get("omitted_evidence") else "recorded" if "validator_input" in diagnostic or "validator_input_ref" in diagnostic else "not_recorded")
 
 
 def comparable_envelope(envelope):
@@ -112,14 +112,43 @@ def merge_diagnostics(prepared, current):
             attempt["diagnostic"] = deepcopy(recorded["diagnostic"])
 
 
-def replay_diagnostic(attempt):
+def resolve_validator_input(diagnostic, resolver=None):
+    """One resolver contract for live diagnostics, portable export and replay."""
+    if "validator_input_ref" in diagnostic:
+        if resolver is None:
+            raise ValueError("diagnostic_input_resolver_required")
+        data = resolver(diagnostic["validator_input_ref"])
+    else:
+        data = diagnostic.get("validator_input")
+    if not isinstance(data, dict):
+        raise ValueError("diagnostic_input_not_recorded")
+    from src.semantic_replay_v1 import stable_json_hash
+    if stable_json_hash(data) != diagnostic.get("validator_input_hash"):
+        raise ValueError("diagnostic_input_integrity_failed")
+    return data
+
+
+def replay_diagnostic(attempt, *, input_resolver=None):
     """Validate recorded input without calling a provider or changing workflow state."""
     diagnostic = attempt.get("diagnostic") or {}
     if not diagnostic:
         return {"status": "unavailable", "reason_code": "diagnostic_input_not_recorded"}
     if diagnostic.get("validator_identity") != validator_identity():
         return {"status": "unavailable", "reason_code": "diagnostic_validator_version_unavailable"}
-    data = diagnostic.get("validator_input")
+    try:
+        data = resolve_validator_input(diagnostic,input_resolver)
+    except (ValueError, RuntimeError) as error:
+        return {"status":"unavailable","reason_code":str(error)}
+    if "proposal" not in diagnostic and isinstance(diagnostic.get("resolved_proposal"),dict):
+        from src.semantic_replay_v1 import stable_json_hash
+        if diagnostic.get("resolved_proposal_hash") != stable_json_hash(diagnostic["resolved_proposal"]):
+            return {"status":"unavailable","reason_code":"diagnostic_input_integrity_failed"}
+        from src.semantic_passage_v1 import semantic_units_from_proposal, SemanticPassageError
+        try:
+            units = semantic_units_from_proposal(**data,proposal=diagnostic["resolved_proposal"])
+        except SemanticPassageError as error:
+            return {"status":"rejected","reason_code":error.code,"finding":error.finding}
+        return {"status":"validated","unit_count":len(units),"admission_authority":False}
     if not isinstance(data, dict) or "proposal" not in diagnostic:
         return {"status": "unavailable", "reason_code": "diagnostic_input_not_recorded"}
     if diagnostic.get("proposal_hash") != hashlib.sha256(json.dumps(diagnostic["proposal"], sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest():
