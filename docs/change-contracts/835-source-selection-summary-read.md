@@ -1,4 +1,97 @@
-# Bronselectie: overzichtsquery en behoud van databaseoorzaken (#835)
+# Bronselectie: kleine duurzame projectie en korte overzichtstransactie (#835)
+
+Change class: B
+Promise: Het overzicht leest actuele compacte metadata zonder de envelope of pogingenhistorie; volledige detaildecodering vindt buiten de korte overzichtstransactie plaats, ook naast checkpoints.
+Proof: Native idle-timeoutreproductie, grote payloads, geauthenticeerde GETs naast echte checkpoints, backfill/rollback en adversariële proeven.
+Touches lifecycle invariants: no
+Rewrite risk: high
+
+## Herclassificatie vóór implementatie
+
+William heeft in de review een samenvattingskolom, detaillezing buiten de korte
+transactie en het stoppen van diagnostiekduplicatie voorgesteld. De eerste twee
+horen in deze PR. Duurzame inputreferenties horen bij #836: replay_diagnostic
+vereist volledige input. Alleen de hash bewaren zou dit gedrag breken. De
+envelopegroei zelf wordt dus niet opgelost door #835.
+
+De eerste queryoptimalisatie was Class B / risk none. Voor de afgeleide kolom
+en gedeelde writergrens is #835 vóór implementatie heringedeeld naar B / high.
+
+Rewrite target: de bestaande Bronselectie-projectie en haar actualisering bij documentwrites.
+Why local patching is insufficient: éénmalig uitpakken blijft de volledige groeiende envelope lezen; de korte transactie bevatte bovendien volledige detaildecodering vóór een volgende query.
+Current authority/writer/reader map: workflow.documents.envelope_payload en document_reviewers blijven autoriteit. De legacy importer, RuntimeStore.write_bundle/_write_document_row, ConcurrentStore.write_bundle en releaseprojection-writer, plus directe SQL-writes, schrijven deze tabel. Eén PostgreSQL-trigger onderhoudt de afleiding. list_source_selection_summaries en summary_projection/estimate lezen haar. Commands, dispatcher, bronrepresentaties, review/publicatie/serving behouden hun owners.
+Supported runtime topologies: beide FastBadge CompleteWorkflow PostgreSQL-composities, concurrente store en één/twee workers per instance; bestaande lokale of Azure immutable source-adapters; geen file-workflowfallback.
+Persisted-state impact: nullable JSONB-afleiding op workflow.documents, versiegebonden functie en trigger; geen wijziging van envelope-inhoud, objectrevisies, bronidentiteit, reviews of releases.
+Compatibility/migration plan: additief schema+trigger terwijl de oude binary actief blijft, expliciete batchbackfill en dan readercutover. Oude writers onderhouden de afleiding ook. Ontbrekende/incompatibele projecties zijn fouten; geen envelopefallback of GET-backfill.
+Rollback/recovery plan: vorige binary blijft dezelfde oorspronkelijke velden lezen/schrijven; laat kolom en trigger staan. Document en projectie rollen samen terug. Backfill is herhaalbaar en slaat gelockte rows over met expliciet remaining > 0. Geen destructieve down-migratie.
+Cutover trigger: schema aanwezig, backfill gereed, native equivalentie/autorisatie/concurrency groen; productiecutover uitsluitend via afzonderlijk geautoriseerde release en livecontrole.
+Cleanup/decommission criteria: actieve overzichtsquery leest geen envelope/pogingenhistorie en heeft geen oud fallbackpad. Bewaar rollbackcompatibiliteit; fysieke verwijdering is afzonderlijk later werk.
+Failure blast radius: ontbrekende/stale metadata kan overzicht/status/toegang verstoren. Atomiciteit, versiecheck, trigger op directe projectiewrites en actuele reviewer-crosscheck beschermen dit. Projecties autoriseren geen commands.
+Adversarial proof matrix: gewone/directe writers; gefingeerde projectie; JSON-null/reviewer-mismatch; rollback; ontbrekende projectie; dry-run/herhaalde/gelockte backfill; identieke envelope/objectrevisies; grote diagnostiek; native idle-timeout; checkpointrowlock naast GET; GET-mutatietelling; ondersteunde overrides en volledige suite.
+
+## Actueel ontwerp
+
+Migration 020 voegt alleen kolom, afleidingsfunctie en trigger toe. De trigger
+werkt bij INSERT en UPDATE van envelope_payload of de projectiekolom. Ook oude
+binaries en directe SQL-writers onderhouden dus dezelfde afleiding; een poging
+om uitsluitend de projectie te vervalsen wordt overschreven.
+
+De projectie bevat bron/configuratiemetadata, voortgang/tellingen, alleen de
+laatste poging en kleine begintijd/eindtijdparen van geslaagde initiële ingests.
+Die behouden exact de waarnemingen voor de bestaande schatting. Failed/resume-
+historie, validatorinput, fragmenten, voorstellen en diagnostiek ontbreken.
+named_reviewers behoudt de oorspronkelijke JSON-nullbetekenis en wordt opnieuw
+tegen document_reviewers gecontroleerd. De oorspronkelijke envelope blijft de
+autoriteit; de projectie is uitsluitend afgeleide presentatie-invoer.
+
+source_selection_documents sluit zijn read-only REPEATABLE READ-transactie na
+de compacte lijst. Het gekozen document wordt daarna geladen en geautoriseerd.
+Detailhergebruik, revisies en verse commandcontroles blijven bestaan. De 5s SQL-
+en idle-limieten worden niet verruimd. De veilige expliciete foutoorzaken uit de
+eerste draft blijven behouden, zonder messages, SQL, parameters of broninhoud.
+
+## Migratie, cutover en rollback
+
+1. Houd de vorige binary actief. Pas migration 020 toe in één expliciete
+   transactie. Dit voert geen backfill of envelopeherschrijving uit.
+2. Controleer de bestaande workflowdatabaseconfiguratie met
+   `python scripts/backfill_source_selection_summary.py` (standaard dry-run).
+3. Voer alleen met de bestaande expliciete migratieautorisatie uit:
+   `python scripts/backfill_source_selection_summary.py --apply --batch-size 32`.
+   Iedere batch heeft een eigen transactie. remaining > 0 door gelockte rows
+   vereist expliciet herhalen; dat geldt niet als een voltooide backfill.
+4. Controleer nul ontbrekende projecties en equivalente geautoriseerde output.
+   Deploy daarna pas de nieuwe reader via de normale releaseprocedure.
+5. Rollback gebruikt de vorige binary met kolom/trigger behouden. Verwijder geen
+   bron-, review-, publicatie- of projectiegegevens.
+
+Geen schema-, backfill- of deploymentactie is op productie uitgevoerd. Geen
+startup-/GET-backfill. Gepubliceerd werk behoudt inhoud, identiteit en rechten.
+
+## Actueel lokaal bewijs en beperkingen
+
+Op main 6cf0dc4 wordt een geselecteerde GET rood met native
+IdleInTransactionSessionTimeout / SQLSTATE 25P03. De fixture bevat grote
+historische diagnostiek. Een gecontroleerde Pythonpauze tussen rowontvangst en
+reviewerquery overschrijdt alleen in de test de verkorte idle-grens van 100ms
+(pauze 300ms). Dit bewijst het mechanisme, niet de historische requestoorzaak.
+Na de correctie is dezelfde GET 200.
+
+Een andere proef houdt drie echte checkpointwrites via _diagnostic_writer en
+StoreCommand vóór hun buitenste commit vast. Beide pagina's worden telkens
+gelezen terwijl de rowlock bestaat: zes GETs 200, geen workflow-DML vanuit GET,
+en de schrijver commit de juiste voortgang. Lokaal PG16: overzicht 0,022–0,026s;
+detail 0,213–0,216s. Dit zijn metingen, geen SLA. De overzichtsfixture leest 10
+buffers versus 5.587 op de oorspronkelijke query; de SQL-regressie verbiedt
+envelope_payload en processing_attempts in de overzichtsquery.
+
+De volledige suite-uitkomst en finale codeversie worden in de PR vastgelegd.
+Eerdere groene uitslagen bewijzen de schema-uitbreiding niet. Productieacceptatie
+en de oorspronkelijke PostgreSQL-fout blijven open. Het stoppen van de bulk-
+duplicatie vereist de duurzame inputreferenties uit #836 en is niet uitgevoerd.
+
+<details>
+<summary>Historisch bewijs van de eerste draft, vóór de nieuwe reviewopdracht</summary>
 
 Change class: B
 Promise: Bronselectie leest dezelfde actuele compacte metadata met minder
@@ -94,3 +187,5 @@ dezelfde gegevens lezen. Productieacceptatie vraagt na een afzonderlijk
 geautoriseerde deployment een geauthenticeerde GET tijdens representatieve
 verwerking, met requestcorrelatie, feitelijke laadtijd en behouden autorisatie.
 Geen merge of deployment in deze run.
+
+</details>

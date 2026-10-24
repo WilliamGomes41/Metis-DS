@@ -136,9 +136,11 @@ def comparable_observations(documents):
             continue
         if prior.get("semantic_replay", {}).get("provider_evidence", {}).get("formation_incomplete"):
             continue
-        for attempt in prior.get("processing_attempts", []):
-            if attempt.get("state") != "succeeded" or attempt.get("kind") != "ingest":
-                continue
+        observations = prior.get('ingest_observations')
+        if observations is None:
+            observations = [attempt for attempt in prior.get("processing_attempts", [])
+                            if attempt.get("state") == "succeeded" and attempt.get("kind") == "ingest"]
+        for attempt in observations:
             elapsed = _duration(attempt.get("started_at"), attempt.get("finished_at"))
             if elapsed and elapsed >= 1:
                 groups.setdefault((prior.get("content_kind"), prior.get("class")), []).append(
