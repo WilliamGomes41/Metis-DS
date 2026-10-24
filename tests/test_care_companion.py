@@ -134,3 +134,18 @@ def test_docling_image_pins_ci_playwright_and_guards_the_render_fonts():
     # The browser layer precedes model preparation, which records the font inventory.
     assert dockerfile.index("playwright@") < dockerfile.index("prepare_docling_models.py /opt/docling-models")
     assert "METIS_BROWSER_EXECUTABLE=/opt/metis-browser/chrome-headless-shell" in dockerfile
+
+
+def test_deploy_check_opens_the_navigation_rooms_in_a_frame_that_cannot_submit():
+    source = SCRIPT.read_text(encoding="utf-8")
+    listed = re.search(r"const DEPLOY_PAGES = \[(.*?)\]\.map", source, re.S).group(1)
+    paths = re.findall(r"'(/[^']*)'\]", listed)
+    rooms = re.findall(r'<a href="(/[^"]*)"', re.search(r'<nav class="rooms">(.*?)</nav>', _nav(ACCOUNT), re.S).group(1))
+    assert paths == rooms + ["/inzicht"]
+    # Same-origin reads only: no forms, popups, downloads or top-level navigation.
+    assert re.findall(r"sandbox: '([^']*)'", source) == ["allow-same-origin allow-scripts"]
+    # Raad inside a probed page only counts errors; it never opens or fetches.
+    assert "if (embedded) return;" in source
+    assert source.index("if (embedded) return;") < source.index("setOpen(true, false)")
+    # A page refused for the role is never copied as checked.
+    assert "(row.skipped ? 'NIET  ' : row.ok ? 'OK    ' : 'FOUT  ')" in source
