@@ -1978,3 +1978,6 @@ h1, h2,
 
 .home-room h1,
 .login-card h1 { color: var(--water); }
+
+/* Raad deploy-controle: verborgen frame per gecontroleerde pagina. */
+.care-probe { position: absolute; left: -10000px; top: 0; width: 1280px; height: 800px; border: 0; visibility: hidden; }

@@ -50,7 +50,7 @@ az webapp config container set -g <rg> -n <app> \
 python scripts/verify_console_deployment.py --health-url <url>/health --expected-commit <sha>
 ```
 
-Daarna in de console: aanmelden, Documenten openen, en één bekend document in Review openen.
+Daarna in de console: aanmelden, Raad (het uiltje rechtsonder) openen en bij "Controle na deploy" op "Controleer alle pagina's" klikken. Alle pagina's moeten ✓ tonen; een pagina die je rol niet mag openen staat als "niet gecontroleerd". Open daarna één bekend document in Review.
 
 ## Rollback
 
