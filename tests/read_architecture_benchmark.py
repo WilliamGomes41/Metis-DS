@@ -89,7 +89,7 @@ def test_read_benchmark(tmp_path, production_console, production_app, monkeypatc
                 'store_reads': dict(calls), 'db': metrics})
         route_records = []
         for route, params in [('/', {}), ('/ingest', {}), ('/source-selection', {}),
-                ('/review', {}), ('/publish', {}), ('/tree', {}), ('/settings', {}), ('/inzicht', {}),
+                ('/review', {}), ('/review/repair', {}), ('/inzicht/routevergelijking', {}), ('/publish', {}), ('/tree', {}), ('/settings', {}), ('/inzicht', {}),
                 ('/inzicht/api/documents', {}), ('/inzicht/api/quality', {}),
                 ('/inzicht/document', {'document': sid}),
                 ('/review', {'document': sid, 'task': 'individual'}),

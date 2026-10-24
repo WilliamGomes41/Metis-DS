@@ -810,7 +810,7 @@ async function loadDocuments(more) {
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const page = await response.json();
     state.docs = more ? (state.docs || []).concat(page.documents) : page.documents;
-    state.docTotal = page.total; state.docNext = page.next_offset; state.docPartial = page.telemetry_partial; state.loaded.documenten = true; renderDocuments();
+    state.docTotal = page.total; state.docNext = page.next_offset; state.docPartial = page.telemetry_partial; state.docMetadataPartial = Boolean(page.metadata_partial) || (more && state.docMetadataPartial); state.loaded.documenten = true; renderDocuments();
   } catch (error) { $('#d-status').textContent = 'Kon documenten niet laden (' + error.message + ').'; }
 }
 function renderDocuments() {
@@ -819,6 +819,7 @@ function renderDocuments() {
   $('#d-status').textContent = state.docTotal === null
     ? `${rows.length} gevonden${more ? ' tot nu toe' : ''}` : `${rows.length} van ${state.docTotal} documenten geladen`;
   if (state.docPartial) $('#d-status').textContent += ' · systeemcijfers over de nieuwste 50.000 events (onvolledig)';
+  if (state.docMetadataPartial) $('#d-status').textContent += ' · documentoverzicht onvolledig; vernieuw voor actuele gegevens';
   $('#d-more').hidden = !more;
   const maxBlocked = Math.max(1, ...rows.map((d) => d.blocked || 0));
   sortable($('#d-table'), [['Document'], ['Verwerking'], ['Geblokkeerd', 1], ['Belangrijkste redenen'], ['Systeem 24 u', 1], ['Ga naar']],

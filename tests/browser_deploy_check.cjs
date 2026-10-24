@@ -59,6 +59,18 @@ const fs=require('node:fs');
       for(const expected of ['/','/ingest','/source-selection','/review','/publish','/tree','/settings','/inzicht'])
         if(!paths.includes(expected))throw Error(username+' missing page '+expected+': '+JSON.stringify(paths));
       results[username]={healthy};
+      if(username===manifest.author){
+        const insightContext=await browser.newContext({storageState:await page.context().storageState()});
+        const insight=await insightContext.newPage();
+        await insight.route('**/inzicht/api/documents?*',route=>route.fulfill({json:{documents:[],
+          total:null,offset:0,limit:200,next_offset:null,telemetry_partial:false,metadata_partial:true}}));
+        await insight.goto(base+'/inzicht?tab=documenten');
+        await insight.waitForFunction(()=>document.querySelector('#d-status')?.textContent.includes('documentoverzicht onvolledig'));
+        const text=await insight.locator('#d-status').textContent();
+        if(text.includes('0 van 0'))throw Error('partial metadata claimed a complete empty document list');
+        await insightContext.close();
+      }
+
       // Playwright also reports errors from frames; the healthy pass must have none.
       if(errors.length)throw Error('page errors on a healthy console: '+errors.join('; '));
       if(username===manifest.reviewer){

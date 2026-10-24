@@ -574,3 +574,26 @@ which the existing publication_issues graph kernel needs when computing duties.
 The projection now retains that exact evidence alongside graph/policy/reviews;
 no graph validation or review/publication condition was changed. The final full
 run must use this corrected selection; the earlier run is not green evidence.
+
+### C2 visible completeness
+
+The Inzicht client now consumes metadata_partial, preserves it when appending
+additional pages and explicitly labels the document overview incomplete. It no
+longer shows a bare zero-result message for a partial empty capture. The actual
+Chromium deploy/navigation test injects that API response and checks the visible
+label, while retaining all eight-page navigation, fault-reporting, authorization
+and domain-unchanged assertions. The browser case fails on 02e19ab (missing label)
+and passes after this UI change (71.21s). Earlier interrupted server runs are
+not the final full-suite evidence.
+
+Paired local benchmark, identical expanded script/fixture on 02e19ab and 147818a:
+Review JSON decode bytes 392,845→15,357; repair 392,825→12,491; comparison
+761,500→420. Repair retains the necessary object read, with no full envelope
+list; comparison drops both full-envelope list reads. These are whole-request
+synthetic measurements, including the combined cleanup, not causal attribution
+to one line of code or Azure storage/latency proof. The later UI completeness
+label does not change those server capture operations.
+
+B6 removal condition: keep the old sessionStorage purge through the first
+deployed release containing the new Raad notices, then remove it in the following
+release. It remains present in this PR. No deployment is performed here.

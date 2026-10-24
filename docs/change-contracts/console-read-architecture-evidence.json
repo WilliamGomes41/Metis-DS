@@ -2104,6 +2104,1117 @@
         "seconds": 11.65,
         "log": "work/834-cleanup-graph-GREEN.log"
       }
-    }
+    },
+    "visible_completeness": {
+      "red_revision": "02e19ab462c02e002d73d377dbfed9771cda63ed",
+      "red_result": "failed: required visible incomplete label absent",
+      "red_log": "work/834-cleanup-partial-ui-RED-final.log",
+      "red_seconds": 45.57,
+      "green_passed": 1,
+      "green_seconds": 71.21,
+      "green_log": "work/834-cleanup-partial-ui-final.log",
+      "scope": "Actual Chromium + HTTP, mocked partial API response; existing eight-page/fault/unchanged-domain proof retained."
+    },
+    "paired_measurement": {
+      "before": {
+        "routes": [
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 1.2263079988770187,
+              "db_connections": 1,
+              "db_json_bytes": 4,
+              "db_queries": 1,
+              "db_query_ms": 0.8115789969451725
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 4,
+            "route": "/",
+            "seconds": 0.009165,
+            "store_reads": {}
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 3.4463840020180214,
+              "db_connections": 3,
+              "db_json_bytes": 428,
+              "db_queries": 3,
+              "db_query_ms": 4.978093005775008
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 428,
+            "route": "/ingest",
+            "seconds": 0.014735,
+            "store_reads": {
+              "list_document_cards": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 3.8907430025574286,
+              "db_connections": 3,
+              "db_json_bytes": 513,
+              "db_queries": 6,
+              "db_query_ms": 6.655888995737769
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 513,
+            "route": "/source-selection",
+            "seconds": 0.016512,
+            "store_reads": {
+              "list_source_selection_summaries": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 18.328205002035247,
+              "db_connections": 10,
+              "db_json_bytes": 392845,
+              "db_queries": 10,
+              "db_query_ms": 14.573696007573744
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 392845,
+            "route": "/review",
+            "seconds": 0.055295,
+            "store_reads": {}
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 3.401057005248731,
+              "db_connections": 3,
+              "db_json_bytes": 392825,
+              "db_queries": 4,
+              "db_query_ms": 4.668039000534918
+            },
+            "detail": false,
+            "full_reads": {
+              "list_document_objects": 1,
+              "list_envelopes": 1
+            },
+            "native_json_bytes": 392825,
+            "route": "/review/repair",
+            "seconds": 0.018313,
+            "store_reads": {
+              "list_document_objects": 1,
+              "list_envelopes": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 9.153680999588687,
+              "db_connections": 6,
+              "db_json_bytes": 761500,
+              "db_queries": 8,
+              "db_query_ms": 10.408684000140056
+            },
+            "detail": false,
+            "full_reads": {
+              "list_envelopes": 2
+            },
+            "native_json_bytes": 761500,
+            "route": "/inzicht/routevergelijking",
+            "seconds": 0.032859,
+            "store_reads": {
+              "list_envelopes": 2
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 3.7569440028164536,
+              "db_connections": 3,
+              "db_json_bytes": 416,
+              "db_queries": 3,
+              "db_query_ms": 6.12888200339512
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 416,
+            "route": "/publish",
+            "seconds": 0.015486,
+            "store_reads": {
+              "list_document_cards": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 7.5280499913787935,
+              "db_connections": 5,
+              "db_json_bytes": 420,
+              "db_queries": 5,
+              "db_query_ms": 8.260515005531488
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 420,
+            "route": "/tree",
+            "seconds": 0.022701,
+            "store_reads": {
+              "list_document_cards": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 1.7945250001503155,
+              "db_connections": 1,
+              "db_json_bytes": 4,
+              "db_queries": 1,
+              "db_query_ms": 0.9246759982488584
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 4,
+            "route": "/settings",
+            "seconds": 0.009638,
+            "store_reads": {}
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 1.901793002616614,
+              "db_connections": 1,
+              "db_json_bytes": 4,
+              "db_queries": 1,
+              "db_query_ms": 1.0600780005916022
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 4,
+            "route": "/inzicht",
+            "seconds": 0.007225,
+            "store_reads": {}
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 7.536493998486549,
+              "db_connections": 5,
+              "db_json_bytes": 443,
+              "db_queries": 14,
+              "db_query_ms": 11.084450001362711
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 443,
+            "route": "/inzicht/api/documents",
+            "seconds": 0.031381,
+            "store_reads": {
+              "document_diagnostic_inputs": 1,
+              "document_processing_inputs": 1,
+              "list_document_summaries": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 8.913926998502575,
+              "db_connections": 7,
+              "db_json_bytes": 436771,
+              "db_queries": 26,
+              "db_query_ms": 18.380118999630213
+            },
+            "detail": false,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 436771,
+            "route": "/inzicht/api/quality",
+            "seconds": 0.045232,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_cards": 2,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 8.846765998896444,
+              "db_connections": 7,
+              "db_json_bytes": 392833,
+              "db_queries": 8,
+              "db_query_ms": 7.894492006016662
+            },
+            "detail": true,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 392833,
+            "route": "/inzicht/document",
+            "seconds": 0.034764,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 10.58341099997051,
+              "db_connections": 8,
+              "db_json_bytes": 393241,
+              "db_queries": 9,
+              "db_query_ms": 11.708055000781314
+            },
+            "detail": true,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 393241,
+            "route": "/review",
+            "seconds": 0.034861,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_cards": 1,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 16.86172500194516,
+              "db_connections": 8,
+              "db_json_bytes": 393241,
+              "db_queries": 9,
+              "db_query_ms": 11.087333998148097
+            },
+            "detail": true,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 393241,
+            "route": "/publish",
+            "seconds": 0.043293,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_cards": 1,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 8.27902199307573,
+              "db_connections": 7,
+              "db_json_bytes": 393342,
+              "db_queries": 12,
+              "db_query_ms": 10.241924999718321
+            },
+            "detail": true,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 393342,
+            "route": "/source-selection",
+            "seconds": 0.029323,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1,
+              "list_source_selection_summaries": 1
+            }
+          }
+        ],
+        "query_plans": {
+          "document_diagnostic_inputs": {
+            "execution_ms": 0.12,
+            "planning_ms": 0.187,
+            "shared_hit_blocks": 44,
+            "shared_read_blocks": 0
+          },
+          "document_processing_inputs": {
+            "execution_ms": 1.059,
+            "planning_ms": 0.297,
+            "shared_hit_blocks": 94,
+            "shared_read_blocks": 0
+          }
+        },
+        "benchmark": {
+          "fixture": {
+            "database": "PostgreSQL16",
+            "documents": 1,
+            "envelope_bytes": 380746,
+            "replay_records": 4000,
+            "roles": [
+              "researcher",
+              "assigned_reviewer"
+            ],
+            "source": "synthetic HTML"
+          },
+          "revision": "02e19ab462c02e002d73d377dbfed9771cda63ed",
+          "samples": [
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 8.711669997865101,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 11.3122159964405
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "first",
+              "native_json_bytes": 443,
+              "sample": 0,
+              "seconds": 0.030497,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 8.42312499662512,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 12.79817101021763
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "repeat",
+              "native_json_bytes": 443,
+              "sample": 1,
+              "seconds": 0.029324,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 7.965013999637449,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 12.10428399281227
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "repeat",
+              "native_json_bytes": 443,
+              "sample": 2,
+              "seconds": 0.031329,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 7.197031998657621,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 10.219388004770735
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "repeat",
+              "native_json_bytes": 443,
+              "sample": 3,
+              "seconds": 0.02688,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 7.741774996247841,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 8.291832000395516
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "repeat",
+              "native_json_bytes": 443,
+              "sample": 4,
+              "seconds": 0.024585,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": [
+                {
+                  "badge_ms": 0.0,
+                  "db_connect_ms": 13.292482995893806,
+                  "db_connections": 5,
+                  "db_json_bytes": 443,
+                  "db_queries": 14,
+                  "db_query_ms": 17.26681098807603
+                },
+                {
+                  "badge_ms": 0.0,
+                  "db_connect_ms": 15.920361001917627,
+                  "db_connections": 5,
+                  "db_json_bytes": 443,
+                  "db_queries": 14,
+                  "db_query_ms": 18.28526399549446
+                }
+              ],
+              "full_reads": {},
+              "mode": "two_readers",
+              "seconds": 0.032875,
+              "store_reads": {
+                "document_diagnostic_inputs": 2,
+                "document_processing_inputs": 2,
+                "list_document_summaries": 2
+              }
+            },
+            {
+              "db": [
+                {
+                  "badge_ms": 0.0,
+                  "db_connect_ms": 13.292482995893806,
+                  "db_connections": 5,
+                  "db_json_bytes": 443,
+                  "db_queries": 14,
+                  "db_query_ms": 17.26681098807603
+                },
+                {
+                  "badge_ms": 0.0,
+                  "db_connect_ms": 15.920361001917627,
+                  "db_connections": 5,
+                  "db_json_bytes": 443,
+                  "db_queries": 14,
+                  "db_query_ms": 18.28526399549446
+                }
+              ],
+              "full_reads": {},
+              "mode": "formation_with_two_readers",
+              "seconds": 0.301305
+            }
+          ]
+        },
+        "storage_batches": {
+          "batches": [
+            {
+              "capture_seconds": 0.033511,
+              "documents": 50,
+              "seconds": 0.035429
+            },
+            {
+              "capture_seconds": 0.0332,
+              "documents": 50,
+              "seconds": 0.035528
+            },
+            {
+              "capture_seconds": 0.002792,
+              "documents": 1,
+              "seconds": 0.005136
+            }
+          ],
+          "fixture": "101 documents; 4000 SHA256 strings/object metadata; PG16 local",
+          "pg_column_size": {
+            "largest_document_bytes": 15878,
+            "largest_object_bytes": 263088,
+            "object_rows": 306,
+            "total_document_bytes": 1619525,
+            "total_object_bytes": 78864936
+          }
+        }
+      },
+      "after": {
+        "routes": [
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 1.201318998937495,
+              "db_connections": 1,
+              "db_json_bytes": 4,
+              "db_queries": 1,
+              "db_query_ms": 0.9989890022552572
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 4,
+            "route": "/",
+            "seconds": 0.006836,
+            "store_reads": {}
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 4.195122000965057,
+              "db_connections": 3,
+              "db_json_bytes": 428,
+              "db_queries": 3,
+              "db_query_ms": 5.509875001735054
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 428,
+            "route": "/ingest",
+            "seconds": 0.016573,
+            "store_reads": {
+              "list_document_cards": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 4.270811998139834,
+              "db_connections": 3,
+              "db_json_bytes": 513,
+              "db_queries": 6,
+              "db_query_ms": 6.6264010056329425
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 513,
+            "route": "/source-selection",
+            "seconds": 0.01851,
+            "store_reads": {
+              "list_source_selection_summaries": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 12.035825002385536,
+              "db_connections": 10,
+              "db_json_bytes": 15357,
+              "db_queries": 10,
+              "db_query_ms": 15.230571996653453
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 15357,
+            "route": "/review",
+            "seconds": 0.040615,
+            "store_reads": {}
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 3.38711400036118,
+              "db_connections": 3,
+              "db_json_bytes": 12491,
+              "db_queries": 3,
+              "db_query_ms": 6.608496001717867
+            },
+            "detail": false,
+            "full_reads": {
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 12491,
+            "route": "/review/repair",
+            "seconds": 0.015201,
+            "store_reads": {
+              "list_document_cards": 1,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 4.575823997583939,
+              "db_connections": 4,
+              "db_json_bytes": 420,
+              "db_queries": 4,
+              "db_query_ms": 5.918359998759115
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 420,
+            "route": "/inzicht/routevergelijking",
+            "seconds": 0.015934,
+            "store_reads": {
+              "list_document_cards": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 4.199007998977322,
+              "db_connections": 3,
+              "db_json_bytes": 416,
+              "db_queries": 3,
+              "db_query_ms": 5.8492149983067065
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 416,
+            "route": "/publish",
+            "seconds": 0.015132,
+            "store_reads": {
+              "list_document_cards": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 5.273451995890355,
+              "db_connections": 5,
+              "db_json_bytes": 420,
+              "db_queries": 5,
+              "db_query_ms": 6.752147997758584
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 420,
+            "route": "/tree",
+            "seconds": 0.01824,
+            "store_reads": {
+              "list_document_cards": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 1.197273002617294,
+              "db_connections": 1,
+              "db_json_bytes": 4,
+              "db_queries": 1,
+              "db_query_ms": 0.830240998766385
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 4,
+            "route": "/settings",
+            "seconds": 0.006275,
+            "store_reads": {}
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 1.2676110018219333,
+              "db_connections": 1,
+              "db_json_bytes": 4,
+              "db_queries": 1,
+              "db_query_ms": 0.9285909982281737
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 4,
+            "route": "/inzicht",
+            "seconds": 0.006147,
+            "store_reads": {}
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 6.058265997126,
+              "db_connections": 5,
+              "db_json_bytes": 443,
+              "db_queries": 14,
+              "db_query_ms": 8.40102899746853
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 443,
+            "route": "/inzicht/api/documents",
+            "seconds": 0.022064,
+            "store_reads": {
+              "document_diagnostic_inputs": 1,
+              "document_processing_inputs": 1,
+              "list_document_summaries": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 9.907186002237722,
+              "db_connections": 7,
+              "db_json_bytes": 436769,
+              "db_queries": 26,
+              "db_query_ms": 20.028244016430108
+            },
+            "detail": false,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 436769,
+            "route": "/inzicht/api/quality",
+            "seconds": 0.048775,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_cards": 2,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 8.949151000706479,
+              "db_connections": 7,
+              "db_json_bytes": 392833,
+              "db_queries": 8,
+              "db_query_ms": 9.429325004020939
+            },
+            "detail": true,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 392833,
+            "route": "/inzicht/document",
+            "seconds": 0.033439,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 12.410341001668712,
+              "db_connections": 8,
+              "db_json_bytes": 393241,
+              "db_queries": 9,
+              "db_query_ms": 12.98050500190584
+            },
+            "detail": true,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 393241,
+            "route": "/review",
+            "seconds": 0.042611,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_cards": 1,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 10.782809993543196,
+              "db_connections": 8,
+              "db_json_bytes": 393241,
+              "db_queries": 9,
+              "db_query_ms": 12.314902996877208
+            },
+            "detail": true,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 393241,
+            "route": "/publish",
+            "seconds": 0.040017,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_cards": 1,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 9.143776991550112,
+              "db_connections": 7,
+              "db_json_bytes": 393342,
+              "db_queries": 12,
+              "db_query_ms": 11.928669988265028
+            },
+            "detail": true,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 393342,
+            "route": "/source-selection",
+            "seconds": 0.032739,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1,
+              "list_source_selection_summaries": 1
+            }
+          }
+        ],
+        "query_plans": {
+          "document_diagnostic_inputs": {
+            "execution_ms": 0.134,
+            "planning_ms": 0.23,
+            "shared_hit_blocks": 44,
+            "shared_read_blocks": 0
+          },
+          "document_processing_inputs": {
+            "execution_ms": 1.11,
+            "planning_ms": 0.351,
+            "shared_hit_blocks": 94,
+            "shared_read_blocks": 0
+          }
+        },
+        "benchmark": {
+          "fixture": {
+            "database": "PostgreSQL16",
+            "documents": 1,
+            "envelope_bytes": 380746,
+            "replay_records": 4000,
+            "roles": [
+              "researcher",
+              "assigned_reviewer"
+            ],
+            "source": "synthetic HTML"
+          },
+          "revision": "147818af98b30d2c43b3ac5b6884c1cce0051993",
+          "samples": [
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 7.421372003591387,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 10.636941995471716
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "first",
+              "native_json_bytes": 443,
+              "sample": 0,
+              "seconds": 0.026814,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 5.6728339950495865,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 7.7306929997575935
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "repeat",
+              "native_json_bytes": 443,
+              "sample": 1,
+              "seconds": 0.019593,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 5.312302007951075,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 8.39122600882547
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "repeat",
+              "native_json_bytes": 443,
+              "sample": 2,
+              "seconds": 0.02089,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 8.877078998921206,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 8.544548996724188
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "repeat",
+              "native_json_bytes": 443,
+              "sample": 3,
+              "seconds": 0.025176,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 5.8513080002740026,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 8.78021799508133
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "repeat",
+              "native_json_bytes": 443,
+              "sample": 4,
+              "seconds": 0.020989,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": [
+                {
+                  "badge_ms": 0.0,
+                  "db_connect_ms": 9.283084003982367,
+                  "db_connections": 5,
+                  "db_json_bytes": 443,
+                  "db_queries": 14,
+                  "db_query_ms": 22.602185992582235
+                },
+                {
+                  "badge_ms": 0.0,
+                  "db_connect_ms": 17.615952998312423,
+                  "db_connections": 5,
+                  "db_json_bytes": 443,
+                  "db_queries": 14,
+                  "db_query_ms": 17.318136004178086
+                }
+              ],
+              "full_reads": {},
+              "mode": "two_readers",
+              "seconds": 0.029595,
+              "store_reads": {
+                "document_diagnostic_inputs": 2,
+                "document_processing_inputs": 2,
+                "list_document_summaries": 2
+              }
+            },
+            {
+              "db": [
+                {
+                  "badge_ms": 0.0,
+                  "db_connect_ms": 9.283084003982367,
+                  "db_connections": 5,
+                  "db_json_bytes": 443,
+                  "db_queries": 14,
+                  "db_query_ms": 22.602185992582235
+                },
+                {
+                  "badge_ms": 0.0,
+                  "db_connect_ms": 17.615952998312423,
+                  "db_connections": 5,
+                  "db_json_bytes": 443,
+                  "db_queries": 14,
+                  "db_query_ms": 17.318136004178086
+                }
+              ],
+              "full_reads": {},
+              "mode": "formation_with_two_readers",
+              "seconds": 0.305147
+            }
+          ]
+        },
+        "storage_batches": {
+          "batches": [
+            {
+              "capture_seconds": 0.033182,
+              "documents": 50,
+              "seconds": 0.034999
+            },
+            {
+              "capture_seconds": 0.034934,
+              "documents": 50,
+              "seconds": 0.039174
+            },
+            {
+              "capture_seconds": 0.003878,
+              "documents": 1,
+              "seconds": 0.007472
+            }
+          ],
+          "fixture": "101 documents; 4000 SHA256 strings/object metadata; PG16 local",
+          "pg_column_size": {
+            "largest_document_bytes": 15870,
+            "largest_object_bytes": 263088,
+            "object_rows": 306,
+            "total_document_bytes": 1618713,
+            "total_object_bytes": 78864936
+          }
+        }
+      },
+      "script_sha256": "157432e0e83b550450afed567e3dfe59e5f3448b6db5cbe36c5ffb5d33452bc8"
+    },
+    "preserved_owners_static": {
+      "src/operations_console_v1.py:waiting_task_counts": true,
+      "src/workflows/workflow_review_cutover_v1.py:_reload_store_locked": true,
+      "src/workflows/workflow_documents_cutover_v1.py:refresh_workflow_documents": true,
+      "src/workflows/workflow_documents_cutover_v1.py:_reload_store_locked": true,
+      "src/workflows/workflow_badge_counts_postgres_v1.py:list_document_lifecycle_statuses": true,
+      "src/review_closure_v1.py:migrate_legacy_revise_to_review": true,
+      "src/decision_successor_v1.py": true,
+      "src/durable_publication_console_v1.py": true,
+      "src/insight_v1.py:MAX_SCAN": true,
+      "src/insight_v1.py:DOCUMENT_STATES": true
+    },
+    "B6_removal_condition": "Retain through one deployed release of new Raad notices; remove in following release. No deployment here."
   }
 }
