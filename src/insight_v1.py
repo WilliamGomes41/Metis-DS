@@ -133,7 +133,7 @@ def _documents_page(inputs, account, *, state_filter="", window):
 
 
 def _document_row(inputs, account, envelope: dict[str, Any], telemetry: dict[str, dict[str, int]]) -> dict[str, Any]:
-    from src.processing_diagnostics_v1 import processing_diagnostics
+    from src.operations_console_v1 import stored_processing_blocked
     from src.request_diagnostics_v1 import doc_ref
     sid = envelope["snapshot_id"]
     roles = set(account.get("roles") or [])
@@ -151,7 +151,7 @@ def _document_row(inputs, account, envelope: dict[str, Any], telemetry: dict[str
         "code": status.get("error_code") or status.get("reason_code"),
         "retry_allowed": bool(status.get("retry_allowed")),
         "blocked": diagnostics.get("blocked_candidate_count"),
-        "processing_blocked": bool(envelope.get("processing_blocker") or envelope.get("publication_eligibility") == "blocked_pending_pre_review"),
+        "processing_blocked": stored_processing_blocked(envelope),
         "reasons": [{"code": code, "count": values.get("candidate_count")} for code, values in reasons],
         "telemetry": telemetry.get(ref or "", {"requests": 0, "errors": 0}),
         "named_reviewer": account["account_id"] in (envelope.get("named_reviewers") or []),

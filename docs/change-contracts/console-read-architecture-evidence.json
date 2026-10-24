@@ -1077,7 +1077,11 @@
       },
       "2": {
         "red_on_56488c0": "failed",
-        "green": "pending"
+        "green": "Normal not-started and in-progress reasons share one definition beside the receipt/formation writers. Only stored failure reasons or failed/interrupted/expired latest attempts count as processing blocks; compact summaries expose only attempt state/expiry, never processing details. Both new/running probes and the existing stored-block/revocation probe pass (3 cases).",
+        "tests": [
+          "test_new_and_running_documents_are_not_processing_blocks",
+          "test_notices_revocation_and_explicit_unknown_count"
+        ]
       },
       "3": {
         "red_on_56488c0": "failed",

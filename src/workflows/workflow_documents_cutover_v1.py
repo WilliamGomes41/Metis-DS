@@ -177,6 +177,8 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                     SELECT d.snapshot_id,d.title,d.source_version AS version,d.class,d.state,
                            d.publication_eligibility,
                            d.envelope_payload->>'processing_blocker' AS processing_blocker,
+                           d.envelope_payload->'processing_attempts'->-1->>'state' AS latest_processing_state,
+                           d.envelope_payload->'processing_attempts'->-1->>'expires_at' AS latest_processing_expires_at,
                            ARRAY(SELECT r.account_id FROM workflow.document_reviewers r
                                  WHERE r.snapshot_id=d.snapshot_id ORDER BY r.account_id) AS named_reviewers,
                            (SELECT COALESCE(jsonb_agg(v ORDER BY v),'[]'::jsonb)

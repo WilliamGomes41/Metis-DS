@@ -409,3 +409,9 @@ external evidence is read only after the SQL transaction closes.
 Capture the entire selected SQL scan window before telemetry; quality captures SQL first and reads sources/ledger afterwards. The source-selection caller already closes SQL before authorization/projection. All 3 transaction-boundary probes pass, including both HTTP routes with 6s telemetry. Additional quality I/O probe was red on the base.
 
 Regression proof: `test_slow_telemetry_outside_read_transaction,test_telemetry_has_no_open_read_transaction,test_quality_source_and_ledger_io_outside_read_transaction`. Red on `56488c0`; green after repair.
+
+### Repair 2
+
+Normal not-started and in-progress reasons share one definition beside the receipt/formation writers. Only stored failure reasons or failed/interrupted/expired latest attempts count as processing blocks; compact summaries expose only attempt state/expiry, never processing details. Both new/running probes and the existing stored-block/revocation probe pass (3 cases).
+
+Regression proof: `test_new_and_running_documents_are_not_processing_blocks,test_notices_revocation_and_explicit_unknown_count`. Red on `56488c0`; green after repair.

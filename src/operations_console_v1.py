@@ -127,6 +127,28 @@ SCHEMA_V14 = REPO_ROOT / "schemas" / "knowledge_object.schema.v1.4.json"
 CONSOLE_VERSION = "operations-console-v1.0.0"
 SNAPSHOT_OBJECT_WRITE_CONFLICT = "snapshot_object_write_conflict"
 CAPTURED = "captured_not_published"
+# These two normal progress reasons are written by receipt/formation below.
+PROCESSING_NOT_STARTED = "source_selection_not_started"
+PROCESSING_IN_PROGRESS = "pre_review_llm_processing_in_progress"
+NON_BLOCKING_PROCESSING_REASONS = frozenset({PROCESSING_NOT_STARTED, PROCESSING_IN_PROGRESS})
+
+
+def stored_processing_blocked(envelope):
+    """A stored failure/expired attempt, never a normal not-started/running state."""
+    blocker = envelope.get("processing_blocker")
+    if blocker and blocker not in NON_BLOCKING_PROCESSING_REASONS:
+        return True
+    attempts = envelope.get("processing_attempts") or []
+    latest = attempts[-1] if attempts else {
+        "state": envelope.get("latest_processing_state"),
+        "expires_at": envelope.get("latest_processing_expires_at")}
+    if latest.get("state") in {"failed", "interrupted"}:
+        return True
+    from src.processing_retry_v1 import now
+    return bool(latest.get("state") == "running" and latest.get("expires_at")
+                and datetime.fromisoformat(latest["expires_at"]) <= now())
+
+
 PRE_REVIEW_BLOCKED = "blocked_pending_pre_review"
 PUBLISHED_ENVELOPE_STATES = frozenset({"published", "superseded", "withdrawn"})
 UNPUBLISHED_DELETE_EVENT = "unpublished_snapshot_deleted"
@@ -1544,7 +1566,7 @@ class OperationsConsole:
             # run, and no attempt is implicitly authorized by receiving bytes.
             envelope["received_source"] = {"filename": filename, "bytes": len(data)}
             envelope["publication_eligibility"] = PRE_REVIEW_BLOCKED
-            envelope["processing_blocker"] = "source_selection_not_started"
+            envelope["processing_blocker"] = PROCESSING_NOT_STARTED
             boundary = _registration_boundary or self._store_write_lock
             with boundary():
                 self._reload_store_locked()
@@ -1584,7 +1606,7 @@ class OperationsConsole:
                 expected_revision = (self.workflow_document_store.revision_for_rows([])
                                      if getattr(self, "workflow_document_store", None) is not None else "")
                 envelope["publication_eligibility"] = PRE_REVIEW_BLOCKED
-                envelope["processing_blocker"] = "pre_review_llm_processing_in_progress"
+                envelope["processing_blocker"] = PROCESSING_IN_PROGRESS
                 from src.source_selection_v1 import active_configuration
                 envelope["processing_configuration"] = active_configuration(self)
                 attempt, _ = reserve(envelope, command_id=uuid.uuid4().hex, actor_id=actor_id,
