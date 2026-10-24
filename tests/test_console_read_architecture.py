@@ -149,6 +149,10 @@ def test_notices_revocation_and_explicit_unknown_count(tmp_path, production_cons
     publisher = console.create_account(username='overview.publisher', password='d54-secret', roles=['publisher'])
     notices = _login(console, publisher['username'], production_app=production_app).get('/raad/meldingen').json()
     assert notices['documents'][0]['blocked'] is None
+    assert notices['documents'][0]['reasons'] == []
+    env.pop('processing_blocker')
+    second.workflow_document_store.write_bundle(envelope=env)
+    assert _login(console, publisher['username'], production_app=production_app).get('/raad/meldingen').json()['documents'] == []
 
 
 def test_overview_errors_are_not_empty_success(tmp_path, production_console, production_app, monkeypatch):

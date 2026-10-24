@@ -82,7 +82,7 @@ def _state_matches(row: dict[str, Any], state_filter: str) -> bool:
     return (not state_filter or (state_filter == "blocked" and (bool(row["blocked"]) or row.get("processing_blocked")))
             or (state_filter == "errors" and bool(row["telemetry"]["errors"]))
             or (state_filter == "retry" and row["retry_allowed"])
-            or (state_filter == "attention" and (row.get("processing_blocked") or row["blocked"] is None
+            or (state_filter == "attention" and (row.get("processing_blocked") or (row.get("processing_access") and row["blocked"] is None)
                 or bool(row["blocked"]) or bool(row["telemetry"]["errors"]))))
 
 
@@ -117,8 +117,8 @@ def _document_window(inputs, account, query, state_filter, offset, limit):
     return authorized, offset, limit, scan_end
 
 
-def _documents_page(inputs, account, *, state_filter="", window):
-    authorized, offset, limit, scan_end = window
+def _documents_page(inputs, account, *, query="", state_filter="", offset=0, limit=MAX_DOCUMENTS, window=None):
+    authorized, offset, limit, scan_end = window or _document_window(inputs, account, query, state_filter, offset, limit)
     state_filter = state_filter if state_filter in DOCUMENT_STATES else ""
     telemetry, partial = _telemetry_by_document(time.time() - 86400) if offset < len(authorized) else ({}, False)
     rows, position = [], offset
@@ -151,6 +151,7 @@ def _document_row(inputs, account, envelope: dict[str, Any], telemetry: dict[str
         "code": status.get("error_code") or status.get("reason_code"),
         "retry_allowed": bool(status.get("retry_allowed")),
         "blocked": diagnostics.get("blocked_candidate_count"),
+        "processing_access": processing_access,
         "processing_blocked": stored_processing_blocked(envelope),
         "reasons": [{"code": code, "count": values.get("candidate_count")} for code, values in reasons],
         "telemetry": telemetry.get(ref or "", {"requests": 0, "errors": 0}),

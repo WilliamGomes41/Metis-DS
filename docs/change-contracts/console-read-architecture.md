@@ -415,3 +415,9 @@ Regression proof: `test_slow_telemetry_outside_read_transaction,test_telemetry_h
 Normal not-started and in-progress reasons share one definition beside the receipt/formation writers. Only stored failure reasons or failed/interrupted/expired latest attempts count as processing blocks; compact summaries expose only attempt state/expiry, never processing details. Both new/running probes and the existing stored-block/revocation probe pass (3 cases).
 
 Regression proof: `test_new_and_running_documents_are_not_processing_blocks,test_notices_revocation_and_explicit_unknown_count`. Red on `56488c0`; green after repair.
+
+### Repair 3
+
+Unknown candidate counts cause a notice only for an account with processing access. Publishers receive stored-block/error notices without processing details; missing access alone produces no notice. The new publisher probe and updated revocation/unknown-count probe pass (2 cases).
+
+Regression proof: `test_publisher_missing_processing_access_is_not_a_notice,test_notices_revocation_and_explicit_unknown_count`. Red on `56488c0`; green after repair.
