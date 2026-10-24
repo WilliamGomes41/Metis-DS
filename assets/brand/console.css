@@ -1979,5 +1979,102 @@ h1, h2,
 .home-room h1,
 .login-card h1 { color: var(--water); }
 
+/* Inleveren (docs/change-contracts/console-ingest-readability.md).
+   A readable form measure, real section headings and one clear choice row. */
+.task-secondary-nav { margin: 4px 0 24px; }
+
+.ingest-room { max-width: 60rem; }
+
+.ingest-form .section { padding: 20px 22px 22px; }
+
+.ingest-form .section h2 {
+  color: var(--paars);
+  font-size: 1.1rem;
+  margin: 0 0 6px;
+}
+
+.ingest-form fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.ingest-form legend {
+  padding: 0;
+  margin: 10px 0 8px;
+  font-weight: 700;
+}
+
+.choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.choice-row .choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--wit);
+  cursor: pointer;
+}
+
+.choice-row .choice:hover { border-color: var(--water); }
+
+.choice-row .choice:has(input:checked) {
+  border-color: var(--paars);
+  background: var(--water-soft);
+  box-shadow: inset 0 0 0 1px var(--paars);
+}
+
+.choice-row .choice:has(input:focus-visible) { outline: 3px solid var(--rood); outline-offset: 2px; }
+
+.choice-row input { accent-color: var(--paars); }
+
+.ingest-form details > summary {
+  margin-top: 12px;
+  color: var(--paars);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ingest-form input[type="file"] { padding: 8px 10px; }
+
+.ingest-form input[type="file"]::file-selector-button {
+  margin-right: 12px;
+  padding: 6px 14px;
+  border: 1px solid var(--paars);
+  border-radius: 8px;
+  background: var(--wit);
+  color: var(--paars);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ingest-form .date-nl-display {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.form-submit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 20px;
+}
+
+.form-submit .btn-primary { margin-top: 0; }
+
+.form-submit [role="status"] { margin: 0; color: var(--muted); }
+
 /* Raad deploy-controle: verborgen frame per gecontroleerde pagina. */
 .care-probe { position: absolute; left: -10000px; top: 0; width: 1280px; height: 800px; border: 0; visibility: hidden; }

@@ -4974,15 +4974,15 @@ def create_console_app(
         return _page(
             f"""
             {_nav(account, "ingest")}
-            <section class="room">
+            <section class="room ingest-room">
               <h1>Document inleveren</h1>
               <p class="lead">Voeg een document toe voor beoordeling.</p>
               {_task_links("ingest")}
-              <form method="post" action="/ingest" enctype="multipart/form-data">
+              <form method="post" action="/ingest" enctype="multipart/form-data" class="ingest-form">
                 <input type="hidden" name="command_id" value="{uuid.uuid4().hex}">
                 <div class="sections">
                   <div class="section">
-                    <h3>Bron</h3>
+                    <h2>Bron</h2>
                     <label for="file">Bronbestand (HTML, PDF of beslisboom)</label>
                     <input id="file" type="file" name="file" aria-describedby="filename-help">
                     <p id="filename-help" class="field-help">{_esc(FILENAME_HINT)}</p>
@@ -4990,7 +4990,7 @@ def create_console_app(
                     <input id="url" name="url" placeholder="https://...">
                   </div>
                   <div class="section">
-                    <h3>Document</h3>
+                    <h2>Document</h2>
                     <div class="field-row">
                       <div>
                         <label for="title">Titel</label>
@@ -5035,21 +5035,28 @@ def create_console_app(
                     <select id="source_status" name="source_status"><option value="unknown">Niet opgegeven</option><option value="established">Vastgesteld</option><option value="draft">Concept</option></select>
                   </div>
                   <div class="section">
-                    <h3>Reviewers</h3>
+                    <h2>Reviewers</h2>
                     <fieldset id="review-configuration">
                       <legend>Wie beoordeelt dit document?</legend>
                       <input type="hidden" name="review_mode" value="choice">
-                      <label><input type="radio" name="review_option" value="uploader_sole" required> Alleen ik</label>
-                      <label><input type="radio" name="review_option" value="one_other" required> Een collega</label>
-                      <label><input type="radio" name="review_option" value="uploader_and_other" required> Een collega en ik</label>
-                      <label><input type="radio" name="review_option" value="two_others" required> Twee collega's</label>
-                      <label for="review_reviewers">Welke collega's (niet nodig bij Alleen ik)</label>
-                      <select id="review_reviewers" name="review_reviewers" multiple size="6">{options}</select>
+                      <div class="choice-row">
+                        <label class="choice"><input type="radio" name="review_option" value="uploader_sole" required> Alleen ik</label>
+                        <label class="choice"><input type="radio" name="review_option" value="one_other" required> Een collega</label>
+                        <label class="choice"><input type="radio" name="review_option" value="uploader_and_other" required> Een collega en ik</label>
+                        <label class="choice"><input type="radio" name="review_option" value="two_others" required> Twee collega's</label>
+                      </div>
+                      <div id="review-colleagues">
+                        <label for="review_reviewers">Welke collega's (niet nodig bij Alleen ik)</label>
+                        <select id="review_reviewers" name="review_reviewers" multiple size="6" aria-describedby="review-reviewers-help">{options}</select>
+                        <p id="review-reviewers-help" class="field-help">Houd Ctrl (Mac: Cmd) ingedrukt om een tweede collega te kiezen.</p>
+                      </div>
                     </fieldset>
                     <fieldset id="review-four-eyes">
                       <legend>Is het vierogenprincipe verplicht?</legend>
-                      <label><input type="radio" name="four_eyes" value="no"> Nee, één beoordeling is voldoende</label>
-                      <label><input type="radio" name="four_eyes" value="yes"> Ja, beide personen moeten goedkeuren</label>
+                      <div class="choice-row">
+                        <label class="choice"><input type="radio" name="four_eyes" value="no"> Nee, één beoordeling is voldoende</label>
+                        <label class="choice"><input type="radio" name="four_eyes" value="yes"> Ja, beide personen moeten goedkeuren</label>
+                      </div>
                     </fieldset>
                     <fieldset>
                       <details id="review-more">
@@ -5061,8 +5068,10 @@ def create_console_app(
 
                   </div>
                 </div>
-                <button class="btn-primary" type="submit" id="ingest-submit">Inleveren</button>
-                <p id="ingest-status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+                <div class="form-submit">
+                  <button class="btn-primary" type="submit" id="ingest-submit">Inleveren</button>
+                  <p id="ingest-status" role="status" aria-live="polite" aria-atomic="true" hidden></p>
+                </div>
               </form>
             </section>
             <script>
@@ -5120,6 +5129,22 @@ def create_console_app(
                 date.addEventListener("change", showNl);
                 showNl();
               }}
+            }})();
+            </script>
+            <script>
+            (function () {{
+              // "Alleen ik" needs no colleagues: hide the list and send none.
+              var colleagues = document.getElementById("review-colleagues");
+              var list = document.getElementById("review_reviewers");
+              var options = document.querySelectorAll('input[name="review_option"]');
+              function syncColleagues() {{
+                var chosen = document.querySelector('input[name="review_option"]:checked');
+                var alone = !!chosen && chosen.value === "uploader_sole";
+                colleagues.hidden = alone;
+                list.disabled = alone;
+              }}
+              options.forEach(function (radio) {{ radio.addEventListener("change", syncColleagues); }});
+              syncColleagues();
             }})();
             </script>
             """
