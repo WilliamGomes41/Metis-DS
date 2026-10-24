@@ -344,7 +344,7 @@ def test_dispatch_expiry_scan_respects_bound(tmp_path, production_console):
     from tests.test_d5_4_review_interaction_evidence import HTML
     console, users, sid, _ = _system(tmp_path, production_console=production_console)
     snapshots = []
-    for index in range(3):
+    for index in range(51):
         receipt = console.receive_source(actor_id=users['researcher']['account_id'], filename=f'queued-{index}.html', data=HTML,
             content_type='text/html', ingest_kind='new', title=f'Queued {index}', version='1.0', date='2026-09-25',
             live_url='', class_='richtlijn', family='test', named_reviewers=[users['reviewer_a']['account_id']])
@@ -358,9 +358,9 @@ def test_dispatch_expiry_scan_respects_bound(tmp_path, production_console):
     def interrupted():
         return sum(console.workflow_document_store.get_envelope(s)['processing_attempts'][-1]['state'] == 'interrupted' for s in snapshots)
     assert pending(console, limit=1) == []
-    assert interrupted() == 1, 'One scan expired unbounded work while finding no pending command'
+    assert interrupted() == 50, 'One scan must retain a bounded expiry discovery batch'
     assert pending(console, limit=1) == []
-    assert interrupted() == 2, 'The bounded scan must progress past completed expiry work'
+    assert interrupted() == 51, 'The bounded scan must progress past completed expiry work'
 
 # PR #834 repair probes: first executed unchanged on 56488c0.
 def _received(console, users, title='Unstarted'):

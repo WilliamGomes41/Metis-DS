@@ -1135,7 +1135,11 @@
       },
       "6": {
         "red_on_56488c0": "failed",
-        "green": "pending"
+        "green": "Discovery looks ahead through at least 50 documents while pending still limits returned tasks. An expired document no longer hides the following pending task in the same round; expiry work remains bounded to 50 documents for limit=1. Both the supplied expired-then-pending probe and a 51-expired-document bound/progress probe pass.",
+        "tests": [
+          "test_pending_finds_task_after_expired_document_in_same_round",
+          "test_dispatch_expiry_scan_respects_bound"
+        ]
       }
     }
   }

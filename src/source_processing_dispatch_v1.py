@@ -43,7 +43,8 @@ def pending(console, *, limit=None, after_snapshot=None):
     if limit is not None and limit <= 0:
         return found
     rows = console.workflow_document_store.dispatched_snapshot_ids(
-        clock=now(), limit=limit, after_snapshot=after_snapshot)
+        # Expired documents consume discovery capacity, not the returned task limit.
+        clock=now(), limit=max(50, limit) if limit is not None else None, after_snapshot=after_snapshot)
     for sid in rows:
         with console._reprocessing_transaction(sid):
             envelope = console._envelope(sid)

@@ -433,3 +433,9 @@ Regression proof: `test_notices_second_diagnostic_batch_failure_is_explicit_part
 Any visible busy/waiting source document now enables the existing 5s reload and refresh text, including the overview without a document parameter. No overview buttons added. Recorded pending/claimed characterization goldens with --record-characterization; all 45 characterization/source cases pass. Diff audit: 32 existing goldens changed only the Raad asset hash; two new source-overview goldens capture the requested behavior. The asset also hides unavailable candidate-count text for publisher-only notices.
 
 Regression proof: `test_source_overview_refreshes_running_document,test_source_overview_running_golden`. Red on `56488c0`; green after repair.
+
+### Repair 6
+
+Discovery looks ahead through at least 50 documents while pending still limits returned tasks. An expired document no longer hides the following pending task in the same round; expiry work remains bounded to 50 documents for limit=1. Both the supplied expired-then-pending probe and a 51-expired-document bound/progress probe pass.
+
+Regression proof: `test_pending_finds_task_after_expired_document_in_same_round,test_dispatch_expiry_scan_respects_bound`. Red on `56488c0`; green after repair.
