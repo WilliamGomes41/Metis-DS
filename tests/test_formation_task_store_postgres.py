@@ -1,7 +1,12 @@
 """#836 durable task boundary; real PostgreSQL, not an in-memory store.
 
-# release-control-evidence: scope/belofte opslag concurrent stale recovery
-# release-control-evidence: toegang beschikbaarheid kwaliteit releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: opslag concurrent stale recovery
+# release-control-evidence: toegang
+# release-control-evidence: beschikbaarheid
+# release-control-evidence: kwaliteit
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from copy import deepcopy
 from pathlib import Path
@@ -183,6 +188,8 @@ def test_resume_uses_committed_tasks_without_partial_activation(tmp_path, produc
     assert "semantic_replay" not in envelope
     assert not console.snapshot_objects(sid)
     assert envelope["processing_attempts"][-1]["diagnostic"]["validator_input_ref"]
+    # Admission rollback does not strand already durable task-v1 contexts.
+    monkeypatch.delenv("METIS_FORMATION_TASK_STORAGE")
     restarted = restart_production(console)
     bind(restarted)
     following,_ = restarted.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id="resume",
