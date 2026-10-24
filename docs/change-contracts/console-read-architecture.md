@@ -597,3 +597,12 @@ label does not change those server capture operations.
 B6 removal condition: keep the old sessionStorage purge through the first
 deployed release containing the new Raad notices, then remove it in the following
 release. It remains present in this PR. No deployment is performed here.
+
+### SQL parity fixture alignment
+
+The complete application run on d843e8a passed 5,753 tests and failed only the
+two isolated SQL queue-parity fixtures: their hand-written schema lacked topics
+and the metadata columns consumed by the now-shared card query. That fixture
+now supplies those columns/topic row; all queue/duty/admission assertions remain
+unchanged. Both parity cases pass (0.75s), without changing application code.
+A fresh complete run follows; the two-failure run is not represented as green.

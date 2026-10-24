@@ -3215,6 +3215,23 @@
       "src/insight_v1.py:MAX_SCAN": true,
       "src/insight_v1.py:DOCUMENT_STATES": true
     },
-    "B6_removal_condition": "Retain through one deployed release of new Raad notices; remove in following release. No deployment here."
+    "B6_removal_condition": "Retain through one deployed release of new Raad notices; remove in following release. No deployment here.",
+    "parity_fixture_alignment": {
+      "application_revision": "d843e8a8c5be1a0e75f81ad7a707e246e0618f09",
+      "full_before": {
+        "passed": 5753,
+        "failed": 2,
+        "skipped": 23,
+        "xfailed": 3,
+        "log": "work/834-cleanup-COMPLETE.log"
+      },
+      "cause": "Isolated SQL parity fixture schema lacked topics and shared card columns; production schema already has them.",
+      "change": "Fixture metadata columns/topic row and explicit insertion columns only; SQL query and all parity/admission assertions unchanged.",
+      "targeted_after": {
+        "passed": 2,
+        "seconds": 0.75,
+        "log": "work/834-cleanup-parity-fixture-GREEN.log"
+      }
+    }
   }
 }
