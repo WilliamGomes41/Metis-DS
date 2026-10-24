@@ -127,6 +127,28 @@ SCHEMA_V14 = REPO_ROOT / "schemas" / "knowledge_object.schema.v1.4.json"
 CONSOLE_VERSION = "operations-console-v1.0.0"
 SNAPSHOT_OBJECT_WRITE_CONFLICT = "snapshot_object_write_conflict"
 CAPTURED = "captured_not_published"
+# These two normal progress reasons are written by receipt/formation below.
+PROCESSING_NOT_STARTED = "source_selection_not_started"
+PROCESSING_IN_PROGRESS = "pre_review_llm_processing_in_progress"
+NON_BLOCKING_PROCESSING_REASONS = frozenset({PROCESSING_NOT_STARTED, PROCESSING_IN_PROGRESS})
+
+
+def stored_processing_blocked(envelope):
+    """A stored failure/expired attempt, never a normal not-started/running state."""
+    blocker = envelope.get("processing_blocker")
+    if blocker and blocker not in NON_BLOCKING_PROCESSING_REASONS:
+        return True
+    attempts = envelope.get("processing_attempts") or []
+    latest = attempts[-1] if attempts else {
+        "state": envelope.get("latest_processing_state"),
+        "expires_at": envelope.get("latest_processing_expires_at")}
+    if latest.get("state") in {"failed", "interrupted"}:
+        return True
+    from src.processing_retry_v1 import now
+    return bool(latest.get("state") == "running" and latest.get("expires_at")
+                and datetime.fromisoformat(latest["expires_at"]) <= now())
+
+
 PRE_REVIEW_BLOCKED = "blocked_pending_pre_review"
 PUBLISHED_ENVELOPE_STATES = frozenset({"published", "superseded", "withdrawn"})
 UNPUBLISHED_DELETE_EVENT = "unpublished_snapshot_deleted"
@@ -449,7 +471,7 @@ def review_stacks(
     return koppen, inhoud
 
 
-_SOURCE_SELECTION_READS = ContextVar("source_selection_reads", default=None)
+from src.console_read_snapshot_v1 import ConsoleReadSnapshot, CURRENT_READ as _DOCUMENT_READS
 
 _STRUCTURE_CONFIRMATION = ContextVar("metis_structure_confirmation", default=False)
 
@@ -667,25 +689,25 @@ POSTGRES_WORKFLOW_AUTHORITY_REQUIRED = "postgres_workflow_authority_required"
 
 class OperationsConsole:
     @contextmanager
-    def source_selection_read_scope(self, *, retained_only=False):
-        """Borrow authoritative read data only during one source-selection GET.
+    def document_read_operation(self, *, retained_only=False):
+        """Own authoritative document inputs for one read operation.
 
         Do not use around commands. Each request owns its state; even nested
         scopes are independent. PostgreSQL uses this to avoid repeated reads.
         Diagnostic callers can forbid native extraction when retained evidence
         disappears during the read. Other callers keep the existing fallback.
         """
-        parent = self._source_selection_reads()
-        token = _SOURCE_SELECTION_READS.set({"console": self, "envelopes": None, "objects": {},
-                                           "retained_only": retained_only or bool(parent and parent.get('retained_only'))})
+        parent = self._document_reads()
+        token = _DOCUMENT_READS.set(ConsoleReadSnapshot(
+            console=self, retained_only=retained_only or bool(parent and parent.retained_only)))
         try:
             yield
         finally:
-            _SOURCE_SELECTION_READS.reset(token)
+            _DOCUMENT_READS.reset(token)
 
-    def _source_selection_reads(self):
-        reads = _SOURCE_SELECTION_READS.get()
-        return reads if reads is not None and reads["console"] is self else None
+    def _document_reads(self):
+        reads = _DOCUMENT_READS.get()
+        return reads if reads is not None and reads.console is self else None
 
     def __init__(
         self,
@@ -1034,11 +1056,11 @@ class OperationsConsole:
         }
 
     @diagnostic_phase("review_bindings")
-    def object_review_bindings(self, snapshot_id: str, *, objects=None) -> list[dict[str, Any]]:
+    def object_review_bindings(self, snapshot_id: str, *, objects=None, bindings=None) -> list[dict[str, Any]]:
         self._envelope(snapshot_id)
-        current = {row["object_id"]: row for row in (self.snapshot_objects(snapshot_id) if objects is None else objects)}
+        current = {row["object_id"]: row for row in (self._read_current_objects(snapshot_id) if objects is None else objects)}
         out = []
-        for row in self._bindings.get(snapshot_id, []):
+        for row in (self._bindings.get(snapshot_id, []) if bindings is None else bindings):
             item = dict(row)
             obj = current.get(item.get("object_id"))
             item["valid"] = bool(obj) and still_matches(item, obj)
@@ -1460,8 +1482,12 @@ class OperationsConsole:
                     "replaces_snapshot_id": replaces_snapshot_id, "revision_reason": revision_reason})}
             identity_hash = stable_hash({"actor_id": actor_id, "command_id": command_id})
             command_snapshot = f"snap-{identity_hash[:16]}-{identity_hash[16:24]}"
-            self.list_envelopes()
-            prior = self._envelopes.get(command_snapshot)
+            try:
+                prior = self._envelope(command_snapshot)
+            except ConsoleError as exc:
+                if exc.code != "unknown_snapshot":
+                    raise
+                prior = None
             if prior is not None:
                 if prior.get("ingest_command") != ingest_command:
                     raise ConsoleError("ingest_command_conflict")
@@ -1540,7 +1566,7 @@ class OperationsConsole:
             # run, and no attempt is implicitly authorized by receiving bytes.
             envelope["received_source"] = {"filename": filename, "bytes": len(data)}
             envelope["publication_eligibility"] = PRE_REVIEW_BLOCKED
-            envelope["processing_blocker"] = "source_selection_not_started"
+            envelope["processing_blocker"] = PROCESSING_NOT_STARTED
             boundary = _registration_boundary or self._store_write_lock
             with boundary():
                 self._reload_store_locked()
@@ -1580,7 +1606,7 @@ class OperationsConsole:
                 expected_revision = (self.workflow_document_store.revision_for_rows([])
                                      if getattr(self, "workflow_document_store", None) is not None else "")
                 envelope["publication_eligibility"] = PRE_REVIEW_BLOCKED
-                envelope["processing_blocker"] = "pre_review_llm_processing_in_progress"
+                envelope["processing_blocker"] = PROCESSING_IN_PROGRESS
                 from src.source_selection_v1 import active_configuration
                 envelope["processing_configuration"] = active_configuration(self)
                 attempt, _ = reserve(envelope, command_id=uuid.uuid4().hex, actor_id=actor_id,
@@ -1713,8 +1739,12 @@ class OperationsConsole:
             except ConsoleError:
                 if not ingest_command or attempt_id:
                     raise
-                self.list_envelopes()
-                prior = self._envelopes.get(snapshot_id)
+                try:
+                    prior = self._envelope(snapshot_id)
+                except ConsoleError as exc:
+                    if exc.code != "unknown_snapshot":
+                        raise
+                    prior = None
                 if prior and prior.get("ingest_command") == ingest_command:
                     return self._durable_receipt(prior) if _receive_only else self._receipt(prior)
                 raise
@@ -1795,37 +1825,27 @@ class OperationsConsole:
         return kind in {"html", "pdf", "boom"}  # every supported source gets a model proposal
 
     @diagnostic_phase("processing_status")
-    def processing_status(self, snapshot_id: str, *, actor_id: str | None = None,
-                          deep: bool = True) -> dict[str, Any]:
-        """Verwerkingsstatus van één document.
-
-        ``deep=False`` is de compacte variant voor overzichten (D-PERF-2): die
-        MOET alleen opgeslagen attempt- en ``provider_evidence``-velden lezen en
-        MAG NIET ``stored_extraction`` of ``incomplete(objects=...)`` aanroepen.
-        Een opgeslagen ``formation_incomplete`` blijft dan ongecontroleerd
-        (``formation_checked`` False) en MOET NOOIT als voltooid gelden.
-        """
+    def processing_status(self, snapshot_id: str, *, actor_id: str | None = None) -> dict[str, Any]:
+        """Actuele detailcontrole; compacte overzichten gebruiken eigen expliciete invoer."""
         from src.processing_retry_v1 import status
         if actor_id is not None:
             from src.source_selection_v1 import authorize
             authorize(self, actor_id, self._envelope(snapshot_id))
         result = status(self._envelope(snapshot_id), policy=self._processing_limits())
-        # Compact: één alleen-lezen objectread zonder deepcopy (D-PERF-4).
-        overview_rows = None if deep else self._overview_rows(snapshot_id)
         if (self.snapshot_is_published(snapshot_id)
-                or (self.snapshot_objects(snapshot_id) if deep else overview_rows)
-                or self._bindings.get(snapshot_id) or self._envelope(snapshot_id).get("review_passes")):
+                or self._read_current_objects(snapshot_id)
+                or self.object_review_bindings(snapshot_id, objects=self._read_current_objects(snapshot_id)) or self._envelope(snapshot_id).get("review_passes")):
             result["retry_allowed"] = False
         from src.recoverable_formation_v1 import incomplete
         envelope = self._envelope(snapshot_id)
         stored_incomplete = incomplete(envelope)
-        if not deep or not stored_incomplete:
+        if not stored_incomplete:
             # Zonder opgeslagen open vorming is de diepe controle identiek
             # (``incomplete`` eindigt dan direct op False).
             result["formation_incomplete"] = stored_incomplete
             result["formation_checked"] = not stored_incomplete
         else:
-            objects = self.snapshot_objects(snapshot_id)
+            objects = self._read_current_objects(snapshot_id)
             from src.source_preparation_context_v1 import stored_extraction
             try:
                 formation_fragments = stored_extraction(envelope)
@@ -1845,22 +1865,31 @@ class OperationsConsole:
         else:
             result["formation_progress"] = {}
         from src.source_selection_v1 import resume_contract_current
-        result["resume_allowed"] = bool(self._can_resume_formation(snapshot_id, rows=overview_rows)
+        result["resume_allowed"] = bool(self._can_resume_formation(snapshot_id)
             and resume_contract_current(envelope) and result["state"] != "running"
             and (result["retry_attempts_used"] < result["max_attempts"] or result["recovery_available"])
             and result["reason_code"] not in {"processing_retry_cooldown", "processing_structural_limit"})
         return result
 
-    def _overview_rows(self, snapshot_id: str) -> list[dict[str, Any]]:
-        """Huidige objectrevisies voor overzichten, zonder deepcopy (D-PERF-4).
+    def _read_current_objects(self, snapshot_id: str, *, envelope=None) -> list[dict[str, Any]]:
+        """Borrow operation-owned immutable inputs for pure domain calculations.
 
-        De rijen zijn gedeelde opgeslagen staat: aanroepers MOETEN ze alleen
-        lezen; wijzigen of doorgeven aan schrijfpaden MAG NIET.
+        Public snapshot_objects keeps its detached caller copy. Commands never
+        borrow these rows; remember=True always loads/pins current working data.
         """
-        self._envelope(snapshot_id)
-        return current_revisions(self._load_objects(snapshot_id, remember=False), snapshot_id=snapshot_id)
+        if envelope is None:
+            self._envelope(snapshot_id)
+        elif str(envelope.get("snapshot_id") or "") != snapshot_id:
+            raise ConsoleError("unknown_snapshot")
+        reads = self._document_reads()
+        if reads is None:
+            return current_revisions(self._load_objects(snapshot_id, remember=False), snapshot_id=snapshot_id)
+        if snapshot_id not in reads.current_objects:
+            reads.current_objects[snapshot_id] = current_revisions(
+                self._load_objects(snapshot_id, remember=False), snapshot_id=snapshot_id)
+        return reads.current_objects[snapshot_id]
 
-    def _can_resume_formation(self, snapshot_id, *, rows=None):
+    def _can_resume_formation(self, snapshot_id):
         from src.recoverable_formation_v1 import incomplete, VERSION
         from src.source_context_review_v1 import ROLE_KEY, LINKS_KEY
         envelope = self._envelope(snapshot_id)
@@ -1874,7 +1903,7 @@ class OperationsConsole:
                               and (lineage_evidence(row) or {}).get("reason") == "same-source candidate retirement"))
                 or ROLE_KEY in (row.get("metadata") or {}) or LINKS_KEY in (row.get("metadata") or {})
                     or ((row.get("metadata") or {}).get("passage_register") or {}).get("source") == "review"
-                for row in (rows if rows is not None else self.snapshot_objects(snapshot_id))))
+                for row in self._read_current_objects(snapshot_id)))
 
     def resume_formation(self, *, actor_id, snapshot_id, command_id, expected_revision):
         """Resume open producer work; reviewed/published work requires successor."""
@@ -1924,7 +1953,8 @@ class OperationsConsole:
             from src.attempt_diagnostics_v1 import checkpoint
             from src.source_selection_v1 import authorize
             with self._reprocessing_transaction(snapshot_id):
-                current = deepcopy(self._envelope(snapshot_id))
+                # Command reads already own detached decoded JSON.
+                current = self._envelope(snapshot_id)
                 active = assert_active(current, attempt_id, now())
                 authorize(self, active["actor_id"], current)
                 checkpoint(active, phase, values)
@@ -2481,8 +2511,8 @@ class OperationsConsole:
             retained = stored_fragments(envelope)
         if retained is not None:
             return retained
-        reads = self._source_selection_reads()
-        if reads is not None and reads.get('retained_only'):
+        reads = self._document_reads()
+        if reads is not None and reads.retained_only:
             raise ConsoleError('retained_source_not_recorded')
         args = {"document_id": envelope["document_id"], "source_id": envelope["source_id"]}
         if envelope.get("decision_tree_formation"):
@@ -2584,7 +2614,8 @@ class OperationsConsole:
 
     @diagnostic_phase("document_summary")
     def _receipt(self, envelope: dict[str, Any]) -> dict[str, Any]:
-        return deepcopy({key: value for key, value in envelope.items() if key != "semantic_replay"})
+        with diagnostic_phase("payload_copy"):
+            return deepcopy({key: value for key, value in envelope.items() if key != "semantic_replay"})
 
     @diagnostic_phase("objects_read")
     def snapshot_objects(
@@ -2599,10 +2630,13 @@ class OperationsConsole:
             envelope = self._envelope(snapshot_id)
         elif str(envelope.get("snapshot_id") or "") != snapshot_id:
             raise ConsoleError("unknown_snapshot")
-        rows = self._load_objects(snapshot_id, remember=for_update)
+        if include_blocked or for_update:
+            rows = self._load_objects(snapshot_id, remember=for_update)
         if include_blocked:
-            return deepcopy(rows)
-        return deepcopy(current_revisions(rows, snapshot_id=snapshot_id))
+            with diagnostic_phase("payload_copy"):
+                return deepcopy(rows)
+        with diagnostic_phase("payload_copy"):
+            return deepcopy(self._read_current_objects(snapshot_id, envelope=envelope) if not for_update else current_revisions(rows, snapshot_id=snapshot_id))
 
     def snapshot_containers(self, snapshot_id: str) -> dict[str, Any]:
         """Typed knowledge/source access over the current atomic revision."""
@@ -2627,7 +2661,7 @@ class OperationsConsole:
         identity = topic_identity_key(label)
         matches = [
             row
-            for row in self.list_envelopes()
+            for row in self.list_document_cards()
             if topic_identity_key(str(row.get("family") or "")) == identity
         ]
         if not matches:
@@ -2643,7 +2677,7 @@ class OperationsConsole:
 
     def family_tree(self) -> dict[str, Any]:
         families: dict[str, dict[str, Any]] = {}
-        for envelope in self.list_envelopes():
+        for envelope in self.list_document_cards():
             family = envelope["family"]
             bucket = families.setdefault(family, {"family": family, "children": []})
             bucket["children"].append(
@@ -2658,6 +2692,7 @@ class OperationsConsole:
                     "sha256": envelope["sha256"],
                     "parent": family,
                     "is_live_capture": envelope["is_live_capture"],
+                    "uploader_account_id": envelope["uploader_account_id"],
                 }
             )
         for bucket in families.values():
@@ -4217,29 +4252,29 @@ class OperationsConsole:
             return self._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id)
 
     def live_snapshot(self, *, family: str, class_: str) -> dict[str, Any] | None:
-        self.list_envelopes()
+        envelopes = self.list_document_cards()
         live = [
             envelope
-            for envelope in self._envelopes.values()
+            for envelope in envelopes
             if envelope["family"] == family and envelope["class"] == class_ and envelope.get("is_live_capture")
         ]
         if not live:
             return None
         live.sort(key=lambda row: row["acquired_at"])
-        return self._receipt(live[-1])
+        return self._receipt(self._envelope(live[-1]["snapshot_id"]))
 
     def select_for_question(self, *, family: str, asked_class: str) -> list[dict[str, Any]]:
-        self.list_envelopes()
+        envelopes = self.list_document_cards()
         if asked_class not in ALLOWED_CLASSES:
             raise ConsoleError("invalid_class")
         matching = [
             envelope
-            for envelope in self._envelopes.values()
+            for envelope in envelopes
             if envelope["family"] == family and envelope["class"] == asked_class
         ]
         heavier_present = any(
             CLASS_ORDER[envelope["class"]] > CLASS_ORDER[asked_class]
-            for envelope in self._envelopes.values()
+            for envelope in envelopes
             if envelope["family"] == family
         )
         if not matching and heavier_present:
@@ -4265,18 +4300,18 @@ class OperationsConsole:
 
     def resolve_document(self, *, title: str, version: str, family: str) -> dict[str, Any]:
         """Map researcher-visible document identity onto the kernel snapshot."""
-        self.list_envelopes()
+        envelopes = self.list_document_cards()
         wanted = (title.strip(), version.strip(), family.strip())
         matches = [
             row
-            for row in self._envelopes.values()
+            for row in envelopes
             if (row["title"], row["version"], row["family"]) == wanted
         ]
         if not matches:
             raise ConsoleError("unknown_document")
         if len(matches) > 1:
             raise ConsoleError("document_not_unique")
-        return self._receipt(matches[0])
+        return self._receipt(self._envelope(matches[0]["snapshot_id"]))
 
     def move_family_document(
         self,

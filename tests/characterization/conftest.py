@@ -36,6 +36,8 @@ def offline_clock(monkeypatch):
     import src.operations_console_app as ui
     import src.quality_evidence_v1 as quality
     import src.processing_retry_v1 as retry
+    import src.source_processing_dispatch_v1 as dispatch
+    import src.source_selection_v1 as selection
     import src.attempt_diagnostics_v1 as diagnostics
     import src.processing_trace_v1 as trace
 
@@ -47,6 +49,8 @@ def offline_clock(monkeypatch):
     monkeypatch.setattr(quality, "uuid4", lambda: UUID(int=2))
     monkeypatch.setattr(quality, "instant", lambda: stamp)
     monkeypatch.setattr(retry, "now", lambda: datetime(2026, 10, 17, 8, tzinfo=timezone.utc))
+    monkeypatch.setattr(dispatch, "now", retry.now)
+    monkeypatch.setattr(selection, "now", retry.now)
     monkeypatch.setattr(ui, "new_review_interaction_id", lambda: "characterization-interaction")
     monkeypatch.setattr(trace, "runtime_identity", lambda: {"version": "a" * 40, "instance": "local",
                                                           "pid": 1, "runtime_id": "b" * 32})

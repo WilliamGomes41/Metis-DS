@@ -32,7 +32,12 @@ def summary_database():
     con.execute(f"CREATE SCHEMA {schema}")
     # Isolated test schema: only columns consumed by the read-only query.
     definitions = {
-        "documents": "snapshot_id text, class text, envelope_payload jsonb, publication_eligibility text",
+        "documents": """snapshot_id text, class text, envelope_payload jsonb, publication_eligibility text,
+            document_id text DEFAULT 'parity-document', source_id text DEFAULT 'parity-source',
+            title text DEFAULT 'Parity', state text DEFAULT 'in_review', source_date date,
+            replaces_snapshot_id text, source_version text DEFAULT '1.0', source_sha256 text,
+            uploader_account_id text DEFAULT 'a', topic_id text DEFAULT 'parity-topic'""",
+        "topics": "topic_id text PRIMARY KEY, display_name text",
         "document_reviewers": "snapshot_id text, account_id text",
         "document_objects": "snapshot_id text, object_id text, position int, payload jsonb",
         "accounts": "account_id text, username text, display_name text",
@@ -40,6 +45,7 @@ def summary_database():
     }
     for table, columns in definitions.items():
         con.execute(f"CREATE TABLE {schema}.{table} ({columns})")
+    con.execute(f"INSERT INTO {schema}.topics VALUES (%s,%s)", ("parity-topic", "Parity"))
     captured = {}
 
     def execute(sql, params):
@@ -142,7 +148,7 @@ def test_sql_sets_match_domain_queues_including_missing_admission(summary_databa
         bindings.append(dict(object_id=object_id, object_version="1.0", canonical_object_hash=by_id[object_id]["provenance"]["canonical_object_hash"],
                              confirmed_object_type=by_id[object_id].get("confirmed_object_type", ""), reviewer_id="a", valid=True, decision="approve"))
     envelope = dict(snapshot_id="snap", title="Parity", version="1.0", named_reviewers=["a", "b"], **{"class": kind})
-    con.execute(f"INSERT INTO {schema}.documents VALUES (%s,%s,%s,%s)", ("snap", kind, Jsonb(envelope), "blocked_pending_review"))
+    con.execute(f"INSERT INTO {schema}.documents(snapshot_id,class,envelope_payload,publication_eligibility) VALUES (%s,%s,%s,%s)", ("snap", kind, Jsonb(envelope), "blocked_pending_review"))
     for actor in ("a", "b"):
         con.execute(f"INSERT INTO {schema}.accounts VALUES (%s,%s,%s)", (actor, actor, actor))
         con.execute(f"INSERT INTO {schema}.document_reviewers VALUES (%s,%s)", ("snap", actor))

@@ -1,5 +1,4 @@
 """Authorized quality table and report history in Inzicht; no workflow authority."""
-from contextlib import nullcontext
 from copy import deepcopy
 from datetime import date
 from html import escape
@@ -13,42 +12,72 @@ from src.quality_evidence_v1 import instant
 from src.quality_metrics_v1 import build_report
 from src.quality_metrics_store_v1 import QualityReportStore
 from src.review_ledger import read_events
-from src.workflows.workflow_transaction_v1 import workflow_transaction
+from src.workflows.workflow_transaction_v1 import workflow_read_transaction
 
 LOG = logging.getLogger(__name__)
 
 
+def _quality_documents(cards, account_id):
+    return [row for row in cards if row.get("uploader_account_id") == account_id
+            or account_id in (row.get("named_reviewers") or [])]
+
+
+def current_quality_scope(state, account):
+    """Fresh post-calculation access check; no repeated source/object capture."""
+    with state.document_read_operation(), workflow_read_transaction(state.workflow_document_store):
+        cards = state.list_document_cards()
+    return {row["snapshot_id"] for row in _quality_documents(cards, account["account_id"])}
+
+
 def capture(state, account):
-    """Freeze only explicitly assigned/owned sources under existing store lock."""
-    owner = getattr(state, "workflow_document_store", None)
-    with state._store_write_lock():
-        with workflow_transaction(owner) if owner else nullcontext() as con:
-            if con is not None:
-                con.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-            state._reload_store_locked()
-            aid = account["account_id"]
-            envelopes = [e for e in state.list_envelopes()
-                         if e.get("uploader_account_id") == aid or aid in (e.get("named_reviewers") or [])]
-            docs = [{"envelope": deepcopy(e), "objects": state.snapshot_objects(e["snapshot_id"]),
-                     "events": [], "bindings": state.object_review_bindings(e["snapshot_id"]),
-                     "fragments": state.review_source_fragments(e["snapshot_id"], envelope=e)} for e in envelopes]
-            by_id = {d["envelope"]["snapshot_id"]: d for d in docs}
-            # Legacy events are attributed only when their object ID is unique globally.
-            ownership = {}
-            for e in state.list_envelopes():
-                sid = e["snapshot_id"]
-                ownership.setdefault(sid, set()).add(sid)
-                for obj in state.snapshot_objects(sid):
-                    ownership.setdefault(obj["object_id"], set()).add(sid)
-            for event in read_events(state._ledger_path):
-                payload = event.get("details") or {}
-                sid = payload.get("snapshot_id") or (payload.get("review_interaction") or {}).get("snapshot_id")
-                if not sid:
-                    candidates = ownership.get(event.get("object_id"), set())
-                    sid = next(iter(candidates)) if len(candidates) == 1 else None
-                if sid in by_id:
-                    by_id[sid]["events"].append(deepcopy(event))
-            return {"documents": docs, "observed_at": instant()}
+    """Own metadata, then freeze assigned SQL inputs before external work.
+
+    Metadata and detail capture are independent SQL snapshots. No consumer or
+    source computation runs with an open read transaction.
+    """
+    owner = state.workflow_document_store
+    with state.document_read_operation():
+        with workflow_read_transaction(owner):
+            cards = state.list_document_cards()
+        owned = _quality_documents(cards, account["account_id"])
+        with workflow_read_transaction(owner):
+            envelopes = [state._envelope(e["snapshot_id"]) for e in owned]
+            # Capture native rows only. Revision validation and detached copies may
+            # be CPU-heavy and belong after the transaction, just like source I/O.
+            reads = state._document_reads()
+            for envelope in envelopes:
+                state._load_objects(envelope["snapshot_id"], remember=False)
+            ids = [e["snapshot_id"] for e in envelopes]
+            from src.operations_console_v1 import ConsoleError
+            from src.workflows.workflow_review_postgres_v1 import WorkflowReviewStoreError
+            try:
+                bindings = state.workflow_review_store.read_bindings(ids)
+            except WorkflowReviewStoreError as exc:
+                raise ConsoleError("workflow_review_unavailable", str(exc)) from exc
+            reads.bindings.update({sid: bindings.get(sid, []) for sid in ids})
+            # Attribution needs IDs only; never fetch another source's object payloads.
+            with owner._connect() as con:
+                object_ids = con.execute("SELECT DISTINCT snapshot_id,object_id FROM workflow.document_objects").fetchall()
+        ownership = {e["snapshot_id"]: {e["snapshot_id"]} for e in cards}
+        for obj in object_ids:
+            ownership.setdefault(obj["object_id"], set()).add(obj["snapshot_id"])
+        # Source verification/reconstruction may touch disk/Blob or extract data.
+        # Ledger dispatch may also be file-backed. Neither belongs in a SQL read.
+        docs = [{"envelope": state._receipt(e), "objects": state.snapshot_objects(e["snapshot_id"]),
+                 "events": [], "bindings": state.object_review_bindings(e["snapshot_id"]),
+                 "fragments": None} for e in envelopes]
+        by_id = {d["envelope"]["snapshot_id"]: d for d in docs}
+        for doc in docs:
+            doc["fragments"] = state.review_source_fragments(doc["envelope"]["snapshot_id"], envelope=doc["envelope"])
+        for event in read_events(state._ledger_path):
+            payload = event.get("details") or {}
+            sid = payload.get("snapshot_id") or (payload.get("review_interaction") or {}).get("snapshot_id")
+            if not sid:
+                candidates = ownership.get(event.get("object_id"), set())
+                sid = next(iter(candidates)) if len(candidates) == 1 else None
+            if sid in by_id:
+                by_id[sid]["events"].append(deepcopy(event))
+        return {"documents": docs, "observed_at": instant()}
 
 
 class QualityViewError(Exception):
@@ -91,8 +120,7 @@ def quality_view(state, store, account, filters, requested_id=None):
         else:
             record = store.calculate(owner=account["account_id"], inputs=inputs,
                 build=lambda i: build_report(i["documents"], as_of=i["observed_at"], filters=i["filters"]))
-        current = capture(state, account)
-        allowed = {d["envelope"]["snapshot_id"] for d in current["documents"]}
+        allowed = current_quality_scope(state, account)
         if not set(record["report"]["scope"]) <= allowed:
             raise QualityViewError(409, "Toegang is gewijzigd. Vernieuw de pagina.")
         history = store.history(owner=account["account_id"], allowed_scope=allowed)

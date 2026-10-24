@@ -21,8 +21,20 @@ from tests.complete_workflow_support import complete_postgres as workflow_postgr
 
 
 def _legacy_keys(console):
-    """The pre-PR-a route: ids taken from list_envelopes receipts (golden reference)."""
     return [row['snapshot_id'] for row in console.list_envelopes()]
+
+
+def _legacy_documents(console, document=''):
+    # Full-payload reference, deliberately more expensive than the production
+    # summary projection. Both feed the same conservative overview contract.
+    if document:
+        console._envelope(document)
+    rows = console.workflow_document_store.list_envelopes()
+    for row in rows:
+        runs = row.get('quality_processing_runs') or []
+        row['source_fragment_count'] = len(runs[-1].get('source_fragments', [])) if runs else None
+        row['pending_rejection_count'] = len(((row.get('semantic_replay') or {}).get('provider_evidence') or {}).get('pending_rejections') or [])
+    return rows
 
 
 def _freeze(monkeypatch):
@@ -54,7 +66,7 @@ def test_source_selection_html_identical_to_legacy_list(tmp_path, monkeypatch, u
     _freeze(monkeypatch)
     new = [_norm(p) for p in _pages(client, sid)]
     _freeze(monkeypatch)
-    monkeypatch.setattr(ui, 'document_keys', _legacy_keys)
+    monkeypatch.setattr(console, 'source_selection_documents', lambda *, actor_id, document='': _legacy_documents(console, document))
     old = [_norm(p) for p in _pages(client, sid)]
     assert new == old
     assert sid in new[0] and sid in new[1]
@@ -73,17 +85,17 @@ def test_source_selection_list_makes_no_receipt_copies(tmp_path, monkeypatch, *,
 
 def test_key_order_matches_list_envelopes(tmp_path, *, production_console):
     console, *_ = system(tmp_path, production_console=production_console)
-    assert ui.document_keys(console) == _legacy_keys(console)
+    assert [row['snapshot_id'] for row in console.source_selection_documents(actor_id=next(a['account_id'] for a in console.list_accounts() if 'researcher' in a['roles']))] == _legacy_keys(console)
 
 
-def test_postgres_key_list_matches_authoritative_list(workflow_postgres, tmp_path):
+def test_compact_source_list_matches_authoritative_list(workflow_postgres, tmp_path):
     from tests.test_attempt_diagnostics_postgres import bound, ingest
     from tests.test_review_batch_atomic_postgres import _console
     console = _console(tmp_path, workflow_postgres)
     bound(console, reject=False)
     ingest(console)
     expected = [row['snapshot_id'] for row in console.list_envelopes()]
-    assert console.list_snapshot_ids() == expected
-    with console.source_selection_read_scope():
-        assert ui.document_keys(console) == expected
-        assert [console._envelope(s)['snapshot_id'] for s in ui.document_keys(console)] == expected
+    assert [row["snapshot_id"] for row in console.list_document_cards()] == expected
+    with console.document_read_operation():
+        assert [row['snapshot_id'] for row in console.source_selection_documents(actor_id=next(a['account_id'] for a in console.list_accounts() if 'researcher' in a['roles']))] == expected
+        assert [console._envelope(s)['snapshot_id'] for s in [row['snapshot_id'] for row in console.source_selection_documents(actor_id=next(a['account_id'] for a in console.list_accounts() if 'researcher' in a['roles']))]] == expected

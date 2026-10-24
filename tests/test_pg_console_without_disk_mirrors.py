@@ -357,7 +357,7 @@ def _run(config, root, guard, monkeypatch, checkpoints, completed, expected=None
         step("delete-unpublished", lambda: console.delete_unpublished_snapshot(
             actor_id=accounts["publisher"]["account_id"], snapshot_id=disposable["snapshot_id"],
             confirmed=True, confirm_title="D4 mirror lifecycle"))
-        assert disposable["snapshot_id"] not in console.list_snapshot_ids()
+        assert disposable["snapshot_id"] not in [row["snapshot_id"] for row in console.list_document_cards()]
         return {"console": console, "accounts": accounts, "source": source,
                 "canonical": canonical, "adapter": adapter, "successor": v3,
                 "build": build}

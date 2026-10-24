@@ -109,6 +109,9 @@ class _TreeBase:
 
 
 class _TreeSubject(_PostgresBadgeCountsMixin, _TreeBase):
+    def _document_reads(self):
+        return None
+
     pass
 
 

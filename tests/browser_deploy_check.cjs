@@ -25,12 +25,52 @@ const fs=require('node:fs');
       await page.locator('[name=password]').fill(manifest.password);
       await Promise.all([page.waitForURL(base+'/'),page.locator('button[type=submit]').click()]);
       await post('/browser-faults',{});
+      let releaseNotices;
+      let noticeRequests=0;
+      const gate=new Promise(resolve=>{releaseNotices=resolve;});
+      await page.route('**/raad/meldingen',async route=>{noticeRequests++;await gate;await route.continue();});
+      const noticesStarted=page.waitForRequest(request=>request.url().endsWith('/raad/meldingen'));
       await page.getByRole('button',{name:/Open Raad/}).click();
+      await noticesStarted;
+      await page.getByRole('button',{name:'Sluit Raad'}).click();
+      await page.getByRole('button',{name:/Open Raad/}).click();
+      await page.evaluate(()=>new Promise(requestAnimationFrame));
+      if(noticeRequests!==1)throw Error('reopening Raad duplicated its in-flight notices request');
+      const noticesFinished=page.waitForResponse(response=>response.url().endsWith('/raad/meldingen'));
+      releaseNotices();
+      await noticesFinished;
+      await page.unroute('**/raad/meldingen');
+      if(await page.evaluate(()=>sessionStorage.getItem('metis-care-notices'))!==null)
+        throw Error('protected notices persisted in session storage');
+      // Missing processing access must not display a candidate count/unknown count.
+      await page.getByRole('button',{name:'Sluit Raad'}).click();
+      await page.route('**/raad/meldingen',route=>route.fulfill({json:{complete:true,next_offset:null,documents:[{
+        snapshot_id:'publisher-fixture',title:'Publisher-only notice',processing_access:false,
+        processing_blocked:true,blocked:null,reasons:[],telemetry:{errors:0}}]}}));
+      await page.getByRole('button',{name:/Open Raad/}).click();
+      const publisherNotice=page.getByRole('link',{name:'Publisher-only notice'}).locator('..');
+      await publisherNotice.waitFor();
+      const publisherText=await publisherNotice.textContent();
+      if(!publisherText.includes('opgeslagen verwerkingsblokkade')||publisherText.includes('kandidaten'))
+        throw Error('publisher notice exposed unavailable processing details: '+publisherText);
+      await page.unroute('**/raad/meldingen');
       const healthy=await run(page);
       const paths=healthy.map(r=>r.path);
       for(const expected of ['/','/ingest','/source-selection','/review','/publish','/tree','/settings','/inzicht'])
         if(!paths.includes(expected))throw Error(username+' missing page '+expected+': '+JSON.stringify(paths));
       results[username]={healthy};
+      if(username===manifest.author){
+        const insightContext=await browser.newContext({storageState:await page.context().storageState()});
+        const insight=await insightContext.newPage();
+        await insight.route('**/inzicht/api/documents?*',route=>route.fulfill({json:{documents:[],
+          total:null,offset:0,limit:200,next_offset:null,telemetry_partial:false,metadata_partial:true}}));
+        await insight.goto(base+'/inzicht?tab=documenten');
+        await insight.waitForFunction(()=>document.querySelector('#d-status')?.textContent.includes('documentoverzicht onvolledig'));
+        const text=await insight.locator('#d-status').textContent();
+        if(text.includes('0 van 0'))throw Error('partial metadata claimed a complete empty document list');
+        await insightContext.close();
+      }
+
       // Playwright also reports errors from frames; the healthy pass must have none.
       if(errors.length)throw Error('page errors on a healthy console: '+errors.join('; '));
       if(username===manifest.reviewer){

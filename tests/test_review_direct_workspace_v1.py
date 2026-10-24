@@ -21,7 +21,7 @@ class Console:
     _ledger_path = None
 
     @contextmanager
-    def source_selection_read_scope(self):
+    def document_read_operation(self):
         yield
 
     def __init__(self, *, roles=('reviewer',), documents=()):
@@ -30,6 +30,9 @@ class Console:
 
     def list_envelopes(self):
         return [{**d['envelope'], 'snapshot_id': sid} for sid, d in self.documents.items()]
+
+    def _envelope(self, snapshot_id):
+        return {**self.documents[snapshot_id]['envelope'], 'snapshot_id': snapshot_id}
 
     def list_accounts(self):
         return [{'account_id': i, 'display_name': i} for i in {i for d in self.documents.values() for i in d['envelope']['named_reviewers']}]
@@ -78,10 +81,6 @@ def client(console, *, login=True):
     @app.exception_handler(ConsoleError)
     async def error(request, exc):
         return JSONResponse({'error': str(exc)}, status_code=403)
-
-    @app.get('/review')
-    def old_review():
-        raise AssertionError('replaced route')
 
     @app.post('/review/headings/batch-confirm')
     def headings():

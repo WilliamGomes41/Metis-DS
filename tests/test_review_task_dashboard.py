@@ -223,7 +223,7 @@ class _HistoryConsole:
         self.signals = signals
         self.object_reads: list[tuple[str, bool]] = []
 
-    def list_envelopes(self) -> list[dict]:
+    def list_document_cards(self) -> list[dict]:
         return [
             {
                 "snapshot_id": "snap-1",

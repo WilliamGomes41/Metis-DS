@@ -43,10 +43,16 @@ class McpQueries:
     def __init__(self, console, origin):
         self.console, self.origin = console, origin
 
-    def document(self, account, sid):
+    def document(self, account, sid, *, compact=False):
         # Refresh before authorization; no process-local authorization cache.
         try:
-            envelope = self.console._envelope(sid)
+            if compact:
+                rows = self.console.workflow_document_store.list_document_cards([sid])
+                if not rows:
+                    raise ConsoleError('unknown_snapshot')
+                envelope = rows[0]
+            else:
+                envelope = self.console._envelope(sid)
         except ConsoleError as exc:
             if exc.code == 'unknown_snapshot':
                 raise McpQueryError('Document niet beschikbaar of geen toegang.') from exc
@@ -69,7 +75,7 @@ class McpQueries:
                           note='Current configuration does not prove which route a historical upload used.')
             return result
         if name == 'search_documents':
-            rows = self.console.list_envelopes()
+            rows = self.console.list_document_cards()
             q = args.get('query', '').casefold()
             rows = [pick(r, DOCUMENT_FIELDS) for r in rows if permitted(account, r)
                     and q in ' '.join(str(r.get(k, '')) for k in ('title', 'family', 'snapshot_id')).casefold()
@@ -78,7 +84,7 @@ class McpQueries:
             return {**result, **page(rows, args)}
         sid = args['snapshot_id']
         try:
-            envelope = self.document(account, sid)
+            envelope = self.document(account, sid, compact=name == 'get_document')
         except McpQueryError:
             if name != 'get_storage_status':
                 raise
@@ -131,9 +137,7 @@ class McpQueries:
         if name == 'get_publication_status':
             current = list({r['object_id']: r for r in objects}.values())
             store = getattr(self.console, 'canonical_publication_store', None)
-            active = None if store is None else [
-                {'object_id': r['knowledge_object']['object_id'], **r['publication']}
-                for r in store.active_publication_rows() if r.get('snapshot_id') == sid]
+            active = None if store is None else store.active_registry_summary(sid)
             return {**result, 'recorded_state': pick(envelope, ('state', 'publication_eligibility', 'processing_blocker', 'published')),
                     'review_status_counts': dict(Counter(str((r.get('governance') or {}).get('validation_status') or 'not_recorded') for r in current)),
                     'decision_graph': envelope.get('decision_graph'),
@@ -141,6 +145,7 @@ class McpQueries:
                     'decision_graph_reviews': envelope.get('decision_graph_reviews'),
                     'active_registry_object_count': None if active is None else len(active),
                     'active_registry_rows': None if active is None else page(active, args),
+                    'canonical_content_integrity': 'not_checked',
                     'note': 'Active rows come only from the publication registry, or null if unavailable. No publication preflight or repair runs.'}
         if name == 'compare_versions':
             other_sid = args['other_snapshot_id']

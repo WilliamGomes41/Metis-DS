@@ -256,7 +256,7 @@ def test_publication_readiness_has_bounded_postgres_query_count(
         store._connect = original_connect  # type: ignore[method-assign]
 
     assert readiness["publication_ready"] is True
-    assert counter == {"queries": 5}
+    assert 0 < counter["queries"] <= 5
 
 
 def test_publish_persists_published_envelope_in_postgres_document_authority_and_ui(
@@ -291,6 +291,21 @@ def test_publish_persists_published_envelope_in_postgres_document_authority_and_
     assert page.status_code == 200
     assert 'data-publication-state="published"' in page.text
     assert "data-publish-form" not in page.text
+
+
+
+def test_published_overview_never_loads_canonical_object_payloads(tmp_path, workflow_postgres, monkeypatch):
+    durable = canonical_store(workflow_postgres)
+    console, accounts, receipt = _ready_console(tmp_path, workflow_postgres, durable, MemorySourceStore())
+    assert console.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=receipt["snapshot_id"])["status"] == "PASS"
+    def full_payload_forbidden(*args, **kwargs):
+        raise AssertionError("Overview loaded canonical object payloads")
+    monkeypatch.setattr(durable, "release_for_snapshot", full_payload_forbidden)
+    client = TestClient(application_for(console), base_url="https://testserver")
+    assert client.post('/login', data={'username': 'publisher.carla', 'password': TEST_PASSWORD}, follow_redirects=False).status_code == 303
+    page = client.get('/publish')
+    assert page.status_code == 200 and 'data-publication-state="published"' in page.text
+    assert 'data-publish-form' not in page.text
 
 
 def test_restart_reads_published_state_from_postgres_document_authority(

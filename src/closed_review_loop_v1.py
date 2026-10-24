@@ -67,19 +67,6 @@ def _source_locator(obj: dict[str, Any], fallback: str = "") -> Any:
 class ClosedLoopReviewConsole(ProportionateReviewConsole):
     """Console policy that makes every final Review outcome explicit."""
 
-    def waiting_task_counts(self, account_id: str) -> dict[str, int]:
-        counts = super().waiting_task_counts(account_id)
-        account = self._account(account_id)
-        if "researcher" in set(account.get("roles") or []):
-            counts["ingest"] = sum(
-                envelope.get("uploader_account_id") == account_id
-                and any((row.get("governance") or {}).get("validation_status") == "revise"
-                        for row in self.snapshot_objects(envelope["snapshot_id"]))
-                for envelope in self._envelopes.values()
-            )
-        return counts
-
-
     def batch_review_normal_risk(self, **kwargs: Any) -> list[dict[str, Any]]:
         """Commit the selected decisions and their evidence as one command."""
         with self._atomic_snapshot_mutation(str(kwargs.get("snapshot_id") or "")):

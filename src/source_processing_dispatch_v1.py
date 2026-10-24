@@ -15,7 +15,7 @@ LOG = logging.getLogger(__name__)
 def claim(console, *, snapshot_id, attempt_id, actor_id=None, stop_event=None):
     """One short SQL row transaction chooses the only executing worker."""
     with console._reprocessing_transaction(snapshot_id):
-        envelope = deepcopy(console._envelope(snapshot_id))
+        envelope = console._envelope(snapshot_id)
         attempt = assert_active(envelope, attempt_id, now())
         from src.source_selection_v1 import authorize
         authorize(console, actor_id or attempt["actor_id"], envelope)
@@ -42,18 +42,12 @@ def pending(console, *, limit=None, after_snapshot=None):
     found = []
     if limit is not None and limit <= 0:
         return found
-    rows = console.list_envelopes()
-    if after_snapshot is not None:
-        index = next((i for i, row in enumerate(rows) if row["snapshot_id"] == after_snapshot), -1)
-        rows = rows[index + 1:] + rows[:index + 1]
-    for row in rows:
-        sid = row["snapshot_id"]
-        envelope = console._envelope(sid)
-        attempts = envelope.get("processing_attempts") or []
-        if not any(a.get("dispatch") and a["state"] == "running" for a in attempts):
-            continue
+    rows = console.workflow_document_store.dispatched_snapshot_ids(
+        # Expired documents consume discovery capacity, not the returned task limit.
+        clock=now(), limit=max(50, limit) if limit is not None else None, after_snapshot=after_snapshot)
+    for sid in rows:
         with console._reprocessing_transaction(sid):
-            envelope = deepcopy(console._envelope(sid))
+            envelope = console._envelope(sid)
             before = deepcopy(envelope.get("processing_attempts"))
             expire_running(envelope, now())
             if envelope.get("processing_attempts") != before:
@@ -108,7 +102,8 @@ class SourceProcessingDispatcher:
         try:
             from src.request_diagnostics_v1 import detached_request_diagnostics
             from src.console_performance_v1 import detached_performance_scope
-            with detached_request_diagnostics(), detached_performance_scope():
+            from src.console_read_snapshot_v1 import detached_document_reads
+            with detached_request_diagnostics(), detached_performance_scope(), detached_document_reads():
                 await asyncio.to_thread(self._execute, sid, attempt)
         except Exception as exc:
             # Kernel failure evidence/expiry remains authoritative. Do not

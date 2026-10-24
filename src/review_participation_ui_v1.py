@@ -104,7 +104,7 @@ def _roster(env, names):
 
 
 def filters(console, *, work, theme, q='', rows=None):
-    rows = console.list_envelopes() if rows is None else rows
+    rows = console.list_document_cards() if rows is None else rows
     themes = sorted({str(e.get('family') or '') for e in rows} - {''})
     return ('<form method="get" action="/review" class="review-filters"><label>Werk<select name="work">' +
             options([('mine', 'Mijn werk'), ('all', 'Alle reviewtrajecten')], work) +
@@ -118,7 +118,7 @@ def overview(console, account, *, theme='', q='', page=1):
     from src import operations_console_app as ui
     from src.review_workboard_v1 import _lifecycle_for_work_item
     rows = []
-    for env in console.list_envelopes():
+    for env in console.list_document_cards():
         if theme and env.get('family') != theme:
             continue
         life = _lifecycle_for_work_item(console, env['snapshot_id'])

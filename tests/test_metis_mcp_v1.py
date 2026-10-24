@@ -267,7 +267,7 @@ def test_transport_limits_and_safe_errors(connection, monkeypatch):
     assert client.post('/mcp', headers=headers, json=[]).status_code == 400
     def broken(*args, **kwargs):
         raise ValueError('DATABASE_SECRET_NOT_FOR_USER')
-    monkeypatch.setattr(console, 'list_envelopes', broken)
+    monkeypatch.setattr(console, 'list_document_cards', broken)
     result = call('search_documents')
     assert result.json()['result']['isError']
     assert 'DATABASE_SECRET' not in result.text
@@ -359,3 +359,13 @@ def test_processing_evidence_uses_only_current_object_versions(monkeypatch):
     )
     assert result["items"] == []
     assert captured["objects"] == [current]
+
+
+def test_compact_document_queries_do_not_fetch_full_payloads(connection, monkeypatch):
+    console, accounts, first, second, client, call, store, token = connection
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Compact MCP operation loaded a full document')
+    monkeypatch.setattr(console.workflow_document_store, 'list_envelopes', forbidden)
+    monkeypatch.setattr(console.workflow_document_store, 'get_envelope', forbidden)
+    assert not call('search_documents').json()['result']['isError']
+    assert not call('get_document', {'snapshot_id': first['snapshot_id']}).json()['result']['isError']

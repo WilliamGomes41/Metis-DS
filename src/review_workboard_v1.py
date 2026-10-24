@@ -485,7 +485,7 @@ def review_workboard_items(
 
     return [
         item
-        for envelope in console.list_envelopes()
+        for envelope in console.list_document_cards()
         if (item := review_work_item(console, account=account, envelope=envelope)) is not None
     ]
 
@@ -825,29 +825,24 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         return
 
     retained = []
-    removed_get = 0
     headings_post_route = None
     for route in app.router.routes:
         methods = set(getattr(route, "methods", set()) or set())
         path = getattr(route, "path", None)
         if path == "/review" and "GET" in methods:
-            removed_get += 1
-            continue
+            raise RuntimeError("review_get_route_already_registered")
         if path == "/review/headings/batch-confirm" and "POST" in methods:
             if headings_post_route is not None:
                 raise RuntimeError("review_headings_route_replacement_ambiguous")
             headings_post_route = route
             continue
         retained.append(route)
-    if removed_get != 1:
-        raise RuntimeError("review_get_route_replacement_failed")
     if headings_post_route is None:
         raise RuntimeError("review_headings_route_replacement_failed")
     original_headings_batch_confirm = headings_post_route.endpoint
     app.router.routes[:] = retained
 
     @app.get("/review", response_class=HTMLResponse)
-    @console.source_selection_read_scope()
     def review_get(
         request: Request,
         document: str = "",
@@ -868,7 +863,7 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             raise ConsoleError("invalid_review_filter")
         if not document and (work == "all" or "reviewer" not in account["roles"]):
             return overview(console, account, theme=theme, q=q, page=page)
-        selected = next((e for e in console.list_envelopes() if e['snapshot_id'] == document), None) if document else None
+        selected = console._envelope(document) if document else None
         if document and selected is None:
             raise ConsoleError("unknown_snapshot")
         if selected and account["account_id"] not in selected["named_reviewers"]:

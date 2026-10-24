@@ -247,7 +247,7 @@ def install_review_recovery_page(app: FastAPI, console: ReviewClosureConsole) ->
         if not ({"researcher", "reviewer"} & roles):
             raise ConsoleError("researcher_role_required")
         cards: list[str] = []
-        for envelope in console.list_envelopes():
+        for envelope in console.list_document_cards():
             snapshot_id = str(envelope.get("snapshot_id") or "")
             allowed = (
                 "researcher" in roles
@@ -258,7 +258,7 @@ def install_review_recovery_page(app: FastAPI, console: ReviewClosureConsole) ->
             )
             if not allowed:
                 continue
-            for obj in console.snapshot_objects(snapshot_id):
+            for obj in console.snapshot_objects(snapshot_id, envelope=envelope):
                 if (obj.get("governance") or {}).get("validation_status") != "revise":
                     continue
                 object_id = str(obj.get("object_id") or "")

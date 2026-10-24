@@ -128,14 +128,17 @@ class _PostgresWorkflowReviewMixin:
             command.fresh = True
 
     def object_review_bindings(self, snapshot_id: str, *, objects=None) -> list[dict[str, Any]]:
-        """Refresh PostgreSQL authorizations before deriving the public view."""
+        """Own read bindings per operation; command maps refresh only on commands."""
+        reads = self._document_reads()
         try:
+            if reads is not None:
+                if snapshot_id not in reads.bindings:
+                    reads.bindings[snapshot_id] = self.workflow_review_store.read_bindings([snapshot_id]).get(snapshot_id, [])
+                return super().object_review_bindings(snapshot_id, objects=objects, bindings=reads.bindings[snapshot_id])
             current = self.workflow_review_store.read_bindings()
         except WorkflowReviewStoreError as exc:
             raise ConsoleError("workflow_review_unavailable", str(exc)) from exc
-        self._bindings = current
-        self._bindings_baseline = deepcopy(current)
-        return super().object_review_bindings(snapshot_id, objects=objects)
+        return super().object_review_bindings(snapshot_id, objects=objects, bindings=current.get(snapshot_id, []))
 
     def _refresh_after_rollback(self, snapshot_id: str | None, original: BaseException) -> None:
         """Refresh disposable process views from PostgreSQL after a native rollback.
@@ -196,29 +199,31 @@ class _PostgresWorkflowReviewMixin:
         the disposable process view from PostgreSQL. Participants own a savepoint
         and an event-buffer level only.
         """
-        command = owned_store_command(self)
-        if command is not None:
-            with self._join_store_command(command, snapshot_id, lock_row=lock_row, buffered=buffered):
-                yield command
-            return
-        with self._store_write_lock():
-            command, token = open_store_command(self)
-            try:
-                with diagnostic_phase("store_transaction"), \
-                        workflow_transaction(self.workflow_review_store) as connection:
-                    if lock_row and snapshot_id:
-                        self._lock_document_row(connection, snapshot_id)
-                    self._reload_store_locked()
-                    with buffer_events(self._ledger_path) if buffered else nullcontext():
-                        yield command
-                    if command.poisoned:
-                        # A caught participant fault left unverified process state.
-                        raise ConsoleError("store_command_participant_refresh_failed")
-            except BaseException as exc:
+        from src.console_read_snapshot_v1 import detached_document_reads
+        with detached_document_reads():
+            command = owned_store_command(self)
+            if command is not None:
+                with self._join_store_command(command, snapshot_id, lock_row=lock_row, buffered=buffered):
+                    yield command
+                return
+            with self._store_write_lock():
+                command, token = open_store_command(self)
+                try:
+                    with diagnostic_phase("store_transaction"), \
+                            workflow_transaction(self.workflow_review_store) as connection:
+                        if lock_row and snapshot_id:
+                            self._lock_document_row(connection, snapshot_id)
+                        self._reload_store_locked()
+                        with buffer_events(self._ledger_path) if buffered else nullcontext():
+                            yield command
+                        if command.poisoned:
+                            # A caught participant fault left unverified process state.
+                            raise ConsoleError("store_command_participant_refresh_failed")
+                except BaseException as exc:
+                    close_store_command(token)
+                    self._refresh_after_rollback(snapshot_id, exc)
+                    raise
                 close_store_command(token)
-                self._refresh_after_rollback(snapshot_id, exc)
-                raise
-            close_store_command(token)
 
     @contextmanager
     def _join_store_command(

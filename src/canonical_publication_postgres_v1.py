@@ -643,6 +643,29 @@ class PostgresCanonicalPublicationStore:
         except Exception as exc:
             raise CanonicalPublicationStoreError("canonical_postgres_write_failed") from exc
 
+    def active_registry_summary(self, snapshot_id: str) -> list[dict[str, Any]]:
+        """Stored registry metadata only; no canonical-content/integrity preflight."""
+        try:
+            with self._connect() as con:
+                rows = con.execute("""
+                    SELECT r.object_id,r.release_id,rel.release_version,r.published_at
+                    FROM publication_registry r
+                    JOIN publication_releases rel ON rel.release_id=r.release_id
+                    JOIN canonical_object_versions c
+                      ON c.object_id=r.object_id AND c.object_version=r.object_version
+                    JOIN canonical_object_sources s
+                      ON s.object_id=c.object_id AND s.object_version=c.object_version
+                    WHERE r.state='active' AND s.snapshot_id=%s
+                    ORDER BY r.object_id
+                """, (snapshot_id,)).fetchall()
+            return [{"object_id": str(row["object_id"]), "release_id": str(row["release_id"]),
+                     "release_version": str(row["release_version"]),
+                     "published_at": _timestamp_text(row["published_at"])} for row in rows]
+        except CanonicalPublicationStoreError:
+            raise
+        except Exception as exc:
+            raise CanonicalPublicationStoreError("canonical_postgres_read_failed") from exc
+
     def active_publication_rows(self) -> list[dict[str, Any]]:
         """Read the complete active publication set used to derive API projection."""
         try:

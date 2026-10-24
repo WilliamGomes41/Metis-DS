@@ -340,6 +340,12 @@
       ]
     ],
     [
+      "/raad/meldingen",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/raad/weergavecontrole",
       [
         "GET"

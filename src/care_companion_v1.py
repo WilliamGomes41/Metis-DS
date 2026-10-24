@@ -75,6 +75,14 @@ def _check_summary(row: dict) -> dict:
 
 
 def install(app, state, require) -> None:
+    @app.get("/raad/meldingen")
+    def companion_notices(request: Request, offset: int = 0) -> JSONResponse:
+        from src.insight_v1 import MAX_SCAN, documents_projection
+        page = documents_projection(state, require(request), state_filter="attention", limit=8, scan_limit=MAX_SCAN, offset=offset, partial_on_error=True)
+        return JSONResponse({"documents": page["documents"],
+                             "complete": page["next_offset"] is None and not page["telemetry_partial"] and not page["metadata_partial"] and not page["diagnostic_partial"],
+                             "next_offset": page["next_offset"]}, headers=HEADERS)
+
     @app.get("/raad/weergavecontrole")
     def companion_view_check(request: Request, document: str = "", attempt: str = "") -> JSONResponse:
         from src.view_check import ViewCheckAccessDenied, authorize, context

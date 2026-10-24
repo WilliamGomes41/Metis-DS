@@ -231,6 +231,8 @@ def build_console_app(console: OperationsConsole, *, trusted_origin=None, topolo
     install_navigation_simplification(app)
     app.state.operations_kernel = console
     app.state.console_topology = topology
+    from src.console_read_operations_v1 import install_console_read_operations
+    install_console_read_operations(app, console)
     # Register last so timings include status/auth middleware and all DB reads.
     from src.telemetry.install import install_console_observability
     install_console_observability(app, console.runtime)

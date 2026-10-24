@@ -1,0 +1,3656 @@
+{
+  "current_application_revision": "d843e8a8c5be1a0e75f81ad7a707e246e0618f09",
+  "current_evidence_section": "pre_deployment_cleanup",
+  "change_class": "B",
+  "rewrite_risk": "high",
+  "release_verdict": "NO-GO",
+  "production_comparison_revision": "7152bab7227c68baaf836588bdbb1b9a0586ab56",
+  "local_comparison_revision": "60bc697ca3a6aaadade8cef3207c771ee61c152e",
+  "application_revision": "28af06f254d5791098694af5a71f9b674629c663",
+  "environment": {
+    "python": "3.12.14",
+    "postgres": "16.15",
+    "chromium": "151.0.7922.173",
+    "playwright": "1.58.2",
+    "azure_access": false,
+    "representative_smetten_data": false
+  },
+  "protocol": {
+    "script": "tests/read_architecture_benchmark.py",
+    "same_script_on_both_revisions": true,
+    "profiled_sequential_samples": 5,
+    "cache_state": "First means new operation; OS/PG buffers not flushed. Repeats use same database, no cross-request payload cache.",
+    "timing_scope": "Local descriptive wall time; profiled and unprofiled samples separated. Not p95 and not production acceptance.",
+    "json_bytes": "Bytes entering native JSON/JSONB decoders; excludes non-JSON columns and protocol overhead. No telemetry serialization.",
+    "deepcopy_calls": "Recursive Python call count, not number of complete document copies.",
+    "concurrency": "Two readers; formation plus two readers. Actual console commands with deterministic provider fixture."
+  },
+  "before": {
+    "routes": [
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 1.7183629997816752,
+          "db_connections": 1,
+          "db_queries": 1,
+          "db_query_ms": 1.3994649998494424
+        },
+        "detail": false,
+        "full_reads": {},
+        "native_json_bytes": 4,
+        "route": "/",
+        "seconds": 0.009127,
+        "store_reads": {}
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 3.307142998892232,
+          "db_connections": 3,
+          "db_queries": 4,
+          "db_query_ms": 4.543570998066571
+        },
+        "detail": false,
+        "full_reads": {
+          "list_envelopes": 1
+        },
+        "native_json_bytes": 380760,
+        "route": "/ingest",
+        "seconds": 0.032527,
+        "store_reads": {
+          "list_envelopes": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 6.890732001011202,
+          "db_connections": 6,
+          "db_queries": 7,
+          "db_query_ms": 7.086054001774755
+        },
+        "detail": false,
+        "full_reads": {
+          "list_document_objects": 1,
+          "list_envelopes": 1
+        },
+        "native_json_bytes": 392831,
+        "route": "/source-selection",
+        "seconds": 0.039075,
+        "store_reads": {
+          "list_document_objects": 1,
+          "list_envelopes": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 13.150252999366785,
+          "db_connections": 10,
+          "db_queries": 10,
+          "db_query_ms": 11.57460399917909
+        },
+        "detail": false,
+        "full_reads": {},
+        "native_json_bytes": 392843,
+        "route": "/review",
+        "seconds": 0.042358,
+        "store_reads": {}
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 3.6405649998414447,
+          "db_connections": 3,
+          "db_queries": 4,
+          "db_query_ms": 5.851869000252918
+        },
+        "detail": false,
+        "full_reads": {
+          "list_envelopes": 1
+        },
+        "native_json_bytes": 380748,
+        "route": "/publish",
+        "seconds": 0.110027,
+        "store_reads": {
+          "list_envelopes": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 7.583792999867001,
+          "db_connections": 6,
+          "db_queries": 8,
+          "db_query_ms": 12.121925999963423
+        },
+        "detail": false,
+        "full_reads": {
+          "get_envelope": 1,
+          "list_envelopes": 1
+        },
+        "native_json_bytes": 761496,
+        "route": "/tree",
+        "seconds": 0.08732,
+        "store_reads": {
+          "get_envelope": 1,
+          "list_envelopes": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 1.3306110004123184,
+          "db_connections": 1,
+          "db_queries": 1,
+          "db_query_ms": 1.530331000139995
+        },
+        "detail": false,
+        "full_reads": {},
+        "native_json_bytes": 4,
+        "route": "/settings",
+        "seconds": 0.006937,
+        "store_reads": {}
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 1.312683999458386,
+          "db_connections": 1,
+          "db_queries": 1,
+          "db_query_ms": 0.860674000250583
+        },
+        "detail": false,
+        "full_reads": {},
+        "native_json_bytes": 4,
+        "route": "/inzicht",
+        "seconds": 0.00697,
+        "store_reads": {}
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 17.907781000758405,
+          "db_connections": 14,
+          "db_queries": 22,
+          "db_query_ms": 36.03690300042217
+        },
+        "detail": false,
+        "full_reads": {
+          "get_envelope": 7,
+          "list_document_objects": 2,
+          "list_envelopes": 1
+        },
+        "native_json_bytes": 3070114,
+        "route": "/inzicht/api/documents",
+        "seconds": 0.54907,
+        "store_reads": {
+          "get_envelope": 7,
+          "list_document_objects": 2,
+          "list_envelopes": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 7.911916001830832,
+          "db_connections": 5,
+          "db_queries": 51,
+          "db_query_ms": 49.699715996212035
+        },
+        "detail": false,
+        "full_reads": {
+          "get_envelope": 8,
+          "list_document_objects": 6,
+          "list_envelopes": 6
+        },
+        "native_json_bytes": 5445988,
+        "route": "/inzicht/api/quality",
+        "seconds": 0.711867,
+        "store_reads": {
+          "get_envelope": 8,
+          "list_document_objects": 6,
+          "list_envelopes": 6
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 22.158489999128506,
+          "db_connections": 15,
+          "db_queries": 24,
+          "db_query_ms": 40.665835997970134
+        },
+        "detail": true,
+        "full_reads": {
+          "get_envelope": 9,
+          "list_document_objects": 1
+        },
+        "native_json_bytes": 3438783,
+        "route": "/inzicht/document",
+        "seconds": 0.702554,
+        "store_reads": {
+          "get_envelope": 9,
+          "list_document_objects": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 12.525340999673062,
+          "db_connections": 7,
+          "db_queries": 8,
+          "db_query_ms": 10.797144001116976
+        },
+        "detail": true,
+        "full_reads": {
+          "list_document_objects": 1,
+          "list_envelopes": 1
+        },
+        "native_json_bytes": 392827,
+        "route": "/review",
+        "seconds": 0.05835,
+        "store_reads": {
+          "list_document_objects": 1,
+          "list_envelopes": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 12.247186001332011,
+          "db_connections": 9,
+          "db_queries": 12,
+          "db_query_ms": 15.778963999764528
+        },
+        "detail": true,
+        "full_reads": {
+          "get_envelope": 2,
+          "list_document_objects": 1,
+          "list_envelopes": 1
+        },
+        "native_json_bytes": 1154315,
+        "route": "/publish",
+        "seconds": 0.197206,
+        "store_reads": {
+          "get_envelope": 2,
+          "list_document_objects": 1,
+          "list_envelopes": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 6.208323999089771,
+          "db_connections": 6,
+          "db_queries": 7,
+          "db_query_ms": 6.923959001142066
+        },
+        "detail": true,
+        "full_reads": {
+          "list_document_objects": 1,
+          "list_envelopes": 1
+        },
+        "native_json_bytes": 392831,
+        "route": "/source-selection",
+        "seconds": 0.038385,
+        "store_reads": {
+          "list_document_objects": 1,
+          "list_envelopes": 1
+        }
+      }
+    ],
+    "benchmark": {
+      "fixture": {
+        "database": "PostgreSQL16",
+        "documents": 1,
+        "envelope_bytes": 380744,
+        "replay_records": 4000,
+        "roles": [
+          "researcher",
+          "assigned_reviewer"
+        ],
+        "source": "synthetic HTML"
+      },
+      "revision": "60bc697ca3a6aaadade8cef3207c771ee61c152e",
+      "samples": [
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 22.850173998449463,
+            "db_connections": 13,
+            "db_queries": 21,
+            "db_query_ms": 31.310545999076567
+          },
+          "decoded_payload_bytes": 3070116,
+          "deepcopy_calls": 1094854,
+          "deepcopy_seconds": 1.304388,
+          "full_payload_bytes": 3070116,
+          "full_reads": {
+            "get_envelope": 7,
+            "list_document_objects": 2,
+            "list_envelopes": 1
+          },
+          "mode": "first",
+          "native_json_bytes": 3070110,
+          "sample": 0,
+          "seconds": 1.418174,
+          "store_reads": {
+            "get_envelope": 7,
+            "list_document_objects": 2,
+            "list_envelopes": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 19.388777998756268,
+            "db_connections": 13,
+            "db_queries": 21,
+            "db_query_ms": 31.833100998483133
+          },
+          "decoded_payload_bytes": 3070116,
+          "deepcopy_calls": 1094854,
+          "deepcopy_seconds": 1.315657,
+          "full_payload_bytes": 3070116,
+          "full_reads": {
+            "get_envelope": 7,
+            "list_document_objects": 2,
+            "list_envelopes": 1
+          },
+          "mode": "repeat",
+          "native_json_bytes": 3070110,
+          "sample": 1,
+          "seconds": 1.431176,
+          "store_reads": {
+            "get_envelope": 7,
+            "list_document_objects": 2,
+            "list_envelopes": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 20.461826999962796,
+            "db_connections": 13,
+            "db_queries": 21,
+            "db_query_ms": 31.94670700122515
+          },
+          "decoded_payload_bytes": 3070116,
+          "deepcopy_calls": 1094854,
+          "deepcopy_seconds": 1.300209,
+          "full_payload_bytes": 3070116,
+          "full_reads": {
+            "get_envelope": 7,
+            "list_document_objects": 2,
+            "list_envelopes": 1
+          },
+          "mode": "repeat",
+          "native_json_bytes": 3070110,
+          "sample": 2,
+          "seconds": 1.416335,
+          "store_reads": {
+            "get_envelope": 7,
+            "list_document_objects": 2,
+            "list_envelopes": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 20.400746001541847,
+            "db_connections": 13,
+            "db_queries": 21,
+            "db_query_ms": 33.40422400196985
+          },
+          "decoded_payload_bytes": 3070116,
+          "deepcopy_calls": 1094854,
+          "deepcopy_seconds": 1.375786,
+          "full_payload_bytes": 3070116,
+          "full_reads": {
+            "get_envelope": 7,
+            "list_document_objects": 2,
+            "list_envelopes": 1
+          },
+          "mode": "repeat",
+          "native_json_bytes": 3070110,
+          "sample": 3,
+          "seconds": 1.503065,
+          "store_reads": {
+            "get_envelope": 7,
+            "list_document_objects": 2,
+            "list_envelopes": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 21.26161499745649,
+            "db_connections": 13,
+            "db_queries": 21,
+            "db_query_ms": 32.362603999899875
+          },
+          "decoded_payload_bytes": 3070116,
+          "deepcopy_calls": 1094854,
+          "deepcopy_seconds": 1.197667,
+          "full_payload_bytes": 3070116,
+          "full_reads": {
+            "get_envelope": 7,
+            "list_document_objects": 2,
+            "list_envelopes": 1
+          },
+          "mode": "repeat",
+          "native_json_bytes": 3070110,
+          "sample": 4,
+          "seconds": 1.301649,
+          "store_reads": {
+            "get_envelope": 7,
+            "list_document_objects": 2,
+            "list_envelopes": 1
+          }
+        },
+        {
+          "db": [
+            {
+              "badge_ms": 0.0,
+              "db_connect_ms": 270.5480689992328,
+              "db_connections": 14,
+              "db_queries": 22,
+              "db_query_ms": 187.2432790005405
+            },
+            {
+              "badge_ms": 0.0,
+              "db_connect_ms": 139.32252300128312,
+              "db_connections": 13,
+              "db_queries": 21,
+              "db_query_ms": 483.0110919992876
+            }
+          ],
+          "full_reads": {
+            "get_envelope": 14,
+            "list_document_objects": 4,
+            "list_envelopes": 2
+          },
+          "mode": "two_readers",
+          "seconds": 1.040781,
+          "store_reads": {
+            "get_envelope": 14,
+            "list_document_objects": 4,
+            "list_envelopes": 2
+          }
+        },
+        {
+          "db": [
+            {
+              "badge_ms": 0.0,
+              "db_connect_ms": 270.5480689992328,
+              "db_connections": 14,
+              "db_queries": 22,
+              "db_query_ms": 187.2432790005405
+            },
+            {
+              "badge_ms": 0.0,
+              "db_connect_ms": 139.32252300128312,
+              "db_connections": 13,
+              "db_queries": 21,
+              "db_query_ms": 483.0110919992876
+            }
+          ],
+          "full_reads": {
+            "get_envelope": 14,
+            "list_document_objects": 4,
+            "list_envelopes": 2
+          },
+          "mode": "formation_with_two_readers",
+          "seconds": 2.581724
+        }
+      ]
+    }
+  },
+  "after": {
+    "routes": [
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 1.1086679996878956,
+          "db_connections": 1,
+          "db_json_bytes": 4,
+          "db_queries": 1,
+          "db_query_ms": 0.8207479995689937
+        },
+        "detail": false,
+        "full_reads": {},
+        "native_json_bytes": 4,
+        "route": "/",
+        "seconds": 0.005976,
+        "store_reads": {}
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 3.3401459995729965,
+          "db_connections": 3,
+          "db_json_bytes": 428,
+          "db_queries": 3,
+          "db_query_ms": 4.272901000149432
+        },
+        "detail": false,
+        "full_reads": {},
+        "native_json_bytes": 428,
+        "route": "/ingest",
+        "seconds": 0.012626,
+        "store_reads": {
+          "list_document_cards": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 3.168778999679489,
+          "db_connections": 3,
+          "db_json_bytes": 513,
+          "db_queries": 6,
+          "db_query_ms": 5.390241000895912
+        },
+        "detail": false,
+        "full_reads": {},
+        "native_json_bytes": 513,
+        "route": "/source-selection",
+        "seconds": 0.01402,
+        "store_reads": {
+          "list_source_selection_summaries": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 11.60293599969009,
+          "db_connections": 10,
+          "db_json_bytes": 392843,
+          "db_queries": 10,
+          "db_query_ms": 10.629947999404976
+        },
+        "detail": false,
+        "full_reads": {},
+        "native_json_bytes": 392843,
+        "route": "/review",
+        "seconds": 0.035797,
+        "store_reads": {}
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 3.4482470000511967,
+          "db_connections": 3,
+          "db_json_bytes": 416,
+          "db_queries": 3,
+          "db_query_ms": 5.012446999899112
+        },
+        "detail": false,
+        "full_reads": {},
+        "native_json_bytes": 416,
+        "route": "/publish",
+        "seconds": 0.013812,
+        "store_reads": {
+          "list_document_cards": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 6.40634200135537,
+          "db_connections": 5,
+          "db_json_bytes": 420,
+          "db_queries": 5,
+          "db_query_ms": 7.067140000799554
+        },
+        "detail": false,
+        "full_reads": {},
+        "native_json_bytes": 420,
+        "route": "/tree",
+        "seconds": 0.02041,
+        "store_reads": {
+          "list_document_cards": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 1.1805459998868173,
+          "db_connections": 1,
+          "db_json_bytes": 4,
+          "db_queries": 1,
+          "db_query_ms": 0.8810480003376142
+        },
+        "detail": false,
+        "full_reads": {},
+        "native_json_bytes": 4,
+        "route": "/settings",
+        "seconds": 0.006734,
+        "store_reads": {}
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 1.1556680001376662,
+          "db_connections": 1,
+          "db_json_bytes": 4,
+          "db_queries": 1,
+          "db_query_ms": 0.7923249995656079
+        },
+        "detail": false,
+        "full_reads": {},
+        "native_json_bytes": 4,
+        "route": "/inzicht",
+        "seconds": 0.005208,
+        "store_reads": {}
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 4.999678999411117,
+          "db_connections": 4,
+          "db_json_bytes": 443,
+          "db_queries": 11,
+          "db_query_ms": 5.870971001058933
+        },
+        "detail": false,
+        "full_reads": {},
+        "native_json_bytes": 443,
+        "route": "/inzicht/api/documents",
+        "seconds": 0.01527,
+        "store_reads": {
+          "document_diagnostic_inputs": 1,
+          "document_processing_inputs": 1,
+          "list_document_summaries": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 5.479874997945444,
+          "db_connections": 5,
+          "db_json_bytes": 436767,
+          "db_queries": 23,
+          "db_query_ms": 14.990523997767013
+        },
+        "detail": false,
+        "full_reads": {
+          "get_envelope": 1,
+          "list_document_objects": 1
+        },
+        "native_json_bytes": 436767,
+        "route": "/inzicht/api/quality",
+        "seconds": 0.033218,
+        "store_reads": {
+          "get_envelope": 1,
+          "list_document_cards": 2,
+          "list_document_objects": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 9.082796997972764,
+          "db_connections": 7,
+          "db_json_bytes": 392831,
+          "db_queries": 8,
+          "db_query_ms": 8.91033699917898
+        },
+        "detail": true,
+        "full_reads": {
+          "get_envelope": 1,
+          "list_document_objects": 1
+        },
+        "native_json_bytes": 392831,
+        "route": "/inzicht/document",
+        "seconds": 0.029723,
+        "store_reads": {
+          "get_envelope": 1,
+          "list_document_objects": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 9.886016998279956,
+          "db_connections": 8,
+          "db_json_bytes": 393239,
+          "db_queries": 9,
+          "db_query_ms": 12.782425999830593
+        },
+        "detail": true,
+        "full_reads": {
+          "get_envelope": 1,
+          "list_document_objects": 1
+        },
+        "native_json_bytes": 393239,
+        "route": "/review",
+        "seconds": 0.035676,
+        "store_reads": {
+          "get_envelope": 1,
+          "list_document_cards": 1,
+          "list_document_objects": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 9.058128001015575,
+          "db_connections": 8,
+          "db_json_bytes": 393239,
+          "db_queries": 9,
+          "db_query_ms": 10.573283999292471
+        },
+        "detail": true,
+        "full_reads": {
+          "get_envelope": 1,
+          "list_document_objects": 1
+        },
+        "native_json_bytes": 393239,
+        "route": "/publish",
+        "seconds": 0.028862,
+        "store_reads": {
+          "get_envelope": 1,
+          "list_document_cards": 1,
+          "list_document_objects": 1
+        }
+      },
+      {
+        "db": {
+          "badge_ms": 0.0,
+          "db_connect_ms": 8.473154000057548,
+          "db_connections": 7,
+          "db_json_bytes": 393340,
+          "db_queries": 12,
+          "db_query_ms": 9.947066998392984
+        },
+        "detail": true,
+        "full_reads": {
+          "get_envelope": 1,
+          "list_document_objects": 1
+        },
+        "native_json_bytes": 393340,
+        "route": "/source-selection",
+        "seconds": 0.02866,
+        "store_reads": {
+          "get_envelope": 1,
+          "list_document_objects": 1,
+          "list_source_selection_summaries": 1
+        }
+      }
+    ],
+    "query_plans": {
+      "document_diagnostic_inputs": {
+        "execution_ms": 0.121,
+        "planning_ms": 0.223,
+        "shared_hit_blocks": 44,
+        "shared_read_blocks": 0
+      },
+      "document_processing_inputs": {
+        "execution_ms": 1.918,
+        "planning_ms": 0.354,
+        "shared_hit_blocks": 94,
+        "shared_read_blocks": 0
+      }
+    },
+    "benchmark": {
+      "fixture": {
+        "database": "PostgreSQL16",
+        "documents": 1,
+        "envelope_bytes": 380744,
+        "replay_records": 4000,
+        "roles": [
+          "researcher",
+          "assigned_reviewer"
+        ],
+        "source": "synthetic HTML"
+      },
+      "revision": "28af06f254d5791098694af5a71f9b674629c663",
+      "samples": [
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 5.06720900102664,
+            "db_connections": 4,
+            "db_json_bytes": 443,
+            "db_queries": 11,
+            "db_query_ms": 6.783507999898575
+          },
+          "decoded_payload_bytes": 1673,
+          "deepcopy_calls": 0,
+          "deepcopy_seconds": 0,
+          "full_payload_bytes": 0,
+          "full_reads": {},
+          "mode": "first",
+          "native_json_bytes": 443,
+          "sample": 0,
+          "seconds": 0.018587,
+          "store_reads": {
+            "document_diagnostic_inputs": 1,
+            "document_processing_inputs": 1,
+            "list_document_summaries": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 4.828731999623415,
+            "db_connections": 4,
+            "db_json_bytes": 443,
+            "db_queries": 11,
+            "db_query_ms": 7.126309999875957
+          },
+          "decoded_payload_bytes": 1673,
+          "deepcopy_calls": 0,
+          "deepcopy_seconds": 0,
+          "full_payload_bytes": 0,
+          "full_reads": {},
+          "mode": "repeat",
+          "native_json_bytes": 443,
+          "sample": 1,
+          "seconds": 0.018881,
+          "store_reads": {
+            "document_diagnostic_inputs": 1,
+            "document_processing_inputs": 1,
+            "list_document_summaries": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 8.528385999852617,
+            "db_connections": 4,
+            "db_json_bytes": 443,
+            "db_queries": 11,
+            "db_query_ms": 10.43468699845107
+          },
+          "decoded_payload_bytes": 1673,
+          "deepcopy_calls": 0,
+          "deepcopy_seconds": 0,
+          "full_payload_bytes": 0,
+          "full_reads": {},
+          "mode": "repeat",
+          "native_json_bytes": 443,
+          "sample": 2,
+          "seconds": 0.027072,
+          "store_reads": {
+            "document_diagnostic_inputs": 1,
+            "document_processing_inputs": 1,
+            "list_document_summaries": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 5.445394998787378,
+            "db_connections": 4,
+            "db_json_bytes": 443,
+            "db_queries": 11,
+            "db_query_ms": 7.367401001829421
+          },
+          "decoded_payload_bytes": 1673,
+          "deepcopy_calls": 0,
+          "deepcopy_seconds": 0,
+          "full_payload_bytes": 0,
+          "full_reads": {},
+          "mode": "repeat",
+          "native_json_bytes": 443,
+          "sample": 3,
+          "seconds": 0.02021,
+          "store_reads": {
+            "document_diagnostic_inputs": 1,
+            "document_processing_inputs": 1,
+            "list_document_summaries": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 5.507175999809988,
+            "db_connections": 4,
+            "db_json_bytes": 443,
+            "db_queries": 11,
+            "db_query_ms": 7.148492001761042
+          },
+          "decoded_payload_bytes": 1673,
+          "deepcopy_calls": 0,
+          "deepcopy_seconds": 0,
+          "full_payload_bytes": 0,
+          "full_reads": {},
+          "mode": "repeat",
+          "native_json_bytes": 443,
+          "sample": 4,
+          "seconds": 0.023265,
+          "store_reads": {
+            "document_diagnostic_inputs": 1,
+            "document_processing_inputs": 1,
+            "list_document_summaries": 1
+          }
+        },
+        {
+          "db": [
+            {
+              "badge_ms": 0.0,
+              "db_connect_ms": 7.86422299916012,
+              "db_connections": 4,
+              "db_json_bytes": 443,
+              "db_queries": 11,
+              "db_query_ms": 15.640865000932536
+            },
+            {
+              "badge_ms": 0.0,
+              "db_connect_ms": 10.206315000687027,
+              "db_connections": 4,
+              "db_json_bytes": 443,
+              "db_queries": 11,
+              "db_query_ms": 13.692895998246968
+            }
+          ],
+          "full_reads": {},
+          "mode": "two_readers",
+          "seconds": 0.022751,
+          "store_reads": {
+            "document_diagnostic_inputs": 2,
+            "document_processing_inputs": 2,
+            "list_document_summaries": 2
+          }
+        },
+        {
+          "db": [
+            {
+              "badge_ms": 0.0,
+              "db_connect_ms": 7.86422299916012,
+              "db_connections": 4,
+              "db_json_bytes": 443,
+              "db_queries": 11,
+              "db_query_ms": 15.640865000932536
+            },
+            {
+              "badge_ms": 0.0,
+              "db_connect_ms": 10.206315000687027,
+              "db_connections": 4,
+              "db_json_bytes": 443,
+              "db_queries": 11,
+              "db_query_ms": 13.692895998246968
+            }
+          ],
+          "full_reads": {},
+          "mode": "formation_with_two_readers",
+          "seconds": 0.344255
+        }
+      ]
+    }
+  },
+  "verification": {
+    "full_suite": {
+      "status": "PASS",
+      "passed": 5723,
+      "skipped": 29,
+      "xfailed": 3,
+      "warnings": 6,
+      "subtests_passed": 3,
+      "seconds": 1297.57,
+      "summary": "5723 passed, 29 skipped, 3 xfailed, 6 warnings, 3 subtests passed in 1297.57s (0:21:37)",
+      "log": "work/FINAL-full-suite.log",
+      "application_revision": "28af06f254d5791098694af5a71f9b674629c663",
+      "command": "PGBIN=work/pgsql/bin PATH=work/pgsql/bin:$PATH work/venv/bin/python -m pytest -q tests",
+      "note": "Only documentation and the independently rechecked optional browser fixture changed after this application revision; production code unchanged."
+    },
+    "focused_closure": {
+      "passed": 61,
+      "warnings": 2,
+      "seconds": 26.09
+    },
+    "browser": {
+      "passed": 2,
+      "seconds": 80.49,
+      "scope": "Real Chromium source-selection journey and eight-page Raad navigation/in-flight request reuse; domain state unchanged."
+    },
+    "large_document": {
+      "passed": 2,
+      "replay_records": [
+        4000,
+        40000
+      ],
+      "invariant": "Inzicht overview makes no full envelope/object reads; native JSON bytes <4096."
+    },
+    "red_regression": {
+      "test": "test_dispatch_expiry_scan_respects_bound",
+      "baseline": "failed: unbounded expiry work",
+      "recovery": "passed: one candidate per bounded scan"
+    },
+    "local_pipeline": "Existing test_publish_persists_published_envelope_in_postgres_document_authority_and_ui runs real ingest/formation/review/canonical PostgreSQL publication with deterministic model and in-memory source-store fixture. Real Azure trajectory remains open.",
+    "local_trajectory_and_architecture": {
+      "passed": 17,
+      "seconds": 6.47,
+      "log": "work/final-trajectory-architecture.log"
+    },
+    "postgres_skip_policy": "Shared conftest raises UsageError if disposable PG cannot start; selected PostgreSQL tests cannot silently skip. Optional browser/Bend/Docling gates are separate.",
+    "browser_final_summary": "Vijf aanvullende Chromium-controles geslaagd (navigatie/Raad, Bronselectie, kenniskader, view-check). Incidentcorrelatie: 15 tests geslaagd, inclusief Chromium.",
+    "browser_initial_failure": {
+      "cause": "Test fixture installed RequestDiagnostics twice on production app, yielding duplicate request IDs.",
+      "baseline": "Same optional browser test failed on unchanged 60bc697.",
+      "fix": "Remove duplicate test-only middleware; production code unchanged.",
+      "recheck": {
+        "passed": 15,
+        "seconds": 2.35,
+        "log": "work/FINAL-section-browser-proof.log"
+      }
+    },
+    "preflights": {
+      "repository": "PASS; 1520 files checked",
+      "architecture_boundaries": "PASS",
+      "release_control": "PASS; live_release_evidence=false",
+      "compileall_src": "PASS",
+      "node_check_care_companion_js": "PASS"
+    }
+  },
+  "limitations": [
+    "User-provided 772.5s production observation not reproduced locally; no claim that browser 502 and app 200 correlate.",
+    "JSONB field selection can still incur TOAST decompression; local query plans do not establish representative Azure storage cost.",
+    "No Azure gateway/load/p95 evidence; no full Smetten source available.",
+    "Self adversarial review is not an independent model review.",
+    "Optional skipped tests are reported separately; PostgreSQL skips are not accepted as passes."
+  ],
+  "open_release_evidence": [
+    "Representative Azure data and storage/query cost",
+    "Azure page/API latency and cancellation under concurrent formation/review",
+    "Full real ingest → formation → review → publication trajectory and restart/recovery on deployment topology"
+  ],
+  "repair_review_2026_10_24": {
+    "base_revision": "56488c00b05e17d21854623a7c2df2bf00105dc1",
+    "classification": "Class B; Rewrite risk: high; lifecycle semantics unchanged",
+    "release_verdict": "NO-GO",
+    "red_suite": {
+      "failed": 8,
+      "seconds": 10.01,
+      "log": "work/834-repair-RED-56488c0.log"
+    },
+    "points": {
+      "1": {
+        "red_on_56488c0": "failed",
+        "tests": [
+          "test_slow_telemetry_outside_read_transaction",
+          "test_telemetry_has_no_open_read_transaction",
+          "test_quality_source_and_ledger_io_outside_read_transaction"
+        ],
+        "repair": "Capture the entire selected SQL scan window before telemetry; quality captures SQL first and reads sources/ledger afterwards. The source-selection caller already closes SQL before authorization/projection. All 3 transaction-boundary probes pass, including both HTTP routes with 6s telemetry. Additional quality I/O probe was red on the base.",
+        "commits": [
+          "045222b",
+          "5bf600c",
+          "8397e53"
+        ],
+        "red": {
+          "revision": "56488c00b05e17d21854623a7c2df2bf00105dc1",
+          "result": "failed",
+          "observation": "6s telemetry: HTTP 400; telemetry transaction flags [True, True]; quality source/ledger flags [True, True].",
+          "log": [
+            "work/834-repair-RED-56488c0.log",
+            "work/834-quality-RED-56488c0.log"
+          ]
+        },
+        "green": {
+          "revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+          "result": "passed",
+          "junit": "work/834-FINAL-suite.xml",
+          "cases": [
+            {
+              "test": "tests.test_console_read_architecture::test_slow_telemetry_outside_read_transaction",
+              "result": "passed",
+              "seconds": 12.349
+            },
+            {
+              "test": "tests.test_console_read_architecture::test_telemetry_has_no_open_read_transaction",
+              "result": "passed",
+              "seconds": 0.328
+            },
+            {
+              "test": "tests.test_console_read_architecture::test_quality_source_and_ledger_io_outside_read_transaction",
+              "result": "passed",
+              "seconds": 0.278
+            }
+          ]
+        }
+      },
+      "2": {
+        "red_on_56488c0": "failed",
+        "tests": [
+          "test_new_and_running_documents_are_not_processing_blocks",
+          "test_notices_revocation_and_explicit_unknown_count"
+        ],
+        "repair": "Normal not-started and in-progress reasons share one definition beside the receipt/formation writers. Only stored failure reasons or failed/interrupted/expired latest attempts count as processing blocks; compact summaries expose only attempt state/expiry, never processing details. Both new/running probes and the existing stored-block/revocation probe pass (3 cases).",
+        "commits": [
+          "b4b6206"
+        ],
+        "red": {
+          "revision": "56488c00b05e17d21854623a7c2df2bf00105dc1",
+          "result": "failed",
+          "observation": "New/running rows both reported processing_blocked=True.",
+          "log": "work/834-repair-RED-56488c0.log"
+        },
+        "green": {
+          "revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+          "result": "passed",
+          "junit": "work/834-FINAL-suite.xml",
+          "cases": [
+            {
+              "test": "tests.test_console_read_architecture::test_new_and_running_documents_are_not_processing_blocks[False]",
+              "result": "passed",
+              "seconds": 0.844
+            },
+            {
+              "test": "tests.test_console_read_architecture::test_new_and_running_documents_are_not_processing_blocks[True]",
+              "result": "passed",
+              "seconds": 0.364
+            }
+          ]
+        }
+      },
+      "3": {
+        "red_on_56488c0": "failed",
+        "tests": [
+          "test_publisher_missing_processing_access_is_not_a_notice",
+          "test_notices_revocation_and_explicit_unknown_count"
+        ],
+        "repair": "Unknown candidate counts cause a notice only for an account with processing access. Publishers receive stored-block/error notices without processing details; missing access alone produces no notice. The new publisher probe and updated revocation/unknown-count probe pass (2 cases).",
+        "commits": [
+          "3385b0e",
+          "0a716dc"
+        ],
+        "red": {
+          "revision": "56488c00b05e17d21854623a7c2df2bf00105dc1",
+          "result": "failed",
+          "observation": "Publisher with no processing access received an unknown-count notice for a normal document.",
+          "log": "work/834-repair-RED-56488c0.log"
+        },
+        "green": {
+          "revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+          "result": "passed",
+          "junit": "work/834-FINAL-suite.xml",
+          "cases": [
+            {
+              "test": "tests.test_console_read_architecture::test_publisher_missing_processing_access_is_not_a_notice",
+              "result": "passed",
+              "seconds": 0.326
+            }
+          ]
+        }
+      },
+      "4": {
+        "red_on_56488c0": "failed",
+        "storage_benchmark": {
+          "batches": [
+            {
+              "documents": 50,
+              "seconds": 0.033869
+            },
+            {
+              "documents": 50,
+              "seconds": 0.036487
+            },
+            {
+              "documents": 1,
+              "seconds": 0.003597
+            }
+          ],
+          "fixture": "101 documents; 4000 SHA256 strings/object metadata; PG16 local",
+          "pg_column_size": {
+            "largest_document_bytes": 15853,
+            "largest_object_bytes": 263088,
+            "object_rows": 306,
+            "total_document_bytes": 1616971,
+            "total_object_bytes": 78864936
+          }
+        },
+        "tests": [
+          "test_notices_second_diagnostic_batch_failure_is_explicit_partial",
+          "test_notices_statement_timeout_preserves_previous_batch",
+          "test_notices_budget_returns_cursor_without_open_transaction",
+          "test_bounded_notices_do_not_claim_complete_when_later_documents_are_unchecked"
+        ],
+        "repair": "Raad captures at most 50 documents per SQL batch and stops at 8 notices or its cooperative 4s operation budget. Each batch closes before telemetry/filtering; SQL statement deadlines are lowered to the remaining budget. Failed/timed-out batches log an explicit diagnostic and return earlier rows with complete=false and the first unexamined offset. Four error/timeout/budget/scan-limit probes pass. Synthetic PG storage: 78,864,936 total object bytes; 50/50/1-document batches took 0.033869/0.036487/0.003597 seconds. Not representative Azure evidence.",
+        "commits": [
+          "99b38f6"
+        ],
+        "red": {
+          "revision": "56488c00b05e17d21854623a7c2df2bf00105dc1",
+          "result": "failed",
+          "observation": "Old code selected all 51 documents in one batch and returned complete=True; second-batch failure never exercised.",
+          "log": "work/834-repair-RED-56488c0.log"
+        },
+        "green": {
+          "revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+          "result": "passed",
+          "junit": "work/834-FINAL-suite.xml",
+          "cases": [
+            {
+              "test": "tests.test_console_read_architecture::test_notices_second_diagnostic_batch_failure_is_explicit_partial",
+              "result": "passed",
+              "seconds": 0.313
+            }
+          ]
+        }
+      },
+      "5": {
+        "red_on_56488c0": "failed",
+        "tests": [
+          "test_source_overview_refreshes_running_document",
+          "test_source_overview_running_golden"
+        ],
+        "repair": "Any visible busy/waiting source document now enables the existing 5s reload and refresh text, including the overview without a document parameter. No overview buttons added. Recorded pending/claimed characterization goldens with --record-characterization; all 45 characterization/source cases pass. Diff audit: 32 existing goldens changed only the Raad asset hash; two new source-overview goldens capture the requested behavior. The asset also hides unavailable candidate-count text for publisher-only notices.",
+        "commits": [
+          "0a716dc"
+        ],
+        "red": {
+          "revision": "56488c00b05e17d21854623a7c2df2bf00105dc1",
+          "result": "failed",
+          "observation": "Overview omitted window.location.reload() and the existing refresh text.",
+          "log": "work/834-repair-RED-56488c0.log"
+        },
+        "green": {
+          "revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+          "result": "passed",
+          "junit": "work/834-FINAL-suite.xml",
+          "cases": [
+            {
+              "test": "tests.test_console_read_architecture::test_source_overview_refreshes_running_document",
+              "result": "passed",
+              "seconds": 0.333
+            }
+          ]
+        }
+      },
+      "6": {
+        "red_on_56488c0": "failed",
+        "tests": [
+          "test_pending_finds_task_after_expired_document_in_same_round",
+          "test_dispatch_expiry_scan_respects_bound"
+        ],
+        "repair": "Discovery looks ahead through at least 50 documents while pending still limits returned tasks. An expired document no longer hides the following pending task in the same round; expiry work remains bounded to 50 documents for limit=1. Both the supplied expired-then-pending probe and a 51-expired-document bound/progress probe pass.",
+        "commits": [
+          "51b94b1"
+        ],
+        "red": {
+          "revision": "56488c00b05e17d21854623a7c2df2bf00105dc1",
+          "result": "failed",
+          "observation": "pending(limit=1) returned [] instead of the waiting task after an expired document.",
+          "log": "work/834-repair-RED-56488c0.log"
+        },
+        "green": {
+          "revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+          "result": "passed",
+          "junit": "work/834-FINAL-suite.xml",
+          "cases": [
+            {
+              "test": "tests.test_console_read_architecture::test_pending_finds_task_after_expired_document_in_same_round",
+              "result": "passed",
+              "seconds": 0.352
+            }
+          ]
+        }
+      }
+    },
+    "quality_boundary_closure": {
+      "passed": 11,
+      "seconds": 2.63,
+      "log": "work/834-quality-capture-final.log",
+      "checks": "Source/ledger I/O and object revision projection outside SQL; failed/expired latest attempts visible."
+    },
+    "focused_suite": {
+      "passed": 89,
+      "seconds": 46.96,
+      "log": "work/834-focused-GREEN.log"
+    },
+    "browser": {
+      "passed": 2,
+      "seconds": 79.86,
+      "log": "work/834-browser-GREEN.log",
+      "checks": "8-page navigation, in-flight Raad reuse, publisher-only notice renderer, source-selection journey"
+    },
+    "characterization": {
+      "passed": 45,
+      "recorded_with": "--record-characterization",
+      "existing_goldens_only_asset_hash": 32,
+      "new_source_goldens": [
+        "pending",
+        "claimed"
+      ]
+    },
+    "boundary_closure": {
+      "passed": 43,
+      "seconds": 32.59,
+      "log": "work/834-boundary-closure-GREEN.log",
+      "metadata_and_detail_consistency": "Independent SQL captures, each with repeatable-read ownership; no atomic cross-capture claim."
+    },
+    "final_verification": {
+      "status": "PASS",
+      "application_revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+      "summary": "5744 passed, 23 skipped, 3 xfailed, 8 warnings, 3 subtests passed in 1414.49s (0:23:34)",
+      "suite_attributes": [
+        {
+          "name": "pytest",
+          "errors": "0",
+          "failures": "0",
+          "skipped": "26",
+          "tests": "5773",
+          "time": "1414.437",
+          "timestamp": "2026-10-24T12:54:15.828685+00:00",
+          "hostname": "4028259c64d3"
+        }
+      ],
+      "log": "work/834-FINAL-suite.log",
+      "junit": "work/834-FINAL-suite.xml",
+      "browser_enabled": true,
+      "postgres_required": true,
+      "skips_are_not_proof": true,
+      "skipped_cases": [
+        {
+          "name": "tests.test_bend_experiment.BendExperimentTests::test_d3_python_and_bend_reject_same_live_relative_import",
+          "reason": "Optional Bend toolchain is not installed",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_bend_experiment.BendExperimentTests::test_d3_source_derived_import_boundary",
+          "reason": "Optional Bend toolchain is not installed",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_bend_experiment.BendExperimentTests::test_example_and_standard_proof",
+          "reason": "Optional Bend toolchain is not installed",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_bend_experiment.BendExperimentTests::test_law_rejects_incorrect_implementation",
+          "reason": "Optional Bend toolchain is not installed",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_true_pipeline_preserves_text_hash_and_original_geometry",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_mixed_digital_and_scanned_pdf_names_the_scanned_page_before_activation",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_structure_columns_labels_table_and_cross_page",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_line_numbers_cross_page_text_and_unequal_page_sizes",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_upload_semantic_source_review_restart_existing_publication_gate",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_pdf_postgres_chain",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_pdf_postgres_successful_publication_and_restart[v2]",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_pdf_postgres_successful_publication_and_restart[v3]",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_acceptance_requires_native_postgres",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_converter_timeout_restart_retry_no_partial_activation[local]",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_converter_timeout_restart_retry_no_partial_activation[postgres]",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_pdf_postgres_commit_rollback_and_concurrent_retry",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_laws_hold",
+          "reason": "Bend is optional outside its dedicated CI job",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_rejects_a_semantic_violation[standalone]",
+          "reason": "Bend is optional outside its dedicated CI job",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_rejects_a_semantic_violation[same_reviewer]",
+          "reason": "Bend is optional outside its dedicated CI job",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_matches_existing_pending_second_review_route[False-Standalone]",
+          "reason": "Bend is optional outside its dedicated CI job",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_matches_existing_pending_second_review_route[False-Console]",
+          "reason": "Bend is optional outside its dedicated CI job",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_matches_existing_pending_second_review_route[True-Standalone]",
+          "reason": "Bend is optional outside its dedicated CI job",
+          "type": "pytest.skip"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_matches_existing_pending_second_review_route[True-Console]",
+          "reason": "Bend is optional outside its dedicated CI job",
+          "type": "pytest.skip"
+        }
+      ],
+      "expected_failures": [
+        "tests.test_b23_richtlijn_vormingscontract_failfirst::test_rl_f1_04_intro_yields_no_objects_and_is_excluded_with_reason[semantic-source-bound-v3]",
+        "tests.test_b23_richtlijn_vormingscontract_failfirst::test_order_recommendation_then_consideration_then_condition[semantic-source-bound-v3]",
+        "tests.test_b23_richtlijn_vormingscontract_failfirst::test_weak_recommendation_without_target_group_is_rejected[semantic-source-bound-v3]"
+      ],
+      "passed": 5744,
+      "skipped": 23,
+      "xfailed": 3,
+      "warnings": 8,
+      "subtests_passed": 3,
+      "postgres_skips": 0,
+      "skip_reasons": {
+        "Optional Bend toolchain is not installed": 4,
+        "Real Docling/models acceptance environment required; not proven by unit tests": 12,
+        "Bend is optional outside its dedicated CI job": 7
+      }
+    },
+    "red_logs_sha256": {
+      "834-repair-RED-56488c0.log": "db79d0fd166a05a32eae741cbbae9c87575ee66e4271224f30a27080669e2fc1",
+      "834-quality-RED-56488c0.log": "6f4bc6db028cacb754ac0e9257f3d5e7fe9242cb4b020b2bf3c9700586a520dc"
+    },
+    "current_measurement": {
+      "routes": [
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 1.1254119999648537,
+            "db_connections": 1,
+            "db_json_bytes": 4,
+            "db_queries": 1,
+            "db_query_ms": 0.9275930005969713
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 4,
+          "route": "/",
+          "seconds": 0.006179,
+          "store_reads": {}
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 2.9371429973252816,
+            "db_connections": 3,
+            "db_json_bytes": 428,
+            "db_queries": 3,
+            "db_query_ms": 4.212853000353789
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 428,
+          "route": "/ingest",
+          "seconds": 0.011681,
+          "store_reads": {
+            "list_document_cards": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 2.8988859994569793,
+            "db_connections": 3,
+            "db_json_bytes": 513,
+            "db_queries": 6,
+            "db_query_ms": 5.24964200303657
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 513,
+          "route": "/source-selection",
+          "seconds": 0.013643,
+          "store_reads": {
+            "list_source_selection_summaries": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 11.056473998905858,
+            "db_connections": 10,
+            "db_json_bytes": 392844,
+            "db_queries": 10,
+            "db_query_ms": 10.612272999424022
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 392844,
+          "route": "/review",
+          "seconds": 0.035208,
+          "store_reads": {}
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 3.2668010007910198,
+            "db_connections": 3,
+            "db_json_bytes": 416,
+            "db_queries": 3,
+            "db_query_ms": 5.519859001651639
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 416,
+          "route": "/publish",
+          "seconds": 0.013287,
+          "store_reads": {
+            "list_document_cards": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 5.346252995877876,
+            "db_connections": 5,
+            "db_json_bytes": 420,
+            "db_queries": 5,
+            "db_query_ms": 8.458484999209759
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 420,
+          "route": "/tree",
+          "seconds": 0.020358,
+          "store_reads": {
+            "list_document_cards": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 3.2950750010058982,
+            "db_connections": 1,
+            "db_json_bytes": 4,
+            "db_queries": 1,
+            "db_query_ms": 0.8212329994421452
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 4,
+          "route": "/settings",
+          "seconds": 0.00857,
+          "store_reads": {}
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 1.0330630011594621,
+            "db_connections": 1,
+            "db_json_bytes": 4,
+            "db_queries": 1,
+            "db_query_ms": 0.827511999887065
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 4,
+          "route": "/inzicht",
+          "seconds": 0.006116,
+          "store_reads": {}
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 6.8523859972629,
+            "db_connections": 5,
+            "db_json_bytes": 443,
+            "db_queries": 14,
+            "db_query_ms": 11.596291995374486
+          },
+          "detail": false,
+          "full_reads": {},
+          "native_json_bytes": 443,
+          "route": "/inzicht/api/documents",
+          "seconds": 0.02765,
+          "store_reads": {
+            "document_diagnostic_inputs": 1,
+            "document_processing_inputs": 1,
+            "list_document_summaries": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 10.854031999770086,
+            "db_connections": 7,
+            "db_json_bytes": 436769,
+            "db_queries": 26,
+            "db_query_ms": 22.71638099773554
+          },
+          "detail": false,
+          "full_reads": {
+            "get_envelope": 1,
+            "list_document_objects": 1
+          },
+          "native_json_bytes": 436769,
+          "route": "/inzicht/api/quality",
+          "seconds": 0.05518,
+          "store_reads": {
+            "get_envelope": 1,
+            "list_document_cards": 2,
+            "list_document_objects": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 11.027971997464192,
+            "db_connections": 7,
+            "db_json_bytes": 392832,
+            "db_queries": 8,
+            "db_query_ms": 8.438716000455315
+          },
+          "detail": true,
+          "full_reads": {
+            "get_envelope": 1,
+            "list_document_objects": 1
+          },
+          "native_json_bytes": 392832,
+          "route": "/inzicht/document",
+          "seconds": 0.032728,
+          "store_reads": {
+            "get_envelope": 1,
+            "list_document_objects": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 10.765594000986312,
+            "db_connections": 8,
+            "db_json_bytes": 393240,
+            "db_queries": 9,
+            "db_query_ms": 13.144144002581015
+          },
+          "detail": true,
+          "full_reads": {
+            "get_envelope": 1,
+            "list_document_objects": 1
+          },
+          "native_json_bytes": 393240,
+          "route": "/review",
+          "seconds": 0.037665,
+          "store_reads": {
+            "get_envelope": 1,
+            "list_document_cards": 1,
+            "list_document_objects": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 8.914335998269962,
+            "db_connections": 8,
+            "db_json_bytes": 393240,
+            "db_queries": 9,
+            "db_query_ms": 11.483643000246957
+          },
+          "detail": true,
+          "full_reads": {
+            "get_envelope": 1,
+            "list_document_objects": 1
+          },
+          "native_json_bytes": 393240,
+          "route": "/publish",
+          "seconds": 0.032012,
+          "store_reads": {
+            "get_envelope": 1,
+            "list_document_cards": 1,
+            "list_document_objects": 1
+          }
+        },
+        {
+          "db": {
+            "badge_ms": 0.0,
+            "db_connect_ms": 9.522985999865341,
+            "db_connections": 7,
+            "db_json_bytes": 393341,
+            "db_queries": 12,
+            "db_query_ms": 15.840047997699003
+          },
+          "detail": true,
+          "full_reads": {
+            "get_envelope": 1,
+            "list_document_objects": 1
+          },
+          "native_json_bytes": 393341,
+          "route": "/source-selection",
+          "seconds": 0.039313,
+          "store_reads": {
+            "get_envelope": 1,
+            "list_document_objects": 1,
+            "list_source_selection_summaries": 1
+          }
+        }
+      ],
+      "query_plans": {
+        "document_diagnostic_inputs": {
+          "execution_ms": 0.15,
+          "planning_ms": 0.192,
+          "shared_hit_blocks": 44,
+          "shared_read_blocks": 0
+        },
+        "document_processing_inputs": {
+          "execution_ms": 1.118,
+          "planning_ms": 0.284,
+          "shared_hit_blocks": 94,
+          "shared_read_blocks": 0
+        }
+      },
+      "benchmark": {
+        "fixture": {
+          "database": "PostgreSQL16",
+          "documents": 1,
+          "envelope_bytes": 380745,
+          "replay_records": 4000,
+          "roles": [
+            "researcher",
+            "assigned_reviewer"
+          ],
+          "source": "synthetic HTML"
+        },
+        "revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+        "samples": [
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 8.742203999645426,
+              "db_connections": 5,
+              "db_json_bytes": 443,
+              "db_queries": 14,
+              "db_query_ms": 10.998425999787287
+            },
+            "decoded_payload_bytes": 1781,
+            "deepcopy_calls": 0,
+            "deepcopy_seconds": 0,
+            "full_payload_bytes": 0,
+            "full_reads": {},
+            "mode": "first",
+            "native_json_bytes": 443,
+            "sample": 0,
+            "seconds": 0.02877,
+            "store_reads": {
+              "document_diagnostic_inputs": 1,
+              "document_processing_inputs": 1,
+              "list_document_summaries": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 8.620249998784857,
+              "db_connections": 5,
+              "db_json_bytes": 443,
+              "db_queries": 14,
+              "db_query_ms": 12.238133995197131
+            },
+            "decoded_payload_bytes": 1781,
+            "deepcopy_calls": 0,
+            "deepcopy_seconds": 0,
+            "full_payload_bytes": 0,
+            "full_reads": {},
+            "mode": "repeat",
+            "native_json_bytes": 443,
+            "sample": 1,
+            "seconds": 0.029315,
+            "store_reads": {
+              "document_diagnostic_inputs": 1,
+              "document_processing_inputs": 1,
+              "list_document_summaries": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 8.834273998218123,
+              "db_connections": 5,
+              "db_json_bytes": 443,
+              "db_queries": 14,
+              "db_query_ms": 10.85918700300681
+            },
+            "decoded_payload_bytes": 1781,
+            "deepcopy_calls": 0,
+            "deepcopy_seconds": 0,
+            "full_payload_bytes": 0,
+            "full_reads": {},
+            "mode": "repeat",
+            "native_json_bytes": 443,
+            "sample": 2,
+            "seconds": 0.026222,
+            "store_reads": {
+              "document_diagnostic_inputs": 1,
+              "document_processing_inputs": 1,
+              "list_document_summaries": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 10.11562400162802,
+              "db_connections": 5,
+              "db_json_bytes": 443,
+              "db_queries": 14,
+              "db_query_ms": 11.444751997260028
+            },
+            "decoded_payload_bytes": 1781,
+            "deepcopy_calls": 0,
+            "deepcopy_seconds": 0,
+            "full_payload_bytes": 0,
+            "full_reads": {},
+            "mode": "repeat",
+            "native_json_bytes": 443,
+            "sample": 3,
+            "seconds": 0.032046,
+            "store_reads": {
+              "document_diagnostic_inputs": 1,
+              "document_processing_inputs": 1,
+              "list_document_summaries": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 8.610744001998683,
+              "db_connections": 5,
+              "db_json_bytes": 443,
+              "db_queries": 14,
+              "db_query_ms": 11.234864001380629
+            },
+            "decoded_payload_bytes": 1781,
+            "deepcopy_calls": 0,
+            "deepcopy_seconds": 0,
+            "full_payload_bytes": 0,
+            "full_reads": {},
+            "mode": "repeat",
+            "native_json_bytes": 443,
+            "sample": 4,
+            "seconds": 0.029107,
+            "store_reads": {
+              "document_diagnostic_inputs": 1,
+              "document_processing_inputs": 1,
+              "list_document_summaries": 1
+            }
+          },
+          {
+            "db": [
+              {
+                "badge_ms": 0.0,
+                "db_connect_ms": 10.995152997566038,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 11.659568002869491
+              },
+              {
+                "badge_ms": 0.0,
+                "db_connect_ms": 13.705072999073309,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 15.166912997301552
+              }
+            ],
+            "full_reads": {},
+            "mode": "two_readers",
+            "seconds": 0.030417,
+            "store_reads": {
+              "document_diagnostic_inputs": 2,
+              "document_processing_inputs": 2,
+              "list_document_summaries": 2
+            }
+          },
+          {
+            "db": [
+              {
+                "badge_ms": 0.0,
+                "db_connect_ms": 10.995152997566038,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 11.659568002869491
+              },
+              {
+                "badge_ms": 0.0,
+                "db_connect_ms": 13.705072999073309,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 15.166912997301552
+              }
+            ],
+            "full_reads": {},
+            "mode": "formation_with_two_readers",
+            "seconds": 0.33074
+          }
+        ]
+      },
+      "storage_batches": {
+        "batches": [
+          {
+            "documents": 50,
+            "seconds": 0.043882
+          },
+          {
+            "documents": 50,
+            "seconds": 0.036329
+          },
+          {
+            "documents": 1,
+            "seconds": 0.004049
+          }
+        ],
+        "fixture": "101 documents; 4000 SHA256 strings/object metadata; PG16 local",
+        "pg_column_size": {
+          "largest_document_bytes": 15858,
+          "largest_object_bytes": 263088,
+          "object_rows": 306,
+          "total_document_bytes": 1617484,
+          "total_object_bytes": 78864936
+        }
+      },
+      "storage_batch_breakdown": {
+        "batches": [
+          {
+            "capture_seconds": 0.038516,
+            "documents": 50,
+            "seconds": 0.04072
+          },
+          {
+            "capture_seconds": 0.033924,
+            "documents": 50,
+            "seconds": 0.035568
+          },
+          {
+            "capture_seconds": 0.003478,
+            "documents": 1,
+            "seconds": 0.005299
+          }
+        ],
+        "fixture": "101 documents; 4000 SHA256 strings/object metadata; PG16 local",
+        "pg_column_size": {
+          "largest_document_bytes": 15865,
+          "largest_object_bytes": 263088,
+          "object_rows": 306,
+          "total_document_bytes": 1618196,
+          "total_object_bytes": 78864936
+        }
+      },
+      "storage_batch_timing_scope": "seconds includes connection + read transaction setup/close; capture_seconds measures document_diagnostic_inputs inside that transaction, including SQL fetch/decode. pg_column_size excludes table/index/protocol overhead. Local synthetic, not Azure.",
+      "instrumentation_note": "Final followup adds separate capture_seconds to the explicit benchmark; application code remains at 8397e53."
+    },
+    "preflights": {
+      "architecture_boundaries": "Architecture boundaries: PASS",
+      "release_control": "PASS; live_release_evidence=false",
+      "repository": {
+        "status": "PASS",
+        "checked_files": 1557
+      },
+      "compileall_src": "PASS",
+      "node_check_care_companion_js": "PASS"
+    },
+    "github_observation": {
+      "application_revision": "8397e5357362d34ac15286b79e87e83e1bf3ad23",
+      "source-processing-proof": "success",
+      "workflow-topology-proof": "success",
+      "docling-acceptance": "success",
+      "Bend experiment proof": "success",
+      "ci": "in_progress",
+      "note": "Observed before the evidence-only followup commit. Local full suite passed; remote general CI is not claimed complete."
+    }
+  },
+  "evidence_scope": "Top-level recovery and repair_review_2026_10_24 stay historical; pre_deployment_cleanup contains the latest tested application, cleanup and complete verification.",
+  "pre_deployment_cleanup": {
+    "base_revision": "02e19ab462c02e002d73d377dbfed9771cda63ed",
+    "classification": "Class B; Rewrite risk: high",
+    "release_verdict": "NO-GO",
+    "red_probes": {
+      "failed": 8,
+      "passed": 1,
+      "log": "work/834-cleanup-RED-02e19ab.log",
+      "summary": "8 failed, 1 passed, 29 deselected, 1 warning in 12.54s",
+      "native_json_bytes": 444855,
+      "review_method_level_probe_passed_but_native_SQL_volume_failed": true
+    },
+    "plan": "A1–A4 and C1–C2; remove B1–B5, keep B6 one release; preserve writer/lifecycle/source integrity contracts. Native review SQL also needs targeted inputs.",
+    "final_verification": {
+      "status": "PASS",
+      "application_revision": "d843e8a8c5be1a0e75f81ad7a707e246e0618f09",
+      "test_suite_revision": "1bfd07d629abebc7f037c149aab2512167b0697b",
+      "summary": "5755 passed, 23 skipped, 3 xfailed, 8 warnings, 3 subtests passed in 1421.55s (0:23:41)",
+      "passed": 5755,
+      "skipped": 23,
+      "xfailed": 3,
+      "warnings": 8,
+      "subtests_passed": 3,
+      "postgres_required": true,
+      "browser_enabled": true,
+      "postgres_skips": 0,
+      "log": "work/834-cleanup-VERIFIED.log",
+      "junit": "work/834-cleanup-VERIFIED.xml",
+      "skips_are_not_proof": true,
+      "skipped_cases": [
+        {
+          "name": "tests.test_bend_experiment.BendExperimentTests::test_d3_python_and_bend_reject_same_live_relative_import",
+          "reason": "Optional Bend toolchain is not installed"
+        },
+        {
+          "name": "tests.test_bend_experiment.BendExperimentTests::test_d3_source_derived_import_boundary",
+          "reason": "Optional Bend toolchain is not installed"
+        },
+        {
+          "name": "tests.test_bend_experiment.BendExperimentTests::test_example_and_standard_proof",
+          "reason": "Optional Bend toolchain is not installed"
+        },
+        {
+          "name": "tests.test_bend_experiment.BendExperimentTests::test_law_rejects_incorrect_implementation",
+          "reason": "Optional Bend toolchain is not installed"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_true_pipeline_preserves_text_hash_and_original_geometry",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_mixed_digital_and_scanned_pdf_names_the_scanned_page_before_activation",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_structure_columns_labels_table_and_cross_page",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_line_numbers_cross_page_text_and_unequal_page_sizes",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_upload_semantic_source_review_restart_existing_publication_gate",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_pdf_postgres_chain",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_pdf_postgres_successful_publication_and_restart[v2]",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_pdf_postgres_successful_publication_and_restart[v3]",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_acceptance_requires_native_postgres",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_converter_timeout_restart_retry_no_partial_activation[local]",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_converter_timeout_restart_retry_no_partial_activation[postgres]",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_docling_real_pdf::test_real_pdf_postgres_commit_rollback_and_concurrent_retry",
+          "reason": "Real Docling/models acceptance environment required; not proven by unit tests"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_laws_hold",
+          "reason": "Bend is optional outside its dedicated CI job"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_rejects_a_semantic_violation[standalone]",
+          "reason": "Bend is optional outside its dedicated CI job"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_rejects_a_semantic_violation[same_reviewer]",
+          "reason": "Bend is optional outside its dedicated CI job"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_matches_existing_pending_second_review_route[False-Standalone]",
+          "reason": "Bend is optional outside its dedicated CI job"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_matches_existing_pending_second_review_route[False-Console]",
+          "reason": "Bend is optional outside its dedicated CI job"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_matches_existing_pending_second_review_route[True-Standalone]",
+          "reason": "Bend is optional outside its dedicated CI job"
+        },
+        {
+          "name": "tests.test_pr_d2_second_review_retirement::test_bend_matches_existing_pending_second_review_route[True-Console]",
+          "reason": "Bend is optional outside its dedicated CI job"
+        }
+      ],
+      "expected_failures": [
+        "tests.test_b23_richtlijn_vormingscontract_failfirst::test_rl_f1_04_intro_yields_no_objects_and_is_excluded_with_reason[semantic-source-bound-v3]",
+        "tests.test_b23_richtlijn_vormingscontract_failfirst::test_order_recommendation_then_consideration_then_condition[semantic-source-bound-v3]",
+        "tests.test_b23_richtlijn_vormingscontract_failfirst::test_weak_recommendation_without_target_group_is_rejected[semantic-source-bound-v3]"
+      ]
+    },
+    "focused": {
+      "final_surface": {
+        "passed": 106,
+        "seconds": 62.65,
+        "log": "work/834-cleanup-final-surface.log"
+      },
+      "navigation_and_shared_cards": {
+        "passed": 14,
+        "seconds": 44.03,
+        "log": "work/834-cleanup-shared-cards.log",
+        "connections_budget": 6,
+        "object_counts": [
+          2,
+          200
+        ]
+      },
+      "writer_and_no_disk": {
+        "passed": 26,
+        "seconds": 29.89,
+        "log": "work/834-cleanup-writer-read-check.log"
+      },
+      "native_domain_and_characterization": {
+        "passed": 41,
+        "seconds": 13.49,
+        "log": "work/834-cleanup-native-characterization.log"
+      }
+    },
+    "read_volume": {
+      "synthetic_replay_records": 4000,
+      "review_native_json_bytes": 15367,
+      "maximum_bytes_guard": 65536,
+      "before": "guard failed on 02e19ab",
+      "measurement_scope": "Local JSON/JSONB decoder bytes, not Azure storage/latency.",
+      "current_native_probe_bytes": 15368,
+      "current_probe_log": "work/834-cleanup-current-native-volume.log"
+    },
+    "changes": {
+      "A1": "Card scope; no command lock/reload on GET.",
+      "A2": "Fallback cards and targeted native card/source/graph SQL; shared card checks; existing duty kernel/source verification.",
+      "A3": "Card list + explicit authorized envelope in existing object reader.",
+      "A4": "Selected _envelope lookup; unchanged command reload/unknown_snapshot.",
+      "C1": "Canonical status after workflow SQL closes; explicit boundary guard.",
+      "C2": "Missing capture IDs skipped, metadata completeness partial.",
+      "B1-B2": "Removed deep switch/branches and _overview_rows.",
+      "B3": "Removed unused ID-list API and snapshot slot; migrated card isolation/deletion tests.",
+      "B4-B5": "Removed obsolete GET definitions, installers own their clean GET slot.",
+      "B6": "Retained for one release."
+    },
+    "intermediate_findings_resolved": [
+      "Test fixture registered an obsolete GET before invoking the new clean-slot installer; removed that test-only route.",
+      "Batch timeout fixture had tied whole-second timestamps; explicit fixture ordering added.",
+      "Separate card metadata query cost one extra connection; shared SQL shape restores the unchanged six-connection budget."
+    ],
+    "graph_input_regression": {
+      "red_revision": "b9014f20ac1fd7e9740acfda37e5449e84819f51",
+      "red_failed": 3,
+      "red_log": "work/834-cleanup-graph-failure.log",
+      "cause": "Targeted native input omitted decision_graph_evidence required by existing graph publication_issues during duty projection.",
+      "repair": "Select the existing graph evidence unchanged; retain graph validation and reviewer confirmation authority.",
+      "green": {
+        "passed": 21,
+        "seconds": 11.65,
+        "log": "work/834-cleanup-graph-GREEN.log"
+      }
+    },
+    "visible_completeness": {
+      "red_revision": "02e19ab462c02e002d73d377dbfed9771cda63ed",
+      "red_result": "failed: required visible incomplete label absent",
+      "red_log": "work/834-cleanup-partial-ui-RED-final.log",
+      "red_seconds": 45.57,
+      "green_passed": 1,
+      "green_seconds": 71.21,
+      "green_log": "work/834-cleanup-partial-ui-final.log",
+      "scope": "Actual Chromium + HTTP, mocked partial API response; existing eight-page/fault/unchanged-domain proof retained."
+    },
+    "paired_measurement": {
+      "before": {
+        "routes": [
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 1.2263079988770187,
+              "db_connections": 1,
+              "db_json_bytes": 4,
+              "db_queries": 1,
+              "db_query_ms": 0.8115789969451725
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 4,
+            "route": "/",
+            "seconds": 0.009165,
+            "store_reads": {}
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 3.4463840020180214,
+              "db_connections": 3,
+              "db_json_bytes": 428,
+              "db_queries": 3,
+              "db_query_ms": 4.978093005775008
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 428,
+            "route": "/ingest",
+            "seconds": 0.014735,
+            "store_reads": {
+              "list_document_cards": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 3.8907430025574286,
+              "db_connections": 3,
+              "db_json_bytes": 513,
+              "db_queries": 6,
+              "db_query_ms": 6.655888995737769
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 513,
+            "route": "/source-selection",
+            "seconds": 0.016512,
+            "store_reads": {
+              "list_source_selection_summaries": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 18.328205002035247,
+              "db_connections": 10,
+              "db_json_bytes": 392845,
+              "db_queries": 10,
+              "db_query_ms": 14.573696007573744
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 392845,
+            "route": "/review",
+            "seconds": 0.055295,
+            "store_reads": {}
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 3.401057005248731,
+              "db_connections": 3,
+              "db_json_bytes": 392825,
+              "db_queries": 4,
+              "db_query_ms": 4.668039000534918
+            },
+            "detail": false,
+            "full_reads": {
+              "list_document_objects": 1,
+              "list_envelopes": 1
+            },
+            "native_json_bytes": 392825,
+            "route": "/review/repair",
+            "seconds": 0.018313,
+            "store_reads": {
+              "list_document_objects": 1,
+              "list_envelopes": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 9.153680999588687,
+              "db_connections": 6,
+              "db_json_bytes": 761500,
+              "db_queries": 8,
+              "db_query_ms": 10.408684000140056
+            },
+            "detail": false,
+            "full_reads": {
+              "list_envelopes": 2
+            },
+            "native_json_bytes": 761500,
+            "route": "/inzicht/routevergelijking",
+            "seconds": 0.032859,
+            "store_reads": {
+              "list_envelopes": 2
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 3.7569440028164536,
+              "db_connections": 3,
+              "db_json_bytes": 416,
+              "db_queries": 3,
+              "db_query_ms": 6.12888200339512
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 416,
+            "route": "/publish",
+            "seconds": 0.015486,
+            "store_reads": {
+              "list_document_cards": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 7.5280499913787935,
+              "db_connections": 5,
+              "db_json_bytes": 420,
+              "db_queries": 5,
+              "db_query_ms": 8.260515005531488
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 420,
+            "route": "/tree",
+            "seconds": 0.022701,
+            "store_reads": {
+              "list_document_cards": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 1.7945250001503155,
+              "db_connections": 1,
+              "db_json_bytes": 4,
+              "db_queries": 1,
+              "db_query_ms": 0.9246759982488584
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 4,
+            "route": "/settings",
+            "seconds": 0.009638,
+            "store_reads": {}
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 1.901793002616614,
+              "db_connections": 1,
+              "db_json_bytes": 4,
+              "db_queries": 1,
+              "db_query_ms": 1.0600780005916022
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 4,
+            "route": "/inzicht",
+            "seconds": 0.007225,
+            "store_reads": {}
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 7.536493998486549,
+              "db_connections": 5,
+              "db_json_bytes": 443,
+              "db_queries": 14,
+              "db_query_ms": 11.084450001362711
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 443,
+            "route": "/inzicht/api/documents",
+            "seconds": 0.031381,
+            "store_reads": {
+              "document_diagnostic_inputs": 1,
+              "document_processing_inputs": 1,
+              "list_document_summaries": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 8.913926998502575,
+              "db_connections": 7,
+              "db_json_bytes": 436771,
+              "db_queries": 26,
+              "db_query_ms": 18.380118999630213
+            },
+            "detail": false,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 436771,
+            "route": "/inzicht/api/quality",
+            "seconds": 0.045232,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_cards": 2,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 8.846765998896444,
+              "db_connections": 7,
+              "db_json_bytes": 392833,
+              "db_queries": 8,
+              "db_query_ms": 7.894492006016662
+            },
+            "detail": true,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 392833,
+            "route": "/inzicht/document",
+            "seconds": 0.034764,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 10.58341099997051,
+              "db_connections": 8,
+              "db_json_bytes": 393241,
+              "db_queries": 9,
+              "db_query_ms": 11.708055000781314
+            },
+            "detail": true,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 393241,
+            "route": "/review",
+            "seconds": 0.034861,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_cards": 1,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 16.86172500194516,
+              "db_connections": 8,
+              "db_json_bytes": 393241,
+              "db_queries": 9,
+              "db_query_ms": 11.087333998148097
+            },
+            "detail": true,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 393241,
+            "route": "/publish",
+            "seconds": 0.043293,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_cards": 1,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 8.27902199307573,
+              "db_connections": 7,
+              "db_json_bytes": 393342,
+              "db_queries": 12,
+              "db_query_ms": 10.241924999718321
+            },
+            "detail": true,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 393342,
+            "route": "/source-selection",
+            "seconds": 0.029323,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1,
+              "list_source_selection_summaries": 1
+            }
+          }
+        ],
+        "query_plans": {
+          "document_diagnostic_inputs": {
+            "execution_ms": 0.12,
+            "planning_ms": 0.187,
+            "shared_hit_blocks": 44,
+            "shared_read_blocks": 0
+          },
+          "document_processing_inputs": {
+            "execution_ms": 1.059,
+            "planning_ms": 0.297,
+            "shared_hit_blocks": 94,
+            "shared_read_blocks": 0
+          }
+        },
+        "benchmark": {
+          "fixture": {
+            "database": "PostgreSQL16",
+            "documents": 1,
+            "envelope_bytes": 380746,
+            "replay_records": 4000,
+            "roles": [
+              "researcher",
+              "assigned_reviewer"
+            ],
+            "source": "synthetic HTML"
+          },
+          "revision": "02e19ab462c02e002d73d377dbfed9771cda63ed",
+          "samples": [
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 8.711669997865101,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 11.3122159964405
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "first",
+              "native_json_bytes": 443,
+              "sample": 0,
+              "seconds": 0.030497,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 8.42312499662512,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 12.79817101021763
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "repeat",
+              "native_json_bytes": 443,
+              "sample": 1,
+              "seconds": 0.029324,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 7.965013999637449,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 12.10428399281227
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "repeat",
+              "native_json_bytes": 443,
+              "sample": 2,
+              "seconds": 0.031329,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 7.197031998657621,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 10.219388004770735
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "repeat",
+              "native_json_bytes": 443,
+              "sample": 3,
+              "seconds": 0.02688,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 7.741774996247841,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 8.291832000395516
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "repeat",
+              "native_json_bytes": 443,
+              "sample": 4,
+              "seconds": 0.024585,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": [
+                {
+                  "badge_ms": 0.0,
+                  "db_connect_ms": 13.292482995893806,
+                  "db_connections": 5,
+                  "db_json_bytes": 443,
+                  "db_queries": 14,
+                  "db_query_ms": 17.26681098807603
+                },
+                {
+                  "badge_ms": 0.0,
+                  "db_connect_ms": 15.920361001917627,
+                  "db_connections": 5,
+                  "db_json_bytes": 443,
+                  "db_queries": 14,
+                  "db_query_ms": 18.28526399549446
+                }
+              ],
+              "full_reads": {},
+              "mode": "two_readers",
+              "seconds": 0.032875,
+              "store_reads": {
+                "document_diagnostic_inputs": 2,
+                "document_processing_inputs": 2,
+                "list_document_summaries": 2
+              }
+            },
+            {
+              "db": [
+                {
+                  "badge_ms": 0.0,
+                  "db_connect_ms": 13.292482995893806,
+                  "db_connections": 5,
+                  "db_json_bytes": 443,
+                  "db_queries": 14,
+                  "db_query_ms": 17.26681098807603
+                },
+                {
+                  "badge_ms": 0.0,
+                  "db_connect_ms": 15.920361001917627,
+                  "db_connections": 5,
+                  "db_json_bytes": 443,
+                  "db_queries": 14,
+                  "db_query_ms": 18.28526399549446
+                }
+              ],
+              "full_reads": {},
+              "mode": "formation_with_two_readers",
+              "seconds": 0.301305
+            }
+          ]
+        },
+        "storage_batches": {
+          "batches": [
+            {
+              "capture_seconds": 0.033511,
+              "documents": 50,
+              "seconds": 0.035429
+            },
+            {
+              "capture_seconds": 0.0332,
+              "documents": 50,
+              "seconds": 0.035528
+            },
+            {
+              "capture_seconds": 0.002792,
+              "documents": 1,
+              "seconds": 0.005136
+            }
+          ],
+          "fixture": "101 documents; 4000 SHA256 strings/object metadata; PG16 local",
+          "pg_column_size": {
+            "largest_document_bytes": 15878,
+            "largest_object_bytes": 263088,
+            "object_rows": 306,
+            "total_document_bytes": 1619525,
+            "total_object_bytes": 78864936
+          }
+        }
+      },
+      "after": {
+        "routes": [
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 1.201318998937495,
+              "db_connections": 1,
+              "db_json_bytes": 4,
+              "db_queries": 1,
+              "db_query_ms": 0.9989890022552572
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 4,
+            "route": "/",
+            "seconds": 0.006836,
+            "store_reads": {}
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 4.195122000965057,
+              "db_connections": 3,
+              "db_json_bytes": 428,
+              "db_queries": 3,
+              "db_query_ms": 5.509875001735054
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 428,
+            "route": "/ingest",
+            "seconds": 0.016573,
+            "store_reads": {
+              "list_document_cards": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 4.270811998139834,
+              "db_connections": 3,
+              "db_json_bytes": 513,
+              "db_queries": 6,
+              "db_query_ms": 6.6264010056329425
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 513,
+            "route": "/source-selection",
+            "seconds": 0.01851,
+            "store_reads": {
+              "list_source_selection_summaries": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 12.035825002385536,
+              "db_connections": 10,
+              "db_json_bytes": 15357,
+              "db_queries": 10,
+              "db_query_ms": 15.230571996653453
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 15357,
+            "route": "/review",
+            "seconds": 0.040615,
+            "store_reads": {}
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 3.38711400036118,
+              "db_connections": 3,
+              "db_json_bytes": 12491,
+              "db_queries": 3,
+              "db_query_ms": 6.608496001717867
+            },
+            "detail": false,
+            "full_reads": {
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 12491,
+            "route": "/review/repair",
+            "seconds": 0.015201,
+            "store_reads": {
+              "list_document_cards": 1,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 4.575823997583939,
+              "db_connections": 4,
+              "db_json_bytes": 420,
+              "db_queries": 4,
+              "db_query_ms": 5.918359998759115
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 420,
+            "route": "/inzicht/routevergelijking",
+            "seconds": 0.015934,
+            "store_reads": {
+              "list_document_cards": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 4.199007998977322,
+              "db_connections": 3,
+              "db_json_bytes": 416,
+              "db_queries": 3,
+              "db_query_ms": 5.8492149983067065
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 416,
+            "route": "/publish",
+            "seconds": 0.015132,
+            "store_reads": {
+              "list_document_cards": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 5.273451995890355,
+              "db_connections": 5,
+              "db_json_bytes": 420,
+              "db_queries": 5,
+              "db_query_ms": 6.752147997758584
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 420,
+            "route": "/tree",
+            "seconds": 0.01824,
+            "store_reads": {
+              "list_document_cards": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 1.197273002617294,
+              "db_connections": 1,
+              "db_json_bytes": 4,
+              "db_queries": 1,
+              "db_query_ms": 0.830240998766385
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 4,
+            "route": "/settings",
+            "seconds": 0.006275,
+            "store_reads": {}
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 1.2676110018219333,
+              "db_connections": 1,
+              "db_json_bytes": 4,
+              "db_queries": 1,
+              "db_query_ms": 0.9285909982281737
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 4,
+            "route": "/inzicht",
+            "seconds": 0.006147,
+            "store_reads": {}
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 6.058265997126,
+              "db_connections": 5,
+              "db_json_bytes": 443,
+              "db_queries": 14,
+              "db_query_ms": 8.40102899746853
+            },
+            "detail": false,
+            "full_reads": {},
+            "native_json_bytes": 443,
+            "route": "/inzicht/api/documents",
+            "seconds": 0.022064,
+            "store_reads": {
+              "document_diagnostic_inputs": 1,
+              "document_processing_inputs": 1,
+              "list_document_summaries": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 9.907186002237722,
+              "db_connections": 7,
+              "db_json_bytes": 436769,
+              "db_queries": 26,
+              "db_query_ms": 20.028244016430108
+            },
+            "detail": false,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 436769,
+            "route": "/inzicht/api/quality",
+            "seconds": 0.048775,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_cards": 2,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 8.949151000706479,
+              "db_connections": 7,
+              "db_json_bytes": 392833,
+              "db_queries": 8,
+              "db_query_ms": 9.429325004020939
+            },
+            "detail": true,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 392833,
+            "route": "/inzicht/document",
+            "seconds": 0.033439,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 12.410341001668712,
+              "db_connections": 8,
+              "db_json_bytes": 393241,
+              "db_queries": 9,
+              "db_query_ms": 12.98050500190584
+            },
+            "detail": true,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 393241,
+            "route": "/review",
+            "seconds": 0.042611,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_cards": 1,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 10.782809993543196,
+              "db_connections": 8,
+              "db_json_bytes": 393241,
+              "db_queries": 9,
+              "db_query_ms": 12.314902996877208
+            },
+            "detail": true,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 393241,
+            "route": "/publish",
+            "seconds": 0.040017,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_cards": 1,
+              "list_document_objects": 1
+            }
+          },
+          {
+            "db": {
+              "badge_ms": 0.0,
+              "db_connect_ms": 9.143776991550112,
+              "db_connections": 7,
+              "db_json_bytes": 393342,
+              "db_queries": 12,
+              "db_query_ms": 11.928669988265028
+            },
+            "detail": true,
+            "full_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1
+            },
+            "native_json_bytes": 393342,
+            "route": "/source-selection",
+            "seconds": 0.032739,
+            "store_reads": {
+              "get_envelope": 1,
+              "list_document_objects": 1,
+              "list_source_selection_summaries": 1
+            }
+          }
+        ],
+        "query_plans": {
+          "document_diagnostic_inputs": {
+            "execution_ms": 0.134,
+            "planning_ms": 0.23,
+            "shared_hit_blocks": 44,
+            "shared_read_blocks": 0
+          },
+          "document_processing_inputs": {
+            "execution_ms": 1.11,
+            "planning_ms": 0.351,
+            "shared_hit_blocks": 94,
+            "shared_read_blocks": 0
+          }
+        },
+        "benchmark": {
+          "fixture": {
+            "database": "PostgreSQL16",
+            "documents": 1,
+            "envelope_bytes": 380746,
+            "replay_records": 4000,
+            "roles": [
+              "researcher",
+              "assigned_reviewer"
+            ],
+            "source": "synthetic HTML"
+          },
+          "revision": "147818af98b30d2c43b3ac5b6884c1cce0051993",
+          "samples": [
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 7.421372003591387,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 10.636941995471716
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "first",
+              "native_json_bytes": 443,
+              "sample": 0,
+              "seconds": 0.026814,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 5.6728339950495865,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 7.7306929997575935
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "repeat",
+              "native_json_bytes": 443,
+              "sample": 1,
+              "seconds": 0.019593,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 5.312302007951075,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 8.39122600882547
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "repeat",
+              "native_json_bytes": 443,
+              "sample": 2,
+              "seconds": 0.02089,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 8.877078998921206,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 8.544548996724188
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "repeat",
+              "native_json_bytes": 443,
+              "sample": 3,
+              "seconds": 0.025176,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": {
+                "badge_ms": 0.0,
+                "db_connect_ms": 5.8513080002740026,
+                "db_connections": 5,
+                "db_json_bytes": 443,
+                "db_queries": 14,
+                "db_query_ms": 8.78021799508133
+              },
+              "decoded_payload_bytes": 1781,
+              "deepcopy_calls": 0,
+              "deepcopy_seconds": 0,
+              "full_payload_bytes": 0,
+              "full_reads": {},
+              "mode": "repeat",
+              "native_json_bytes": 443,
+              "sample": 4,
+              "seconds": 0.020989,
+              "store_reads": {
+                "document_diagnostic_inputs": 1,
+                "document_processing_inputs": 1,
+                "list_document_summaries": 1
+              }
+            },
+            {
+              "db": [
+                {
+                  "badge_ms": 0.0,
+                  "db_connect_ms": 9.283084003982367,
+                  "db_connections": 5,
+                  "db_json_bytes": 443,
+                  "db_queries": 14,
+                  "db_query_ms": 22.602185992582235
+                },
+                {
+                  "badge_ms": 0.0,
+                  "db_connect_ms": 17.615952998312423,
+                  "db_connections": 5,
+                  "db_json_bytes": 443,
+                  "db_queries": 14,
+                  "db_query_ms": 17.318136004178086
+                }
+              ],
+              "full_reads": {},
+              "mode": "two_readers",
+              "seconds": 0.029595,
+              "store_reads": {
+                "document_diagnostic_inputs": 2,
+                "document_processing_inputs": 2,
+                "list_document_summaries": 2
+              }
+            },
+            {
+              "db": [
+                {
+                  "badge_ms": 0.0,
+                  "db_connect_ms": 9.283084003982367,
+                  "db_connections": 5,
+                  "db_json_bytes": 443,
+                  "db_queries": 14,
+                  "db_query_ms": 22.602185992582235
+                },
+                {
+                  "badge_ms": 0.0,
+                  "db_connect_ms": 17.615952998312423,
+                  "db_connections": 5,
+                  "db_json_bytes": 443,
+                  "db_queries": 14,
+                  "db_query_ms": 17.318136004178086
+                }
+              ],
+              "full_reads": {},
+              "mode": "formation_with_two_readers",
+              "seconds": 0.305147
+            }
+          ]
+        },
+        "storage_batches": {
+          "batches": [
+            {
+              "capture_seconds": 0.033182,
+              "documents": 50,
+              "seconds": 0.034999
+            },
+            {
+              "capture_seconds": 0.034934,
+              "documents": 50,
+              "seconds": 0.039174
+            },
+            {
+              "capture_seconds": 0.003878,
+              "documents": 1,
+              "seconds": 0.007472
+            }
+          ],
+          "fixture": "101 documents; 4000 SHA256 strings/object metadata; PG16 local",
+          "pg_column_size": {
+            "largest_document_bytes": 15870,
+            "largest_object_bytes": 263088,
+            "object_rows": 306,
+            "total_document_bytes": 1618713,
+            "total_object_bytes": 78864936
+          }
+        }
+      },
+      "script_sha256": "157432e0e83b550450afed567e3dfe59e5f3448b6db5cbe36c5ffb5d33452bc8"
+    },
+    "preserved_owners_static": {
+      "src/operations_console_v1.py:waiting_task_counts": true,
+      "src/workflows/workflow_review_cutover_v1.py:_reload_store_locked": true,
+      "src/workflows/workflow_documents_cutover_v1.py:refresh_workflow_documents": true,
+      "src/workflows/workflow_documents_cutover_v1.py:_reload_store_locked": true,
+      "src/workflows/workflow_badge_counts_postgres_v1.py:list_document_lifecycle_statuses": true,
+      "src/review_closure_v1.py:migrate_legacy_revise_to_review": true,
+      "src/decision_successor_v1.py": true,
+      "src/durable_publication_console_v1.py": true,
+      "src/insight_v1.py:MAX_SCAN": true,
+      "src/insight_v1.py:DOCUMENT_STATES": true
+    },
+    "B6_removal_condition": "Retain through one deployed release of new Raad notices; remove in following release. No deployment here.",
+    "parity_fixture_alignment": {
+      "application_revision": "d843e8a8c5be1a0e75f81ad7a707e246e0618f09",
+      "full_before": {
+        "passed": 5753,
+        "failed": 2,
+        "skipped": 23,
+        "xfailed": 3,
+        "log": "work/834-cleanup-COMPLETE.log"
+      },
+      "cause": "Isolated SQL parity fixture schema lacked topics and shared card columns; production schema already has them.",
+      "change": "Fixture metadata columns/topic row and explicit insertion columns only; SQL query and all parity/admission assertions unchanged.",
+      "targeted_after": {
+        "passed": 2,
+        "seconds": 0.75,
+        "log": "work/834-cleanup-parity-fixture-GREEN.log"
+      }
+    },
+    "final_probe_results": [
+      {
+        "name": "tests.test_console_read_architecture::test_compact_page_routes_do_not_fetch_full_envelopes",
+        "result": "passed",
+        "seconds": 0.437
+      },
+      {
+        "name": "tests.test_postgres_document_cards::test_postgres_scoped_cards_never_construct_full_receipts",
+        "result": "passed",
+        "seconds": 0.948
+      },
+      {
+        "name": "tests.test_postgres_document_cards::test_scoped_cards_do_not_alias_the_process_cache",
+        "result": "passed",
+        "seconds": 0.314
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_cleanup_compact_gets_do_not_read_full_envelopes[/review]",
+        "result": "passed",
+        "seconds": 0.882
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_cleanup_compact_gets_do_not_read_full_envelopes[/review/repair]",
+        "result": "passed",
+        "seconds": 0.317
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_cleanup_compact_gets_do_not_read_full_envelopes[/inzicht/routevergelijking]",
+        "result": "passed",
+        "seconds": 0.327
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_console_gets_never_take_command_write_lock",
+        "result": "passed",
+        "seconds": 0.586
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_class_change_reads_only_its_selected_snapshot",
+        "result": "passed",
+        "seconds": 0.312
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_slow_canonical_status_is_outside_workflow_transaction",
+        "result": "passed",
+        "seconds": 12.375
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_deleted_document_between_summary_and_capture_is_partial[/inzicht/api/documents]",
+        "result": "passed",
+        "seconds": 0.375
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_deleted_document_between_summary_and_capture_is_partial[/raad/meldingen]",
+        "result": "passed",
+        "seconds": 0.361
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_review_overview_does_not_decode_unrelated_envelope_replay",
+        "result": "passed",
+        "seconds": 0.435
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_installed_review_and_publish_gets_have_single_explicit_owner",
+        "result": "passed",
+        "seconds": 0.794
+      },
+      {
+        "name": "tests.test_console_read_architecture::test_native_review_targeted_inputs_preserve_full_domain_result",
+        "result": "passed",
+        "seconds": 0.328
+      },
+      {
+        "name": "tests.test_browser_deploy_check::test_deploy_check_names_each_failing_page_and_changes_nothing",
+        "result": "passed",
+        "seconds": 70.623
+      }
+    ],
+    "final_graph_probe_results": [
+      {
+        "name": "test_pdf_requires_passage_and_graph_review_after_restart[postgres-None]",
+        "result": "passed",
+        "seconds": 0.505
+      },
+      {
+        "name": "test_pdf_requires_passage_and_graph_review_after_restart[postgres-optional]",
+        "result": "passed",
+        "seconds": 0.465
+      },
+      {
+        "name": "test_pdf_requires_passage_and_graph_review_after_restart[postgres-required]",
+        "result": "passed",
+        "seconds": 0.573
+      }
+    ],
+    "final_preflights": {
+      "repository": {
+        "status": "PASS",
+        "checked_files": 1597
+      },
+      "release_control": "PASS; live_release_evidence=false",
+      "architecture": "Architecture boundaries: PASS",
+      "compileall_src": "PASS",
+      "javascript": "Actual Chromium and node --check passed"
+    },
+    "proof_logs_sha256": {
+      "834-cleanup-RED-02e19ab.log": "235d7cc2433811d5a4731a383f9922a038f175554fc7be453c1e7acd82f60db7",
+      "834-cleanup-graph-failure.log": "392f1b3fa1c1aa37912a05752010e81d1e661cd4eb6c13d0c8c85b721d7fa9f3",
+      "834-cleanup-partial-ui-RED-final.log": "f053b7c4421ac2c470c3046c3d0c78d9a876619ccf94eb8d0cccbcb4efab96bb",
+      "834-cleanup-VERIFIED.log": "68345f754f7f2630f626fa96c837f1daed5fd0d03eb35699088b8621c912ae9d"
+    },
+    "application_commits": [
+      "b9014f2",
+      "147818a",
+      "d843e8a"
+    ]
+  },
+  "ci_parallel_verification_2026_10_24": {
+    "change_class": "C",
+    "rewrite_risk": "none",
+    "parent_pr_classification_unchanged": "B / high / NO-GO",
+    "base_revision": "fd15afca34b376a775cd6ed0ebb51aa37919d91c",
+    "implementation_revisions": [
+      "e2064d1de6d5f0d460a76c6215656c1289b03c0a",
+      "253981145de461ee7cd4b0a439074f42a15eaef8",
+      "cfcf81b97826e2111e6d4ce66dc5f4eccdca6dbc"
+    ],
+    "application_source_unchanged": true,
+    "full_suite": {
+      "checkout_at_start": "253981145de461ee7cd4b0a439074f42a15eaef8",
+      "command": "python scripts/measure_test_suite.py --output <shard>/result.json --shard-index <0..3> --shard-count 4",
+      "environment": "Python 3.12.14, PostgreSQL 16.15; four processes and four disposable PostgreSQL servers on one local host",
+      "collected": 5814,
+      "unique_selected": 5814,
+      "finished": 5814,
+      "collection_digest": "3c3a64e0350596525942da8b8a16832806974279d91d7ffcb7151157172bc92f",
+      "passed": 5782,
+      "skipped": 29,
+      "xfailed": 3,
+      "subtests_passed": 3,
+      "postgres_skips": 0,
+      "shard_wall_seconds": 437.089,
+      "orchestrated_wall_seconds": 437.971,
+      "summed_shard_seconds": 1651.182,
+      "shards": [
+        {
+          "index": 0,
+          "seconds": 437.089,
+          "selected": 1669,
+          "finished": 1669,
+          "exit_code": 0,
+          "postgres_version": 160015,
+          "postgres_skips": [],
+          "report_sha256": "beb4670feca8abeafdcc04269460f1f91e5623ae82f8256cf2b3d5e28849ecef",
+          "junit_sha256": "0f17b953e5810a68553ac025900fe528e55867ac0e3e02f4e7c20a06eb855e8c"
+        },
+        {
+          "index": 1,
+          "seconds": 364.206,
+          "selected": 1401,
+          "finished": 1401,
+          "exit_code": 0,
+          "postgres_version": 160015,
+          "postgres_skips": [],
+          "report_sha256": "52e789fc03f2e7f541e60971529b79e46fa1a5c5d1a21de3ce6f1f64ed63f8f6",
+          "junit_sha256": "86122d48f692121151e487026d10c77b6f4525753c88eb5093e7f944ff43eee1"
+        },
+        {
+          "index": 2,
+          "seconds": 437.003,
+          "selected": 1381,
+          "finished": 1381,
+          "exit_code": 0,
+          "postgres_version": 160015,
+          "postgres_skips": [],
+          "report_sha256": "ad0a09daf1afa8246de7cbef185a3c9103512d612eb64b735b64812f3ad251ed",
+          "junit_sha256": "6fb5c41746a62c63f5009fdfe6a8e6471a330c0528e9fd07b5ac746626077894"
+        },
+        {
+          "index": 3,
+          "seconds": 412.884,
+          "selected": 1363,
+          "finished": 1363,
+          "exit_code": 0,
+          "postgres_version": 160015,
+          "postgres_skips": [],
+          "report_sha256": "4dda9defcc46418c3ae03e5829184d55007235951706809eef92583d01e1407a",
+          "junit_sha256": "2faaf5e83c9e839288341f738814132d19432b60e88ce199771153ced894dc42"
+        }
+      ],
+      "merged_junit_sha256": "43d6f2b6ff4e2fddafe2e5d4961bb8c9ddd4de662186a28bd2e5da59d1596d8e",
+      "all_seven_native_exports": [
+        {
+          "name": "D5 PostgreSQL lifecycle without disk mirrors",
+          "exit_code": 0
+        },
+        {
+          "name": "Verify reprocessing owner guard and PG state against native PostgreSQL (#708)",
+          "exit_code": 0
+        },
+        {
+          "name": "Verify blockage diagnostics and native read-only access",
+          "exit_code": 0
+        },
+        {
+          "name": "Verify publication refusal store against native PostgreSQL (#637, PASSED proof)",
+          "exit_code": 0
+        },
+        {
+          "name": "Verify A10 source repair against native PostgreSQL",
+          "exit_code": 0
+        },
+        {
+          "name": "Verify A08 atomic heading batches against native PostgreSQL",
+          "exit_code": 0
+        },
+        {
+          "name": "Verify durable processing trace and restart evidence",
+          "exit_code": 0
+        }
+      ],
+      "final_metadata_updates": "During/after execution: overwrite:true for retry evidence, additional assertion in existing workflow contract case, PyYAML dev-extra metadata. Runner/sharding/application source unchanged; final contracts separately verified: 69 passed.",
+      "skipped_not_proof": {
+        "real_docling": 12,
+        "optional_bend": 11,
+        "browser_opt_in": 6
+      },
+      "xfails_not_proof": "3 existing B23/Forge cases; JUnit counts these among its 32 skipped elements"
+    },
+    "browser": {
+      "source_revision": "e2064d1de6d5f0d460a76c6215656c1289b03c0a",
+      "unchanged_by_later_commits": true,
+      "command": "pytest tests/test_browser_knowledge_context.py tests/test_browser_deploy_check.py tests/test_browser_source_selection.py tests/test_browser_view_check.py tests/test_section_incident.py::test_real_authenticated_browser_route_exports_correlated_evidence",
+      "passed": 6,
+      "skipped": 0,
+      "seconds": 112.78,
+      "junit_sha256": "4d56e8214d68a70b8d4e7c4142ec667158d6d2a04df971a2cb8bf0f23d639c8a"
+    },
+    "package": {
+      "source_revision": "cfcf81b97826e2111e6d4ce66dc5f4eccdca6dbc",
+      "local_identity_only": "run_id=1 / attempt=1 are local test identifiers, not a successful GitHub run or deployment authorization",
+      "zip_sha256": "24f33857ccfa936bd5cd6c52b964bf25a630299e21912d1c5ebf18ae5265b5c9",
+      "package_import_smoke": "passed",
+      "isolation": "Python 3.12 -I -S; imports use only extracted ZIP plus standard library; native wheels and src.console_asgi loaded successfully"
+    },
+    "reproduction": {
+      "workflow_contract_before": {
+        "revision": "fd15afca34b376a775cd6ed0ebb51aa37919d91c",
+        "failed": 3,
+        "passed": 0,
+        "log_sha256": "5a3c96ff153faab9d6a9d5aabfea990296932f6f113268da6a2bdd5b59d31de4"
+      },
+      "workflow_contract_after": {
+        "failed": 0,
+        "passed": 3,
+        "log_sha256": "09673e4a416181b17fe362cef0020f97a425d1c5c46360002083c12cca736acb"
+      },
+      "retry_upload_guard_before": {
+        "failed": 1,
+        "log_sha256": "048a1943f350a903ed5ba7d24cd70cb7ad761429b783177dfb43ccf4708eed1d"
+      },
+      "retry_upload_guard_after": {
+        "passed": 3
+      },
+      "initial_exploratory_suite": "Not green: local psql absent from PATH, two temporary mutation copies accidentally collected under work/, and old test-deploy SHA expectation. Copies moved outside checkout, PATH fixed, expectation changed to explicit input commit. Fresh four-part run above is green."
+    },
+    "adversarial_checks": {
+      "remove_hash_validation": {
+        "detected": true,
+        "failed": 1,
+        "passed": 17
+      },
+      "remove_run_status_commit_workflow_validation": {
+        "detected": true,
+        "failed": 7,
+        "passed": 11
+      },
+      "scope": "Mutated disposable copies outside final test collection; original code retained."
+    },
+    "checks": {
+      "targeted_final_contracts": "69 passed",
+      "actionlint": "v1.7.7: all three edited workflows pass, shellcheck unavailable/disabled",
+      "architecture_boundaries": "PASS",
+      "release_control_preflight_origin_main": "PASS",
+      "repository_preflight_clean_checkout": "PASS",
+      "product_api_write_and_compatibility": "PASS without PostgreSQL service; local PYTHONPATH points at isolated checkout to mirror CI editable install",
+      "compile": "PASS"
+    },
+    "timing_comparison": {
+      "historical_full_suite_revision": "1bfd07d629abebc7f037c149aab2512167b0697b",
+      "historical_seconds": 1421.55,
+      "new_orchestrated_seconds": 437.971,
+      "comparison": "One historical sequential run versus one complete parallel run with 33 additional CI contract cases and browser proof split out. No repeated matched A/B experiment; no GitHub or Azure speed claim. Installation and runner queue excluded from local test measurements. Summed work and installation overhead may increase runner minutes."
+    },
+    "rollout": {
+      "merge": false,
+      "deployment": false,
+      "azure_evidence": false,
+      "github_checks": "Pending on the pushed head; main-only package job and cross-run artifact download need first approved main run. No package can be used unless that main run completes successfully."
+    }
+  }
+}

@@ -3756,7 +3756,7 @@ def _render_review_room(
             '</div>'
         )
     snapshot_revision = ""
-    envelopes = console.list_envelopes()
+    envelopes = console.list_document_cards()
     chosen_row = next((row for row in envelopes if row["snapshot_id"] == chosen), None)
     cards = []
     if not chosen:
@@ -4989,7 +4989,7 @@ def create_console_app(
             f'<option value="{_esc(row["account_id"])}">{_esc(row["display_name"])} ({_esc(row["username"])})</option>'
             for row in reviewers
         )
-        documents = state.list_envelopes()
+        documents = state.list_document_cards()
         family_options = "".join(
             f'<option value="{_esc(family)}"></option>'
             for family in sorted({str(row.get("family") or "") for row in documents if row.get("family")}, key=str.casefold)
@@ -5264,7 +5264,7 @@ def create_console_app(
         can_move = "researcher" in account["roles"] or "publisher" in account["roles"]
         can_promote = "reviewer" in account["roles"]
         payload = state.family_tree()
-        named_on = ({row["snapshot_id"] for row in state.list_envelopes()
+        named_on = ({row["snapshot_id"] for row in state.list_document_cards()
                      if account["account_id"] in (row.get("named_reviewers") or [])}
                     if can_promote and not can_move else set())
         move_family_options = "".join(
@@ -5448,12 +5448,7 @@ def create_console_app(
         if not confirmed:
             raise ConsoleError("class_change_confirmation_required")
         if snapshot_id.strip():
-            current = next(
-                (row for row in state.list_envelopes() if row["snapshot_id"] == snapshot_id),
-                None,
-            )
-            if current is None:
-                raise ConsoleError("unknown_snapshot")
+            state._envelope(snapshot_id)  # Existing unknown_snapshot guard; commands reload their own state.
             state.promote_class(
                 actor_id=account["account_id"],
                 snapshot_id=snapshot_id,
@@ -5498,20 +5493,6 @@ def create_console_app(
             target = "/tree"
         return RedirectResponse(target, status_code=303)
 
-    @app.get("/review", response_class=HTMLResponse)
-    @state.source_selection_read_scope()
-    def review_get(request: Request, document: str = "", object: str = "", task: str = "",
-                   context_target: str = "", context_mode: str = "", context_saved: str = "") -> str:
-        with diagnostic_phase("authorization"):
-            account = _require(request)
-        return _render_review_room(
-            state,
-            account,
-            html.escape(document, quote=True),
-            html.escape(object, quote=True),
-            task=html.escape(task, quote=True),
-            context_target=context_target, context_mode=context_mode, context_saved=context_saved == "yes",
-        )
 
     @app.get("/inzicht/document/passages")
     def review_passages_export(request: Request, document: str = "", format: str = "json") -> Response:
@@ -6192,57 +6173,6 @@ def create_console_app(
             status_code=303,
         )
 
-    @app.get("/publish", response_class=HTMLResponse)
-    def publish_get(request: Request) -> str:
-        account = _require(request)
-        rows = []
-        for envelope in state.list_envelopes():
-            considered = None
-            try:
-                considered = state.consider_publish(actor_id=account["account_id"], snapshot_id=envelope["snapshot_id"])
-            except ConsoleError as exc:
-                considered = {"blockers": [exc.code], "publish_allowed": False}
-            blockers = considered.get("blockers") or []
-            blocker_text = " ".join(BLOCKER_LABELS.get(code, code) for code in blockers) or "Geen extra blockers in deze kamer."
-            if considered.get("state") == "published" or state.snapshot_is_published(envelope["snapshot_id"]):
-                action = '<div class="banner ok">Gepubliceerd. Dit document staat in de publicatieprojectie.</div>'
-            elif considered.get("publish_allowed"):
-                count = int(considered.get("publishable_object_count") or 0)
-                noun = "kennisobject" if count == 1 else "kennisobjecten"
-                reviewed = "gereviewd" if count == 1 else "gereviewde"
-                action = f'''
-                  <div class="banner ok">Klaar voor publicatie: {count} {reviewed} {noun}. De bron en controles zijn geverifieerd.</div>
-                  <form method="post" action="/publish" class="stack">
-                    <input type="hidden" name="snapshot_id" value="{_esc(envelope['snapshot_id'])}">
-                    <label class="check"><input type="checkbox" name="publish_confirmed" value="yes" required>
-                      Ik bevestig publicatie van deze gereviewde kennisobjecten.</label>
-                    <button type="submit">Publiceer document</button>
-                  </form>
-                '''
-            else:
-                action = f'<div class="banner warn">{_esc(blocker_text)}</div>'
-            rows.append(
-                f"""
-                <article class="doc-card">
-                  {_document_card_heading({**envelope, "status": envelope["state"]})}
-                  {action}
-                </article>
-                """
-            )
-        success = ""
-        if request.query_params.get("published") == "yes":
-            success = '<div class="banner ok">Publicatie voltooid en zichtbaar gemaakt in de publicatieprojectie.</div>'
-        return _page(
-            f"""
-            {_nav(account, "publish")}
-            <section class="room">
-              <h1>Publiceren</h1>
-              <p class="lead">Neem hier het afzonderlijke publicatiebesluit. Alleen gereviewde kennisobjecten met een geverifieerde bron worden gepubliceerd; anders blijft publicatie geblokkeerd.</p>
-              {success}
-              <div class="doc-list">{"".join(rows) or '<p class="muted">Nog geen documenten.</p>'}</div>
-            </section>
-            """
-        )
 
     @app.post("/publish")
     def publish_post(

@@ -85,48 +85,49 @@ def _blockage_html(report, esc):
     return body + '</ul></details>'
 
 
-@diagnostic_phase("document_list")
-def document_keys(console):
-    """Snapshot ids in list_envelopes order, without per-document receipts."""
-    lister = getattr(console, "list_snapshot_ids", None)
-    if lister is not None:
-        return lister()
-    return list(console._envelopes)
-
 
 def install(app, console, require, page, nav, esc):
     from src.source_processing_dispatch_v1 import install_dispatcher
     dispatcher = install_dispatcher(app, console)
 
     @app.get('/source-selection', response_class=HTMLResponse)
-    @console.source_selection_read_scope()
     def selection_get(request: Request, document: str = ''):
         with diagnostic_phase("authorization"):
             actor = require(request)
-        # PR-a: lichte sleutellijst; NOOIT een deepcopy-receipt per document.
+        # Overview owns compact progress inputs; only the chosen document loads detail.
         scoped_document = actor.get('_view_document')
         documents = ([console._envelope(scoped_document)] if scoped_document else
-                     [console._envelope(sid) for sid in document_keys(console)])
-        visible = [row for row in documents if "researcher" in actor['roles'] or actor['account_id'] in row.get('named_reviewers', [])]
+                     console.source_selection_documents(actor_id=actor['account_id'], document=document))
+        visible = documents
         if document and document not in {row['snapshot_id'] for row in visible}:
             raise ConsoleError('reviewer_not_named_on_snapshot')
         selected = document or (visible[-1]['snapshot_id'] if visible else '')
         options = ''.join(f'<option value="{esc(row["snapshot_id"])}" {"selected" if row["snapshot_id"] == selected else ""}>{esc(row["title"])} — {esc(row["version"])}</option>' for row in visible)
         cards = []
-        running_selected = False
+        running_visible = False
         # Eén keer per verzoek (PR-b): vergelijkbare metingen over alle documenten.
         observations = comparable_observations(documents)
         for envelope in visible:
             sid = envelope['snapshot_id']
             # Volledige controle alleen voor het expliciet gekozen document (D-PERF-2).
-            result = projection(console, actor_id=actor['account_id'], snapshot_id=sid, documents=documents,
-                                deep=bool(document) and sid == document, observations=observations)
+            from src.source_selection_v1 import summary_projection
+            detail = bool(document) and sid == document
+            result = (projection(console, actor_id=actor['account_id'], snapshot_id=sid, documents=documents,
+                                 observations=observations) if detail
+                      else summary_projection(console, envelope=envelope, observations=observations))
             action = ''
             if result['state'] in {'bezig', 'wacht op uitvoering'}:
+                running_visible = True
+            if not detail:
+                label = 'Voortgang bekijken' if result['state'] in {'bezig', 'wacht op uitvoering'} else 'Document openen'
+                action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">{label}</a>'
+                if result['state'] in {'bezig', 'wacht op uitvoering'}:
+                    action += '<p class="progress-refresh">Deze pagina ververst elke 5 seconden zolang de verwerking loopt.</p>'
+            elif result['state'] in {'bezig', 'wacht op uitvoering'}:
                 if sid == selected:
                     # This page already polls the selected document; a link to itself only reloads.
                     action = '<p class="progress-refresh">Deze pagina ververst elke 5 seconden zolang de verwerking loopt.</p>'
-                    running_selected = True
+                    running_visible = True
                 else:
                     action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Voortgang bekijken</a>'
             elif result['state'] == 'voltooid':
@@ -173,21 +174,24 @@ def install(app, console, require, page, nav, esc):
                 summary = (f'<p>{result["candidates"]} gevormde kandidaten · {result["source_passages"]} overige bronpassages · {result["blocked"]} geblokkeerde kandidaten · {result["formation_blockers"]} verwerkingsblokkades.</p>'
                            f'<p>Poging technisch geslaagd: {"ja" if result["attempt_succeeded"] else "nee"}. '
                            f'Volledige bronverwerking: {"ja" if result["formation_complete"] else "nog niet bevestigd"}.</p>')
+            if result['candidates'] is None:
+                summary = '<p>Aantallen kandidaten en bronpassages zijn nog niet gecontroleerd. Open het document voor de actuele controles en vervolgacties.</p>'
             diagnosis_link = f'<a class="btn-secondary" href="/inzicht/document?{esc(urlencode({"document": sid}))}">Bekijk diagnose in Inzicht</a>'
             review = f'<a class="btn-primary" href="/review?document={esc(sid)}">Naar Review</a>' if result['review_available'] else ''
             extent = _size(result["bytes"]) if result['bytes'] is not None else 'Bestandsgrootte onbekend'
-            records = (envelope.get('quality_processing_runs') or [])
-            if records:
-                extent += f' · {len(records[-1].get("source_fragments", []))} opgeslagen bronfragmenten'
+            fragment_count = envelope.get('source_fragment_count')
+            if fragment_count is not None:
+                extent += f' · {fragment_count} opgeslagen bronfragmenten'
             cards.append(f'<article class="doc-card" id="source-{esc(sid)}" data-source-document="{esc(sid)}" data-selected="{str(sid == selected).lower()}">'
                          f'<h2>{esc(result["title"])}</h2><p class="source-meta">{esc(result["filename"])} · Bronversie {esc(result["version"])} · {esc(extent)}</p>'
                          f'<p role="status">Status: {esc(result["state"])}</p>'
                          f'<p class="source-estimate">{esc(_estimate(result["estimate"]))}</p>'
                          f'{progress}{summary}<div class="source-actions">{action}{review}{diagnosis_link}</div></article>')
         notice = '<div class="banner ok">Document veilig ontvangen. Start bronselectie wanneer je wilt.</div>' if request.query_params.get('received') == 'yes' else ''
-        # Only a selected running document is polled. Every refresh reads the
+        # Any visible running/waiting document keeps the overview current.
+        # Every refresh reads the
         # durable authority; no browser state can start another attempt.
-        script = '<script>setTimeout(function(){ window.location.reload(); }, 5000);</script>' if running_selected else ''
+        script = '<script>setTimeout(function(){ window.location.reload(); }, 5000);</script>' if running_visible else ''
         script += '<script>document.querySelectorAll("form[action=\\"/source-selection/start\\"]").forEach(function(form){form.addEventListener("submit",function(event){if(form.dataset.submitting){event.preventDefault();return;}form.dataset.submitting="yes";form.querySelector("button").disabled=true;});});</script>'
         return page(nav(actor, 'selection') + '<section class="room" id="source-selection"><h1>Bronselectie</h1>' + notice
                     + '<form method="get" class="source-picker"><label for="source-document">Document</label>'

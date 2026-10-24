@@ -30,8 +30,8 @@ PHASES = frozenset({'authorization', 'document_list', 'document_store_read', 'do
     'selection_projection', 'processing_status', 'objects_read', 'source_read',
     'source_reconstruction', 'source_verify', 'review_bindings', 'review_render', 'review_index',
     'db_connect', 'db_execute', 'db_fetch', 'document_summary', 'review_work_items',
-    'store_lock_wait', 'store_lock_hold', 'store_transaction'})
-COUNTERS = frozenset({'source_reconstruction_built', 'source_reconstruction_reused',
+    'payload_copy', 'store_lock_wait', 'store_lock_hold', 'store_transaction'})
+COUNTERS = frozenset({'document_snapshot_reused', 'source_reconstruction_built', 'source_reconstruction_reused',
     'source_reconstruction_unscoped', 'source_input_compared', 'source_input_hashed'})
 HEARTBEAT_SECONDS = 15
 MAX_PHASE_EVENTS = 40

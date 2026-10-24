@@ -99,9 +99,21 @@ def test_quality_projection_keeps_teller_noemer_and_shows_a_score_drop():
 
 
 def test_documents_are_paged_and_searched_over_the_whole_authorized_list():
-    from src.insight_v1 import documents_projection
+    from src.insight_v1 import _documents_page as documents_page
 
-    class State:
+    class Inputs:
+        state = None
+        metadata_partial = False
+
+        @property
+        def documents(self):
+            return self.list_envelopes()
+
+        def select(self, ids):
+            pass
+
+        def status_and_diagnostics(self, envelope):
+            return self.processing_status(envelope["snapshot_id"]), {"blocked_candidate_count": 0, "by_reason_code": {}}
         def list_envelopes(self):
             return [{'snapshot_id': f'snap-{i:016x}-0000000{i}', 'title': f'Richtlijn {i}'} for i in range(5)]
 
@@ -112,13 +124,13 @@ def test_documents_are_paged_and_searched_over_the_whole_authorized_list():
             return []
 
     account = {'account_id': 'a', 'roles': ['researcher']}
-    first = documents_projection(State(), account, offset=0, limit=2)
+    first = documents_page(Inputs(), account, offset=0, limit=2)
     assert first['total'] == 5 and [d['title'] for d in first['documents']] == ['Richtlijn 0', 'Richtlijn 1']
-    last = documents_projection(State(), account, offset=4, limit=2)
+    last = documents_page(Inputs(), account, offset=4, limit=2)
     assert [d['title'] for d in last['documents']] == ['Richtlijn 4']
-    found = documents_projection(State(), account, query='richtlijn 4', limit=2)
+    found = documents_page(Inputs(), account, query='richtlijn 4', limit=2)
     assert found['total'] == 1 and found['documents'][0]['title'] == 'Richtlijn 4'
-    State.processing_status = lambda self, sid, **_kwargs: {'state': 'failed', 'retry_allowed': sid.endswith('4')}
-    retry = documents_projection(State(), account, state_filter='retry', limit=2)
+    Inputs.processing_status = lambda self, sid, **_kwargs: {'state': 'failed', 'retry_allowed': sid.endswith('4')}
+    retry = documents_page(Inputs(), account, state_filter='retry', limit=2)
     assert [d['title'] for d in retry['documents']] == ['Richtlijn 4']
     assert retry['total'] is None and retry['next_offset'] is None

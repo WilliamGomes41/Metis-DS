@@ -305,7 +305,7 @@ def collect_blockage(console, *, actor_id, snapshot_id, current_checks=False, se
         before = digest(json.dumps(envelope, sort_keys=True))
         checks = {'snapshot_id':snapshot_id, 'revision_sha256':digest(revision), 'source_hash':envelope.get('sha256'),
                   'observed_at':datetime.now(timezone.utc).isoformat(), 'runtime':runtime_identity(), 'errors':{}}
-        with console.source_selection_read_scope(retained_only=True):
+        with console.document_read_operation(retained_only=True):
             for name, call in (('processing', lambda: console.processing_status(snapshot_id, actor_id=actor_id)),
                                ('readiness', lambda: console.publication_readiness(snapshot_id))):
                 try:

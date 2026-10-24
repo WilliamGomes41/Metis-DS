@@ -1,5 +1,8 @@
 # Bronselectie: lichte sleutellijst (PR-a)
 
+> Historical contract: this key-list API was retired by PR #834 cleanup.
+> Production source overviews use compact cards/summaries; no key-list warmup remains.
+
 Change class: B
 Promise: GET /source-selection MOET documenten ophalen via een lichte sleutellijst zonder per-document _receipt-deepcopy; HTML, volgorde, zichtbaarheid en verdicts MOGEN NIET wijzigen.
 Proof: tests/test_source_selection_key_list_golden.py: golden HTML-gelijkheid (auteur en reviewer, overzicht en gekozen document) tegen het oude list_envelopes-pad; 4 rood op main 7d084fa, groen na; PostgreSQL-variant via workflow_postgres.

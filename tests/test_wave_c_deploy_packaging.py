@@ -68,10 +68,14 @@ def test_packaging_script_is_invoked_via_bash_and_is_executable() -> None:
     assert "git archive" not in text
     mode = script.stat().st_mode
     assert mode & stat.S_IXUSR
+    ci = _read(ROOT / '.github/workflows/ci.yml')
+    assert 'bash scripts/create_azure_deploy_package.sh' in ci
+    assert 'run: scripts/create_azure_deploy_package.sh' not in ci
     for name in ("deploy-test.yml", "deploy-production.yml"):
         workflow = _read(ROOT / ".github" / "workflows" / name)
-        assert "bash scripts/create_azure_deploy_package.sh" in workflow
-        assert 'run: scripts/create_azure_deploy_package.sh' not in workflow
+        assert 'actions/download-artifact@v4' in workflow
+        assert 'verified_deploy_artifact.py verify' in workflow
+        assert 'create_azure_deploy_package.sh' not in workflow
 
 
 def test_packaging_produces_fully_deployable_zip_with_dependencies(tmp_path: Path) -> None:

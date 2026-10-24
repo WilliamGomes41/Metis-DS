@@ -27,23 +27,10 @@ _LIFECYCLE_BY_SNAPSHOT: ContextVar[dict[str, dict[str, str]]] = ContextVar(
 _STATUS_PATHS = frozenset({"/tree", "/review"})
 
 
-def _closed_fallback() -> dict[str, str]:
-    return {
-        "workflow_status": "processing",
-        "release_status": "none",
-        "serving_status": "inactive",
-        "presentation_status": "processing",
-    }
-
-
 def current_document_lifecycle_status(snapshot_id: str) -> dict[str, str] | None:
     """Return the request-local presentation status when middleware populated it."""
     row = _LIFECYCLE_BY_SNAPSHOT.get().get(str(snapshot_id or ""))
     return dict(row) if row else None
-
-
-def _is_list_request(request: Request) -> bool:
-    return request.url.path in {"/tree", "/review"}
 
 
 def install_document_status_ui(app: FastAPI, console: Any) -> None:
@@ -82,8 +69,6 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
 
     def read_status_context(
         session_token: str | None,
-        *,
-        list_request: bool,
     ) -> tuple[dict[str, dict[str, str]] | None, Any]:
         try:
             console.session_account(session_token)
@@ -92,42 +77,18 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
 
         lifecycle_by_snapshot: dict[str, dict[str, str]] = {}
         publication_batch = None
-        list_reader = getattr(console, "list_document_lifecycle_statuses", None)
-        if list_request and callable(list_reader):
-            # Production PostgreSQL presentation GETs use one light workflow aggregate
-            # plus one canonical release read. Never enter full publish-readiness here.
-            publication_batch_var = getattr(console, "_tree_publication_batch", None)
-            publication_batch_token = (
-                publication_batch_var.set(None)
-                if isinstance(publication_batch_var, ContextVar)
-                else None
-            )
-            try:
-                try:
-                    lifecycle_by_snapshot = {
-                        str(snapshot_id): dict(row)
-                        for snapshot_id, row in list_reader().items()
-                    }
-                except (AttributeError, ConsoleError):
-                    lifecycle_by_snapshot = {}
-                if publication_batch_token is not None:
-                    publication_batch = publication_batch_var.get()
-            finally:
-                if publication_batch_token is not None:
-                    publication_batch_var.reset(publication_batch_token)
-        else:
-            # Publish keeps its existing full lifecycle semantics. Local/non-PostgreSQL
-            # runtimes also retain the compatibility path when no list reader exists.
-            for row in console.list_envelopes():
-                snapshot_id = str(row.get("snapshot_id") or "")
-                if not snapshot_id:
-                    continue
-                try:
-                    lifecycle_by_snapshot[snapshot_id] = dict(
-                        console.document_lifecycle_status(snapshot_id)
-                    )
-                except (AttributeError, ConsoleError):
-                    lifecycle_by_snapshot[snapshot_id] = _closed_fallback()
+        publication_batch_var = console._tree_publication_batch
+        publication_batch_token = publication_batch_var.set(None)
+        try:
+            # Every supported runtime has the PostgreSQL aggregate. Failure is
+            # explicit; never replace it with an empty map or a readiness scan.
+            lifecycle_by_snapshot = {
+                str(snapshot_id): dict(row)
+                for snapshot_id, row in console.list_document_lifecycle_statuses().items()
+            }
+            publication_batch = publication_batch_var.get()
+        finally:
+            publication_batch_var.reset(publication_batch_token)
         return lifecycle_by_snapshot, publication_batch
 
     @app.middleware("http")
@@ -139,11 +100,9 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
         if request.url.path not in _STATUS_PATHS:
             return await call_next(request)
 
-        list_request = _is_list_request(request)
         lifecycle_by_snapshot, publication_batch = await asyncio.to_thread(
             read_status_context,
             request.cookies.get(console_ui.COOKIE),
-            list_request=list_request,
         )
         if lifecycle_by_snapshot is None:
             return await call_next(request)
@@ -151,7 +110,7 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
         publication_batch_var = getattr(console, "_tree_publication_batch", None)
         publication_batch_token = (
             publication_batch_var.set(publication_batch)
-            if list_request and isinstance(publication_batch_var, ContextVar)
+            if isinstance(publication_batch_var, ContextVar)
             else None
         )
         token = _LIFECYCLE_BY_SNAPSHOT.set(lifecycle_by_snapshot)
