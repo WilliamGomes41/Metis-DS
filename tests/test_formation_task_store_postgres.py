@@ -240,9 +240,11 @@ def test_explicit_migration_preserves_history_and_blocks_old_writers(tmp_path,pr
     assert after["processing_attempts"] == before["processing_attempts"]
     assert {k:v for k,v in after.items() if k != "processing_storage"} == before
     assert migrate(store,sid,apply=True)["status"] == "already_migrated"
-    with pytest.raises(psycopg.Error,match="processing_storage_compatible_writer_required"):
-        with store._connect() as con:
-            con.execute("UPDATE workflow.documents SET envelope_payload=envelope_payload || '{\"processing_attempts\":[]}'::jsonb WHERE snapshot_id=%s",(sid,))
+    for change in ("envelope_payload=envelope_payload || '{\"processing_attempts\":[]}'::jsonb",
+                   "envelope_payload=envelope_payload-'processing_storage'", "processing_storage_version=NULL"):
+        with pytest.raises(psycopg.Error,match="processing_storage_compatible_writer_required"):
+            with store._connect() as con:
+                con.execute(f"UPDATE workflow.documents SET {change} WHERE snapshot_id=%s",(sid,))
 
 
 def test_process_kill_then_new_process_reuses_committed_work(tmp_path,production_console,monkeypatch):
@@ -554,3 +556,70 @@ def test_diagnostic_keeps_every_rejected_call_in_recorded_order(tmp_path,product
         {"snapshot_id":writer.snapshot_id,"table":"validator_inputs"})
     assert result["items"][0]["validator_input"] == data
     assert console._envelope(writer.snapshot_id) == before
+
+
+def test_migrated_partial_work_can_resume_across_more_than_one_new_attempt(tmp_path,production_console,monkeypatch):
+    import json
+    from types import SimpleNamespace
+    import time
+    import src.bounded_formation_v1 as bounded
+    from src.bounded_model_call_v1 import ModelCallLimits
+    from src.operations_console_v1 import ConsoleError
+    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.source_bound_fields_v3 import MODE
+    from scripts.migrate_processing_attempts import migrate
+    from tests.test_recommendation_context_v3 import response_for
+    console,users,_,_ = _system(tmp_path,production_console=production_console)
+    actor = users['researcher']['account_id']
+    sid = console.receive_source(actor_id=actor,filename='legacy-partial.html',content_type='text/html',
+        data=b'<html><body><h1>Een</h1><p>Gebruik geen zalf.</p><h1>Twee</h1><p>Controleer dagelijks de huid.</p><h1>Drie</h1><p>Was dagelijks de handen.</p></body></html>',
+        ingest_kind='new',title='Legacy partial cutover',version='1',date='2026-10-24',live_url='',class_='richtlijn',family='test',
+        named_reviewers=[users['reviewer_a']['account_id']])['snapshot_id']
+    elapsed=[0]
+    stop_after_call=[True]
+    calls=[]
+    def provider(_url,_headers,payload,_timeout):
+        text=json.loads(payload['input'][1]['content'])['source_blocks'][0]['text']
+        calls.append(text)
+        response=response_for(payload,text)
+        if stop_after_call[0]: elapsed[0]=2
+        return {'status':'completed','output':[{'type':'message','content':[{'type':'output_text','text':json.dumps(response)}]}]}
+    bind_pre_review_semantic_processing(console,environ={'METIS_PASSAGE_FORMATION_MODE':MODE,
+        'METIS_LLM_API_KEY':'fixture','METIS_LLM_MODEL':'test'},post_json=provider)
+    monkeypatch.setattr(console,'_model_call_limits_reader',lambda:ModelCallLimits(total=1))
+    monkeypatch.setattr(bounded,'time',SimpleNamespace(monotonic=lambda:time.monotonic()+elapsed[0]))
+    first,_=console.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id='legacy',expected_revision=console.objects_revision(sid))
+    console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=first)
+    assert console._envelope(sid)['processing_attempts'][-1]['state']=='incomplete_budget'
+    assert console.snapshot_objects(sid)  # the pre-cutover slice is already active
+    migrate(console.workflow_document_store,sid,apply=True)
+    elapsed[0]=0
+    second,_=console.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id='new-budget',expected_revision=console.objects_revision(sid))
+    with pytest.raises(ConsoleError,match='source_task_budget_exhausted'):
+        console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=second)
+    assert console._can_resume_formation(sid), 'Unreviewed legacy objects must not strand durable new results'
+    elapsed[0]=0
+    stop_after_call[0]=False
+    monkeypatch.setattr(console,'_model_call_limits_reader',lambda:ModelCallLimits(total=10))
+    third,_=console.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id='new-final',expected_revision=console.objects_revision(sid))
+    console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=third)
+    assert console._envelope(sid)['processing_attempts'][-1]['state']=='succeeded'
+    assert len(calls)==3 and len(set(calls))==3
+
+
+def test_task_storage_keeps_non_bounded_v1_retry_available(tmp_path,production_console,monkeypatch):
+    from src.operations_console_v1 import ConsoleError
+    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from tests.test_console_read_architecture import _received
+    console,users,_,_ = _system(tmp_path,production_console=production_console)
+    actor=users['researcher']['account_id']
+    sid=_received(console,users,title='Legacy semantic mode retry')
+    bind_pre_review_semantic_processing(console,environ={'METIS_PASSAGE_FORMATION_MODE':'semantic-source-bound-v1',
+        'METIS_LLM_API_KEY':'fixture','METIS_LLM_MODEL':'test'},post_json=lambda *_:'invalid response')
+    monkeypatch.setenv('METIS_FORMATION_TASK_STORAGE','v1')
+    first,_=console.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id='v1-first',expected_revision=console.objects_revision(sid))
+    with pytest.raises(ConsoleError,match='pre_review_llm_response_invalid'):
+        console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=first)
+    assert console._envelope(sid)['processing_attempts'][-1]['diagnostic']['validator_input_ref']
+    second,fresh=console.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id='v1-retry',expected_revision=console.objects_revision(sid))
+    assert fresh and second['kind']!='resume'

@@ -111,6 +111,7 @@ LANGUAGE plpgsql AS $body$
 BEGIN
     IF OLD.processing_storage_version=1 THEN
         IF NEW.processing_storage_version IS DISTINCT FROM 1
+           OR NEW.envelope_payload->>'processing_storage' IS DISTINCT FROM 'task-v1'
            OR NEW.envelope_payload ? 'processing_attempts' THEN
             RAISE EXCEPTION 'processing_storage_compatible_writer_required';
         END IF;

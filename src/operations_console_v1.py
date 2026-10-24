@@ -1900,18 +1900,21 @@ class OperationsConsole:
 
     def _can_resume_formation(self, snapshot_id):
         from src.recoverable_formation_v1 import incomplete, VERSION
+        from src.bounded_formation_v1 import VERSION as TASK_VERSION
         from src.source_context_review_v1 import ROLE_KEY, LINKS_KEY
         envelope = self._envelope(snapshot_id)
         if envelope.get("processing_storage") == "task-v1" and any(
                 (a.get("diagnostic") or {}).get("validator_input_ref") for a in envelope.get("processing_attempts") or []):
             latest = next(reversed(envelope.get("processing_attempts") or []), {})
-            return bool((latest.get("diagnostic") or {}).get("validator_input_ref")
-                and latest.get("state") != "succeeded" and not self.snapshot_is_published(snapshot_id)
-                and not self._read_current_objects(snapshot_id)
-                and not self.object_review_bindings(snapshot_id) and not envelope.get("review_passes"))
-        contract = ((envelope.get("semantic_replay") or {}).get("identity") or {}).get("components", {}).get("semantic_contract_version", "")
-        from src.bounded_formation_v1 import VERSION as TASK_VERSION
-        return bool(incomplete(envelope) and VERSION in contract and TASK_VERSION in contract
+            contract = ((latest.get("diagnostic") or {}).get("semantic_identity") or {}).get("components", {}).get("semantic_contract_version", "")
+            pending = bool((latest.get("diagnostic") or {}).get("validator_input_ref")
+                and latest.get("state") != "succeeded" and VERSION in contract and TASK_VERSION in contract)
+        else:
+            contract = ((envelope.get("semantic_replay") or {}).get("identity") or {}).get("components", {}).get("semantic_contract_version", "")
+            pending = incomplete(envelope) and VERSION in contract and TASK_VERSION in contract
+        # Legacy partial activation may have left unreviewed objects before
+        # cutover. Preserve the existing human-work guard for both formats.
+        return bool(pending
             and not self.snapshot_is_published(snapshot_id)
             and not self.object_review_bindings(snapshot_id) and not envelope.get("review_passes")
             and not any(((row.get("governance") or {}).get("validation_status") not in {None, "needs_review"}
