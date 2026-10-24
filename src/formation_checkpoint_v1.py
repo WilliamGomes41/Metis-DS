@@ -10,7 +10,7 @@ from src.operations_console_v1 import ConsoleError
 from src.processing_retry_v1 import assert_active, now
 from src.source_selection_v1 import authorize_account, configuration
 from src.workflows.formation_task_store_v1 import FormationTaskStore
-from src.workflows.workflow_documents_postgres_v1 import _json_text
+from src.workflows.workflow_documents_postgres_v1 import _json_text, WorkflowDocumentStoreError
 from src.workflows.workflow_transaction_v1 import workflow_transaction_active
 
 
@@ -84,6 +84,8 @@ class TaskCheckpointWriter:
                 reference = self.store.retain_input(con, envelope=envelope,
                     validator_input=values.pop("validator_input"), semantic_identity=values["semantic_identity"],
                     expected_revision=active["expected_revision"])
+                if active.get("kind") == "resume" and self.input_reference and reference != self.input_reference:
+                    raise ConsoleError("processing_resume_context_incompatible")
                 values["validator_input_ref"] = reference
                 self.store.checkpoint(con,self.attempt_id,phase,values)
                 active.setdefault("diagnostic", {}).update(phase=phase, **values)
@@ -99,6 +101,13 @@ class TaskCheckpointWriter:
         if not self.input_reference:
             return []
         return self.store.task_results(self.input_reference["context_id"])
+
+    def validate_resume_input(self):
+        if self.input_reference:
+            try:
+                self.store.resolve_input(self.input_reference,expected_snapshot_id=self.snapshot_id)
+            except WorkflowDocumentStoreError as error:
+                raise ConsoleError(str(error)) from error
 
     def plan_tasks(self, count):
         if not self.input_reference:

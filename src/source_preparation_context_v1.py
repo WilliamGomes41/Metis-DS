@@ -131,6 +131,8 @@ def build_formation_context(console, *, envelope, actor_id, expected_revision,
     checkpoint_writer = console._diagnostic_writer(source.snapshot_id, attempt['attempt_id'] if attempt else None)
     if hasattr(checkpoint_writer,'claim_token') and checkpoint_writer.claim_token != (attempt.get('dispatch') or {}).get('token'):
         raise _error('processing_command_conflict')
+    if resume and hasattr(checkpoint_writer,'validate_resume_input'):
+        checkpoint_writer.validate_resume_input()
     context: FormationContext = {
         'snapshot_id': source.snapshot_id, 'source_sha256': source.sha256,
         'semantic_replay': deepcopy(envelope.get('semantic_replay')),

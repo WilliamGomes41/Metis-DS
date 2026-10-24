@@ -136,7 +136,7 @@ def test_new_checkpoint_does_not_reload_archive_or_take_global_write_lock(tmp_pa
     assert console._envelope(sid)["processing_attempts"][-1]["state"] == "failed"
 
 
-@pytest.mark.parametrize("stop",["provider","joint"])
+@pytest.mark.parametrize("stop",["provider","joint","corrupt"])
 def test_resume_uses_committed_tasks_without_partial_activation(tmp_path, production_console, monkeypatch,stop):
     import json
     from src.operations_console_v1 import ConsoleError
@@ -156,7 +156,7 @@ def test_resume_uses_committed_tasks_without_partial_activation(tmp_path, produc
         data = json.loads(payload["input"][1]["content"])
         text = data["source_blocks"][0]["text"]
         calls.append(text)
-        if stop == "provider" and len(calls) == 2:
+        if stop != "joint" and len(calls) == 2:
             raise ConsoleError("processing_test_interrupted")
         proposal = response_for(payload,text)
         return {"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":json.dumps(proposal)}]}]}
@@ -181,7 +181,7 @@ def test_resume_uses_committed_tasks_without_partial_activation(tmp_path, produc
     monkeypatch.setattr(semantic,"_project_semantic_selection",counted)
     attempt,_ = console.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id="initial",
         expected_revision=console.objects_revision(sid))
-    with pytest.raises(ConsoleError,match="processing_test_interrupted" if stop == "provider" else "semantic_proposal_invalid"):
+    with pytest.raises(ConsoleError,match="processing_test_interrupted" if stop != "joint" else "semantic_proposal_invalid"):
         console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=attempt)
     first = calls[0]
     envelope = console._envelope(sid)
@@ -192,9 +192,18 @@ def test_resume_uses_committed_tasks_without_partial_activation(tmp_path, produc
     monkeypatch.delenv("METIS_FORMATION_TASK_STORAGE")
     restarted = restart_production(console)
     bind(restarted)
+    if stop == 'corrupt':
+        with restarted.workflow_document_store._connect() as con:
+            con.execute("UPDATE workflow.processing_attempts SET payload=jsonb_set(payload,"
+                "'{diagnostic,validator_input_ref,artifact_id}','\"missing\"'::jsonb) WHERE attempt_id=%s",(attempt['attempt_id'],))
     following,_ = restarted.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id="resume",
         expected_revision=restarted.objects_revision(sid))
     assert following["kind"] == "resume"
+    if stop == 'corrupt':
+        with pytest.raises(ConsoleError,match='formation_input_missing'):
+            restarted.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=following)
+        assert len(calls)==2, 'A broken reference must not silently rebuild or replay model work'
+        return
     restarted.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=following)
     assert calls.count(first) == 1
     assert len(calls) == 4  # first success, interrupted call, two remaining calls
