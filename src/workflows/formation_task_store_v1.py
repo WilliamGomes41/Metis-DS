@@ -287,17 +287,24 @@ class FormationTaskStore:
             rows = con.execute("SELECT phase,payload,recorded_at FROM workflow.processing_checkpoints "
                                "WHERE attempt_id=%s ORDER BY checkpoint_id",(attempt["attempt_id"],)).fetchall()
         diagnostic.setdefault("checkpoints", [])
+        rejected_tasks = []
         for row in rows:
             diagnostic.update(row["payload"])
             diagnostic["checkpoints"].append({"phase":row["phase"],"at":row["recorded_at"].isoformat()})
+            if row["phase"] == "task_rejected" and isinstance(row["payload"].get("evidence"),dict):
+                rejected_tasks.append(row["payload"])
         reference = diagnostic.get("validator_input_ref")
         if reference:
             from src.bounded_formation_v1 import _merge_task_proposals
             results = self.task_results(reference["context_id"],attempt_id=attempt["attempt_id"],diagnostic=True)
-            proposal = _merge_task_proposals([row["proposal"] for row in results])
-            calls = [row["evidence"] for row in results]
-            diagnostic["resolved_proposal"] = proposal
-            diagnostic["resolved_proposal_hash"] = stable_json_hash(proposal)
+            if results or "resolved_proposal" not in diagnostic:
+                proposal = _merge_task_proposals([row["proposal"] for row in results])
+                diagnostic["resolved_proposal"] = proposal
+                diagnostic["resolved_proposal_hash"] = stable_json_hash(proposal)
+            task_evidence = sorted([*results,*rejected_tasks],key=lambda row:(
+                row["task"].get("phase") != "initial",(row.get("timing") or {}).get("index",0)))
+            calls = [row["evidence"] for row in task_evidence]
             if calls:
-                diagnostic["provider_evidence"] = {**calls[0], "supplementary_calls": calls[1:]}
+                diagnostic["provider_evidence"] = {**calls[0], "supplementary_calls": calls[1:],
+                    "task_policy":"bounded-formation-v1","tasks":[row["task"] for row in task_evidence]}
         return diagnostic

@@ -441,9 +441,12 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         topic_values = (*values[:5], topic["topic_id"], *values[5:])
         snapshot_id = str(stored_envelope["snapshot_id"])
         existing = con.execute(
-            "SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
+            "SELECT snapshot_id,envelope_payload,processing_storage_version FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
             (snapshot_id,),
         ).fetchone()
+        unchanged = bool(task_storage and existing is not None
+            and self._payload(existing["envelope_payload"]) == stored_envelope
+            and self._reviewers(con,snapshot_id) == sorted(set(stored_envelope.get("named_reviewers") or [])))
         if existing is None:
             con.execute(
                 "INSERT INTO workflow.documents("
@@ -454,7 +457,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                 "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s::jsonb)",
                 (*topic_values, _json_text(stored_envelope)),
             )
-        else:
+        elif not unchanged:
             con.execute(
                 "UPDATE workflow.documents SET "
                 "source_id=%s,document_id=%s,title=%s,family=%s,topic_id=%s,class=%s,state=%s,publication_eligibility=%s,"
@@ -464,15 +467,17 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                 "envelope_payload=%s::jsonb,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE snapshot_id=%s",
                 (*topic_values[1:], _json_text(stored_envelope), snapshot_id),
             )
-        con.execute("DELETE FROM workflow.document_reviewers WHERE snapshot_id=%s", (snapshot_id,))
-        for reviewer in sorted(set(str(x) for x in stored_envelope.get("named_reviewers") or [])):
-            con.execute(
-                "INSERT INTO workflow.document_reviewers(snapshot_id,account_id) VALUES(%s,%s)",
-                (snapshot_id, reviewer),
-            )
+        if not unchanged:
+            con.execute("DELETE FROM workflow.document_reviewers WHERE snapshot_id=%s", (snapshot_id,))
+            for reviewer in sorted(set(str(x) for x in stored_envelope.get("named_reviewers") or [])):
+                con.execute(
+                    "INSERT INTO workflow.document_reviewers(snapshot_id,account_id) VALUES(%s,%s)",
+                    (snapshot_id, reviewer),
+                )
         if task_storage:
             from src.workflows.formation_task_store_v1 import FormationTaskStore
-            con.execute("UPDATE workflow.documents SET processing_storage_version=1 WHERE snapshot_id=%s", (snapshot_id,))
+            if existing is None or existing["processing_storage_version"] != 1:
+                con.execute("UPDATE workflow.documents SET processing_storage_version=1 WHERE snapshot_id=%s", (snapshot_id,))
             FormationTaskStore.save_attempts(con, snapshot_id, attempts)
 
     def write_bundle(

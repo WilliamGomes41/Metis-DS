@@ -110,7 +110,11 @@ def test_new_checkpoint_does_not_reload_archive_or_take_global_write_lock(tmp_pa
     monkeypatch.setenv("METIS_FORMATION_TASK_STORAGE", "v1")
     attempt, _ = console.reserve_source_selection(actor_id=users["researcher"]["account_id"], snapshot_id=sid,
         command_id="targeted-checkpoint", expected_revision=console.objects_revision(sid))
+    with console.workflow_document_store._connect() as con:
+        before = con.execute("SELECT envelope_payload,revision FROM workflow.documents WHERE snapshot_id=%s",(sid,)).fetchone()
     claimed = claim(console, snapshot_id=sid, attempt_id=attempt["attempt_id"])
+    with console.workflow_document_store._connect() as con:
+        assert con.execute("SELECT envelope_payload,revision FROM workflow.documents WHERE snapshot_id=%s",(sid,)).fetchone() == before
     writer = console._diagnostic_writer(sid, claimed["attempt_id"])
     def forbidden(*args, **kwargs):
         raise AssertionError("checkpoint must not reload archive or use global lock")
@@ -522,3 +526,17 @@ def test_existing_confirmed_unpublished_delete_also_removes_owned_task_records(t
     with console.workflow_document_store._connect() as con:
         for table in ("processing_attempts","formation_inputs","prepared_extraction_versions","formation_contexts"):
             assert con.execute(f"SELECT COUNT(*) AS n FROM workflow.{table} WHERE snapshot_id=%s",(writer.snapshot_id,)).fetchone()["n"] == 0
+
+
+def test_diagnostic_keeps_every_rejected_call_in_recorded_order(tmp_path,production_console):
+    console,envelope,data = prepared(tmp_path,production_console)
+    writer = checkpoint_context(console,envelope,data)
+    for index in range(3):
+        writer("task_rejected",{"task":{"phase":"initial","task_id":f"task-{index}","status":"failed"},
+            "evidence":{"task_id":f"task-{index}","response":{"output_text":f"recorded-output-{index}"}},"timing":{"index":index}})
+    attempt = console._envelope(writer.snapshot_id)["processing_attempts"][-1]
+    diagnostic = writer.store.diagnostic(attempt)
+    calls = [diagnostic["provider_evidence"],*diagnostic["provider_evidence"]["supplementary_calls"]]
+    assert [call["response"]["output_text"] for call in calls] == [f"recorded-output-{i}" for i in range(3)]
+    assert "validator_input" not in diagnostic
+    assert writer.store.resolve_input(diagnostic["validator_input_ref"]) == data
