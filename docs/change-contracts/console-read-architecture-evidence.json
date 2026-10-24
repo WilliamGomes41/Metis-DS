@@ -1055,5 +1055,41 @@
     "Representative Azure data and storage/query cost",
     "Azure page/API latency and cancellation under concurrent formation/review",
     "Full real ingest → formation → review → publication trajectory and restart/recovery on deployment topology"
-  ]
+  ],
+  "repair_review_2026_10_24": {
+    "base_revision": "56488c00b05e17d21854623a7c2df2bf00105dc1",
+    "classification": "Class B; Rewrite risk: high; lifecycle semantics unchanged",
+    "release_verdict": "NO-GO",
+    "red_suite": {
+      "failed": 8,
+      "seconds": 10.01,
+      "log": "work/834-repair-RED-56488c0.log"
+    },
+    "points": {
+      "1": {
+        "red_on_56488c0": "failed",
+        "green": "pending"
+      },
+      "2": {
+        "red_on_56488c0": "failed",
+        "green": "pending"
+      },
+      "3": {
+        "red_on_56488c0": "failed",
+        "green": "pending"
+      },
+      "4": {
+        "red_on_56488c0": "failed",
+        "green": "pending"
+      },
+      "5": {
+        "red_on_56488c0": "failed",
+        "green": "pending"
+      },
+      "6": {
+        "red_on_56488c0": "failed",
+        "green": "pending"
+      }
+    }
+  }
 }

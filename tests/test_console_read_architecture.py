@@ -357,3 +357,144 @@ def test_dispatch_expiry_scan_respects_bound(tmp_path, production_console):
     assert interrupted() == 1, 'One scan expired unbounded work while finding no pending command'
     assert pending(console, limit=1) == []
     assert interrupted() == 2, 'The bounded scan must progress past completed expiry work'
+
+# PR #834 repair probes: first executed unchanged on 56488c0.
+def _received(console, users, title='Unstarted'):
+    from tests.test_d5_4_review_interaction_evidence import HTML
+    return console.receive_source(actor_id=users['researcher']['account_id'], filename='queued.html', data=HTML,
+        content_type='text/html', ingest_kind='new', title=title, version='1.0', date='2026-09-25',
+        live_url='', class_='richtlijn', family='test', named_reviewers=[users['reviewer_a']['account_id']])['snapshot_id']
+
+
+def test_slow_telemetry_outside_read_transaction(tmp_path, production_console, production_app, monkeypatch):
+    import src.insight_v1 as insight
+    console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    original = insight._telemetry_by_document
+    def slow(since):
+        time.sleep(6)
+        return original(since)
+    monkeypatch.setattr(insight, '_telemetry_by_document', slow)
+    client = _login(console, users['researcher']['username'], production_app=production_app)
+    assert client.get('/inzicht/api/documents').status_code == 200
+    assert client.get('/raad/meldingen').status_code == 200
+
+
+def test_telemetry_has_no_open_read_transaction(tmp_path, production_console, production_app, monkeypatch):
+    import src.insight_v1 as insight
+    from src.workflows.workflow_transaction_v1 import workflow_transaction_active
+    console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    observed = []
+    def telemetry(since):
+        observed.append(workflow_transaction_active())
+        return {}, False
+    monkeypatch.setattr(insight, '_telemetry_by_document', telemetry)
+    client = _login(console, users['researcher']['username'], production_app=production_app)
+    assert client.get('/inzicht/api/documents').status_code == 200
+    assert client.get('/raad/meldingen').status_code == 200
+    assert observed == [False, False]
+
+
+@pytest.mark.parametrize('running', [False, True])
+def test_new_and_running_documents_are_not_processing_blocks(tmp_path, production_console, production_app, running):
+    console, users, _, _ = _system(tmp_path, production_console=production_console)
+    sid = _received(console, users)
+    if running:
+        console.reserve_source_selection(actor_id=users['researcher']['account_id'], snapshot_id=sid,
+            command_id='repair-running', expected_revision=console.objects_revision(sid))
+        env = console.workflow_document_store.get_envelope(sid)
+        env['processing_blocker'] = 'pre_review_llm_processing_in_progress'
+        console.workflow_document_store.write_bundle(envelope=env)
+    client = _login(console, users['researcher']['username'], production_app=production_app)
+    row = next(r for r in client.get('/inzicht/api/documents').json()['documents'] if r['snapshot_id'] == sid)
+    assert row['processing_blocked'] is False
+    assert sid not in {r['snapshot_id'] for r in client.get('/raad/meldingen').json()['documents']}
+
+
+def test_publisher_missing_processing_access_is_not_a_notice(tmp_path, production_console, production_app):
+    console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    publisher = console.create_account(username='repair.publisher', password='d54-secret', roles=['publisher'])
+    client = _login(console, publisher['username'], production_app=production_app)
+    assert client.get('/raad/meldingen').json()['documents'] == []
+    env = console.workflow_document_store.get_envelope(sid)
+    env['processing_blocker'] = 'processing_dependency_failed'
+    console.workflow_document_store.write_bundle(envelope=env)
+    row = client.get('/raad/meldingen').json()['documents'][0]
+    assert row['processing_blocked'] and row['blocked'] is None and row['reasons'] == []
+    assert row['retry_allowed'] is False and row['code'] is None
+
+
+def test_notices_second_diagnostic_batch_failure_is_explicit_partial(tmp_path, production_console, production_app, monkeypatch, caplog):
+    from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+    console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    store = console.workflow_document_store
+    summary = store.list_document_summaries()[0]
+    processing = store.document_processing_inputs([sid])[sid]
+    diagnostic = store.document_diagnostic_inputs([sid])[sid]
+    documents = [{**summary, 'snapshot_id': f'batch-{i}', 'processing_blocker': 'processing_dependency_failed' if i == 0 else None} for i in range(51)]
+    monkeypatch.setattr(store, 'list_document_summaries', lambda **kw: documents)
+    monkeypatch.setattr(store, 'document_processing_inputs', lambda ids: {s: {**processing, 'snapshot_id': s} for s in ids})
+    monkeypatch.setattr(console, 'published_snapshot_ids', lambda ids: set())
+    calls = []
+    def diagnostics(ids):
+        calls.append(len(ids))
+        if len(calls) == 2:
+            raise WorkflowDocumentStoreError('workflow_document_diagnostics_read_failed')
+        return {s: diagnostic for s in ids}
+    monkeypatch.setattr(store, 'document_diagnostic_inputs', diagnostics)
+    client = _login(console, users['researcher']['username'], production_app=production_app)
+    response = client.get('/raad/meldingen')
+    assert response.status_code == 200
+    result = response.json()
+    assert result['complete'] is False and result['next_offset'] == 50
+    assert [r['snapshot_id'] for r in result['documents']] == ['batch-0']
+    assert calls == [50, 1]
+    assert 'document_diagnostic_batch_unavailable' in caplog.text
+
+
+def test_source_overview_refreshes_running_document(tmp_path, production_console, production_app):
+    console, users, _, _ = _system(tmp_path, production_console=production_console)
+    sid = _received(console, users)
+    console.reserve_source_selection(actor_id=users['researcher']['account_id'], snapshot_id=sid,
+        command_id='overview-running', expected_revision=console.objects_revision(sid))
+    response = _login(console, users['researcher']['username'], production_app=production_app).get('/source-selection')
+    assert response.status_code == 200
+    assert 'window.location.reload()' in response.text
+    assert 'Deze pagina ververst elke 5 seconden zolang de verwerking loopt.' in response.text
+    assert 'action="/source-selection/start"' not in response.text
+
+
+def test_pending_finds_task_after_expired_document_in_same_round(tmp_path, production_console):
+    from datetime import timedelta
+    from src.processing_retry_v1 import now
+    from src.source_processing_dispatch_v1 import pending
+    console, users, _, _ = _system(tmp_path, production_console=production_console)
+    ids = []
+    for index in range(2):
+        sid = _received(console, users, f'Queued {index}')
+        console.reserve_source_selection(actor_id=users['researcher']['account_id'], snapshot_id=sid,
+            command_id=f'repair-{index}', expected_revision=console.objects_revision(sid))
+        ids.append(sid)
+    env = console.workflow_document_store.get_envelope(ids[0])
+    env['processing_attempts'][-1]['expires_at'] = (now()-timedelta(seconds=1)).isoformat()
+    console.workflow_document_store.write_bundle(envelope=env)
+    found = pending(console, limit=1)
+    assert [s for s, attempt in found] == [ids[1]]
+
+
+def test_quality_source_and_ledger_io_outside_read_transaction(tmp_path, production_console, monkeypatch):
+    import src.quality_metrics_app_v1 as quality
+    from src.workflows.workflow_transaction_v1 import workflow_transaction_active
+    console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    original = console.review_source_fragments
+    observed = []
+    def source(*args, **kwargs):
+        observed.append(workflow_transaction_active())
+        return original(*args, **kwargs)
+    monkeypatch.setattr(console, 'review_source_fragments', source)
+    ledger = quality.read_events
+    def events(*args):
+        observed.append(workflow_transaction_active())
+        return ledger(*args)
+    monkeypatch.setattr(quality, 'read_events', events)
+    assert quality.capture(console, users['researcher'])['documents']
+    assert observed and not any(observed)

@@ -389,3 +389,17 @@ representative TOAST/Azure costs remain open.
 **Joint verdict: local implementation ready for review; release NO-GO.**
 No merge/deployment is authorized by this proof. Actual Azure topology/data,
 latency/cancellation under load and the full real content trajectory remain required.
+
+## Repair after review (2026-10-24)
+
+Class B / Rewrite risk: high remain unchanged. Work continues from PR head
+56488c0 through additive commits; no rebase, force push, merge or deployment.
+The six user-supplied failures have reproduction tests before production edits:
+eight cases fail on that exact head. Quality source/ledger I/O has an additional
+transaction-boundary reproduction. Each repair and red/green result is recorded
+in the evidence JSON. No new persistence, cache, migration or lifecycle rule.
+
+Read transactions may contain only bounded database capture and the minimal
+bounded preparation needed to select it: no file, network, Blob or telemetry I/O
+and no unbounded Python computation. Captured inputs belong to the operation;
+external evidence is read only after the SQL transaction closes.
