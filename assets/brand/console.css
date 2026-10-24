@@ -2078,3 +2078,53 @@ h1, h2,
 
 /* Raad deploy-controle: verborgen frame per gecontroleerde pagina. */
 .care-probe { position: absolute; left: -10000px; top: 0; width: 1280px; height: 800px; border: 0; visibility: hidden; }
+
+/* Bronselectie (docs/change-contracts/console-source-selection-readability.md).
+   A real picker button, a quiet document card, a status label and one action row. */
+.source-picker { margin: 0 0 20px; }
+
+.source-picker label { display: block; margin-bottom: 6px; }
+
+.source-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.source-picker-row select { flex: 1 1 18rem; width: auto; min-width: 0; }
+
+.source-picker-row .btn-secondary { margin: 0; }
+
+#source-selection .doc-card { display: grid; gap: 10px; padding: 20px 22px; margin-bottom: 16px; }
+
+#source-selection .doc-card > * { margin: 0; }
+
+#source-selection .source-meta { color: var(--muted); }
+
+#source-selection .doc-card > p[role="status"] {
+  justify-self: start;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--water-soft);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+#source-selection .source-estimate { color: var(--muted); font-size: 0.9rem; }
+
+.source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.source-actions form { margin: 0; }
+
+.source-actions .btn-primary,
+.source-actions .btn-secondary { margin: 0; min-height: 44px; }
+
+.source-actions > p { flex-basis: 100%; margin: 0; }
