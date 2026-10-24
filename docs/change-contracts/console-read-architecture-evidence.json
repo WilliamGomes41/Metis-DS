@@ -2041,6 +2041,57 @@
       "log": "work/834-cleanup-RED-02e19ab.log"
     },
     "plan": "A1–A4 and C1–C2; remove B1–B5, keep B6 one release; preserve writer/lifecycle/source integrity contracts. Native review SQL also needs targeted inputs.",
-    "final_verification": "pending"
+    "final_verification": "pending",
+    "focused": {
+      "final_surface": {
+        "passed": 106,
+        "seconds": 62.65,
+        "log": "work/834-cleanup-final-surface.log"
+      },
+      "navigation_and_shared_cards": {
+        "passed": 14,
+        "seconds": 44.03,
+        "log": "work/834-cleanup-shared-cards.log",
+        "connections_budget": 6,
+        "object_counts": [
+          2,
+          200
+        ]
+      },
+      "writer_and_no_disk": {
+        "passed": 26,
+        "seconds": 29.89,
+        "log": "work/834-cleanup-writer-read-check.log"
+      },
+      "native_domain_and_characterization": {
+        "passed": 41,
+        "seconds": 13.49,
+        "log": "work/834-cleanup-native-characterization.log"
+      }
+    },
+    "read_volume": {
+      "synthetic_replay_records": 4000,
+      "review_native_json_bytes": 15367,
+      "maximum_bytes_guard": 65536,
+      "before": "guard failed on 02e19ab",
+      "measurement_scope": "Local JSON/JSONB decoder bytes, not Azure storage/latency."
+    },
+    "changes": {
+      "A1": "Card scope; no command lock/reload on GET.",
+      "A2": "Fallback cards and targeted native card/source/graph SQL; shared card checks; existing duty kernel/source verification.",
+      "A3": "Card list + explicit authorized envelope in existing object reader.",
+      "A4": "Selected _envelope lookup; unchanged command reload/unknown_snapshot.",
+      "C1": "Canonical status after workflow SQL closes; explicit boundary guard.",
+      "C2": "Missing capture IDs skipped, metadata completeness partial.",
+      "B1-B2": "Removed deep switch/branches and _overview_rows.",
+      "B3": "Removed unused ID-list API and snapshot slot; migrated card isolation/deletion tests.",
+      "B4-B5": "Removed obsolete GET definitions, installers own their clean GET slot.",
+      "B6": "Retained for one release."
+    },
+    "intermediate_findings_resolved": [
+      "Test fixture registered an obsolete GET before invoking the new clean-slot installer; removed that test-only route.",
+      "Batch timeout fixture had tied whole-second timestamps; explicit fixture ordering added.",
+      "Separate card metadata query cost one extra connection; shared SQL shape restores the unchanged six-connection budget."
+    ]
   }
 }

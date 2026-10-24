@@ -169,14 +169,14 @@ def estimate(envelope, documents, *, observations=None):
 
 
 @diagnostic_phase("selection_projection")
-def projection(console, *, actor_id, snapshot_id, documents, deep=True, observations=None):
+def projection(console, *, actor_id, snapshot_id, documents, observations=None):
     from pathlib import Path
     from src.source_accountability_v1 import is_source_record
     from src.admission_gate_v1 import is_admission_blocked
     envelope = console._envelope(snapshot_id)
     authorize(console, actor_id, envelope)
-    processing = console.processing_status(snapshot_id, actor_id=actor_id, deep=deep)
-    # Overzicht: alleen-lezen rijen zonder deepcopy; het gekozen document leest volledig.
+    processing = console.processing_status(snapshot_id, actor_id=actor_id)
+    # Exact selected-document inputs; overviews use summary_projection.
     objects = console._read_current_objects(snapshot_id)
     attempt = next(reversed(envelope.get("processing_attempts") or []), {})
     budget_stopped = attempt.get("state") == "incomplete_budget"

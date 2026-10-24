@@ -1825,31 +1825,21 @@ class OperationsConsole:
         return kind in {"html", "pdf", "boom"}  # every supported source gets a model proposal
 
     @diagnostic_phase("processing_status")
-    def processing_status(self, snapshot_id: str, *, actor_id: str | None = None,
-                          deep: bool = True) -> dict[str, Any]:
-        """Verwerkingsstatus van één document.
-
-        ``deep=False`` is de compacte variant voor overzichten (D-PERF-2): die
-        MOET alleen opgeslagen attempt- en ``provider_evidence``-velden lezen en
-        MAG NIET ``stored_extraction`` of ``incomplete(objects=...)`` aanroepen.
-        Een opgeslagen ``formation_incomplete`` blijft dan ongecontroleerd
-        (``formation_checked`` False) en MOET NOOIT als voltooid gelden.
-        """
+    def processing_status(self, snapshot_id: str, *, actor_id: str | None = None) -> dict[str, Any]:
+        """Actuele detailcontrole; compacte overzichten gebruiken eigen expliciete invoer."""
         from src.processing_retry_v1 import status
         if actor_id is not None:
             from src.source_selection_v1 import authorize
             authorize(self, actor_id, self._envelope(snapshot_id))
         result = status(self._envelope(snapshot_id), policy=self._processing_limits())
-        # Compact: één alleen-lezen objectread zonder deepcopy (D-PERF-4).
-        overview_rows = None if deep else self._overview_rows(snapshot_id)
         if (self.snapshot_is_published(snapshot_id)
-                or (self._read_current_objects(snapshot_id) if deep else overview_rows)
-                or self.object_review_bindings(snapshot_id, objects=(self._read_current_objects(snapshot_id) if deep else overview_rows)) or self._envelope(snapshot_id).get("review_passes")):
+                or self._read_current_objects(snapshot_id)
+                or self.object_review_bindings(snapshot_id, objects=self._read_current_objects(snapshot_id)) or self._envelope(snapshot_id).get("review_passes")):
             result["retry_allowed"] = False
         from src.recoverable_formation_v1 import incomplete
         envelope = self._envelope(snapshot_id)
         stored_incomplete = incomplete(envelope)
-        if not deep or not stored_incomplete:
+        if not stored_incomplete:
             # Zonder opgeslagen open vorming is de diepe controle identiek
             # (``incomplete`` eindigt dan direct op False).
             result["formation_incomplete"] = stored_incomplete
@@ -1875,19 +1865,22 @@ class OperationsConsole:
         else:
             result["formation_progress"] = {}
         from src.source_selection_v1 import resume_contract_current
-        result["resume_allowed"] = bool(self._can_resume_formation(snapshot_id, rows=overview_rows)
+        result["resume_allowed"] = bool(self._can_resume_formation(snapshot_id)
             and resume_contract_current(envelope) and result["state"] != "running"
             and (result["retry_attempts_used"] < result["max_attempts"] or result["recovery_available"])
             and result["reason_code"] not in {"processing_retry_cooldown", "processing_structural_limit"})
         return result
 
-    def _read_current_objects(self, snapshot_id: str) -> list[dict[str, Any]]:
+    def _read_current_objects(self, snapshot_id: str, *, envelope=None) -> list[dict[str, Any]]:
         """Borrow operation-owned immutable inputs for pure domain calculations.
 
         Public snapshot_objects keeps its detached caller copy. Commands never
         borrow these rows; remember=True always loads/pins current working data.
         """
-        self._envelope(snapshot_id)
+        if envelope is None:
+            self._envelope(snapshot_id)
+        elif str(envelope.get("snapshot_id") or "") != snapshot_id:
+            raise ConsoleError("unknown_snapshot")
         reads = self._document_reads()
         if reads is None:
             return current_revisions(self._load_objects(snapshot_id, remember=False), snapshot_id=snapshot_id)
@@ -1896,10 +1889,7 @@ class OperationsConsole:
                 self._load_objects(snapshot_id, remember=False), snapshot_id=snapshot_id)
         return reads.current_objects[snapshot_id]
 
-    def _overview_rows(self, snapshot_id: str) -> list[dict[str, Any]]:
-        return self._read_current_objects(snapshot_id)
-
-    def _can_resume_formation(self, snapshot_id, *, rows=None):
+    def _can_resume_formation(self, snapshot_id):
         from src.recoverable_formation_v1 import incomplete, VERSION
         from src.source_context_review_v1 import ROLE_KEY, LINKS_KEY
         envelope = self._envelope(snapshot_id)
@@ -1913,7 +1903,7 @@ class OperationsConsole:
                               and (lineage_evidence(row) or {}).get("reason") == "same-source candidate retirement"))
                 or ROLE_KEY in (row.get("metadata") or {}) or LINKS_KEY in (row.get("metadata") or {})
                     or ((row.get("metadata") or {}).get("passage_register") or {}).get("source") == "review"
-                for row in (rows if rows is not None else self._read_current_objects(snapshot_id))))
+                for row in self._read_current_objects(snapshot_id)))
 
     def resume_formation(self, *, actor_id, snapshot_id, command_id, expected_revision):
         """Resume open producer work; reviewed/published work requires successor."""
@@ -2646,7 +2636,7 @@ class OperationsConsole:
             with diagnostic_phase("payload_copy"):
                 return deepcopy(rows)
         with diagnostic_phase("payload_copy"):
-            return deepcopy(self._read_current_objects(snapshot_id) if not for_update else current_revisions(rows, snapshot_id=snapshot_id))
+            return deepcopy(self._read_current_objects(snapshot_id, envelope=envelope) if not for_update else current_revisions(rows, snapshot_id=snapshot_id))
 
     def snapshot_containers(self, snapshot_id: str) -> dict[str, Any]:
         """Typed knowledge/source access over the current atomic revision."""

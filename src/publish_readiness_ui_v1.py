@@ -345,17 +345,9 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
     if getattr(app.state, "publish_readiness_ui_v1", False):
         return
 
-    retained = []
-    removed = 0
-    for route in app.router.routes:
-        methods = set(getattr(route, "methods", set()) or set())
-        if getattr(route, "path", None) == "/publish" and "GET" in methods:
-            removed += 1
-            continue
-        retained.append(route)
-    if removed != 1:
-        raise RuntimeError("publish_get_route_replacement_failed")
-    app.router.routes[:] = retained
+    if any(getattr(route, "path", None) == "/publish" and "GET" in (getattr(route, "methods", None) or ())
+           for route in app.router.routes):
+        raise RuntimeError("publish_get_route_already_registered")
 
     @app.get("/publish", response_class=HTMLResponse)
     def publish_get(request: Request, document: str = "") -> str:

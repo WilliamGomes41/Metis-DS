@@ -17,6 +17,7 @@ from src.publish_authorization_v1 import still_matches
 from src.four_eyes_v1 import HIGH_RISK_FIELDS
 from src.operations_console_v1 import CAPTURED, PRE_REVIEW_BLOCKED, ConsoleError
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+from src.workflows.workflow_documents_cutover_v1 import _DOCUMENT_CARD_COLUMNS, _document_cards_from_rows
 from src.workflows.workflow_review_postgres_v1 import WorkflowReviewStoreError
 from src.workflows.workflow_remaining_cutover_v1 import (
     PostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
@@ -314,9 +315,21 @@ class _PostgresBadgeCountsMixin:
         try:
             with self.workflow_document_store._connect() as con:
                 rows = con.execute(
-                    """
-                    SELECT d.snapshot_id,d.envelope_payload
+                    f"""
+                    SELECT {_DOCUMENT_CARD_COLUMNS},
+                           COALESCE((SELECT jsonb_object_agg(k,d.envelope_payload->k)
+                             FROM unnest(ARRAY['content_kind','binary_path','immutable_storage_locator',
+                               'prepared_source_extraction','decision_tree_formation','decision_unit_contract',
+                               'decision_graph','decision_graph_reviews']) k
+                             WHERE d.envelope_payload ? k), '{{}}'::jsonb)
+                           || jsonb_build_object('quality_processing_runs', COALESCE((
+                               SELECT jsonb_agg((SELECT jsonb_object_agg(k,a->k)
+                                   FROM unnest(ARRAY['outcome','document_extraction','extractor_versions','source_fragments']) k
+                                   WHERE a ? k) ORDER BY n)
+                               FROM jsonb_array_elements(COALESCE(NULLIF(d.envelope_payload->'quality_processing_runs','null'::jsonb),'[]'::jsonb))
+                                 WITH ORDINALITY AS runs(a,n)), '[]'::jsonb)) AS review_inputs
                     FROM workflow.documents d
+                    LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id
                     JOIN workflow.document_reviewers r ON r.snapshot_id=d.snapshot_id
                     WHERE r.account_id=%s
                       AND d.snapshot_id=COALESCE(%s,d.snapshot_id)
@@ -330,16 +343,18 @@ class _PostgresBadgeCountsMixin:
         except Exception as exc:
             raise WorkflowDocumentStoreError("workflow_review_workboard_read_failed") from exc
 
+        # Compact list metadata and only the source/graph inputs required by the
+        # existing duty kernel. Never decode unrelated replay/attempt payloads.
         out: dict[str, dict[str, Any]] = {}
-        for row in rows:
-            envelope = row.get("envelope_payload")
+        for row in _document_cards_from_rows(rows):
+            envelope = row.pop("review_inputs")
             if isinstance(envelope, str):
                 envelope = json.loads(envelope)
             if not isinstance(envelope, dict):
                 raise WorkflowDocumentStoreError("workflow_document_envelope_payload_invalid")
             snapshot_id = str(row["snapshot_id"])
             out[snapshot_id] = {
-                "envelope": dict(envelope),
+                "envelope": {**row, **envelope},
                 "heading_total": int(row.get("heading_total") or 0),
                 "heading_pending": int(row.get("heading_pending") or 0),
                 "individual_total": int(row.get("individual_total") or 0),

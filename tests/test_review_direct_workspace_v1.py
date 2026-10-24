@@ -82,10 +82,6 @@ def client(console, *, login=True):
     async def error(request, exc):
         return JSONResponse({'error': str(exc)}, status_code=403)
 
-    @app.get('/review')
-    def old_review():
-        raise AssertionError('replaced route')
-
     @app.post('/review/headings/batch-confirm')
     def headings():
         raise AssertionError('not used')

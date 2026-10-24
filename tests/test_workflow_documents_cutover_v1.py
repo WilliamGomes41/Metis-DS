@@ -263,7 +263,7 @@ def test_delete_source_cleanup_follows_transaction_commit_and_restart(documents,
     assert result['deleted'] and result['freeze_bytes_removed']
     assert deletes==[locator]
     fresh=restart_production(console)
-    assert sid not in fresh.list_snapshot_ids()
+    assert sid not in [row["snapshot_id"] for row in fresh.list_document_cards()]
     with pytest.raises(ConsoleError,match='unknown_snapshot'):
         fresh.delete_unpublished_snapshot(**command)
     assert deletes==[locator]

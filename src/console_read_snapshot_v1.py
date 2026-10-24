@@ -9,7 +9,6 @@ class ConsoleReadSnapshot:
     retained_only: bool = False
     envelopes: dict[str, dict[str, Any]] = field(default_factory=dict)
     listed: bool = False
-    snapshot_ids: list[str] | None = None
     objects: dict[str, tuple[list[dict[str, Any]], str | None]] = field(default_factory=dict)
     current_objects: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     bindings: dict[str, list[dict[str, Any]]] = field(default_factory=dict)

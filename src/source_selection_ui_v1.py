@@ -113,7 +113,7 @@ def install(app, console, require, page, nav, esc):
             from src.source_selection_v1 import summary_projection
             detail = bool(document) and sid == document
             result = (projection(console, actor_id=actor['account_id'], snapshot_id=sid, documents=documents,
-                                 deep=True, observations=observations) if detail
+                                 observations=observations) if detail
                       else summary_projection(console, envelope=envelope, observations=observations))
             action = ''
             if result['state'] in {'bezig', 'wacht op uitvoering'}:

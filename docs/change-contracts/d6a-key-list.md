@@ -1,5 +1,8 @@
 # PG-sleutellijst zonder volledige receipts
 
+> Historical contract: this key-list API was retired by PR #834 cleanup.
+> Production source overviews use compact cards/summaries; no key-list warmup remains.
+
 Change class: B
 Promise: de bestaande bronselectie-sleutellijst bouwt geen volledige documentreceipts; de gekozen documenten en toegangsregels blijven gelijk.
 Proof: een PG-regressie weigert elke receiptconstructie binnen de leesscope; de bestaande HTML-golden- en verse-leesproeven blijven groen.

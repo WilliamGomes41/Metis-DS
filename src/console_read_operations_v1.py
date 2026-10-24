@@ -22,6 +22,7 @@ class DocumentOverviewInputs:
     published: set = field(default_factory=set)
     processing: dict = field(default_factory=dict)
     metadata_partial: bool = False
+    missing_snapshots: set[str] = field(default_factory=set)
 
     def select(self, snapshot_ids):
         missing = [sid for sid in snapshot_ids if sid not in self.diagnostics]
@@ -29,10 +30,20 @@ class DocumentOverviewInputs:
             batch = missing[start:start + 50]
             processing = self.state.workflow_document_store.document_processing_inputs(batch)
             diagnostics = self.state.workflow_document_store.document_diagnostic_inputs(batch)
-            published = self.state.published_snapshot_ids(batch)
+            absent = set(batch) - (processing.keys() & diagnostics.keys())
+            self.missing_snapshots.update(absent)
+            self.metadata_partial |= bool(absent)
             self.processing.update(processing)
             self.diagnostics.update(diagnostics)
-            self.published.update(published)
+
+    def select_publication(self, snapshot_ids):
+        """Canonical is an independent authority; call only after workflow SQL closes."""
+        from src.workflows.workflow_transaction_v1 import workflow_transaction_active, WorkflowTransactionError
+        if workflow_transaction_active():
+            raise WorkflowTransactionError("canonical_read_requires_closed_workflow_transaction")
+        present = [sid for sid in snapshot_ids if sid not in self.missing_snapshots]
+        if present:
+            self.published.update(self.state.published_snapshot_ids(present))
 
     def status_and_diagnostics(self, envelope):
         from src.processing_retry_v1 import status

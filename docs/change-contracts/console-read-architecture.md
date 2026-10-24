@@ -525,3 +525,43 @@ between captures and a native Review replay-volume probe. The passing Review
 method-level probe does not detect its native full-envelope SQL read; the native
 JSON-volume probe does. The fixed local fixture is synthetic; no Azure claim.
 Rollback remains application-only; no schema/migration/backfill or data rollback.
+
+### Cleanup implementation and focused proof
+
+A1 removes the route-comparison GET's command lock/reload and scopes compact cards
+by the unchanged owner/reviewer predicate. A2 migrates the fallback list to cards
+and the active native reader to the same shared card SQL shape/consistency checks
+plus explicit source/graph inputs. It omits replay, processing attempts and other
+unneeded payloads without losing source-byte verification or domain duty counts.
+The shared SQL avoids an extra roundtrip: the existing six-connection navigation
+budget still passes for 2 and 200 objects. Review overview still computes actual
+duties using necessary source/object inputs; it is not claimed to be zero-cost
+metadata or to have solved Azure TOAST cost. A3 passes an explicit authorized
+card to the existing object reader, avoiding a hidden envelope reread. A4 fetches
+only the selected envelope before the unchanged class-change command boundary.
+
+C1 captures workflow fields under SQL and reads canonical publication history
+after the workflow transaction closes, with a guard against calling it inside.
+C2 records missing captured IDs, skips them and marks metadata/page completeness
+partial. The prior 50-document batching and error/cursor behavior remain.
+
+B1–B2 remove deep=False, both deep parameters and _overview_rows; selected detail
+keeps the existing complete check. B3 removes list_snapshot_ids and its unused
+snapshot slot; five test call sites now use live cards, retaining request/process
+isolation coverage. B4–B5 remove the obsolete base GET definitions; each installer
+owns its GET and refuses an already occupied slot. Route-owner tests and unchanged
+characterization goldens verify the resulting composition. B6 remains for one
+release. Section C's writer reloads, command/reconcile/migration full reads, base
+waiting count, lifecycle batches and Inzicht filters remain in place.
+
+Focused final surface: 106 passed (including all characterization cases, with no
+golden updates needed). Shared-card/native navigation: 14 passed. Writer/no-disk
+and selected-GET checks: 26 passed. Native Review full-vs-targeted domain result
+equality passes; a 4,000-record replay fixture yields 15,367 JSON decode bytes,
+below the fixed 65,536-byte guard. Baseline 02e19ab fails that guard. This is
+local synthetic read-volume evidence, not a production latency measurement.
+
+An existing timeout test depended on random-ID ordering when acquired_at timestamps
+tied at whole-second precision. Its fixture now explicitly orders the documents;
+production ordering and domain clocks are unchanged. Intermediate fixture-route
+and extra-query budget failures were resolved before the final full-suite run.

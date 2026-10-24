@@ -112,7 +112,10 @@ def documents_projection(state, account, *, query: str = "", state_filter: str =
             except WorkflowDocumentStoreError as exc:
                 from src.operations_console_v1 import ConsoleError
                 raise ConsoleError('workflow_document_unavailable') from exc
-    # File-backed telemetry and all rendering/filtering happen after SQL closes.
+    # Canonical storage and telemetry run after workflow SQL closes.
+    if not partial_on_error:
+        inputs.select_publication([e["snapshot_id"] for e in authorized[offset:scan_end]
+                                   if _processing_access(actor, e)])
     if partial_on_error:
         return _notice_documents_page(inputs, actor, window=window, state_filter=state_filter,
                                       deadline=started + NOTICE_TIME_BUDGET_SECONDS)
@@ -139,8 +142,11 @@ def _documents_page(inputs, account, *, query="", state_filter="", offset=0, lim
     telemetry, partial = _telemetry_by_document(time.time() - 86400) if offset < len(authorized) else ({}, False)
     rows, position = [], offset
     while position < scan_end and len(rows) < limit:
-        row = _document_row(inputs, account, authorized[position], telemetry)
+        envelope = authorized[position]
         position += 1
+        if envelope["snapshot_id"] in getattr(inputs, "missing_snapshots", set()):
+            continue
+        row = _document_row(inputs, account, envelope, telemetry)
         if _state_matches(row, state_filter):
             rows.append(row)
     return {"documents": rows, "total": None if state_filter or inputs.metadata_partial else len(authorized), "offset": offset,
@@ -180,11 +186,14 @@ def _notice_documents_page(inputs, account, *, window, state_filter, deadline):
             diagnostic_partial = True
             LOG.warning("document_diagnostic_batch_unavailable")
             break
+        inputs.select_publication(ids)
         if telemetry is None:
             telemetry, telemetry_partial = _telemetry_by_document(time.time() - 86400)
         for envelope in batch:
-            row = _document_row(inputs, account, envelope, telemetry)
             position += 1
+            if envelope["snapshot_id"] in inputs.missing_snapshots:
+                continue
+            row = _document_row(inputs, account, envelope, telemetry)
             if _state_matches(row, state_filter):
                 rows.append(row)
                 if len(rows) >= limit:

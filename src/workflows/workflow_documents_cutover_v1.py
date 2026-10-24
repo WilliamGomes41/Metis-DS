@@ -41,6 +41,34 @@ from src.workflows.workflow_transaction_v1 import WorkflowTransactionError, _con
 REVIEW_STORE_REQUIRED_FOR_DOCUMENT_STORE = "workflow_review_store_required_for_document_store"
 
 
+# Shared compact card shape; every consumer retains the same metadata checks.
+_DOCUMENT_CARD_COLUMNS = """d.snapshot_id,d.document_id,d.source_id,d.title,d.class,d.state,
+                           to_char(d.source_date,'YYYY-MM-DD') AS date,
+                           d.replaces_snapshot_id,
+                           d.source_version AS version,d.source_sha256 AS sha256,
+                           d.publication_eligibility,d.uploader_account_id,
+                           d.topic_id,t.display_name AS family,
+                           d.envelope_payload->'is_live_capture' AS is_live_capture,
+                           d.envelope_payload->>'acquired_at' AS acquired_at,
+                           (SELECT jsonb_object_agg(k,d.envelope_payload->k)
+                            FROM unnest(ARRAY['review_policy','processing_blocker','source_declaration',
+                                             'review_configuration','configuration_source']) k
+                            WHERE d.envelope_payload ? k) AS details,
+                           d.envelope_payload->'named_reviewers' AS named_reviewers,
+                           (SELECT COALESCE(jsonb_agg(v ORDER BY v),'[]'::jsonb)
+                            FROM jsonb_array_elements(COALESCE(d.envelope_payload->'named_reviewers','[]'::jsonb)) v)
+                           = (SELECT COALESCE(jsonb_agg(r.account_id ORDER BY r.account_id),'[]'::jsonb)
+                              FROM workflow.document_reviewers r WHERE r.snapshot_id=d.snapshot_id) AS reviewers_consistent"""
+
+def _document_cards_from_rows(rows):
+    if any(not row['topic_id'] or not row['family'] for row in rows):
+        raise WorkflowDocumentStoreError("workflow_topic_identity_not_prepared")
+    if any(not row['reviewers_consistent'] for row in rows):
+        raise WorkflowDocumentStoreError('workflow_document_reviewers_authority_mismatch')
+    return [{**{key: value for key, value in row.items() if key not in {'details', 'reviewers_consistent'}},
+             **(row['details'] or {})} for row in rows]
+
+
 class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
     """Runtime operations added on top of the migration-only document store."""
 
@@ -136,34 +164,13 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             return []
         try:
             with self._connect() as con:
-                rows = con.execute("""
-                    SELECT d.snapshot_id,d.document_id,d.source_id,d.title,d.class,d.state,
-                           to_char(d.source_date,'YYYY-MM-DD') AS date,
-                           d.replaces_snapshot_id,
-                           d.source_version AS version,d.source_sha256 AS sha256,
-                           d.publication_eligibility,d.uploader_account_id,
-                           d.topic_id,t.display_name AS family,
-                           d.envelope_payload->'is_live_capture' AS is_live_capture,
-                           d.envelope_payload->>'acquired_at' AS acquired_at,
-                           (SELECT jsonb_object_agg(k,d.envelope_payload->k)
-                            FROM unnest(ARRAY['review_policy','processing_blocker','source_declaration',
-                                             'review_configuration','configuration_source']) k
-                            WHERE d.envelope_payload ? k) AS details,
-                           d.envelope_payload->'named_reviewers' AS named_reviewers,
-                           (SELECT COALESCE(jsonb_agg(v ORDER BY v),'[]'::jsonb)
-                            FROM jsonb_array_elements(COALESCE(d.envelope_payload->'named_reviewers','[]'::jsonb)) v)
-                           = (SELECT COALESCE(jsonb_agg(r.account_id ORDER BY r.account_id),'[]'::jsonb)
-                              FROM workflow.document_reviewers r WHERE r.snapshot_id=d.snapshot_id) AS reviewers_consistent
+                rows = con.execute(f"""
+                    SELECT {_DOCUMENT_CARD_COLUMNS}
                     FROM workflow.documents d LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id
                 """ + (" WHERE d.snapshot_id=ANY(%s)" if snapshot_ids is not None else "")
                     + " ORDER BY d.acquired_at,d.snapshot_id",
                     ((snapshot_ids,) if snapshot_ids is not None else ())).fetchall()
-            if any(not row['topic_id'] or not row['family'] for row in rows):
-                raise WorkflowDocumentStoreError("workflow_topic_identity_not_prepared")
-            if any(not row['reviewers_consistent'] for row in rows):
-                raise WorkflowDocumentStoreError('workflow_document_reviewers_authority_mismatch')
-            return [{**{key: value for key, value in row.items() if key not in {'details', 'reviewers_consistent'}},
-                     **(row['details'] or {})} for row in rows]
+            return _document_cards_from_rows(rows)
         except WorkflowDocumentStoreError:
             raise
         except Exception as exc:
@@ -656,23 +663,6 @@ class _PostgresWorkflowDocumentsMixin:
             return deepcopy(reads.cards)
         except WorkflowDocumentStoreError as exc:
             raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
-
-    def list_snapshot_ids(self) -> list[str]:
-        reads = self._document_reads()
-        if reads is not None:
-            if reads.listed:
-                return list(reads.envelopes)
-            if reads.snapshot_ids is not None:
-                return list(reads.snapshot_ids)
-        try:
-            with self.workflow_document_store._connect() as con:
-                ids = [str(row["snapshot_id"]) for row in con.execute(
-                    "SELECT snapshot_id FROM workflow.documents ORDER BY acquired_at,snapshot_id").fetchall()]
-        except Exception as exc:
-            raise ConsoleError("workflow_document_unavailable") from exc
-        if reads is not None:
-            reads.snapshot_ids = ids
-        return list(ids)
 
     @diagnostic_phase("document_load")
     def _envelope(self, snapshot_id: str) -> dict[str, Any]:

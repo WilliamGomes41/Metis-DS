@@ -88,14 +88,14 @@ def test_key_order_matches_list_envelopes(tmp_path, *, production_console):
     assert [row['snapshot_id'] for row in console.source_selection_documents(actor_id=next(a['account_id'] for a in console.list_accounts() if 'researcher' in a['roles']))] == _legacy_keys(console)
 
 
-def test_postgres_key_list_matches_authoritative_list(workflow_postgres, tmp_path):
+def test_compact_source_list_matches_authoritative_list(workflow_postgres, tmp_path):
     from tests.test_attempt_diagnostics_postgres import bound, ingest
     from tests.test_review_batch_atomic_postgres import _console
     console = _console(tmp_path, workflow_postgres)
     bound(console, reject=False)
     ingest(console)
     expected = [row['snapshot_id'] for row in console.list_envelopes()]
-    assert console.list_snapshot_ids() == expected
+    assert [row["snapshot_id"] for row in console.list_document_cards()] == expected
     with console.document_read_operation():
         assert [row['snapshot_id'] for row in console.source_selection_documents(actor_id=next(a['account_id'] for a in console.list_accounts() if 'researcher' in a['roles']))] == expected
         assert [console._envelope(s)['snapshot_id'] for s in [row['snapshot_id'] for row in console.source_selection_documents(actor_id=next(a['account_id'] for a in console.list_accounts() if 'researcher' in a['roles']))]] == expected

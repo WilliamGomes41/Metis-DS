@@ -63,11 +63,9 @@ def install_route_comparison_routes(app, state, require, page) -> None:
 
     def scope(account: dict[str, Any]) -> dict[str, dict[str, Any]]:
         # Match the existing Quality & workprocess account boundary.
-        with state._store_write_lock():
-            state._reload_store_locked()
-            aid = account["account_id"]
-            return {e["snapshot_id"]: e for e in state.list_envelopes()
-                    if e.get("uploader_account_id") == aid or aid in (e.get("named_reviewers") or [])}
+        aid = account["account_id"]
+        return {e["snapshot_id"]: e for e in state.list_document_cards()
+                if e.get("uploader_account_id") == aid or aid in (e.get("named_reviewers") or [])}
 
     def current(request: Request, comparison_id: str):
         account = require(request)

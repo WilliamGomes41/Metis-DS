@@ -529,6 +529,11 @@ def test_notices_statement_timeout_preserves_previous_batch(tmp_path, production
     console, users, sid, _ = _system(tmp_path, production_console=production_console)
     store = console.workflow_document_store
     later = _received(console, users)
+    # utc_now stores seconds; make batch ordering independent of random ID ties.
+    from datetime import datetime, timedelta
+    later_env = store.get_envelope(later)
+    later_env['acquired_at'] = (datetime.fromisoformat(store.get_envelope(sid)['acquired_at']) + timedelta(seconds=1)).isoformat()
+    store.write_bundle(envelope=later_env)
     env = store.get_envelope(sid)
     env['processing_blocker'] = 'processing_dependency_failed'
     store.write_bundle(envelope=env)
@@ -592,15 +597,17 @@ def test_cleanup_compact_gets_do_not_read_full_envelopes(tmp_path, production_co
 
 def test_console_gets_never_take_command_write_lock(tmp_path, production_console, production_app, monkeypatch):
     console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    console.workflow_identity_store.update_roles(users['researcher']['account_id'], ['researcher','reviewer','publisher'])
     client = _login(console, users['researcher']['username'], production_app=production_app)
     lock_calls = []
     def forbidden():
         lock_calls.append(True)
         raise AssertionError('GET took the command write lock')
     monkeypatch.setattr(console, '_store_write_lock', forbidden)
-    for path in ['/', '/ingest', '/source-selection', '/review', '/review/repair', '/tree', '/settings',
+    for path in ['/', '/ingest', '/source-selection', '/publish', '/review', '/review/repair', '/tree', '/settings',
                  '/inzicht', '/inzicht/routevergelijking', '/inzicht/api/documents', '/raad/meldingen',
-                 '/inzicht/api/quality', '/inzicht/document?document='+sid, '/review?document='+sid]:
+                 '/inzicht/api/quality', '/inzicht/document?document='+sid, '/review?document='+sid,
+                 '/source-selection?document='+sid, '/publish?document='+sid]:
         assert client.get(path).status_code == 200, path
         assert not lock_calls, path
 
@@ -669,4 +676,28 @@ def test_review_overview_does_not_decode_unrelated_envelope_replay(tmp_path, pro
     client = _login(console, users['reviewer_a']['username'], production_app=production_app)
     response = client.get('/review')
     assert response.status_code == 200
+    print('REVIEW_COMPACT_JSON_BYTES', metrics[-1]['db_json_bytes'])
     assert 0 < metrics[-1]['db_json_bytes'] < 65536
+
+
+def test_installed_review_and_publish_gets_have_single_explicit_owner(tmp_path, production_console, production_app):
+    import inspect
+    console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    app = production_app(console)
+    for path, owner in [('/review', 'src.review_workboard_v1'), ('/publish', 'src.publish_readiness_ui_v1')]:
+        routes = [r for r in app.routes if getattr(r, 'path', '') == path and 'GET' in (getattr(r, 'methods', None) or ())]
+        assert len(routes) == 1
+        assert inspect.unwrap(routes[0].endpoint).__module__ == owner
+
+
+def test_native_review_targeted_inputs_preserve_full_domain_result(tmp_path, production_console):
+    from src.review_workboard_v1 import review_work_item
+    console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    account = users['reviewer_a']
+    full = review_work_item(console, account=account, envelope=console.workflow_document_store.get_envelope(sid))
+    with console.document_read_operation():
+        compact = console.review_workboard_summaries(account['account_id'])[sid]['work_item']
+    assert full is not None and compact is not None
+    assert {k:v for k,v in compact.items() if k != 'envelope'} == {k:v for k,v in full.items() if k != 'envelope'}
+    assert 'semantic_replay' not in compact['envelope']
+    assert 'processing_attempts' not in compact['envelope']
