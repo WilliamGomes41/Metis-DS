@@ -4,7 +4,7 @@ ALTER TABLE workflow.documents ADD COLUMN IF NOT EXISTS object_generation BIGINT
 
 CREATE TABLE IF NOT EXISTS workflow.processing_attempts (
     attempt_id TEXT PRIMARY KEY,
-    snapshot_id TEXT NOT NULL REFERENCES workflow.documents(snapshot_id),
+    snapshot_id TEXT NOT NULL REFERENCES workflow.documents(snapshot_id) ON DELETE CASCADE,
     command_id TEXT NOT NULL,
     started_at TIMESTAMPTZ NOT NULL,
     object_generation BIGINT NOT NULL,
@@ -18,13 +18,13 @@ CREATE INDEX IF NOT EXISTS processing_attempts_dispatch
     ON workflow.processing_attempts((payload->>'state'),(payload->'dispatch'->>'state'));
 
 CREATE TABLE IF NOT EXISTS workflow.processing_document_summaries (
-    snapshot_id TEXT PRIMARY KEY REFERENCES workflow.documents(snapshot_id),
+    snapshot_id TEXT PRIMARY KEY REFERENCES workflow.documents(snapshot_id) ON DELETE CASCADE,
     payload JSONB NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS workflow.processing_checkpoints (
     checkpoint_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    attempt_id TEXT NOT NULL REFERENCES workflow.processing_attempts(attempt_id),
+    attempt_id TEXT NOT NULL REFERENCES workflow.processing_attempts(attempt_id) ON DELETE CASCADE,
     phase TEXT NOT NULL,
     recorded_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     payload JSONB NOT NULL
@@ -34,19 +34,19 @@ CREATE INDEX IF NOT EXISTS processing_checkpoints_attempt
 
 CREATE TABLE IF NOT EXISTS workflow.prepared_extraction_versions (
     record_hash TEXT PRIMARY KEY,
-    snapshot_id TEXT NOT NULL REFERENCES workflow.documents(snapshot_id),
+    snapshot_id TEXT NOT NULL REFERENCES workflow.documents(snapshot_id) ON DELETE CASCADE,
     payload JSONB NOT NULL
 );
 CREATE TABLE IF NOT EXISTS workflow.formation_inputs (
     artifact_id TEXT PRIMARY KEY,
-    snapshot_id TEXT NOT NULL REFERENCES workflow.documents(snapshot_id),
-    extraction_hash TEXT NOT NULL REFERENCES workflow.prepared_extraction_versions(record_hash),
+    snapshot_id TEXT NOT NULL REFERENCES workflow.documents(snapshot_id) ON DELETE CASCADE,
+    extraction_hash TEXT NOT NULL REFERENCES workflow.prepared_extraction_versions(record_hash) ON DELETE CASCADE,
     payload JSONB NOT NULL
 );
 CREATE TABLE IF NOT EXISTS workflow.formation_contexts (
     context_id TEXT PRIMARY KEY,
-    snapshot_id TEXT NOT NULL REFERENCES workflow.documents(snapshot_id),
-    artifact_id TEXT NOT NULL REFERENCES workflow.formation_inputs(artifact_id),
+    snapshot_id TEXT NOT NULL REFERENCES workflow.documents(snapshot_id) ON DELETE CASCADE,
+    artifact_id TEXT NOT NULL REFERENCES workflow.formation_inputs(artifact_id) ON DELETE CASCADE,
     semantic_identity JSONB NOT NULL,
     semantic_hash TEXT NOT NULL,
     expected_revision TEXT NOT NULL,
@@ -58,19 +58,19 @@ CREATE TABLE IF NOT EXISTS workflow.formation_contexts (
 );
 CREATE INDEX IF NOT EXISTS formation_contexts_document ON workflow.formation_contexts(snapshot_id);
 CREATE TABLE IF NOT EXISTS workflow.formation_task_results (
-    context_id TEXT NOT NULL REFERENCES workflow.formation_contexts(context_id),
+    context_id TEXT NOT NULL REFERENCES workflow.formation_contexts(context_id) ON DELETE CASCADE,
     ranges_hash TEXT NOT NULL,
     source_ranges JSONB NOT NULL,
     result_hash TEXT NOT NULL,
     payload JSONB NOT NULL,
-    attempt_id TEXT NOT NULL REFERENCES workflow.processing_attempts(attempt_id),
+    attempt_id TEXT NOT NULL REFERENCES workflow.processing_attempts(attempt_id) ON DELETE CASCADE,
     claim_token TEXT,
     committed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY(context_id,ranges_hash)
 );
 CREATE INDEX IF NOT EXISTS formation_task_results_attempt ON workflow.formation_task_results(attempt_id);
 CREATE TABLE IF NOT EXISTS workflow.formation_task_findings (
-    context_id TEXT NOT NULL REFERENCES workflow.formation_contexts(context_id),
+    context_id TEXT NOT NULL REFERENCES workflow.formation_contexts(context_id) ON DELETE CASCADE,
     ranges_hash TEXT NOT NULL,
     result_hash TEXT NOT NULL,
     finding JSONB NOT NULL,
@@ -78,12 +78,12 @@ CREATE TABLE IF NOT EXISTS workflow.formation_task_findings (
     PRIMARY KEY(context_id,ranges_hash,result_hash)
 );
 CREATE TABLE IF NOT EXISTS workflow.formation_task_result_history (
-    context_id TEXT NOT NULL REFERENCES workflow.formation_contexts(context_id),
+    context_id TEXT NOT NULL REFERENCES workflow.formation_contexts(context_id) ON DELETE CASCADE,
     ranges_hash TEXT NOT NULL,
     result_hash TEXT NOT NULL,
     source_ranges JSONB NOT NULL,
     payload JSONB NOT NULL,
-    attempt_id TEXT NOT NULL REFERENCES workflow.processing_attempts(attempt_id),
+    attempt_id TEXT NOT NULL REFERENCES workflow.processing_attempts(attempt_id) ON DELETE CASCADE,
     claim_token TEXT,
     committed_at TIMESTAMPTZ NOT NULL,
     PRIMARY KEY(context_id,ranges_hash,result_hash)

@@ -831,17 +831,18 @@ def _semantic_execution_before_review(
             validator_input=validator_input, provider=provider, limits=limits,
             proposal=proposal, evidence=(replay_record or {}).get("provider_evidence"), checkpoint=checkpoint,
             timings=formation_timings)
+        errors = [call["error_code"] for call in [provider_evidence, *provider_evidence.get("supplementary_calls", [])]
+                  if call.get("error_code")]
         if hasattr(checkpoint, "commit_task") and provider_evidence.get("formation_incomplete"):
             # Retain provisional results, but do not activate a partial slice
             # merely to manufacture an envelope semantic_replay for resume.
-            error = ConsoleError("source_task_budget_exhausted" if any(
-                c.get("error_code") == "source_task_budget_exhausted" for c in
-                [provider_evidence, *provider_evidence.get("supplementary_calls", [])])
-                else "source_formation_incomplete")
+            structural = next((code for code in errors if code in {
+                "pre_review_llm_input_limit_exceeded","pre_review_llm_output_limit_exceeded"}),None)
+            code = structural or ("source_task_budget_exhausted" if "source_task_budget_exhausted" in errors
+                else errors[0] if errors and not proposal["objects"] else "source_formation_incomplete")
+            error = ConsoleError(code)
             error.formation_progress = provider_evidence.get("formation_progress")
             raise error
-        errors = [call["error_code"] for call in [provider_evidence, *provider_evidence.get("supplementary_calls", [])]
-                  if call.get("error_code")]
         if not proposal["objects"] and errors:
             # A wholly failed new run must not replace existing valid work
             # with source remainders. Partial success is retained separately.

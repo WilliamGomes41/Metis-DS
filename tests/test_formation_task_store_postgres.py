@@ -450,7 +450,10 @@ def test_budget_stop_without_new_progress_consumes_retry_budget(tmp_path,product
         ingest_kind="new",title="Budget",version="1",date="2026-10-24",live_url="",class_="richtlijn",family="test",
         named_reviewers=[users["reviewer_a"]["account_id"]])["snapshot_id"]
     elapsed = [0]
+    failure_code = [None]
     def provider(_url,_headers,payload,_timeout):
+        if failure_code[0]:
+            raise ConsoleError(failure_code[0])
         text = json.loads(payload["input"][1]["content"])["source_blocks"][0]["text"]
         proposal = response_for(payload,text)
         elapsed[0] = 2
@@ -473,6 +476,12 @@ def test_budget_stop_without_new_progress_consumes_retry_budget(tmp_path,product
     latest = console._envelope(sid)["processing_attempts"][-1]
     assert latest["state"] == "incomplete_budget" and latest["formation_progress_made"] is False
     assert console.processing_status(sid)["retry_attempts_used"] == 1
+    failure_code[0] = "pre_review_llm_input_limit_exceeded"
+    monkeypatch.setattr(console,"_model_call_limits_reader",lambda:ModelCallLimits(total=1))
+    final,_ = console.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id="structural-stop",expected_revision=console.objects_revision(sid))
+    with pytest.raises(ConsoleError,match="pre_review_llm_input_limit_exceeded"):
+        console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=final)
+    assert console.processing_status(sid)["reason_code"] == "processing_structural_limit"
 
 
 def test_concurrent_task_commits_keep_one_durable_result(tmp_path,production_console):
@@ -502,3 +511,14 @@ def test_stale_document_write_cannot_erase_newer_checkpoint(tmp_path,production_
     current = console._envelope(writer.snapshot_id)
     assert current["title"] == stale["title"]
     assert current["processing_attempts"][-1]["diagnostic"]["phase"] == "model_request"
+
+
+def test_existing_confirmed_unpublished_delete_also_removes_owned_task_records(tmp_path,production_console):
+    console,envelope,data = prepared(tmp_path,production_console)
+    writer = checkpoint_context(console,envelope,data)
+    console.delete_unpublished_snapshot(actor_id=envelope["uploader_account_id"],snapshot_id=writer.snapshot_id,
+        confirmed=True,confirm_title=envelope["title"])
+    assert console.workflow_document_store.get_envelope(writer.snapshot_id) is None
+    with console.workflow_document_store._connect() as con:
+        for table in ("processing_attempts","formation_inputs","prepared_extraction_versions","formation_contexts"):
+            assert con.execute(f"SELECT COUNT(*) AS n FROM workflow.{table} WHERE snapshot_id=%s",(writer.snapshot_id,)).fetchone()["n"] == 0

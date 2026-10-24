@@ -79,3 +79,40 @@ gebruiken; bestaande nieuwe contexten behouden hun taakrecords. Een binary van
 vóór #836 mag nieuwe contexten niet verwerken: een databaseguard weigert het
 terugschrijven van een inline attempts-array of het terugzetten van de versie.
 Geen destructieve down-migratie. Productiebackfill en deployment zijn niet uitgevoerd.
+
+De bestaande expliciet bevestigde verwijdering van een ongepubliceerd snapshot
+verwijdert ook zijn eigen taak-/inputrecords via foreign keys. Dit voegt geen
+verwijderbevoegdheid toe; de bestaande bevestiging, titelcontrole, autorisatie en
+bescherming van gepubliceerd werk blijven gelden. Andere documentmutaties
+gebruiken pogingversies: een oude documentkopie kan nieuwere checkpoints niet
+terugschrijven. Een stale worker mag evenmin de winnende poging op failed zetten.
+
+## Uitgevoerd bewijs
+
+De gerichte native proeven omvatten bron-/contractbinding, inputversie/corruptie,
+replay/export, echte proceskill en een nieuw workerproces, pogingonafhankelijk
+hergebruik, gerichte correctie na gezamenlijke afwijzing met bewaarde historie,
+gelijklopende taakcommits, stale documentwrites, rol-/claim-/deadlinefencing,
+budgets zonder nieuwe voortgang, GET naast een open checkpointtransactie en
+de bestaande expliciete documentverwijdering.
+
+Een geïsoleerde mutatie verwijderde alleen de source-hashguard. De bronfencingtest
+faalde dan inhoudelijk met DID NOT RAISE; na herstel slaagde dezelfde proef.
+Dit bewijst één concrete guard, geen algemene foutloosheid of onafhankelijke review.
+
+De archiefproef gebruikt 1/10/100 overige envelopes van circa 1 MB en meet
+10/50/100/130 taakcommits. Het oude pad leest bij 100 overige documenten circa
+114 MB JSON per checkpoint; het nieuwe circa 7 kB en een constant queryaantal.
+Tijden zijn lokale waarnemingen, geen productie-SLA.
+
+De volledige opgenomen Smetten-validatorinput (867 inhoudsfragmenten en 1.040
+bewijsfragmenten) is daarnaast exact gereconstrueerd op inputhash. De vergelijking
+met 130 opgenomen taakidentiteiten is reproduceerbaar met een eigen tijdelijke
+PostgreSQL-testdatabase via:
+
+`python scripts/measure_recorded_checkpoints.py --evidence-zip EXPORT.zip --output RESULT.json`
+
+Gebruik een door `scripts/test_postgres.sh` geleverde `METIS_TEST_POSTGRES_DSN`.
+De proef maakt een eigen wegwerpdatabase. Zij herhaalt opslag en inputresolutie,
+doet geen live modelaanroep of PDF-herextractie en bewijst geen klinische
+volledigheid van Smetten. Die inhoudelijke eindacceptatie blijft onderdeel #837.
