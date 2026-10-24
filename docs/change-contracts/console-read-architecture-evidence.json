@@ -2030,5 +2030,17 @@
       "note": "Observed before the evidence-only followup commit. Local full suite passed; remote general CI is not claimed complete."
     }
   },
-  "evidence_scope": "Original recovery evidence stays historical at the top level; repair_review_2026_10_24 contains the current application revision and final six-point proof."
+  "evidence_scope": "Original recovery evidence stays historical at the top level; repair_review_2026_10_24 contains the current application revision and final six-point proof.",
+  "pre_deployment_cleanup": {
+    "base_revision": "02e19ab462c02e002d73d377dbfed9771cda63ed",
+    "classification": "Class B; Rewrite risk: high",
+    "release_verdict": "NO-GO",
+    "red_probes": {
+      "failed": 8,
+      "passed": 1,
+      "log": "work/834-cleanup-RED-02e19ab.log"
+    },
+    "plan": "A1–A4 and C1–C2; remove B1–B5, keep B6 one release; preserve writer/lifecycle/source integrity contracts. Native review SQL also needs targeted inputs.",
+    "final_verification": "pending"
+  }
 }

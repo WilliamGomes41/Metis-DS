@@ -122,7 +122,7 @@ def test_compact_page_routes_do_not_fetch_full_envelopes(tmp_path, production_co
         raise AssertionError('Compact page fetched a full envelope')
     monkeypatch.setattr(console.workflow_document_store, 'list_envelopes', forbidden)
     monkeypatch.setattr(console.workflow_document_store, 'get_envelope', forbidden)
-    for path in ['/ingest', '/tree', '/publish', '/inzicht/api/documents', '/raad/meldingen']:
+    for path in ['/ingest', '/tree', '/publish', '/review', '/review/repair', '/inzicht/routevergelijking', '/inzicht/api/documents', '/raad/meldingen']:
         assert client.get(path).status_code == 200, path
 
 
@@ -575,3 +575,98 @@ def test_failed_or_expired_latest_attempt_is_a_stored_block(tmp_path, production
     console.workflow_document_store.write_bundle(envelope=env)
     client = _login(console, users['researcher']['username'], production_app=production_app)
     assert next(r for r in client.get('/raad/meldingen').json()['documents'] if r['snapshot_id'] == sid)['processing_blocked']
+
+
+@pytest.mark.parametrize('path', ['/review', '/review/repair', '/inzicht/routevergelijking'])
+def test_cleanup_compact_gets_do_not_read_full_envelopes(tmp_path, production_console, production_app, monkeypatch, path):
+    console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    client = _login(console, users['researcher']['username'], production_app=production_app)
+    def forbidden(*args, **kwargs):
+        raise AssertionError('GET fetched full envelope data')
+    monkeypatch.setattr(console.workflow_document_store, 'get_envelope', forbidden)
+    monkeypatch.setattr(console.workflow_document_store, 'list_envelopes', forbidden)
+    response = client.get(path)
+    assert response.status_code == 200
+    assert 'comparison_unavailable' not in response.text
+
+
+def test_console_gets_never_take_command_write_lock(tmp_path, production_console, production_app, monkeypatch):
+    console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    client = _login(console, users['researcher']['username'], production_app=production_app)
+    lock_calls = []
+    def forbidden():
+        lock_calls.append(True)
+        raise AssertionError('GET took the command write lock')
+    monkeypatch.setattr(console, '_store_write_lock', forbidden)
+    for path in ['/', '/ingest', '/source-selection', '/review', '/review/repair', '/tree', '/settings',
+                 '/inzicht', '/inzicht/routevergelijking', '/inzicht/api/documents', '/raad/meldingen',
+                 '/inzicht/api/quality', '/inzicht/document?document='+sid, '/review?document='+sid]:
+        assert client.get(path).status_code == 200, path
+        assert not lock_calls, path
+
+
+def test_class_change_reads_only_its_selected_snapshot(tmp_path, production_console, production_app, monkeypatch):
+    console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    client = _login(console, users['researcher']['username'], production_app=production_app)
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Class change listed every envelope')
+    monkeypatch.setattr(console, 'list_envelopes', forbidden)
+    calls = []
+    monkeypatch.setattr(console, 'promote_class', lambda **kw: calls.append(kw))
+    response = client.post('/tree/promote', data={'snapshot_id':sid,'new_class':'protocol','confirm':'yes'}, follow_redirects=False)
+    assert response.status_code == 303
+    assert calls and calls[0]['snapshot_id'] == sid
+    missing = client.post('/tree/promote', data={'snapshot_id':'snap-missing','new_class':'protocol','confirm':'yes'}, follow_redirects=False)
+    assert missing.status_code == 400 and 'unknown_snapshot' in missing.text
+    assert len(calls) == 1
+
+
+def test_slow_canonical_status_is_outside_workflow_transaction(tmp_path, production_console, production_app, monkeypatch):
+    from src.workflows.workflow_transaction_v1 import workflow_transaction_active
+    console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    original = console.published_snapshot_ids
+    observed = []
+    def slow(ids):
+        observed.append(workflow_transaction_active())
+        time.sleep(6)
+        return original(ids)
+    monkeypatch.setattr(console, 'published_snapshot_ids', slow)
+    client = _login(console, users['researcher']['username'], production_app=production_app)
+    assert client.get('/inzicht/api/documents').status_code == 200
+    assert client.get('/raad/meldingen').status_code == 200
+    assert observed == [False, False]
+
+
+@pytest.mark.parametrize('path', ['/inzicht/api/documents', '/raad/meldingen'])
+def test_deleted_document_between_summary_and_capture_is_partial(tmp_path, production_console, production_app, monkeypatch, path):
+    console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    monkeypatch.setattr(console.workflow_document_store, 'document_processing_inputs', lambda ids: {})
+    client = _login(console, users['researcher']['username'], production_app=production_app)
+    response = client.get(path)
+    assert response.status_code == 200
+    body = response.json()
+    assert body['documents'] == []
+    if path == '/raad/meldingen':
+        assert body['complete'] is False
+    else:
+        assert body['metadata_partial'] is True and body['total'] is None
+
+
+def test_review_overview_does_not_decode_unrelated_envelope_replay(tmp_path, production_console, production_app, monkeypatch):
+    import src.request_diagnostics_v1 as diagnostics
+    console, users, sid, _ = _system(tmp_path, production_console=production_console)
+    store = console.workflow_document_store
+    env = store.get_envelope(sid)
+    env.setdefault('semantic_replay', {}).setdefault('provider_evidence', {})['large_fixture'] = [
+        {'index': i, 'text': 'synthetic review replay payload', 'spans':[{'start':i,'end':i+20}]} for i in range(4000)]
+    store.write_bundle(envelope=env)
+    metrics = []
+    original = diagnostics.note_request_metrics
+    def capture(**kw):
+        metrics.append(kw)
+        return original(**kw)
+    monkeypatch.setattr(diagnostics, 'note_request_metrics', capture)
+    client = _login(console, users['reviewer_a']['username'], production_app=production_app)
+    response = client.get('/review')
+    assert response.status_code == 200
+    assert 0 < metrics[-1]['db_json_bytes'] < 65536

@@ -493,3 +493,35 @@ processing and topology proofs, report success on the tested application head.
 General remote CI was still running when this evidence was finalized; no result
 for it is inferred from the local full suite. The two extra warnings versus the
 original run concern JUnit record_property compatibility, not background failures.
+
+## Pre-deployment cleanup after 02e19ab (design before edits)
+
+Class B / Rewrite risk: high remain unchanged; lifecycle authority, persisted
+identity, review/publication decisions, source verification and writer reloads
+remain intact. No deployment/merge is authorized. This round covers A1–A4, C1–C2
+and B1–B5. B6's sessionStorage cleanup stays for one release; section C's writer
+and lifecycle mechanisms stay.
+
+Active paths: route-comparison scope takes the command write lock and reloads
+all envelopes; recovery lists all envelopes and rereads each authorized envelope
+through snapshot_objects; class change lists all to find one. Review's fallback
+is not the production path: both production FastBadge classes use native SQL
+summaries, whose query still selects full envelope_payload. That native input
+selection must also change, preserving source verification and the shared review
+duty kernel. Cards supply list metadata; targeted source/graph inputs supply the
+existing kernel without replay/attempt baggage. Necessary object/source inputs
+for actual review-duty calculations are not claimed to be zero-cost metadata.
+
+C1 separates workflow capture from canonical status reads; no canonical call may
+inherit the workflow SQL transaction. C2 records a disappeared snapshot, skips
+its row and marks completeness unknown rather than indexing absent inputs.
+The read-only card/owned-object APIs replace obsolete key-list warmers. Obsolete
+GET definitions are removed and installers require a clean GET slot, retaining
+only their active production handler. Writer row/command locks remain unchanged.
+
+Before edits: 8 failures and 1 pass on exact head 02e19ab for compact GETs,
+GET write-lock refusal, selected class change, slow canonical status, deletion
+between captures and a native Review replay-volume probe. The passing Review
+method-level probe does not detect its native full-envelope SQL read; the native
+JSON-volume probe does. The fixed local fixture is synthetic; no Azure claim.
+Rollback remains application-only; no schema/migration/backfill or data rollback.
