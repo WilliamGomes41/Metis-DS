@@ -272,38 +272,33 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             raise WorkflowDocumentStoreError("workflow_document_diagnostics_read_failed") from exc
 
     def list_source_selection_summaries(self) -> list[dict[str, Any]]:
-        """Stored progress/estimate inputs only, without objects or review tokens."""
+        """Read only the atomically maintained, versioned overview projection.
+
+        Never fall back to the large envelope during staged migration. The
+        original payload remains authoritative; its writers update this derived
+        column in the same database transaction through migration 020's trigger.
+        """
         try:
             with self._connect() as con:
                 rows = con.execute("""
                     SELECT d.snapshot_id,d.title,d.source_version AS version,d.class,d.content_kind,
-                           d.publication_eligibility,
-                           d.envelope_payload->>'binary_path' AS binary_path,
-                           d.envelope_payload->'received_source' AS received_source,
-                           d.envelope_payload->'processing_configuration' AS processing_configuration,
-                           jsonb_build_object('provider_evidence', jsonb_build_object(
-                               'formation_incomplete', d.envelope_payload->'semantic_replay'->'provider_evidence'->'formation_incomplete',
-                               'formation_progress', d.envelope_payload->'semantic_replay'->'provider_evidence'->'formation_progress')) AS semantic_replay,
-                           jsonb_array_length(COALESCE(NULLIF(d.envelope_payload->'semantic_replay'->'provider_evidence'->'pending_rejections','null'::jsonb),'[]'::jsonb)) AS pending_rejection_count,
-                           CASE WHEN jsonb_array_length(COALESCE(NULLIF(d.envelope_payload->'quality_processing_runs','null'::jsonb),'[]'::jsonb))>0
-                                THEN jsonb_array_length(COALESCE(NULLIF(d.envelope_payload->'quality_processing_runs'->-1->'source_fragments','null'::jsonb),'[]'::jsonb))
-                                ELSE NULL END AS source_fragment_count,
-                           COALESCE((SELECT jsonb_agg(jsonb_build_object(
-                               'state', a->'state', 'kind', a->'kind', 'started_at', a->'started_at',
-                               'finished_at', a->'finished_at', 'expires_at', a->'expires_at',
-                               'phase', a->'phase', 'diagnostic', jsonb_build_object('phase',a->'diagnostic'->'phase'),
-                               'dispatch', jsonb_build_object('state',a->'dispatch'->'state')
-                           ) ORDER BY n) FROM jsonb_array_elements(COALESCE(NULLIF(d.envelope_payload->'processing_attempts','null'::jsonb),'[]'::jsonb))
-                             WITH ORDINALITY AS attempts(a,n)), '[]'::jsonb) AS processing_attempts,
-                           d.envelope_payload->'named_reviewers' AS named_reviewers,
+                           d.publication_eligibility,d.source_selection_summary AS summary,
                            ARRAY(SELECT r.account_id FROM workflow.document_reviewers r
                                  WHERE r.snapshot_id=d.snapshot_id ORDER BY r.account_id)
-                           = ARRAY(SELECT jsonb_array_elements_text(COALESCE(d.envelope_payload->'named_reviewers','[]'::jsonb)) ORDER BY 1) AS reviewers_consistent
+                           = ARRAY(SELECT jsonb_array_elements_text(COALESCE(
+                               d.source_selection_summary->'named_reviewers','[]'::jsonb)) ORDER BY 1)
+                           AS reviewers_consistent
                     FROM workflow.documents d ORDER BY d.acquired_at,d.snapshot_id
                 """).fetchall()
+            if any(not isinstance(row['summary'], dict)
+                   or type(row['summary'].get('schema_version')) is not int
+                   or row['summary'].get('schema_version') != 1 for row in rows):
+                raise WorkflowDocumentStoreError('workflow_source_summary_backfill_required')
             if any(not row['reviewers_consistent'] for row in rows):
                 raise WorkflowDocumentStoreError('workflow_document_reviewers_authority_mismatch')
-            return [{k: v for k, v in row.items() if k != 'reviewers_consistent'} for row in rows]
+            return [{**{k: v for k, v in row.items() if k not in {'summary', 'reviewers_consistent'}},
+                     **{k: v for k, v in row['summary'].items()
+                        if k != 'schema_version' and k not in row}} for row in rows]
         except Exception as exc:
             raise WorkflowDocumentStoreError("workflow_source_summaries_read_failed") from exc
 
@@ -634,8 +629,10 @@ class _PostgresWorkflowDocumentsMixin:
             raise ConsoleError("not_authenticated")
         try:
             with workflow_read_transaction(self.workflow_document_store):
-                selected = self._envelope(document) if document else None
                 documents = self.workflow_document_store.list_source_selection_summaries()
+            # Full payload decoding and detail authorization must not leave the
+            # bounded overview transaction idle before its next SQL statement.
+            selected = self._envelope(document) if document else None
         except WorkflowDocumentStoreError as exc:
             raise ConsoleError("workflow_document_unavailable") from exc
         if selected is not None:

@@ -74,6 +74,38 @@ def test_hub_redacts_bounds_and_never_raises(tmp_path):
     assert all(event['pid'] and event['commit'] for event in stored)
 
 
+def test_database_cause_keeps_sqlstate_without_messages_or_sql():
+    import psycopg
+    from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+    try:
+        try:
+            raise psycopg.errors.QueryCanceled('password=private-secret SELECT clinical_source')
+        except psycopg.Error as cause:
+            raise WorkflowDocumentStoreError('private-secret wrapper') from cause
+    except WorkflowDocumentStoreError as cause:
+        error = ConsoleError('workflow_document_unavailable', 'private-secret outer')
+        error.__cause__ = cause
+    evidence = exception_evidence(error)
+    assert evidence['causes'][-1]['type'] == 'QueryCanceled'
+    assert evidence['causes'][-1]['sqlstate'] == '57014'
+    assert 'private-secret' not in json.dumps(evidence)
+    assert 'clinical_source' not in json.dumps(evidence)
+    # The downloaded hub export must retain the SQLSTATE too.
+    from src.telemetry.hub import _clean
+    assert _clean({'error': evidence})['error']['causes'][-1]['sqlstate'] == '57014'
+
+
+def test_explicit_cause_cycle_is_bounded_and_implicit_context_stays_private():
+    error = ConsoleError('workflow_document_unavailable')
+    cause = RuntimeError('private source')
+    error.__cause__ = cause
+    cause.__cause__ = error
+    assert len(exception_evidence(error)['causes']) == 1
+    error.__cause__ = None
+    error.__context__ = cause
+    assert 'causes' not in exception_evidence(error)
+
+
 def test_sink_prunes_by_retention(tmp_path, monkeypatch):
     import os
     old = tmp_path / 'events-19990101-1-aaaaaaaa.jsonl'
