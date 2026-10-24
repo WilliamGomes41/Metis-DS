@@ -34,7 +34,7 @@ class DocumentOverviewInputs:
         from src.processing_retry_v1 import status
         from src.processing_diagnostics_v1 import processing_diagnostics
         sid = envelope['snapshot_id']
-        self.select([sid])
+        # Capture is explicit and complete before leaving the SQL boundary.
         inputs = self.diagnostics[sid]
         processing = self.processing[sid]
         result = status(processing, policy=self.state._processing_limits())

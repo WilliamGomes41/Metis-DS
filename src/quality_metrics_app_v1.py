@@ -25,7 +25,8 @@ def _quality_documents(cards, account_id):
 def current_quality_scope(state, account):
     """Fresh post-calculation access check; no repeated source/object capture."""
     with state.document_read_operation(), workflow_read_transaction(state.workflow_document_store):
-        return {row["snapshot_id"] for row in _quality_documents(state.list_document_cards(), account["account_id"])}
+        cards = state.list_document_cards()
+    return {row["snapshot_id"] for row in _quality_documents(cards, account["account_id"])}
 
 
 def capture(state, account):
@@ -38,22 +39,26 @@ def capture(state, account):
             envelopes = [state._receipt(state._envelope(e["snapshot_id"])) for e in _quality_documents(cards, aid)]
             docs = [{"envelope": e, "objects": state.snapshot_objects(e["snapshot_id"]),
                      "events": [], "bindings": state.object_review_bindings(e["snapshot_id"]),
-                     "fragments": state.review_source_fragments(e["snapshot_id"], envelope=e)} for e in envelopes]
+                     "fragments": None} for e in envelopes]
             by_id = {d["envelope"]["snapshot_id"]: d for d in docs}
             # Attribution needs IDs only; never fetch another source's object payloads.
             ownership = {e["snapshot_id"]: {e["snapshot_id"]} for e in cards}
             with owner._connect() as con:
                 for obj in con.execute("SELECT DISTINCT snapshot_id,object_id FROM workflow.document_objects").fetchall():
                     ownership.setdefault(obj["object_id"], set()).add(obj["snapshot_id"])
-            for event in read_events(state._ledger_path):
-                payload = event.get("details") or {}
-                sid = payload.get("snapshot_id") or (payload.get("review_interaction") or {}).get("snapshot_id")
-                if not sid:
-                    candidates = ownership.get(event.get("object_id"), set())
-                    sid = next(iter(candidates)) if len(candidates) == 1 else None
-                if sid in by_id:
-                    by_id[sid]["events"].append(deepcopy(event))
-            return {"documents": docs, "observed_at": instant()}
+        # Source verification/reconstruction may touch disk/Blob or extract data.
+        # Ledger dispatch may also be file-backed. Neither belongs in a SQL read.
+        for doc in docs:
+            doc["fragments"] = state.review_source_fragments(doc["envelope"]["snapshot_id"], envelope=doc["envelope"])
+        for event in read_events(state._ledger_path):
+            payload = event.get("details") or {}
+            sid = payload.get("snapshot_id") or (payload.get("review_interaction") or {}).get("snapshot_id")
+            if not sid:
+                candidates = ownership.get(event.get("object_id"), set())
+                sid = next(iter(candidates)) if len(candidates) == 1 else None
+            if sid in by_id:
+                by_id[sid]["events"].append(deepcopy(event))
+        return {"documents": docs, "observed_at": instant()}
 
 
 class QualityViewError(Exception):

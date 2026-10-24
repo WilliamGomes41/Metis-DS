@@ -111,6 +111,10 @@ def workflow_transaction(owner: Any) -> Iterator[Any]:
 def workflow_read_transaction(owner: Any) -> Iterator[Any]:
     """A bounded pure operation, using the existing participant connection binding.
 
+    No file, network, Blob or telemetry I/O and no unbounded Python computation
+    may run inside this transaction. Capture database inputs, close it, then
+    reconstruct sources, process external evidence and render.
+
     Authorization that requires row locks runs before this boundary. Never promote
     an enclosing command to read-only or weaken an existing transaction's isolation.
     """

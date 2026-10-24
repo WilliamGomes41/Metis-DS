@@ -95,23 +95,33 @@ def documents_projection(state, account, *, query: str = "", state_filter: str =
     """
     from src.console_read_operations_v1 import document_overview_operation
     with document_overview_operation(state, account, scan_limit=scan_limit) as (actor, inputs):
-        return _documents_page(inputs, actor, query=query, state_filter=state_filter, offset=offset, limit=limit)
+        window = _document_window(inputs, actor, query, state_filter, offset, limit)
+        authorized, offset, limit, scan_end = window
+        inputs.select([e["snapshot_id"] for e in authorized[offset:scan_end]
+                       if _processing_access(actor, e)])
+    # File-backed telemetry and all rendering/filtering happen after SQL closes.
+    return _documents_page(inputs, actor, state_filter=state_filter, window=window)
 
 
-def _documents_page(inputs, account, *, query="", state_filter="", offset=0, limit=MAX_DOCUMENTS):
-    state = inputs.state
+def _processing_access(account, envelope):
+    roles = set(account.get("roles") or [])
+    return "researcher" in roles or ("reviewer" in roles and account["account_id"] in (envelope.get("named_reviewers") or []))
+
+
+def _document_window(inputs, account, query, state_filter, offset, limit):
     query = query.strip().lower()
-    state_filter = state_filter if state_filter in DOCUMENT_STATES else ""
-    authorized = [envelope for envelope in _authorized_documents(state, account, inputs.documents)
-                  if not query or _matches_document(envelope, query)]
+    authorized = [e for e in _authorized_documents(inputs.state, account, inputs.documents)
+                  if not query or _matches_document(e, query)]
     offset, limit = max(0, offset), max(1, min(limit, MAX_DOCUMENTS))
+    scan_end = min(len(authorized), offset + (MAX_SCAN if state_filter in DOCUMENT_STATES else limit))
+    return authorized, offset, limit, scan_end
+
+
+def _documents_page(inputs, account, *, state_filter="", window):
+    authorized, offset, limit, scan_end = window
+    state_filter = state_filter if state_filter in DOCUMENT_STATES else ""
     telemetry, partial = _telemetry_by_document(time.time() - 86400) if offset < len(authorized) else ({}, False)
     rows, position = [], offset
-    scan_end = min(len(authorized), offset + (MAX_SCAN if state_filter else limit))
-    processing = [e["snapshot_id"] for e in authorized[offset:scan_end]
-                  if "researcher" in set(account.get("roles") or [])
-                  or ("reviewer" in set(account.get("roles") or []) and account["account_id"] in (e.get("named_reviewers") or []))]
-    inputs.select(processing)
     while position < scan_end and len(rows) < limit:
         row = _document_row(inputs, account, authorized[position], telemetry)
         position += 1

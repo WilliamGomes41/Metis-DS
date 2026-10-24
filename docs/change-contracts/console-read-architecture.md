@@ -403,3 +403,9 @@ Read transactions may contain only bounded database capture and the minimal
 bounded preparation needed to select it: no file, network, Blob or telemetry I/O
 and no unbounded Python computation. Captured inputs belong to the operation;
 external evidence is read only after the SQL transaction closes.
+
+### Repair 1
+
+Capture the entire selected SQL scan window before telemetry; quality captures SQL first and reads sources/ledger afterwards. The source-selection caller already closes SQL before authorization/projection. All 3 transaction-boundary probes pass, including both HTTP routes with 6s telemetry. Additional quality I/O probe was red on the base.
+
+Regression proof: `test_slow_telemetry_outside_read_transaction,test_telemetry_has_no_open_read_transaction,test_quality_source_and_ledger_io_outside_read_transaction`. Red on `56488c0`; green after repair.

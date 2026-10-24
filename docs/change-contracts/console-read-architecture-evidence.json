@@ -1068,7 +1068,12 @@
     "points": {
       "1": {
         "red_on_56488c0": "failed",
-        "green": "pending"
+        "green": "Capture the entire selected SQL scan window before telemetry; quality captures SQL first and reads sources/ledger afterwards. The source-selection caller already closes SQL before authorization/projection. All 3 transaction-boundary probes pass, including both HTTP routes with 6s telemetry. Additional quality I/O probe was red on the base.",
+        "tests": [
+          "test_slow_telemetry_outside_read_transaction",
+          "test_telemetry_has_no_open_read_transaction",
+          "test_quality_source_and_ledger_io_outside_read_transaction"
+        ]
       },
       "2": {
         "red_on_56488c0": "failed",
