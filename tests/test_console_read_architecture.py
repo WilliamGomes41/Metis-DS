@@ -495,6 +495,11 @@ def test_quality_source_and_ledger_io_outside_read_transaction(tmp_path, product
         observed.append(workflow_transaction_active())
         return original(*args, **kwargs)
     monkeypatch.setattr(console, 'review_source_fragments', source)
+    objects = console.snapshot_objects
+    def captured_objects(*args, **kwargs):
+        observed.append(workflow_transaction_active())
+        return objects(*args, **kwargs)
+    monkeypatch.setattr(console, 'snapshot_objects', captured_objects)
     ledger = quality.read_events
     def events(*args):
         observed.append(workflow_transaction_active())
@@ -551,3 +556,22 @@ def test_notices_statement_timeout_preserves_previous_batch(tmp_path, production
     monkeypatch.setattr(store, 'document_diagnostic_inputs', original)
     again = _login(console, users['researcher']['username'], production_app=production_app).get('/raad/meldingen?offset=1')
     assert again.status_code == 200 and again.json()['complete'] is True
+
+
+@pytest.mark.parametrize('state', ['failed', 'expired'])
+def test_failed_or_expired_latest_attempt_is_a_stored_block(tmp_path, production_console, production_app, state):
+    from datetime import timedelta
+    from src.processing_retry_v1 import now
+    console, users, _, _ = _system(tmp_path, production_console=production_console)
+    sid = _received(console, users)
+    console.reserve_source_selection(actor_id=users['researcher']['account_id'], snapshot_id=sid,
+        command_id='failure-notice', expected_revision=console.objects_revision(sid))
+    env = console.workflow_document_store.get_envelope(sid)
+    env.pop('processing_blocker', None)
+    if state == 'failed':
+        env['processing_attempts'][-1].update(state='failed', finished_at=now().isoformat(), error_code='processing_dependency_failed')
+    else:
+        env['processing_attempts'][-1]['expires_at'] = (now()-timedelta(seconds=1)).isoformat()
+    console.workflow_document_store.write_bundle(envelope=env)
+    client = _login(console, users['researcher']['username'], production_app=production_app)
+    assert next(r for r in client.get('/raad/meldingen').json()['documents'] if r['snapshot_id'] == sid)['processing_blocked']

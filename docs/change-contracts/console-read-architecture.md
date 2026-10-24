@@ -439,3 +439,21 @@ Regression proof: `test_source_overview_refreshes_running_document,test_source_o
 Discovery looks ahead through at least 50 documents while pending still limits returned tasks. An expired document no longer hides the following pending task in the same round; expiry work remains bounded to 50 documents for limit=1. Both the supplied expired-then-pending probe and a 51-expired-document bound/progress probe pass.
 
 Regression proof: `test_pending_finds_task_after_expired_document_in_same_round,test_dispatch_expiry_scan_respects_bound`. Red on `56488c0`; green after repair.
+
+### Repair 1 closure: CPU work and captured empty bindings
+
+Quality captures raw envelopes, object rows and bindings under SQL, then validates
+revisions, detaches public copies, reconstructs sources and assigns ledger events
+after SQL closes. Empty bindings are captured explicitly so no post-transaction
+read substitutes fresher bindings into the owned snapshot. The strengthened
+quality probe checks object projection as well as file/source/ledger work.
+Quality and failed/expired notice tests pass all 11 cases.
+
+Raad notice definition: a true stored processing block (excluding the two normal
+progress reasons), blocked candidates, a genuinely unavailable count for an actor
+with processing access, or telemetry errors. Missing processing access is never
+a notice or a candidate-count explanation. Publisher-only rows expose no retry,
+reason or candidate details. Per-batch SQL snapshots are independent: command
+checks remain current and never authorize from the notices snapshot. The time
+budget is cooperative between captures; external telemetry retains its existing
+bounded reader and is never cancelled by leaving detached work running.

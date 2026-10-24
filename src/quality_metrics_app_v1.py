@@ -36,11 +36,20 @@ def capture(state, account):
         with workflow_read_transaction(owner):
             aid = account["account_id"]
             cards = state.list_document_cards()
-            envelopes = [state._receipt(state._envelope(e["snapshot_id"])) for e in _quality_documents(cards, aid)]
-            docs = [{"envelope": e, "objects": state.snapshot_objects(e["snapshot_id"]),
-                     "events": [], "bindings": state.object_review_bindings(e["snapshot_id"]),
-                     "fragments": None} for e in envelopes]
-            by_id = {d["envelope"]["snapshot_id"]: d for d in docs}
+            envelopes = [state._envelope(e["snapshot_id"]) for e in _quality_documents(cards, aid)]
+            # Capture native rows only. Revision validation and detached copies may
+            # be CPU-heavy and belong after the transaction, just like source I/O.
+            reads = state._document_reads()
+            for envelope in envelopes:
+                state._load_objects(envelope["snapshot_id"], remember=False)
+            ids = [e["snapshot_id"] for e in envelopes]
+            from src.operations_console_v1 import ConsoleError
+            from src.workflows.workflow_review_postgres_v1 import WorkflowReviewStoreError
+            try:
+                bindings = state.workflow_review_store.read_bindings(ids)
+            except WorkflowReviewStoreError as exc:
+                raise ConsoleError("workflow_review_unavailable", str(exc)) from exc
+            reads.bindings.update({sid: bindings.get(sid, []) for sid in ids})
             # Attribution needs IDs only; never fetch another source's object payloads.
             ownership = {e["snapshot_id"]: {e["snapshot_id"]} for e in cards}
             with owner._connect() as con:
@@ -48,6 +57,10 @@ def capture(state, account):
                     ownership.setdefault(obj["object_id"], set()).add(obj["snapshot_id"])
         # Source verification/reconstruction may touch disk/Blob or extract data.
         # Ledger dispatch may also be file-backed. Neither belongs in a SQL read.
+        docs = [{"envelope": state._receipt(e), "objects": state.snapshot_objects(e["snapshot_id"]),
+                 "events": [], "bindings": state.object_review_bindings(e["snapshot_id"]),
+                 "fragments": None} for e in envelopes]
+        by_id = {d["envelope"]["snapshot_id"]: d for d in docs}
         for doc in docs:
             doc["fragments"] = state.review_source_fragments(doc["envelope"]["snapshot_id"], envelope=doc["envelope"])
         for event in read_events(state._ledger_path):

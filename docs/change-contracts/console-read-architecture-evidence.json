@@ -1141,6 +1141,32 @@
           "test_dispatch_expiry_scan_respects_bound"
         ]
       }
+    },
+    "quality_boundary_closure": {
+      "passed": 11,
+      "seconds": 2.63,
+      "log": "work/834-quality-capture-final.log",
+      "checks": "Source/ledger I/O and object revision projection outside SQL; failed/expired latest attempts visible."
+    },
+    "focused_suite": {
+      "passed": 89,
+      "seconds": 46.96,
+      "log": "work/834-focused-GREEN.log"
+    },
+    "browser": {
+      "passed": 2,
+      "seconds": 79.86,
+      "log": "work/834-browser-GREEN.log",
+      "checks": "8-page navigation, in-flight Raad reuse, publisher-only notice renderer, source-selection journey"
+    },
+    "characterization": {
+      "passed": 45,
+      "recorded_with": "--record-characterization",
+      "existing_goldens_only_asset_hash": 32,
+      "new_source_goldens": [
+        "pending",
+        "claimed"
+      ]
     }
   }
 }
