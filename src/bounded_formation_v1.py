@@ -426,6 +426,10 @@ def _durable_targets(blocks, proposal):
     by_block = {}
     refs = [s for obj in proposal["objects"] for s in obj["spans"]]
     refs.extend(row["span"] for row in proposal["source_assessments"])
+    # Bound context is already source use on its candidate. Preserve the
+    # existing recovery rule: it is not another candidate-search target.
+    refs.extend(entry["span"] for obj in proposal["objects"] for entry in obj.get("context_evidence", [])
+                if entry.get("span") and not entry.get("unresolved_reason"))
     for span in refs:
         by_block.setdefault(span["block_id"], []).append((span["start"],span["end"]))
     result = []
