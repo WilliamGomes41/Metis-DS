@@ -624,3 +624,15 @@ and JS/browser checks pass. No golden updates were needed. B6 remains for one
 deployed release. No schema/data migration, rebase, force push, merge or deployment
 was performed. The joint release verdict remains **NO-GO** pending the required
 representative Azure/storage/load and real full content-trajectory evidence.
+
+## Parallel CI verification (2026-10-24)
+
+The separately authorized CI maintenance is Class C / rewrite risk none; this
+read-architecture change remains Class B / high / NO-GO. See
+[the CI contract](ci-parallel-verification.md). Both required Python checks now
+aggregate four complete suite partitions and an independent browser job. All
+5,814 local test IDs are covered exactly once, with zero PostgreSQL skips; six
+browser cases also execute separately. The local suite takes 437.971 s elapsed;
+this does not establish GitHub or Azure performance. Deployments keep their
+manual gates and consume a hash-verified package from successful exact main CI.
+No merge or deployment is authorized or performed by this maintenance.

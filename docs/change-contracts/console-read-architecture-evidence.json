@@ -3468,5 +3468,189 @@
       "147818a",
       "d843e8a"
     ]
+  },
+  "ci_parallel_verification_2026_10_24": {
+    "change_class": "C",
+    "rewrite_risk": "none",
+    "parent_pr_classification_unchanged": "B / high / NO-GO",
+    "base_revision": "fd15afca34b376a775cd6ed0ebb51aa37919d91c",
+    "implementation_revisions": [
+      "e2064d1de6d5f0d460a76c6215656c1289b03c0a",
+      "253981145de461ee7cd4b0a439074f42a15eaef8",
+      "cfcf81b97826e2111e6d4ce66dc5f4eccdca6dbc"
+    ],
+    "application_source_unchanged": true,
+    "full_suite": {
+      "checkout_at_start": "253981145de461ee7cd4b0a439074f42a15eaef8",
+      "command": "python scripts/measure_test_suite.py --output <shard>/result.json --shard-index <0..3> --shard-count 4",
+      "environment": "Python 3.12.14, PostgreSQL 16.15; four processes and four disposable PostgreSQL servers on one local host",
+      "collected": 5814,
+      "unique_selected": 5814,
+      "finished": 5814,
+      "collection_digest": "3c3a64e0350596525942da8b8a16832806974279d91d7ffcb7151157172bc92f",
+      "passed": 5782,
+      "skipped": 29,
+      "xfailed": 3,
+      "subtests_passed": 3,
+      "postgres_skips": 0,
+      "shard_wall_seconds": 437.089,
+      "orchestrated_wall_seconds": 437.971,
+      "summed_shard_seconds": 1651.182,
+      "shards": [
+        {
+          "index": 0,
+          "seconds": 437.089,
+          "selected": 1669,
+          "finished": 1669,
+          "exit_code": 0,
+          "postgres_version": 160015,
+          "postgres_skips": [],
+          "report_sha256": "beb4670feca8abeafdcc04269460f1f91e5623ae82f8256cf2b3d5e28849ecef",
+          "junit_sha256": "0f17b953e5810a68553ac025900fe528e55867ac0e3e02f4e7c20a06eb855e8c"
+        },
+        {
+          "index": 1,
+          "seconds": 364.206,
+          "selected": 1401,
+          "finished": 1401,
+          "exit_code": 0,
+          "postgres_version": 160015,
+          "postgres_skips": [],
+          "report_sha256": "52e789fc03f2e7f541e60971529b79e46fa1a5c5d1a21de3ce6f1f64ed63f8f6",
+          "junit_sha256": "86122d48f692121151e487026d10c77b6f4525753c88eb5093e7f944ff43eee1"
+        },
+        {
+          "index": 2,
+          "seconds": 437.003,
+          "selected": 1381,
+          "finished": 1381,
+          "exit_code": 0,
+          "postgres_version": 160015,
+          "postgres_skips": [],
+          "report_sha256": "ad0a09daf1afa8246de7cbef185a3c9103512d612eb64b735b64812f3ad251ed",
+          "junit_sha256": "6fb5c41746a62c63f5009fdfe6a8e6471a330c0528e9fd07b5ac746626077894"
+        },
+        {
+          "index": 3,
+          "seconds": 412.884,
+          "selected": 1363,
+          "finished": 1363,
+          "exit_code": 0,
+          "postgres_version": 160015,
+          "postgres_skips": [],
+          "report_sha256": "4dda9defcc46418c3ae03e5829184d55007235951706809eef92583d01e1407a",
+          "junit_sha256": "2faaf5e83c9e839288341f738814132d19432b60e88ce199771153ced894dc42"
+        }
+      ],
+      "merged_junit_sha256": "43d6f2b6ff4e2fddafe2e5d4961bb8c9ddd4de662186a28bd2e5da59d1596d8e",
+      "all_seven_native_exports": [
+        {
+          "name": "D5 PostgreSQL lifecycle without disk mirrors",
+          "exit_code": 0
+        },
+        {
+          "name": "Verify reprocessing owner guard and PG state against native PostgreSQL (#708)",
+          "exit_code": 0
+        },
+        {
+          "name": "Verify blockage diagnostics and native read-only access",
+          "exit_code": 0
+        },
+        {
+          "name": "Verify publication refusal store against native PostgreSQL (#637, PASSED proof)",
+          "exit_code": 0
+        },
+        {
+          "name": "Verify A10 source repair against native PostgreSQL",
+          "exit_code": 0
+        },
+        {
+          "name": "Verify A08 atomic heading batches against native PostgreSQL",
+          "exit_code": 0
+        },
+        {
+          "name": "Verify durable processing trace and restart evidence",
+          "exit_code": 0
+        }
+      ],
+      "final_metadata_updates": "During/after execution: overwrite:true for retry evidence, additional assertion in existing workflow contract case, PyYAML dev-extra metadata. Runner/sharding/application source unchanged; final contracts separately verified: 69 passed.",
+      "skipped_not_proof": {
+        "real_docling": 12,
+        "optional_bend": 11,
+        "browser_opt_in": 6
+      },
+      "xfails_not_proof": "3 existing B23/Forge cases; JUnit counts these among its 32 skipped elements"
+    },
+    "browser": {
+      "source_revision": "e2064d1de6d5f0d460a76c6215656c1289b03c0a",
+      "unchanged_by_later_commits": true,
+      "command": "pytest tests/test_browser_knowledge_context.py tests/test_browser_deploy_check.py tests/test_browser_source_selection.py tests/test_browser_view_check.py tests/test_section_incident.py::test_real_authenticated_browser_route_exports_correlated_evidence",
+      "passed": 6,
+      "skipped": 0,
+      "seconds": 112.78,
+      "junit_sha256": "4d56e8214d68a70b8d4e7c4142ec667158d6d2a04df971a2cb8bf0f23d639c8a"
+    },
+    "package": {
+      "source_revision": "cfcf81b97826e2111e6d4ce66dc5f4eccdca6dbc",
+      "local_identity_only": "run_id=1 / attempt=1 are local test identifiers, not a successful GitHub run or deployment authorization",
+      "zip_sha256": "24f33857ccfa936bd5cd6c52b964bf25a630299e21912d1c5ebf18ae5265b5c9",
+      "package_import_smoke": "passed",
+      "isolation": "Python 3.12 -I -S; imports use only extracted ZIP plus standard library; native wheels and src.console_asgi loaded successfully"
+    },
+    "reproduction": {
+      "workflow_contract_before": {
+        "revision": "fd15afca34b376a775cd6ed0ebb51aa37919d91c",
+        "failed": 3,
+        "passed": 0,
+        "log_sha256": "5a3c96ff153faab9d6a9d5aabfea990296932f6f113268da6a2bdd5b59d31de4"
+      },
+      "workflow_contract_after": {
+        "failed": 0,
+        "passed": 3,
+        "log_sha256": "09673e4a416181b17fe362cef0020f97a425d1c5c46360002083c12cca736acb"
+      },
+      "retry_upload_guard_before": {
+        "failed": 1,
+        "log_sha256": "048a1943f350a903ed5ba7d24cd70cb7ad761429b783177dfb43ccf4708eed1d"
+      },
+      "retry_upload_guard_after": {
+        "passed": 3
+      },
+      "initial_exploratory_suite": "Not green: local psql absent from PATH, two temporary mutation copies accidentally collected under work/, and old test-deploy SHA expectation. Copies moved outside checkout, PATH fixed, expectation changed to explicit input commit. Fresh four-part run above is green."
+    },
+    "adversarial_checks": {
+      "remove_hash_validation": {
+        "detected": true,
+        "failed": 1,
+        "passed": 17
+      },
+      "remove_run_status_commit_workflow_validation": {
+        "detected": true,
+        "failed": 7,
+        "passed": 11
+      },
+      "scope": "Mutated disposable copies outside final test collection; original code retained."
+    },
+    "checks": {
+      "targeted_final_contracts": "69 passed",
+      "actionlint": "v1.7.7: all three edited workflows pass, shellcheck unavailable/disabled",
+      "architecture_boundaries": "PASS",
+      "release_control_preflight_origin_main": "PASS",
+      "repository_preflight_clean_checkout": "PASS",
+      "product_api_write_and_compatibility": "PASS without PostgreSQL service; local PYTHONPATH points at isolated checkout to mirror CI editable install",
+      "compile": "PASS"
+    },
+    "timing_comparison": {
+      "historical_full_suite_revision": "1bfd07d629abebc7f037c149aab2512167b0697b",
+      "historical_seconds": 1421.55,
+      "new_orchestrated_seconds": 437.971,
+      "comparison": "One historical sequential run versus one complete parallel run with 33 additional CI contract cases and browser proof split out. No repeated matched A/B experiment; no GitHub or Azure speed claim. Installation and runner queue excluded from local test measurements. Summed work and installation overhead may increase runner minutes."
+    },
+    "rollout": {
+      "merge": false,
+      "deployment": false,
+      "azure_evidence": false,
+      "github_checks": "Pending on the pushed head; main-only package job and cross-run artifact download need first approved main run. No package can be used unless that main run completes successfully."
+    }
   }
 }

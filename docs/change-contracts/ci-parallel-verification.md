@@ -80,3 +80,35 @@ Deze CI-wijziging levert geen Azure-vrijgavebewijs. De gemeten 24 minuten lokaal
 zijn een historische baseline, geen gegarandeerde GitHub-doorlooptijd. Vier
 gelijktijdige runners kunnen op runnercapaciteit wachten; dat moet live gemeten
 worden. De lopende oude run wordt door lokaal werk niet aangepast.
+
+## Uitgevoerde verificatie
+
+De volledige lokale verzameling is in vier delen uitgevoerd: **5.782 passed,
+29 skipped, 3 xfailed en 3 subtests passed**; nul PostgreSQL-skips. Alle 5.814
+test-ID's zijn eenmaal geselecteerd en afgesloten. De verzamelaar en alle zeven
+ongewijzigde native bewijscontroles slagen. De browserjob voert afzonderlijk alle
+zes browsercases groen uit (112,78 s); de zes browser-skips uit de suite tellen
+niet als bewijs. De 12 Docling- en 11 Bend-skips blijven aan hun bestaande
+afzonderlijke workflows voorbehouden; drie bestaande B23-xfails zijn geen bewijs.
+
+De vier delen meten 437,089 / 364,206 / 437,003 / 412,884 s. Inclusief lokale
+serverstart en orchestration is de doorlooptijd **437,971 s (7:18)**. De som
+van de suiteprocessen is 1.651,182 s. Vergelijking met de eerdere lokale run
+van 1.421,55 s (23:42): korter wachten, maar geen besparing van dezelfde omvang
+in runner-minuten. Het betreft één historische en één parallelle lokale run,
+geen herhaalde A/B-proef; GitHub-installatie, wachtrij en overige workflows
+kunnen de werkelijke doorlooptijd bepalen.
+
+Startrevision van de complete uitvoering: `2539811`. De laatste metadatafix
+voor artifact-herpogingen, de aanvullende assertie en het dev-extra zijn
+afzonderlijk met de 69 gerichte contractcases en actionlint gecontroleerd.
+Het echte pakket van `cfcf81b` slaagt voor de geïsoleerde importproef.
+Hash- en CI-identiteitsmutaties worden door de gerichte tests ontdekt.
+Architectuur-, release-control-, repository-, API-compatibiliteits- en
+compilecontroles slagen. Details, test-ID-digest, hashes, eerdere mislukte
+proeven en bewijsgrenzen staan in `ci_parallel_verification_2026_10_24` van
+`console-read-architecture-evidence.json`.
+
+Nog niet bewezen: GitHub-doorlooptijd van de nieuwe indeling, de eerste
+main-pakketjob, artifactdownload tussen runs en Azure-startup na deployment.
+Geen merge, deployment of gewijzigde vrijgavebeslissing uitgevoerd.
