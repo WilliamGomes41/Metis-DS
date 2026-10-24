@@ -23,7 +23,7 @@ def test_size_uses_dutch_units() -> None:
 
 
 @pytest.mark.pure_function
-def test_estimate_is_one_sentence_without_repeating_insufficient() -> None:
+def test_estimate_is_one_paragraph_without_repeating_insufficient() -> None:
     none = _estimate({"range_seconds": None, "sample_count": 0, "basis": "Onvoldoende vergelijkbare metingen."})
     assert none == "Geschatte verwerkingstijd: nog geen schatting. Onvoldoende vergelijkbare metingen (0)."
     assert none.count("Onvoldoende") == 1

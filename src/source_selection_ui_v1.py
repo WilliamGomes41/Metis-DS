@@ -34,7 +34,7 @@ def _size(count):
 
 
 def _estimate(estimate):
-    """One sentence: the range, or that there is none yet, then its basis."""
+    """One short paragraph: the range, or that there is none yet, then its basis and sample count."""
     if estimate["range_seconds"] is None:
         return (f'Geschatte verwerkingstijd: nog geen schatting. '
                 f'{estimate["basis"].rstrip(".")} ({estimate["sample_count"]}).')
