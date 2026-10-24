@@ -98,6 +98,9 @@ def test_budget_exhaustion_bulk_records_remaining_tasks_with_single_checkpoint()
     assert all(task['status'] == 'not_started' for task in evidence['tasks'])
     assert len(checkpoints) == 1
     assert checkpoints[0][0] == 'proposal_received'
+    skipped = checkpoints[0][1]['formation_timings']
+    assert [row['index'] for row in skipped] == list(range(1, 51))
+    assert all(row['status'] == 'not_started' and row['planned'] == 50 for row in skipped)
     checkpoint_evidence = checkpoints[0][1]['provider_evidence']
     calls = [checkpoint_evidence, *checkpoint_evidence.get('supplementary_calls', [])]
     assert len(calls) == 50
@@ -217,3 +220,102 @@ def test_answered_task_clears_transport_failure_but_does_not_dispose_unknown_sou
     assert proposal == {'objects': [], 'source_assessments': []}  # no exclusion or invented knowledge
     evidence['supplementary_calls'][0]['formation']['rejections'] = [{'kind': 'object', 'reason_code': 'semantic_evidence_literal_not_found', 'spans': [span]}]
     assert len(pending_rejections(evidence, proposal)) == 2
+
+
+def test_each_task_records_plan_and_where_its_time_went():
+    fragments = [
+        dict(source(f'Bronpassage {i} met voldoende klinische tekst voor een eigen taak.')[0],
+             fragment_id=str(i), fragment_hash=str(i), section_path=[str(i)])
+        for i in range(3)
+    ]
+    blocks = semantic_source_blocks(fragments)
+    checkpoints = []
+
+    def empty(**kwargs):
+        return {'objects': [], 'relations': [], 'source_assessments': [], 'abstain_reason': 'no_validated_proposals'}
+
+    _, evidence = execute(
+        blocks=blocks, evidence_blocks=blocks,
+        validator_input={'fragments': fragments, 'document_id': 'test', 'evidence_fragments': fragments,
+                         'allowed_candidate_block_ids': [b['block_id'] for b in blocks], 'field_contract_v3': True},
+        provider=empty, limits=ModelCallLimits(),
+        checkpoint=lambda phase, values: checkpoints.append((phase, deepcopy(values))),
+    )
+
+    requests = [values['current_task'] for phase, values in checkpoints if phase == 'model_request']
+    assert [(task['index'], task['planned']) for task in requests[:3]] == [(1, 3), (2, 3), (3, 3)]
+    timings = checkpoints[-1][1]['formation_timings']
+    initial = [row for row in timings if row['phase'] == 'initial']
+    assert [row['index'] for row in initial] == [1, 2, 3]
+    for row in initial:
+        assert row['planned'] == 3 and row['status'] == 'completed'
+        assert all(row[key] >= 0 for key in ('checkpoint_before_seconds', 'provider_seconds', 'validation_seconds'))
+    # A write cannot hold its own duration: the last one appears only after a later checkpoint.
+    assert all('checkpoint_after_seconds' in row for row in timings[:-1])
+    # Measurements stay attempt-owned: never in provider evidence or replay identity.
+    assert 'formation_timings' not in json.dumps(evidence)
+    assert 'provider_seconds' not in json.dumps(evidence)
+
+
+def test_task_rejected_in_validation_keeps_its_validation_time(monkeypatch):
+    import src.bounded_formation_v1 as bounded
+    from src.semantic_passage_v1 import SemanticPassageError
+    fragments = [dict(source('Bronpassage met voldoende klinische tekst voor een eigen taak.')[0],
+                      fragment_id='0', fragment_hash='0', section_path=['0'])]
+    blocks = semantic_source_blocks(fragments)
+    checkpoints = []
+
+    def rejecting(*args, **kwargs):
+        raise SemanticPassageError('semantic_fixture_rejected')
+    monkeypatch.setattr(bounded, 'restrict_supplement', rejecting)
+    execute(blocks=blocks, evidence_blocks=blocks,
+        validator_input={'fragments': fragments, 'document_id': 'test', 'evidence_fragments': fragments,
+                         'allowed_candidate_block_ids': [b['block_id'] for b in blocks], 'field_contract_v3': True},
+        provider=lambda **kwargs: {'objects': [], 'relations': [], 'source_assessments': [], 'abstain_reason': 'x'},
+        limits=ModelCallLimits(),
+        checkpoint=lambda phase, values: checkpoints.append((phase, deepcopy(values))))
+    first = checkpoints[-1][1]['formation_timings'][0]
+    assert first['status'] == 'failed'
+    assert first['provider_seconds'] >= 0 and first['validation_seconds'] >= 0
+
+
+def test_provider_reports_model_transport_time_apart_from_its_own_validation():
+    import pytest
+    from src.operations_console_v1 import ConsoleError
+    from src.pre_review_semantic_v1 import _provider_proposal
+    blocks = semantic_source_blocks(source('Bronpassage met voldoende klinische tekst.'))
+    timing = {}
+    with pytest.raises(ConsoleError):
+        _provider_proposal(api_key='fixture', model='fixture', blocks=blocks, evidence_blocks=blocks,
+                           post_json=lambda *args: 'not a response', field_contract_v3=True, timing=timing)
+    assert timing['transport_seconds'] >= 0
+
+    def unreachable(*args):
+        raise ConsoleError('pre_review_llm_connection_failed')
+    timing = {}
+    with pytest.raises(ConsoleError):
+        _provider_proposal(api_key='fixture', model='fixture', blocks=blocks, evidence_blocks=blocks,
+                           post_json=unreachable, field_contract_v3=True, timing=timing)
+    assert timing['transport_seconds'] >= 0
+
+
+def test_final_rejection_still_persists_the_last_task_write_time(monkeypatch):
+    import pytest
+    import src.pre_review_semantic_v1 as semantic
+    from src.operations_console_v1 import ConsoleError
+    from src.semantic_passage_v1 import SemanticPassageError
+    text = 'Gebruik geen zalf'
+    fragments = [dict(source(text)[0], fragment_id='0', fragment_hash='0', section_path=['Same'])]
+    def provider(_url, _headers, payload, _timeout):
+        return {'output': [{'content': [{'type': 'output_text', 'text': json.dumps(response_for(payload, text))}]}]}
+    def rejecting(**kwargs):
+        raise SemanticPassageError('semantic_fixture_rejected')
+    monkeypatch.setattr(semantic, '_materialised_content', rejecting)
+    checkpoints = []
+    with pytest.raises(ConsoleError):
+        _semantic_execution_before_review(fragments, document_id='test', api_key='fixture', model='fixture',
+            field_contract_v3=True, post_json=provider, formation_context={'snapshot_id': 'snap', 'source_sha256': 'a'*64,
+                'diagnostic_checkpoint': lambda phase, values: checkpoints.append((phase, deepcopy(values)))})
+    phase, values = checkpoints[-1]
+    assert phase == 'validation_rejected'
+    assert values['formation_timings'] and all('checkpoint_after_seconds' in row for row in values['formation_timings'])

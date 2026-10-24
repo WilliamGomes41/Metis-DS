@@ -14,6 +14,9 @@ VERSION = 'processing-trace-v1'
 MAX_ATTEMPTS = 64
 MAX_CHECKPOINTS = 128
 MAX_CHECKPOINT_EVENTS = 64
+MAX_TASK_TIMINGS = 512
+PROGRESS_KEYS = ('task_count', 'planned_task_count', 'terminal_task_count', 'pending_task_count', 'failed_task_count')
+TIMING_KEYS = ('index', 'planned', 'checkpoint_before_seconds', 'transport_seconds', 'provider_seconds', 'validation_seconds', 'checkpoint_after_seconds')
 PHASES = frozenset({'reserved', 'source_reconstructed', 'model_request', 'response_received',
     'model_response', 'proposal_parsed', 'proposal_gate_rejected', 'validation_rejected',
     'evidence_resolved', 'proposal_received', 'formation_accounted', 'validation_started',
@@ -60,6 +63,15 @@ def mapping(value):
     return value if isinstance(value, dict) else {}
 
 
+def task_timings(rows):
+    """Bounded numbers per source task; ids and statuses only in closed forms."""
+    rows = rows if isinstance(rows, list) else []
+    return [{'task_id': sha(row.get('task_id')), 'phase': choice(row.get('phase'), {'initial', 'recovery'}),
+             'status': choice(row.get('status'), {'completed', 'partial', 'failed', 'not_started'}),
+             **{key: number(row.get(key)) for key in TIMING_KEYS}}
+            for row in rows[-MAX_TASK_TIMINGS:] if isinstance(row, dict)]
+
+
 def project_attempt(attempt):
     attempt = mapping(attempt)
     diagnostic = mapping(attempt.get('diagnostic'))
@@ -86,10 +98,11 @@ def project_attempt(attempt):
         'claimed_at': timestamp(dispatch.get('claimed_at')),
         # Error codes are kernel-bounded; never export exception/provider prose.
         'error_code': token(attempt.get('error_code'), r'[a-z][a-z0-9_]{0,95}'),
-        'checkpoints': [{'phase': choice(row.get('phase'), PHASES), 'at': timestamp(row.get('at'))}
+        'checkpoints': [{'phase': choice(row.get('phase'), PHASES), 'at': timestamp(row.get('at')), 'bytes': number(row.get('bytes'))}
                         for row in history[-MAX_CHECKPOINTS:] if isinstance(row, dict)],
         'omitted_checkpoints': max(0, len(history)-MAX_CHECKPOINTS),
         'diagnostic_evidence_omitted': bool(diagnostic.get('omitted_evidence')),
+        'formation_timings': task_timings(diagnostic.get('formation_timings')),
         'extraction_checkpoint_hash': sha(mapping(diagnostic.get('extraction_checkpoint')).get('record_hash')),
         # Absent on legacy attempts: None, never backfilled or inferred.
         'stop_reason': choice(attempt.get('stop_reason'), {'done', 'budget_exhausted', 'error'}),
@@ -117,7 +130,7 @@ def processing_trace(envelope):
             'semantic_identity_hash': sha(mapping(replay.get('identity')).get('hash')),
             'semantic_validation': choice(replay.get('validation'), {'passed'}),
             'formation_incomplete':provider.get('formation_incomplete') if type(provider.get('formation_incomplete')) is bool else None,
-            'formation_progress': {key:number(progress.get(key)) for key in ('task_count', 'terminal_task_count', 'pending_task_count', 'failed_task_count')},
+            'formation_progress': {key:number(progress.get(key)) for key in PROGRESS_KEYS},
             'verification': 'not_revalidated_by_trace'},
         'limitations': ['diagnostic_checkpoints_do_not_authorize_resume',
             'checkpoint_payload_history_not_retained', 'formation_and_publication_not_assessed',
@@ -144,6 +157,7 @@ def clean_trace(raw):
             diagnostic={'origin_request_id':row.get('origin_request_id'), 'origin_runtime':row.get('origin_runtime'),
                 'execution_runtime':row.get('execution_runtime'), 'checkpoints':row.get('checkpoints') if isinstance(row.get('checkpoints'), list) else [],
                 'omitted_evidence':['omitted'] if row.get('diagnostic_evidence_omitted') is True else [],
+                'formation_timings':row.get('formation_timings'),
                 'extraction_checkpoint':{'record_hash':row.get('extraction_checkpoint_hash')}})
         clean = project_attempt(proxy)
         for key in ('command_sha256', 'source_version_sha256', 'expected_revision_sha256', 'configuration_sha256'):
@@ -161,7 +175,7 @@ def clean_trace(raw):
             'semantic_identity_hash':sha(artifacts.get('semantic_identity_hash')),
             'semantic_validation':choice(artifacts.get('semantic_validation'), {'passed'}),
             'formation_incomplete':artifacts.get('formation_incomplete') if type(artifacts.get('formation_incomplete')) is bool else None,
-            'formation_progress': {key:number(mapping(artifacts.get('formation_progress')).get(key)) for key in ('task_count', 'terminal_task_count', 'pending_task_count', 'failed_task_count')},
+            'formation_progress': {key:number(mapping(artifacts.get('formation_progress')).get(key)) for key in PROGRESS_KEYS},
             'verification':'not_revalidated_by_trace'}}
 
 

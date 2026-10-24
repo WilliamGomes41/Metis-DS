@@ -617,6 +617,7 @@ def _provider_proposal(
     evidence: dict[str, Any] | None = None,
     checkpoint=None,
     validator_input=None,
+    timing: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     safe_key = str(api_key or "").strip()
     if not safe_key:
@@ -642,13 +643,18 @@ def _provider_proposal(
     if checkpoint:
         checkpoint("model_request", {"provider_evidence": evidence})
     headers = {"Authorization": f"Bearer {safe_key}", "Content-Type": "application/json"}
-    if post_json is None:
-        response = _bounded_provider_json(OPENAI_RESPONSES_URL, headers, payload, limits, transport)
-    else:
-        # Injection for deterministic proposal tests / existing instrumentation.
-        # Production uses the supervised native transport; custom transports must
-        # honor this contract themselves. This guard still forbids late activation.
-        response = post_json(OPENAI_RESPONSES_URL, headers, payload, limits.total)
+    try:
+        if post_json is None:
+            response = _bounded_provider_json(OPENAI_RESPONSES_URL, headers, payload, limits, transport)
+        else:
+            # Injection for deterministic proposal tests / existing instrumentation.
+            # Production uses the supervised native transport; custom transports must
+            # honor this contract themselves. This guard still forbids late activation.
+            response = post_json(OPENAI_RESPONSES_URL, headers, payload, limits.total)
+    finally:
+        if timing is not None:
+            # Attempt-owned measurement, also for failed calls; never provider evidence.
+            timing["transport_seconds"] = round(time.monotonic() - started, 3)
     if time.monotonic() - started >= limits.total:
         raise ConsoleError("pre_review_llm_processing_timeout")
     if not isinstance(response, dict):
@@ -819,9 +825,11 @@ def _semantic_execution_before_review(
         def provider(**kwargs):
             return _provider_proposal(api_key=api_key, model=safe_model, post_json=post_json,
                 field_contract_v3=True, checkpoint=None, **kwargs)
+        formation_timings = []
         proposal, provider_evidence = execute(blocks=blocks, evidence_blocks=evidence_blocks,
             validator_input=validator_input, provider=provider, limits=limits,
-            proposal=proposal, evidence=(replay_record or {}).get("provider_evidence"), checkpoint=checkpoint)
+            proposal=proposal, evidence=(replay_record or {}).get("provider_evidence"), checkpoint=checkpoint,
+            timings=formation_timings)
         errors = [call["error_code"] for call in [provider_evidence, *provider_evidence.get("supplementary_calls", [])]
                   if call.get("error_code")]
         if not proposal["objects"] and errors:
@@ -832,7 +840,7 @@ def _semantic_execution_before_review(
             content_units = _materialised_content(**validator_input, proposal=proposal)
         except SemanticPassageError as exc:
             if checkpoint:
-                checkpoint("validation_rejected", {"finding": exc.finding})
+                checkpoint("validation_rejected", {"finding": exc.finding, "formation_timings": formation_timings})
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
     if blocks and proposal is None:
         provider_evidence: dict[str, Any] = {}
@@ -871,7 +879,11 @@ def _semantic_execution_before_review(
             provider_evidence["pending_rejections"] = pending_rejections(provider_evidence, proposal)
             provider_evidence["formation_incomplete"] = bool(provider_evidence["pending_rejections"])
             if checkpoint:
-                checkpoint("formation_accounted", {"provider_evidence": provider_evidence})
+                accounted = {"provider_evidence": provider_evidence}
+                if locals().get("formation_timings"):
+                    # Includes the last task's checkpoint_after_seconds, set after its own write.
+                    accounted["formation_timings"] = formation_timings
+                checkpoint("formation_accounted", accounted)
         if execution != EXECUTION_REPLAY or (formation_context or {}).get("resume_formation"):
             execution = EXECUTION_INFERENCE
         if identity is not None and execution != EXECUTION_REPLAY:
