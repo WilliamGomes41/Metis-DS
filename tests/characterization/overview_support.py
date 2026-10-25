@@ -88,5 +88,9 @@ def install_native_summaries(monkeypatch, console, sid, summary):
 
     monkeypatch.setattr(console, "review_workboard_summaries",
                         lambda account_id, snapshot_id=None, **kw: {sid: deepcopy(summary)}, raising=False)
+    # The fixture already contains the supplied domain counts. Production now
+    # separates metadata selection from visible-card enrichment; neither step
+    # in this characterization double should invoke the real PG projection.
+    monkeypatch.setattr(console, '_enrich_review_workboard_summaries', lambda *args: None)
     monkeypatch.setattr(board, "_projected_document_dashboard", spy)
     return calls

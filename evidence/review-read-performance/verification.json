@@ -1,0 +1,226 @@
+{
+  "schema": "review-read-performance-evidence-v1",
+  "measurement_date": "2026-10-25",
+  "implementation_base": "f133b860379ecd1ee3a1e8b52055a6afb830add1",
+  "comparison_main": "53f75512950ef15c67e9753cfdbdd68878547ce9",
+  "python": "3.12.14",
+  "postgresql": "16.2",
+  "candidates": 3000,
+  "fixture_html_sha256": "d5267a8323f12b2ad858fa09b1fefad9af2ca8e741c1e21128d1359169b51b4b",
+  "method": "Authenticated full ASGI HTTP response; first Review GET in each new process. Login, application startup and fixture identification excluded. No claim of cold PostgreSQL buffers. Synthetic fixture; existing deterministic candidate materialisation and admission.",
+  "pre_integration_measurements": [
+    {
+      "route": "workboard",
+      "sample": 70,
+      "outcome": "completed",
+      "seconds": 6.90817676000006,
+      "status": 200,
+      "html_bytes": 23057,
+      "calls": {
+        "review_work_item": 1,
+        "source_accountability": 1
+      }
+    },
+    {
+      "route": "workboard",
+      "sample": 71,
+      "outcome": "completed",
+      "seconds": 6.605371837000348,
+      "status": 200,
+      "html_bytes": 23057,
+      "calls": {
+        "review_work_item": 1,
+        "source_accountability": 1
+      }
+    },
+    {
+      "route": "workboard",
+      "sample": 72,
+      "outcome": "completed",
+      "seconds": 5.406791350000276,
+      "status": 200,
+      "html_bytes": 23057,
+      "calls": {
+        "review_work_item": 1,
+        "source_accountability": 1
+      }
+    },
+    {
+      "route": "first",
+      "sample": 71,
+      "outcome": "completed",
+      "seconds": 0.5463621959988814,
+      "status": 200,
+      "html_bytes": 52843,
+      "calls": {
+        "source_accountability": 1
+      }
+    },
+    {
+      "route": "first",
+      "sample": 72,
+      "outcome": "completed",
+      "seconds": 0.2999789169989526,
+      "status": 200,
+      "html_bytes": 52843,
+      "calls": {
+        "source_accountability": 1
+      }
+    },
+    {
+      "route": "middle",
+      "sample": 70,
+      "outcome": "completed",
+      "seconds": 0.3452188120008941,
+      "status": 200,
+      "html_bytes": 52940,
+      "calls": {
+        "source_accountability": 1
+      }
+    },
+    {
+      "route": "middle",
+      "sample": 71,
+      "outcome": "completed",
+      "seconds": 0.3251395280003635,
+      "status": 200,
+      "html_bytes": 52940,
+      "calls": {
+        "source_accountability": 1
+      }
+    },
+    {
+      "route": "middle",
+      "sample": 72,
+      "outcome": "completed",
+      "seconds": 0.3129215839999233,
+      "status": 200,
+      "html_bytes": 52940,
+      "calls": {
+        "source_accountability": 1
+      }
+    },
+    {
+      "route": "last",
+      "sample": 70,
+      "outcome": "completed",
+      "seconds": 0.45603189100074815,
+      "status": 200,
+      "html_bytes": 52843,
+      "calls": {
+        "source_accountability": 1
+      }
+    },
+    {
+      "route": "last",
+      "sample": 71,
+      "outcome": "completed",
+      "seconds": 0.279039114000625,
+      "status": 200,
+      "html_bytes": 52843,
+      "calls": {
+        "source_accountability": 1
+      }
+    },
+    {
+      "route": "last",
+      "sample": 72,
+      "outcome": "completed",
+      "seconds": 0.3011608189990511,
+      "status": 200,
+      "html_bytes": 52843,
+      "calls": {
+        "source_accountability": 1
+      }
+    },
+    {
+      "route": "document",
+      "sample": 70,
+      "outcome": "completed",
+      "seconds": 4.850032319000093,
+      "status": 200,
+      "html_bytes": 23062,
+      "calls": {
+        "review_work_item": 1,
+        "source_accountability": 1
+      }
+    },
+    {
+      "route": "individual",
+      "sample": 70,
+      "outcome": "timeout",
+      "seconds": 20.005771198999355,
+      "calls": {}
+    },
+    {
+      "route": "first",
+      "sample": 73,
+      "outcome": "completed",
+      "seconds": 0.29007743900001515,
+      "status": 200,
+      "html_bytes": 52843,
+      "calls": {
+        "source_accountability": 1
+      }
+    }
+  ],
+  "limitations": [
+    "The nine repeated detail measurements precede main integration; three additional fresh-process detail measurements pass on the integrated core.",
+    "Explicit document-wide individual queue exceeded 20 seconds.",
+    "Full repository suite not completed; no full-suite PASS claimed.",
+    "Browser and Azure acceptance not performed.",
+    "Migration 024 must precede rollout."
+  ],
+  "verification": {
+    "targeted_pre_integration_regressions": "Passed after targeted fixes; see change contract.",
+    "revision_guard_mutation": "Stale HTTP form test fails with 303 instead of 409 when only generation comparison is removed. Normal code refuses stale input.",
+    "post_integration_regressions": {
+      "passed": 99,
+      "skipped": [
+        {
+          "class": "tests.test_review_formation_problems",
+          "name": "test_real_browser_navigation_and_raad_read_only",
+          "reason": "Required browser acceptance job supplies Chromium"
+        }
+      ],
+      "failures": 0,
+      "additional_partial_formation_banner_assertion": "1 passed; rerun after adding the explicit banner assertion"
+    }
+  },
+  "post_integration_core_commit": "cafca4f",
+  "post_integration_measurements": [
+    {
+      "route": "first",
+      "sample": 90,
+      "outcome": "completed",
+      "seconds": 0.49369547400056035,
+      "status": 200,
+      "html_bytes": 52941,
+      "calls": {
+        "source_accountability": 1
+      }
+    },
+    {
+      "route": "middle",
+      "sample": 90,
+      "outcome": "completed",
+      "seconds": 0.5257381960000203,
+      "status": 200,
+      "html_bytes": 53038,
+      "calls": {
+        "source_accountability": 1
+      }
+    },
+    {
+      "route": "last",
+      "sample": 90,
+      "outcome": "completed",
+      "seconds": 0.3707826190002379,
+      "status": 200,
+      "html_bytes": 52941,
+      "calls": {
+        "source_accountability": 1
+      }
+    }
+  ]
+}

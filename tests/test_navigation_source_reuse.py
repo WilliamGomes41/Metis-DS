@@ -35,17 +35,20 @@ def source_navigation(tmp_path, *, production_console):
 
 
 def test_navigation_reconstructs_each_source_once_per_call(source_navigation, monkeypatch):
-    import src.knowledge_materialisation_v1 as materialisation
+    import src.semantic_passage_v1 as semantic
     probe, fragments = source_navigation
     before = deepcopy((probe.objects, probe.envelopes, probe.bindings, fragments))
-    original = materialisation._selection_blocks
+    original = semantic._reconstructed_blocks
     calls = []
 
     def counted(rows):
-        calls.append(1)
+        from src.prepared_source_views_v1 import preserve_fragments
+        rows = preserve_fragments(rows)
+        if rows:
+            calls.append(1)
         return original(rows)
 
-    monkeypatch.setattr(materialisation, "_selection_blocks", counted)
+    monkeypatch.setattr(semantic, "_reconstructed_blocks", counted)
     for expected_calls in (1, 2):
         assert probe.waiting_task_counts("reviewer-1")["review"] == 1
         assert len(calls) == expected_calls

@@ -2797,13 +2797,17 @@ def _render_second_review_card(
     *,
     reviewer_id: str,
     snapshot_revision: str,
+    read_inputs=None,
 ) -> str:
-    bindings = console.object_review_bindings(snapshot_id, objects=snapshot_objects)
+    bindings = (read_inputs.bindings if read_inputs is not None else
+                console.object_review_bindings(snapshot_id, objects=snapshot_objects))
+    fragments = (read_inputs.fragments if read_inputs is not None else
+                 console.review_source_fragments(snapshot_id))
     route = reviewer_route_for(
         obj,
         review_path=review_path,
         reviewer_id=reviewer_id,
-        bindings=bindings, fragments=console.review_source_fragments(snapshot_id)
+        bindings=bindings, fragments=fragments
     )
     if not route or route.get("canonical_task") != "second_review":
         raise ConsoleError("second_review_not_available")
@@ -2861,7 +2865,7 @@ def _render_second_review_card(
             snapshot_objects,
             snapshot_id=snapshot_id,
             review_path=review_path,
-            task="second_review", bindings=console.object_review_bindings(snapshot_id, objects=snapshot_objects), fragments=console.review_source_fragments(snapshot_id)
+            task="second_review", bindings=bindings, fragments=fragments
         )}
         {semantics_html}
         {relations_html}
@@ -3132,7 +3136,7 @@ def _review_inventory(
 def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], snapshot_id: str,
                           snapshot_revision: str, *, context_target: str = "",
                           source_mode: bool = False, draft: dict[str, Any] | None = None,
-                          error: str = "", projection=None) -> str:
+                          error: str = "", projection=None, choices_html: str = "") -> str:
     """Present existing context decisions; navigation never confirms a relation."""
     if obj.get("object_type") in {"document", "heading", "path"}:
         return ""
@@ -3197,6 +3201,8 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
             parts.append('</div>')
         parts.append('</section>')
     if not is_source:
+        if choices_html:
+            parts.append(choices_html)
         candidates = [row for row in objects if row["object_id"] != oid
                       and row.get("object_type") not in {"document", "heading", "path"}
                       and not links_of(row) and (row.get("content") or {}).get("clean_text")]
@@ -3227,6 +3233,8 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
         return ''.join(parts) + '</section>'
     if current["links"]:
         return ''.join(parts) + '<p>Dit fragment heeft zelf gekoppelde context. Beoordeel de passage met die context.</p></section>'
+    if choices_html:
+        parts.append(choices_html)
     if target:
         parts.append('<h4>Passage waarvoor je context kiest</h4>' + full_text(target) + source_link(target) +
                      f'<p><a href="{review_url(context_target)}">Terug naar deze passage zonder op te slaan</a></p>')
@@ -3484,6 +3492,7 @@ def _render_review_card(
     snapshot_revision: str = "",
     task: str = "",
     context_html: str = "",
+    read_inputs=None,
 ) -> str:
     heading = review_card_sentence(obj)
     obj_text = (obj.get("content") or {}).get("clean_text") or ""
@@ -3521,11 +3530,17 @@ def _render_review_card(
         review_path=review_path,
         proposed=confirmable,
     )
-    try:
-        console.open_source_passage(snapshot_id=snapshot_id, object_id=obj["object_id"])
-        passage_ok = True
-    except ConsoleError:
-        passage_ok = False
+    if read_inputs is not None:
+        passage_ok = read_inputs.source_available
+    else:
+        try:
+            console.open_source_passage(snapshot_id=snapshot_id, object_id=obj["object_id"])
+            passage_ok = True
+        except ConsoleError:
+            passage_ok = False
+    bindings = (read_inputs.bindings if read_inputs is not None else
+                console.object_review_bindings(snapshot_id, objects=snapshot_objects))
+    fragments = (read_inputs.fragments if read_inputs is not None else console.review_source_fragments(snapshot_id))
     disabled = "" if passage_ok else " disabled"
     gate = str(admission_of(obj).get("gate_result") or "")
     admission_notice = ""
@@ -3537,8 +3552,7 @@ def _render_review_card(
         )
     current_duty = review_duty_for(
         obj, review_path=review_path,
-        bindings=console.object_review_bindings(snapshot_id, objects=snapshot_objects),
-        fragments=console.review_source_fragments(snapshot_id),
+        bindings=bindings, fragments=fragments,
     )
     approval_disabled = disabled or (" disabled" if current_duty is None else "")
     repair_guidance = (
@@ -3589,7 +3603,7 @@ def _render_review_card(
                         snapshot_objects,
                         snapshot_id=snapshot_id,
                         review_path=review_path,
-                        task=task, bindings=console.object_review_bindings(snapshot_id, objects=snapshot_objects), fragments=console.review_source_fragments(snapshot_id)
+                        task=task, bindings=bindings, fragments=fragments
                     )}
                     {context_html}
                     </div>
@@ -3649,7 +3663,7 @@ def _render_review_card(
                         obj,
                         snapshot_objects,
                         review_path=review_path,
-                        draft=draft, bindings=console.object_review_bindings(snapshot_id, objects=snapshot_objects), fragments=console.review_source_fragments(snapshot_id)
+                        draft=draft, bindings=bindings, fragments=fragments
                     )}
                     {_source_discrepancy_block(obj, draft, review_path=review_path)}
                     <section class="review-step" data-review-step="f">
@@ -3679,7 +3693,8 @@ def _render_review_card(
 
 
 def _source_context_card(console: OperationsConsole, snapshot_id: str, obj: dict[str, Any],
-                         panel: str, *, context_target: str, context_mode: str, task: str) -> str:
+                         panel: str, *, context_target: str, context_mode: str, task: str,
+                         read_inputs=None) -> str:
     """Keep fragment handling separate from approval of independent knowledge."""
     if "data-source-repair" in panel:
         return panel
@@ -3687,11 +3702,14 @@ def _source_context_card(console: OperationsConsole, snapshot_id: str, obj: dict
     if not (is_source_record(obj) or role_of(obj) or (panel and (context_target or context_mode == "source" or
             (source_label_hint(obj) and context_mode != "review")))):
         return ""
-    try:
-        console.open_source_passage(snapshot_id=snapshot_id, object_id=obj["object_id"])
-        passage_ok = True
-    except ConsoleError:
-        passage_ok = False
+    if read_inputs is not None:
+        passage_ok = read_inputs.source_available
+    else:
+        try:
+            console.open_source_passage(snapshot_id=snapshot_id, object_id=obj["object_id"])
+            passage_ok = True
+        except ConsoleError:
+            passage_ok = False
     parts = ['<section data-source-role-card><h3>Brontekst koppelen of afhandelen</h3>',
              _broncontext_html(obj, snapshot_id, obj["object_id"], passage_ok, task=task)]
     if source_label_hint(obj) and not role_of(obj) and not is_source_record(obj):
@@ -3715,6 +3733,28 @@ def _formation_incomplete_banner(console, snapshot_id: str) -> str:
             f'<p><a class="btn-secondary" href="{_esc(link)}">Vormingsproblemen behandelen</a></p></div>')
 
 
+def _passage_choices_html(snapshot_id, obj, inputs, *, context_mode='', context_target=''):
+    """Keep every context choice reachable without rendering the corpus on click."""
+    params = {'document': snapshot_id, 'object': obj['object_id'], 'context_page': 1}
+    if context_mode:
+        params['context_mode'] = context_mode
+    if context_target:
+        params['context_target'] = context_target
+    hidden = ''.join(f'<input type="hidden" name="{_esc(k)}" value="{_esc(v)}">'
+                     for k, v in params.items())
+    links = []
+    for page, label in ((inputs.choice_page-1, 'Vorige'), (inputs.choice_page+1, 'Volgende')):
+        if page >= 1 and (page <= inputs.choice_page or inputs.choice_page*25 < inputs.choice_total):
+            url = urlencode({**params, 'context_page': page, 'context_q': inputs.choice_query})
+            links.append(f'<a href="/review?{_esc(url)}#passage-context">{label}</a>')
+    return ('<h4>Context toevoegen uit de bron</h4>'
+            f'<form method="get" action="/review">{hidden}'
+            f'<label>Zoek brontekst<input name="context_q" value="{_esc(inputs.choice_query)}"></label>'
+            '<button class="btn-secondary">Zoeken</button></form>'
+            f'<nav aria-label="Bronpassages">{inputs.choice_total} teksten · '
+            f'pagina {inputs.choice_page} · {" · ".join(links)}</nav>')
+
+
 @source_reconstruction_scope(reuse_existing=True)
 @diagnostic_phase("review_render")
 def _render_review_room(
@@ -3734,6 +3774,7 @@ def _render_review_room(
     batch_selection: list[str] | None = None,
     batch_completed: int = 0,
     snapshot: tuple[list[dict[str, Any]], str] | None = None,
+    read_inputs=None,
 ) -> str:
     chosen = document.strip()
     chosen_object_id = object.strip()
@@ -3749,7 +3790,7 @@ def _render_review_room(
             '</div>'
         )
     snapshot_revision = ""
-    envelopes = console.list_document_cards()
+    envelopes = [read_inputs.envelope] if read_inputs is not None else console.list_document_cards()
     chosen_row = next((row for row in envelopes if row["snapshot_id"] == chosen), None)
     cards = []
     if not chosen:
@@ -3782,11 +3823,23 @@ def _render_review_room(
             snapshot_objects = _current_review_objects(loaded_objects)
         else:
             snapshot_objects, snapshot_revision = (
-                snapshot if snapshot is not None else console.snapshot_objects_and_revision(chosen)
-            )
+                (read_inputs.objects, read_inputs.revision) if read_inputs is not None else
+                snapshot if snapshot is not None else console.snapshot_objects_and_revision(chosen))
             all_object_versions = []
         review_path = review_path_for_klasse(chosen_row["class"])
-        objects_html += _formation_incomplete_banner(console, chosen)
+        if read_inputs is None:
+            objects_html += _formation_incomplete_banner(console, chosen)
+        elif read_inputs.envelope['_review_check_formation']:
+            # Open formation needs the existing document-wide closure check.
+            # The compact passage input must not hide its retained replay.
+            reads = console._document_reads()
+            if reads is not None:
+                reads.envelopes.pop(chosen, None)
+            try:
+                objects_html += _formation_incomplete_banner(console, chosen)
+            finally:
+                if reads is not None:
+                    reads.envelopes[chosen] = read_inputs.envelope
         audit_signals: list[dict[str, Any]] = []
         if history_enabled:
             audit_reader = getattr(console, "audit_review_signals", None)
@@ -3832,20 +3885,24 @@ def _render_review_room(
             else:
                 from src.source_containers_v1 import source_accountability
                 detail_projection = source_accountability(snapshot_objects, review_path=review_path,
-                    bindings=_review_bindings(console, chosen, objects=snapshot_objects),
-                    fragments=console.review_source_fragments(chosen))
+                    bindings=(read_inputs.bindings if read_inputs is not None else
+                              _review_bindings(console, chosen, objects=snapshot_objects)),
+                    fragments=read_inputs.fragments if read_inputs is not None else console.review_source_fragments(chosen))
                 context_html = ""
                 if ('reviewer' in (account.get('roles') or [])
                         and str(account.get('account_id') or '') in chosen_row.get('named_reviewers', [])
                         and not console.snapshot_is_published(chosen)):
                     context_html = _source_context_panel(obj, snapshot_objects, chosen, snapshot_revision,
                         context_target=context_target, source_mode=context_mode == "source",
-                        draft=context_draft, error=context_error, projection=detail_projection)
+                        draft=context_draft, error=context_error, projection=detail_projection,
+                        choices_html=_passage_choices_html(chosen, obj, read_inputs,
+                            context_mode=context_mode, context_target=context_target) if read_inputs is not None else '')
                 if context_saved:
                     objects_html += '<p class="banner ok" role="status">Het contextbesluit is opgeslagen. Beoordeel de betrokken passages opnieuw.</p>'
                 conflict_html = _review_conflict_html(conflict, current=obj, draft=draft)
                 try:
-                    current_bindings = _review_bindings(console, chosen, objects=snapshot_objects)
+                    current_bindings = (read_inputs.bindings if read_inputs is not None else
+                                        _review_bindings(console, chosen, objects=snapshot_objects))
                 except AttributeError:
                     current_bindings = None
                 route = (
@@ -3853,13 +3910,15 @@ def _render_review_room(
                         obj,
                         review_path=review_path,
                         reviewer_id=str(account.get("account_id") or ""),
-                        bindings=current_bindings, fragments=console.review_source_fragments(chosen)
+                        bindings=current_bindings, fragments=(read_inputs.fragments if read_inputs is not None
+                                                             else console.review_source_fragments(chosen))
                     )
                     if current_bindings is not None
                     else None
                 )
                 source_card = _source_context_card(console, chosen, obj, context_html,
-                    context_target=context_target, context_mode=context_mode, task=chosen_task)
+                    context_target=context_target, context_mode=context_mode, task=chosen_task,
+                    read_inputs=read_inputs)
                 if source_card:
                     objects_html += conflict_html + source_card
                     if conflict:
@@ -3878,6 +3937,7 @@ def _render_review_room(
                             review_path,
                             reviewer_id=str(account.get("account_id") or ""),
                             snapshot_revision=snapshot_revision,
+                            read_inputs=read_inputs,
                         )
                     else:
                         objects_html += f"""
@@ -3893,6 +3953,7 @@ def _render_review_room(
                         review_path,
                         reviewer_id=str(account.get("account_id") or ""),
                         snapshot_revision=snapshot_revision,
+                        read_inputs=read_inputs,
                     )
                 else:
                     objects_html += _render_review_card(
@@ -3906,6 +3967,7 @@ def _render_review_room(
                         snapshot_revision,
                         chosen_task,
                         context_html=context_html,
+                        read_inputs=read_inputs,
                     )
 
     empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
@@ -5792,6 +5854,8 @@ def create_console_app(
             else None
         )
         try:
+            from src.review_passage_read_v1 import resolve_review_revision
+            snapshot_revision = resolve_review_revision(state, snapshot_id, snapshot_revision.strip())
             state.review_object(
                 actor_id=account["account_id"],
                 snapshot_id=snapshot_id,
@@ -5962,6 +6026,8 @@ def create_console_app(
         try:
             if source_checked != "1":
                 raise ConsoleError("source_context_check_required")
+            from src.review_passage_read_v1 import resolve_review_revision
+            snapshot_revision = resolve_review_revision(state, snapshot_id, snapshot_revision)
             state.confirm_source_context(actor_id=account['account_id'], snapshot_id=snapshot_id,
                 source_object_id=source_object_id, role=role, target_object_ids=target_object_ids,
                 reason=reason, command_id=command_id, expected_revision=snapshot_revision)
@@ -5989,6 +6055,8 @@ def create_console_app(
         return_task: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
+        from src.review_passage_read_v1 import resolve_review_revision
+        snapshot_revision = resolve_review_revision(state, snapshot_id, snapshot_revision.strip())
         state.accept_source_continuation(
             actor_id=account["account_id"],
             snapshot_id=snapshot_id,
@@ -6104,6 +6172,8 @@ def create_console_app(
         account = _require(request)
         if not snapshot_revision.strip():
             raise ConsoleError("snapshot_revision_required")
+        from src.review_passage_read_v1 import resolve_review_revision
+        snapshot_revision = resolve_review_revision(state, snapshot_id, snapshot_revision.strip())
         current_rows = state.snapshot_objects(snapshot_id)
         focal = next(
             (row for row in current_rows if row.get("object_id") == object_id),

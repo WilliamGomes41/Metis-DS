@@ -310,10 +310,25 @@ class _PostgresBadgeCountsMixin:
 
     def review_workboard_summaries(
         self, account_id: str, snapshot_id: str | None = None, *, navigation_only: bool = False,
+        metadata_only: bool = False,
     ) -> dict[str, dict[str, Any]]:
         """Select assigned documents; kernel projections own all review duties."""
         try:
             with self.workflow_document_store._connect() as con:
+                if metadata_only:
+                    columns = _DOCUMENT_CARD_COLUMNS.replace('d.envelope_payload', 'd.review_envelope')
+                    rows = con.execute(
+                        "WITH selected AS MATERIALIZED (SELECT d.*, d.envelope_payload - ARRAY["
+                        "'semantic_replay','processing_attempts','quality_processing_runs','prepared_source_extraction'] "
+                        "AS review_envelope FROM workflow.documents d WHERE EXISTS ("
+                        "SELECT 1 FROM workflow.document_reviewers r WHERE r.snapshot_id=d.snapshot_id "
+                        "AND r.account_id=%s) AND d.snapshot_id=COALESCE(%s,d.snapshot_id) "
+                        "AND d.publication_eligibility<>%s) "
+                        f"SELECT {columns} FROM selected d LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id "
+                        "ORDER BY d.snapshot_id", (account_id, snapshot_id or None, PRE_REVIEW_BLOCKED),
+                    ).fetchall()
+                    return {row['snapshot_id']: {'envelope': row, '_metadata_only': True}
+                            for row in _document_cards_from_rows(rows)}
                 rows = con.execute(
                     f"""
                     SELECT {_DOCUMENT_CARD_COLUMNS},
@@ -445,6 +460,8 @@ class _PostgresBadgeCountsMixin:
             objects = self.workflow_document_store.list_current_objects_batch(ids)
             bindings = self.workflow_review_store.read_bindings(ids)
             for sid in ids:
+                if summaries[sid].pop('_metadata_only', False):
+                    summaries[sid]['envelope'], _generation = self.workflow_document_store.review_document_input(sid)
                 current = {obj["object_id"]: obj for obj in objects[sid]}
                 checked = []
                 for binding in bindings.get(sid, []):

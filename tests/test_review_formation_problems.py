@@ -71,6 +71,7 @@ def test_durable_independent_valid_proposal_reaches_review(tmp_path, production_
     login(client, 'reviewer')
     response = client.get('/review', params={'document': sid, 'object': candidates[0]['object_id'], 'task': 'contextual'})
     assert response.status_code == 200 and FIRST in response.text
+    assert 'data-formation-incomplete' in response.text and 'Vormingsproblemen behandelen' in response.text
 
 
 def test_whitespace_ranges_are_not_model_work():
