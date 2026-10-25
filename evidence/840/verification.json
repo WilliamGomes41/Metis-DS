@@ -1,0 +1,93 @@
+{
+  "issue": 840,
+  "base": "ff13c33591d1e0c15ca805479f25eefcb9f8a001",
+  "runtime_revision": "b87d8e8c21d87f3fd8dc1dbe78ada04a36e70ccd",
+  "change_class": "A",
+  "rewrite_risk": "high",
+  "backend": "native PostgreSQL 16.15",
+  "python": "3.13.5",
+  "specific_handover_tests": {
+    "passed": 21,
+    "failures": 0,
+    "evidence": "final full-suite test IDs, includes phase and clock regressions"
+  },
+  "focused_regressions": {
+    "passed": 94,
+    "failures": 0,
+    "seconds": 101.64,
+    "log": "phase-focused-final.log",
+    "boundary": "working-tree phase regression run; final full suite verifies the frozen runtime revision"
+  },
+  "proofs": [
+    "one reservation, task commit, cooperative handover, new kernel and dispatcher completion with identical first TaskResult",
+    "SIGKILL and new Python process, same attempt, original expiry, committed result unchanged, extraction and reconstruction forbidden",
+    "concurrent native claims produce one owner",
+    "stale checkpoint, execution and final activation rejected; stale failure cannot stop successor claim",
+    "expired owner failure requeues while original authorization permits; heartbeat cannot revive expired/replaced claim or even update its record_version",
+    "authorization/configuration/deadline/budget block before further model work; revocation preserves first committed task",
+    "budget deadline not reset; task allowance bounded by lease and hard expiry unchanged",
+    "long preparation survives lease renewal; timer stops after execution",
+    "failed claim transaction rolls back completely",
+    "HTTP overview and detail return 200, show waiting/blocked with no Resume during handover, and do not mutate workflow",
+    "initial and recovery phase cursor remains command-owned across workers; failed task gets two calls rather than three",
+    "late imported modules do not retain a temporary injected clock"
+  ],
+  "fail_first": {
+    "revision": "ff13c33591d1e0c15ca805479f25eefcb9f8a001",
+    "test": "test_dispatcher_finishes_same_command_after_handover_and_kernel_restart",
+    "result": "failed: previous worker finishes instead of handing the same running command back to pending"
+  },
+  "mutation": {
+    "isolated_revision": "e667bd4",
+    "change": "remove only final activation claim-token fence",
+    "test": "test_old_worker_cannot_activate_after_claim_changes_after_final_validation",
+    "result": "failed with DID NOT RAISE, unchanged implementation passes",
+    "independent_review": false
+  },
+  "scope": "new task-v1 source-bound-v3 HTML/PDF commands; existing v1, alternate modes and decision trees retain original route",
+  "migration": "additive source-dispatch-v2 JSON in existing processing_attempts; no SQL migration or backfill",
+  "rollout": "drain old active workers and use compatible binaries; do not reset pending v2 commands, budgets or deadlines",
+  "production_changes": false,
+  "paid_model_calls": false,
+  "clinical_acceptance": "remaining integral Smetten proof belongs to issue 837",
+  "superseded_runs": [
+    "suite-before-lease-call-bound: interrupted, not final proof",
+    "suite-final: superseded; shard-2 had missing psql PATH, confirmed by targeted environment reproduction; corrected path used in all final shards",
+    "suite-heartbeat d9279d3: complete collection, one late-expiry failure led to isolated clock reproduction; all four final shards are repeated on the corrected phase/clock runtime"
+  ],
+  "phase_fail_first": {
+    "revision": "d9279d3",
+    "result": "failed with 3 model calls where original initial+recovery contract permits 2; fixed case passes"
+  },
+  "clock_fail_first": {
+    "revision": "d9279d3",
+    "result": "isolated subprocess captures a temporary year-2000 clock after restore; fixed modules use current clock"
+  },
+  "full_suite": {
+    "commit": "b87d8e8c21d87f3fd8dc1dbe78ada04a36e70ccd",
+    "python": "3.13.5",
+    "seconds": 2851.17,
+    "wall_seconds": 788.159,
+    "tests": 5886,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 26,
+    "postgres_skips": [],
+    "postgres_version": 160015,
+    "collected": 5886,
+    "collection_digest": "53f220376d94e3d913bcc484b208e84a3aa5a997de7cfa09501e1c02a0c82ec3",
+    "passed": 5860,
+    "known_xfails": 3,
+    "optional_skips": 23,
+    "browser_enabled": true,
+    "complete_exact_partition": true
+  },
+  "checks": {
+    "repository_preflight": "PASS",
+    "release_control_preflight": "PASS",
+    "compileall": "PASS",
+    "architecture_boundaries": "PASS",
+    "change_contract": "PASS",
+    "architecture_invariants": "passed within full suite and targeted 7-case run"
+  }
+}
