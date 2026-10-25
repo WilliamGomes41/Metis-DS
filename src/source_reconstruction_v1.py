@@ -185,6 +185,10 @@ def reconstruct_source_fragments(
     is marked ``unresolved``; the admission gate can consequently keep the
     resulting incomplete object out of content review.
     """
+    from src.prepared_source_views_v1 import stored_blocks
+    retained = stored_blocks(fragments)
+    if retained is not None:
+        return [source for _public,source in retained]
     fragments = list(fragments)
     cache = _RUN_CACHE.get()
     key = None

@@ -91,7 +91,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                     "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname='workflow'").fetchall()}
                 if not {"processing_attempts","processing_document_summaries","processing_checkpoints",
                         "prepared_extraction_versions","formation_inputs","formation_contexts",
-                        "formation_task_results","formation_task_findings","formation_task_result_history","formation_task_plans"} <= task_tables:
+                        "formation_task_results","formation_task_findings","formation_task_result_history","formation_task_plans","formation_source_views"} <= task_tables:
                     raise WorkflowDocumentStoreError("workflow_formation_task_schema_missing")
                 try:
                     unresolved = con.execute(

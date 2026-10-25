@@ -43,7 +43,10 @@ def heading_structure_units(
 ) -> list[dict[str, Any]]:
     """Project extractor-labelled headings as structural rows, one per heading."""
 
-    headings = [fragment for fragment in fragments if extract_object_type(fragment)[0] == "heading"]
+    from src.prepared_source_views_v1 import filtered_view
+    headings = filtered_view(fragments,"headings")
+    if headings is None:
+        headings = [fragment for fragment in fragments if extract_object_type(fragment)[0] == "heading"]
     rows: list[dict[str, Any]] = []
     for fragment in reconstruct_source_fragments(headings):
         text = (fragment.get("clean_text") or fragment.get("raw_text") or "").strip()

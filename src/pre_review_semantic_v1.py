@@ -426,6 +426,10 @@ def _request_payload(
     }
 
 def _content_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    from src.prepared_source_views_v1 import filtered_view
+    retained = filtered_view(fragments,"content")
+    if retained is not None:
+        return retained
     out: list[dict[str, Any]] = []
     for fragment in fragments:
         object_type, _proposed = extract_object_type(fragment)
@@ -459,6 +463,10 @@ def _candidate_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]
     candidate passages.
     """
 
+    from src.prepared_source_views_v1 import filtered_view
+    retained = filtered_view(fragments,"candidate")
+    if retained is not None:
+        return retained
     out: list[dict[str, Any]] = []
     for fragment in _content_fragments(fragments):
         text = str(fragment.get("clean_text") or fragment.get("raw_text") or "").strip()
@@ -475,6 +483,10 @@ def _candidate_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]
 def _evidence_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return source material eligible to support semantics evidence."""
 
+    from src.prepared_source_views_v1 import filtered_view
+    retained = filtered_view(fragments,"evidence")
+    if retained is not None:
+        return retained
     return [
         fragment
         for fragment in fragments
@@ -743,6 +755,10 @@ def _semantic_execution_before_review(
             raise ConsoleError("pre_review_llm_api_key_required")
         raise ConsoleError("pre_review_llm_model_required")
 
+    checkpoint = (formation_context or {}).get("diagnostic_checkpoint")
+    if hasattr(checkpoint,"retain_source_views"):
+        from src.prepared_source_views_v1 import prepare
+        fragments = prepare(fragments).fragments
     content_fragments = _content_fragments(fragments)
     candidate_fragments = _candidate_fragments(fragments)
     evidence_fragments = _evidence_fragments(fragments)
@@ -783,7 +799,11 @@ def _semantic_execution_before_review(
             existing_replay,
             expected_identity=identity,
         )
-        if lookup.status == LOOKUP_HIT and lookup.proposal is not None:
+        if lookup.status == LOOKUP_HIT and lookup.proposal is not None and (formation_context or {}).get("resume_formation"):
+            proposal = lookup.proposal
+            execution = EXECUTION_REPLAY
+            replay_record = replayed_record(existing_replay)
+        elif lookup.status == LOOKUP_HIT and lookup.proposal is not None:
             try:
                 replay_units = _materialised_content(
                     fragments=content_fragments,
@@ -817,6 +837,8 @@ def _semantic_execution_before_review(
         checkpoint("source_reconstructed", {"validator_input": validator_input,
             "validator_input_hash": _stable_json_hash(validator_input),
             "validator_identity": validator_identity(), "semantic_identity": identity})
+    if hasattr(checkpoint,"retain_source_views"):
+        checkpoint.retain_source_views(fragments.root.payload)
     if field_contract_v3 and blocks and (proposal is None or (formation_context or {}).get("resume_formation")):
         if ((formation_context or {}).get("resume_formation") and proposal is None
                 and not hasattr(checkpoint, "task_results")):
@@ -889,6 +911,11 @@ def _semantic_execution_before_review(
             raise ConsoleError("pre_review_llm_proposal_rejected", exc.code) from exc
         if hasattr(checkpoint,"final_validation"):
             checkpoint.final_validation(proposal)
+    if execution == EXECUTION_REPLAY and not (formation_context or {}).get("resume_formation") and hasattr(checkpoint,"final_validation"):
+        # Exact replay has just passed _materialised_content above. An explicit
+        # reextract may own a new context/revision: bind that successful gate to
+        # this context too, without promoting old telemetry into task results.
+        checkpoint.final_validation(proposal)
     if proposal is not None and blocks:
         provider_evidence = locals().get("provider_evidence") or deepcopy((replay_record or {}).get("provider_evidence") or {})
         if field_contract_v3:
@@ -1164,6 +1191,9 @@ def bind_pre_review_semantic_processing(
                 raise ConsoleError("processing_attempt_expired")
             limits = replace(limits, total=min(limits.total, remaining),
                              connect=min(limits.connect, remaining), idle=min(limits.idle, remaining))
+        if hasattr(checkpoint,"retain_source_views"):
+            from src.prepared_source_views_v1 import prepare
+            fragments = prepare(fragments).fragments
         spec = semantic_spec_from_fragments(
             document_id=document_id,
             title=title,

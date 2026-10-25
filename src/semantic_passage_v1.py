@@ -114,9 +114,15 @@ def _block_id(fragment: dict[str, Any], text: str) -> str:
     return f"semblock-{digest}"
 
 
+from src.prepared_source_views_v1 import preserve_fragments, stored_blocks
+
+
 def _reconstructed_blocks(
     fragments: Iterable[dict[str, Any]],
 ) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    retained = stored_blocks(fragments)
+    if retained is not None:
+        return retained
     blocks: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for position, fragment in enumerate(reconstruct_source_fragments(fragments)):
         text = normalize_visible_prose(
@@ -516,7 +522,7 @@ def validate_bound_recommendation_semantics(obj, *, fragments):
     if not isinstance(semantics, dict):
         _fail("recommendation_semantics_invalid")
     from src.knowledge_materialisation_v1 import _read_source_blocks
-    blocks = _read_source_blocks(list(fragments), include_headings=True)
+    blocks = _read_source_blocks(preserve_fragments(fragments), include_headings=True)
     spans = (metadata.get("semantic_passage") or {}).get("spans") or []
     selected = []
     for span in spans:
@@ -621,7 +627,7 @@ def attach_relation_proposals(
 ) -> None:
     evidence_by_id = {
         public["block_id"]: (public, source)
-        for public, source in _reconstructed_blocks(list(evidence_fragments))
+        for public, source in _reconstructed_blocks(preserve_fragments(evidence_fragments))
     }
     if raw_relations is None:
         raw_relations = []
@@ -735,7 +741,7 @@ def semantic_coverage_units(
 ) -> list[dict[str, Any]]:
     """Preserve source-only content when no candidate-selectable block exists."""
 
-    reconstructed = _reconstructed_blocks(list(fragments))
+    reconstructed = _reconstructed_blocks(preserve_fragments(fragments))
     rows = _coverage_remainders(
         reconstructed,
         document_id=document_id,
@@ -760,8 +766,8 @@ def _project_semantic_selection(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Validate a proposal. Return selection decisions and, optionally, coverage."""
 
-    fragments_list = list(fragments)
-    evidence_list = list(evidence_fragments) if evidence_fragments is not None else fragments_list
+    fragments_list = preserve_fragments(fragments)
+    evidence_list = preserve_fragments(evidence_fragments) if evidence_fragments is not None else fragments_list
 
     if not isinstance(proposal, dict):
         _fail("semantic_proposal_invalid")

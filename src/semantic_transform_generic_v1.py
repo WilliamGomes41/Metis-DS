@@ -16,6 +16,7 @@ from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
 from src.integrity_kernel import stamp_canonical_hashes, stable_hash
+from src.prepared_source_views_v1 import filtered_view
 from src.semantic_passage_v1 import (
     SELECTION_ORIGIN_COVERAGE,
     SELECTION_ORIGIN_PROPOSAL,
@@ -237,8 +238,9 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
             from src.source_layout_v1 import mapped_raw_spans
             from src.object_taxonomy_v1 import extract_object_type
             if mapping_blocks is None:
+                selected_source = filtered_view(raw_rows,"content")
                 mapping_blocks = {public["block_id"]: (public, source) for public, source in _reconstructed_blocks(
-                    row for row in raw_rows if extract_object_type(row)[0] != "heading")}
+                    selected_source if selected_source is not None else (row for row in raw_rows if extract_object_type(row)[0] != "heading"))}
             expected_mapping = []
             for span in semantic_passage["spans"]:
                 if span["block_id"] not in mapping_blocks:
@@ -266,8 +268,9 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
             from src.semantic_passage_v1 import semantic_source_blocks
             from src.object_taxonomy_v1 import extract_object_type
             if evidence_blocks is None:
+                selected_source = filtered_view(raw_rows,"content")
                 evidence_blocks = {b["block_id"]: b for b in semantic_source_blocks(
-                    r for r in raw_rows if extract_object_type(r)[0] != "heading")}
+                    selected_source if selected_source is not None else (r for r in raw_rows if extract_object_type(r)[0] != "heading"))}
             selected = []
             for span in semantic_passage["spans"]:
                 block = evidence_blocks.get(span["block_id"])

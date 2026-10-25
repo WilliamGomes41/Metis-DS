@@ -150,6 +150,12 @@ def build_formation_context(console, *, envelope, actor_id, expected_revision,
         return context
     contract = extractor_contract(source.content_kind)
     fresh_extraction = not attempt or attempt.get('kind') == 'reextract'
+    if resume and hasattr(checkpoint_writer,'retained_source') and checkpoint_writer.input_reference is not None:
+        retained,retained_identity=checkpoint_writer.retained_source(contract)
+        if retained_identity!=asdict(source):
+            raise _error('source_extraction_identity_mismatch')
+        context['retained_fragments']=retained
+        return context
     if not fresh_extraction:
         retained = stored_extraction(envelope, required_contract=contract)
         if retained is None and source.content_kind == 'pdf':
@@ -157,6 +163,14 @@ def build_formation_context(console, *, envelope, actor_id, expected_revision,
             retained = stored_fragments(envelope)
         if retained is not None:
             context['retained_fragments'] = retained
+            # Verified committed extraction needs no second full reconstruction
+            # of the extraction checkpoint. Explicit reextract stays below.
+            if KEY in envelope:
+                if hasattr(checkpoint_writer,'source_from_extraction'):
+                    views=checkpoint_writer.source_from_extraction(envelope[KEY])
+                    if views is not None:
+                        context['retained_fragments']=views
+                return context
 
     def retain(fragments):
         record = extraction_record(envelope, fragments, contract)
