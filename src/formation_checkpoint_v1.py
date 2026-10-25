@@ -266,10 +266,10 @@ class TaskCheckpointWriter:
         # Provider and validation have finished before opening this transaction.
         payload = {"task": task, "proposal": proposal, "evidence": evidence, "timing": timing}
         with self._locked() as (con, active):
-            self.store.commit_task(con,context_id=self.input_reference["context_id"],ranges=task["target_spans"],
+            committed = self.store.commit_task(con,context_id=self.input_reference["context_id"],ranges=task["target_spans"],
                 payload=payload,attempt_id=self.attempt_id,claim_token=self.claim_token)
             self._commit_cursor(active)
-            if self.document_scoped:
+            if committed:
                 active["formation_progress_made"] = True
             active.setdefault("diagnostic", {})["phase"] = "proposal_received"
         if self._cursor_enabled:
@@ -285,13 +285,16 @@ class TaskCheckpointWriter:
         with self.store.documents._connect() as con:
             rows = con.execute("SELECT ranges_hash,result_hash FROM workflow.formation_task_results "
                                "WHERE context_id=%s ORDER BY ranges_hash",(self.input_reference["context_id"],)).fetchall()
-        evidence = {"version":1,"result_set_hash":stable_json_hash(rows),
+        evidence = {"version":2,"result_set_hash":stable_json_hash(rows),
                     "proposal_hash":stable_json_hash(proposal),"validator_identity":validator_identity()}
         with self._locked() as (con, active):
             current = con.execute("SELECT ranges_hash,result_hash FROM workflow.formation_task_results "
                                   "WHERE context_id=%s ORDER BY ranges_hash",(self.input_reference["context_id"],)).fetchall()
             if current != rows:
                 raise ConsoleError("formation_result_set_changed")
+            # The preparation context stays pinned across partial activation;
+            # a later resume fences its own current object revision separately.
+            evidence["activation_revision"] = active["expected_revision"]
             con.execute("UPDATE workflow.formation_contexts SET final_result_hash=%s,final_validation=%s::jsonb WHERE context_id=%s",
                         (evidence["result_set_hash"],_json_text(evidence),self.input_reference["context_id"]))
             active.setdefault("diagnostic", {})["final_validation"] = evidence

@@ -182,12 +182,20 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
 
 def incomplete(envelope, *, objects=None, bindings=None, fragments=None):
     """Derive closure from the current source and review bundle, without writes."""
+    return bool(unresolved_rejections(envelope, objects=objects, bindings=bindings, fragments=fragments))
+
+
+def unresolved_rejections(envelope, *, objects=None, bindings=None, fragments=None):
+    """The same exact closure decision for readiness and the problem projection."""
     replay = envelope.get("semantic_replay") or {}
     evidence = replay.get("provider_evidence") or {}
     if not evidence.get("formation_incomplete"):
-        return False
+        return []
+    pending = evidence.get("pending_rejections") or [{
+        "kind": "formation", "reason_code": "source_formation_incomplete", "spans": []}]
+    unverified = [{"kind": "formation", "reason_code": "formation_evidence_unverified", "spans": []}]
     if objects is None:
-        return True
+        return deepcopy(unverified)
     from src.semantic_replay_v1 import exact_replay_lookup, stable_json_hash, LOOKUP_HIT
     identity = replay.get("identity") or {}
     components = identity.get("components") or {}
@@ -197,7 +205,7 @@ def incomplete(envelope, *, objects=None, bindings=None, fragments=None):
                                       ("source_sha256", "sha256"), ("document_id", "document_id")))
             or identity.get("hash") != stable_json_hash(components)
             or exact_replay_lookup(replay, expected_identity=identity).status != LOOKUP_HIT):
-        return True
+        return deepcopy(unverified)
     from src.pre_review_semantic_v1 import _candidate_fragments, _evidence_fragments
     from src.semantic_passage_v1 import semantic_source_blocks
     # Source-only remainders have no proposal stamp. Pin their literal inputs
@@ -206,7 +214,7 @@ def incomplete(envelope, *, objects=None, bindings=None, fragments=None):
             "source_blocks": semantic_source_blocks(_candidate_fragments(fragments)),
             "evidence_blocks": semantic_source_blocks(_evidence_fragments(fragments)),
     }) != components.get("source_blocks_hash"):
-        return True
+        return deepcopy(unverified)
     from src.source_accountability_v1 import is_source_record
     from src.review_disposition_v1 import definitive_review_disposition
     from src.source_containers_v1 import source_accountability
@@ -253,14 +261,22 @@ def incomplete(envelope, *, objects=None, bindings=None, fragments=None):
             # even when the source-accountability projection is accounted.
             continue
         final.extend(semantic["spans"])
-    pending = evidence.get("pending_rejections") or []
     # Named human disposition can resolve a located rejection without deleting
     # the original model error. Unknown scope cannot be resolved by assumption.
-    return not pending or any(not spans_are_exact(r.get("spans")) or not all(
-        _covers(ref, final) for ref in r["spans"]) for r in pending)
+    return [deepcopy(r) for r in pending if not spans_are_exact(r.get("spans")) or not all(
+        _covers(ref, final) for ref in r["spans"])]
 
 
-def pending_rejections(evidence, proposal):
+def _whitespace_only(spans, by_id):
+    """Only verified, nonempty exact ranges of literal whitespace are inert."""
+    if not spans_are_exact(spans):
+        return False
+    return all(span["block_id"] in by_id
+        and 0 <= span["start"] < span["end"] <= len(by_id[span["block_id"]])
+        and not by_id[span["block_id"]][span["start"]:span["end"]].strip() for span in spans)
+
+
+def pending_rejections(evidence, proposal, *, blocks=None):
     """Historical rejection is resolved only by a validated covering selection.
 
     The caller must supply the joint source-validated proposal and its evidence
@@ -291,8 +307,10 @@ def pending_rejections(evidence, proposal):
         pending.extend(deepcopy((call.get("formation") or {}).get("rejections", [])))
     # A call-level error may be recovered only when all its explicit source
     # targets are covered. Unknown-location errors still require successor work.
-    return [r for r in pending if r.get("requires_review") or not spans_are_exact(r.get("spans")) or not all(
-        _covers(ref, selected) for ref in r["spans"])]
+    by_id = {block["block_id"]: block["text"] for block in blocks or []}
+    return [r for r in pending if not _whitespace_only(r.get("spans"), by_id)
+        and (r.get("requires_review") or not spans_are_exact(r.get("spans")) or not all(
+            _covers(ref, selected) for ref in r["spans"]))]
 
 
 def restrict_supplement(proposal, *, primary, targets):

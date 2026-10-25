@@ -256,10 +256,12 @@ class FormationTaskStore:
                           "WHERE context_id=%s AND snapshot_id=%s",(reference["context_id"],envelope["snapshot_id"])).fetchone()
         proof = row["final_validation"] if row else None
         replay = envelope.get("semantic_replay") or {}
-        if (not proof or proof != (latest.get("diagnostic") or {}).get("final_validation")
+        if (not proof or proof.get("version") not in {1, 2}
+                or proof.get("version") == 2 and not proof.get("activation_revision")
+                or proof != (latest.get("diagnostic") or {}).get("final_validation")
                 or proof.get("proposal_hash") != stable_json_hash(replay.get("proposal"))
                 or row["semantic_identity"] != replay.get("identity")
-                or row["expected_revision"] != latest.get("expected_revision")):
+                or proof.get("activation_revision", row["expected_revision"]) != latest.get("expected_revision")):
             raise WorkflowDocumentStoreError("formation_final_validation_required")
         hashes = con.execute("SELECT ranges_hash,result_hash FROM workflow.formation_task_results "
                              "WHERE context_id=%s ORDER BY ranges_hash",(reference["context_id"],)).fetchall()

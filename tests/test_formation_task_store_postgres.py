@@ -486,17 +486,19 @@ def test_budget_stop_without_new_progress_consumes_retry_budget(tmp_path,product
     monkeypatch.setattr(console,"_model_call_limits_reader",lambda:ModelCallLimits(total=1))
     monkeypatch.setattr(bounded,"time",SimpleNamespace(monotonic=lambda:time.monotonic()+elapsed[0]))
     attempt,_ = console.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id="budget-first",expected_revision=console.objects_revision(sid))
-    with pytest.raises(ConsoleError,match="source_task_budget_exhausted"):
-        console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=attempt)
+    console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=attempt)
     first = console._envelope(sid)["processing_attempts"][-1]
     assert first["state"] == "incomplete_budget" and first["formation_progress_made"] is True
-    assert not console.snapshot_objects(sid)
+    partial = console.snapshot_objects(sid)
+    assert any(o.get('proposed_object_type') == 'recommendation' for o in partial)
+    assert 'source_formation_incomplete' in console.publication_readiness(sid)['blockers']
     monkeypatch.setattr(console,"_model_call_limits_reader",lambda:ModelCallLimits(total=0))
     following,_ = console.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id="budget-empty",expected_revision=console.objects_revision(sid))
     with pytest.raises(ConsoleError,match="source_task_budget_exhausted"):
         console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=following)
     latest = console._envelope(sid)["processing_attempts"][-1]
     assert latest["state"] == "incomplete_budget" and latest["formation_progress_made"] is False
+    assert console.snapshot_objects(sid) == partial
     assert console.processing_status(sid)["retry_attempts_used"] == 1
     failure_code[0] = "pre_review_llm_input_limit_exceeded"
     monkeypatch.setattr(console,"_model_call_limits_reader",lambda:ModelCallLimits(total=1))
@@ -604,8 +606,8 @@ def test_migrated_partial_work_can_resume_across_more_than_one_new_attempt(tmp_p
     migrate(console.workflow_document_store,sid,apply=True)
     elapsed[0]=0
     second,_=console.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id='new-budget',expected_revision=console.objects_revision(sid))
-    with pytest.raises(ConsoleError,match='source_task_budget_exhausted'):
-        console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=second)
+    console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=second)
+    assert console._envelope(sid)['processing_attempts'][-1]['state'] == 'incomplete_budget'
     assert console._can_resume_formation(sid), 'Unreviewed legacy objects must not strand durable new results'
     elapsed[0]=0
     stop_after_call[0]=False
