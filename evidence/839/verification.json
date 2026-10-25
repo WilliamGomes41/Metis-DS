@@ -1,0 +1,40 @@
+{
+  "commit": "a6bcf250ebb3107c75fe2b6f64399558d8e60b19",
+  "python": "3.13.5",
+  "seconds": 2769.166,
+  "wall_seconds": 770.344,
+  "exit_code": 0,
+  "tests": 5865,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 26,
+  "postgres_skips": [],
+  "postgres_version": 160015,
+  "collected": 5865,
+  "collection_digest": "00b91929e1294db685ac99e71430982d58664c2eebe07dc4252008191eb15d8a",
+  "passed": 5839,
+  "skip_reasons": [
+    {
+      "type": "pytest.xfail",
+      "reason": "B23 nog niet ge\u00efmplementeerd op main (Forge)",
+      "count": 3
+    },
+    {
+      "type": "pytest.skip",
+      "reason": "Optional Bend toolchain is not installed",
+      "count": 4
+    },
+    {
+      "type": "pytest.skip",
+      "reason": "Bend is optional outside its dedicated CI job",
+      "count": 7
+    },
+    {
+      "type": "pytest.skip",
+      "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+      "count": 12
+    }
+  ],
+  "browser": "Chromium enabled for all four partitions; all six browser cases executed",
+  "scope": "Full collection on runtime code a6bcf25; subsequent evidence commit changes documents/reports only. No production cutover or live model calls."
+}

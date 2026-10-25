@@ -1,0 +1,14 @@
+{
+  "fixture": "recorded Smetten validator input",
+  "validator_input_hash": "c9c2fb9c1e3093bb9fc3ef6db43c8c94395035d29a5046480124b5d978123a5c",
+  "content_fragments": 867,
+  "evidence_fragments": 1040,
+  "source_blocks_hash": "baf77e302c6d2524c7c0657cf1de423ffa4f046dc94e68b56fd633b31b42fd37",
+  "historical_source_blocks_hash_verified": true,
+  "source_blocks": 759,
+  "evidence_blocks": 938,
+  "all_source_blocks_and_mappings_equal": true,
+  "roundtrip_with_reconstruction_forbidden": true,
+  "derived_views_payload_bytes": 10567878,
+  "scope": "Recorded validator-source views, not raw PDF extraction, provider output or clinical acceptance"
+}

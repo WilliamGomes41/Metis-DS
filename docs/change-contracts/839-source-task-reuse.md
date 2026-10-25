@@ -63,3 +63,24 @@ Uitvoering: bestaande eigenaren behouden; alleen noodzakelijke viewopslag/carrie
 ## Verfijning van de uitvoeringsgrens
 
 De brede regressies tonen dat contextopbouw readonly moet blijven: een context met een passende configuratie moet samengesteld kunnen worden zonder een actieve poging te muteren. Het alternatief om extraction_reused direct in de contextbuilder te schrijven is daarom verworpen. De gekozen overdracht bevat alleen een kleine extraction_reuse_summary; de bestaande OperationsConsole._fragments_and_spec-uitvoeringsgrens schrijft de trace onder de normale checkpointfencing. Dit herstelt observatie zonder bronherbouw of nieuwe statusautoriteit.
+
+
+## Uitgevoerd bewijs
+
+De volledige collectie op runtimecode `a6bcf250ebb3107c75fe2b6f64399558d8e60b19` is groen: **5.839 passed, 23 optionele skips, 3 bekende xfails**, nul failures/errors en nul PostgreSQL-skips. Alle 5.865 test-ID’s zijn via de vier standaard CI-partities exact eenmaal afgedekt. PostgreSQL 16.15, Python 3.13.5 en Chromium ingeschakeld; wall-clock 770,344 s. De skips betreffen de aparte Docling/model- en Bend-acceptatieomgevingen; de zes browsercases zijn daadwerkelijk uitgevoerd. De bron-/configuratie-/trace-/hervatset slaagt afzonderlijk met 234 tests. De finale opvolgcommit voegt alleen bewijsdocumentatie en rapportages toe; runtime- en testlogica blijven gelijk.
+
+De oorspronkelijke fail-first-workerproef faalde door herhaalde bronreconstructie. Nu hervatten een verse kernel én een echt nieuw workerproces met extractor/reconstructor verboden. Resultaatpayloads/hashes blijven gelijk; alleen open bronwerk krijgt modelcalls. Negatieve proeven omvatten verdwenen/corrupte/foreign bronviews, extractorwisseling, corrupte TaskResults, stale claim, rollback, concurrente gelijke acceptatie en afwijkende inhoud op dezelfde sleutel. De mappinggrensmutatie faalt met DID NOT RAISE; de ongewijzigde versie slaagt. Mutable bronclones behouden de oude reconstructie/mutatiecontroles. Expliciete herextractie en niet-bounded v1-retry blijven beschikbaar.
+
+De trace-regressies maakten twee zaken concreet: de extraction_reused-provenance moet behouden blijven en contextopbouw mag niet schrijven. De definitieve readonly-handoff is expliciet bewezen. De afgebroken eerdere brede runs zijn geen eindbewijs; de volledige hierboven genoemde collectie is op de definitieve runtime opnieuw uitgevoerd. De aparte adversariële pass is door dezelfde agent gedaan, geen onafhankelijke review.
+
+De opgenomen Smetten-validatorinput behoudt exact alle 759 kandidaatbronblokken en 938 bewijsblokken met hun mappings. De historisch verzegelde bronblokkenhash `baf77e302c6d2524c7c0657cf1de423ffa4f046dc94e68b56fd633b31b42fd37` blijft gelijk. De readroundtrip heeft reconstructie verboden. De ongecomprimeerde afgeleide viewpayload is circa 10,6 MB, eenmaal per extractie/contract, niet per poging of checkpoint. Dit bewijst geen ruwe PDF-herextractie of klinische volledigheid.
+
+| Taken | Opnieuw gereconstrueerde fragmenten oud → nieuw | Reconstructie-cachehashes oud → nieuw | Hervatting oud → nieuw |
+|---:|---:|---:|---:|
+| 10 | 400 → 0 | 163 → 0 | 0.99 → 0.65 s |
+| 50 | 6,000 → 0 | 843 → 0 | 7.58 → 4.77 s |
+| 130 | 36,400 → 0 | 2,203 → 0 | 41.65 → 22.24 s |
+
+De baseline is ongewijzigde main na #843 (`846f13a`), de definitieve runtime is `a6bcf25`. De runs zijn na de volledige suite achtereenvolgens uitgevoerd op dezelfde host, elk met een eigen testdatabase en dezelfde fixture. Tijden betreffen execute_source_selection na reservering, één meting per grootte, geen productie-SLA of claim over totale lineariteit. De nulwaarden betreffen herhaalde reconstructie en reconstructie-cachehashing; integriteitsverificatie van opgeslagen artefacten blijft aanwezig. De oorspronkelijke gecommitteerde taak blijft in beide varianten exact behouden en wordt niet opnieuw aan de provider aangeboden.
+
+Zie [volledige verificatie](../../evidence/839/verification.json), [source-vergelijking](../../evidence/839/source-reuse-comparison.json) en [Smetten-roundtrip](../../evidence/839/recorded-source-views.json). Reproduceer met scripts/measure_source_task_reuse.py en scripts/measure_recorded_source_views.py. Productieactivering, live modelcalls en integrale inhoudelijke eindacceptatie zijn niet uitgevoerd.
