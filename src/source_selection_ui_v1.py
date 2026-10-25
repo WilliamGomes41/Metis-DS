@@ -136,7 +136,10 @@ def install(app, console, require, page, nav, esc):
                 action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Volledigheid controleren</a>'
             elif result['can_start']:
                 label = 'Starten' if result['state'] == 'nog niet gestart' else 'Hervatten'
-                action = (f'<form method="post" action="/source-selection/start">'
+                from src.processing_document_budget_v1 import enabled as document_budget_enabled
+                authorization = ('<p>Starten geeft één opdracht voor het volledige document, binnen vier uur inclusief wachttijd. '
+                    'Het maximum aantal modelaanroepen is tweemaal het aantal geplande taken.</p>' if document_budget_enabled() else '')
+                action = authorization + (f'<form method="post" action="/source-selection/start">'
                           f'<input type="hidden" name="document" value="{esc(sid)}">'
                           f'<input type="hidden" name="expected_revision" value="{esc(result["revision"])}">'
                           f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
@@ -159,11 +162,18 @@ def install(app, console, require, page, nav, esc):
             if result.get('blocked_reason'):
                 reason = {'processing_attempt_expired':'De totale tijdslimiet is bereikt',
                           'source_task_budget_exhausted':'Het verwerkingsbudget is uitgeput',
+                          'processing_document_call_budget_exhausted':'Het maximum aantal modelaanroepen is bereikt',
                           'processing_configuration_changed':'De verwerkingsconfiguratie is gewijzigd',
                           'researcher_role_required':'De uitvoeringsbevoegdheid is ingetrokken',
                           'not_authenticated':'Het verantwoordelijke account is niet meer actief'}.get(result['blocked_reason'], 'Een verwerkingsvoorwaarde blokkeert de uitvoering')
                 progress = (f'<p>Verwerking geblokkeerd: {esc(reason)}. '
                             f'{esc(result.get("required_action") or "Los de blokkade op voordat u opnieuw start.")}</p>')
+            if result.get('document_budget'):
+                budget = result['document_budget']
+                maximum = budget['max_model_calls']
+                calls = (f"{budget['calls_reserved']} van {maximum}" if maximum is not None else "maximum volgt uit de taakplanning")
+                progress += (f'<p>Documentbudget: vier uur inclusief wachttijd. '
+                    f'Resterend: {esc(_minutes(budget["remaining_seconds"]))}. Modelaanroepen gereserveerd: {esc(calls)}.</p>')
             if result.get('budget_stopped') and not result.get('blocked_reason'):
                 counts = result.get('progress') or {}
                 done, open_ = counts.get('terminal_task_count'), counts.get('pending_task_count')

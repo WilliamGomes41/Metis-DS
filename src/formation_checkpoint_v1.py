@@ -3,6 +3,8 @@
 Only this checkpoint operation bypasses the shared in-process command maps. It
 uses PostgreSQL-owned document, account and attempt records in a short transaction.
 """
+from src.processing_document_budget_v1 import leased, document_scoped, budget as document_budget
+
 from contextlib import contextmanager
 from copy import deepcopy
 
@@ -29,8 +31,11 @@ class TaskCheckpointWriter:
         if not self.configuration:
             raise ConsoleError("processing_configuration_unpinned")
         self._formation_cursor = deepcopy((attempt.get("dispatch") or {}).get("formation_cursor"))
-        self._cursor_enabled = (attempt.get("dispatch") or {}).get("version") == "source-dispatch-v2"
+        self._cursor_enabled = leased(attempt)
         self._next_cursor = None
+        self.document_scoped = document_scoped(attempt)
+        self.document_plan_bound = bool((document_budget(attempt) or {}).get("plan_hash"))
+        self.max_output_tokens = (document_budget(attempt) or {}).get("max_output_tokens")
         self.preparation = None
         self.source_payload = None
         self.source_reference = deepcopy((attempt.get("diagnostic") or {}).get("source_views_ref"))
@@ -118,6 +123,9 @@ class TaskCheckpointWriter:
             self.input_reference = reference
         else:
             with self._locked() as (con, active):
+                if phase == "model_request" and self.document_scoped:
+                    from src.processing_document_budget_v1 import reserve_call
+                    values["document_budget"] = reserve_call(active)
                 self.store.checkpoint(con,self.attempt_id,phase,values)
                 if phase == "task_rejected":
                     self._commit_cursor(active)
@@ -223,6 +231,11 @@ class TaskCheckpointWriter:
             expected_hash=(self.plan_reference or {}).get("plan_hash"))
         if plan is not None and not self.plan_reference:
             return self.retain_task_plan(plan)
+        if plan is not None and self.document_scoped and not self.document_plan_bound:
+            from src.processing_document_budget_v1 import pin_plan
+            with self._locked() as (con, active):
+                pin_plan(active, self.plan_reference, len(plan["tasks"]))
+            self.document_plan_bound = True
         return plan
 
     def retain_task_plan(self, plan):
@@ -232,9 +245,12 @@ class TaskCheckpointWriter:
         with self._locked() as (con, active):
             retained = self.store.retain_task_plan(con,self.input_reference["context_id"],plan)
             reference = {"context_id":self.input_reference["context_id"], "plan_hash":stable_json_hash(retained)}
+            from src.processing_document_budget_v1 import pin_plan
+            pin_plan(active, reference, len(retained["tasks"]))
             active.setdefault("diagnostic", {})["task_plan_ref"] = reference
             self.store.checkpoint(con,self.attempt_id,"task_plan_pinned",{"task_plan_ref":reference})
         self.plan_reference = reference
+        self.document_plan_bound = self.document_scoped
         return retained
 
     def plan_tasks(self, count):
@@ -253,6 +269,8 @@ class TaskCheckpointWriter:
             self.store.commit_task(con,context_id=self.input_reference["context_id"],ranges=task["target_spans"],
                 payload=payload,attempt_id=self.attempt_id,claim_token=self.claim_token)
             self._commit_cursor(active)
+            if self.document_scoped:
+                active["formation_progress_made"] = True
             active.setdefault("diagnostic", {})["phase"] = "proposal_received"
         if self._cursor_enabled:
             self._formation_cursor = deepcopy(self._next_cursor)
@@ -320,7 +338,7 @@ def task_checkpoint_writer(console, snapshot_id, attempt_id):
 def finish_task_failure(con, active, error):
     """One stop classification and retry-accounting rule for native attempts."""
     from src.processing_retry_v1 import finish
-    budget = getattr(error, "code", None) == "source_task_budget_exhausted"
+    budget = getattr(error, "code", None) in {"source_task_budget_exhausted", "processing_document_call_budget_exhausted"}
     finish({"processing_attempts":[active]}, active["attempt_id"],
            state="incomplete_budget" if budget else "failed", error=error)
     if budget:
@@ -355,7 +373,17 @@ def record_task_failure(console,snapshot_id,attempt_id,error,*,claim_token):
             if active["state"] != "running" or (active.get("dispatch") or {}).get("token") != claim_token:
                 return True
             dispatch = active.get("dispatch") or {}
-            if dispatch.get("version") == "source-dispatch-v2":
+            from datetime import datetime
+            from src.processing_document_budget_v1 import worker_expired
+            if (document_scoped(active) and worker_expired(active, now())
+                    and datetime.fromisoformat(active["expires_at"]) > now()
+                    and getattr(error,"code",None) in {"processing_worker_deadline_reached","processing_attempt_expired"}):
+                dispatch.update(state="pending",token=None,released_at=now().isoformat(),release_reason="worker_deadline")
+                con.execute("UPDATE workflow.processing_attempts SET payload=%s::jsonb,record_version=record_version+1 WHERE attempt_id=%s",
+                    (_json_text(active),attempt_id))
+                store.checkpoint_summary(con,snapshot_id,active)
+                return "handover"
+            if leased(active):
                 from datetime import datetime
                 if (dispatch.get("state") == "claimed" and datetime.fromisoformat(dispatch["lease_expires_at"]) <= now()
                         and datetime.fromisoformat(active["expires_at"]) > now()
@@ -366,13 +394,13 @@ def record_task_failure(console,snapshot_id,attempt_id,error,*,claim_token):
                                 (_json_text(active),attempt_id))
                     store.checkpoint_summary(con,snapshot_id,active)
                     return True
-            if dispatch.get("version") == "source-dispatch-v2":
+            if leased(active):
                 if datetime.fromisoformat(active["expires_at"]) <= now():
-                    error = ConsoleError("processing_attempt_expired")
+                    error = ConsoleError("source_task_budget_exhausted" if document_scoped(active) else "processing_attempt_expired")
                 elif dispatch.get("budget_expires_at") and datetime.fromisoformat(dispatch["budget_expires_at"]) <= now():
                     error = ConsoleError("source_task_budget_exhausted")
             finish_task_failure(con, active, error)
-            if (active.get("dispatch") or {}).get("version") == "source-dispatch-v2":
+            if leased(active):
                 active["dispatch"].update(state="blocked", blocked_reason=getattr(error,"code","processing_dependency_failed"),
                     required_action="Los de blokkade op en start opnieuw met de bestaande herstelautorisatie waar vereist.")
             con.execute("UPDATE workflow.processing_attempts SET payload=%s::jsonb,record_version=record_version+1 WHERE attempt_id=%s",

@@ -14,6 +14,7 @@ import uuid
 
 from src.operations_console_v1 import ConsoleError
 from src import processing_retry_v1 as retry_clock
+from src.processing_document_budget_v1 import leased, document_scoped, budget as document_budget, worker_expired
 from src.source_selection_v1 import authorize_account, configuration
 from src.workflows.formation_task_store_v1 import FormationTaskStore
 from src.workflows.workflow_documents_postgres_v1 import _json_text
@@ -22,7 +23,6 @@ def now():
     return retry_clock.now()
 
 
-VERSION = 'source-dispatch-v2'
 _STOP = ContextVar('source_worker_stop', default=None)
 HEARTBEAT_SECONDS = 30
 LOG = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ def worker_execution(stop_event, *, console, sid, attempt):
     token = _STOP.set(stop_event)
     ended = Event()
     heartbeat = None
-    if (attempt.get('dispatch') or {}).get('version') == VERSION:
+    if leased(attempt):
         def maintain():
             while not ended.wait(HEARTBEAT_SECONDS):
                 try:
@@ -89,7 +89,8 @@ def locked(console, sid, attempt_id):
 def validate(console, con, document, row, active):
     # Worker leases do not grant authorization and never extend the hard limit.
     if datetime.fromisoformat(active['expires_at']) <= now():
-        raise ConsoleError('processing_attempt_expired')
+        raise ConsoleError('source_task_budget_exhausted' if document_scoped(active) else 'processing_attempt_expired')
+    document_budget(active)
     dispatch = active['dispatch']
     if dispatch.get('budget_expires_at') and datetime.fromisoformat(dispatch['budget_expires_at']) <= now():
         raise ConsoleError('source_task_budget_exhausted')
@@ -122,7 +123,7 @@ def native_attempt(console, sid, attempt_id=None):
             'WHERE a.snapshot_id=%s AND d.processing_storage_version=1 '
             + ('AND a.attempt_id=%s ' if attempt_id else '') + 'ORDER BY a.started_at DESC LIMIT 1',
             (sid, attempt_id) if attempt_id else (sid,)).fetchone()
-    return row['payload'] if row and (row['payload'].get('dispatch') or {}).get('version') == VERSION else None
+    return row['payload'] if row and leased(row['payload']) else None
 
 
 def discover(console, sid, attempt):
@@ -136,7 +137,7 @@ def discover(console, sid, attempt):
             block(con, active, error)
             return None
         dispatch = active['dispatch']
-        if dispatch['state'] == 'claimed' and datetime.fromisoformat(dispatch['lease_expires_at']) <= now():
+        if dispatch['state'] == 'claimed' and (datetime.fromisoformat(dispatch['lease_expires_at']) <= now() or worker_expired(active, now())):
             dispatch.update(state='pending', token=None, released_at=now().isoformat(), release_reason='lease_expired')
         return deepcopy(active) if dispatch['state'] == 'pending' else None
 
@@ -160,6 +161,9 @@ def claim_native(console, sid, attempt_id, *, actor_id=None, stop_event=None, wo
             clock = now()
             expires = datetime.fromisoformat(active['expires_at'])
             dispatch = active['dispatch']
+            if document_scoped(active):
+                dispatch['worker_expires_at'] = min(expires, clock+timedelta(seconds=min(active['limits']['attempt'],active['document_budget']['max_worker_seconds']))).isoformat()
+                expires = datetime.fromisoformat(dispatch['worker_expires_at'])
             dispatch.update(state='claimed', token=uuid.uuid4().hex, claimed_at=clock.isoformat(),
                 claim_number=dispatch.get('claim_number', 0)+1,
                 worker_until=(clock+timedelta(seconds=worker_seconds)).isoformat(),
@@ -167,7 +171,7 @@ def claim_native(console, sid, attempt_id, *, actor_id=None, stop_event=None, wo
             from src.processing_trace_v1 import runtime_identity
             active.setdefault('diagnostic', {})['execution_runtime'] = runtime_identity()
             FormationTaskStore.checkpoint(con, attempt_id, 'worker_claimed', {
-                'worker_claim': {k:dispatch[k] for k in ('claim_number','claimed_at','lease_expires_at','worker_until')}})
+                'worker_claim': {k:dispatch[k] for k in ('claim_number','claimed_at','lease_expires_at','worker_until','worker_expires_at') if k in dispatch}})
             result = deepcopy(active)
     if denied:
         raise denied
@@ -185,7 +189,7 @@ def renew(console, sid, claimed):
         if (active['state'] != 'running' or dispatch.get('state') != 'claimed'
                 or dispatch.get('token') != claimed['dispatch']['token']):
             return False
-        if datetime.fromisoformat(dispatch['lease_expires_at']) <= now():
+        if datetime.fromisoformat(dispatch['lease_expires_at']) <= now() or worker_expired(active, now()):
             return False  # A worker cannot revive its already lost ownership.
         try:
             validate(console, con, document, row, active)
@@ -193,6 +197,8 @@ def renew(console, sid, claimed):
             block(con, active, error)
             return False
         boundary = datetime.fromisoformat(active['expires_at'])
+        if document_scoped(active):
+            boundary = min(boundary, datetime.fromisoformat(dispatch['worker_expires_at']))
         if dispatch.get('budget_expires_at'):
             boundary = min(boundary, datetime.fromisoformat(dispatch['budget_expires_at']))
         dispatch['lease_expires_at'] = min(boundary, max(datetime.fromisoformat(dispatch['lease_expires_at']),
@@ -210,12 +216,12 @@ def before_task(writer):
     handover = False
     with writer._locked() as (con, active):
         dispatch = active.get('dispatch') or {}
-        if dispatch.get('version') != VERSION:
+        if not leased(active):
             return None
         clock = now()
         if 'budget_expires_at' not in dispatch:
             dispatch['budget_expires_at'] = min(datetime.fromisoformat(active['expires_at']),
-                clock+timedelta(seconds=active['limits']['total'])).isoformat()
+                clock+timedelta(seconds=active['document_budget']['window_seconds'] if document_scoped(active) else active['limits']['total'])).isoformat()
         remaining = (datetime.fromisoformat(dispatch['budget_expires_at'])-clock).total_seconds()
         if remaining <= 0:
             raise ConsoleError('source_task_budget_exhausted')

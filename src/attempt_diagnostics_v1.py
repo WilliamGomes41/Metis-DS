@@ -1,6 +1,8 @@
 """Attempt-owned evidence. Never an admission or validated replay authority."""
 from __future__ import annotations
 
+from src.processing_document_budget_v1 import leased, document_scoped
+
 import hashlib
 import json
 import platform
@@ -102,8 +104,12 @@ def comparable_envelope(envelope):
     for attempt in result.get("processing_attempts", []):
         attempt.pop("diagnostic", None)
         attempt.pop("_record_version",None)
-        if (attempt.get("dispatch") or {}).get("version") == "source-dispatch-v2":
-            attempt["dispatch"] = {"version":"source-dispatch-v2"}
+        if document_scoped(attempt):
+            attempt.pop("formation_progress_made", None)
+            attempt["document_budget"] = {k:v for k,v in attempt["document_budget"].items()
+                if k not in {"calls_reserved","planned_tasks","plan_hash","max_model_calls"}}
+        if leased(attempt):
+            attempt["dispatch"] = {"version":attempt["dispatch"]["version"]}
     return result
 
 
@@ -111,7 +117,10 @@ def merge_diagnostics(prepared, current):
     by_id = {a["attempt_id"]: a for a in current.get("processing_attempts", [])}
     for attempt in prepared.get("processing_attempts", []):
         recorded = by_id.get(attempt["attempt_id"], {})
-        if (recorded.get("dispatch") or {}).get("version") == "source-dispatch-v2":
+        if document_scoped(recorded):
+            attempt["document_budget"] = deepcopy(recorded["document_budget"])
+            attempt["formation_progress_made"] = recorded.get("formation_progress_made", False)
+        if leased(recorded):
             attempt["dispatch"] = deepcopy(recorded["dispatch"])
         if "diagnostic" in recorded:
             attempt["diagnostic"] = deepcopy(recorded["diagnostic"])

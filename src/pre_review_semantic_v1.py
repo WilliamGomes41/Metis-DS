@@ -630,6 +630,7 @@ def _provider_proposal(
     checkpoint=None,
     validator_input=None,
     timing: dict[str, Any] | None = None,
+    max_output_tokens: int | None = None,
 ) -> dict[str, Any]:
     safe_key = str(api_key or "").strip()
     if not safe_key:
@@ -637,6 +638,8 @@ def _provider_proposal(
     payload = _request_payload(model=model, blocks=blocks,
                                evidence_blocks=evidence_blocks,
                                field_contract_v2=field_contract_v2, field_contract_v3=field_contract_v3, selection_targets=selection_targets, task=task)
+    if max_output_tokens is not None:
+        payload["max_output_tokens"] = max_output_tokens
     if len(json.dumps(payload, ensure_ascii=False).encode("utf-8")) > MAX_INPUT_BYTES:
         raise ConsoleError("pre_review_llm_input_limit_exceeded")
     request_evidence = deepcopy(payload)
@@ -847,7 +850,8 @@ def _semantic_execution_before_review(
         limits = model_limits or ModelCallLimits(total=DEFAULT_TIMEOUT_SECONDS)
         def provider(**kwargs):
             return _provider_proposal(api_key=api_key, model=safe_model, post_json=post_json,
-                field_contract_v3=True, checkpoint=None, **kwargs)
+                field_contract_v3=True, checkpoint=None,
+                max_output_tokens=getattr(checkpoint,"max_output_tokens",None), **kwargs)
         formation_timings = []
         proposal, provider_evidence = execute(blocks=blocks, evidence_blocks=evidence_blocks,
             validator_input=validator_input, provider=provider, limits=limits,

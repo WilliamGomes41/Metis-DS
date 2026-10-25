@@ -1,6 +1,8 @@
 """Retry attempt rules; durability belongs to the existing workflow document."""
 from __future__ import annotations
 
+from src.processing_document_budget_v1 import leased, document_scoped, budget as document_budget
+
 import re
 import uuid
 from copy import deepcopy
@@ -117,6 +119,13 @@ def expire_running(envelope, clock):
     from src.attempt_diagnostics_v1 import finish_diagnostic
     for attempt in envelope.get(KEY, []):
         if attempt["state"] == "running" and datetime.fromisoformat(attempt["expires_at"]) <= clock:
+            if document_scoped(attempt):
+                document_budget(attempt)
+                finish(envelope, attempt["attempt_id"], state="incomplete_budget", error=ConsoleError("source_task_budget_exhausted"))
+                attempt["stop_reason"] = "budget_exhausted"
+                attempt["dispatch"].update(state="blocked",blocked_reason="source_task_budget_exhausted",
+                    required_action="Het documentbudget is bereikt. Een nieuwe expliciete opdracht of herstelautorisatie is nodig.")
+                continue
             attempt.update(state="interrupted", finished_at=clock.isoformat(), phase="stopped", error_code="processing_attempt_expired",
                            stop_reason="error")
             finish_diagnostic(attempt, ConsoleError("processing_attempt_expired"))
@@ -126,10 +135,14 @@ def assert_active(envelope: dict, attempt_id: str, clock: datetime) -> dict:
     attempt = next((a for a in envelope.get(KEY, []) if a["attempt_id"] == attempt_id), None)
     if attempt is None or attempt["state"] != "running":
         raise ConsoleError("processing_attempt_not_active")
+    document_budget(attempt)
     if datetime.fromisoformat(attempt["expires_at"]) <= clock:
-        raise ConsoleError("processing_attempt_expired")
+        raise ConsoleError("source_task_budget_exhausted" if document_scoped(attempt) else "processing_attempt_expired")
     dispatch = attempt.get("dispatch") or {}
-    if dispatch.get("version") == "source-dispatch-v2":
+    if leased(attempt):
+        from src.processing_document_budget_v1 import worker_expired
+        if worker_expired(attempt, clock):
+            raise ConsoleError("processing_worker_deadline_reached")
         if dispatch.get("state") == "claimed" and datetime.fromisoformat(dispatch["lease_expires_at"]) <= clock:
             raise ConsoleError("processing_worker_lease_expired")
         if dispatch.get("budget_expires_at") and datetime.fromisoformat(dispatch["budget_expires_at"]) <= clock:
