@@ -25,7 +25,7 @@ from tests.test_d5_4_review_interaction_evidence import _system
 from tests.test_recommendation_context_v3 import response_for
 
 
-def setup_command(tmp_path, production_console, monkeypatch):
+def setup_command(tmp_path, production_console, monkeypatch, request_hook=None):
     console, users, _, _ = _system(tmp_path, production_console=production_console)
     actor = users['researcher']['account_id']
     sid = console.receive_source(actor_id=actor, filename='handover.html', content_type='text/html',
@@ -38,6 +38,8 @@ def setup_command(tmp_path, production_console, monkeypatch):
         request = json.loads(payload['input'][1]['content'])
         text = request['source_blocks'][0]['text']
         calls.append(text)
+        if request_hook is not None:
+            request_hook(text)
         return {'status':'completed','output':[{'type':'message','content':[{'type':'output_text',
             'text':json.dumps(response_for(payload,text))}]}]}
     def bind(target):
@@ -384,3 +386,37 @@ def test_heartbeat_cannot_revive_expired_or_replaced_claim(tmp_path, production_
     after = console._envelope(sid)['processing_attempts'][0]
     assert after == before  # Even record_version must remain unchanged for the stale heartbeat.
     assert second['dispatch']['token'] == after['dispatch']['token']
+
+
+def test_handover_does_not_restart_initial_and_recovery_passes(tmp_path, production_console, monkeypatch):
+    def rejected(text):
+        if text == 'Gebruik geen zalf.':
+            raise ConsoleError('pre_review_llm_response_invalid')
+    console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch, request_hook=rejected)
+    monkeypatch.setattr('src.source_processing_dispatch_v1.WORKER_SECONDS', 0)
+    console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
+    assert calls == ['Gebruik geen zalf.', 'Controleer dagelijks de huid.']
+    monkeypatch.setattr('src.source_processing_dispatch_v1.WORKER_SECONDS', 240)
+    with pytest.raises(ConsoleError, match='source_formation_incomplete'):
+        console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
+    assert calls.count('Gebruik geen zalf.') == 2, 'Worker transfer must not renew the one initial + one recovery policy'
+    assert calls.count('Controleer dagelijks de huid.') == calls.count('Was dagelijks de handen.') == 1
+    assert console.snapshot_objects(sid) == []
+
+
+def test_late_import_does_not_capture_a_temporary_test_clock():
+    import subprocess
+    import sys
+    script = '''
+from datetime import datetime, timezone
+import src.processing_retry_v1 as clock
+actual = clock.now
+clock.now = lambda: datetime(2000, 1, 1, tzinfo=timezone.utc)
+import src.formation_checkpoint_v1 as checkpoints
+import src.worker_handover_v1 as workers
+clock.now = actual
+assert abs((checkpoints.now()-actual()).total_seconds()) < 1
+assert abs((workers.now()-actual()).total_seconds()) < 1
+'''
+    completed = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True, timeout=20)
+    assert completed.returncode == 0, completed.stderr

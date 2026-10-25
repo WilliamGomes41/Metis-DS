@@ -7,11 +7,16 @@ from contextlib import contextmanager
 from copy import deepcopy
 
 from src.operations_console_v1 import ConsoleError
-from src.processing_retry_v1 import assert_active, now
+from src.processing_retry_v1 import assert_active
+from src import processing_retry_v1 as retry_clock
 from src.source_selection_v1 import authorize_account, configuration
 from src.workflows.formation_task_store_v1 import FormationTaskStore
 from src.workflows.workflow_documents_postgres_v1 import _json_text, WorkflowDocumentStoreError
 from src.workflows.workflow_transaction_v1 import workflow_transaction_active
+
+
+def now():
+    return retry_clock.now()
 
 
 class TaskCheckpointWriter:
@@ -23,6 +28,9 @@ class TaskCheckpointWriter:
         self.configuration = deepcopy(attempt.get("processing_configuration"))
         if not self.configuration:
             raise ConsoleError("processing_configuration_unpinned")
+        self._formation_cursor = deepcopy((attempt.get("dispatch") or {}).get("formation_cursor"))
+        self._cursor_enabled = (attempt.get("dispatch") or {}).get("version") == "source-dispatch-v2"
+        self._next_cursor = None
         self.preparation = None
         self.source_payload = None
         self.source_reference = deepcopy((attempt.get("diagnostic") or {}).get("source_views_ref"))
@@ -111,11 +119,38 @@ class TaskCheckpointWriter:
         else:
             with self._locked() as (con, active):
                 self.store.checkpoint(con,self.attempt_id,phase,values)
+                if phase == "task_rejected":
+                    self._commit_cursor(active)
                 active.setdefault("diagnostic", {})["phase"] = phase
                 if phase=="extraction_reused":
                     active["diagnostic"]["extraction_checkpoint"]=values["extraction_checkpoint"]
+        if phase == "task_rejected" and self._cursor_enabled:
+            self._formation_cursor = deepcopy(self._next_cursor)
         from src.processing_trace_v1 import observe
         observe("processing_checkpoint",self.snapshot_id,active,phase=phase)
+
+    def skip_task(self, phase, position):
+        if not self._cursor_enabled:
+            return False
+        cursor = self._formation_cursor or {"phase":"initial", "position":-1}
+        order = {"initial":0, "recovery":1}
+        if (order[phase] < order[cursor["phase"]]
+                or (phase == cursor["phase"] and position <= cursor["position"])):
+            return True
+        self._next_cursor = {"phase":phase,"position":position}
+        return False
+
+    def _commit_cursor(self, active):
+        if self._cursor_enabled and self._next_cursor is not None:
+            active["dispatch"]["formation_cursor"] = deepcopy(self._next_cursor)
+
+    def task_failures(self):
+        if not self._cursor_enabled:
+            return []
+        with self.store.documents._connect() as con:
+            rows = con.execute("SELECT payload FROM workflow.processing_checkpoints WHERE attempt_id=%s "
+                "AND phase='task_rejected' ORDER BY checkpoint_id", (self.attempt_id,)).fetchall()
+        return [row["payload"] for row in rows]
 
     def before_task(self):
         from src.worker_handover_v1 import before_task
@@ -217,7 +252,10 @@ class TaskCheckpointWriter:
         with self._locked() as (con, active):
             self.store.commit_task(con,context_id=self.input_reference["context_id"],ranges=task["target_spans"],
                 payload=payload,attempt_id=self.attempt_id,claim_token=self.claim_token)
+            self._commit_cursor(active)
             active.setdefault("diagnostic", {})["phase"] = "proposal_received"
+        if self._cursor_enabled:
+            self._formation_cursor = deepcopy(self._next_cursor)
         self.committed_this_worker = True
 
     def final_validation(self, proposal):

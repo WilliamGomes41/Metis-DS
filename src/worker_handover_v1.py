@@ -13,10 +13,15 @@ from datetime import datetime, timedelta
 import uuid
 
 from src.operations_console_v1 import ConsoleError
-from src.processing_retry_v1 import now, finish
+from src.processing_retry_v1 import finish
+from src import processing_retry_v1 as retry_clock
 from src.source_selection_v1 import authorize_account, configuration
 from src.workflows.formation_task_store_v1 import FormationTaskStore
 from src.workflows.workflow_documents_postgres_v1 import _json_text
+
+def now():
+    return retry_clock.now()
+
 
 VERSION = 'source-dispatch-v2'
 _STOP = ContextVar('source_worker_stop', default=None)
@@ -222,6 +227,10 @@ def before_task(writer):
                 'worker_handover': {'claim_number':dispatch['claim_number'], 'released_at':dispatch['released_at'],
                     'task_plan_ref':writer.plan_reference, 'validator_input_ref':writer.input_reference}})
             handover = True
+        elif writer._next_cursor is not None:
+            cursor = dispatch.get('formation_cursor')
+            if cursor is None or cursor['phase'] != writer._next_cursor['phase']:
+                dispatch['formation_cursor'] = {'phase':writer._next_cursor['phase'], 'position':-1}
     if handover:
         raise WorkerHandover()
     return min(remaining, lease_remaining)
