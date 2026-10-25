@@ -112,6 +112,8 @@ class TaskCheckpointWriter:
             with self._locked() as (con, active):
                 self.store.checkpoint(con,self.attempt_id,phase,values)
                 active.setdefault("diagnostic", {})["phase"] = phase
+                if phase=="extraction_reused":
+                    active["diagnostic"]["extraction_checkpoint"]=values["extraction_checkpoint"]
         from src.processing_trace_v1 import observe
         observe("processing_checkpoint",self.snapshot_id,active,phase=phase)
 
@@ -151,9 +153,9 @@ class TaskCheckpointWriter:
             raise ConsoleError(str(error)) from error
         if root is not None:
             self.source_payload=root.payload
-            return root.fragments,extraction["source"]
+            return root.fragments,extraction["source"],{k:extraction[k] for k in ("record_hash","fragments_hash")}
         from src.source_preparation_context_v1 import KEY,stored_extraction
-        return stored_extraction({**extraction["source"],KEY:extraction}),extraction["source"]
+        return stored_extraction({**extraction["source"],KEY:extraction}),extraction["source"],{k:extraction[k] for k in ("record_hash","fragments_hash")}
 
     def retain_source_views(self,payload):
         if payload is self.source_payload and self.source_reference is not None:
