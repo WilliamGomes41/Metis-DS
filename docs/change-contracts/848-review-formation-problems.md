@@ -191,7 +191,7 @@ initiële en één herstelpassage eisen, maar verwacht nu de onafhankelijk geldi
 objecten in Review in plaats van een lege objectset; het foutieve bereik en de
 publicatieblokkade moeten blijven bestaan.
 
-## 6. Ingevulde checklist en verificatie-uitkomst
+## 6. Ingevulde checklist en verificatie vóór Raad-integratie
 
 De eerdere onderzoeksvragen zijn lokaal beantwoord. De native rood/groenproef
 bevestigt de vroege taakpoort als oorzaak in het onderzochte codepad; dit bewijst
@@ -264,6 +264,14 @@ reviewgegevens zijn gelijk gebleven. Geen wijziging aan domein-, bron- of
 publicatiepoorten door deze integratie.
 
 Het groene meetrapport van vóór de integratie blijft apart bewaard als
-`evidence/848/verification-before-raad-integration.json`. De volledige
-standaardcollectie wordt op de gecombineerde vaste versie opnieuw uitgevoerd;
-deze uitkomst wordt afzonderlijk vastgelegd voordat de PR-overdracht eindigt.
+`evidence/848/verification-before-raad-integration.json`. De volledige standaardcollectie is opnieuw uitgevoerd op `57b9b8a9e9944b50da49d7e2654f785b5aa9cd00`:
+**5906 passed, 23 skipped, 3 xfailed**, nul failures/errors en nul
+PostgreSQL-skips. Alle **5932** testgevallen zijn eenmaal verantwoord
+met dezelfde commit en collectiedigest: `8dfca284d8e05ae7ce878d1a3a4b4e411e496d2c2b1bfba0a467158e07fac8b9`.
+Vier geïsoleerde PostgreSQL 16.15-databases, Python 3.12.14; de strikte merge
+slaagt. Totale tijd over de vier delen 5222.19 s, langste deel
+1414.42 s. Het actuele rapport staat in `evidence/848/verification.json`.
+De native aanvullende proeven en vereiste preflights slagen ook op de
+gecombineerde versie; de PR-contracttekst is met de CI-validator gecontroleerd.
+De PR-overdracht omvat hiermee het gecombineerde lokale bewijs. Productie- en
+klinische Smetten-acceptatie blijven open zoals hierboven vastgelegd.

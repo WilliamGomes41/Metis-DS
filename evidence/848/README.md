@@ -88,3 +88,17 @@ van de volledige suite zijn vervolgens opnieuw op dezelfde gewijzigde
 testcommit uitgevoerd; er worden geen resultaten van verschillende commits
 als één groene uitvoering samengevoegd. De productiecode is hiervoor niet
 gewijzigd. De echte deadline-/leaseweigeringen blijven in de suite getoetst.
+
+## Raad-integratie
+
+Tijdens de eerdere volledige controle werd #849 in main samengevoegd. Die
+Raad-wijziging raakte dezelfde browsercontrole en schermreferenties. De branch
+neemt main-commit `6a82455` over in `57b9b8a`: nieuwe tekst-/context-/volgorde-
+en bruikbaarheidscontroles blijven behouden; Vormingsproblemen is aangesloten
+op dezelfde beperkte documentcontrole en gedeelde bruikbaarheidscontrole.
+De gecombineerde gerichte controle slaagt met 69 tests, naast de 38
+karakterisatieproeven. De volledige suite is vervolgens opnieuw op de
+gecombineerde commit gecontroleerd. Het eerdere groene bewijs blijft apart
+bewaard in `verification-before-raad-integration.json`; de actuele volledige
+uitslag staat in `verification.json`. Reviewgegevens zijn bij het samenvoegen
+van de schermreferenties gelijk gebleven.

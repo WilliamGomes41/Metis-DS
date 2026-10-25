@@ -1,17 +1,17 @@
 {
-  "commit": "1b1782bc3f5004f3f4ccdb2ac1d53aa465a84fdd",
+  "commit": "57b9b8a9e9944b50da49d7e2654f785b5aa9cd00",
   "python": "3.12.14",
   "postgres_version": 160015,
-  "collected": 5928,
-  "tests": 5928,
+  "collected": 5932,
+  "tests": 5932,
   "failures": 0,
   "errors": 0,
   "skipped": 26,
   "postgres_skips": [],
-  "collection_digest": "9a176aa76a0e2e471013b8efd8c34ce3b21812cc9360d052ead4f9f0fbf97a8d",
-  "seconds": 4926.714,
-  "wall_seconds": 1370.314,
-  "passed": 5902,
+  "collection_digest": "8dfca284d8e05ae7ce878d1a3a4b4e411e496d2c2b1bfba0a467158e07fac8b9",
+  "seconds": 5222.19,
+  "wall_seconds": 1414.42,
+  "passed": 5906,
   "skip_classification": {
     "pytest.xfail": 3,
     "pytest.skip": 23
@@ -23,22 +23,22 @@
   "shards": [
     {
       "shard_index": 0,
-      "tests": 1136,
+      "tests": 1137,
       "failures": 0,
       "errors": 0,
       "skipped": 22,
       "postgres_skips": [],
-      "seconds": 1139.159,
+      "seconds": 1196.695,
       "exit_code": 0
     },
     {
       "shard_index": 1,
-      "tests": 1917,
+      "tests": 1920,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
       "postgres_skips": [],
-      "seconds": 1143.661,
+      "seconds": 1290.411,
       "exit_code": 0
     },
     {
@@ -48,7 +48,7 @@
       "errors": 0,
       "skipped": 4,
       "postgres_skips": [],
-      "seconds": 1370.314,
+      "seconds": 1414.42,
       "exit_code": 0
     },
     {
@@ -58,12 +58,12 @@
       "errors": 0,
       "skipped": 0,
       "postgres_skips": [],
-      "seconds": 1273.58,
+      "seconds": 1320.664,
       "exit_code": 0
     }
   ],
-  "raw_merged_sha256": "f566ed13298d47eecc97a659925094c846e6ef48632df6f7858ece33fe1c3f22",
-  "raw_junit_sha256": "14b6fb4be8e5fde8f3d52d98898119315c5f61692637e3c4ae47db43f66f9b73",
+  "raw_merged_sha256": "7a262157708648698dbba91480431a04a015dd9c37307c636156bfcc1313d7d5",
+  "raw_junit_sha256": "5ee5c360a47e3416744039451707fafb11d7765db1033f1ed39eb0cb6ca88826",
   "prior_validation_attempt": {
     "commit": "d09d8e136dc9e4dd8207a7198c529ac10ea272d1",
     "collected": 5928,
@@ -75,16 +75,29 @@
     "production_code_changed": false,
     "final_validation": "All four complete shards rerun on the fixed test commit; no mixed-commit merge"
   },
+  "raad_main_integration": {
+    "main_commit": "6a82455fe95bc86f0e4b6b1e506a8eb4d1f123ef",
+    "merge_commit": "57b9b8a9e9944b50da49d7e2654f785b5aa9cd00",
+    "reason": "PR #849 merged during verification and conflicted with the same Raad callers and goldens",
+    "focused_passed": 69,
+    "focused_seconds": 226.65,
+    "characterization_passed": 38,
+    "golden_review": "Only Raad heading, aria-live change and CSS/JS/readiness asset references; review data unchanged",
+    "prior_full_green": "verification-before-raad-integration.json",
+    "current_full_suite": "All four shards rerun together on the combined commit"
+  },
   "supplemental_probes": {
     "command": "python -m pytest -q -p tests.conftest evidence/848/probes.py",
     "passed": 2,
-    "seconds": 4.92
+    "seconds": 5.26
   },
   "required_checks": {
     "repository_preflight": "PASS",
-    "release_control_preflight": "PASS (base 78dff417e3d28a245d818d883c2a2e388724d0a1)",
+    "release_control_preflight": "PASS (base 6a82455fe95bc86f0e4b6b1e506a8eb4d1f123ef)",
     "architecture_boundaries": "PASS",
+    "pr_body_change_contract": "PASS",
     "compileall_src": "PASS",
     "git_diff_check": "PASS"
-  }
+  },
+  "final_collection_matches_tested_runtime": true
 }
