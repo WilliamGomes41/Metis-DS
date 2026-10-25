@@ -1,6 +1,11 @@
 """#840: one durable command, replaceable workers on native PostgreSQL.
-# release-control-evidence: scope/belofte opslag concurrent stale interrupt retry version-compat
-# release-control-evidence: toegang beschikbaarheid kwaliteit slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: opslag concurrent stale interrupt retry version-compat
+# release-control-evidence: toegang
+# release-control-evidence: beschikbaarheid
+# release-control-evidence: kwaliteit
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 import asyncio
 import json
@@ -319,3 +324,21 @@ def test_revocation_during_running_worker_prevents_next_call_and_activation(tmp_
     assert stored['dispatch']['state'] == 'blocked' and stored['error_code'] == 'researcher_role_required'
     with console.workflow_document_store._connect() as con:
         assert con.execute('SELECT count(*) AS n FROM workflow.formation_task_results').fetchone()['n'] == 1
+
+
+def test_worker_transport_deadline_and_task_allowance_cannot_outlive_lease(tmp_path, production_console, monkeypatch):
+    import time
+    from datetime import datetime
+    from src.formation_checkpoint_v1 import TaskCheckpointWriter
+    console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
+    seen = []
+    def inspect_deadline(**kwargs):
+        active = kwargs['attempt']
+        lease_left = (datetime.fromisoformat(active['dispatch']['lease_expires_at'])-now()).total_seconds()
+        assert 0 < kwargs['deadline']-time.monotonic() <= lease_left+.1
+        allowed = TaskCheckpointWriter(console, sid, active).before_task()
+        assert 0 < allowed <= lease_left-4
+        seen.append(True)
+    monkeypatch.setattr(console, '_execute_source_attempt', inspect_deadline)
+    console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
+    assert seen == [True] and calls == []

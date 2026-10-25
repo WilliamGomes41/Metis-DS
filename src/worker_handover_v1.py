@@ -163,8 +163,9 @@ def before_task(writer):
         remaining = (datetime.fromisoformat(dispatch['budget_expires_at'])-clock).total_seconds()
         if remaining <= 0:
             raise ConsoleError('source_task_budget_exhausted')
+        lease_remaining = (datetime.fromisoformat(dispatch['lease_expires_at'])-clock).total_seconds()-5
         stop = _STOP.get()
-        if (datetime.fromisoformat(dispatch['worker_until']) <= clock or (stop is not None and stop.is_set())) and getattr(writer, 'committed_this_worker', False):
+        if lease_remaining <= 0 or ((datetime.fromisoformat(dispatch['worker_until']) <= clock or (stop is not None and stop.is_set())) and getattr(writer, 'committed_this_worker', False)):
             dispatch.update(state='pending', token=None, released_at=clock.isoformat(), release_reason='worker_boundary')
             writer.store.checkpoint(con, writer.attempt_id, 'worker_handover', {
                 'worker_handover': {'claim_number':dispatch['claim_number'], 'released_at':dispatch['released_at'],
@@ -172,4 +173,4 @@ def before_task(writer):
             handover = True
     if handover:
         raise WorkerHandover()
-    return remaining
+    return min(remaining, lease_remaining)
