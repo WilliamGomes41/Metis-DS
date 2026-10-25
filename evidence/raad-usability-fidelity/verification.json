@@ -165,7 +165,8 @@
     "tests/test_care_companion.py": "adb726fad422822c529a98db8226770c8556051f6f8cbc96211894ffa89133e9",
     "tests/test_section_incident.py": "66ca1fbfd43edf078ceba8c9f2867eb24a6ee299c647b40231e866c1f8706d75",
     "tests/test_view_check_contract.py": "fdd60348cf9e67e344e4e3231c8a054aac26d92b1dae9b06f3cd9ab7398e1822",
-    "tests/test_view_check_postgres.py": "ce5d970039fec9e4193e657f12e99952187b6a057399050cb08f1c6ff98555f0"
+    "tests/test_view_check_postgres.py": "ce5d970039fec9e4193e657f12e99952187b6a057399050cb08f1c6ff98555f0",
+    "tests/test_operations_console_mvp.py": "1709a1ea9538147ee7bbfc3cc5dffb5ded431d44e29b48bc3a0845cc4bfaeb57"
   },
   "delivery_base_commit": "78dff417e3d28a245d818d883c2a2e388724d0a1",
   "after_rebase_verification": {
@@ -181,6 +182,23 @@
       "failed": 0,
       "errors": 0,
       "seconds": 215.711
+    }
+  },
+  "ci_followups": {
+    "contract_body": {
+      "run_id": 40219765267,
+      "event_body_red_green": true,
+      "fixed_in_run": 40221418620
+    },
+    "heading_assertion": {
+      "run_id": 40221418620,
+      "failed_on_both_python_versions": true,
+      "test": "tests/test_operations_console_mvp.py::test_via_negativa_is_not_the_heading_of_researcher_rooms",
+      "cause": "test read first h1/h2 as page h1; hidden Raad dialog has its own h2",
+      "change": "assert exactly one h1 with original page title; retain forbidden-phrase checks over all h1/h2",
+      "red_reproduced": true,
+      "focused_passed": 13,
+      "product_code_changed": false
     }
   }
 }
