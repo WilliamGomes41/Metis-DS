@@ -1,0 +1,90 @@
+{
+  "commit": "1b1782bc3f5004f3f4ccdb2ac1d53aa465a84fdd",
+  "python": "3.12.14",
+  "postgres_version": 160015,
+  "collected": 5928,
+  "tests": 5928,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 26,
+  "postgres_skips": [],
+  "collection_digest": "9a176aa76a0e2e471013b8efd8c34ce3b21812cc9360d052ead4f9f0fbf97a8d",
+  "seconds": 4926.714,
+  "wall_seconds": 1370.314,
+  "passed": 5902,
+  "skip_classification": {
+    "pytest.xfail": 3,
+    "pytest.skip": 23
+  },
+  "scope": "Local synthetic PostgreSQL/Chromium; no production or live Smetten acceptance",
+  "browser": "Chromium 151.0.7922.173 (Debian 13)",
+  "playwright_core": "1.57.0",
+  "collection_note": "PYTEST_ADDOPTS=--ignore=work excludes only untracked scratch; no tracked tests omitted",
+  "shards": [
+    {
+      "shard_index": 0,
+      "tests": 1136,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 22,
+      "postgres_skips": [],
+      "seconds": 1139.159,
+      "exit_code": 0
+    },
+    {
+      "shard_index": 1,
+      "tests": 1917,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "postgres_skips": [],
+      "seconds": 1143.661,
+      "exit_code": 0
+    },
+    {
+      "shard_index": 2,
+      "tests": 1410,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 4,
+      "postgres_skips": [],
+      "seconds": 1370.314,
+      "exit_code": 0
+    },
+    {
+      "shard_index": 3,
+      "tests": 1465,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "postgres_skips": [],
+      "seconds": 1273.58,
+      "exit_code": 0
+    }
+  ],
+  "raw_merged_sha256": "f566ed13298d47eecc97a659925094c846e6ef48632df6f7858ece33fe1c3f22",
+  "raw_junit_sha256": "14b6fb4be8e5fde8f3d52d98898119315c5f61692637e3c4ae47db43f66f9b73",
+  "prior_validation_attempt": {
+    "commit": "d09d8e136dc9e4dd8207a7198c529ac10ea272d1",
+    "collected": 5928,
+    "failures": 1,
+    "test": "test_migrated_partial_work_can_resume_across_more_than_one_new_attempt",
+    "failure": "source_task_budget_exhausted at final_validation: real one-second dispatch budget expired",
+    "fix": "Test-only: real worker budget 60 seconds; simulated formation clock advances 120 seconds after one call",
+    "focused_result": "22 passed in 47.24s for the whole affected test file",
+    "production_code_changed": false,
+    "final_validation": "All four complete shards rerun on the fixed test commit; no mixed-commit merge"
+  },
+  "supplemental_probes": {
+    "command": "python -m pytest -q -p tests.conftest evidence/848/probes.py",
+    "passed": 2,
+    "seconds": 4.92
+  },
+  "required_checks": {
+    "repository_preflight": "PASS",
+    "release_control_preflight": "PASS (base 78dff417e3d28a245d818d883c2a2e388724d0a1)",
+    "architecture_boundaries": "PASS",
+    "compileall_src": "PASS",
+    "git_diff_check": "PASS"
+  }
+}

@@ -1876,9 +1876,12 @@ class OperationsConsole:
             if reference:
                 from src.workflows.formation_task_store_v1 import FormationTaskStore
                 result["formation_progress"] = FormationTaskStore(self.workflow_document_store).progress(reference["context_id"])
-                result["formation_incomplete"] = latest.get("state") != "succeeded"
+                # A successful activation can contain independent review work
+                # and unresolved source findings. Attempt success is not closure.
+                activated = bool(envelope.get("semantic_replay")) and latest.get("state") in {"succeeded", "incomplete_budget"}
+                result["formation_incomplete"] = result["formation_incomplete"] or not activated
                 result["formation_state"] = "pending" if result["formation_incomplete"] else "complete"
-                result["formation_checked"] = not result["formation_incomplete"]
+                result["formation_checked"] = bool(envelope.get("semantic_replay")) or not result["formation_incomplete"]
         from src.source_selection_v1 import resume_contract_current
         result["resume_allowed"] = bool(self._can_resume_formation(snapshot_id)
             and resume_contract_current(envelope) and result["state"] != "running"
@@ -1914,7 +1917,8 @@ class OperationsConsole:
             latest = next(reversed(envelope.get("processing_attempts") or []), {})
             contract = ((latest.get("diagnostic") or {}).get("semantic_identity") or {}).get("components", {}).get("semantic_contract_version", "")
             pending = bool((latest.get("diagnostic") or {}).get("validator_input_ref")
-                and latest.get("state") != "succeeded" and VERSION in contract and TASK_VERSION in contract)
+                and (latest.get("state") != "succeeded" or incomplete(envelope))
+                and VERSION in contract and TASK_VERSION in contract)
         else:
             contract = ((envelope.get("semantic_replay") or {}).get("identity") or {}).get("components", {}).get("semantic_contract_version", "")
             pending = incomplete(envelope) and VERSION in contract and TASK_VERSION in contract

@@ -91,6 +91,12 @@
       ]
     ],
     [
+      "/formation-problems",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/health",
       [
         "GET"

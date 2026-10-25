@@ -415,7 +415,7 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
             break
     evidence["task_plan_summary"] = report(plan,proposal,_durable_targets(blocks,proposal))
     evidence["recommendation_coverage"] = assess(blocks, proposal)
-    evidence["pending_rejections"] = pending_rejections(evidence, proposal)
+    evidence["pending_rejections"] = pending_rejections(evidence, proposal, blocks=blocks)
     evidence["formation_incomplete"] = bool(evidence["pending_rejections"])
     evidence["formation_state"] = "pending" if evidence["formation_incomplete"] else "complete"
     evidence["formation_progress"] = formation_progress(evidence)
@@ -470,4 +470,6 @@ def _durable_targets(blocks, proposal):
         if cursor < len(block["text"]):
             result.append({"span":{"block_id":block["block_id"],"start":cursor,"end":len(block["text"])},
                            "text":block["text"][cursor:]})
-    return result
+    # Source coverage already omits empty visible prose. Preserve exact source
+    # offsets, but do not spend model calls on whitespace between selections.
+    return [row for row in result if row["text"].strip()]

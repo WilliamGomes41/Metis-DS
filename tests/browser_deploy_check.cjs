@@ -61,7 +61,7 @@ const fs=require('node:fs');
       await page.unroute('**/raad/meldingen');
       const healthy=await run(page);
       const paths=healthy.map(r=>r.path);
-      for(const expected of ['/','/ingest','/source-selection','/review','/publish','/tree','/settings','/inzicht'])
+      for(const expected of ['/','/ingest','/source-selection','/review','/publish','/tree','/formation-problems','/settings','/inzicht'])
         if(!paths.includes(expected))throw Error(username+' missing page '+expected+': '+JSON.stringify(paths));
       results[username]={healthy};
       if(username===manifest.author){
@@ -155,7 +155,7 @@ const fs=require('node:fs');
         await page.getByRole('button',{name:/Open Raad/}).click();
         if(!await page.getByRole('button',{name:"Controleer alle pagina's",exact:true}).isDisabled())throw Error('second run possible while running');
         await page.getByRole('button',{name:'Kopieer uitslag'}).waitFor({timeout:120000});
-        if(await page.locator('[data-deploy-page]').count()!==8)throw Error('reopened panel missed the result');
+        if(await page.locator('[data-deploy-page]').count()!==healthy.length)throw Error('reopened panel missed the result');
                 await post('/browser-faults',{'/ingest':'unauth'});
         const unauth=await run(page);
         if(unauth.length!==2||!unauth[1].text.includes('aanmelden'))

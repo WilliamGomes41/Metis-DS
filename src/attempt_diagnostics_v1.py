@@ -104,8 +104,10 @@ def comparable_envelope(envelope):
     for attempt in result.get("processing_attempts", []):
         attempt.pop("diagnostic", None)
         attempt.pop("_record_version",None)
+        # Task checkpoint progress is derived from committed results, including
+        # non-document-budget contexts that can now activate partial review.
+        attempt.pop("formation_progress_made", None)
         if document_scoped(attempt):
-            attempt.pop("formation_progress_made", None)
             attempt["document_budget"] = {k:v for k,v in attempt["document_budget"].items()
                 if k not in {"calls_reserved","planned_tasks","plan_hash","max_model_calls"}}
         if leased(attempt):
@@ -117,9 +119,10 @@ def merge_diagnostics(prepared, current):
     by_id = {a["attempt_id"]: a for a in current.get("processing_attempts", [])}
     for attempt in prepared.get("processing_attempts", []):
         recorded = by_id.get(attempt["attempt_id"], {})
+        if "formation_progress_made" in recorded:
+            attempt["formation_progress_made"] = recorded["formation_progress_made"]
         if document_scoped(recorded):
             attempt["document_budget"] = deepcopy(recorded["document_budget"])
-            attempt["formation_progress_made"] = recorded.get("formation_progress_made", False)
         if leased(recorded):
             attempt["dispatch"] = deepcopy(recorded["dispatch"])
         if "diagnostic" in recorded:

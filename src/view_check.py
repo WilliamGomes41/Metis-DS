@@ -1,7 +1,7 @@
 """Document-scoped, read-only browser investigation over the installed app.
 
 No human cookie is copied. The worker receives one fenced capability, accepted
-only on the three inspected GET routes and private brand assets.
+only on the inspected GET routes and private brand assets.
 """
 from __future__ import annotations
 
@@ -118,6 +118,7 @@ def allowed_request(method, path, params, document):
     if path.startswith('/brand/'):
         return '..' not in path and len(path) < 200
     permitted = {'/source-selection': {'document'}, '/review': {'document', 'task'},
+                 '/formation-problems': {'document'},
                  '/inzicht/document/passages': {'document', 'format'}}
     if path not in permitted or set(params) - permitted[path]:
         return False
@@ -181,7 +182,8 @@ class ViewChecks:
                 'object_order': 'knowledge_rows_only_source_groups_not_checked',
                 'objects_checked': [str(oid)[:200] for oid in raw.get('coverage', {}).get('objects_checked', [])[:1000]],
                 'objects_unchecked': [str(oid)[:200] for oid in raw.get('coverage', {}).get('objects_unchecked', [])[:1000]],
-                'clinical': 'not_established', 'source_extraction': 'not_established'}
+                'clinical': 'not_established', 'source_extraction': 'not_established',
+                'formation_problems': 'first_page_read_only' if raw.get('coverage', {}).get('formation_problems') == 'first_page_read_only' else 'not_established'}
             if raw.get('incomplete'):
                 raise ValueError('browser_failed')
             if context(self.state, job['owner_account_id'], job['snapshot_id'], pinned['attempt_id']) != pinned:

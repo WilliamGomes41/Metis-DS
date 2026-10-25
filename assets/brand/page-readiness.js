@@ -1,4 +1,4 @@
-// Smallest task-specific evidence for the eight main pages. Shared by the
+// Smallest task-specific evidence for the main pages. Shared by the
 // user's hidden-frame check and the external Playwright section probe.
 // No requests, mutations, private text, or new status authority.
 (function (scope) {
@@ -12,6 +12,7 @@
       '/review': ['review_inventory_or_empty', '.review-passage-inventory, .review-task-card, .review-empty, .doc-list .doc-card'],
       '/publish': ['publication_inventory_or_empty', '.doc-list .doc-card, .doc-list > p'],
       '/tree': ['document_inventory_or_empty', '#documents .document-row, #documents .document-empty'],
+      '/formation-problems': ['formation_problem_access_available', '#formation-problems'],
       '/settings': ['settings_navigation_available', '.room a[href="/accounts"]'],
       '/inzicht': ['document_inventory_loaded', '#d-table[data-readiness="ready"]'],
     };

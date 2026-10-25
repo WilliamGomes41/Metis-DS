@@ -825,6 +825,7 @@ def _nav(account: dict[str, Any] | None, current: str = "") -> str:
         ("review", "/review", "Review"),
         ("publish", "/publish", "Publicatie"),
         ("tree", "/tree", "Documenten"),
+        ("formation", "/formation-problems", "Vormingsproblemen"),
         ("settings", "/settings", "Instellingen"),
     ]
     links = []
@@ -3699,27 +3700,19 @@ def _source_context_card(console: OperationsConsole, snapshot_id: str, obj: dict
     return ''.join(parts) + panel + '</section>'
 
 
-def _formation_incomplete_banner(console, snapshot_id: str, objects: list[dict[str, Any]]) -> str:
-    """Point to recovery when formation left no knowledge candidate at all.
-
-    Read-only: reuses the deep processing status (#516), so review closure of
-    the pending ranges or an unavailable resume hides this guidance.
-    """
-    from src.source_accountability_v1 import is_source_record
-    if any(obj.get("object_type") not in {"document", "heading"} and not is_source_record(obj) for obj in objects):
-        return ""
+def _formation_incomplete_banner(console, snapshot_id: str) -> str:
+    """Keep unresolved formation visible alongside independent review work."""
     try:
         status = console.processing_status(snapshot_id)
     except ConsoleError:
         return ""
-    if not (status.get("formation_incomplete") and status.get("resume_allowed")):
+    if not status.get("formation_incomplete"):
         return ""
-    link = f'/source-selection?{urlencode({"document": snapshot_id})}'
+    link = f'/formation-problems?{urlencode({"document": snapshot_id})}'
     return ('<div class="banner warn" role="alert" data-formation-incomplete>'
-            '<p><strong>Kennisvorming onvolledig.</strong> Metis heeft voor dit document nog geen kennisvoorstellen '
-            'gevormd; de afgewezen voorstellen en de bron zijn bewaard. Hervat eerst de verwerking. '
-            'Handel bronregels pas af nadat de kennisvorming is hersteld.</p>'
-            f'<p><a class="btn-primary" href="{_esc(link)}">Naar Bronselectie om te hervatten</a></p></div>')
+            '<p><strong>Kennisvorming onvolledig.</strong> Zelfstandig geldige voorstellen kunnen worden beoordeeld. '
+            'Resterende bronproblemen en hun herstelacties blijven beschikbaar; publicatie is geblokkeerd.</p>'
+            f'<p><a class="btn-secondary" href="{_esc(link)}">Vormingsproblemen behandelen</a></p></div>')
 
 
 @source_reconstruction_scope(reuse_existing=True)
@@ -3793,7 +3786,7 @@ def _render_review_room(
             )
             all_object_versions = []
         review_path = review_path_for_klasse(chosen_row["class"])
-        objects_html += _formation_incomplete_banner(console, chosen, snapshot_objects)
+        objects_html += _formation_incomplete_banner(console, chosen)
         audit_signals: list[dict[str, Any]] = []
         if history_enabled:
             audit_reader = getattr(console, "audit_review_signals", None)

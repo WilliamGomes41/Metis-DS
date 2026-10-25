@@ -859,13 +859,15 @@ def _semantic_execution_before_review(
             timings=formation_timings)
         errors = [call["error_code"] for call in [provider_evidence, *provider_evidence.get("supplementary_calls", [])]
                   if call.get("error_code")]
-        if hasattr(checkpoint, "commit_task") and provider_evidence.get("formation_incomplete"):
-            # Retain provisional results, but do not activate a partial slice
-            # merely to manufacture an envelope semantic_replay for resume.
-            structural = next((code for code in errors if code in {
-                "pre_review_llm_input_limit_exceeded","pre_review_llm_output_limit_exceeded"}),None)
+        structural = next((code for code in errors if code in {
+            "pre_review_llm_input_limit_exceeded", "pre_review_llm_output_limit_exceeded"}), None)
+        if (hasattr(checkpoint, "commit_task") and provider_evidence.get("formation_incomplete")
+                and (structural or not proposal["objects"])):
+            # Keep empty selections and structural resource stops on the
+            # existing failure path. The joint gate below decides on other
+            # selections; unresolved source work still blocks publication.
             code = structural or ("source_task_budget_exhausted" if "source_task_budget_exhausted" in errors
-                else errors[0] if errors and not proposal["objects"] else "source_formation_incomplete")
+                else errors[0] if errors else "source_formation_incomplete")
             error = ConsoleError(code)
             error.formation_progress = provider_evidence.get("formation_progress")
             raise error
@@ -924,7 +926,7 @@ def _semantic_execution_before_review(
         provider_evidence = locals().get("provider_evidence") or deepcopy((replay_record or {}).get("provider_evidence") or {})
         if field_contract_v3:
             from src.recoverable_formation_v1 import pending_rejections
-            provider_evidence["pending_rejections"] = pending_rejections(provider_evidence, proposal)
+            provider_evidence["pending_rejections"] = pending_rejections(provider_evidence, proposal, blocks=blocks)
             provider_evidence["formation_incomplete"] = bool(provider_evidence["pending_rejections"])
             if checkpoint:
                 accounted = {"provider_evidence": provider_evidence}

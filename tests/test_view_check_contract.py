@@ -23,6 +23,10 @@ from src.view_check import CHECK_IDS, allowed_request, validate_checks
     ('GET', '/inzicht/document/passages', 'document=one&format=csv'),
     ('GET', '/inzicht/document/blokkade', 'document=one&checks=1'),
     ('GET', '/tree', 'document=one'),
+    ('GET', '/formation-problems', 'document=two'),
+    ('GET', '/formation-problems', 'document=one&document=two'),
+    ('GET', '/formation-problems', 'document=one&offset=100'),
+    ('POST', '/formation-problems', 'document=one'),
 ])
 def test_capability_does_not_authorize_mutations_other_documents_or_diagnostics(method, path, query):
     assert not allowed_request(method, path, QueryParams(query), 'one')
@@ -31,6 +35,7 @@ def test_capability_does_not_authorize_mutations_other_documents_or_diagnostics(
 def test_capability_allows_only_the_fixed_read_scenario():
     assert allowed_request('GET', '/review', QueryParams('document=one&task=inventory'), 'one')
     assert allowed_request('GET', '/source-selection', QueryParams('document=one'), 'one')
+    assert allowed_request('GET', '/formation-problems', QueryParams('document=one'), 'one')
     assert allowed_request('GET', '/inzicht/document/passages', QueryParams('document=one'), 'one')
 
 
