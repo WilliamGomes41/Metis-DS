@@ -1,0 +1,14 @@
+{
+  "issue": 840,
+  "pr": 845,
+  "baseline_head": "e917459da610f3f82e8b842ceca81b5dfde4975e",
+  "bug": "Waiting/claim/heartbeat budget exhaustion was recorded as failed, unlike execution incomplete_budget, changing retry accounting after proven progress",
+  "fix": "All four native stop paths use the same finish_task_failure classification and attempt-owned committed TaskResult proof",
+  "red": {"new_cases": 8, "failed": 6, "passed": 2},
+  "green": {"focused_passed": 64, "new_cases_passed": 8, "failures": 0, "seconds": 56.30},
+  "backend": "PostgreSQL 16.15",
+  "invariants": ["Progress exempts a budget stop; no progress still consumes the existing cap", "Existing TaskResults unchanged", "No extra providerrequest or candidate activation", "Original hard deadline and formation budget unchanged", "Authorization, fencing and recovery grants unchanged"],
+  "scope": "Budget-stop accounting correction only; no migration or historical rewrite",
+  "full_local_suite": "Existing complete-suite evidence belongs to baseline b87d8e8; not rerun for this bounded review correction",
+  "ci": "Must rerun on the new commit; previous 26 green checks are baseline evidence only"
+}

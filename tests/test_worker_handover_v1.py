@@ -140,7 +140,7 @@ def test_discovery_blocks_real_limits_without_new_start_or_provider(tmp_path, pr
     stored = console._envelope(sid)
     final = stored['processing_attempts'][-1]
     assert len(stored['processing_attempts']) == 1
-    assert final['state'] == 'failed'
+    assert final['state'] == ('incomplete_budget' if boundary == 'budget' else 'failed')
     assert final['dispatch']['state'] == 'blocked'
     assert final['dispatch']['blocked_reason'] == code
     assert final['dispatch']['required_action']
@@ -420,3 +420,45 @@ assert abs((workers.now()-actual()).total_seconds()) < 1
 '''
     completed = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True, timeout=20)
     assert completed.returncode == 0, completed.stderr
+
+
+@pytest.mark.parametrize('path', ['discovery', 'claim', 'heartbeat', 'execution'])
+@pytest.mark.parametrize('progress', [False, True])
+def test_budget_stop_counts_the_same_on_every_worker_path(tmp_path, production_console, monkeypatch, path, progress):
+    from src.processing_retry_v1 import _retry_budget_attempts
+    from src.worker_handover_v1 import renew
+    console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
+    if progress:
+        monkeypatch.setattr('src.source_processing_dispatch_v1.WORKER_SECONDS', 0)
+        console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
+        assert len(calls) == 1
+    claimed = None
+    if path in {'heartbeat', 'execution'}:
+        claimed = claim(console, snapshot_id=sid, attempt_id=attempt['attempt_id'])
+    with console.workflow_document_store._connect() as con:
+        results = con.execute('SELECT result_hash,payload FROM workflow.formation_task_results WHERE attempt_id=%s',
+            (attempt['attempt_id'],)).fetchall()
+        con.execute("UPDATE workflow.processing_attempts SET payload=jsonb_set(payload,'{dispatch,budget_expires_at}',%s::jsonb) WHERE attempt_id=%s",
+            (json.dumps((now()-timedelta(seconds=1)).isoformat()), attempt['attempt_id']))
+    if path == 'discovery':
+        assert pending(console) == []
+    elif path == 'claim':
+        with pytest.raises(ConsoleError, match='source_task_budget_exhausted'):
+            claim(console, snapshot_id=sid, attempt_id=attempt['attempt_id'])
+    elif path == 'heartbeat':
+        assert not renew(console, sid, claimed)
+    else:
+        console._record_processing_failure(sid, attempt['attempt_id'], ConsoleError('source_task_budget_exhausted'),
+            claim_token=claimed['dispatch']['token'])
+    final = console._envelope(sid)['processing_attempts'][0]
+    assert final['state'] == 'incomplete_budget'
+    assert final['stop_reason'] == 'budget_exhausted'
+    assert final['formation_progress_made'] is progress
+    assert len(_retry_budget_attempts([final])) == (0 if progress else 1)
+    assert final['dispatch']['state'] == 'blocked' and final['dispatch']['blocked_reason'] == 'source_task_budget_exhausted'
+    assert final['expires_at'] == attempt['expires_at']
+    assert len(calls) == (1 if progress else 0)
+    assert console.snapshot_objects(sid) == []
+    with console.workflow_document_store._connect() as con:
+        assert con.execute('SELECT result_hash,payload FROM workflow.formation_task_results WHERE attempt_id=%s',
+            (attempt['attempt_id'],)).fetchall() == results

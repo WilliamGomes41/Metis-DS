@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 import uuid
 
 from src.operations_console_v1 import ConsoleError
-from src.processing_retry_v1 import finish
 from src import processing_retry_v1 as retry_clock
 from src.source_selection_v1 import authorize_account, configuration
 from src.workflows.formation_task_store_v1 import FormationTaskStore
@@ -110,8 +109,9 @@ def validate(console, con, document, row, active):
         raise ConsoleError('published_objects_must_not_be_rewritten')
 
 
-def block(active, error):
-    finish({'processing_attempts':[active]}, active['attempt_id'], state='failed', error=error)
+def block(con, active, error):
+    from src.formation_checkpoint_v1 import finish_task_failure
+    finish_task_failure(con, active, error)
     active['dispatch'].update(state='blocked', blocked_reason=error.code,
         required_action='Nieuwe geautoriseerde start of herstel na oplossen van de blokkade.')
 
@@ -133,7 +133,7 @@ def discover(console, sid, attempt):
         try:
             validate(console, con, document, row, active)
         except ConsoleError as error:
-            block(active, error)
+            block(con, active, error)
             return None
         dispatch = active['dispatch']
         if dispatch['state'] == 'claimed' and datetime.fromisoformat(dispatch['lease_expires_at']) <= now():
@@ -154,7 +154,7 @@ def claim_native(console, sid, attempt_id, *, actor_id=None, stop_event=None, wo
         try:
             validate(console, con, document, row, active)
         except ConsoleError as error:
-            block(active, error)
+            block(con, active, error)
             denied = error
         else:
             clock = now()
@@ -190,7 +190,7 @@ def renew(console, sid, claimed):
         try:
             validate(console, con, document, row, active)
         except ConsoleError as error:
-            block(active, error)
+            block(con, active, error)
             return False
         boundary = datetime.fromisoformat(active['expires_at'])
         if dispatch.get('budget_expires_at'):

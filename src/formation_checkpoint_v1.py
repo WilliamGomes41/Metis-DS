@@ -317,6 +317,19 @@ def task_checkpoint_writer(console, snapshot_id, attempt_id):
     return None
 
 
+def finish_task_failure(con, active, error):
+    """One stop classification and retry-accounting rule for native attempts."""
+    from src.processing_retry_v1 import finish
+    budget = getattr(error, "code", None) == "source_task_budget_exhausted"
+    finish({"processing_attempts":[active]}, active["attempt_id"],
+           state="incomplete_budget" if budget else "failed", error=error)
+    if budget:
+        active["stop_reason"] = "budget_exhausted"
+        active["formation_progress_made"] = con.execute(
+            "SELECT EXISTS(SELECT 1 FROM workflow.formation_task_results WHERE attempt_id=%s) AS made",
+            (active["attempt_id"],)).fetchone()["made"]
+
+
 def record_task_failure(console,snapshot_id,attempt_id,error,*,claim_token):
     """Stop an owned new-format attempt without archive reload on error.
 
@@ -358,16 +371,10 @@ def record_task_failure(console,snapshot_id,attempt_id,error,*,claim_token):
                     error = ConsoleError("processing_attempt_expired")
                 elif dispatch.get("budget_expires_at") and datetime.fromisoformat(dispatch["budget_expires_at"]) <= now():
                     error = ConsoleError("source_task_budget_exhausted")
-            budget = getattr(error,"code",None) == "source_task_budget_exhausted"
-            from src.processing_retry_v1 import finish
-            finish({"processing_attempts":[active]},attempt_id,state="incomplete_budget" if budget else "failed",error=error)
+            finish_task_failure(con, active, error)
             if (active.get("dispatch") or {}).get("version") == "source-dispatch-v2":
                 active["dispatch"].update(state="blocked", blocked_reason=getattr(error,"code","processing_dependency_failed"),
                     required_action="Los de blokkade op en start opnieuw met de bestaande herstelautorisatie waar vereist.")
-            if budget:
-                active["stop_reason"] = "budget_exhausted"
-                active["formation_progress_made"] = con.execute("SELECT EXISTS(SELECT 1 FROM workflow.formation_task_results WHERE attempt_id=%s) AS made",
-                                                                (attempt_id,)).fetchone()["made"]
             con.execute("UPDATE workflow.processing_attempts SET payload=%s::jsonb,record_version=record_version+1 WHERE attempt_id=%s",
                         (_json_text(active),attempt_id))
             store.checkpoint_summary(con,snapshot_id,active)
