@@ -823,9 +823,9 @@ def _nav(account: dict[str, Any] | None, current: str = "") -> str:
         ("ingest", "/ingest", "Inleveren"),
         ("selection", "/source-selection", "Bronselectie"),
         ("review", "/review", "Review"),
-        ("formation", "/formation-problems", "Vormingsproblemen"),
         ("publish", "/publish", "Publicatie"),
         ("tree", "/tree", "Documenten"),
+        ("formation", "/formation-problems", "Vormingsproblemen"),
         ("settings", "/settings", "Instellingen"),
     ]
     links = []
