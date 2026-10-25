@@ -75,3 +75,22 @@ en resterende beperkingen worden bij deze wijziging en in #851 bijgehouden.
 Controleer onder meer escape van brontekst, ongeldige spans, onbekende scope,
 alle bevindingen bij groepering/paginering, herstel na menselijke review,
 achtergrondverwerking tijdens navigeren en de echte Raad-worker.
+
+
+## Uitslag volledige regressiecontrole
+
+Volledige standaardcollectie op `d9eab5c8ad71b69851579fad375a5cab8b737ece`: 5911 passed,
+26 JUnit-skips inclusief verwachte fouten, nul failures/errors en
+nul PostgreSQL-skips. Alle 5937 testgevallen zijn eenmaal verantwoord
+in vier geïsoleerde PostgreSQL-databases. De strikte merge controleert commit,
+Python, PostgreSQL-versie, collectiedigest en complete uitvoering. Digest:
+`c03df0976438f3825aab3f4d64143c04587359e095726d13f2a922a819fcdde2`. Meetgegevens en beperkingen: `evidence/851/verification.json`.
+
+De releasecontrole was aanvankelijk geblokkeerd doordat meerdere bewijsrubrieken
+op één markerregel stonden. Na afzonderlijke regels geeft de echte controle
+PASS. De onvolledige eerste suite is niet als groen bewijs gebruikt.
+
+Het gebruikersdoel is lokaal opgeleverd: bron lezen, reden begrijpen en de
+beschikbare volgende handeling vinden; alle oude bevindingen blijven bereikbaar.
+Geen claim van gemeten menselijke taakduur, volledige handmatige WCAG-audit,
+actuele Smetten-volledigheid of productie-uitrol. Geen merge/deployment.

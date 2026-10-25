@@ -24,6 +24,8 @@ Dit is geen actuele Smetten-bron of productieacceptatie.
 
 ## Werkelijk uitgevoerd
 
+Volledige standaardcollectie op `d9eab5c8ad71b69851579fad375a5cab8b737ece`: **5.911 passed, 23 skipped, 3 xfailed**, nul failures/errors en nul PostgreSQL-skips. Alle **5.937** testgevallen zijn eenmaal verantwoord in vier geïsoleerde PostgreSQL 16.15-databases, Python 3.12.14, en strikt samengevoegd op dezelfde commit en collectiedigest. Zie `verification.json`.
+
 - Verse baseline: bestaande echte Chromium-/Raad-proef, 1 passed.
 - Nieuwe presentatie- en bestaande featureproeven: 15 passed; inclusief broncitaat, exacte groepering, XSS-escaping, ontbrekende bronlocatie, ongewijzigde toestand en publicatieblokkade.
 - Twee afzonderlijke native adversariële proeven: 2 passed; vervalst activatiebewijs geweigerd en alle 270 bevindingen bereikbaar na groepering/paginering.

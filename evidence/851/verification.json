@@ -1,0 +1,115 @@
+{
+  "commit": "d9eab5c8ad71b69851579fad375a5cab8b737ece",
+  "python": "3.12.14",
+  "postgres_version": 160015,
+  "tests": 5937,
+  "collected": 5937,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 26,
+  "postgres_skips": [],
+  "collection_digest": "c03df0976438f3825aab3f4d64143c04587359e095726d13f2a922a819fcdde2",
+  "seconds": 4984.516,
+  "wall_seconds": 1348.656,
+  "passed": 5911,
+  "skip_classification": {
+    "pytest.xfail": 3,
+    "pytest.skip": 23
+  },
+  "shards": [
+    {
+      "shard_index": 0,
+      "tests": 1695,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 7,
+      "postgres_skips": [],
+      "exit_code": 0,
+      "seconds": 1063.795
+    },
+    {
+      "shard_index": 1,
+      "tests": 1432,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 7,
+      "postgres_skips": [],
+      "exit_code": 0,
+      "seconds": 1348.656
+    },
+    {
+      "shard_index": 2,
+      "tests": 1414,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 12,
+      "postgres_skips": [],
+      "exit_code": 0,
+      "seconds": 1346.367
+    },
+    {
+      "shard_index": 3,
+      "tests": 1396,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "postgres_skips": [],
+      "exit_code": 0,
+      "seconds": 1225.698
+    }
+  ],
+  "raw_merged_sha256": "2342f88a91bfb4836a84e66b2e0421c5757fcf4feb7a1264bdbec25e5cea9099",
+  "raw_junit_sha256": "9a3b80daca6cce769629cd53b82e9431b3a6ee17de0f3a31daa1e216d5f8478a",
+  "scope": "Local synthetic PostgreSQL 16.15 / Chromium 151 / Playwright 1.57; no production or live Smetten acceptance",
+  "focused": {
+    "feature_and_clarity": 15,
+    "native_adversarial": 2,
+    "existing_callers": 79,
+    "characterization": 38,
+    "postgres_skips": 0
+  },
+  "browser_readability": {
+    "knownSourceGroups": 1,
+    "originalFindings": 2,
+    "technicalDetailsInitiallyHidden": true,
+    "keyboardDisclosure": true,
+    "viewports": [
+      320,
+      390,
+      768,
+      1440
+    ],
+    "textZoomPercent": 200,
+    "minLightTextContrast": 7.504110602305391,
+    "minDarkTextContrast": 9.619401416134414,
+    "minTreatmentTargetHeight": 44,
+    "physicalDevice": false
+  },
+  "impeccable": {
+    "cli": "4.7.0",
+    "skill": "4.7.1",
+    "official_source_commit": "3671d50f0ac9a662ce0615e85a256110c9cd720b",
+    "normal_bundle_download": "proxy failure",
+    "installation": "official source bundle installed with CLI; project-local tooling, no product dependency",
+    "detector_findings": 5,
+    "new_component_findings": 0,
+    "remaining": "pre-existing side-tab borders elsewhere in shared stylesheet",
+    "heuristic_audit_before": 15,
+    "heuristic_audit_after": 18,
+    "heuristic_audit_max": 20,
+    "human_usability_timing": false
+  },
+  "required_checks": {
+    "repository_preflight": "PASS",
+    "architecture_boundaries": "PASS",
+    "release_control_preflight": "PASS",
+    "change_contract": "PASS",
+    "compileall": "PASS",
+    "git_diff_check": "PASS"
+  },
+  "goldens_review": "32 changed reference files; only shared stylesheet version differs from the main base",
+  "superseded_invocations": [
+    "Combined tests plus explicit tests.conftest plugin: duplicate cleanup after 17 passed; not counted as a green process; separate 15 and 2 invocations both exit 0",
+    "Incomplete full-suite attempt before correction of one-category-per-line evidence markers; all four final shards rerun on the corrected commit"
+  ]
+}
