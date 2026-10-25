@@ -44,20 +44,21 @@ def _script_url() -> str:
 
 def markup(current: str = "") -> str:
     """Companion shell for authenticated navigation; content is built client side."""
-    from src.request_diagnostics_v1 import deployed_commit
+    from src.request_diagnostics_v1 import deployed_commit, current_request_id
     room = escape(current or "page", quote=True)
     commit = escape(deployed_commit() or "", quote=True)
-    return f'''<div class="care-companion" data-care-companion data-room="{room}" data-commit="{commit}">
+    return f'''<div class="care-companion" data-care-companion data-room="{room}" data-commit="{commit}" data-request-id="{escape(current_request_id() or "", quote=True)}">
   <div class="care-panel" id="care-panel" role="dialog" aria-modal="false" aria-labelledby="care-title" hidden>
     <div class="care-panel-head">
       <strong id="care-title">Raad</strong>
       <button class="care-close quiet" type="button" data-care-close aria-label="Sluit Raad">×</button>
     </div>
-    <div class="care-panel-body" data-care-body aria-live="polite"></div>
+    <div class="care-panel-body" data-care-body></div>
   </div>
   <button class="care-toggle" type="button" data-care-toggle aria-expanded="false" aria-controls="care-panel"
           aria-label="Open Raad: hulp, meldingen en weergavecontrole">{OWL}<span class="care-dot" data-care-dot hidden></span></button>
 </div>
+<script src="/brand/page-readiness.js?v={sha256((SCRIPT.parent / "page-readiness.js").read_bytes()).hexdigest()[:16]}" defer></script>
 <script src="{_script_url()}" defer></script>'''
 
 

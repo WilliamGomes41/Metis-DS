@@ -72,12 +72,30 @@ def build_incident(probe, application_events, platform_events=()):
         response_request_id=identifier(probe.get('response_request_id')), status=status(probe.get('status')),
         navigation=choice(probe.get('navigation'), {'loaded', 'timeout', 'network_error', 'probe_error'}),
         final_location=choice(probe.get('final_location'), {'target', 'login', 'other'}),
-        assertion=choice(probe.get('assertion'), {'section-visible-v1'}),
-        usability=choice(probe.get('usability'), {'passed', 'failed', 'not_checked'}),
+        assertion=choice(probe.get('assertion'), {'section-visible-v1', 'task-ready-v2'}),
+        usability=choice(probe.get('usability'), {'passed', 'failed', 'not_checked', 'not_established', 'not_checked_access'}),
         response_complete=probe.get('response_complete') is True,
         navigation_started=probe.get('navigation_started') is True,
         page_errors=number(probe.get('page_errors')),
         blocked_requests=number(probe.get('blocked_requests')))
+    # Retain the new compact observation in the existing incident projection.
+    # Older probes remain supported; arbitrary DOM/URL/header data is dropped.
+    diagnostic = probe.get('diagnosis')
+    if isinstance(diagnostic, dict):
+        browser['diagnosis'] = {
+            'step': choice(diagnostic.get('step'), {'page_usability'}),
+            'expected': choice(diagnostic.get('expected'), {'task_controls_available', 'navigation_available',
+                'upload_form_available', 'document_choice_and_status', 'review_inventory_or_empty',
+                'publication_inventory_or_empty', 'document_inventory_or_empty', 'settings_navigation_available', 'document_inventory_loaded'}),
+            'observed': choice(diagnostic.get('observed'), {'pending','ready','partial','error','loaded','timeout','network_error','probe_error'}),
+            'elapsed_ms': number(diagnostic.get('elapsed_ms')),
+        }
+        request = diagnostic.get('request')
+        if isinstance(request, dict) and request.get('route') == '/inzicht/api/documents':
+            browser['diagnosis']['request'] = {'route': request['route'],
+                'state': request.get('state') if request.get('state') in {'pending','not_observed'} or
+                    isinstance(request.get('state'), str) and request['state'].isdigit() and len(request['state']) == 3 else 'unknown',
+                'reference': identifier(request.get('reference'))}
     rows, omitted, invalid = [], 0, 0
     for raw in application_events:
         if len(rows) >= MAX_EVENTS:

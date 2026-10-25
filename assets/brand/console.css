@@ -2523,3 +2523,17 @@ html[data-theme="dark"] mark.broncontext-marked { color: #1f2933; }
   .review-room > .task-secondary-nav { margin-top: 0; }
   .review-filters { padding: var(--space-4); }
 }
+
+/* Raad: bounded operational details, native disclosure and touch/focus targets. */
+.care-close { min-width: 2.75rem; min-height: 2.75rem; }
+.care-section + .care-section, .care-disclosure { border-top: 1px solid var(--line); padding-top: .8rem; }
+.care-disclosure { margin-top: 1rem; }
+.care-disclosure summary { cursor: pointer; font-weight: 600; padding: .4rem 0; }
+.care-panel :is(button, a, summary, textarea):focus-visible { outline: 3px solid var(--paars); outline-offset: 3px; }
+.care-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; }
+.care-panel .care-list { overflow-wrap: anywhere; }
+.care-panel-head { z-index: 1; }
+@media (max-width: 480px) {
+  .care-panel { max-height: min(76dvh, 42rem); }
+  .care-actions > button { width: 100%; }
+}

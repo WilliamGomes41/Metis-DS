@@ -1,4 +1,5 @@
 """Real PG production app for Raad's deploy check; injected faults are fixture-only."""
+import asyncio
 import json
 from hashlib import sha256
 
@@ -24,6 +25,12 @@ faults = {}
 @app.middleware('http')
 async def injected_fault(request: Request, call_next):
     fault = faults.get(request.url.path) if request.method == 'GET' else None
+    if fault == 'pending':
+        await asyncio.sleep(25)
+    if fault in {'empty', 'partial'} and request.url.path == '/inzicht/api/documents':
+        return JSONResponse({'documents': [], 'total': None if fault == 'partial' else 0,
+            'offset': 0, 'limit': 200, 'next_offset': None, 'telemetry_partial': False,
+            'metadata_partial': fault == 'partial'})
     if fault == 'status':
         return PlainTextResponse('Internal Server Error', status_code=500)
     if fault == 'unauth':
