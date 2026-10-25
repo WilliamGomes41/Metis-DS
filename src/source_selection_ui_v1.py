@@ -195,6 +195,7 @@ def install(app, console, require, page, nav, esc):
             if result['candidates'] is None:
                 summary = '<p>Aantallen kandidaten en bronpassages zijn nog niet gecontroleerd. Open het document voor de actuele controles en vervolgacties.</p>'
             diagnosis_link = f'<a class="btn-secondary" href="/inzicht/document?{esc(urlencode({"document": sid}))}">Bekijk diagnose in Inzicht</a>'
+            diagnosis_link += f'<a class="btn-secondary" href="/formation-problems?{esc(urlencode({"document": sid}))}">Vormingsproblemen</a>'
             review = f'<a class="btn-primary" href="/review?document={esc(sid)}">Naar Review</a>' if result['review_available'] else ''
             extent = _size(result["bytes"]) if result['bytes'] is not None else 'Bestandsgrootte onbekend'
             fragment_count = envelope.get('source_fragment_count')
@@ -216,6 +217,55 @@ def install(app, console, require, page, nav, esc):
                     + '<div class="source-picker-row"><select id="source-document" name="document">' + options + '</select>'
                     + '<button class="btn-secondary" type="submit">Document selecteren</button></div></form>'
                     + ''.join(sorted(cards, key=lambda card: 'data-selected="true"' not in card)) + '</section>' + script)
+
+    @app.get('/formation-problems', response_class=HTMLResponse)
+    def formation_problems_get(request: Request, document: str = '', offset: int = Query(0, ge=0)):
+        from src.formation_problems_v1 import collect
+        actor = require(request)
+        scoped = actor.get('_view_document')
+        if document:
+            report = collect(console, actor_id=actor['account_id'], snapshot_id=document)
+            status = report['processing']
+            query = {'document': document}
+            body = '<h2>' + esc(report['title']) + '</h2><p>Bronversie ' + esc(report['version']) + '.</p>'
+            body += '<p>Een afgewezen voorstel is geen inhoudelijke reviewtaak. Open bronproblemen blijven publicatie blokkeren totdat de relevante controle slaagt.</p>'
+            body += '<p><a href="/review?' + esc(urlencode(query)) + '">Naar Review</a> · <a href="/source-selection?' + esc(urlencode(query)) + '">Naar Bronselectie</a></p>'
+            if status.get('resume_allowed') or status.get('retry_allowed'):
+                label = 'Open bronwerk hervatten' if status.get('resume_allowed') else 'Bronverwerking starten'
+                body += ('<form method="post" action="/source-selection/start">'
+                    '<input type="hidden" name="document" value="' + esc(document) + '">'
+                    '<input type="hidden" name="command_id" value="' + uuid.uuid4().hex + '">'
+                    '<input type="hidden" name="expected_revision" value="' + esc(console.objects_revision(document)) + '">'
+                    '<button class="btn-primary">' + label + '</button></form>')
+            elif status.get('state') == 'running':
+                body += '<p>De verwerking loopt door. Je kunt andere kamers openen zonder de verwerking te onderbreken.</p>'
+            elif status.get('formation_incomplete'):
+                body += '<p>Modelherstel is nu niet beschikbaar. Gebruik de bron- of kandidaatreparatie hieronder. Na menselijke wijzigingen blijft herextractie beschermd; een nieuwe werkrevisie heeft eigen reviewbewijs.</p>'
+                if 'researcher' in actor['roles'] and actor['account_id'] in console._envelope(document).get('named_reviewers', []):
+                    body += '<p><a href="/review/policy?' + esc(urlencode(query)) + '">Nieuwe werkrevisie voorbereiden</a></p>'
+            rows = report['problems']
+            body += '<p>' + str(len(rows)) + ' actuele vormingsproblemen.</p>'
+            if not rows:
+                body += '<p>Geen actuele vormingsproblemen gevonden. De overige review- en publicatievoorwaarden blijven gelden.</p>'
+            for row in rows[offset:offset + 100]:
+                spans = ', '.join(str(s.get('block_id')) + ' [' + str(s.get('start')) + '–' + str(s.get('end')) + ')' for s in row['spans'])
+                if row.get('page') is not None:
+                    spans = 'pagina ' + str(row['page'])
+                body += '<article class="doc-card" id="problem-' + row['problem_id'] + '"><h3>' + esc(row['title']) + '</h3>'
+                body += '<p>' + esc(row['expected_condition'] or 'Controleer het bronbewijs en de bestaande herstelvoorwaarden.') + '</p>'
+                body += '<p>Controlecode: ' + esc(row['code'] or 'onbekend') + '. Bronbereik: ' + esc(spans or 'nog niet exact vastgesteld') + '.</p>'
+                body += ''.join('<p><a href="' + esc(action['url']) + '">' + esc(action['label']) + '</a></p>' for action in row['actions']) + '</article>'
+            for label, position in [('Vorige problemen', max(0, offset - 100)), ('Volgende problemen', offset + 100)]:
+                if label.startswith('Vorige') and offset or label.startswith('Volgende') and offset + 100 < len(rows):
+                    body += '<p><a href="?' + esc(urlencode({**query, 'offset': position})) + '">' + label + '</a></p>'
+        else:
+            documents = ([console._envelope(scoped)] if scoped else
+                         console.source_selection_documents(actor_id=actor['account_id']))
+            body = '<p>Kies een document om actuele bronproblemen en bestaande herstelacties te openen.</p>'
+            body += ''.join('<article class="doc-card"><h2><a href="/formation-problems?' +
+                esc(urlencode({'document': row['snapshot_id']})) + '">' + esc(row['title']) + '</a></h2></article>' for row in documents)
+        return HTMLResponse(page(nav(actor, 'formation') + '<section class="room" id="formation-problems" style="overflow-wrap:anywhere"><h1>Vormingsproblemen</h1>' + body + '</section>'),
+                            headers={'Cache-Control': 'no-store'})
 
     @app.get('/inzicht/document/verwerkingsspoor')
     def processing_trace_export(request: Request, document: str = ''):

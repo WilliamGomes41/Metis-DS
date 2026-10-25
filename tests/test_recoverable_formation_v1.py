@@ -111,7 +111,7 @@ def partial_story(tmp_path, make_console=None, *, production_console):
 
 
 
-def test_review_points_to_resume_when_formation_left_no_candidate(tmp_path, *, production_app, production_console):
+def test_review_points_to_problems_with_or_without_candidate(tmp_path, *, production_app, production_console):
     from fastapi.testclient import TestClient
     from src.operations_console_app import create_console_app, COOKIE
     from src.source_accountability_v1 import is_source_record
@@ -123,19 +123,20 @@ def test_review_points_to_resume_when_formation_left_no_candidate(tmp_path, *, p
     client.cookies.set(COOKIE, state.authenticate('reviewer', 'strong-test-password')['token'])
     page = client.get('/review', params={'document': sid, 'task': 'individual'}).text
     assert 'data-formation-incomplete' in page and 'Kennisvorming onvolledig' in page
-    assert f'/source-selection?document={sid}' in page
+    assert f'/formation-problems?document={sid}' in page
     # The current-state projection decides, not the stored flag alone.
     real_status = state.processing_status
-    for change in ({'formation_incomplete': False}, {'resume_allowed': False}):
+    for change in ({'formation_incomplete': False},):
         state.processing_status = lambda snapshot_id, change=change, **kwargs: {**real_status(snapshot_id, **kwargs), **change}
         assert 'data-formation-incomplete' not in client.get('/review', params={'document': sid, 'task': 'individual'}).text
     state.processing_status = real_status
 
-    # A partial run with a validated candidate keeps its normal Review page.
+    # Independent candidates and problems are both reachable, even after
+    # review makes automated re-extraction unavailable.
     partial, partial_sid, *_ = system(tmp_path / 'partial', production_console=production_console)
     partial_client = TestClient(production_app(partial))
     partial_client.cookies.set(COOKIE, partial.authenticate('reviewer', 'strong-test-password')['token'])
-    assert 'data-formation-incomplete' not in partial_client.get('/review', params={'document': partial_sid, 'task': 'individual'}).text
+    assert 'data-formation-incomplete' in partial_client.get('/review', params={'document': partial_sid, 'task': 'individual'}).text
 
 
 def test_processing_status_projects_progress_for_pre_v10_bounded_evidence(tmp_path, *, production_console):

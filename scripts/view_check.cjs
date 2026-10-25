@@ -28,7 +28,7 @@ async function run(input) {
     await context.route('**/*', async route => {
       const request = route.request();
       const url = new URL(request.url());
-      const paths = ['/source-selection','/review','/inzicht/document/passages'];
+      const paths = ['/source-selection','/review','/formation-problems','/inzicht/document/passages'];
       if (url.origin !== origin || request.method() !== 'GET' ||
           !(paths.includes(url.pathname) || url.pathname.startsWith('/brand/'))) return route.abort();
       return route.continue();
@@ -54,6 +54,9 @@ async function run(input) {
     if (exported.snapshot_id !== input.document || exported.objects_revision !== input.revision || exported.rows.length>1000) throw Error('context_changed');
     const selected = await page.locator('[data-source-document][data-selected="true"]').getAttribute('data-source-document');
     const selectedValue = await page.locator('select[name=document]').inputValue();
+    const problems = await page.goto(origin+'/formation-problems?'+query);
+    if (problems.status() !== 200 || new URL(page.url()).pathname !== '/formation-problems') throw Error('formation_problems_unavailable');
+    await page.getByRole('heading', {name:'Vormingsproblemen', exact:true}).waitFor();
     const review = await page.goto(origin+'/review?'+query+'&task=inventory');
     if (review.status() !== 200 || new URL(page.url()).pathname !== '/review') throw Error('review_unavailable');
     await page.locator('.review-passage-inventory').first().waitFor();
@@ -72,7 +75,7 @@ async function run(input) {
     const screenshot = await page.screenshot({type:'png',fullPage:false});
     return {checks,browser_version:browser.version(),screenshot:screenshot.toString('base64'),
       // Limits are explicit: these checks do not certify clinical correctness.
-      coverage:{inventory:'all_rows', clinical:'not_established', source_text:'not_established'},
+      coverage:{inventory:'all_rows', clinical:'not_established', source_text:'not_established', formation_problems:'first_page_read_only'},
       scenario_sha256:hash(require('node:fs').readFileSync(__filename))};
   } finally { await browser.close(); }
 }

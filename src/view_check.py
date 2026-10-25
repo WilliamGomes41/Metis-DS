@@ -1,7 +1,7 @@
 """Document-scoped, read-only browser investigation over the installed app.
 
 No human cookie is copied. The worker receives one fenced capability, accepted
-only on the three inspected GET routes and private brand assets.
+only on the inspected GET routes and private brand assets.
 """
 from __future__ import annotations
 
@@ -117,6 +117,7 @@ def allowed_request(method, path, params, document):
     if path.startswith('/brand/'):
         return '..' not in path and len(path) < 200
     permitted = {'/source-selection': {'document'}, '/review': {'document', 'task'},
+                 '/formation-problems': {'document'},
                  '/inzicht/document/passages': {'document', 'format'}}
     if path not in permitted or set(params) - permitted[path]:
         return False
@@ -172,7 +173,7 @@ class ViewChecks:
             result['browser_version'] = str(raw.get('browser_version', ''))[:80]
             result['scenario_sha256'] = sha256((ROOT / 'scripts/view_check.cjs').read_bytes()).hexdigest()
             result['coverage'] = {'inventory': 'all_rows', 'clinical': 'not_established',
-                                  'source_text': 'not_established'}
+                                  'source_text': 'not_established', 'formation_problems': 'first_page_read_only'}
             if context(self.state, job['owner_account_id'], job['snapshot_id'], pinned['attempt_id']) != pinned:
                 raise ValueError('context_changed')
             # Recheck fence/cancellation before uploading source-bearing evidence.
