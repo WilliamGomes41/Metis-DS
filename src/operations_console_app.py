@@ -3735,6 +3735,8 @@ def _formation_incomplete_banner(console, snapshot_id: str) -> str:
 
 def _passage_choices_html(snapshot_id, obj, inputs, *, context_mode='', context_target=''):
     """Keep every context choice reachable without rendering the corpus on click."""
+    if inputs is None:
+        return ''
     params = {'document': snapshot_id, 'object': obj['object_id'], 'context_page': 1}
     if context_mode:
         params['context_mode'] = context_mode
@@ -3753,6 +3755,38 @@ def _passage_choices_html(snapshot_id, obj, inputs, *, context_mode='', context_
             '<button class="btn-secondary">Zoeken</button></form>'
             f'<nav aria-label="Bronpassages">{inputs.choice_total} teksten · '
             f'pagina {inputs.choice_page} · {" · ".join(links)}</nav>')
+
+
+def _review_formation_notice(console, snapshot_id, read_inputs):
+    """Use the complete formation authority when the passage cannot rule it out."""
+    if read_inputs is None:
+        return _formation_incomplete_banner(console, snapshot_id)
+    if not read_inputs.envelope['_review_check_formation']:
+        return ''
+    reads = console._document_reads()
+    if reads is not None:
+        reads.envelopes.pop(snapshot_id, None)
+    try:
+        return _formation_incomplete_banner(console, snapshot_id)
+    finally:
+        if reads is not None:
+            reads.envelopes[snapshot_id] = read_inputs.envelope
+
+
+def _review_detail_projection(console, account, snapshot_id, obj, objects, review_path, read_inputs):
+    """Project source context and actor route from the same captured read inputs."""
+    from src.source_containers_v1 import source_accountability
+    if read_inputs is not None:
+        bindings, fragments = read_inputs.bindings, read_inputs.fragments
+    else:
+        bindings = _review_bindings(console, snapshot_id, objects=objects)
+        fragments = console.review_source_fragments(snapshot_id)
+    projection = source_accountability(objects, review_path=review_path,
+                                      bindings=bindings, fragments=fragments)
+    route = (reviewer_route_for(obj, review_path=review_path,
+        reviewer_id=str(account.get('account_id') or ''), bindings=bindings, fragments=fragments)
+        if bindings is not None else None)
+    return projection, route
 
 
 @source_reconstruction_scope(reuse_existing=True)
@@ -3827,19 +3861,7 @@ def _render_review_room(
                 snapshot if snapshot is not None else console.snapshot_objects_and_revision(chosen))
             all_object_versions = []
         review_path = review_path_for_klasse(chosen_row["class"])
-        if read_inputs is None:
-            objects_html += _formation_incomplete_banner(console, chosen)
-        elif read_inputs.envelope['_review_check_formation']:
-            # Open formation needs the existing document-wide closure check.
-            # The compact passage input must not hide its retained replay.
-            reads = console._document_reads()
-            if reads is not None:
-                reads.envelopes.pop(chosen, None)
-            try:
-                objects_html += _formation_incomplete_banner(console, chosen)
-            finally:
-                if reads is not None:
-                    reads.envelopes[chosen] = read_inputs.envelope
+        objects_html += _review_formation_notice(console, chosen, read_inputs)
         audit_signals: list[dict[str, Any]] = []
         if history_enabled:
             audit_reader = getattr(console, "audit_review_signals", None)
@@ -3883,11 +3905,8 @@ def _render_review_room(
                     audit_signals,
                 )
             else:
-                from src.source_containers_v1 import source_accountability
-                detail_projection = source_accountability(snapshot_objects, review_path=review_path,
-                    bindings=(read_inputs.bindings if read_inputs is not None else
-                              _review_bindings(console, chosen, objects=snapshot_objects)),
-                    fragments=read_inputs.fragments if read_inputs is not None else console.review_source_fragments(chosen))
+                detail_projection, route = _review_detail_projection(
+                    console, account, chosen, obj, snapshot_objects, review_path, read_inputs)
                 context_html = ""
                 if ('reviewer' in (account.get('roles') or [])
                         and str(account.get('account_id') or '') in chosen_row.get('named_reviewers', [])
@@ -3896,26 +3915,10 @@ def _render_review_room(
                         context_target=context_target, source_mode=context_mode == "source",
                         draft=context_draft, error=context_error, projection=detail_projection,
                         choices_html=_passage_choices_html(chosen, obj, read_inputs,
-                            context_mode=context_mode, context_target=context_target) if read_inputs is not None else '')
+                            context_mode=context_mode, context_target=context_target))
                 if context_saved:
                     objects_html += '<p class="banner ok" role="status">Het contextbesluit is opgeslagen. Beoordeel de betrokken passages opnieuw.</p>'
                 conflict_html = _review_conflict_html(conflict, current=obj, draft=draft)
-                try:
-                    current_bindings = (read_inputs.bindings if read_inputs is not None else
-                                        _review_bindings(console, chosen, objects=snapshot_objects))
-                except AttributeError:
-                    current_bindings = None
-                route = (
-                    reviewer_route_for(
-                        obj,
-                        review_path=review_path,
-                        reviewer_id=str(account.get("account_id") or ""),
-                        bindings=current_bindings, fragments=(read_inputs.fragments if read_inputs is not None
-                                                             else console.review_source_fragments(chosen))
-                    )
-                    if current_bindings is not None
-                    else None
-                )
                 source_card = _source_context_card(console, chosen, obj, context_html,
                     context_target=context_target, context_mode=context_mode, task=chosen_task,
                     read_inputs=read_inputs)

@@ -227,3 +227,37 @@ de oude basis is vóór uitvoering onderbroken om de nieuwe main te integreren;
 een volledige suite op de uiteindelijke PR-head blijft open. De PR wordt daarom
 als concept aangeboden, met menselijke review en definitieve CI als verdere
 voorwaarden. Geen claim van volledige merge-/releasegereedheid.
+
+## CI-opvolging — 26 oktober 2026
+
+De eerste PR-head `5f37168` faalde in `source-processing-proof` en de volledige
+Python 3.12/3.13-suites. De logs identificeren zeven unieke falende tests:
+vier revisie-/co-readproeven in twee bestanden, een bronhergebruikproef voor
+passagedetail, een renderer-testdouble en de bestaande complexiteitsgrens.
+De gewone browserjob, karakterisering, change contract en preflights waren groen.
+
+De revisieproeven gebruiken nu de werkelijke gerichte leesroute. Zij toetsen
+de compacte verwijzing via de productieadapter, een commit tijdens de SQL-capture
+en een commit tussen capture en rendering. Een tweede native verbinding schrijft
+na de generatielezing maar vóór de objectlezing; de oude toestand blijft coherent
+en de oude formulierpin wordt vervolgens zonder mutatie geweigerd. Een verse GET
+ziet de winnaar. Ook het bewijs tegen een vervalste thread-local revisie blijft.
+
+De bronhergebruikproef wijzigt voor het detail nu daadwerkelijk bronbewijs van
+de geselecteerde kandidaat. Een gerichte lezing hoeft geen losstaande, niet
+geladen bronpassage te reconstrueren. De bestaande grenzen, ongecachete
+HTML-pariteit, nieuw-verzoek-freshness en autorisatieasserties blijven behouden.
+De testdouble volgt de renderer-signatuur en eist voor documenttaken expliciet
+`read_inputs is None`.
+
+De renderer is vereenvoudigd door bronverantwoording en actorroute uit dezelfde
+captured inputs te projecteren en de volledige vormingswaarschuwing apart af te
+handelen. De complexiteit daalt van 55 naar 43; de oorspronkelijke grens `<45`
+is niet aangepast. Review-, bron-, schrijf- en isolatieregels zijn niet verzwakt.
+
+Lokale brede controle: **117 passed, 1 skipped** (uitsluitend de niet
+geconfigureerde browserproef, geen PostgreSQL-skip). Een afzonderlijke in-memory
+mutatie van `REPEATABLE READ` naar `READ COMMITTED` maakt de native raceproef
+aantoonbaar rood op gemengde generaties. De normale code is groen. Het meetverslag
+bevat de oorzaken en controles; volledige CI op de reparatiecommit moet nog
+afzonderlijk worden bevestigd.

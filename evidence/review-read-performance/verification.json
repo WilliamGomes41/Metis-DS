@@ -222,5 +222,42 @@
         "source_accountability": 1
       }
     }
-  ]
+  ],
+  "ci_followup": {
+    "date": "2026-10-26",
+    "failed_head": "5f371684f5b65998889a3c7209e3b7396c7b0017",
+    "failed_runs": [
+      "https://github.com/WilliamGomes41/Metis-DS/actions/runs/40243216284",
+      "https://github.com/WilliamGomes41/Metis-DS/actions/runs/40243216287"
+    ],
+    "failed_checks": [
+      "source-processing-proof native-and-browser",
+      "ci suite partitions on Python 3.12 and 3.13"
+    ],
+    "root_causes": [
+      "Legacy form tests compared the opaque compact pin directly to the old objectset token, or injected races into the replaced whole-document read.",
+      "Source-reuse detail test changed an unrelated source row outside the bounded package.",
+      "Task-render test double lacked the added read_inputs argument.",
+      "Shared Review renderer exceeded its existing complexity bound (55 versus <45)."
+    ],
+    "fixes": [
+      "Exercise the real targeted read and resolve pins through the production adapter; verify concurrent commits both during SQL capture and after capture.",
+      "Change the selected candidate evidence and retain reconstruction, uncached parity and next-request freshness assertions.",
+      "Align the test double with the renderer signature and require no passage package for a task page.",
+      "Separate formation notice handling and project source/context/actor route from the same captured inputs; complexity is now 43."
+    ],
+    "local_verification": {
+      "passed": 117,
+      "skipped": 1,
+      "failures": 0,
+      "skip_reason": "Chromium/Playwright is not configured locally; no PostgreSQL skip.",
+      "initial_local_red": "5 failed, 6 passed; the two additional form-bound cases were found in the complete CI logs."
+    },
+    "isolation_mutation": {
+      "change": "Only the in-memory read transaction isolation is changed from REPEATABLE READ to READ COMMITTED in a separate pytest process.",
+      "result": "The native concurrent GET test fails because the captured rows include the concurrently committed marker, while the normal code passes.",
+      "expected_exit_code": 1
+    },
+    "new_ci": "pending on the repair commit; no full-suite PASS claimed yet"
+  }
 }
