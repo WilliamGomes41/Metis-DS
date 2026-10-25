@@ -1,6 +1,8 @@
 """#851: readable source grouping retains every finding and all authority.
 
-# release-control-evidence: scope/belofte toegang beschikbaarheid kwaliteit slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from copy import deepcopy
 from html import escape
