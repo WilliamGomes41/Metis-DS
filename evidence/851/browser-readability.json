@@ -1,0 +1,17 @@
+{
+  "knownSourceGroups": 1,
+  "originalFindings": 2,
+  "technicalDetailsInitiallyHidden": true,
+  "keyboardDisclosure": true,
+  "viewports": [
+    320,
+    390,
+    768,
+    1440
+  ],
+  "textZoomPercent": 200,
+  "minLightTextContrast": 7.504110602305391,
+  "minDarkTextContrast": 9.619401416134414,
+  "minTreatmentTargetHeight": 44,
+  "physicalDevice": false
+}
