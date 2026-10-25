@@ -6,6 +6,7 @@ from hashlib import sha256
 from psycopg import sql
 from psycopg.rows import tuple_row
 
+from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from tests.browser_postgres_support import browser_application
@@ -61,3 +62,26 @@ def domain_state():
             rows[schema+'.'+table] = cursor.execute(sql.SQL('SELECT to_jsonb(t)::text FROM {}.{} t ORDER BY 1').format(
                 sql.Identifier(schema), sql.Identifier(table))).fetchall()
     return JSONResponse({'sha256': sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest()})
+
+# Mutating preparation is confined to this disposable fixture process.
+view_fault = {'mode': ''}
+
+
+@app.post('/browser-view-fault')
+async def set_view_fault(request: Request):
+    view_fault['mode'] = (await request.json()).get('mode', '')
+    return JSONResponse({'mode': view_fault['mode']})
+
+
+@app.middleware('http')
+async def alter_rendered_inventory(request: Request, call_next):
+    response = await call_next(request)
+    if (view_fault['mode'] in {'text', 'hidden'} and request.url.path == '/review'
+            and request.query_params.get('task') == 'inventory'):
+        from fastapi.responses import HTMLResponse
+        body = b''.join([chunk async for chunk in response.body_iterator]).decode()
+        body = (body.replace('Gebruik geen zalf.', 'Gebruik zalf.') if view_fault['mode'] == 'text' else
+                body.replace('</head>', '<style>.review-row-title { display:none; }</style></head>'))
+        return HTMLResponse(body, status_code=response.status_code,
+                            headers={k: v for k, v in response.headers.items() if k.lower() != 'content-length'})
+    return response

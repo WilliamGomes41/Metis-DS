@@ -50,14 +50,15 @@ def markup(current: str = "") -> str:
     return f'''<div class="care-companion" data-care-companion data-room="{room}" data-commit="{commit}">
   <div class="care-panel" id="care-panel" role="dialog" aria-modal="false" aria-labelledby="care-title" hidden>
     <div class="care-panel-head">
-      <strong id="care-title">Raad</strong>
+      <h2 id="care-title">Raad</h2>
       <button class="care-close quiet" type="button" data-care-close aria-label="Sluit Raad">×</button>
     </div>
-    <div class="care-panel-body" data-care-body aria-live="polite"></div>
+    <div class="care-panel-body" data-care-body></div>
   </div>
   <button class="care-toggle" type="button" data-care-toggle aria-expanded="false" aria-controls="care-panel"
           aria-label="Open Raad: hulp, meldingen en weergavecontrole">{OWL}<span class="care-dot" data-care-dot hidden></span></button>
 </div>
+<script src="/brand/page-readiness.js?v={sha256((SCRIPT.parent / "page-readiness.js").read_bytes()).hexdigest()[:16]}" defer></script>
 <script src="{_script_url()}" defer></script>'''
 
 

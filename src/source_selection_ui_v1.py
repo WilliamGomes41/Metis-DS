@@ -216,7 +216,7 @@ def install(app, console, require, page, nav, esc):
                     + '<form method="get" class="source-picker"><label for="source-document">Document</label>'
                     + '<div class="source-picker-row"><select id="source-document" name="document">' + options + '</select>'
                     + '<button class="btn-secondary" type="submit">Document selecteren</button></div></form>'
-                    + ''.join(sorted(cards, key=lambda card: 'data-selected="true"' not in card)) + '</section>' + script)
+                    + (''.join(sorted(cards, key=lambda card: 'data-selected="true"' not in card)) or '<p data-source-empty>Geen documenten beschikbaar voor bronselectie.</p>') + '</section>' + script)
 
     @app.get('/formation-problems', response_class=HTMLResponse)
     def formation_problems_get(request: Request, document: str = '', offset: int = Query(0, ge=0)):

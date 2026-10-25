@@ -243,3 +243,27 @@ Geen merge, deployment of productiegegevens gewijzigd. De lokale implementatie
 is toetsbaar opgeleverd; productie-/Smetten-eindacceptatie is niet als gereed
 aangemerkt. #848 en #837 blijven daarvoor open. Onopgeloste of alleen verplaatste
 problemen zijn geen opgeloste problemen.
+
+
+## 7. Integratie met de tijdens verificatie samengevoegde Raad-wijziging #849
+
+Na de volledige groene controle van §6 is #849 in main samengevoegd
+(`6a82455`). De lokale branch neemt die bestaande main-wijziging over om
+conflicten in Raad en schermreferenties op te lossen; de PR wordt niet gemerged
+of uitgerold. De nieuwe tekst-/context-/volgorde- en bruikbaarheidscontroles
+blijven behouden. Vormingsproblemen krijgt een route in dezelfde gedeelde
+bruikbaarheidscontrole en blijft in de vaste documentcontrole uitsluitend
+leesbaar voor het gekozen document. Diagnose en de nieuwe beperkte dekkingsvelden
+worden niet door de oudere dekkingsvorm overschreven.
+
+Gerichte gecombineerde controle: **69 passed** in 226,65 s, inclusief echte
+Chromium/Playwright, Raad-worker en vernieuwde Raad-deploycontrole. De 38
+karakterisatieproeven slagen. Machinevergelijking met de vorige goldens toont
+uitsluitend de verwachte Raad-kop, aria-live-wijziging en assetverwijzingen;
+reviewgegevens zijn gelijk gebleven. Geen wijziging aan domein-, bron- of
+publicatiepoorten door deze integratie.
+
+Het groene meetrapport van vóór de integratie blijft apart bewaard als
+`evidence/848/verification-before-raad-integration.json`. De volledige
+standaardcollectie wordt op de gecombineerde vaste versie opnieuw uitgevoerd;
+deze uitkomst wordt afzonderlijk vastgelegd voordat de PR-overdracht eindigt.

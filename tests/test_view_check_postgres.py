@@ -226,7 +226,7 @@ def test_second_expired_lease_is_terminal_and_does_not_block_next_job(complete_p
         assert not store.finish(first['id'], attempt, token, {'checks': []})
 
 
-@pytest.mark.parametrize('interruption', ['none', 'browser_revocation', 'upload_revocation', 'cancel', 'storage_failure'])
+@pytest.mark.parametrize('interruption', ['none', 'browser_revocation', 'upload_revocation', 'cancel', 'storage_failure', 'revision_change'])
 def test_worker_activation_rechecks_authority_and_preserves_document(interruption, production_console, production_app, complete_postgres, tmp_path, monkeypatch):
     import base64
     import json
@@ -240,6 +240,11 @@ def test_worker_activation_rechecks_authority_and_preserves_document(interruptio
     client = TestClient(app, base_url='https://testserver')
     login(client)
     document = upload(client, reviewer).headers['location'].split('document=')[1].split('&')[0]
+    if interruption == 'revision_change':
+        attempt, _ = state.reserve_source_selection(actor_id=author, snapshot_id=document,
+            command_id=uuid4().hex, expected_revision=state.objects_revision(document))
+        state.execute_source_selection(actor_id=author, snapshot_id=document, attempt=attempt)
+        assert state.snapshot_objects(document)
     service = configure(app, state, complete_postgres, tmp_path / 'evidence')
     pinned = {**context(state, reviewer, document), 'origin': service.config.origin}
     row = service.store.register(reviewer, document, uuid4().hex, pinned)
@@ -255,6 +260,10 @@ def test_worker_activation_rechecks_authority_and_preserves_document(interruptio
         assert set(kwargs['env']) <= {'PATH', 'HOME', 'TMPDIR', 'SYSTEMROOT', 'METIS_PLAYWRIGHT_MODULE', 'METIS_BROWSER_EXECUTABLE'}
         if interruption == 'browser_revocation':
             revoke()
+        if interruption == 'revision_change':
+            objects = deepcopy(state.snapshot_objects(document))
+            objects[0].setdefault('metadata', {})['fixture_revision_marker'] = 'concurrent-edit'
+            state._save_objects(document, objects, expected_revision=before[1])
         if interruption == 'cancel':
             service.store.cancel(row['id'], reviewer)
         return SimpleNamespace(returncode=0, stdout=json.dumps({
@@ -272,6 +281,13 @@ def test_worker_activation_rechecks_authority_and_preserves_document(interruptio
     monkeypatch.setattr(service.evidence, 'put', put)
     service.execute_one()
     result = service.store.get(row['id'])
+    if interruption == 'revision_change':
+        assert state.objects_revision(document) != before[1]
+        assert result['state'] == 'failed'
+        assert result['result']['reason'] == 'context_changed'
+        assert result['result']['evidence'] == []
+        assert all(check['verdict'] == 'not_established' for check in result['result']['checks'])
+        return
     assert before == (state._envelope(document), state.objects_revision(document))
     if interruption == 'none':
         assert result['state'] == 'completed' and len(result['result']['evidence']) == 1

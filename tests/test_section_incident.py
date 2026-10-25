@@ -221,3 +221,22 @@ def test_export_reads_projected_kql_rows_and_console_lines(tmp_path):
     assert read(path, events=True)[0] == [raw]
     path.write_text('metis_diagnostic ' + json.dumps(raw) + '\n')
     assert read(path, events=True)[0] == [raw]
+
+
+def test_incident_retains_bounded_readiness_observation_without_private_payload():
+    probe = browser()
+    probe['route'] = '/inzicht'
+    probe['usability'] = 'not_established'
+    probe['assertion'] = 'task-ready-v2'
+    probe['diagnosis'] = {'step':'page_usability', 'expected':'document_inventory_loaded',
+        'observed':'pending', 'elapsed_ms':20000, 'cookies':'secret',
+        'request':{'route':'/inzicht/api/documents', 'state':'pending', 'reference':'a'*32,
+                   'headers':{'authorization':'secret'}}}
+    result = build_incident(probe, [])
+    assert result['browser']['diagnosis']['request']['reference'] == 'a'*32
+    assert result['browser']['usability'] == 'not_established'
+    assert 'secret' not in str(result)
+    assert result['assessment']['cause'] == 'unknown'
+    for route in ('/', '/settings'):
+        probe['route'] = route
+        assert build_incident(probe, [])['browser']['route'] == route

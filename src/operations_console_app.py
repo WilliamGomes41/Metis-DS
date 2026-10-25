@@ -5353,7 +5353,7 @@ def create_console_app(
             blocks.append(
                 f'<h2>Onderwerp {_esc(family)}</h2><div class="doc-list">{"".join(cards)}</div>'
             )
-        empty = '<p class="muted">Nog geen documenten. Lever eerst een document in.</p>'
+        empty = '<p class="muted document-empty">Nog geen documenten. Lever eerst een document in.</p>'
         return _page(
             f"""
             {_nav(account, "tree")}
