@@ -257,7 +257,7 @@ class FormationTaskStore:
         proof = row["final_validation"] if row else None
         replay = envelope.get("semantic_replay") or {}
         if (not proof or proof.get("version") not in {1, 2}
-                or proof.get("version") == 2 and not proof.get("activation_revision")
+                or proof.get("version") == 2 and not isinstance(proof.get("activation_revision"), str)
                 or proof != (latest.get("diagnostic") or {}).get("final_validation")
                 or proof.get("proposal_hash") != stable_json_hash(replay.get("proposal"))
                 or row["semantic_identity"] != replay.get("identity")

@@ -104,7 +104,7 @@ Rewrite target: De onvoorwaardelijke volledigheidspoort vóór task-v1-materiali
 Why local patching is insufficient: Alleen een knop toevoegen levert geen reviewtaken; alleen de raise verwijderen zonder gezamenlijke validatie en bewaarde publicatieblokkade zou te ruim zijn.
 Current authority/writer/reader map: Bronstore → voorbereiding/provider/prepare → TaskCheckpointWriter/FormationTaskStore → materialisatie/transform/Admission → OperationsConsole.reextract_unpublished → workflow PostgreSQL write_bundle/assert_activation. reserve/retry/resume/dispatcher blijven enige opdracht-/claimwriters. processing_status, source_selection.projectie, Review, export en nieuwe probleemprojectie lezen die eigenaren. Publicatieresultaat blijft uitsluitend readiness → durable/azure publication → canonical store/registry → Product API. Legacy ingest/reextract en beslisboom behouden hun bestaande route. Geen nieuwe writer of fallback.
 Supported runtime topologies: Volledige productie-PostgreSQL-compositie, met bestaande lokale/Azure bronadapter. Legacy replay blijft leesbaar. File-only runtime is niet ondersteund.
-Persisted-state impact: Geen schema of nieuwe probleemstatus; bestaande replay bevat gedeeltelijke gevalideerde selectie en pending bewijs. Bestaande final_validation blijft de gezamenlijke resultaatset binden.
+Persisted-state impact: Geen schema of nieuwe probleemstatus; bestaande replay bevat gedeeltelijke gevalideerde selectie en pending bewijs. final_validation versie 2 bindt naast de gezamenlijke resultaatset de actuele activatierevisie; de oorspronkelijke voorbereidingscontext en zijn invoerrevisie blijven immutable. Versie 1 blijft volgens zijn oorspronkelijke revisiecontrole leesbaar.
 Compatibility/migration plan: Alleen nieuwe uitvoering onder task-v1 kan gedeeltelijk activeren; oude opgeslagen taakresultaten worden bij expliciet hervatten opnieuw gezamenlijk gevalideerd. Geen GET/startupbackfill of interpretatie van diagnostiek als kandidaat.
 Rollback/recovery plan: Bewaar taakresultaten/replay/bron/reviews; oude binary behoudt zijn strengere stop bij toekomstige partial work. Geen destructieve migratie; bestaande reviews vereisen bestaande menselijke herstel-/opvolgeroperaties.
 Cutover trigger: Lokale acceptatie en verplichte checks plus menselijke PR-review; uitrol is afzonderlijk werk.
@@ -160,3 +160,25 @@ Review, Vormingsproblemen, Raad en Azure-opslag controleren. Niet lokaal bewezen
 - [ ] Implement: rood/groenproef, kleine domeinwijziging en probleemtoegang.
 - [ ] Scrap: vervangen stop/dubbele afleidingen verwijderen en einddiff controleren.
 - [ ] Verificatie-uitkomsten en beperkingen in issue/PR bijwerken.
+
+### Ontwerpverfijning uit de regressieproeven
+
+Een gedeeltelijke activatie wijzigt de objectrevisie, terwijl de herbruikbare
+taakinput bewust op de oorspronkelijke voorbereidingsrevisie blijft staan.
+De eindpoort bindt daarom zijn eigen actuele activatierevisie in versie 2 van
+het bestaande validatiebewijs. De bestaande bron-/claim-/rol-/deadline- en
+objectset-CAS blijven verplicht; dit maakt de oude inputrevisie geen nieuwe
+schrijfbevoegdheid. Een lege revisie bij oorspronkelijke registratie blijft
+een geldige string, niet een ontbrekend veld.
+
+Budgetstops behouden `incomplete_budget`, ook wanneer geldig werk reviewbaar
+wordt. Alleen een nieuwe gecommitte taak telt als voortgang; een duplicaat of
+een poging zonder vooruitgang blijft de bestaande retrycap verbruiken.
+Een echte verlopen worker-/opdrachtgrens verleent geen gedeeltelijke activatie.
+Structurele input-/outputlimieten blijven de bestaande blokkerende foutroute.
+
+Een generiek afwijzingsbesluit over een V2-bronrecord is onvoldoende om de
+broninhoud te verantwoorden. De bestaande expliciete bronafhandeling met
+exact bewijs, bevoegde actor en revisie is nodig. De probleemprojectie gebruikt
+dezelfde sluitingsbeslissing als publicatiegereedheid. Niet-geactiveerde
+taakresultaten gelden niet als bewijs van gezamenlijke sluiting.
