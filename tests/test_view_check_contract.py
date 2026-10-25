@@ -76,11 +76,14 @@ const good=[{id:'a',text:' Gebruik geen zalf,\\n tenzij de huid intact is. ',sou
 const missing=good.map(row=>({...row})); missing[0].text='Gebruik geen zalf.';
 const swapped=good.map(row=>({...row})); swapped[1].text='Daarna wegen. Eerst meten.';
 const unicode=good.map(row=>({...row})); unicode[1].text='Eerst meten.\\u00a0Daarna wegen.';
-console.log(JSON.stringify([good,missing,swapped,unicode,[...good].reverse()].map(rows=>compareContent(expected,rows,[]))));'''
+const results=[good,missing,swapped,unicode,[...good].reverse()].map(rows=>compareContent(expected,rows,[]));
+results.push(compareContent([...expected,{object_id:'c',content:{raw_text:'opaque'}}],[...good,{id:'c',text:'opaque',source:false}],[]));
+console.log(JSON.stringify(results));'''
     results = json.loads(subprocess.check_output(['node', '-e', js, str(script)], text=True))
     assert all(row['verdict'] == 'pass' for row in results[0])
     assert all(case[0]['verdict'] == 'fail' for case in results[1:4])
     assert next(row for row in results[4] if row['id'] == 'rendered_order')['verdict'] == 'fail'
+    assert results[5][0]['verdict'] == 'not_established'
 
 
 def test_compact_diagnosis_discards_private_headers_urls_and_unknown_references():

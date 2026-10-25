@@ -16,6 +16,11 @@ const fs=require('node:fs');
       await page.getByRole('button',{name:'Kopieer uitslag'}).waitFor({state:'attached',timeout:120000});
       return page.locator('[data-deploy-page]').evaluateAll(nodes=>nodes.map(n=>({path:n.dataset.deployPage,result:n.dataset.deployResult,text:n.textContent})));
     };
+    const copiedText=async page=>{
+      await page.evaluate(()=>{window.__copiedDeploy='';navigator.clipboard.writeText=async text=>{window.__copiedDeploy=text;};});
+      await page.getByRole('button',{name:'Kopieer uitslag'}).click();
+      return page.evaluate(()=>window.__copiedDeploy);
+    };
     for(const username of [manifest.author, manifest.reviewer]){
       const page=await browser.newPage();
       const errors=[];
@@ -75,6 +80,8 @@ const fs=require('node:fs');
       if(errors.length)throw Error('page errors on a healthy console: '+errors.join('; '));
       if(username===manifest.reviewer){
         // A role refusal is reported as not checked, never as a deploy fault.
+        const copy=await copiedText(page);
+        if(!copy.split('\n').some(line=>line.startsWith('NIET')&&line.includes('/publish')))throw Error('access refusal copied as checked');
         const refused=healthy.filter(r=>r.result!=='ok');
         if(refused.length!==1||refused[0].path!=='/publish'||refused[0].result!=='skipped')
           throw Error('reviewer role refusal misreported: '+JSON.stringify(healthy));
@@ -87,8 +94,11 @@ const fs=require('node:fs');
         const byPath=Object.fromEntries(faulty.map(r=>[r.path,r]));
         const expect=(path,needle)=>{ if(byPath[path].result!=='problem'||!byPath[path].text.includes(needle))throw Error(path+' not reported: '+JSON.stringify(byPath[path])); };
         expect('/tree','foutstatus 500');
-        expect('/publish','fixture_failure');
-        expect('/publish','req-fixture');
+        const faultEvidence = await page.evaluate(()=>JSON.parse(sessionStorage.getItem('metis-care-deploy-check')).rows.find(row=>row.path==='/publish'));
+        if(faultEvidence.code!=='fixture_failure'||faultEvidence.reference!=='req-fixture'||faultEvidence.verdict!=='fail'||faultEvidence.diagnosis.verdict!=='fail')throw Error('failure correlation missing');
+        const technicalEvidence=page.locator('.care-disclosure').filter({has:page.locator('pre')}).locator('pre').filter({hasText:'fixture_failure'});
+        if(await technicalEvidence.count()!==1||!await technicalEvidence.isHidden())
+          throw Error('technical evidence is missing or not disclosed progressively');
         expect('/review','1 scriptfout');
         expect('/settings','stuurt door naar /');
         if(faulty.filter(r=>r.result!=='ok').length!==4)throw Error('unexpected failures: '+JSON.stringify(faulty));
@@ -101,12 +111,13 @@ const fs=require('node:fs');
         const copied=await page.evaluate(()=>JSON.parse(sessionStorage.getItem('metis-care-deploy-check')));
         if(copied.rows.length!==faulty.length)throw Error('stored result incomplete');
         // A valid empty inventory passes; partial and hung data never pass.
-        for (const [fault, expected] of [['empty','ok'],['partial','problem'],['pending','problem']]) {
+        for (const [fault, expected] of [['empty','ok'],['partial','problem'],['pending','problem'],['unauth','skipped']]) {
           await post('/browser-faults', {'/inzicht/api/documents':fault});
           const row = (await run(page)).find(r=>r.path==='/inzicht');
           if(row.result!==expected) throw Error(fault+' inventory misreported: '+JSON.stringify(row));
           const stored = await page.evaluate(()=>JSON.parse(sessionStorage.getItem('metis-care-deploy-check')));
           const observation = stored.rows.find(r=>r.path==='/inzicht');
+          if(fault==='pending' && !(await copiedText(page)).split('\n').some(line=>line.startsWith('ONBEKEND')&&line.includes('/inzicht')))throw Error('incomplete check copied as known fault or pass');
           if(fault==='pending' && (observation.verdict!=='not_established' || observation.diagnosis.request.state!=='pending'))
             throw Error('pending data lacks bounded diagnosis: '+JSON.stringify(observation));
         }
@@ -133,7 +144,7 @@ const fs=require('node:fs');
         // A publisher refused with publisher_role_required is a fault, not a skip.
         await post('/browser-faults',{'/publish':'role'});
         const role=(await run(page)).find(r=>r.path==='/publish');
-        if(role.result!=='problem'||!role.text.includes('publisher_role_required'))throw Error('own role refusal hidden: '+JSON.stringify(role));
+        if(role.result!=='problem'||!await page.evaluate(()=>JSON.parse(sessionStorage.getItem('metis-care-deploy-check')).rows.some(row=>row.path==='/publish'&&row.code==='publisher_role_required')))throw Error('own role refusal hidden: '+JSON.stringify(role));
         // Closing and reopening Raad during a run keeps one run and shows its result.
         await post('/browser-faults',{});
         await page.getByRole('button',{name:"Controleer alle pagina's",exact:true}).click();

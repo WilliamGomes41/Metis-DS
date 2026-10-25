@@ -97,6 +97,7 @@ async function probe(browser, {url, storageState, timeout = 30000}) {
         result.usability = result.response_complete && !result.page_errors ? 'passed' : 'failed';
       } catch (_) { result.usability = 'not_established'; }
       if (target.pathname !== '/login') result.diagnosis = await page.evaluate(readPageReadiness, target.pathname);
+      if (result.diagnosis?.request?.state === '401') result.usability = 'not_checked_access';
 
     }
   } catch (_) {

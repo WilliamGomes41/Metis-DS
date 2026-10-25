@@ -265,8 +265,8 @@ def validate_diagnosis(raw):
     elapsed = raw.get('elapsed_ms')
     result['elapsed_ms'] = elapsed if type(elapsed) is int and 0 <= elapsed <= 60000 else None
     result['requests'] = []
-    for row in raw.get('requests', [])[:12]:
-        if not isinstance(row, dict) or row.get('route') not in {'/source-selection', '/review', '/inzicht/document/passages'}:
+    for row in raw.get('requests', [])[:16]:
+        if not isinstance(row, dict) or row.get('route') not in {'/source-selection', '/review', '/inzicht/document/passages', '/brand/*'}:
             continue
         reference = row.get('reference')
         result['requests'].append({'route': row['route'],

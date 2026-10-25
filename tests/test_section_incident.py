@@ -225,6 +225,7 @@ def test_export_reads_projected_kql_rows_and_console_lines(tmp_path):
 
 def test_incident_retains_bounded_readiness_observation_without_private_payload():
     probe = browser()
+    probe['route'] = '/inzicht'
     probe['usability'] = 'not_established'
     probe['assertion'] = 'task-ready-v2'
     probe['diagnosis'] = {'step':'page_usability', 'expected':'document_inventory_loaded',
@@ -235,3 +236,7 @@ def test_incident_retains_bounded_readiness_observation_without_private_payload(
     assert result['browser']['diagnosis']['request']['reference'] == 'a'*32
     assert result['browser']['usability'] == 'not_established'
     assert 'secret' not in str(result)
+    assert result['assessment']['cause'] == 'unknown'
+    for route in ('/', '/settings'):
+        probe['route'] = route
+        assert build_incident(probe, [])['browser']['route'] == route

@@ -7,6 +7,10 @@ from datetime import datetime
 
 from src.request_diagnostics_v1 import PHASES, ROUTES
 
+# Browser observations cover every main page; detailed phase telemetry keeps
+# its existing, narrower producer scope. Missing backend evidence stays unknown.
+PROBE_ROUTES = ROUTES | frozenset({'/', '/settings', '/inzicht'})
+
 MAX_EVENTS = 1000
 EVENTS = frozenset({'request_started', 'phase_started', 'request_running',
                    'response_started', 'response_completed', 'request_finished'})
@@ -45,7 +49,7 @@ def clean_event(row):
         return None
     result = dict(event=row['event'], request_id=identifier(row.get('request_id')),
                   attempt_id=identifier(row.get('attempt_id')),
-                  route=choice(row.get('route'), ROUTES), timestamp=timestamp(row.get('timestamp')),
+                  route=choice(row.get('route'), PROBE_ROUTES), timestamp=timestamp(row.get('timestamp')),
                   elapsed_ms=number(row.get('elapsed_ms')), status=status(row.get('status')),
                   outcome=choice(row.get('outcome'), {'completed', 'incomplete', 'cancelled', 'exception'}),
                   phase=choice(row.get('phase'), PHASES | {'request_dispatch'}))
@@ -65,7 +69,7 @@ def clean_event(row):
 def build_incident(probe, application_events, platform_events=()):
     """Join by explicit IDs only. Input event order is retained, not clock-sorted."""
     if (not isinstance(probe, dict) or probe.get('schema') != 'metis.section-probe.v1'
-            or not identifier(probe.get('attempt_id')) or choice(probe.get('route'), ROUTES) is None):
+            or not identifier(probe.get('attempt_id')) or choice(probe.get('route'), PROBE_ROUTES) is None):
         raise ValueError('invalid_browser_probe')
     browser = {key: probe[key] for key in ('schema', 'attempt_id', 'route')}
     browser.update(started_at=timestamp(probe.get('started_at')), finished_at=timestamp(probe.get('finished_at')),

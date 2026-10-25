@@ -150,7 +150,7 @@
 
   const documentsSection = () => {
     const list = el('ul', {class: 'care-list'});
-    const status = el('p', {class: 'care-muted', text: 'Meldingen worden opgehaald…'});
+    const status = el('p', {class: 'care-muted', role: 'status', text: 'Meldingen worden opgehaald…'});
     storage((s) => s.removeItem('metis-care-notices'));
     const render = (page) => {
       const rows = page.documents || [];
@@ -175,13 +175,14 @@
   };
 
   const viewCheckSection = (documentId, attempt) => {
-    const holder = section('Weergavecontrole', el('p', {class: 'care-muted', text: 'Status wordt opgehaald…'}));
+    const holder = section('Weergavecontrole', el('p', {class: 'care-muted', role: 'status', text: 'Status wordt opgehaald…'}));
+    holder.setAttribute('aria-busy', 'true');
     fetchJson('/raad/weergavecontrole?' + new URLSearchParams({document: documentId, attempt}))
       .then((data) => {
         const children = [el('h3', {text: 'Weergavecontrole'})];
         if (!data.available || !data.form) {
           const reason = REASONS[data.reason] ?? REASONS.not_available;
-          if (reason) children.push(el('p', {class: 'care-muted', text: reason}));
+          if (reason) children.push(el('p', {class: 'care-muted', role: 'status', text: reason}));
         }
         if (data.form) {
           const form = el('form', {method: 'post', action: '/inzicht/document/weergavecontrole'});
@@ -205,7 +206,8 @@
         holder.replaceChildren(...children);
       })
       .catch(() => holder.replaceChildren(el('h3', {text: 'Weergavecontrole'}),
-        el('p', {class: 'care-muted', text: 'De status is nu niet op te halen.'})));
+        el('p', {class: 'care-muted', role: 'status', text: 'De status is nu niet op te halen. Probeer het later opnieuw of open Inzicht.'})))
+      .finally(() => holder.setAttribute('aria-busy', 'false'));
     return holder;
   };
 
@@ -247,9 +249,11 @@
       frame.remove();
       const elapsed_ms = Math.round(performance.now() - started);
       const seconds = elapsed_ms / 1000;
-      resolve({...page, ...outcome, verdict: outcome.skipped ? 'not_checked_access' : outcome.ok ? 'pass' :
-        ['timeout', 'incomplete', 'unreadable'].includes(outcome.problem) ? 'not_established' : 'fail',
-        diagnosis: {...readiness, elapsed_ms}, seconds: seconds.toLocaleString('nl-NL', {minimumFractionDigits: 1, maximumFractionDigits: 1})});
+      const verdict = outcome.skipped || outcome.problem === 'login' ? 'not_checked_access' : outcome.ok ? 'pass' :
+        ['timeout', 'incomplete', 'unreadable'].includes(outcome.problem) ? 'not_established' : 'fail';
+      const observed = outcome.skipped ? 'missing_access' : readiness.observed === 'navigation_pending' && outcome.problem ? outcome.problem : readiness.observed;
+      resolve({...page, ...outcome, verdict,
+        diagnosis: {...readiness, verdict, observed, elapsed_ms}, seconds: seconds.toLocaleString('nl-NL', {minimumFractionDigits: 1, maximumFractionDigits: 1})});
     };
     // Our pages never leave the origin: a cross-origin frame is the Entra sign-in.
     const signIn = () => {
@@ -277,7 +281,7 @@
           const shell = doc.querySelector('[data-care-companion]');
           // Raad inside the frame counts from its own start; the listener only after load.
           const errors = Math.max(Number(shell && shell.dataset.errors || 0), lateErrors);
-          readiness.navigation = {route:page.path, state:'loaded', status, reference:shell?.dataset.requestId || null};
+          readiness.navigation = {route:page.path, state:'loaded', status, reference:banner?.getAttribute('data-request-id') || null};
           const code = banner ? banner.getAttribute('data-error-code') || '' : '';
           // Local sign-in answers protected pages with not_authenticated, and / with a login form.
           if (signIn() || code === 'not_authenticated' || doc.querySelector('input[type=password]')) finish({ok: false, problem: 'login'});
@@ -291,7 +295,8 @@
           else if (errors) finish({ok: false, problem: 'script', errors});
           else {
             readiness = win.MetisPageReadiness ? {...win.MetisPageReadiness(page.path), navigation:readiness.navigation} : {...readiness, observed: 'readiness_unavailable'};
-            if (readiness.verdict === 'pass') finish({ok: true});
+            if (readiness.request?.state === '401') finish({ok:false, problem:'login'});
+            else if (readiness.verdict === 'pass') finish({ok: true});
             else if (['partial', 'error'].includes(readiness.observed)) finish({ok: false, problem: 'incomplete'});
             else poll = setTimeout(inspect, 100);
           }
@@ -307,8 +312,8 @@
 
   const deployProblem = (row) => ({
     timeout: 'laadt niet binnen ' + PAGE_TIMEOUT / 1000 + ' seconden',
-    login: 'stuurt door naar aanmelden; je sessie is verlopen',
-    error: 'toont een foutmelding' + (row.code ? ' (' + row.code + ')' : '') + (row.reference ? ', referentie ' + row.reference : ''),
+    login: 'vraagt om aanmelden; meld je opnieuw aan',
+    error: 'toont een foutmelding; open de controledetails voor code en referentie',
     status: 'geeft foutstatus ' + row.status,
     redirect: 'stuurt door naar ' + row.landed,
     incomplete: 'is niet volledig geladen' + (row.status ? ' (status ' + row.status + ')' : ''),
@@ -320,7 +325,7 @@
     'Bruikbaarheidscontrole Metis-console',
     'Tijd: ' + run.at,
     'Versie: ' + (run.commit || '-'),
-    ...run.rows.map((row) => (row.skipped ? 'NIET  ' : row.ok ? 'OK    ' : 'FOUT  ') + row.label + ' (' + row.path + ') — '
+    ...run.rows.map((row) => (row.verdict === 'not_checked_access' ? 'NIET  ' : row.verdict === 'not_established' ? 'ONBEKEND  ' : row.ok ? 'OK    ' : 'FOUT  ') + row.label + ' (' + row.path + ') — '
       + (row.skipped ? 'geen toegang met jouw rol' : row.ok ? 'bruikbaar, ' + row.seconds + ' s' : deployProblem(row))
       + (row.diagnosis ? '\n  ' + JSON.stringify(row.diagnosis) : ''))
   ].join('\n');
@@ -346,20 +351,22 @@
     if (last && (last.who !== who || last.schema !== 'task-ready-v2')) last = null;
     const show = (run) => {
       list.replaceChildren(...run.rows.map((row) => el('li', {'data-deploy-page': row.path,
-        'data-deploy-result': row.skipped ? 'skipped' : row.ok ? 'ok' : 'problem'},
-        el('strong', {text: (row.skipped ? '– ' : row.ok ? '✓ ' : '✗ ') + row.label}),
+        'data-deploy-result': row.verdict === 'not_checked_access' ? 'skipped' : row.ok ? 'ok' : 'problem'},
+        el('strong', {text: row.label}),
         el('span', {class: 'care-muted', text: ' — ' + (row.skipped ? 'niet gecontroleerd: geen toegang met jouw rol'
-          : row.ok ? 'bruikbaar · ' + row.seconds + ' s' : (row.verdict === 'not_established' ? 'niet vastgesteld: ' : 'afwijking: ') + deployProblem(row))}))));
+          : row.ok ? 'bruikbaar · ' + row.seconds + ' s' : (row.verdict === 'not_checked_access' ? 'niet gecontroleerd: ' : row.verdict === 'not_established' ? 'niet vastgesteld: ' : 'afwijking: ') + deployProblem(row))}))));
       evidence.replaceChildren(...run.rows.map(row => el('div', {},
         el('strong', {text: row.label}),
-        el('pre', {text: JSON.stringify({verdict:row.verdict, ...row.diagnosis}, null, 2)}),
+        el('pre', {text: JSON.stringify({verdict:row.verdict, code:row.code, reference:row.reference, ...row.diagnosis}, null, 2)}),
         el('a', {href:'/inzicht?tab=systeem&route=' + encodeURIComponent(row.path) + '&q=' + encodeURIComponent(row.diagnosis?.request?.reference || row.diagnosis?.navigation?.reference || row.reference || ''), text:'Beschikbare verzoekdiagnostiek'}))));
       technical.hidden = false;
-      const failed = run.rows.filter((row) => !row.ok).length;
-      status.textContent = (failed ? failed + ' van ' + run.rows.length + " pagina's hebben een probleem."
-        : "Alle gecontroleerde pagina's voldoen aan hun gereedheidsvoorwaarde.") + ' Versie ' + (run.commit || 'onbekend')
-        + ', gecontroleerd ' + run.at.slice(11, 16) + ' (UTC).'
-        + (run.rows.some((row) => row.problem === 'login') ? ' Gestopt: meld je opnieuw aan en controleer daarna opnieuw.' : '');
+      const counts = verdict => run.rows.filter(row => row.verdict === verdict).length;
+      status.textContent = counts('pass') + ' bruikbaar · ' + counts('fail') + ' afwijking(en) · '
+        + counts('not_established') + ' niet vastgesteld · ' + counts('not_checked_access') + ' niet gecontroleerd.'
+        + ' Versie ' + (run.commit || 'onbekend') + ', gecontroleerd ' + run.at.slice(11, 16) + ' (UTC).'
+        + (run.rows.some(row => row.problem === 'login') ? ' Gestopt: meld je opnieuw aan en controleer daarna opnieuw. '
+          + (DEPLOY_PAGES.length - run.rows.length) + ' overige pagina’s zijn niet gecontroleerd.' : '')
+        + (counts('not_established') ? ' Probeer opnieuw. Blijft de controle onvolledig? Open de controledetails of maak hieronder een melding.' : '');
       actions.append(copy);
     };
     const view = {

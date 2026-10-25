@@ -1,0 +1,169 @@
+{
+  "change_class": "B",
+  "rewrite_risk": "none",
+  "base_commit": "f133b860379ecd1ee3a1e8b52055a6afb830add1",
+  "complete_collection": {
+    "collected": 5898,
+    "executed_exact_partition": true,
+    "collection_digest": "7944e3fde1796754ec465c6701a848756532746a783504eb121af262c23a8dcf",
+    "initial_failures": 17,
+    "initial_errors": 0,
+    "skipped_including_xfail": 26,
+    "xfail": 3,
+    "postgres_skips": 0,
+    "postgres_version": 170011,
+    "python": "3.13.5",
+    "initial_commit_field": "f133b860379ecd1ee3a1e8b52055a6afb830add1",
+    "sum_seconds": 15603.449,
+    "wall_seconds": 4306.234,
+    "after_retries_remaining": [
+      "tests/test_bounded_model_transport.py::test_real_transport_wait_is_bounded_even_with_trickle[connect-pre_review_llm_connection_timeout]",
+      "tests/test_bounded_processing_lifecycle.py::test_native_stall_reserves_before_call_and_recovers_same_source"
+    ],
+    "remaining_reproduced_on_start_commit": true,
+    "complete_suite_claim": "executed; not a green final-head run",
+    "sdk_dependencies_restored_from_repository_pins": true,
+    "model_limits_changed": false
+  },
+  "shipping_scope": {
+    "passed": 93,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 388.8,
+    "browser_enabled": true,
+    "postgres_enabled": true
+  },
+  "browser_proofs": [
+    "healthy loaded pages",
+    "valid empty inventory",
+    "hung data request",
+    "partial inventory",
+    "rendered text mutation",
+    "CSS-hidden text",
+    "missing access",
+    "API authentication expiry",
+    "revision change",
+    "close/reopen shares run",
+    "domain authority rows unchanged"
+  ],
+  "rendering_coverage": {
+    "checked": [
+      "content.clean_text",
+      "source_label_hint.label",
+      "knowledge-row order",
+      "inventory identity",
+      "source partition",
+      "review links"
+    ],
+    "not_checked": [
+      "structured conditions/exceptions not rendered in inventory",
+      "source locators",
+      "full source context relations",
+      "clinical correctness",
+      "complete source extraction"
+    ]
+  },
+  "impeccable": {
+    "cli_version": "4.7.0",
+    "source_version": "4.7.1",
+    "source_commit": "658b4ce2942171ed5b3b3bec7e9d99456ba86e5e",
+    "install": "official source linked after website bundle download failed",
+    "audit_before": 15,
+    "audit_after": 17,
+    "score_max": 20,
+    "baseline_detector_findings": 7,
+    "final_detector_findings": 5,
+    "remaining_detector_findings": {
+      "intentional_brand_purple": 3,
+      "intentional_nonmodal_overlay": 1,
+      "existing_home_h1_outside_scope": 1
+    },
+    "close_target_css_px": [
+      44,
+      44
+    ],
+    "landscape_200_percent_text_y_before": -43,
+    "landscape_200_percent_text_y_after": 32,
+    "viewports": [
+      [
+        1440,
+        1000
+      ],
+      [
+        390,
+        844
+      ],
+      [
+        844,
+        390
+      ],
+      [
+        320,
+        568
+      ]
+    ],
+    "light_and_dark": true,
+    "synthesized_chromium_touch": true,
+    "keyboard": true,
+    "reduced_motion_state_preserved": true,
+    "physical_device": false,
+    "manual_screen_reader": false
+  },
+  "additional_runtime_costs": "not measured against a baseline",
+  "live_production": "not tested",
+  "azure_resource_mutation": false,
+  "merge_or_deploy": false,
+  "runtime_and_test_sha256": {
+    "assets/brand/care-companion.js": "17f2e39999336f1eaddee5ef94bcd28f6c7f309604d0d4b818f10259bd6bd438",
+    "assets/brand/console.css": "ac5f9681f0b819a1a66454b37ab8bd6bc53568953144ad42d4e685c06899ed3c",
+    "assets/brand/page-readiness.js": "23a6d37447ecf9e32751eb6432a87a66da1677328b21c41ccb8ce097ee59c477",
+    "scripts/probe_section.cjs": "81441ae03468bc310c0ff81c4895476ef7f87df98be2c572711d9f3314c20d85",
+    "scripts/view_check.cjs": "3eed96e017b0bc3b9a077c7b40b4a8b192a590b6ecbb2b00ad9c605d0a1c5126",
+    "src/care_companion_v1.py": "131e964723a46e8fac9b58e6f8bb17bac1f555fa1e304f61d542762aeebc2752",
+    "src/operations_console_app.py": "e6a94d294cdc2264ace020829f0f80890532428c46a555626b6a63f6c7ab521f",
+    "src/section_incident_v1.py": "8cba897808afe33d5ece1a56b9c83db3fa996bb19edd2f773dea681ad0a644bb",
+    "src/source_selection_ui_v1.py": "9706a3e6c58ece0f038a8c1ef1a85d3c3f57565a4dbca40cb7375a18c8f905eb",
+    "src/telemetry/page.py": "885f0027da5e61e206f092b29578f460b11ef321f2cec01d19055d0801ce33cb",
+    "src/view_check.py": "60e0127567ddc49df55ae970179e572495f3ed17417ef28721ce37f90e4649f3",
+    "tests/browser_deploy_check.cjs": "ea59758a7b39c76f3ab33dc0dde3d62ca186976d1ad321ecf95141c8bd3b97dd",
+    "tests/browser_deploy_check_fixture.py": "292167b840a8689a70a0942cd0c1ee9b34c9ff4f1ec402f0586f085f0fa8926c",
+    "tests/browser_view_check.cjs": "f86d12292431fe100d8f9a4a47e4a86f726da1375bfd0a576f6282e1cea15e0c",
+    "tests/browser_view_check_fixture.py": "658bebd44c1ef07b5cd2c7b47db42801b103f69fdd855865ec87b1ff3e41201b",
+    "tests/characterization/golden/review_overview/guideline_disposition.json": "fbf6fbffd04b3507b8c9aec2be1f459f1906169f7be5d6b80b346a9a21c672b9",
+    "tests/characterization/golden/review_overview/guideline_index.json": "bbe1a17ecb6aef7588bb0eb96b62c399c42800ed1e3439403552966c4e0926d2",
+    "tests/characterization/golden/review_overview/guideline_inventory.json": "688e16fa860cd71c8e7a472228c2a16b8464ddf2412e4757e96795d460366a72",
+    "tests/characterization/golden/review_overview/guideline_workboard.json": "96a6b6c9c5c349d12d8cc6fe5ca34aba694487a0566d7c8c0066d77fc73fc6d6",
+    "tests/characterization/golden/review_overview/guideline_workboard_native.json": "910bc5cbb8545bea4eb99a68cd34f7575efca673d3186362d080dc9ede08d651",
+    "tests/characterization/golden/review_overview/tree_index.json": "1addaea0af1c0bed04226c3a3a9f43799497ec9aa9d9bc8f549e90e86d5c9918",
+    "tests/characterization/golden/review_overview/tree_workboard.json": "0f9764d2e87b0cfe0421b1ecfb3062eef3888c5d877c69eab822a4c043d9a5b1",
+    "tests/characterization/golden/review_overview/tree_workboard_native.json": "030e21dff9a0ec3f5f2d688704d3f1bf20c636411a3207f33192f4bc23379171",
+    "tests/characterization/golden/review_room/batch.json": "31cf9bd6108621134bcfd578d154947744d5e9aee36b222784ef94a5a3ae44a5",
+    "tests/characterization/golden/review_room/batch_selected.json": "31cf9bd6108621134bcfd578d154947744d5e9aee36b222784ef94a5a3ae44a5",
+    "tests/characterization/golden/review_room/content.json": "67549054f3cfaa20806c0704d0cd6f4f1e96e65cdd0c780790c9947441378e4e",
+    "tests/characterization/golden/review_room/context_saved.json": "8610ed38ca0917e058f999d0c3c10db2bab5ac7884e2f03e81537bd8044f24e8",
+    "tests/characterization/golden/review_room/context_source.json": "f4879efa6c4f35f8f18ccbd4e58c3ac0d5b8ed1f7c71ffd870bd6c9703b9328c",
+    "tests/characterization/golden/review_room/documents.json": "5834bc9d87c71b950a3e46b5dd80bfe9ca5d3fe3134e0e0b34fb905a7fd8c097",
+    "tests/characterization/golden/review_room/empty.json": "0d9799606d42cacff8cb77fd0d6149330ddc7fb520bbac668d968334e00f6f58",
+    "tests/characterization/golden/review_room/heading.json": "a7d5a965bcf56a3a0145af022a0ea9c07fc68c52e57e587475590625496c7847",
+    "tests/characterization/golden/review_room/history_detail.json": "91cfb41ab2b935c89de4f27ee305677d0b40284e217656c0969ff9befd6733d4",
+    "tests/characterization/golden/review_room/history_index.json": "990effa0b44ed538ad63329e72545a4b6d0e8d7c2c0f27579a36a90f78bedcb3",
+    "tests/characterization/golden/review_room/history_no_reader.json": "990effa0b44ed538ad63329e72545a4b6d0e8d7c2c0f27579a36a90f78bedcb3",
+    "tests/characterization/golden/review_room/index.json": "d5b4917da74e3724ba6b7b9082085dbd25a7309e79d8759ec9b4a3c3129a09f0",
+    "tests/characterization/golden/review_room/non_reviewer.json": "62f23ae95a6dac77eb4e763da2ad6b5775dab59392802f742bf4e9d7e9e46ce4",
+    "tests/characterization/golden/review_room/outsider.json": "66d8ef5607c47fd31767a76e246da7ca1f5de6bc481f1e4bb7cb79b381dd80cb",
+    "tests/characterization/golden/review_room/partial_many.json": "44c8436cbd9938ee0ebca0a35486234d11558e7056cadba3b55e20eb5930c93b",
+    "tests/characterization/golden/review_room/partial_one.json": "e0d44651776883507467cc0bf888f594c93018ea39a2d4dffd3ec103c71855b0",
+    "tests/characterization/golden/review_room/proportionate_index.json": "d5b4917da74e3724ba6b7b9082085dbd25a7309e79d8759ec9b4a3c3129a09f0",
+    "tests/characterization/golden/review_room/provided_snapshot.json": "3c1ee9beffb25bbf8f5bcb370625901ab5a1c006ede93a5e9f5861e22b7be1f7",
+    "tests/characterization/golden/review_room/published.json": "47ee598adc4fab4ac504dc3a8cd1b4444f24f1342c9e20d31637d492ca9b0ccd",
+    "tests/characterization/golden/review_room/second_actionable.json": "19fd3da3d2ea678ee6ef1011aa460910b03a997cb71887c815707003d804d32c",
+    "tests/characterization/golden/review_room/second_same_reviewer.json": "a02680caa55506c3312ee0252bd3b50bb0d5417b065a459e14af143b272fb59e",
+    "tests/characterization/golden/review_room/source_conflict.json": "34bfbc79d444a025e2db9c216d049fda555e8ac45cbcb92ed1330cd192398d0d",
+    "tests/characterization/golden/review_room/source_conflict_empty_draft.json": "eb5810954a02576af6eb8b4e8373543f224842421d4f7e0f1917b3ade20a313c",
+    "tests/characterization/golden/review_room/unknown_document.json": "4c44beca5c2f9b428b82af750f8b9cc3354920249d719b4aba3bc8fe1ae98d6b",
+    "tests/test_care_companion.py": "adb726fad422822c529a98db8226770c8556051f6f8cbc96211894ffa89133e9",
+    "tests/test_section_incident.py": "66ca1fbfd43edf078ceba8c9f2867eb24a6ee299c647b40231e866c1f8706d75",
+    "tests/test_view_check_contract.py": "fdd60348cf9e67e344e4e3231c8a054aac26d92b1dae9b06f3cd9ab7398e1822",
+    "tests/test_view_check_postgres.py": "ce5d970039fec9e4193e657f12e99952187b6a057399050cb08f1c6ff98555f0"
+  }
+}

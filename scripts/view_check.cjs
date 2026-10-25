@@ -30,7 +30,7 @@ function compareContent(expected, observed, sourceIds) {
   const ids = expected.filter(row => !source.has(row.object_id)).map(row => row.object_id);
   const visible = observed.filter(row => !row.source).map(row => row.id);
   return [
-    {id:'rendered_text', verdict:!supported.length ? 'not_established' : matched.length === supported.length ? 'pass':'fail', expected:supported.length, observed:matched.length},
+    {id:'rendered_text', verdict:matched.length !== supported.length ? 'fail' : supported.length === expected.length ? 'pass' : 'not_established', expected:supported.length, observed:matched.length},
     {id:'rendered_context', verdict:contextMatches.length === contexts.length ? 'pass':'fail', expected:contexts.length, observed:contextMatches.length},
     {id:'rendered_order', verdict:JSON.stringify(ids) === JSON.stringify(visible) ? 'pass':'fail', expected:ids.length, observed:visible.length},
   ];
@@ -45,11 +45,12 @@ async function run(input) {
   let step = 'browser_setup';
   let expectedState = 'restricted_context';
   const requests = [];
+  const assets = [];
   let page;
   let coverage = {normalization:'HTML_ASCII_whitespace', fields:['content.clean_text','source_label_hint.label'],
     unchecked_fields:['structured_conditions', 'structured_exceptions', 'source_locators', 'source_context'],
     clinical:'not_established', source_extraction:'not_established'};
-  const diagnose = observed => ({step, expected:expectedState, observed, elapsed_ms:Date.now()-started, requests});
+  const diagnose = observed => ({step, expected:expectedState, observed, elapsed_ms:Date.now()-started, requests:[...requests,...assets.filter(row=>row.state!=='completed').slice(0,4)].map(row=>({...row}))});
   try {
     const context = await browser.newContext({viewport:{width:1440,height:1000}, serviceWorkers:'block', acceptDownloads:false});
     await context.addCookies([{name:'metis_view_check',value:input.token,url:origin,
@@ -68,8 +69,10 @@ async function run(input) {
     page = await context.newPage();
     page.on('request', request => {
       const route = new URL(request.url()).pathname;
-      if (!['/source-selection','/review','/inzicht/document/passages'].includes(route) || requests.length >= 12) return;
-      const row = {route, state:'pending', reference:null}; requests.push(row);
+      const asset = route.startsWith('/brand/');
+      if (asset ? assets.length >= 8 : !['/source-selection','/review','/inzicht/document/passages'].includes(route) || requests.length >= 12) return;
+      const row = {route:asset ? '/brand/*' : route, state:'pending', reference:null};
+      (asset ? assets : requests).push(row);
       request._viewObservation = row;
     });
     page.on('response', response => {
@@ -131,7 +134,7 @@ async function run(input) {
     const screenshot = await page.screenshot({type:'png',fullPage:false});
     return {checks,browser_version:browser.version(),screenshot:screenshot.toString('base64'),
       // Limits are explicit: these checks do not certify clinical correctness.
-      coverage, diagnosis:diagnose(checks.some(row => row.verdict === 'fail') ? 'difference' : 'matched'),
+      coverage, diagnosis:diagnose(checks.some(row => row.verdict === 'fail') ? 'difference' : checks.some(row => row.verdict === 'not_established') ? 'not_established' : 'matched'),
       scenario_sha256:hash(require('node:fs').readFileSync(__filename))};
   } catch (error) {
     // No exception text, URL queries, headers, cookies, or DOM in diagnostics.
