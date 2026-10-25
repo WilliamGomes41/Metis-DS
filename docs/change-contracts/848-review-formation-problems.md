@@ -275,3 +275,33 @@ De native aanvullende proeven en vereiste preflights slagen ook op de
 gecombineerde versie; de PR-contracttekst is met de CI-validator gecontroleerd.
 De PR-overdracht omvat hiermee het gecombineerde lokale bewijs. Productie- en
 klinische Smetten-acceptatie blijven open zoals hierboven vastgelegd.
+
+
+## 8. CI- en release-notes-opvolging van de PR-review
+
+Merge blijft geblokkeerd totdat de verplichte CI-checks op de uiteindelijke
+PR-head groen zijn. Run 40228764837 op `57b9b8a` faalde op de ontbrekende
+PR-velden `Proof` en `Touches lifecycle invariants`. Die velden zijn aangevuld;
+run 40230721355 op `517d214` heeft een groene `change-contract`-job.
+
+De nieuwe navigatieproef was lokaal wel uitgevoerd, maar ontbrak in de aparte
+CI-browserjob. De gewone suites configureren geen Chromium; zonder browserenv
+faalde deze proef lokaal reproduceerbaar met `KeyError: METIS_PLAYWRIGHT_MODULE`.
+De proef gebruikt nu dezelfde beschikbaarheidsselectie als bestaande
+browserproeven en is expliciet opgenomen in de verplichte browserjob. De
+bestaande controle op nul overgeslagen browsergevallen blijft behouden. Het
+ontbreken van Chromium mag dus nooit een groene browserjob opleveren.
+
+Gerichte lokale controle: 25 passed in 21,75 s voor workflowcontracten,
+shardbewijs en alle tien featureproeven, inclusief echte Chromium/Playwright
+en Raad. Een afzonderlijke proef zonder browserenv rapporteert 1 skipped;
+dat is geen geslaagd browserbewijs. Repository- en releasepreflight slagen.
+Geen productiecode of domein-/publicatiepoort gewijzigd.
+
+CHANGELOG Unreleased bevat nu expliciet de versie-2-rollbackbeperking:
+na versie-2-activatiebewijs is een binary van vóór #848 geen ondersteund
+schrijf-/herstelpad. Een rollback moet de versie-2-reader/writer en de
+activatierevisiecontrole behouden; eerst nieuwe opdrachten sluiten en workers
+drainen, met behoud van bron, taakresultaten, bewijs en reviews. Geen velden
+verwijderen of revisies resetten. De actuele CI-run en uitslag worden in
+issue #848 en PR #850 bijgehouden. Geen merge of deployment in deze opvolging.

@@ -265,6 +265,7 @@ jobs:
           pytest -v --junitxml=output/browser.xml --basetemp="$RUNNER_TEMP/metis-browser-proof" \
             tests/test_browser_knowledge_context.py tests/test_browser_deploy_check.py \
             tests/test_browser_source_selection.py tests/test_browser_view_check.py \
+            tests/test_review_formation_problems.py::test_real_browser_navigation_and_raad_read_only \
             tests/test_section_incident.py::test_real_authenticated_browser_route_exports_correlated_evidence
           python - <<'PYCODE'
           import xml.etree.ElementTree as ET

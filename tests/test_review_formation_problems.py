@@ -5,6 +5,7 @@
 """
 from copy import deepcopy
 import json
+import os
 
 import pytest
 from fastapi.testclient import TestClient
@@ -229,8 +230,9 @@ def test_actual_start_does_not_call_model_for_whitespace_gaps(tmp_path, producti
     assert not console.processing_status(sid)['formation_incomplete']
 
 
+@pytest.mark.skipif(not os.environ.get('METIS_BROWSER_EXECUTABLE'),
+                    reason='Required browser acceptance job supplies Chromium')
 def test_real_browser_navigation_and_raad_read_only(tmp_path, production_console, monkeypatch):
-    import os
     import socket
     import subprocess
     from threading import Event, Thread
