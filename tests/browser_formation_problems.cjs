@@ -76,10 +76,30 @@ const fs = require('node:fs');
     await page.evaluate(()=>document.documentElement.style.fontSize='200%');
     if (await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth)) throw Error('text zoom overflow');
     await page.screenshot({path:process.env.METIS_PROBLEM_SCREENSHOT.replace('.png','-zoom.png'),fullPage:true});
+    // Wider fallback metrics reproduced CI's overflow in the shared room navigation.
+    await page.evaluate(()=>{
+      document.documentElement.style.setProperty('--font-body','DejaVu Sans');
+      document.documentElement.style.setProperty('--font-heading','DejaVu Sans');
+    });
+    for (const width of [320,390]) {
+      await page.setViewportSize({width,height:844});
+      const overflow=await page.evaluate(()=>({
+        width:window.innerWidth,scrollWidth:document.documentElement.scrollWidth,
+        nodes:[...document.querySelectorAll('body *')].filter(n=>n.getBoundingClientRect().right>window.innerWidth)
+          .map(n=>({tag:n.tagName,classes:n.className,right:n.getBoundingClientRect().right}))
+      }));
+      if (overflow.scrollWidth>overflow.width) throw Error('fallback font text zoom overflow: '+JSON.stringify(overflow));
+    }
+    await page.evaluate(()=>{
+      document.documentElement.style.removeProperty('--font-body');
+      document.documentElement.style.removeProperty('--font-heading');
+    });
+    await page.setViewportSize({width:390,height:844});
     await page.evaluate(()=>{document.documentElement.style.fontSize='';document.documentElement.dataset.theme='light';});
     fs.writeFileSync(process.env.METIS_PROBLEM_SCREENSHOT.replace('.png','.json'),JSON.stringify({
       knownSourceGroups:1,originalFindings:2,technicalDetailsInitiallyHidden:true,
       keyboardDisclosure:true,viewports:[320,390,768,1440],textZoomPercent:200,
+      fallbackFontZoom:{font:'DejaVu Sans',viewports:[320,390],overflow:false},
       minLightTextContrast:Math.min(...lightContrast),minDarkTextContrast:Math.min(...darkContrast),
       minTreatmentTargetHeight:Math.min(...targets),physicalDevice:false},null,2));
     await page.getByRole('button',{name:'Uitloggen',exact:true}).click();

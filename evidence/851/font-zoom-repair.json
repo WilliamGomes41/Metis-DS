@@ -1,0 +1,88 @@
+{
+  "failed_ci_run": "https://github.com/WilliamGomes41/Metis-DS/actions/runs/40242523292",
+  "failed_commit": "c6c50f96c422a267d5f15d68f2c30c45d3e93b62",
+  "cause": "shared navigation label white-space: nowrap; wider fallback font metrics at 200%",
+  "reproduction_before": {
+    "font": "DejaVu Sans",
+    "viewport": 390,
+    "scrollWidth": 396,
+    "overflowingLabel": "Vormingsproblemen",
+    "labelRight": 395.90625
+  },
+  "after_header_font_matrix": [
+    {
+      "font": "system-ui",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "nodes": []
+    },
+    {
+      "font": "Arial",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "nodes": []
+    },
+    {
+      "font": "DejaVu Sans",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "nodes": []
+    },
+    {
+      "font": "Noto Sans",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "nodes": []
+    },
+    {
+      "font": "Liberation Sans",
+      "viewport": 390,
+      "scrollWidth": 390,
+      "nodes": []
+    }
+  ],
+  "goldens": {
+    "count": 32,
+    "onlyStylesheetVersionChanged": true
+  },
+  "additional_reproduction_before_brand_fix": {
+    "font": "DejaVu Sans",
+    "zoom": 200,
+    "viewport": 320,
+    "scrollWidth": 358,
+    "overflowingElement": "brand metis-brand",
+    "right": 357.75
+  },
+  "local_after": {
+    "required_browser_cases_passed": 7,
+    "browser_seconds": 244.57,
+    "postgres_skips": 0,
+    "formation_navigation_raad_individual_passed": 1,
+    "formation_individual_seconds": 14.58,
+    "readability": {
+      "knownSourceGroups": 1,
+      "originalFindings": 2,
+      "technicalDetailsInitiallyHidden": true,
+      "keyboardDisclosure": true,
+      "viewports": [
+        320,
+        390,
+        768,
+        1440
+      ],
+      "textZoomPercent": 200,
+      "fallbackFontZoom": {
+        "font": "DejaVu Sans",
+        "viewports": [
+          320,
+          390
+        ],
+        "overflow": false
+      },
+      "minLightTextContrast": 7.504110602305391,
+      "minDarkTextContrast": 9.619401416134414,
+      "minTreatmentTargetHeight": 44,
+      "physicalDevice": false
+    }
+  }
+}

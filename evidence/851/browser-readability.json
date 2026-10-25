@@ -10,6 +10,14 @@
     1440
   ],
   "textZoomPercent": 200,
+  "fallbackFontZoom": {
+    "font": "DejaVu Sans",
+    "viewports": [
+      320,
+      390
+    ],
+    "overflow": false
+  },
   "minLightTextContrast": 7.504110602305391,
   "minDarkTextContrast": 9.619401416134414,
   "minTreatmentTargetHeight": 44,

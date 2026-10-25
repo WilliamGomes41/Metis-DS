@@ -94,3 +94,29 @@ Het gebruikersdoel is lokaal opgeleverd: bron lezen, reden begrijpen en de
 beschikbare volgende handeling vinden; alle oude bevindingen blijven bereikbaar.
 Geen claim van gemeten menselijke taakduur, volledige handmatige WCAG-audit,
 actuele Smetten-volledigheid of productie-uitrol. Geen merge/deployment.
+
+
+## CI-correctie voor tekstvergroting
+
+CI-run 40242523292 op `c6c50f9` vond horizontale overflow bij 200% tekst.
+De eerdere lokale browsermeting was groen met andere systeemlettertypemetriek;
+die meting bewees de CI-omgeving dus onvoldoende. De gedeelde kamernavigatie
+forceerde `white-space: nowrap`: met DejaVu Sans was de link
+Vormingsproblemen 396px breed bij een viewport van 390px.
+
+De aanvullende 320px-proef vond ook een te brede merktekst; de bestaande
+mobiele header begrenst en breekt die tekst nu waar nodig.
+De bestaande responsive navigatieregel laat labels nu afbreken binnen de
+beschikbare breedte. Desktopgedrag blijft bij dezelfde eigenaar. De browserproef
+behoudt de bestaande controles en controleert bovendien 200% tekst met DejaVu
+Sans op 320 en 390px; bij fouten worden de overlopende elementen gerapporteerd.
+De losse headerproef controleert vijf lettertypen. De 32 karakterisatiebestanden
+zijn opnieuw vergeleken met de main-basis: alleen de stylesheetversie verschilt.
+Zie `evidence/851/font-zoom-repair.json`. Nieuwe CI op de reparatiecommit is
+vereist; de volledige lokale suite hierboven hoort bij de expliciet genoemde
+oudere commit. Geen merge of deployment.
+
+Na beide headercorrecties: alle zeven verplichte browsercases lokaal geslaagd
+(244,57 s), nul skips; de afzonderlijke Vormingsproblemen-/Raad-proef slaagt
+ook (14,58 s), inclusief beide fallbacklettertype-breedtes. De lokale beelden
+en leesbaarheidsmetingen zijn met de herstelde stylesheet vernieuwd.

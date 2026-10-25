@@ -1905,7 +1905,7 @@ html[data-theme="dark"] .care-owl-pupil { fill: #0b1b34; }
    home tiles are not touched. */
 .topbar { gap: 18px 24px; }
 
-/* The links never break inside the row: the account text gives way first. */
+/* Desktop links stay together; wrapped navigation also accommodates enlarged text. */
 .rooms { flex: 1 1 auto; flex-wrap: nowrap; align-items: center; gap: 2px; }
 .rooms form { margin: 0; }
 
@@ -1955,6 +1955,7 @@ html[data-theme="dark"] .theme-icon-sun { display: block; }
 @media (max-width: 1359px) {
   .topbar { flex-wrap: wrap; }
   .rooms { order: 3; flex-basis: 100%; flex-wrap: wrap; margin-left: -10px; }
+  .rooms a, .rooms button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
   .theme-toggle { margin-left: auto; }
   .who { margin-left: 0; }
 }
@@ -1965,6 +1966,8 @@ html[data-theme="dark"] .theme-icon-sun { display: block; }
 }
 
 @media (max-width: 560px) {
+  .metis-brand { max-width: 100%; min-width: 0; }
+  .brand-copy { min-width: 0; overflow-wrap: anywhere; }
   .who { text-align: left; }
 }
 
