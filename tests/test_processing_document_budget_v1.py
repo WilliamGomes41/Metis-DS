@@ -31,7 +31,7 @@ class ClockProxy:
         return getattr(self.original, name)
 
 
-def document(tmp_path, production_console, monkeypatch, *, total=3, seconds=70, hook=None, feature="v1", reserve=True, worker_limit=None, mode=MODE):
+def document(tmp_path, production_console, monkeypatch, *, total=3, seconds=70, hook=None, feature="v1", reserve=True, worker_limit=None, mode=MODE, virtual_clock=True):
     console, users, _, _ = _system(tmp_path, production_console=production_console)
     actor = users['researcher']['account_id']
     html = '<html><body>'+''.join(f'<h1>Stap {i}</h1><p>Controleer dagelijks de huid bij patiënt {i}.</p>' for i in range(total))+'</body></html>'
@@ -41,12 +41,13 @@ def document(tmp_path, production_console, monkeypatch, *, total=3, seconds=70, 
     elapsed, calls = [0], []
     from src import processing_retry_v1 as retry
     clock_start = retry.now()
-    monkeypatch.setattr(retry, 'now', lambda: clock_start+timedelta(seconds=elapsed[0]))
-    monkeypatch.setattr('src.source_processing_dispatch_v1.now', retry.now)
-    monkeypatch.setattr('src.source_selection_v1.now', retry.now)
-    proxy = ClockProxy(time, elapsed)
-    for name in ('src.operations_console_v1.time','src.pre_review_semantic_v1.time','src.bounded_formation_v1.time'):
-        monkeypatch.setattr(name, proxy)
+    if virtual_clock:
+        monkeypatch.setattr(retry, 'now', lambda: clock_start+timedelta(seconds=elapsed[0]))
+        monkeypatch.setattr('src.source_processing_dispatch_v1.now', retry.now)
+        monkeypatch.setattr('src.source_selection_v1.now', retry.now)
+        proxy = ClockProxy(time, elapsed)
+        for name in ('src.operations_console_v1.time','src.pre_review_semantic_v1.time','src.bounded_formation_v1.time'):
+            monkeypatch.setattr(name, proxy)
     monkeypatch.setenv('METIS_FORMATION_TASK_STORAGE','v1')
     monkeypatch.setenv('METIS_DOCUMENT_PROCESSING_BUDGET',feature)
     def provider(_url, _headers, payload, _timeout):
@@ -315,7 +316,7 @@ def test_process_death_does_not_refund_an_uncertain_call_or_need_a_new_start(tmp
     from pathlib import Path
     from src.source_processing_dispatch_v1 import pending
     from src.processing_retry_v1 import now
-    console, actor, sid, attempt, calls, bind, elapsed = document(tmp_path,production_console,monkeypatch)
+    console, actor, sid, attempt, calls, bind, elapsed = document(tmp_path,production_console,monkeypatch,virtual_clock=False)
     marker = tmp_path/'committed-document-task'
     command = [sys.executable,'-m','tests.formation_process_probe',str(console.root),console.workflow_document_store.config.dsn,
         sid,attempt['attempt_id'],actor,'crash',str(marker)]
@@ -335,7 +336,8 @@ def test_process_death_does_not_refund_an_uncertain_call_or_need_a_new_start(tmp
             (attempt['attempt_id'],)).fetchone()
         con.execute("UPDATE workflow.processing_attempts SET payload=jsonb_set(payload,'{dispatch,lease_expires_at}',%s::jsonb) WHERE attempt_id=%s",
             (json.dumps((now()-timedelta(seconds=1)).isoformat()),attempt['attempt_id']))
-    assert pending(console)[0][1]['attempt_id'] == attempt['attempt_id']
+    discovered = pending(console)
+    assert discovered and discovered[0][1]['attempt_id'] == attempt['attempt_id']
     command[8] = 'resume'
     resumed = subprocess.run(command,capture_output=True,text=True,timeout=25)
     assert resumed.returncode == 0, resumed.stderr
