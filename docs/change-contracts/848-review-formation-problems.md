@@ -11,9 +11,9 @@ William heeft aanmaak en uitvoering expliciet opgedragen. Geen merge/deployment.
 
 ## 1. Ground — feiten en onderzoek
 
-De door William gemelde Smetten-export toont afgewezen bronverwijzingen,
+De gebruikersopdracht noemt als aangetoond: afgewezen bronverwijzingen,
 witruimtetaken, gedeeltelijke resultaten en `source_formation_incomplete`.
-Die export is in deze workspace niet aangeleverd; geen nieuwe productiecausaliteit
+De actuele Smetten-export/bron is in deze workspace niet aangeleverd; geen nieuwe productiecausaliteit
 of klinische volledigheid claimen. De bestaande offline Smetten-proef staat in
 `docs/acceptance/smetten_recorded_formation_replay.json`.
 
@@ -29,7 +29,7 @@ uit dezelfde gepinde context. processing_status overschrijft bij task-v1 de
 inhoudelijke volledigheid met uitsluitend de laatste pogingstatus. _durable_targets
 neemt ook lege witruimte tussen selecties op; de coverageprojectie slaat die al over.
 
-Nog te bewijzen: de concrete rood/groenroute en bron-/revisiebehoud bij herstel.
+Bij vastlegging vóór implementatie nog te bewijzen: de concrete rood/groenroute en bron-/revisiebehoud bij herstel. De uiteindelijke uitkomsten staan in §6.
 Gerangschikte hypotheses: (1) de vroege durable poort voorkomt materialisatie;
 (2) gezamenlijk bron-/relatiebewijs faalt terecht; (3) Admission blokkeert het
 individuele object; (4) hervatten verliest eerdere resultaten. De proef moet
@@ -157,9 +157,9 @@ Review, Vormingsproblemen, Raad en Azure-opslag controleren. Niet lokaal bewezen
 - [x] Ground: bestaande code, eigenaren en herstelgrens onderzocht.
 - [x] Sketch: twee opslagvormen vergeleken en bovenstaande regels vastgelegd.
 - [x] Agree: gebruikersopdracht autoriseert uitvoering zonder nieuwe goedkeuringsronde.
-- [ ] Implement: rood/groenproef, kleine domeinwijziging en probleemtoegang.
-- [ ] Scrap: vervangen stop/dubbele afleidingen verwijderen en einddiff controleren.
-- [ ] Verificatie-uitkomsten en beperkingen in issue/PR bijwerken.
+- [x] Implement: rood/groenproef, kleine domeinwijziging en probleemtoegang.
+- [x] Scrap: vervangen stop/dubbele afleidingen verwijderen en einddiff controleren.
+- [x] Verificatie-uitkomsten en beperkingen in issue/PR bijwerken.
 
 ### Ontwerpverfijning uit de regressieproeven
 
@@ -190,3 +190,56 @@ als laatste actie in dezelfde rij. De workeroverdrachtproef blijft exact één
 initiële en één herstelpassage eisen, maar verwacht nu de onafhankelijk geldige
 objecten in Review in plaats van een lege objectset; het foutieve bereik en de
 publicatieblokkade moeten blijven bestaan.
+
+## 6. Ingevulde checklist en verificatie-uitkomst
+
+De eerdere onderzoeksvragen zijn lokaal beantwoord. De native rood/groenproef
+bevestigt de vroege taakpoort als oorzaak in het onderzochte codepad; dit bewijst
+geen actuele productieoorzaak voor de niet-aangeleverde Smetten-bron. Hervatten
+leest de bestaande geverifieerde taakresultaten uit dezelfde voorbereidingscontext.
+De oorspronkelijke bron, bewijs en geldige objecten blijven behouden.
+
+| Acceptatie | Lokaal resultaat |
+| --- | --- |
+| Onafhankelijk geldig object naar Review | Geslaagd via echte taakuitvoering, Admission en Review-HTTP |
+| Noodzakelijke ontbrekende context blokkeert | Geslaagd; context-/relatieproeven eisen correcte, actuele koppeling voor de betrokken objecten |
+| Actuele problemen zichtbaar en uitvoerbaar | Geslaagd; bronbereik en bestaande behandelacties, ook na menselijke review; alle 270 afzonderlijke bevindingen via paginering bereikbaar |
+| Witruimte zonder modelaanroep | Geslaagd; bron met uitsluitend witruimte tussen twee selecties vraagt precies één modelcall, zonder tekst-/offsetwijziging |
+| Gericht herstel zonder verlies/duplicatie | Geslaagd; herstart, stabiele probleem-ID's, behoud geldig object, één herstelcall voor het open bereik, idempotente opdracht en stale weigering |
+| Sluiten uitsluitend na relevante controle | Geslaagd; generiek afwijzen laat open, exacte bevoegde bronafhandeling sluit alleen het betrokken probleem; oorspronkelijke fout blijft in bewijs |
+| Publicatievoorwaarden behouden | Geslaagd; incomplete bron en ontbrekende reviews blijven blokkeren; wegmuteren van de bronblokkade maakt de beslissende proef rood |
+| Navigeren onderbreekt verwerking niet | Geslaagd in echte Chromium/Playwright tijdens gepauzeerde provider; Raad controleert de probleemkamer met beperkte leescapability zonder domeinmutatie |
+
+Volledige standaardcollectie op `1b1782bc3f5004f3f4ccdb2ac1d53aa465a84fdd`: **5.902 geslaagd, 23 overgeslagen en 3 verwachte fouten**, nul failures/errors en nul PostgreSQL-skips; alle **5.928** testgevallen eenmaal verantwoord. Vier geïsoleerde PostgreSQL 16.15-databases, Python 3.12.14; strikte samenvoeging controleert commit, collectiedigest en volledige uitvoering. Collectiedigest: `9a176aa76a0e2e471013b8efd8c34ce3b21812cc9360d052ead4f9f0fbf97a8d`. Totale looptijd over de vier delen: 4926.714 s; langste deel 1370.314 s.
+
+Aanvullend: 38 karakterisatieproeven geslaagd; 11 feature-/browseraanroeperproeven
+geslaagd, inclusief echte Raad-deploycontrole; 22 proeven in het getroffen
+taakopslagbestand geslaagd na de testklokcorrectie; twee afzonderlijke
+adversariële proeven geslaagd. De definitieve volledige suite omvat de
+standaardtests opnieuw. Repository-/releasepreflight, architectuurgrenzen,
+compileall en diffcontrole zijn groen. Meetgegevens, herhaalbare extra proeven en
+een synthetische mobiele schermafbeelding staan in `evidence/848/`.
+
+De eerdere volledige uitvoering op `d09d8e1` had één testfout: een echte
+workergrens van één seconde verstreek tijdens eindvalidatie. De productieguard
+weigerde terecht. Commit `1b1782b` corrigeert uitsluitend de testfixture:
+gesimuleerde vormingsklok +120 seconden bij een echte workergrens van 60 seconden.
+Alle vier volledige testdelen zijn daarna opnieuw uitgevoerd op één commit;
+geen vermenging van commits of losse geslaagde herhaling als volledige uitslag.
+
+De oude onvoorwaardelijke stop, dubbele pogingstatusafleiding en
+witruimte-aanroepen zijn opgeruimd. Raad, de bestaande menucontrole,
+reviewbanner en bronselectie-aanroepers zijn overgezet. De vijf bestaande
+workflowkamers behouden hun volgorde. Er is geen ongebruikte nieuwe configuratie,
+nieuw register of SQL-migratie toegevoegd.
+
+### Nog benodigde productiecontrole
+
+- [ ] Actuele Richtlijn Smetten op de bedoelde bronversie en providerconfiguratie uitvoeren; bronkwaliteit en inhoudelijke volledigheid beoordelen.
+- [ ] Na afzonderlijke uitrol de echte Azure-/PostgreSQL-compositie, Review, probleembehandeling, hervatten en Raad controleren.
+- [ ] Menselijke code-/domeinreview en de bredere klinische acceptatie van #837 afronden.
+
+Geen merge, deployment of productiegegevens gewijzigd. De lokale implementatie
+is toetsbaar opgeleverd; productie-/Smetten-eindacceptatie is niet als gereed
+aangemerkt. #848 en #837 blijven daarvoor open. Onopgeloste of alleen verplaatste
+problemen zijn geen opgeloste problemen.
