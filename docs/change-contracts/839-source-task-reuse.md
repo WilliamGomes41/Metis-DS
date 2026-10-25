@@ -58,3 +58,8 @@ Gebruik: een geautoriseerde worker laadt één geverifieerde preparation; filter
 | rechten/claim/review | bestaande domeinoperaties → protected writes/activatie | nooit gecachet als bevoegdheid |
 
 Uitvoering: bestaande eigenaren behouden; alleen noodzakelijke viewopslag/carrier toevoegen; consumers aansluiten, daarna native restart-, fout- en gelijkheidsproeven en volledige repositorychecks. Implementatie is geautoriseerd; bij structurele tegenspraak wordt teruggekeerd naar dit ontwerp.
+
+
+## Verfijning van de uitvoeringsgrens
+
+De brede regressies tonen dat contextopbouw readonly moet blijven: een context met een passende configuratie moet samengesteld kunnen worden zonder een actieve poging te muteren. Het alternatief om extraction_reused direct in de contextbuilder te schrijven is daarom verworpen. De gekozen overdracht bevat alleen een kleine extraction_reuse_summary; de bestaande OperationsConsole._fragments_and_spec-uitvoeringsgrens schrijft de trace onder de normale checkpointfencing. Dit herstelt observatie zonder bronherbouw of nieuwe statusautoriteit.

@@ -80,5 +80,7 @@ def test_empty_pinned_configuration_is_unpinned(tmp_path, *, production_console)
 def test_matching_pinned_configuration_passes_the_check(tmp_path, *, production_console):
     console, envelope, attempt, actor, extracted = _setup(tmp_path, production_console=production_console)
     assert attempt['processing_configuration'] == selection.configuration(console)
+    before=deepcopy(console._envelope(envelope['snapshot_id']))
     context = _build(console, envelope, attempt, actor)
     assert context['snapshot_id'] == envelope['snapshot_id']
+    assert console._envelope(envelope['snapshot_id'])==before, 'Context construction must not write workflow checkpoints'

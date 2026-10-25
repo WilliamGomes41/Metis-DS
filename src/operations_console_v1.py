@@ -2600,6 +2600,10 @@ class OperationsConsole:
     def _fragments_and_spec(self, kind, path, **command):
         """Explicit mutation-only formation boundary, preserving legacy callers."""
         context = command.get("formation_context") or {}
+        reuse = context.get("extraction_reuse_summary")
+        diagnostic = context.get("diagnostic_checkpoint")
+        if reuse is not None and diagnostic:
+            diagnostic("extraction_reused", {"extraction_checkpoint": reuse})
         checkpoint = context.get("extraction_checkpoint")
         if checkpoint is not None:
             context = dict(context)
