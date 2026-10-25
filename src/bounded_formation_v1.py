@@ -299,7 +299,8 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
             task_record["phase"] = phase
             timing = {"task_id": task["task_id"], "phase": phase, "index": index + 1, "planned": len(phase_tasks)}
             allowed = checkpoint.before_task() if durable else None
-            remaining = limits.total - (time.monotonic() - started)
+            remaining = (allowed if durable and checkpoint.document_scoped
+                         else limits.total - (time.monotonic() - started))
             if allowed is not None:
                 remaining = min(remaining, allowed)
             call = {"task_id": task["task_id"], "target_spans": task["target_spans"]}

@@ -1807,7 +1807,11 @@ class OperationsConsole:
                             actor_id=actor_id, stop_event=_dispatch_stop)
             if attempt is None:
                 return self._receipt(self._envelope(snapshot_id))
-        remaining = (datetime.fromisoformat(attempt["expires_at"]) - now()).total_seconds()
+        from src.processing_document_budget_v1 import document_scoped
+        deadline_at = datetime.fromisoformat(attempt["expires_at"])
+        if document_scoped(attempt):
+            deadline_at = min(deadline_at, datetime.fromisoformat(attempt["dispatch"]["worker_expires_at"]))
+        remaining = (deadline_at - now()).total_seconds()
         from src.worker_handover_v1 import worker_execution
         with worker_execution(_dispatch_stop, console=self, sid=snapshot_id, attempt=attempt):
             return self._execute_source_attempt(actor_id=actor_id, snapshot_id=snapshot_id,
@@ -2076,8 +2080,9 @@ class OperationsConsole:
     def _record_processing_failure(self, snapshot_id, attempt_id, error, *, claim_token=None):
         from src.processing_retry_v1 import KEY, finish
         from src.formation_checkpoint_v1 import record_task_failure
-        if record_task_failure(self,snapshot_id,attempt_id,error,claim_token=claim_token):
-            return
+        handled = record_task_failure(self,snapshot_id,attempt_id,error,claim_token=claim_token)
+        if handled:
+            return handled
         with self._reprocessing_transaction(snapshot_id):
             current = deepcopy(self._envelope(snapshot_id))
             active = next(a for a in current[KEY] if a["attempt_id"] == attempt_id)
@@ -2102,7 +2107,8 @@ class OperationsConsole:
             if isinstance(error, WorkerHandover):
                 return
             if attempt_id is not None:
-                self._record_processing_failure(snapshot_id, attempt_id, error,claim_token=claim_token)
+                if self._record_processing_failure(snapshot_id, attempt_id, error,claim_token=claim_token) == "handover":
+                    return
             raise
 
     def _execute_source_attempt(self, *, actor_id, snapshot_id, attempt, deadline):

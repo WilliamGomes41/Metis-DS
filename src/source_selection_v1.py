@@ -7,6 +7,7 @@ from statistics import median
 
 from src.operations_console_v1 import ConsoleError, PRE_REVIEW_BLOCKED, SNAPSHOT_OBJECT_WRITE_CONFLICT
 from src.processing_retry_v1 import reserve, now, status
+from src.processing_document_budget_v1 import projection as document_budget_projection
 
 
 UNCHECKED = "volledigheid nog niet gecontroleerd"
@@ -105,10 +106,15 @@ def reserve_selection(console, *, actor_id, snapshot_id, command_id, expected_re
         if fresh:
             attempt["processing_configuration"] = deepcopy(envelope["processing_configuration"])
             from src.source_bound_fields_v3 import MODE
-            durable_tasks = (envelope.get("processing_storage") == "task-v1"
-                and attempt["processing_configuration"].get("mode") == MODE
+            supported_document_policy = (attempt["processing_configuration"].get("mode") == MODE
                 and envelope["content_kind"] in {"html", "pdf"} and envelope["class"] != "beslisboom")
+            durable_tasks = envelope.get("processing_storage") == "task-v1" and supported_document_policy
             attempt["dispatch"] = {"version": "source-dispatch-v2" if durable_tasks else "source-dispatch-v1", "state": "pending"}
+            from src.processing_document_budget_v1 import enabled, authorize as authorize_document_budget
+            if enabled() and supported_document_policy:
+                if not durable_tasks:
+                    raise ConsoleError("processing_document_budget_requires_task_storage")
+                authorize_document_budget(attempt)
         console._commit_prepared_store(envelopes={snapshot_id: envelope}, snapshot_id=snapshot_id)
         return deepcopy(attempt), fresh
 
@@ -222,7 +228,7 @@ def projection(console, *, actor_id, snapshot_id, documents, observations=None):
     formation_blockers = len(evidence.get("pending_rejections") or []) if processing["formation_incomplete"] else 0
     if state == "mislukt":
         formation_blockers += 1
-    return {"snapshot_id": snapshot_id, "title": envelope["title"],
+    return {**document_budget_projection(attempt,now()), "snapshot_id": snapshot_id, "title": envelope["title"],
             "filename": (envelope.get("received_source") or {}).get("filename") or Path(envelope["binary_path"]).name,
             "version": envelope["version"], "bytes": (envelope.get("received_source") or {}).get("bytes"),
             "state": state, "blocked_reason": (attempt.get("dispatch") or {}).get("blocked_reason"),
@@ -260,7 +266,7 @@ def summary_projection(console, *, envelope, observations):
         lo, hi = timing["range_seconds"]
         remaining = [max(0, lo-elapsed), hi-elapsed]
     evidence = (envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
-    return {"snapshot_id": envelope["snapshot_id"], "title": envelope["title"], "version": envelope["version"],
+    return {**document_budget_projection(attempt,now()), "snapshot_id": envelope["snapshot_id"], "title": envelope["title"], "version": envelope["version"],
             "filename": (envelope.get("received_source") or {}).get("filename") or Path(envelope["binary_path"]).name,
             "bytes": (envelope.get("received_source") or {}).get("bytes"), "state": state, "blocked_reason": (attempt.get("dispatch") or {}).get("blocked_reason"),
             "required_action": (attempt.get("dispatch") or {}).get("required_action"),

@@ -1,0 +1,101 @@
+{
+  "issue": 846,
+  "dependency_pr": 845,
+  "base_head": "34b97285f3397da9da0f101d6de45b478f91ed69",
+  "runtime_revision": "c37bd31b0547703926f95e6b7feddd1021139556",
+  "change_class": "A",
+  "rewrite_risk": "high",
+  "backend": "native PostgreSQL 16.15",
+  "policy": {
+    "feature": "METIS_DOCUMENT_PROCESSING_BUDGET=v1",
+    "window_seconds": 14400,
+    "max_worker_seconds": 1800,
+    "max_model_calls": "2 \u00d7 pinned plan task count",
+    "max_input_bytes": 2000000,
+    "max_output_tokens": 16384,
+    "currency_cap": "not inferred; no pricing catalog"
+  },
+  "targeted": {
+    "focused_passed": 88,
+    "seconds": 129.84,
+    "additional_compatibility_passed": 3,
+    "mutation_baseline_and_architecture_passed": 7
+  },
+  "document_proof": {
+    "tasks": 130,
+    "virtual_seconds_per_task": 70,
+    "virtual_forming_seconds": 9100,
+    "starts": 1,
+    "provider_requests": 130,
+    "maximum_model_calls": 260,
+    "activations": 1,
+    "source_reconstruction_after_restart": "forbidden",
+    "clinical_acceptance": false
+  },
+  "restart_proof": {
+    "boundary": "SIGKILL + new Python process",
+    "successful_tasks": 3,
+    "calls_reserved": 4,
+    "reason": "second request uncertain and not refunded",
+    "starts": 1,
+    "earlier_task_hash": "unchanged"
+  },
+  "mutation": {
+    "isolated_revision": "c37bd31",
+    "change": "reset calls_reserved on each new worker claim",
+    "test": "test_call_reservations_survive_lost_worker_and_concurrent_last_slot",
+    "positive": "passed",
+    "mutated": "failed: two reserved slots instead of one reserved and one budget refusal",
+    "independent_model_review": false
+  },
+  "boundaries": [
+    "four-hour limit with/without committed progress on discovery and execution",
+    "worker hard limit requeues same document",
+    "concurrent final callslot atomic; stale token cannot reserve",
+    "call cap blocks actual processing visibly",
+    "complete result set with no remaining calls may run final gate",
+    "corrupt/missing budget rejected before provider work",
+    "revocation/configuration rechecked",
+    "old contracts and alternative modes retain previous limits",
+    "HTTP start shows policy and readonly overview/detail show current counters"
+  ],
+  "production_actions": false,
+  "paid_provider_calls": false,
+  "full_suite": {
+    "commit": "c37bd31b0547703926f95e6b7feddd1021139556",
+    "python": "3.13.5",
+    "seconds": 2820.045,
+    "wall_seconds": 811.2,
+    "tests": 5914,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 26,
+    "postgres_skips": [],
+    "postgres_version": 160015,
+    "collected": 5914,
+    "collection_digest": "6d51e79863f1089c08e333e5ff386dcd2724ae9a0ef945402ca155167b9c8823",
+    "passed": 5888,
+    "known_xfails": 3,
+    "optional_skips": 23,
+    "browser_enabled": true,
+    "complete_exact_partition": true
+  },
+  "fixture_correction": {
+    "file": "tests/test_processing_document_budget_v1.py",
+    "sha256": "190c34dd4101dccb9908f48d1f73fae88facf4ab648a38f684a830ff6452ba2a",
+    "change": "Physical-process proof uses real clock only; virtual-budget proofs retain virtual clock",
+    "product_runtime_changed": false,
+    "selected_partition_repeated": 3,
+    "other_partitions_contain_no_selected_tests_from_this_file": true,
+    "debug_instrumentation_removed": true
+  },
+  "timing_note": "wall_seconds is the longest final partition, not elapsed investigation time; partition 3 was rerun after the fixture-only correction.",
+  "checks": {
+    "repository_preflight": "PASS",
+    "release_control_preflight": "PASS",
+    "compileall": "PASS",
+    "architecture_boundaries": "PASS",
+    "change_contract": "PASS",
+    "architecture_invariants": "7-case targeted run and complete suite"
+  }
+}
