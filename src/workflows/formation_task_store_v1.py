@@ -117,6 +117,32 @@ class FormationTaskStore:
             raise WorkflowDocumentStoreError("formation_task_ranges_invalid")
         return result
 
+    def load_task_plan(self, context_id, *, expected_hash=None, con=None):
+        if con is None:
+            with self.documents._connect() as connection:
+                return self.load_task_plan(context_id,expected_hash=expected_hash,con=connection)
+        row = con.execute("SELECT plan_hash,payload FROM workflow.formation_task_plans WHERE context_id=%s",
+                          (context_id,)).fetchone()
+        if not row:
+            if expected_hash:
+                raise WorkflowDocumentStoreError("formation_task_plan_missing")
+            return None
+        if expected_hash and row["plan_hash"] != expected_hash:
+            raise WorkflowDocumentStoreError("formation_task_plan_conflict")
+        plan = integrity(row["payload"],row["plan_hash"],"formation_task_plan_integrity_failed")
+        from src.recommendation_task_plan_v1 import VERSION
+        if plan.get("version") != VERSION:
+            raise WorkflowDocumentStoreError("formation_task_plan_version_unsupported")
+        return plan
+
+    def retain_task_plan(self, con, context_id, plan):
+        con.execute("INSERT INTO workflow.formation_task_plans(context_id,plan_hash,payload) "
+                    "VALUES(%s,%s,%s::jsonb) ON CONFLICT DO NOTHING",
+                    (context_id,stable_json_hash(plan),_json_text(plan)))
+        # Concurrent creators use the first committed immutable plan. Grouping
+        # policy is not part of a semantic result's identity.
+        return self.load_task_plan(context_id,con=con)
+
     def commit_task(self, con, *, context_id, ranges, payload, attempt_id, claim_token):
         ranges = self.canonical_ranges(ranges)
         ranges_hash, result_hash = stable_json_hash(ranges), stable_json_hash(payload)
@@ -295,6 +321,10 @@ class FormationTaskStore:
                 rejected_tasks.append(row["payload"])
         reference = diagnostic.get("validator_input_ref")
         if reference:
+            plan_reference = diagnostic.get("task_plan_ref")
+            plan = self.load_task_plan(reference["context_id"], expected_hash=(plan_reference or {}).get("plan_hash"))
+            if plan is not None:
+                diagnostic["task_plan"] = plan
             from src.bounded_formation_v1 import _merge_task_proposals
             results = self.task_results(reference["context_id"],attempt_id=attempt["attempt_id"],diagnostic=True)
             if results or "resolved_proposal" not in diagnostic:
@@ -307,4 +337,14 @@ class FormationTaskStore:
             if calls:
                 diagnostic["provider_evidence"] = {**calls[0], "supplementary_calls": calls[1:],
                     "task_policy":"bounded-formation-v1","tasks":[row["task"] for row in task_evidence]}
+                if plan is not None:
+                    from src.recommendation_task_plan_v1 import report
+                    from src.bounded_formation_v1 import _durable_targets
+                    from src.semantic_passage_v1 import semantic_source_blocks
+                    data = self.resolve_input(reference)
+                    blocks = semantic_source_blocks(data["fragments"])
+                    proposal = diagnostic["resolved_proposal"]
+                    diagnostic["provider_evidence"].update(task_plan=plan,
+                        task_plan_summary=report(plan,proposal,_durable_targets(blocks,proposal),
+                            selection_scope="attempt_recorded_proposals"))
         return diagnostic

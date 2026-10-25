@@ -1,0 +1,170 @@
+{
+  "fixture": "recorded Smetten validator input; independent smetten-reference.json",
+  "validator_input_hash": "c9c2fb9c1e3093bb9fc3ef6db43c8c94395035d29a5046480124b5d978123a5c",
+  "content_fragments": 867,
+  "evidence_fragments": 1040,
+  "tasks": 130,
+  "possible_recommendation_count": 25,
+  "first_planned_task_original_position": 6,
+  "priority_task_count": 10,
+  "coverage_exact": true,
+  "independent_reference_recommendations": 19,
+  "matches": [
+    {
+      "source_match": true,
+      "old_task_positions": [
+        43
+      ],
+      "new_task_positions": [
+        2
+      ]
+    },
+    {
+      "source_match": true,
+      "old_task_positions": [
+        65
+      ],
+      "new_task_positions": [
+        3
+      ]
+    },
+    {
+      "source_match": false,
+      "old_task_positions": [],
+      "new_task_positions": []
+    },
+    {
+      "source_match": true,
+      "old_task_positions": [
+        65
+      ],
+      "new_task_positions": [
+        3
+      ]
+    },
+    {
+      "source_match": true,
+      "old_task_positions": [
+        83
+      ],
+      "new_task_positions": [
+        5
+      ]
+    },
+    {
+      "source_match": true,
+      "old_task_positions": [
+        83
+      ],
+      "new_task_positions": [
+        5
+      ]
+    },
+    {
+      "source_match": false,
+      "old_task_positions": [],
+      "new_task_positions": []
+    },
+    {
+      "source_match": true,
+      "old_task_positions": [
+        83
+      ],
+      "new_task_positions": [
+        5
+      ]
+    },
+    {
+      "source_match": true,
+      "old_task_positions": [
+        83
+      ],
+      "new_task_positions": [
+        5
+      ]
+    },
+    {
+      "source_match": false,
+      "old_task_positions": [],
+      "new_task_positions": []
+    },
+    {
+      "source_match": true,
+      "old_task_positions": [
+        110
+      ],
+      "new_task_positions": [
+        7
+      ]
+    },
+    {
+      "source_match": true,
+      "old_task_positions": [
+        111
+      ],
+      "new_task_positions": [
+        8
+      ]
+    },
+    {
+      "source_match": true,
+      "old_task_positions": [
+        111
+      ],
+      "new_task_positions": [
+        8
+      ]
+    },
+    {
+      "source_match": true,
+      "old_task_positions": [
+        112
+      ],
+      "new_task_positions": [
+        9
+      ]
+    },
+    {
+      "source_match": false,
+      "old_task_positions": [],
+      "new_task_positions": []
+    },
+    {
+      "source_match": true,
+      "old_task_positions": [
+        112
+      ],
+      "new_task_positions": [
+        9
+      ]
+    },
+    {
+      "source_match": true,
+      "old_task_positions": [
+        129
+      ],
+      "new_task_positions": [
+        10
+      ]
+    },
+    {
+      "source_match": true,
+      "old_task_positions": [
+        129
+      ],
+      "new_task_positions": [
+        10
+      ]
+    },
+    {
+      "source_match": true,
+      "old_task_positions": [
+        129
+      ],
+      "new_task_positions": [
+        10
+      ]
+    }
+  ],
+  "scope": "offline ordering/source-reference proof; no provider, automatic selection or clinical acceptance claim"
+}
