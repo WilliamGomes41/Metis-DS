@@ -126,8 +126,13 @@ def build_formation_context(console, *, envelope, actor_id, expected_revision,
                 or deadline is None):
             raise _error('processing_command_conflict')
     resume = bool(attempt and attempt.get('kind') == 'resume')
-    if resume and not envelope.get('semantic_replay'):
+    if resume and not envelope.get('semantic_replay') and envelope.get('processing_storage') != 'task-v1':
         raise _error('source_preparation_checkpoint_required')
+    checkpoint_writer = console._diagnostic_writer(source.snapshot_id, attempt['attempt_id'] if attempt else None)
+    if hasattr(checkpoint_writer,'claim_token') and checkpoint_writer.claim_token != (attempt.get('dispatch') or {}).get('token'):
+        raise _error('processing_command_conflict')
+    if resume and hasattr(checkpoint_writer,'validate_resume_input'):
+        checkpoint_writer.validate_resume_input()
     context: FormationContext = {
         'snapshot_id': source.snapshot_id, 'source_sha256': source.sha256,
         'semantic_replay': deepcopy(envelope.get('semantic_replay')),
@@ -135,7 +140,7 @@ def build_formation_context(console, *, envelope, actor_id, expected_revision,
         'model_call_limits': {key: attempt['limits'][key] for key in ('connect', 'idle', 'total', 'attempt', 'max_attempts')}
                             if attempt and attempt.get('limits') else None,
         'attempt_deadline': deadline,
-        'diagnostic_checkpoint': console._diagnostic_writer(source.snapshot_id, attempt['attempt_id'] if attempt else None),
+        'diagnostic_checkpoint': checkpoint_writer,
         'processing_reference': attempt.get('processing_reference') if attempt else None,
         # Recorded accountings for unresolved pages; extraction re-checks each binding.
         'page_accountings': deepcopy(envelope.get('source_page_accountings') or []),

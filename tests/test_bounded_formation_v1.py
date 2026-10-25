@@ -32,6 +32,17 @@ def test_tasks_partition_candidates_and_keep_referenced_table_content_as_context
         assert not ({b['block_id'] for b in task['source_blocks']} & {b['block_id'] for b in task['evidence_blocks']})
 
 
+def test_durable_recovery_does_not_search_already_bound_context_again():
+    from src.bounded_formation_v1 import _durable_targets, full_span
+    advice = block('advice','Gebruik geen zalf.',['Advies'])
+    context = block('context','Bij een natte plek:',['Advies'])
+    proposal = {'objects':[{'spans':[full_span(advice)],'context_evidence':[
+        {'role':'condition','span':full_span(context),'unresolved_reason':None}]}], 'source_assessments':[]}
+    assert _durable_targets([advice,context],proposal) == []
+    proposal['objects'][0]['context_evidence'] = [{'role':'condition','span':None,'unresolved_reason':'not_stated'}]
+    assert [target['span'] for target in _durable_targets([advice,context],proposal)] == [full_span(context)]
+
+
 def test_oversized_source_remains_explicit_instead_of_truncation():
     b = block('long', 'x' * (MAX_CANDIDATE_CHARS + 1), ['One'])
     task = tasks_for([b], [b])[0]

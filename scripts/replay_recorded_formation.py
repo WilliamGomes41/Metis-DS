@@ -22,6 +22,7 @@ def replay(path):
     csv.field_size_limit(32_000_000)
     with ZipFile(path) as archive:
         rows = list(csv.DictReader(io.StringIO(archive.read('attempt_diagnostics.csv').decode('utf-8-sig'))))
+        inputs = list(csv.DictReader(io.StringIO(archive.read('validator_inputs.csv').decode('utf-8-sig')))) if 'validator_inputs.csv' in archive.namelist() else []
     diagnostic = next(json.loads(r['diagnostic']) for r in rows if r['state'] == 'failed')
     recorded = diagnostic['provider_evidence']
     calls = [recorded, *recorded.get('supplementary_calls', [])]
@@ -34,7 +35,9 @@ def replay(path):
         return {'id': response['id'], 'status': response['status'], 'output': [
             {'type': 'message', 'content': [{'type': 'output_text', 'text': response['output_text']}]}]}
     started = time.monotonic()
-    data = diagnostic['validator_input']
+    from src.attempt_diagnostics_v1 import resolve_validator_input
+    recorded_inputs = {row['artifact_id']:json.loads(row['validator_input']) for row in inputs}
+    data = resolve_validator_input(diagnostic,lambda ref: recorded_inputs[ref['artifact_id']])
     spec = semantic_spec_from_fragments(document_id=data['document_id'], title='Recorded source',
         family='recorded', class_='richtlijn', fragments=data['evidence_fragments'], content_kind='pdf',
         api_key='offline-recorded-response', model=diagnostic['model'], post_json=provider,

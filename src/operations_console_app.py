@@ -5402,6 +5402,11 @@ def create_console_app(
         if attempt is None:
             raise ConsoleError("processing_attempt_not_active")
         from src.attempt_diagnostics_v1 import replay_diagnostic
+        if envelope.get("processing_storage") == "task-v1":
+            from src.workflows.formation_task_store_v1 import FormationTaskStore
+            store = FormationTaskStore(state.workflow_document_store)
+            attempt = {**attempt, "diagnostic":store.diagnostic(attempt)}
+            return JSONResponse(replay_diagnostic(attempt,input_resolver=lambda ref:store.resolve_input(ref,expected_snapshot_id=document)),headers={"Cache-Control":"no-store"})
         return JSONResponse(replay_diagnostic(attempt), headers={"Cache-Control": "no-store"})
 
     @app.post("/tree/reprocess")
@@ -5540,11 +5545,16 @@ def create_console_app(
             raise ConsoleError("reviewer_not_named_on_snapshot")
         objects, revision = state.snapshot_objects_and_revision(snapshot_id)
         refusal_issues: list[str] = []
+        task_evidence = {}
+        if envelope.get("processing_storage") == "task-v1":
+            from src.workflows.formation_task_store_v1 import FormationTaskStore
+            task_store = FormationTaskStore(state.workflow_document_store)
+            task_evidence = {"input_resolver":lambda ref:task_store.resolve_input(ref,expected_snapshot_id=snapshot_id),"diagnostic_reader":task_store.diagnostic}
         payload = processing_evidence_zip(snapshot_id=snapshot_id, revision=revision,
                                           envelope=envelope, objects=objects,
                                           bindings=state.object_review_bindings(snapshot_id, objects=objects),
                                           refusals=_refusal_records(state, snapshot_id, issues=refusal_issues),
-                                          refusal_issues=refusal_issues)
+                                          refusal_issues=refusal_issues, **task_evidence)
         filename = re.sub(r"[^A-Za-z0-9_-]", "_", snapshot_id)
         return Response(payload, media_type="application/zip", headers={
             "Content-Disposition": f'attachment; filename="{filename}-processing-evidence.zip"',

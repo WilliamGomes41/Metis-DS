@@ -209,6 +209,14 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
     evidence["task_policy"] = VERSION
     evidence.setdefault("tasks", [])
     proposal = deepcopy(proposal or {"objects": [], "relations": [], "source_assessments": [], "abstain_reason": "no_validated_proposals"})
+    durable = checkpoint is not None and hasattr(checkpoint, "commit_task")
+    retained = checkpoint.task_results() if durable else []
+    # Read committed task deltas once. Attempt identity is provenance only.
+    if retained:
+        proposal = _merge_task_proposals([proposal, *(row["proposal"] for row in retained)])
+        for row in retained:
+            evidence["tasks"].append(deepcopy(row["task"]))
+            evidence.setdefault("supplementary_calls", []).append(deepcopy(row["evidence"]))
     # Source-role classification is independent of knowledge extraction. These
     # closed whole-range rules cannot classify arbitrary clinical text.
     if not resuming:
@@ -234,7 +242,7 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
         return ordered_source_projection(
             candidates, decisions, coverage, validator_input["fragments"]
         )
-    targets = _remaining_targets(units())
+    targets = _durable_targets(blocks,proposal) if durable else _remaining_targets(units())
     if resuming:
         pending = evidence.get("pending_rejections") or []
         scope = [s for r in pending for s in r.get("spans", [])]
@@ -255,9 +263,18 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
         return round(time.monotonic() - begun, 3)
     for phase in phases:
         if phase == "recovery" and not resuming:
-            targets = _remaining_targets(units())
+            targets = _durable_targets(blocks,proposal) if durable else _remaining_targets(units())
         phase_tasks = tasks_for(blocks, evidence_blocks, targets)
+        if durable:
+            checkpoint.plan_tasks(len(phase_tasks))
+        deltas = []
+        primary_by_spans = {stable_json_hash(obj["spans"]): obj for obj in proposal["objects"]} if durable else {}
+        retained_by_ranges = {stable_json_hash(checkpoint.store.canonical_ranges(row["task"]["target_spans"])): row
+                              for row in retained if row["task"].get("status") == "completed"} if durable else {}
         for index, task in enumerate(phase_tasks):
+            if durable and stable_json_hash(checkpoint.store.canonical_ranges(task["target_spans"])) in retained_by_ranges:
+                continue
+            result = None
             task_record = {key: deepcopy(task[key]) for key in ("task_id", "section_path", "target_spans")}
             task_record["phase"] = phase
             timing = {"task_id": task["task_id"], "phase": phase, "index": index + 1, "planned": len(phase_tasks)}
@@ -288,8 +305,9 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                         evidence.setdefault("supplementary_calls", []).append(pending_call)
                 budget_exhausted = True
                 if checkpoint:
-                    timed_checkpoint("proposal_received", {"provider_evidence": evidence,
-                        "resolved_proposal": proposal, "resolved_proposal_hash": stable_json_hash(proposal)})
+                    timed_checkpoint("budget_exhausted" if durable else "proposal_received",
+                        {"remaining_task_count": len(phase_tasks) - index} if durable else {"provider_evidence": evidence,
+                         "resolved_proposal": proposal, "resolved_proposal_hash": stable_json_hash(proposal)})
                 break
 
             error = task.get("error_code")
@@ -313,7 +331,9 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                         model_limits=call_limits, evidence=call, validator_input=task_validator, timing=timing)
                     timing["provider_seconds"] = round(time.monotonic() - called, 3)
                     validated = time.monotonic()
-                    result, rejected = restrict_supplement(result, primary=proposal,
+                    primary = {"objects": [primary_by_spans[h] for h in
+                        {stable_json_hash(obj["spans"]) for obj in result["objects"]} if h in primary_by_spans]} if durable else proposal
+                    result, rejected = restrict_supplement(result, primary=primary,
                         targets=[{"span": s} for s in task["target_spans"]])
                     call.setdefault("formation", {}).setdefault("rejections", []).extend(rejected)
                     call["formation"]["accepted_object_count"] = len(result["objects"])
@@ -322,10 +342,16 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                     for rejection in call["formation"]["rejections"]:
                         if not rejection.get("spans"):
                             rejection["spans"] = deepcopy(task["target_spans"])
-                    merged = merge_proposals(proposal, result)
-                    if merged != proposal:
-                        semantic_units_from_proposal(**validator_input, proposal=merged)
-                    proposal = merged
+                    if durable:
+                        # The provider's prepare() already validates this task's
+                        # exact source binding. Cross-task conflicts belong to
+                        # the final joint gate, never a growing per-task pass.
+                        deltas.append(result)
+                    else:
+                        merged = merge_proposals(proposal, result)
+                        if merged != proposal:
+                            semantic_units_from_proposal(**validator_input, proposal=merged)
+                        proposal = merged
                     timing["validation_seconds"] = round(time.monotonic() - validated, 3)
                     task_record["status"] = "partial" if call["formation"]["rejections"] else "completed"
                 except (ConsoleError, SemanticPassageError) as exc:
@@ -348,8 +374,19 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
             timings.append(timing)
             if checkpoint:
                 # Recorded in the next checkpoint: a write cannot contain its own duration.
-                timing["checkpoint_after_seconds"] = timed_checkpoint("proposal_received", {"provider_evidence": evidence,
-                    "resolved_proposal": proposal, "resolved_proposal_hash": stable_json_hash(proposal)})
+                if durable:
+                    begun = time.monotonic()
+                    if result is not None and (task_record["status"] == "completed" or result["objects"] or result["source_assessments"]):
+                        checkpoint.commit_task(task=task_record,proposal=result,evidence=call,timing=timing)
+                        retained.append({"task": task_record, "proposal": result, "evidence": call, "timing": timing})
+                    else:
+                        checkpoint("task_rejected", {"task": task_record, "evidence": call, "timing": timing})
+                    timing["checkpoint_after_seconds"] = round(time.monotonic()-begun,3)
+                else:
+                    timing["checkpoint_after_seconds"] = timed_checkpoint("proposal_received", {"provider_evidence": evidence,
+                        "resolved_proposal": proposal, "resolved_proposal_hash": stable_json_hash(proposal)})
+        if durable:
+            proposal = _merge_task_proposals([proposal, *deltas])
         if budget_exhausted:
             break
     evidence["recommendation_coverage"] = assess(blocks, proposal)
@@ -358,3 +395,54 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
     evidence["formation_state"] = "pending" if evidence["formation_incomplete"] else "complete"
     evidence["formation_progress"] = formation_progress(evidence)
     return proposal, evidence
+
+
+def _merge_task_proposals(proposals):
+    """Linear assembly, with one canonical dedup index per proposal component.
+
+    This is assembly only. Existing joint validation decides whether the complete
+    selection is valid; conflicting selections are not silently repaired here.
+    """
+    result = {"objects": [], "relations": [], "source_assessments": [], "abstain_reason": None}
+    for key in ("objects", "relations", "source_assessments"):
+        seen = set()
+        for proposal in proposals:
+            for value in proposal.get(key, []):
+                identity = stable_json_hash(value)
+                if identity not in seen:
+                    seen.add(identity)
+                    result[key].append(value)
+    if not result["objects"] and not result["source_assessments"]:
+        result["abstain_reason"] = "no_validated_proposals"
+    return result
+
+
+def _durable_targets(blocks, proposal):
+    """Coverage planning without materialising/validating the whole proposal.
+
+    Only exact selected ranges are subtracted. Interpretation and cross-task
+    relationships remain the responsibility of the final joint validator.
+    """
+    by_block = {}
+    refs = [s for obj in proposal["objects"] for s in obj["spans"]]
+    refs.extend(row["span"] for row in proposal["source_assessments"])
+    # Bound context is already source use on its candidate. Preserve the
+    # existing recovery rule: it is not another candidate-search target.
+    refs.extend(entry["span"] for obj in proposal["objects"] for entry in obj.get("context_evidence", [])
+                if entry.get("span") and not entry.get("unresolved_reason"))
+    for span in refs:
+        by_block.setdefault(span["block_id"], []).append((span["start"],span["end"]))
+    result = []
+    for block in blocks:
+        if metadata_reason(block["text"]):
+            continue
+        cursor = 0
+        for start,end in sorted(by_block.get(block["block_id"], [])):
+            if start > cursor:
+                result.append({"span":{"block_id":block["block_id"],"start":cursor,"end":start},
+                               "text":block["text"][cursor:start]})
+            cursor = max(cursor,end)
+        if cursor < len(block["text"]):
+            result.append({"span":{"block_id":block["block_id"],"start":cursor,"end":len(block["text"])},
+                           "text":block["text"][cursor:]})
+    return result

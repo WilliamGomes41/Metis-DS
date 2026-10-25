@@ -147,7 +147,7 @@ def test_no_plain_account_id_appears_anywhere_in_the_export(tmp_path):
 def test_export_schema_is_v15_without_actor_columns():
     # Metis 2026-10-16: removing actor/actor_id is a schema change; closes OPENVRAAG-EXP-1.
     from src.processing_evidence_export_v1 import PROJECTOR_VERSION, SCHEMAS, VERSION
-    assert VERSION == PROJECTOR_VERSION == 'processing-evidence-export-v15'
+    assert VERSION == PROJECTOR_VERSION == 'processing-evidence-export-v16'
     assert not any({'actor', 'actor_id'} & set(fields) for fields in SCHEMAS.values())
 
 

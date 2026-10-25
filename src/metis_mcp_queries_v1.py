@@ -122,8 +122,14 @@ class McpQueries:
             return {**result, **page(rows, args)}
         if name == 'get_processing_evidence':
             current_objects = list({row['object_id']: row for row in objects}.values())
+            task_evidence = {}
+            if envelope.get('processing_storage') == 'task-v1':
+                from src.workflows.formation_task_store_v1 import FormationTaskStore
+                store = FormationTaskStore(self.console.workflow_document_store)
+                task_evidence = {'input_resolver':lambda ref:store.resolve_input(ref,expected_snapshot_id=sid),
+                                 'diagnostic_reader':store.diagnostic}
             tables, coverage = processing_evidence_tables(
-                snapshot_id=sid, revision=revision, envelope=envelope, objects=current_objects)
+                snapshot_id=sid, revision=revision, envelope=envelope, objects=current_objects,**task_evidence)
             rows = tables[args.get('table', 'runs')]
             if args.get('object_id'):
                 rows = [r for r in rows if r.get('object_id') == args['object_id']]

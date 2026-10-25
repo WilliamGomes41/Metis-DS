@@ -79,13 +79,20 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                 rows = con.execute(
                     "SELECT table_name,column_name FROM information_schema.columns "
                     "WHERE table_schema='workflow' AND "
-                    "((table_name='documents' AND column_name='envelope_payload') OR "
+                    "((table_name='documents' AND column_name IN ('envelope_payload','processing_storage_version','object_generation')) OR "
                     "(table_name='document_objects' AND column_name='position'))"
                 ).fetchall()
                 present = {(str(row["table_name"]), str(row["column_name"])) for row in rows}
-                required = {("documents", "envelope_payload"), ("document_objects", "position")}
+                required = {("documents", "envelope_payload"), ("document_objects", "position"),
+                            ("documents","processing_storage_version"),("documents","object_generation")}
                 if present != required:
                     raise WorkflowDocumentStoreError("workflow_document_cutover_schema_missing")
+                task_tables = {str(r["tablename"]) for r in con.execute(
+                    "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname='workflow'").fetchall()}
+                if not {"processing_attempts","processing_document_summaries","processing_checkpoints",
+                        "prepared_extraction_versions","formation_inputs","formation_contexts",
+                        "formation_task_results","formation_task_findings","formation_task_result_history"} <= task_tables:
+                    raise WorkflowDocumentStoreError("workflow_formation_task_schema_missing")
                 try:
                     unresolved = con.execute(
                         "SELECT COUNT(*) AS n FROM workflow.documents d "
@@ -140,6 +147,9 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             raise WorkflowDocumentStoreError("workflow_document_reviewers_authority_mismatch")
         envelope["topic_id"] = topic_id
         envelope["family"] = display_name
+        if envelope.get("processing_storage") == "task-v1":
+            from src.workflows.formation_task_store_v1 import FormationTaskStore
+            envelope["processing_attempts"] = FormationTaskStore.attempts(con, snapshot_id,include_versions=True)
         return envelope
 
     @diagnostic_phase("document_store_read")
@@ -184,8 +194,12 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                     SELECT d.snapshot_id,d.title,d.source_version AS version,d.class,d.state,
                            d.publication_eligibility,
                            d.envelope_payload->>'processing_blocker' AS processing_blocker,
-                           d.envelope_payload->'processing_attempts'->-1->>'state' AS latest_processing_state,
-                           d.envelope_payload->'processing_attempts'->-1->>'expires_at' AS latest_processing_expires_at,
+                           CASE WHEN d.processing_storage_version=1 THEN
+                               (SELECT p.payload->'processing_attempts'->0->>'state' FROM workflow.processing_document_summaries p WHERE p.snapshot_id=d.snapshot_id)
+                               ELSE d.envelope_payload->'processing_attempts'->-1->>'state' END AS latest_processing_state,
+                           CASE WHEN d.processing_storage_version=1 THEN
+                               (SELECT p.payload->'processing_attempts'->0->>'expires_at' FROM workflow.processing_document_summaries p WHERE p.snapshot_id=d.snapshot_id)
+                               ELSE d.envelope_payload->'processing_attempts'->-1->>'expires_at' END AS latest_processing_expires_at,
                            ARRAY(SELECT r.account_id FROM workflow.document_reviewers r
                                  WHERE r.snapshot_id=d.snapshot_id ORDER BY r.account_id) AS named_reviewers,
                            (SELECT COALESCE(jsonb_agg(v ORDER BY v),'[]'::jsonb)
@@ -217,7 +231,10 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                            jsonb_strip_nulls(jsonb_build_object('consumed_by', d.envelope_payload->'processing_recovery'->'consumed_by',
                                'source_hash', d.envelope_payload->'processing_recovery'->'source_hash',
                                'source_version', d.envelope_payload->'processing_recovery'->'source_version')) AS processing_recovery,
-                           COALESCE((SELECT jsonb_agg(jsonb_build_object(
+                           CASE WHEN d.processing_storage_version=1 THEN
+                               COALESCE((SELECT jsonb_agg(p.payload-'diagnostic' ORDER BY p.started_at,p.attempt_id)
+                                   FROM workflow.processing_attempts p WHERE p.snapshot_id=d.snapshot_id),'[]'::jsonb)
+                           ELSE COALESCE((SELECT jsonb_agg(jsonb_build_object(
                                'state', a->'state', 'kind', a->'kind',
                                'attempt_id', a->'attempt_id', 'expires_at', a->'expires_at',
                                'error_code', a->'error_code', 'retry_not_before', a->'retry_not_before',
@@ -226,7 +243,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                                'transport', jsonb_build_object('external_cancellation', a->'transport'->'external_cancellation')
                            ) ORDER BY n)
                              FROM jsonb_array_elements(COALESCE(d.envelope_payload->'processing_attempts', '[]'::jsonb))
-                                  WITH ORDINALITY AS attempts(a,n)), '[]'::jsonb) AS processing_attempts,
+                                  WITH ORDINALITY AS attempts(a,n)), '[]'::jsonb) END AS processing_attempts,
                            ARRAY(SELECT r.account_id FROM workflow.document_reviewers r
                                  WHERE r.snapshot_id=d.snapshot_id ORDER BY r.account_id) AS named_reviewers
                     FROM workflow.documents d WHERE d.snapshot_id=ANY(%s) ORDER BY d.acquired_at,d.snapshot_id
@@ -282,13 +299,15 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             with self._connect() as con:
                 rows = con.execute("""
                     SELECT d.snapshot_id,d.title,d.source_version AS version,d.class,d.content_kind,
-                           d.publication_eligibility,d.source_selection_summary AS summary,
+                           d.publication_eligibility,(d.source_selection_summary || COALESCE(p.payload,'{}'::jsonb)) AS summary,
                            ARRAY(SELECT r.account_id FROM workflow.document_reviewers r
                                  WHERE r.snapshot_id=d.snapshot_id ORDER BY r.account_id)
                            = ARRAY(SELECT jsonb_array_elements_text(COALESCE(
                                d.source_selection_summary->'named_reviewers','[]'::jsonb)) ORDER BY 1)
                            AS reviewers_consistent
-                    FROM workflow.documents d ORDER BY d.acquired_at,d.snapshot_id
+                    FROM workflow.documents d
+                    LEFT JOIN workflow.processing_document_summaries p ON p.snapshot_id=d.snapshot_id
+                    ORDER BY d.acquired_at,d.snapshot_id
                 """).fetchall()
             if any(not isinstance(row['summary'], dict)
                    or type(row['summary'].get('schema_version')) is not int
@@ -310,15 +329,19 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             with self._connect() as con:
                 rows = con.execute("""
                     SELECT d.snapshot_id FROM workflow.documents d
-                    WHERE EXISTS (SELECT 1 FROM jsonb_array_elements(
+                    WHERE (d.processing_storage_version=1 AND EXISTS (
+                        SELECT 1 FROM workflow.processing_attempts a WHERE a.snapshot_id=d.snapshot_id
+                        AND a.payload->>'state'='running' AND a.payload->'dispatch' IS NOT NULL
+                        AND (a.payload->'dispatch'->>'state'='pending' OR (a.payload->>'expires_at')::timestamptz<=%s)))
+                    OR (d.processing_storage_version IS NULL AND EXISTS (SELECT 1 FROM jsonb_array_elements(
                         COALESCE(NULLIF(d.envelope_payload->'processing_attempts','null'::jsonb),'[]'::jsonb)) AS a
                         WHERE a->>'state'='running' AND a->'dispatch' IS NOT NULL
-                          AND (a->'dispatch'->>'state'='pending' OR (a->>'expires_at')::timestamptz<=%s))
+                          AND (a->'dispatch'->>'state'='pending' OR (a->>'expires_at')::timestamptz<=%s)))
                     ORDER BY CASE WHEN (d.acquired_at,d.snapshot_id) <=
                         (SELECT p.acquired_at,p.snapshot_id FROM workflow.documents p WHERE p.snapshot_id=%s)
                         THEN 1 ELSE 0 END, d.acquired_at,d.snapshot_id
                 """ + (" LIMIT %s" if limit is not None else ""),
-                    ((clock, after_snapshot, limit) if limit is not None else (clock, after_snapshot))).fetchall()
+                    ((clock, clock, after_snapshot, limit) if limit is not None else (clock, clock, after_snapshot))).fetchall()
             return [str(row["snapshot_id"]) for row in rows]
         except Exception as exc:
             raise WorkflowDocumentStoreError("workflow_dispatch_discovery_failed") from exc
@@ -409,13 +432,21 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         stored_envelope = deepcopy(dict(envelope))
         stored_envelope["topic_id"] = topic["topic_id"]
         stored_envelope["family"] = topic["display_name"]
+        task_storage = stored_envelope.get("processing_storage") == "task-v1"
+        attempts = stored_envelope.pop("processing_attempts", []) if task_storage else []
+        if task_storage:
+            provider = (stored_envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
+            provider.pop("formation_progress",None)
         values = self._document_values(stored_envelope)
         topic_values = (*values[:5], topic["topic_id"], *values[5:])
         snapshot_id = str(stored_envelope["snapshot_id"])
         existing = con.execute(
-            "SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
+            "SELECT snapshot_id,envelope_payload,processing_storage_version FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
             (snapshot_id,),
         ).fetchone()
+        unchanged = bool(task_storage and existing is not None
+            and self._payload(existing["envelope_payload"]) == stored_envelope
+            and self._reviewers(con,snapshot_id) == sorted(set(stored_envelope.get("named_reviewers") or [])))
         if existing is None:
             con.execute(
                 "INSERT INTO workflow.documents("
@@ -426,7 +457,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                 "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s::jsonb)",
                 (*topic_values, _json_text(stored_envelope)),
             )
-        else:
+        elif not unchanged:
             con.execute(
                 "UPDATE workflow.documents SET "
                 "source_id=%s,document_id=%s,title=%s,family=%s,topic_id=%s,class=%s,state=%s,publication_eligibility=%s,"
@@ -436,12 +467,18 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                 "envelope_payload=%s::jsonb,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE snapshot_id=%s",
                 (*topic_values[1:], _json_text(stored_envelope), snapshot_id),
             )
-        con.execute("DELETE FROM workflow.document_reviewers WHERE snapshot_id=%s", (snapshot_id,))
-        for reviewer in sorted(set(str(x) for x in stored_envelope.get("named_reviewers") or [])):
-            con.execute(
-                "INSERT INTO workflow.document_reviewers(snapshot_id,account_id) VALUES(%s,%s)",
-                (snapshot_id, reviewer),
-            )
+        if not unchanged:
+            con.execute("DELETE FROM workflow.document_reviewers WHERE snapshot_id=%s", (snapshot_id,))
+            for reviewer in sorted(set(str(x) for x in stored_envelope.get("named_reviewers") or [])):
+                con.execute(
+                    "INSERT INTO workflow.document_reviewers(snapshot_id,account_id) VALUES(%s,%s)",
+                    (snapshot_id, reviewer),
+                )
+        if task_storage:
+            from src.workflows.formation_task_store_v1 import FormationTaskStore
+            if existing is None or existing["processing_storage_version"] != 1:
+                con.execute("UPDATE workflow.documents SET processing_storage_version=1 WHERE snapshot_id=%s", (snapshot_id,))
+            FormationTaskStore.save_attempts(con, snapshot_id, attempts)
 
     def write_bundle(
         self,
@@ -468,6 +505,9 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                     elif expected_revision not in (None, ""):
                         raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
 
+                    if objects is not None:
+                        from src.workflows.formation_task_store_v1 import FormationTaskStore
+                        FormationTaskStore.assert_activation(con,envelope)
                     self._write_envelope_locked(con, envelope)
                     next_objects = current_objects if objects is None else objects
                     identities = [

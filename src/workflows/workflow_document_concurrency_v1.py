@@ -291,6 +291,8 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         instead of being hard-coded back to ``published``.
         """
         stored = dict(envelope)
+        if stored.get("processing_storage") == "task-v1":
+            stored.pop("processing_attempts",None)
         for field in _DATABASE_MANAGED_LIFECYCLE_PROJECTION_FIELDS:
             if field not in stored and field in current_payload:
                 stored[field] = current_payload[field]
@@ -334,6 +336,8 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                             if objects is not None:
                                 raise WorkflowDocumentStoreError(PUBLISHED_WORKING_REVISION_IMMUTABLE)
                             current_payload = self._payload(existing["envelope_payload"])
+                            if current_payload.get("processing_storage") == "task-v1":
+                                current_payload = self._envelope_from_row(con,existing)
                             topic_id = str(existing.get("topic_id") or "")
                             display_name = str(existing.get("display_name") or "")
                             if not topic_id or not display_name:
@@ -355,6 +359,9 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                     elif expected_revision not in (None, ""):
                         raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
 
+                    if objects is not None:
+                        from src.workflows.formation_task_store_v1 import FormationTaskStore
+                        FormationTaskStore.assert_activation(con,envelope)
                     self._write_envelope_locked(con, envelope)
                     next_objects = current_objects
                     if objects is not None:
