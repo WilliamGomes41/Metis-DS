@@ -632,3 +632,14 @@ def test_task_storage_keeps_non_bounded_v1_retry_available(tmp_path,production_c
     assert console._envelope(sid)['processing_attempts'][-1]['diagnostic']['validator_input_ref']
     second,fresh=console.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id='v1-retry',expected_revision=console.objects_revision(sid))
     assert fresh and second['kind']!='resume'
+    from tests.production_support import restart_production
+    restarted=restart_production(console)
+    bind_pre_review_semantic_processing(restarted,environ={'METIS_PASSAGE_FORMATION_MODE':'semantic-source-bound-v1',
+        'METIS_LLM_API_KEY':'fixture','METIS_LLM_MODEL':'test'},post_json=lambda *_:'invalid response')
+    def forbidden(*args,**kwargs):
+        raise AssertionError('Retry must reuse compatible committed source views')
+    monkeypatch.setattr(restarted,'_extract',forbidden)
+    monkeypatch.setattr('src.source_reconstruction_v1._with_status',forbidden)
+    with pytest.raises(ConsoleError,match='pre_review_llm_response_invalid'):
+        restarted.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=second)
+    assert restarted._envelope(sid)['processing_attempts'][-1]['diagnostic']['source_views_ref']==console._envelope(sid)['processing_attempts'][-2]['diagnostic']['source_views_ref']

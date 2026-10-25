@@ -6,6 +6,7 @@ returns decisions. It does not assign object identity or canonical text.
 from __future__ import annotations
 
 from src.request_diagnostics_v1 import diagnostic_count, diagnostic_phase
+from src.prepared_source_views_v1 import preserve_fragments, stored_index, fragment_index
 
 import hashlib
 import math
@@ -80,6 +81,9 @@ def _source_input_snapshot(value):
 
 @diagnostic_phase("source_reconstruction")
 def _read_source_blocks(fragments, *, include_headings=False):
+    retained = stored_index(fragments,include_headings=include_headings)
+    if retained is not None:
+        return retained
     def reconstruct():
         if include_headings:
             return {public["block_id"]: (public, source)
@@ -121,6 +125,9 @@ class MaterialisationError(SemanticPassageError):
 
 
 def _selection_blocks(fragments):
+    retained = stored_index(fragments)
+    if retained is not None:
+        return retained
     from src.object_taxonomy_v1 import extract_object_type
     return {
         public["block_id"]: (public, source)
@@ -132,7 +139,7 @@ def _selection_blocks(fragments):
 
 def selection_source_blocks(fragments: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     """The exact public source view that selection proposals may reference."""
-    return [public for public, _source in _selection_blocks(list(fragments)).values()]
+    return [public for public, _source in _selection_blocks(preserve_fragments(fragments)).values()]
 
 
 def resolve_source_selection(
@@ -145,8 +152,8 @@ def resolve_source_selection(
 
     if not spans_are_exact(spans) or any(not isinstance(span["block_id"], str) for span in spans):
         raise MaterialisationError("materialisation_span_invalid")
-    fragments = list(fragments)
-    raw_by_id = {row.get("fragment_id"): row for row in fragments}
+    fragments = preserve_fragments(fragments)
+    raw_by_id = fragment_index(fragments)
     try:
         blocks = source_blocks if source_blocks is not None else _read_source_blocks(fragments)
     except (ValueError, KeyError, TypeError) as exc:
@@ -233,7 +240,7 @@ def materialise_knowledge_candidates(
 ) -> list[dict[str, Any]]:
     """Create KnowledgeCandidates from selection decisions and exact source spans."""
 
-    fragments = list(fragments)
+    fragments = preserve_fragments(fragments)
     try:
         source_blocks = _selection_blocks(fragments)
     except (ValueError, KeyError, TypeError) as exc:
@@ -303,7 +310,7 @@ def validate_materialised_candidate(
 
     Origin, admission, type and identity are not accepted as source proof.
     """
-    fragments = list(fragments)
+    fragments = preserve_fragments(fragments)
     metadata = obj.get("metadata") or {}
     semantic = obj.get("semantic_passage") or metadata.get("semantic_passage") or {}
     resolved = resolve_source_selection(
@@ -325,7 +332,7 @@ def validate_materialised_candidate(
         if not isinstance(refs, list) or any(not isinstance(row, dict) for row in refs):
             raise MaterialisationError("materialisation_source_fragments_invalid")
         ids = [row.get("raw_object_id") for row in refs]
-        raw_by_id = {row.get("fragment_id"): row for row in fragments}
+        raw_by_id = fragment_index(fragments)
         for ref in refs:
             raw = raw_by_id.get(ref.get("raw_object_id"))
             if (raw is None

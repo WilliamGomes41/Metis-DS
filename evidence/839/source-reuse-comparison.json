@@ -1,0 +1,106 @@
+{
+  "baseline_commit": "846f13ae2d5d83685b25380515e7f3e4cec0afc5",
+  "implementation_commit": "a6bcf250ebb3107c75fe2b6f64399558d8e60b19",
+  "backend": "PostgreSQL 16.15, Python 3.13.5, deterministic provider",
+  "method": "Sequential before/after runs on the same host after the full suite completed; fresh isolated database per variant. One first committed task, interruption, fresh kernel, remaining work. Times cover execute_source_selection after reservation; one sample per count, no production SLA.",
+  "before": [
+    {
+      "tasks": 10,
+      "initial": {
+        "reconstructed_fragments": 60,
+        "reconstruction_input_hashes": 10,
+        "seconds": 0.232757
+      },
+      "resume": {
+        "reconstructed_fragments": 400,
+        "reconstruction_input_hashes": 163,
+        "seconds": 0.993654
+      },
+      "provider_calls": 11,
+      "first_committed_task_reused": true,
+      "first_result_hash_unchanged": true
+    },
+    {
+      "tasks": 50,
+      "initial": {
+        "reconstructed_fragments": 300,
+        "reconstruction_input_hashes": 10,
+        "seconds": 0.382024
+      },
+      "resume": {
+        "reconstructed_fragments": 6000,
+        "reconstruction_input_hashes": 843,
+        "seconds": 7.578498
+      },
+      "provider_calls": 51,
+      "first_committed_task_reused": true,
+      "first_result_hash_unchanged": true
+    },
+    {
+      "tasks": 130,
+      "initial": {
+        "reconstructed_fragments": 780,
+        "reconstruction_input_hashes": 10,
+        "seconds": 0.578319
+      },
+      "resume": {
+        "reconstructed_fragments": 36400,
+        "reconstruction_input_hashes": 2203,
+        "seconds": 41.649549
+      },
+      "provider_calls": 131,
+      "first_committed_task_reused": true,
+      "first_result_hash_unchanged": true
+    }
+  ],
+  "after": [
+    {
+      "tasks": 10,
+      "initial": {
+        "reconstructed_fragments": 40,
+        "reconstruction_input_hashes": 0,
+        "seconds": 0.221149
+      },
+      "resume": {
+        "reconstructed_fragments": 0,
+        "reconstruction_input_hashes": 0,
+        "seconds": 0.654412
+      },
+      "provider_calls": 11,
+      "first_committed_task_reused": true,
+      "first_result_hash_unchanged": true
+    },
+    {
+      "tasks": 50,
+      "initial": {
+        "reconstructed_fragments": 200,
+        "reconstruction_input_hashes": 0,
+        "seconds": 0.4783
+      },
+      "resume": {
+        "reconstructed_fragments": 0,
+        "reconstruction_input_hashes": 0,
+        "seconds": 4.769426
+      },
+      "provider_calls": 51,
+      "first_committed_task_reused": true,
+      "first_result_hash_unchanged": true
+    },
+    {
+      "tasks": 130,
+      "initial": {
+        "reconstructed_fragments": 520,
+        "reconstruction_input_hashes": 0,
+        "seconds": 0.559909
+      },
+      "resume": {
+        "reconstructed_fragments": 0,
+        "reconstruction_input_hashes": 0,
+        "seconds": 22.242722
+      },
+      "provider_calls": 131,
+      "first_committed_task_reused": true,
+      "first_result_hash_unchanged": true
+    }
+  ]
+}

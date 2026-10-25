@@ -72,6 +72,9 @@ class FormationTaskStore:
                 "validator_input_hash": payload["validator_input_hash"]}
 
     def resolve_input(self, reference, *, expected_snapshot_id=None):
+        return self.resolve_preparation(reference,expected_snapshot_id=expected_snapshot_id)["validator_input"]
+
+    def resolve_preparation(self, reference, *, expected_snapshot_id=None):
         if reference.get("version") != STORAGE_VERSION:
             raise WorkflowDocumentStoreError("formation_input_version_unsupported")
         if expected_snapshot_id is not None and reference.get("snapshot_id") != expected_snapshot_id:
@@ -101,7 +104,7 @@ class FormationTaskStore:
                   "evidence_fragments": _evidence_fragments(fragments)}
         integrity(result, payload["validator_input_hash"], "formation_input_integrity_failed")
         integrity(result, reference["validator_input_hash"], "formation_input_integrity_failed")
-        return result
+        return {"validator_input":result,"extraction":extraction,"input":payload}
 
     @staticmethod
     def canonical_ranges(ranges):
@@ -116,6 +119,69 @@ class FormationTaskStore:
                for a,b in zip(result,result[1:])):
             raise WorkflowDocumentStoreError("formation_task_ranges_invalid")
         return result
+
+    def load_source_views(self, preparation, reference=None):
+        from src.prepared_source_views_v1 import contract,VERSION,PreparedSource
+        extraction=preparation["extraction"]
+        extraction_hash=extraction["record_hash"]
+        views_id=stable_json_hash({"extraction_hash":extraction_hash,"contract":contract()})
+        if reference is not None:
+            if (set(reference)!={"version","views_id","extraction_hash","payload_hash"}
+                    or reference.get("version")!=VERSION or reference.get("extraction_hash")!=extraction_hash):
+                raise WorkflowDocumentStoreError("source_views_reference_invalid")
+            if reference["views_id"]!=views_id:
+                raise WorkflowDocumentStoreError("source_views_contract_mismatch")
+        with self.documents._connect() as con:
+            row=con.execute("SELECT extraction_hash,payload_hash,payload FROM workflow.formation_source_views WHERE views_id=%s",
+                            (views_id,)).fetchone()
+        if not row:
+            if reference is not None:
+                raise WorkflowDocumentStoreError("source_views_missing")
+            return None
+        if row["extraction_hash"]!=extraction_hash or row["payload"].get("extraction_hash")!=extraction_hash:
+            raise WorkflowDocumentStoreError("source_views_source_mismatch")
+        integrity(row["payload"],row["payload_hash"],"source_views_integrity_failed")
+        if reference is not None and row["payload_hash"]!=reference["payload_hash"]:
+            raise WorkflowDocumentStoreError("source_views_integrity_failed")
+        if row["payload"].get("extractor_contract")!=extraction["extractor_contract"]:
+            raise WorkflowDocumentStoreError("source_views_extractor_mismatch")
+        return PreparedSource(extraction["fragments"],row["payload"],docling_record=extraction.get("docling_record"))
+
+    def _source_views_header(self,con,input_reference):
+        return con.execute("SELECT i.payload->>'extraction_hash' AS extraction_hash,"
+            "e.payload->>'fragments_hash' AS fragments_hash,e.payload->>'extractor_contract' AS extractor_contract "
+            "FROM workflow.formation_inputs i JOIN workflow.prepared_extraction_versions e ON e.record_hash=i.extraction_hash "
+            "WHERE i.artifact_id=%s AND i.snapshot_id=%s",
+            (input_reference["artifact_id"],input_reference["snapshot_id"])).fetchone()
+
+    def prepare_source_views(self,input_reference,payload,*,con=None):
+        if con is None:
+            with self.documents._connect() as connection:
+                return self.prepare_source_views(input_reference,payload,con=connection)
+        from src.prepared_source_views_v1 import contract
+        header=self._source_views_header(con,input_reference)
+        if not header or payload.get("fragments_hash")!=header["fragments_hash"] or payload.get("contract")!=contract():
+            raise WorkflowDocumentStoreError("source_views_source_mismatch")
+        record={**payload,"extraction_hash":header["extraction_hash"],"extractor_contract":header["extractor_contract"]}
+        # Hashing and JSON serialization happen before the protected write.
+        return {"header":header,"views_id":stable_json_hash({"extraction_hash":header["extraction_hash"],"contract":contract()}),
+                "payload_hash":stable_json_hash(record),"encoded":_json_text(record)}
+
+    def retain_source_views(self,con,input_reference,payload,*,prepared=None):
+        from src.prepared_source_views_v1 import VERSION
+        prepared=prepared if prepared is not None else self.prepare_source_views(input_reference,payload,con=con)
+        header=self._source_views_header(con,input_reference)
+        if header!=prepared["header"]:
+            raise WorkflowDocumentStoreError("source_views_source_mismatch")
+        con.execute("INSERT INTO workflow.formation_source_views(views_id,extraction_hash,payload_hash,payload) "
+            "VALUES(%s,%s,%s,%s::jsonb) ON CONFLICT DO NOTHING",
+            (prepared["views_id"],header["extraction_hash"],prepared["payload_hash"],prepared["encoded"]))
+        row=con.execute("SELECT extraction_hash,payload_hash,payload=%s::jsonb AS same FROM workflow.formation_source_views WHERE views_id=%s",
+            (prepared["encoded"],prepared["views_id"])).fetchone()
+        if (not row or not row["same"] or row["extraction_hash"]!=header["extraction_hash"]
+                or row["payload_hash"]!=prepared["payload_hash"]):
+            raise WorkflowDocumentStoreError("formation_immutable_record_conflict")
+        return {"version":VERSION,"views_id":prepared["views_id"],"extraction_hash":header["extraction_hash"],"payload_hash":prepared["payload_hash"]}
 
     def load_task_plan(self, context_id, *, expected_hash=None, con=None):
         if con is None:

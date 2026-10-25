@@ -54,7 +54,8 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
 
     objects = list(objects)
     bindings = tuple(bindings or ())
-    fragments = list(fragments) if fragments is not None else None
+    from src.prepared_source_views_v1 import preserve_fragments
+    fragments = preserve_fragments(fragments) if fragments is not None else None
     conflicts = context_issues(objects)
     targets = []
 

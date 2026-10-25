@@ -23,8 +23,13 @@ class TaskCheckpointWriter:
         self.configuration = deepcopy(attempt.get("processing_configuration"))
         if not self.configuration:
             raise ConsoleError("processing_configuration_unpinned")
+        self.preparation = None
+        self.source_payload = None
+        self.source_reference = deepcopy((attempt.get("diagnostic") or {}).get("source_views_ref"))
         self.plan_reference = deepcopy((attempt.get("diagnostic") or {}).get("task_plan_ref"))
         self.input_reference = deepcopy((attempt.get("diagnostic") or {}).get("validator_input_ref"))
+        if attempt.get("kind")=="resume" and self.source_reference is not None and self.input_reference is None:
+            raise ConsoleError("formation_input_required")
 
     @contextmanager
     def _locked(self):
@@ -79,7 +84,19 @@ class TaskCheckpointWriter:
         if "formation_timings" in values:
             values["formation_timings"] = values["formation_timings"][-1:]
         reference = None
-        if "validator_input" in values:
+        if "validator_input" in values and self.preparation is not None:
+            from src.semantic_replay_v1 import stable_json_hash
+            data=values.pop("validator_input")
+            if stable_json_hash(data)!=self.input_reference["validator_input_hash"]:
+                raise ConsoleError("processing_resume_context_incompatible")
+            with self._locked() as (con,active):
+                identity=con.execute("SELECT semantic_identity FROM workflow.formation_contexts WHERE context_id=%s",
+                    (self.input_reference["context_id"],)).fetchone()
+                if not identity or identity["semantic_identity"]!=values["semantic_identity"]:
+                    raise ConsoleError("processing_resume_context_incompatible")
+                self.store.checkpoint(con,self.attempt_id,phase,{**values,"validator_input_ref":self.input_reference})
+                active.setdefault("diagnostic",{}).update(phase=phase,**values,validator_input_ref=self.input_reference)
+        elif "validator_input" in values:
             envelope = self.console._envelope(self.snapshot_id)
             with self._locked() as (con, active):
                 reference = self.store.retain_input(con, envelope=envelope,
@@ -95,6 +112,8 @@ class TaskCheckpointWriter:
             with self._locked() as (con, active):
                 self.store.checkpoint(con,self.attempt_id,phase,values)
                 active.setdefault("diagnostic", {})["phase"] = phase
+                if phase=="extraction_reused":
+                    active["diagnostic"]["extraction_checkpoint"]=values["extraction_checkpoint"]
         from src.processing_trace_v1 import observe
         observe("processing_checkpoint",self.snapshot_id,active,phase=phase)
 
@@ -106,9 +125,52 @@ class TaskCheckpointWriter:
     def validate_resume_input(self):
         if self.input_reference:
             try:
-                self.store.resolve_input(self.input_reference,expected_snapshot_id=self.snapshot_id)
+                self.preparation = self.store.resolve_preparation(self.input_reference,expected_snapshot_id=self.snapshot_id)
             except WorkflowDocumentStoreError as error:
                 raise ConsoleError(str(error)) from error
+
+    def source_from_extraction(self,extraction):
+        try:
+            root=self.store.load_source_views({"extraction":extraction},self.source_reference)
+        except WorkflowDocumentStoreError as error:
+            raise ConsoleError(str(error)) from error
+        if root is None:
+            return None
+        self.source_payload=root.payload
+        return root.fragments
+
+    def retained_source(self,required_contract):
+        if self.preparation is None:
+            self.validate_resume_input()
+        if self.preparation is None:
+            raise ConsoleError("formation_input_required")
+        extraction=self.preparation["extraction"]
+        if extraction["extractor_contract"]!=required_contract:
+            raise ConsoleError("source_extraction_contract_mismatch")
+        try:
+            root=self.store.load_source_views(self.preparation,self.source_reference)
+        except WorkflowDocumentStoreError as error:
+            raise ConsoleError(str(error)) from error
+        if root is not None:
+            self.source_payload=root.payload
+            return root.fragments,extraction["source"],{k:extraction[k] for k in ("record_hash","fragments_hash")}
+        from src.source_preparation_context_v1 import KEY,stored_extraction
+        return stored_extraction({**extraction["source"],KEY:extraction}),extraction["source"],{k:extraction[k] for k in ("record_hash","fragments_hash")}
+
+    def retain_source_views(self,payload):
+        if payload is self.source_payload and self.source_reference is not None:
+            return
+        if not self.input_reference:
+            raise ConsoleError("formation_input_required")
+        prepared=self.store.prepare_source_views(self.input_reference,payload)
+        with self._locked() as (con,active):
+            reference=self.store.retain_source_views(con,self.input_reference,payload,prepared=prepared)
+            if self.source_reference is not None and self.source_reference!=reference:
+                raise ConsoleError("source_views_reference_invalid")
+            active.setdefault("diagnostic",{})["source_views_ref"]=reference
+            self.store.checkpoint(con,self.attempt_id,"source_views_pinned",{"source_views_ref":reference})
+        self.source_reference=reference
+        self.source_payload=payload
 
     def load_task_plan(self):
         if not self.input_reference:

@@ -29,6 +29,12 @@ def run():
             "METIS_LLM_API_KEY":"fixture","METIS_LLM_MODEL":"test"},post_json=provider)
     console = production_application(Path(root),PostgresCanonicalConfig(dsn=dsn),processing_binder=bind,
         source_store=Path(root)/"sources"/"private",runtime=Path(root)/"runtime"/"console").state.operations_kernel
+    if phase == "resume":
+        def forbidden(*args,**kwargs):
+            raise AssertionError("New worker must read committed source views without extraction/reconstruction")
+        console._extract = forbidden
+        import src.source_reconstruction_v1 as reconstruction
+        reconstruction._with_status = forbidden
     attempt = next(a for a in console._envelope(sid)["processing_attempts"] if a["attempt_id"] == attempt_id)
     console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=attempt)
     print(json.dumps({"state":console._envelope(sid)["processing_attempts"][-1]["state"],"calls":calls}))
