@@ -1053,6 +1053,9 @@ def semantic_spec_from_fragments(
             model_limits=model_limits,
         )
     except ConsoleError as exc:
+        from src.worker_handover_v1 import WorkerHandover
+        if isinstance(exc, WorkerHandover):
+            raise
         reason = str(exc) if exc.code == "pre_review_llm_proposal_rejected" else ""
         reason = reason if re.fullmatch(r"(?:semantic|recommendation|source_bound|materialisation|materialiser|selection)_[a-z_]{1,100}", reason) else ""
         code = exc.code if re.fullmatch(r"[a-z_]{1,120}", exc.code) else "processing_failed"

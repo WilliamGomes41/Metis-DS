@@ -128,6 +128,12 @@ def assert_active(envelope: dict, attempt_id: str, clock: datetime) -> dict:
         raise ConsoleError("processing_attempt_not_active")
     if datetime.fromisoformat(attempt["expires_at"]) <= clock:
         raise ConsoleError("processing_attempt_expired")
+    dispatch = attempt.get("dispatch") or {}
+    if dispatch.get("version") == "source-dispatch-v2":
+        if dispatch.get("state") == "claimed" and datetime.fromisoformat(dispatch["lease_expires_at"]) <= clock:
+            raise ConsoleError("processing_worker_lease_expired")
+        if dispatch.get("budget_expires_at") and datetime.fromisoformat(dispatch["budget_expires_at"]) <= clock:
+            raise ConsoleError("source_task_budget_exhausted")
     return attempt
 
 

@@ -332,7 +332,10 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                     WHERE (d.processing_storage_version=1 AND EXISTS (
                         SELECT 1 FROM workflow.processing_attempts a WHERE a.snapshot_id=d.snapshot_id
                         AND a.payload->>'state'='running' AND a.payload->'dispatch' IS NOT NULL
-                        AND (a.payload->'dispatch'->>'state'='pending' OR (a.payload->>'expires_at')::timestamptz<=%s)))
+                        AND (a.payload->'dispatch'->>'state'='pending' OR (a.payload->>'expires_at')::timestamptz<=%s
+                            OR (a.payload->'dispatch'->>'version'='source-dispatch-v2' AND
+                                ((a.payload->'dispatch'->>'lease_expires_at')::timestamptz<=CURRENT_TIMESTAMP
+                                 OR (a.payload->'dispatch'->>'budget_expires_at')::timestamptz<=CURRENT_TIMESTAMP)))))
                     OR (d.processing_storage_version IS NULL AND EXISTS (SELECT 1 FROM jsonb_array_elements(
                         COALESCE(NULLIF(d.envelope_payload->'processing_attempts','null'::jsonb),'[]'::jsonb)) AS a
                         WHERE a->>'state'='running' AND a->'dispatch' IS NOT NULL

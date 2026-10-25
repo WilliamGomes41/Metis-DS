@@ -117,6 +117,10 @@ class TaskCheckpointWriter:
         from src.processing_trace_v1 import observe
         observe("processing_checkpoint",self.snapshot_id,active,phase=phase)
 
+    def before_task(self):
+        from src.worker_handover_v1 import before_task
+        return before_task(self)
+
     def task_results(self):
         if not self.input_reference:
             return []
@@ -214,6 +218,7 @@ class TaskCheckpointWriter:
             self.store.commit_task(con,context_id=self.input_reference["context_id"],ranges=task["target_spans"],
                 payload=payload,attempt_id=self.attempt_id,claim_token=self.claim_token)
             active.setdefault("diagnostic", {})["phase"] = "proposal_received"
+        self.committed_this_worker = True
 
     def final_validation(self, proposal):
         """Bind the one successful joint gate to the exact committed result set."""
@@ -298,9 +303,29 @@ def record_task_failure(console,snapshot_id,attempt_id,error,*,claim_token):
             active = row["payload"]
             if active["state"] != "running" or (active.get("dispatch") or {}).get("token") != claim_token:
                 return True
+            dispatch = active.get("dispatch") or {}
+            if dispatch.get("version") == "source-dispatch-v2":
+                from datetime import datetime
+                if (dispatch.get("state") == "claimed" and datetime.fromisoformat(dispatch["lease_expires_at"]) <= now()
+                        and datetime.fromisoformat(active["expires_at"]) > now()
+                        and (not dispatch.get("budget_expires_at") or datetime.fromisoformat(dispatch["budget_expires_at"]) > now())):
+                    # The old worker no longer has authority to fail this command.
+                    dispatch.update(state="pending",token=None,released_at=now().isoformat(),release_reason="lease_expired")
+                    con.execute("UPDATE workflow.processing_attempts SET payload=%s::jsonb,record_version=record_version+1 WHERE attempt_id=%s",
+                                (_json_text(active),attempt_id))
+                    store.checkpoint_summary(con,snapshot_id,active)
+                    return True
+            if dispatch.get("version") == "source-dispatch-v2":
+                if datetime.fromisoformat(active["expires_at"]) <= now():
+                    error = ConsoleError("processing_attempt_expired")
+                elif dispatch.get("budget_expires_at") and datetime.fromisoformat(dispatch["budget_expires_at"]) <= now():
+                    error = ConsoleError("source_task_budget_exhausted")
             budget = getattr(error,"code",None) == "source_task_budget_exhausted"
             from src.processing_retry_v1 import finish
             finish({"processing_attempts":[active]},attempt_id,state="incomplete_budget" if budget else "failed",error=error)
+            if (active.get("dispatch") or {}).get("version") == "source-dispatch-v2":
+                active["dispatch"].update(state="blocked", blocked_reason=getattr(error,"code","processing_dependency_failed"),
+                    required_action="Los de blokkade op en start opnieuw met de bestaande herstelautorisatie waar vereist.")
             if budget:
                 active["stop_reason"] = "budget_exhausted"
                 active["formation_progress_made"] = con.execute("SELECT EXISTS(SELECT 1 FROM workflow.formation_task_results WHERE attempt_id=%s) AS made",

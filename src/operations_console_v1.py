@@ -1808,8 +1808,10 @@ class OperationsConsole:
             if attempt is None:
                 return self._receipt(self._envelope(snapshot_id))
         remaining = (datetime.fromisoformat(attempt["expires_at"]) - now()).total_seconds()
-        return self._execute_source_attempt(actor_id=actor_id, snapshot_id=snapshot_id,
-                                           attempt=attempt, deadline=time.monotonic() + remaining)
+        from src.worker_handover_v1 import worker_execution
+        with worker_execution(_dispatch_stop):
+            return self._execute_source_attempt(actor_id=actor_id, snapshot_id=snapshot_id,
+                                               attempt=attempt, deadline=time.monotonic() + remaining)
 
     def _processing_limits(self):
         from src.bounded_model_call_v1 import ModelCallLimits
@@ -2096,6 +2098,9 @@ class OperationsConsole:
         try:
             yield
         except Exception as error:
+            from src.worker_handover_v1 import WorkerHandover
+            if isinstance(error, WorkerHandover):
+                return
             if attempt_id is not None:
                 self._record_processing_failure(snapshot_id, attempt_id, error,claim_token=claim_token)
             raise
@@ -2126,6 +2131,7 @@ class OperationsConsole:
             return self.reextract_unpublished(actor_id=actor_id, snapshot_id=snapshot_id,
                  _attempt_id=attempt["attempt_id"], _attempt_deadline=deadline,
                  _claim_token=(attempt.get("dispatch") or {}).get("token"))
+        return self._receipt(self._envelope(snapshot_id))
 
     def retry_pre_review(self, *, actor_id: str, snapshot_id: str, command_id: str) -> dict[str, Any]:
         """Retry an empty blocked source without losing evidence or prior work."""

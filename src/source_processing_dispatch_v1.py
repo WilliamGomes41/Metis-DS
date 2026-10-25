@@ -10,10 +10,18 @@ from src.operations_console_v1 import ConsoleError
 from src.processing_retry_v1 import assert_active, expire_running, now
 
 LOG = logging.getLogger(__name__)
+WORKER_SECONDS = 240
 
 
 def claim(console, *, snapshot_id, attempt_id, actor_id=None, stop_event=None):
     """One short SQL row transaction chooses the only executing worker."""
+    from src.worker_handover_v1 import native_attempt, claim_native
+    if native_attempt(console, snapshot_id, attempt_id) is not None:
+        result = claim_native(console, snapshot_id, attempt_id, actor_id=actor_id, stop_event=stop_event, worker_seconds=WORKER_SECONDS)
+        if result is not None:
+            from src.processing_trace_v1 import observe
+            observe("processing_claimed", snapshot_id, result)
+        return result
     with console._reprocessing_transaction(snapshot_id):
         envelope = console._envelope(snapshot_id)
         attempt = assert_active(envelope, attempt_id, now())
@@ -46,6 +54,15 @@ def pending(console, *, limit=None, after_snapshot=None):
         # Expired documents consume discovery capacity, not the returned task limit.
         clock=now(), limit=max(50, limit) if limit is not None else None, after_snapshot=after_snapshot)
     for sid in rows:
+        from src.worker_handover_v1 import native_attempt, discover
+        native = native_attempt(console, sid)
+        if native is not None:
+            available = discover(console, sid, native)
+            if available is not None:
+                found.append((sid, available))
+                if limit is not None and len(found) >= limit:
+                    return found
+            continue
         with console._reprocessing_transaction(sid):
             envelope = console._envelope(sid)
             before = deepcopy(envelope.get("processing_attempts"))
