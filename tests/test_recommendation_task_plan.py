@@ -214,7 +214,10 @@ def test_corrupt_plan_and_stale_writer_cannot_start_or_replace_planning(tmp_path
     with pytest.raises(ConsoleError,match='formation_task_plan_source_mismatch'):
         foreign = writer.store.load_task_plan(context_id)
         remaining_tasks(foreign,blocks,evidence,[{'span':full_span(b)} for b in blocks])
-    writer.plan_reference['context_id'] = 'another-context'
+    writer.plan_reference = {'context_id':context_id}
+    with pytest.raises(ConsoleError,match='formation_task_plan_conflict'):
+        writer.load_task_plan()
+    writer.plan_reference = {'context_id':'another-context', 'plan_hash':stable_json_hash(plan)}
     with pytest.raises(ConsoleError,match='formation_task_plan_conflict'):
         writer.load_task_plan()
 

@@ -113,7 +113,10 @@ class TaskCheckpointWriter:
     def load_task_plan(self):
         if not self.input_reference:
             raise ConsoleError("formation_input_required")
-        if self.plan_reference and self.plan_reference.get("context_id") != self.input_reference["context_id"]:
+        if self.plan_reference is not None and (set(self.plan_reference) != {"context_id", "plan_hash"}
+                or not isinstance(self.plan_reference.get("plan_hash"), str)
+                or len(self.plan_reference["plan_hash"]) != 64
+                or self.plan_reference.get("context_id") != self.input_reference["context_id"]):
             raise ConsoleError("formation_task_plan_conflict")
         plan = self.store.load_task_plan(self.input_reference["context_id"],
             expected_hash=(self.plan_reference or {}).get("plan_hash"))

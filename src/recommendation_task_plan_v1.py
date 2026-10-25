@@ -49,6 +49,11 @@ def remaining_tasks(plan, blocks, evidence_blocks, targets):
     if plan.get('source_blocks_hash') != source_identity(blocks,evidence_blocks):
         raise ConsoleError('formation_task_plan_source_mismatch')
     by_id = {b['block_id']:b for b in [*evidence_blocks,*blocks]}
+    # Legacy source-accountability targets can include evidence-only strength
+    # labels. Preserve tasks_for's boundary: these remain context, never an
+    # extra candidate task. Coverage checks below concern candidate source only.
+    candidate_ids = {b['block_id'] for b in blocks}
+    targets = [r for r in targets if r['span']['block_id'] in candidate_ids]
     tasks = []
     for recorded in plan['tasks']:
         refs = []
