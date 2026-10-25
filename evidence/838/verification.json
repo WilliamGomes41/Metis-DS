@@ -1,0 +1,29 @@
+{
+  "commit": "4dc39288b511d1fb6577b761ad366eb9057c7d3f",
+  "python": "3.13.5",
+  "seconds": 2436.207,
+  "wall_seconds": 694.299,
+  "exit_code": 0,
+  "tests": 5855,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 32,
+  "postgres_skips": [],
+  "postgres_version": 160015,
+  "collected": 5855,
+  "collection_digest": "3e62c83dad4fa0ebba5e34f6d7b69e9c8f509573587b87c08c560ec5cdc9c4cf",
+  "passed": 5823,
+  "skips_by_type": {
+    "pytest.xfail": 3,
+    "pytest.skip": 29
+  },
+  "additional_browser_proof": {
+    "tests": 6,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "executable": "Chromium",
+    "scope": "Six browser cases skipped in the full run, executed separately with explicit browser configuration"
+  },
+  "proof_boundary": "Full collection on runtime code 4dc3928; later commit changes verification documents and test docstring markers only. No live model or production cutover."
+}

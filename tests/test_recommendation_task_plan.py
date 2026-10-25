@@ -1,7 +1,12 @@
 """#838 priority changes execution order, never coverage or recommendation admission.
 
-# release-control-evidence: scope/belofte kwaliteit opslag recovery concurrent stale version-compat
-# release-control-evidence: toegang beschikbaarheid slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: kwaliteit
+# release-control-evidence: opslag recovery concurrent stale version-compat
+# release-control-evidence: toegang
+# release-control-evidence: beschikbaarheid
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 import json
 from copy import deepcopy
