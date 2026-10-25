@@ -194,8 +194,8 @@ def install(app, console, require, page, nav, esc):
                            f'Volledige bronverwerking: {"ja" if result["formation_complete"] else "nog niet bevestigd"}.</p>')
             if result['candidates'] is None:
                 summary = '<p>Aantallen kandidaten en bronpassages zijn nog niet gecontroleerd. Open het document voor de actuele controles en vervolgacties.</p>'
-            diagnosis_link = f'<a class="btn-secondary" href="/inzicht/document?{esc(urlencode({"document": sid}))}">Bekijk diagnose in Inzicht</a>'
-            diagnosis_link += f'<a class="btn-secondary" href="/formation-problems?{esc(urlencode({"document": sid}))}">Vormingsproblemen</a>'
+            diagnosis_link = f'<a class="btn-secondary" href="/formation-problems?{esc(urlencode({"document": sid}))}">Vormingsproblemen</a>'
+            diagnosis_link += f'<a class="btn-secondary" href="/inzicht/document?{esc(urlencode({"document": sid}))}">Bekijk diagnose in Inzicht</a>'
             review = f'<a class="btn-primary" href="/review?document={esc(sid)}">Naar Review</a>' if result['review_available'] else ''
             extent = _size(result["bytes"]) if result['bytes'] is not None else 'Bestandsgrootte onbekend'
             fragment_count = envelope.get('source_fragment_count')

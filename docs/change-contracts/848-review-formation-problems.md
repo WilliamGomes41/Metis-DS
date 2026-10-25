@@ -182,3 +182,11 @@ broninhoud te verantwoorden. De bestaande expliciete bronafhandeling met
 exact bewijs, bevoegde actor en revisie is nodig. De probleemprojectie gebruikt
 dezelfde sluitingsbeslissing als publicatiegereedheid. Niet-geactiveerde
 taakresultaten gelden niet als bewijs van gezamenlijke sluiting.
+
+De nieuwe kamer staat na Documenten in de navigatie, buiten de bestaande vijf
+workflowstappen. Zowel Raad's vaste documentcontrole als zijn controle van alle
+menu-ingangen zijn aangesloten. Bronselectie behoudt zijn bestaande diagnoseactie
+als laatste actie in dezelfde rij. De workeroverdrachtproef blijft exact één
+initiële en één herstelpassage eisen, maar verwacht nu de onafhankelijk geldige
+objecten in Review in plaats van een lege objectset; het foutieve bereik en de
+publicatieblokkade moeten blijven bestaan.

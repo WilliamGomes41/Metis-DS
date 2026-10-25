@@ -397,11 +397,14 @@ def test_handover_does_not_restart_initial_and_recovery_passes(tmp_path, product
     console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
     assert calls == ['Gebruik geen zalf.', 'Controleer dagelijks de huid.']
     monkeypatch.setattr('src.source_processing_dispatch_v1.WORKER_SECONDS', 240)
-    with pytest.raises(ConsoleError, match='source_formation_incomplete'):
-        console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
+    console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
     assert calls.count('Gebruik geen zalf.') == 2, 'Worker transfer must not renew the one initial + one recovery policy'
     assert calls.count('Controleer dagelijks de huid.') == calls.count('Was dagelijks de handen.') == 1
-    assert console.snapshot_objects(sid) == []
+    candidates = [o for o in console.snapshot_objects(sid) if o.get('proposed_object_type') == 'recommendation']
+    assert {o['content']['clean_text'] for o in candidates} == {'Controleer dagelijks de huid.', 'Was dagelijks de handen.'}
+    assert console.processing_status(sid)['formation_incomplete']
+    assert 'source_formation_incomplete' in console.publication_readiness(sid)['blockers']
+    assert not console.publication_readiness(sid)['publish_allowed']
 
 
 def test_late_import_does_not_capture_a_temporary_test_clock():

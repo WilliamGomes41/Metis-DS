@@ -246,6 +246,10 @@ class _HistoryConsole:
     def audit_review_signals(self) -> list[dict]:
         return self.signals
 
+    def processing_status(self, snapshot_id: str) -> dict:
+        # This isolated history fixture has no open formation work.
+        return {"formation_incomplete": False}
+
 
 def test_object_history_reuses_one_document_read_and_shows_stored_version_diff() -> None:
     previous = _with_register(

@@ -863,10 +863,9 @@ def _semantic_execution_before_review(
             "pre_review_llm_input_limit_exceeded", "pre_review_llm_output_limit_exceeded"}), None)
         if (hasattr(checkpoint, "commit_task") and provider_evidence.get("formation_incomplete")
                 and (structural or not proposal["objects"])):
-            # No knowledge selection, or a structural resource stop, cannot
-            # activate. Otherwise
-            # the existing joint materialisation/validation below decides;
-            # unresolved source work remains a separate publication blocker.
+            # Keep empty selections and structural resource stops on the
+            # existing failure path. The joint gate below decides on other
+            # selections; unresolved source work still blocks publication.
             code = structural or ("source_task_budget_exhausted" if "source_task_budget_exhausted" in errors
                 else errors[0] if errors else "source_formation_incomplete")
             error = ConsoleError(code)
