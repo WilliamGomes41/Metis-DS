@@ -31,7 +31,8 @@
     "skipped": 0,
     "seconds": 388.8,
     "browser_enabled": true,
-    "postgres_enabled": true
+    "postgres_enabled": true,
+    "recorded_before_rebase": true
   },
   "browser_proofs": [
     "healthy loaded pages",
@@ -122,7 +123,7 @@
     "src/care_companion_v1.py": "131e964723a46e8fac9b58e6f8bb17bac1f555fa1e304f61d542762aeebc2752",
     "src/operations_console_app.py": "e6a94d294cdc2264ace020829f0f80890532428c46a555626b6a63f6c7ab521f",
     "src/section_incident_v1.py": "8cba897808afe33d5ece1a56b9c83db3fa996bb19edd2f773dea681ad0a644bb",
-    "src/source_selection_ui_v1.py": "9706a3e6c58ece0f038a8c1ef1a85d3c3f57565a4dbca40cb7375a18c8f905eb",
+    "src/source_selection_ui_v1.py": "2a498fea4b1eac6d05ed04fb7a6ec8d8b8cc074d93d682536f52f0ae6ad53101",
     "src/telemetry/page.py": "885f0027da5e61e206f092b29578f460b11ef321f2cec01d19055d0801ce33cb",
     "src/view_check.py": "60e0127567ddc49df55ae970179e572495f3ed17417ef28721ce37f90e4649f3",
     "tests/browser_deploy_check.cjs": "ea59758a7b39c76f3ab33dc0dde3d62ca186976d1ad321ecf95141c8bd3b97dd",
@@ -165,5 +166,21 @@
     "tests/test_section_incident.py": "66ca1fbfd43edf078ceba8c9f2867eb24a6ee299c647b40231e866c1f8706d75",
     "tests/test_view_check_contract.py": "fdd60348cf9e67e344e4e3231c8a054aac26d92b1dae9b06f3cd9ab7398e1822",
     "tests/test_view_check_postgres.py": "ce5d970039fec9e4193e657f12e99952187b6a057399050cb08f1c6ff98555f0"
+  },
+  "delivery_base_commit": "78dff417e3d28a245d818d883c2a2e388724d0a1",
+  "after_rebase_verification": {
+    "base_commit": "78dff417e3d28a245d818d883c2a2e388724d0a1",
+    "raad_browser_contract_architecture": {
+      "passed": 48,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 217.774
+    },
+    "document_browser_postgres_characterization": {
+      "passed": 51,
+      "failed": 0,
+      "errors": 0,
+      "seconds": 215.711
+    }
   }
 }
