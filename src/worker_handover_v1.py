@@ -6,6 +6,8 @@ retried after lease loss; committed task results are never repeated.
 """
 from contextlib import contextmanager
 from contextvars import ContextVar
+from threading import Event, Thread
+import logging
 from copy import deepcopy
 from datetime import datetime, timedelta
 import uuid
@@ -18,14 +20,34 @@ from src.workflows.workflow_documents_postgres_v1 import _json_text
 
 VERSION = 'source-dispatch-v2'
 _STOP = ContextVar('source_worker_stop', default=None)
+HEARTBEAT_SECONDS = 30
+LOG = logging.getLogger(__name__)
 
 
 @contextmanager
-def worker_execution(stop_event):
+def worker_execution(stop_event, *, console, sid, attempt):
     token = _STOP.set(stop_event)
+    ended = Event()
+    heartbeat = None
+    if (attempt.get('dispatch') or {}).get('version') == VERSION:
+        def maintain():
+            while not ended.wait(HEARTBEAT_SECONDS):
+                try:
+                    if not renew(console, sid, attempt):
+                        return
+                except Exception:
+                    # Loss of a database connection grants no additional time.
+                    # Existing protected writes still reject an expired lease.
+                    LOG.warning('source_worker_lease_renewal_stopped')
+                    continue
+        heartbeat = Thread(target=maintain, daemon=True, name='source-worker-lease')
+        heartbeat.start()
     try:
         yield
     finally:
+        ended.set()
+        if heartbeat is not None:
+            heartbeat.join(timeout=6)
         _STOP.reset(token)
 
 
@@ -52,10 +74,12 @@ def locked(console, sid, attempt_id):
             if not row:
                 raise ConsoleError('processing_attempt_not_active')
             active = row['payload']
+            before = deepcopy(active)
             yield con, document, row, active
-            con.execute('UPDATE workflow.processing_attempts SET payload=%s::jsonb,record_version=record_version+1 WHERE attempt_id=%s',
-                (_json_text(active), attempt_id))
-            store.checkpoint_summary(con, sid, active)
+            if active != before:
+                con.execute('UPDATE workflow.processing_attempts SET payload=%s::jsonb,record_version=record_version+1 WHERE attempt_id=%s',
+                    (_json_text(active), attempt_id))
+                store.checkpoint_summary(con, sid, active)
 
 
 def validate(console, con, document, row, active):
@@ -143,6 +167,33 @@ def claim_native(console, sid, attempt_id, *, actor_id=None, stop_event=None, wo
     if denied:
         raise denied
     return result
+
+
+def renew(console, sid, claimed):
+    """Keep long preparation alive without renewing command authorization.
+
+    The same token is required. Hard expiry and formation budget never move;
+    process death stops this disposable timer, leaving a discoverable SQL lease.
+    """
+    with locked(console, sid, claimed['attempt_id']) as (con, document, row, active):
+        dispatch = active.get('dispatch') or {}
+        if (active['state'] != 'running' or dispatch.get('state') != 'claimed'
+                or dispatch.get('token') != claimed['dispatch']['token']):
+            return False
+        if datetime.fromisoformat(dispatch['lease_expires_at']) <= now():
+            return False  # A worker cannot revive its already lost ownership.
+        try:
+            validate(console, con, document, row, active)
+        except ConsoleError as error:
+            block(active, error)
+            return False
+        boundary = datetime.fromisoformat(active['expires_at'])
+        if dispatch.get('budget_expires_at'):
+            boundary = min(boundary, datetime.fromisoformat(dispatch['budget_expires_at']))
+        dispatch['lease_expires_at'] = min(boundary, max(datetime.fromisoformat(dispatch['lease_expires_at']),
+            now()+timedelta(seconds=180))).isoformat()
+        dispatch['heartbeat_at'] = now().isoformat()
+        return True
 
 
 def before_task(writer):

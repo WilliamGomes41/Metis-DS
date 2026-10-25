@@ -1807,12 +1807,9 @@ class OperationsConsole:
                             actor_id=actor_id, stop_event=_dispatch_stop)
             if attempt is None:
                 return self._receipt(self._envelope(snapshot_id))
-        deadline_at = datetime.fromisoformat(attempt["expires_at"])
-        if (attempt.get("dispatch") or {}).get("version") == "source-dispatch-v2":
-            deadline_at = min(deadline_at, datetime.fromisoformat(attempt["dispatch"]["lease_expires_at"]))
-        remaining = (deadline_at - now()).total_seconds()
+        remaining = (datetime.fromisoformat(attempt["expires_at"]) - now()).total_seconds()
         from src.worker_handover_v1 import worker_execution
-        with worker_execution(_dispatch_stop):
+        with worker_execution(_dispatch_stop, console=self, sid=snapshot_id, attempt=attempt):
             return self._execute_source_attempt(actor_id=actor_id, snapshot_id=snapshot_id,
                                                attempt=attempt, deadline=time.monotonic() + remaining)
 

@@ -326,7 +326,7 @@ def test_revocation_during_running_worker_prevents_next_call_and_activation(tmp_
         assert con.execute('SELECT count(*) AS n FROM workflow.formation_task_results').fetchone()['n'] == 1
 
 
-def test_worker_transport_deadline_and_task_allowance_cannot_outlive_lease(tmp_path, production_console, monkeypatch):
+def test_worker_task_allowance_cannot_outlive_lease(tmp_path, production_console, monkeypatch):
     import time
     from datetime import datetime
     from src.formation_checkpoint_v1 import TaskCheckpointWriter
@@ -335,10 +335,52 @@ def test_worker_transport_deadline_and_task_allowance_cannot_outlive_lease(tmp_p
     def inspect_deadline(**kwargs):
         active = kwargs['attempt']
         lease_left = (datetime.fromisoformat(active['dispatch']['lease_expires_at'])-now()).total_seconds()
-        assert 0 < kwargs['deadline']-time.monotonic() <= lease_left+.1
+        hard_left = (datetime.fromisoformat(active['expires_at'])-now()).total_seconds()
+        assert 0 < kwargs['deadline']-time.monotonic() <= hard_left+.1
         allowed = TaskCheckpointWriter(console, sid, active).before_task()
         assert 0 < allowed <= lease_left-4
         seen.append(True)
     monkeypatch.setattr(console, '_execute_source_attempt', inspect_deadline)
     console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
     assert seen == [True] and calls == []
+
+
+def test_live_worker_renews_lease_during_long_preparation_without_extending_deadline(tmp_path, production_console, monkeypatch):
+    import time
+    from datetime import datetime
+    console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
+    monkeypatch.setattr('src.worker_handover_v1.HEARTBEAT_SECONDS', .05)
+    original = console._fragments_and_spec
+    def long_preparation(*args, **kwargs):
+        with console.workflow_document_store._connect() as con:
+            con.execute("UPDATE workflow.processing_attempts SET payload=jsonb_set(payload,'{dispatch,lease_expires_at}',%s::jsonb) WHERE attempt_id=%s",
+                (json.dumps((now()+timedelta(seconds=.5)).isoformat()), attempt['attempt_id']))
+        time.sleep(.8)
+        stored = console._envelope(sid)['processing_attempts'][0]
+        assert datetime.fromisoformat(stored['dispatch']['lease_expires_at']) > now()
+        assert stored['dispatch']['heartbeat_at']
+        assert stored['expires_at'] == attempt['expires_at']
+        return original(*args, **kwargs)
+    monkeypatch.setattr(console, '_fragments_and_spec', long_preparation)
+    console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
+    assert len(calls) == 3
+    final = console._envelope(sid)['processing_attempts'][0]
+    assert final['state'] == 'succeeded' and final['expires_at'] == attempt['expires_at']
+    assert not any(t.name == 'source-worker-lease' and t.is_alive() for t in __import__('threading').enumerate())
+
+
+def test_heartbeat_cannot_revive_expired_or_replaced_claim(tmp_path, production_console, monkeypatch):
+    from src.worker_handover_v1 import renew
+    console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
+    first = claim(console, snapshot_id=sid, attempt_id=attempt['attempt_id'])
+    with console.workflow_document_store._connect() as con:
+        con.execute("UPDATE workflow.processing_attempts SET payload=jsonb_set(payload,'{dispatch,lease_expires_at}',%s::jsonb) WHERE attempt_id=%s",
+            (json.dumps((now()-timedelta(seconds=1)).isoformat()), attempt['attempt_id']))
+    assert not renew(console, sid, first)
+    assert pending(console)
+    second = claim(console, snapshot_id=sid, attempt_id=attempt['attempt_id'])
+    before = deepcopy(console._envelope(sid)['processing_attempts'][0])
+    assert not renew(console, sid, first)
+    after = console._envelope(sid)['processing_attempts'][0]
+    assert after == before  # Even record_version must remain unchanged for the stale heartbeat.
+    assert second['dispatch']['token'] == after['dispatch']['token']
