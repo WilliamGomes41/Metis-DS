@@ -745,8 +745,9 @@ def _html_client(tmp_path: Path, *, production_app, production_console) -> tuple
     return client, console, accounts
 
 
-def _headings(html: str) -> list[str]:
-    return [re.sub(r"<[^>]+>", "", block).strip().lower() for block in re.findall(r"<h[12][^>]*>.*?</h[12]>", html, flags=re.I | re.S)]
+def _headings(html: str, *, level: int | None = None) -> list[str]:
+    tag = f"h{level}" if level is not None else r"h[12]"
+    return [re.sub(r"<[^>]+>", "", block).strip().lower() for block in re.findall(rf"<{tag}[^>]*>.*?</{tag}>", html, flags=re.I | re.S)]
 
 
 def _visible_named_inputs(html: str, name: str) -> list[str]:
@@ -912,8 +913,9 @@ def test_via_negativa_is_not_the_heading_of_researcher_rooms(tmp_path: Path, *, 
         joined = " ".join(headings)
         for phrase in forbidden:
             assert phrase not in joined
-    ingest_h1 = _headings(client.get("/ingest").text)[0]
-    assert ingest_h1 == "document inleveren"
+    # The page title is the h1; Raad has its own h2 in its hidden help dialog.
+    ingest_h1 = _headings(client.get("/ingest").text, level=1)
+    assert ingest_h1 == ["document inleveren"]
 
 
 def test_html_ingest_submits_document_and_publish_stays_blocked(tmp_path: Path, *, production_app, production_console) -> None:

@@ -802,16 +802,22 @@ $('#q-form').addEventListener('submit', (event) => {
 // ---- Documenten -------------------------------------------------------
 // Pages of at most 200 authorized documents; search and state filter run on the server over all of them.
 async function loadDocuments(more) {
+  $('#d-table').dataset.readiness = 'pending';
+  $('#d-table').dataset.requestState = 'pending';
+  $('#d-table').dataset.requestId = '';
   $('#d-status').textContent = 'Laden…';
   const offset = more ? (state.docNext || 0) : 0;
   const q = new URLSearchParams({ q: $('#d-q').value.trim(), state: $('#d-state').value, offset: String(offset) });
   try {
     const response = await fetch('/inzicht/api/documents?' + q, { credentials: 'same-origin' });
+    $('#d-table').dataset.requestId = response.headers.get('x-metis-request-id') || '';
+    $('#d-table').dataset.requestState = String(response.status);
     if (!response.ok) throw new Error('HTTP ' + response.status);
     const page = await response.json();
     state.docs = more ? (state.docs || []).concat(page.documents) : page.documents;
     state.docTotal = page.total; state.docNext = page.next_offset; state.docPartial = page.telemetry_partial; state.docMetadataPartial = Boolean(page.metadata_partial) || (more && state.docMetadataPartial); state.loaded.documenten = true; renderDocuments();
-  } catch (error) { $('#d-status').textContent = 'Kon documenten niet laden (' + error.message + ').'; }
+    $('#d-table').dataset.readiness = state.docMetadataPartial || page.diagnostic_partial ? 'partial' : 'ready';
+  } catch (error) { $('#d-table').dataset.readiness = 'error'; $('#d-status').textContent = 'Kon documenten niet laden (' + error.message + ').'; }
 }
 function renderDocuments() {
   const rows = state.docs || [];

@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+from time import monotonic
 from urllib.parse import urlencode, urlsplit
 from uuid import uuid4
 
@@ -28,7 +29,7 @@ from src.operations_console_v1 import ConsoleError
 from src.view_check_store import ViewCheckConflict, ViewCheckStore
 
 COOKIE = 'metis_view_check'
-SCENARIO = 'selection-review-inventory-v1'
+SCENARIO = 'selection-review-inventory-v2'
 HEADERS = {'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'}
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -148,6 +149,7 @@ class ViewChecks:
         if not claimed:
             return
         job, token = claimed
+        started = monotonic()
         result = {'scenario': SCENARIO, 'reason': 'not_established', 'checks': [], 'evidence': []}
         try:
             pinned = {k: v for k, v in job['context'].items() if k != 'origin'}
@@ -171,8 +173,17 @@ class ViewChecks:
             result['checks'] = validate_checks(raw.get('checks'))
             result['browser_version'] = str(raw.get('browser_version', ''))[:80]
             result['scenario_sha256'] = sha256((ROOT / 'scripts/view_check.cjs').read_bytes()).hexdigest()
-            result['coverage'] = {'inventory': 'all_rows', 'clinical': 'not_established',
-                                  'source_text': 'not_established'}
+            result['diagnosis'] = validate_diagnosis(raw.get('diagnosis'))
+            result['coverage'] = {
+                'inventory': 'all_rows' if not raw.get('incomplete') else 'not_established',
+                'normalization': 'HTML_ASCII_whitespace', 'fields': ['content.clean_text', 'source_label_hint.label'],
+                'unchecked_fields': ['structured_conditions', 'structured_exceptions', 'source_locators', 'source_context'],
+                'object_order': 'knowledge_rows_only_source_groups_not_checked',
+                'objects_checked': [str(oid)[:200] for oid in raw.get('coverage', {}).get('objects_checked', [])[:1000]],
+                'objects_unchecked': [str(oid)[:200] for oid in raw.get('coverage', {}).get('objects_unchecked', [])[:1000]],
+                'clinical': 'not_established', 'source_extraction': 'not_established'}
+            if raw.get('incomplete'):
+                raise ValueError('browser_failed')
             if context(self.state, job['owner_account_id'], job['snapshot_id'], pinned['attempt_id']) != pinned:
                 raise ValueError('context_changed')
             # Recheck fence/cancellation before uploading source-bearing evidence.
@@ -195,6 +206,10 @@ class ViewChecks:
             # Observed differences remain visible, but none of the passes certifies
             # a stable context when preparation/activation did not complete.
             result.update(reason=reason, evidence=[])
+            result.setdefault('diagnosis', {'step': 'worker_execution', 'expected': 'stable_authorized_context_and_browser_result',
+                                         'observed': reason, 'elapsed_ms': round((monotonic()-started)*1000), 'requests': []})
+            if reason == 'context_changed':
+                result['diagnosis']['observed'] = 'context_changed'
             for check in result['checks']:
                 if check['verdict'] == 'pass':
                     check['verdict'] = 'not_established'
@@ -216,7 +231,7 @@ class ViewChecks:
             await asyncio.gather(self.poller, return_exceptions=True)
 
 
-CHECK_IDS = {'inventory_identity', 'source_partition', 'review_links', 'source_selection', 'browser_errors'}
+CHECK_IDS = {'inventory_identity', 'source_partition', 'review_links', 'source_selection', 'browser_errors', 'rendered_text', 'rendered_order', 'rendered_context'}
 
 
 def validate_checks(raw):
@@ -235,6 +250,29 @@ def validate_checks(raw):
         result.append(item)
     if {row['id'] for row in result} != CHECK_IDS:
         raise ValueError('invalid_checks')
+    return result
+
+
+def validate_diagnosis(raw):
+    if not isinstance(raw, dict):
+        return {'observed': 'not_recorded'}
+    choices = {
+        'step': {'browser_setup', 'source_selection', 'stored_inventory', 'review_inventory', 'rendered_content', 'screen_evidence'},
+        'expected': {'restricted_context', 'selected_document_and_controls', 'same_document_revision_and_bounded_export', 'visible_inventory_with_stored_text', 'visible_stored_fields', 'bounded_screenshot'},
+        'observed': {'matched', 'difference', 'not_established', 'timeout'},
+    }
+    result = {key: raw.get(key) if raw.get(key) in allowed else 'unknown' for key, allowed in choices.items()}
+    elapsed = raw.get('elapsed_ms')
+    result['elapsed_ms'] = elapsed if type(elapsed) is int and 0 <= elapsed <= 60000 else None
+    result['requests'] = []
+    for row in raw.get('requests', [])[:16]:
+        if not isinstance(row, dict) or row.get('route') not in {'/source-selection', '/review', '/inzicht/document/passages', '/brand/*'}:
+            continue
+        reference = row.get('reference')
+        result['requests'].append({'route': row['route'],
+            'state': row.get('state') if row.get('state') in {'pending', 'response_started', 'completed', 'failed'} else 'unknown',
+            'status': row.get('status') if type(row.get('status')) is int and 100 <= row['status'] <= 599 else None,
+            'reference': reference if isinstance(reference, str) and re.fullmatch('[0-9a-f]{32}', reference) else None})
     return result
 
 
@@ -366,7 +404,7 @@ def panel(app, state, account, document, attempt=''):
     if service is None:
         return title + '<p>De weergavecontrole is nog niet ingericht voor deze omgeving.</p></section>'
     body = title + '<p>Vergelijkt de schermweergave met vastgelegde gegevens. Dit is geen inhoudelijke documentbeoordeling.</p>'
-    body += '<p>De eerste controle vergelijkt passage-identiteit, scheiding van bronregels, reviewlinks en browserfouten. Broninhoud, locators en klinische volledigheid worden hiermee nog niet vastgesteld.</p>'
+    body += '<p>De controle van weergavetrouwheid vergelijkt passage-identiteit, opgeslagen tekst en kennisregelvolgorde, bronregels en reviewlinks. Alleen HTML-witruimte wordt genormaliseerd. Los opgeslagen voorwaarden, uitzonderingen, bronlocators en contextvelden worden nog niet gecontroleerd; voorwaarden in de passage-tekst wel. Dit bewijst geen klinische juistheid of volledige bronextractie.</p>'
     try:
         pinned = context(state, account['account_id'], document, attempt)
     except ValueError:

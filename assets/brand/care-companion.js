@@ -51,6 +51,7 @@
     for (const child of children) if (child) node.append(child);
     return node;
   };
+  const disclosure = (title, content) => el('details', {class: 'care-disclosure'}, el('summary', {text: title}), content);
   const section = (title, ...children) => el('section', {class: 'care-section'}, el('h3', {text: title}), ...children);
   const storage = (action) => { try { return action(sessionStorage); } catch (_) { return null; } };
 
@@ -97,7 +98,7 @@
     const area = el('textarea', {class: 'care-report', rows: '9', 'aria-label': 'Tekst van de melding'});
     area.value = reportText(error);
     const status = el('p', {class: 'care-muted', role: 'status'});
-    const copy = el('button', {type: 'button', class: 'btn-primary', text: 'Kopieer melding'});
+    const copy = el('button', {type: 'button', class: 'btn-secondary', text: 'Kopieer melding'});
     copy.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(area.value);
@@ -149,7 +150,7 @@
 
   const documentsSection = () => {
     const list = el('ul', {class: 'care-list'});
-    const status = el('p', {class: 'care-muted', text: 'Meldingen worden opgehaald…'});
+    const status = el('p', {class: 'care-muted', role: 'status', text: 'Meldingen worden opgehaald…'});
     storage((s) => s.removeItem('metis-care-notices'));
     const render = (page) => {
       const rows = page.documents || [];
@@ -174,13 +175,14 @@
   };
 
   const viewCheckSection = (documentId, attempt) => {
-    const holder = section('Weergavecontrole', el('p', {class: 'care-muted', text: 'Status wordt opgehaald…'}));
+    const holder = section('Weergavecontrole', el('p', {class: 'care-muted', role: 'status', text: 'Status wordt opgehaald…'}));
+    holder.setAttribute('aria-busy', 'true');
     fetchJson('/raad/weergavecontrole?' + new URLSearchParams({document: documentId, attempt}))
       .then((data) => {
         const children = [el('h3', {text: 'Weergavecontrole'})];
         if (!data.available || !data.form) {
           const reason = REASONS[data.reason] ?? REASONS.not_available;
-          if (reason) children.push(el('p', {class: 'care-muted', text: reason}));
+          if (reason) children.push(el('p', {class: 'care-muted', role: 'status', text: reason}));
         }
         if (data.form) {
           const form = el('form', {method: 'post', action: '/inzicht/document/weergavecontrole'});
@@ -204,7 +206,8 @@
         holder.replaceChildren(...children);
       })
       .catch(() => holder.replaceChildren(el('h3', {text: 'Weergavecontrole'}),
-        el('p', {class: 'care-muted', text: 'De status is nu niet op te halen.'})));
+        el('p', {class: 'care-muted', role: 'status', text: 'De status is nu niet op te halen. Probeer het later opnieuw of open Inzicht.'})))
+      .finally(() => holder.setAttribute('aria-busy', 'false'));
     return holder;
   };
 
@@ -235,15 +238,22 @@
       'aria-hidden': 'true', tabindex: '-1', title: 'Deploy-controle'});
     const started = performance.now();
     let settled = false;
-    let loaded = 0;
     let lateErrors = 0;
+    let readiness = {step: 'page_usability', expected: 'task_controls_available', observed: 'navigation_pending', verdict: 'not_established'};
+    let poll;
     const finish = (outcome) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearTimeout(poll);
       frame.remove();
-      const seconds = ((loaded || performance.now()) - started) / 1000;
-      resolve({...page, ...outcome, seconds: seconds.toLocaleString('nl-NL', {minimumFractionDigits: 1, maximumFractionDigits: 1})});
+      const elapsed_ms = Math.round(performance.now() - started);
+      const seconds = elapsed_ms / 1000;
+      const verdict = outcome.skipped || outcome.problem === 'login' ? 'not_checked_access' : outcome.ok ? 'pass' :
+        ['timeout', 'incomplete', 'unreadable'].includes(outcome.problem) ? 'not_established' : 'fail';
+      const observed = outcome.skipped ? 'missing_access' : readiness.observed === 'navigation_pending' && outcome.problem ? outcome.problem : readiness.observed;
+      resolve({...page, ...outcome, verdict,
+        diagnosis: {...readiness, verdict, observed, elapsed_ms}, seconds: seconds.toLocaleString('nl-NL', {minimumFractionDigits: 1, maximumFractionDigits: 1})});
     };
     // Our pages never leave the origin: a cross-origin frame is the Entra sign-in.
     const signIn = () => {
@@ -256,14 +266,13 @@
     };
     const timer = setTimeout(() => finish({ok: false, problem: signIn() ? 'login' : 'timeout'}), PAGE_TIMEOUT);
     frame.addEventListener('load', () => {
-      loaded = performance.now();
       if (signIn()) {
         finish({ok: false, problem: 'login'});
         return;
       }
       const win = frame.contentWindow;
       win.addEventListener('error', () => { lateErrors += 1; });
-      setTimeout(() => {
+      const inspect = () => {
         try {
           const doc = frame.contentDocument;
           const nav = win.performance.getEntriesByType('navigation')[0];
@@ -272,6 +281,7 @@
           const shell = doc.querySelector('[data-care-companion]');
           // Raad inside the frame counts from its own start; the listener only after load.
           const errors = Math.max(Number(shell && shell.dataset.errors || 0), lateErrors);
+          readiness.navigation = {route:page.path, state:'loaded', status, reference:banner?.getAttribute('data-request-id') || null};
           const code = banner ? banner.getAttribute('data-error-code') || '' : '';
           // Local sign-in answers protected pages with not_authenticated, and / with a login form.
           if (signIn() || code === 'not_authenticated' || doc.querySelector('input[type=password]')) finish({ok: false, problem: 'login'});
@@ -283,20 +293,27 @@
           else if (win.location.pathname !== page.path) finish({ok: false, problem: 'redirect', landed: win.location.pathname});
           else if (!shell) finish({ok: false, problem: 'incomplete', status});
           else if (errors) finish({ok: false, problem: 'script', errors});
-          else finish({ok: true});
+          else {
+            readiness = win.MetisPageReadiness ? {...win.MetisPageReadiness(page.path), navigation:readiness.navigation} : {...readiness, observed: 'readiness_unavailable'};
+            if (readiness.request?.state === '401') finish({ok:false, problem:'login'});
+            else if (readiness.verdict === 'pass') finish({ok: true});
+            else if (['partial', 'error'].includes(readiness.observed)) finish({ok: false, problem: 'incomplete'});
+            else poll = setTimeout(inspect, 100);
+          }
         } catch (_) {
           finish({ok: false, problem: 'unreadable'});
         }
-      }, SETTLE);
+      };
+      poll = setTimeout(inspect, SETTLE);
     });
-    frame.setAttribute('src', page.path);
+    frame.setAttribute('src', page.path === '/inzicht' ? '/inzicht?tab=documenten' : page.path);
     document.body.append(frame);
   });
 
   const deployProblem = (row) => ({
     timeout: 'laadt niet binnen ' + PAGE_TIMEOUT / 1000 + ' seconden',
-    login: 'stuurt door naar aanmelden; je sessie is verlopen',
-    error: 'toont een foutmelding' + (row.code ? ' (' + row.code + ')' : '') + (row.reference ? ', referentie ' + row.reference : ''),
+    login: 'vraagt om aanmelden; meld je opnieuw aan',
+    error: 'toont een foutmelding; open de controledetails voor code en referentie',
     status: 'geeft foutstatus ' + row.status,
     redirect: 'stuurt door naar ' + row.landed,
     incomplete: 'is niet volledig geladen' + (row.status ? ' (status ' + row.status + ')' : ''),
@@ -305,11 +322,12 @@
   }[row.problem] || 'onbekend probleem');
 
   const deployText = (run) => [
-    'Deploy-controle Metis-console',
+    'Bruikbaarheidscontrole Metis-console',
     'Tijd: ' + run.at,
     'Versie: ' + (run.commit || '-'),
-    ...run.rows.map((row) => (row.skipped ? 'NIET  ' : row.ok ? 'OK    ' : 'FOUT  ') + row.label + ' (' + row.path + ') — '
-      + (row.skipped ? 'geen toegang met jouw rol' : row.ok ? row.seconds + ' s' : deployProblem(row)))
+    ...run.rows.map((row) => (row.verdict === 'not_checked_access' ? 'NIET  ' : row.verdict === 'not_established' ? 'ONBEKEND  ' : row.ok ? 'OK    ' : 'FOUT  ') + row.label + ' (' + row.path + ') — '
+      + (row.skipped ? 'geen toegang met jouw rol' : row.ok ? 'bruikbaar, ' + row.seconds + ' s' : deployProblem(row))
+      + (row.diagnosis ? '\n  ' + JSON.stringify(row.diagnosis) : ''))
   ].join('\n');
 
   // One run per page; the panel re-renders on reopen, so the run lives here
@@ -320,29 +338,39 @@
   const deploySection = () => {
     const status = el('p', {class: 'care-muted', role: 'status'});
     const list = el('ul', {class: 'care-list'});
-    const start = el('button', {type: 'button', class: 'btn-primary', text: "Controleer alle pagina's"});
+    const evidence = el('div');
+    const technical = disclosure('Controledetails', evidence);
+    technical.hidden = true;
+    const start = el('button', {type: 'button', class: new URLSearchParams(location.search).get('document') ? 'btn-secondary' : 'btn-primary', text: "Controleer alle pagina's"});
     const copy = el('button', {type: 'button', class: 'btn-secondary', text: 'Kopieer uitslag'});
     // Button classes set display, so the hidden attribute alone would not hide it.
     const actions = el('div', {class: 'care-actions'}, start);
     // sessionStorage survives a sign-out in this tab: only show a run of the same account and roles.
     const who = (document.querySelector('header.topbar .who') || {}).textContent || '';
     let last = storage((s) => JSON.parse(s.getItem(DEPLOY_KEY) || 'null'));
-    if (last && last.who !== who) last = null;
+    if (last && (last.who !== who || last.schema !== 'task-ready-v2')) last = null;
     const show = (run) => {
       list.replaceChildren(...run.rows.map((row) => el('li', {'data-deploy-page': row.path,
-        'data-deploy-result': row.skipped ? 'skipped' : row.ok ? 'ok' : 'problem'},
-        el('strong', {text: (row.skipped ? '– ' : row.ok ? '✓ ' : '✗ ') + row.label}),
+        'data-deploy-result': row.verdict === 'not_checked_access' ? 'skipped' : row.ok ? 'ok' : 'problem'},
+        el('strong', {text: row.label}),
         el('span', {class: 'care-muted', text: ' — ' + (row.skipped ? 'niet gecontroleerd: geen toegang met jouw rol'
-          : row.ok ? 'geladen in ' + row.seconds + ' s' : deployProblem(row))}))));
-      const failed = run.rows.filter((row) => !row.ok).length;
-      status.textContent = (failed ? failed + ' van ' + run.rows.length + " pagina's hebben een probleem."
-        : "Alle gecontroleerde pagina's laden zonder fouten.") + ' Versie ' + (run.commit || 'onbekend')
-        + ', gecontroleerd ' + run.at.slice(11, 16) + ' (UTC).'
-        + (run.rows.some((row) => row.problem === 'login') ? ' Gestopt: meld je opnieuw aan en controleer daarna opnieuw.' : '');
+          : row.ok ? 'bruikbaar · ' + row.seconds + ' s' : (row.verdict === 'not_checked_access' ? 'niet gecontroleerd: ' : row.verdict === 'not_established' ? 'niet vastgesteld: ' : 'afwijking: ') + deployProblem(row))}))));
+      evidence.replaceChildren(...run.rows.map(row => el('div', {},
+        el('strong', {text: row.label}),
+        el('pre', {text: JSON.stringify({verdict:row.verdict, code:row.code, reference:row.reference, ...row.diagnosis}, null, 2)}),
+        el('a', {href:'/inzicht?tab=systeem&route=' + encodeURIComponent(row.path) + '&q=' + encodeURIComponent(row.diagnosis?.request?.reference || row.diagnosis?.navigation?.reference || row.reference || ''), text:'Beschikbare verzoekdiagnostiek'}))));
+      technical.hidden = false;
+      const counts = verdict => run.rows.filter(row => row.verdict === verdict).length;
+      status.textContent = counts('pass') + ' bruikbaar · ' + counts('fail') + ' afwijking(en) · '
+        + counts('not_established') + ' niet vastgesteld · ' + counts('not_checked_access') + ' niet gecontroleerd.'
+        + ' Versie ' + (run.commit || 'onbekend') + ', gecontroleerd ' + run.at.slice(11, 16) + ' (UTC).'
+        + (run.rows.some(row => row.problem === 'login') ? ' Gestopt: meld je opnieuw aan en controleer daarna opnieuw. '
+          + (DEPLOY_PAGES.length - run.rows.length) + ' overige pagina’s zijn niet gecontroleerd.' : '')
+        + (counts('not_established') ? ' Probeer opnieuw. Blijft de controle onvolledig? Open de controledetails of maak hieronder een melding.' : '');
       actions.append(copy);
     };
     const view = {
-      progress: (text) => { start.disabled = true; list.replaceChildren(); copy.remove(); status.textContent = text; },
+      progress: (text) => { start.disabled = true; list.replaceChildren(); copy.remove(); technical.hidden = true; status.textContent = text; },
       done: (run) => { last = run; start.disabled = false; show(run); }
     };
     deployView = view;
@@ -358,7 +386,7 @@
         // Further pages would only start more sign-in flows.
         if (row.problem === 'login') break;
       }
-      const run = {at: new Date().toISOString(), commit, who, rows};
+      const run = {schema:'task-ready-v2', at: new Date().toISOString(), commit, who, rows};
       storage((s) => s.setItem(DEPLOY_KEY, JSON.stringify(run)));
       deployProgress = '';
       deployView.done(run);
@@ -374,8 +402,8 @@
     if (deployProgress) view.progress(deployProgress);
     else if (last) show(last);
     return section('Controle na deploy',
-      el('p', {text: "Opent alle hoofdpagina's één keer, met jouw aanmelding, en meldt welke niet laadt of een fout toont. Er wordt niets gewijzigd."}),
-      actions, status, list);
+      el('p', {text: "Controleert of de belangrijkste bediening en gegevens beschikbaar zijn. Een geldige lege lijst mag slagen. Dit bewijst geen inhoudelijke juistheid."}),
+      actions, status, list, technical);
   };
 
   const render = () => {
@@ -386,9 +414,9 @@
       problemSection(),
       section('Op deze pagina', el('p', {text: HELP[room] || HELP.page})),
       documentId ? viewCheckSection(documentId, params.get('attempt') || '') : null,
-      documentsSection(),
       deploySection(),
-      reportSection(error)
+      documentsSection(),
+      disclosure('Melding opstellen', reportSection(error))
     ];
     body.replaceChildren(...parts.filter(Boolean));
   };

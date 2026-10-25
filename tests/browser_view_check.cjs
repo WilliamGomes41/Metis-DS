@@ -31,7 +31,7 @@ const fs=require('node:fs');
         if(['completed','failed'].includes(result.state))break;
         await new Promise(resolve=>setTimeout(resolve,1000));
       }
-      if(result.state!=='completed'||result.result.checks.length!==5||result.result.checks.some(c=>c.verdict!=='pass'))
+      if(result.state!=='completed'||result.result.checks.length!==8||result.result.checks.some(c=>c.verdict!=='pass'))
         throw Error('view check did not establish the inventory contract: '+JSON.stringify(result.result));
       await page.reload();
       await page.getByRole('heading',{name:'Uitkomst weergavecontrole',exact:true}).waitFor();
@@ -41,6 +41,22 @@ const fs=require('node:fs');
       },id);
       if(evidence.status!==200||evidence.type!=='image/png'||evidence.size===0)throw Error('missing private evidence');
       results.push({id,state:result.state,checks:result.result.checks,evidence});
+      if (testCase === cases[0]) for (const mode of ['text','hidden']) {
+        await fetch(base+'/browser-view-fault', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({mode})});
+        await page.goto(base+'/inzicht/document?'+new URLSearchParams({document}));
+        await Promise.all([page.waitForURL('**/*view_check=**'),page.getByRole('button',{name:'Controleer weergave',exact:true}).click()]);
+        const changedId = new URL(page.url()).searchParams.get('view_check');
+        let changed;
+        for (let i=0; i<50; i++) {
+          changed = await page.evaluate(async id => (await fetch('/inzicht/weergavecontrole/'+id)).json(), changedId);
+          if (['completed','failed'].includes(changed.state)) break;
+          await new Promise(resolve=>setTimeout(resolve,500));
+        }
+        if(changed.state!=='completed' || !changed.result.checks.some(c=>c.id==='rendered_text' && c.verdict==='fail'))
+          throw Error(mode+' rendered text mutation escaped: '+JSON.stringify(changed.result));
+        if(!changed.result.diagnosis.requests.some(r=>r.route==='/review' && r.reference)) throw Error('request correlation missing');
+        await fetch(base+'/browser-view-fault', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({mode:''})});
+      }
       await page.close();
     }
     if(!results[1].checks.some(c=>c.id==='source_partition'&&c.expected>0))throw Error('source partition was empty');

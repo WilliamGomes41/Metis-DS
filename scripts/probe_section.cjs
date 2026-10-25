@@ -2,11 +2,15 @@
 // Read-only, external section probe. Never exports URL, cookies, DOM or errors.
 const fs = require('node:fs');
 const crypto = require('node:crypto');
+const readPageReadiness = require('../assets/brand/page-readiness.js');
 const { performance } = require('node:perf_hooks');
 
 const sections = {
   '/login': '.login-card a[href="/auth/microsoft"], .login-card button[type="submit"]',
   '/ingest': '#ingest-submit',
+  '/': '.home-tiles',
+  '/settings': '.room a[href="/accounts"]',
+  '/inzicht': '#d-table[data-readiness="ready"]',
   '/tree': 'h1:text-is("Documenten")',
   '/source-selection': '#source-selection h1:text-is("Bronselectie")',
   '/review': 'h1:text-is("Review")',
@@ -23,7 +27,7 @@ async function probe(browser, {url, storageState, timeout = 30000}) {
     schema: 'metis.section-probe.v1', attempt_id: crypto.randomBytes(16).toString('hex'),
     route: target.pathname, started_at: new Date().toISOString(), finished_at: null,
     navigation: 'probe_error', navigation_started: false, status: null, response_request_id: null,
-    response_complete: false, final_location: 'other', assertion: 'section-visible-v1',
+    response_complete: false, final_location: 'other', assertion: 'task-ready-v2',
     usability: 'not_checked', page_errors: 0, blocked_requests: 0,
   };
   const started = performance.now();
@@ -64,7 +68,7 @@ async function probe(browser, {url, storageState, timeout = 30000}) {
     });
     try {
       result.navigation_started = true;
-      await page.goto(target.href, {waitUntil: 'load', timeout});
+      await page.goto(target.pathname === '/inzicht' ? target.origin + '/inzicht?tab=documenten' : target.href, {waitUntil: 'load', timeout});
       result.navigation = 'loaded';
     } catch (error) {
       result.navigation = error.name === 'TimeoutError' ? 'timeout' : 'network_error';
@@ -72,19 +76,36 @@ async function probe(browser, {url, storageState, timeout = 30000}) {
     const current = new URL(page.url());
     result.final_location = current.origin === target.origin && current.pathname === target.pathname ? 'target' :
       current.origin === target.origin && current.pathname === '/login' ? 'login' : 'other';
+    if (result.final_location === 'login') result.usability = 'not_checked_access';
+    if (result.status === 403) {
+      const missingRole = await page.evaluate(() => {
+        const code=document.querySelector('[data-error-code]')?.dataset.errorCode || '';
+        const roles=document.querySelector('header.topbar .who-roles')?.textContent || '';
+        return /_role_required$/.test(code) && !roles.includes(code.replace(/_role_required$/, ''));
+      });
+      result.usability = missingRole ? 'not_checked_access' : 'failed';
+    }
     if (result.navigation === 'loaded' && result.final_location === 'target' && result.status === 200) {
-      // A bounded visible-section assertion, not proof of every control or task.
+      // Same task-specific readiness evidence as Raad; no heading/shell pass.
       try {
-        await page.locator(sections[target.pathname]).first().waitFor({state: 'visible',
-          timeout: Math.max(1, timeout - (performance.now() - started))});
-        result.usability = result.response_complete ? 'passed' : 'failed';
-      } catch (_) { result.usability = 'failed'; }
+        if (target.pathname === '/login') {
+          await page.locator(sections[target.pathname]).first().waitFor({state:'visible', timeout});
+        } else {
+          await page.waitForFunction('() => (' + readPageReadiness.toString() + ')("' + target.pathname + '").verdict === "pass"',
+            null, {timeout: Math.max(1, timeout - (performance.now() - started))});
+        }
+        result.usability = result.response_complete && !result.page_errors ? 'passed' : 'failed';
+      } catch (_) { result.usability = 'not_established'; }
+      if (target.pathname !== '/login') result.diagnosis = await page.evaluate(readPageReadiness, target.pathname);
+      if (result.diagnosis?.request?.state === '401') result.usability = 'not_checked_access';
+
     }
   } catch (_) {
     result.navigation = 'probe_error';
   } finally {
     if (context) await context.close().catch(() => {});
     result.finished_at = new Date().toISOString();
+    result.diagnosis = {...(result.diagnosis || {step:'page_usability', expected:'task_controls_available', observed:result.navigation, verdict:'not_established'}), elapsed_ms:Math.round(performance.now()-started)};
   }
   return result;
 }
