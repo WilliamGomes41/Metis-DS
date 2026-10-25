@@ -97,7 +97,7 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
                "processing_reference": attempt["processing_reference"]})
     if envelope.get("processing_storage") == "task-v1" and kind == "resume" and attempts:
         previous_context = attempts[-1].get("diagnostic") or {}
-        for key in ("validator_input_ref", "validator_input_hash", "validator_identity", "semantic_identity"):
+        for key in ("validator_input_ref", "validator_input_hash", "validator_identity", "semantic_identity", "task_plan_ref"):
             if key in previous_context:
                 attempt["diagnostic"][key] = deepcopy(previous_context[key])
     from src.request_diagnostics_v1 import current_request_id

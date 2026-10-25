@@ -19,13 +19,14 @@ _NORMATIVE = re.compile(
 _STAMP = re.compile(r"\b(?:Sterk|Zwak)\s*[–—-]\s*(?:voor|tegen)\b\.?", re.I)
 
 
-def inventory(blocks):
+def inventory(blocks, *, recommendation_sections_only=True):
     result = []
     active_scope = None
     active_path = None
     for block in blocks:
         path = list(block.get("section_path") or [])
-        if not any(re.fullmatch(r"(?:\d+(?:\.\d+)*[.)]?\s*)?(?:aanbevelingen|recommendations)\s*:?", p.strip(), re.I) for p in path):
+        recommendation_section = any(re.fullmatch(r"(?:\d+(?:\.\d+)*[.)]?\s*)?(?:aanbevelingen|recommendations)\s*:?", p.strip(), re.I) for p in path)
+        if recommendation_sections_only and not recommendation_section:
             continue
         text = block["text"]
         if path != active_path:
@@ -36,6 +37,8 @@ def inventory(blocks):
             active_scope = {"block_id": block["block_id"], "start": 0, "end": len(text), "text": text}
         numbers = [m for m in _NUMBER.finditer(text)
                    if not re.search(r"\b(?:Tabel|Table|Bijlage|Figuur)\s*$", text[:m.start()], re.I)]
+        if not recommendation_section:
+            numbers = [m for m in numbers if _NORMATIVE.search(text[m.end():].lstrip())]
         starts = [m.end() for m in numbers]
         if not starts and _NORMATIVE.search(text.lstrip()):
             starts = [len(text) - len(text.lstrip())]

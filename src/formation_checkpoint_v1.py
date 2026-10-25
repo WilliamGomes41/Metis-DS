@@ -23,6 +23,7 @@ class TaskCheckpointWriter:
         self.configuration = deepcopy(attempt.get("processing_configuration"))
         if not self.configuration:
             raise ConsoleError("processing_configuration_unpinned")
+        self.plan_reference = deepcopy((attempt.get("diagnostic") or {}).get("task_plan_ref"))
         self.input_reference = deepcopy((attempt.get("diagnostic") or {}).get("validator_input_ref"))
 
     @contextmanager
@@ -108,6 +109,32 @@ class TaskCheckpointWriter:
                 self.store.resolve_input(self.input_reference,expected_snapshot_id=self.snapshot_id)
             except WorkflowDocumentStoreError as error:
                 raise ConsoleError(str(error)) from error
+
+    def load_task_plan(self):
+        if not self.input_reference:
+            raise ConsoleError("formation_input_required")
+        if self.plan_reference is not None and (set(self.plan_reference) != {"context_id", "plan_hash"}
+                or not isinstance(self.plan_reference.get("plan_hash"), str)
+                or len(self.plan_reference["plan_hash"]) != 64
+                or self.plan_reference.get("context_id") != self.input_reference["context_id"]):
+            raise ConsoleError("formation_task_plan_conflict")
+        plan = self.store.load_task_plan(self.input_reference["context_id"],
+            expected_hash=(self.plan_reference or {}).get("plan_hash"))
+        if plan is not None and not self.plan_reference:
+            return self.retain_task_plan(plan)
+        return plan
+
+    def retain_task_plan(self, plan):
+        from src.semantic_replay_v1 import stable_json_hash
+        if not self.input_reference:
+            raise ConsoleError("formation_input_required")
+        with self._locked() as (con, active):
+            retained = self.store.retain_task_plan(con,self.input_reference["context_id"],plan)
+            reference = {"context_id":self.input_reference["context_id"], "plan_hash":stable_json_hash(retained)}
+            active.setdefault("diagnostic", {})["task_plan_ref"] = reference
+            self.store.checkpoint(con,self.attempt_id,"task_plan_pinned",{"task_plan_ref":reference})
+        self.plan_reference = reference
+        return retained
 
     def plan_tasks(self, count):
         if not self.input_reference:

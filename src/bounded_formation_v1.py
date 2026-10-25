@@ -249,6 +249,16 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
         if pending and all(r.get("spans") for r in pending):
             targets = [r for r in targets if any(s["block_id"] == r["span"]["block_id"] and
                 max(s["start"], r["span"]["start"]) < min(s["end"], r["span"]["end"]) for s in scope)]
+    from src.recommendation_task_plan_v1 import build_plan, remaining_tasks, report
+    plan = checkpoint.load_task_plan() if durable else evidence.get("task_plan")
+    if plan is None:
+        # Full original source partition, independent of attempt or current
+        # completion. Prior results keep their exact existing semantic keys.
+        baseline = _durable_targets(blocks, {"objects":[], "source_assessments":[]})
+        plan = build_plan(tasks_for(blocks,evidence_blocks,baseline),blocks,evidence_blocks)
+        if durable:
+            plan = checkpoint.retain_task_plan(plan)
+    evidence["task_plan"] = plan
     phases = ["recovery"] if resuming else ["initial", "recovery"]
     budget_exhausted = False
     # Attempt-owned measurements only: never part of provider evidence or replay identity.
@@ -264,7 +274,7 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
     for phase in phases:
         if phase == "recovery" and not resuming:
             targets = _durable_targets(blocks,proposal) if durable else _remaining_targets(units())
-        phase_tasks = tasks_for(blocks, evidence_blocks, targets)
+        phase_tasks = remaining_tasks(plan, blocks, evidence_blocks, targets)
         if durable:
             checkpoint.plan_tasks(len(phase_tasks))
         deltas = []
@@ -275,7 +285,7 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
             if durable and stable_json_hash(checkpoint.store.canonical_ranges(task["target_spans"])) in retained_by_ranges:
                 continue
             result = None
-            task_record = {key: deepcopy(task[key]) for key in ("task_id", "section_path", "target_spans")}
+            task_record = {key: deepcopy(task[key]) for key in ("task_id", "section_path", "target_spans", "priority", "source_order")}
             task_record["phase"] = phase
             timing = {"task_id": task["task_id"], "phase": phase, "index": index + 1, "planned": len(phase_tasks)}
             remaining = limits.total - (time.monotonic() - started)
@@ -290,7 +300,7 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                     timings.append({"task_id": pending_task["task_id"], "phase": phase, "index": offset,
                                     "planned": len(phase_tasks), "status": "not_started"})
                     pending_record = {key: deepcopy(pending_task[key])
-                                      for key in ("task_id", "section_path", "target_spans")}
+                                      for key in ("task_id", "section_path", "target_spans", "priority", "source_order")}
                     pending_record.update(phase=phase, status="not_started")
                     pending_call = {
                         "task_id": pending_task["task_id"],
@@ -389,6 +399,7 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
             proposal = _merge_task_proposals([proposal, *deltas])
         if budget_exhausted:
             break
+    evidence["task_plan_summary"] = report(plan,proposal,_durable_targets(blocks,proposal))
     evidence["recommendation_coverage"] = assess(blocks, proposal)
     evidence["pending_rejections"] = pending_rejections(evidence, proposal)
     evidence["formation_incomplete"] = bool(evidence["pending_rejections"])
