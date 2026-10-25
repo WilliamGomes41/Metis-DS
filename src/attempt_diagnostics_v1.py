@@ -102,6 +102,8 @@ def comparable_envelope(envelope):
     for attempt in result.get("processing_attempts", []):
         attempt.pop("diagnostic", None)
         attempt.pop("_record_version",None)
+        if (attempt.get("dispatch") or {}).get("version") == "source-dispatch-v2":
+            attempt["dispatch"] = {"version":"source-dispatch-v2"}
     return result
 
 
@@ -109,6 +111,8 @@ def merge_diagnostics(prepared, current):
     by_id = {a["attempt_id"]: a for a in current.get("processing_attempts", [])}
     for attempt in prepared.get("processing_attempts", []):
         recorded = by_id.get(attempt["attempt_id"], {})
+        if (recorded.get("dispatch") or {}).get("version") == "source-dispatch-v2":
+            attempt["dispatch"] = deepcopy(recorded["dispatch"])
         if "diagnostic" in recorded:
             attempt["diagnostic"] = deepcopy(recorded["diagnostic"])
         if "_record_version" in recorded:

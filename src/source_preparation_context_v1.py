@@ -126,7 +126,7 @@ def build_formation_context(console, *, envelope, actor_id, expected_revision,
                 or (attempt['expected_revision'] != expected_revision and not initial_registration)
                 or deadline is None):
             raise _error('processing_command_conflict')
-    resume = bool(attempt and attempt.get('kind') == 'resume')
+    resume = bool(attempt and (attempt.get('kind') == 'resume' or ((attempt.get('dispatch') or {}).get('version') == 'source-dispatch-v2' and (attempt.get('diagnostic') or {}).get('validator_input_ref'))))
     if resume and not envelope.get('semantic_replay') and envelope.get('processing_storage') != 'task-v1':
         raise _error('source_preparation_checkpoint_required')
     checkpoint_writer = console._diagnostic_writer(source.snapshot_id, attempt['attempt_id'] if attempt else None)
@@ -193,7 +193,9 @@ def build_formation_context(console, *, envelope, actor_id, expected_revision,
                 active = assert_active(current, attempt['attempt_id'], now()) if attempt else None
                 authorize(console, actor_id, current)
                 if active is not None and (active['actor_id'] != actor_id or active['source_hash'] != source.sha256
-                        or active['expected_revision'] != attempt['expected_revision']):
+                        or active['expected_revision'] != attempt['expected_revision']
+                        or ((active.get('dispatch') or {}).get('version') == 'source-dispatch-v2'
+                            and (active.get('dispatch') or {}).get('token') != (attempt.get('dispatch') or {}).get('token'))):
                     raise _error('processing_command_conflict')
                 # #628 F3: a deploy between reserve and execute MOET give processing_configuration_changed.
                 if active is not None and active.get('processing_configuration') and active['processing_configuration'] != configuration(console):

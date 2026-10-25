@@ -104,7 +104,11 @@ def reserve_selection(console, *, actor_id, snapshot_id, command_id, expected_re
                                  revision=revision, clock=now(), limits=console._processing_limits(), kind=kind)
         if fresh:
             attempt["processing_configuration"] = deepcopy(envelope["processing_configuration"])
-            attempt["dispatch"] = {"version": "source-dispatch-v1", "state": "pending"}
+            from src.source_bound_fields_v3 import MODE
+            durable_tasks = (envelope.get("processing_storage") == "task-v1"
+                and attempt["processing_configuration"].get("mode") == MODE
+                and envelope["content_kind"] in {"html", "pdf"} and envelope["class"] != "beslisboom")
+            attempt["dispatch"] = {"version": "source-dispatch-v2" if durable_tasks else "source-dispatch-v1", "state": "pending"}
         console._commit_prepared_store(envelopes={snapshot_id: envelope}, snapshot_id=snapshot_id)
         return deepcopy(attempt), fresh
 
@@ -201,6 +205,8 @@ def projection(console, *, actor_id, snapshot_id, documents, observations=None):
              else UNCHECKED if unchecked
              else "onderbroken" if (succeeded and not complete) else "mislukt" if current == "failed"
              else "voltooid" if complete else "nog niet gestart")
+    if (attempt.get("dispatch") or {}).get("state") == "blocked":
+        state = "geblokkeerd"
     elapsed = _duration(attempt.get("started_at"), attempt.get("finished_at") or now().isoformat())
     timing = estimate({**envelope, "processing_configuration": configuration(console)}, documents,
                       observations=observations)
@@ -219,7 +225,8 @@ def projection(console, *, actor_id, snapshot_id, documents, observations=None):
     return {"snapshot_id": snapshot_id, "title": envelope["title"],
             "filename": (envelope.get("received_source") or {}).get("filename") or Path(envelope["binary_path"]).name,
             "version": envelope["version"], "bytes": (envelope.get("received_source") or {}).get("bytes"),
-            "state": state, "attempt_succeeded": succeeded, "formation_complete": complete and not unchecked,
+            "state": state, "blocked_reason": (attempt.get("dispatch") or {}).get("blocked_reason"),
+            "required_action": (attempt.get("dispatch") or {}).get("required_action"), "attempt_succeeded": succeeded, "formation_complete": complete and not unchecked,
             "formation_checked": not unchecked,
             "phase": (attempt.get("diagnostic") or {}).get("phase") or attempt.get("phase") or "Nog niet gestart", "elapsed_seconds": elapsed,
             "deadline_seconds": _duration(now().isoformat(), attempt.get("expires_at")),
@@ -244,6 +251,8 @@ def summary_projection(console, *, envelope, observations):
     state = ("wacht op uitvoering" if waiting else "bezig" if current == "running"
              else "onderbroken" if current in {"expired", "interrupted", "incomplete_budget"}
              else "mislukt" if current == "failed" else UNCHECKED if succeeded else "nog niet gestart")
+    if (attempt.get("dispatch") or {}).get("state") == "blocked":
+        state = "geblokkeerd"
     elapsed = _duration(attempt.get("started_at"), attempt.get("finished_at") or now().isoformat())
     timing = estimate({**envelope, "processing_configuration": configuration(console)}, [], observations=observations)
     remaining = None
@@ -253,7 +262,8 @@ def summary_projection(console, *, envelope, observations):
     evidence = (envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
     return {"snapshot_id": envelope["snapshot_id"], "title": envelope["title"], "version": envelope["version"],
             "filename": (envelope.get("received_source") or {}).get("filename") or Path(envelope["binary_path"]).name,
-            "bytes": (envelope.get("received_source") or {}).get("bytes"), "state": state,
+            "bytes": (envelope.get("received_source") or {}).get("bytes"), "state": state, "blocked_reason": (attempt.get("dispatch") or {}).get("blocked_reason"),
+            "required_action": (attempt.get("dispatch") or {}).get("required_action"),
             "attempt_succeeded": bool(succeeded), "formation_complete": False, "formation_checked": False,
             "phase": (attempt.get("diagnostic") or {}).get("phase") or attempt.get("phase") or "Nog niet gestart",
             "elapsed_seconds": elapsed, "deadline_seconds": _duration(now().isoformat(),attempt.get("expires_at")),

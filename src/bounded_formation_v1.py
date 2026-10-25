@@ -217,6 +217,13 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
         for row in retained:
             evidence["tasks"].append(deepcopy(row["task"]))
             evidence.setdefault("supplementary_calls", []).append(deepcopy(row["evidence"]))
+    if durable:
+        # Failure findings are not proposals or successful TaskResults. Restore
+        # them for diagnostics/coverage while the command cursor preserves the
+        # finite initial/recovery policy independently of the worker.
+        for failure in checkpoint.task_failures():
+            evidence["tasks"].append(deepcopy(failure["task"]))
+            evidence.setdefault("supplementary_calls", []).append(deepcopy(failure["evidence"]))
     # Source-role classification is independent of knowledge extraction. These
     # closed whole-range rules cannot classify arbitrary clinical text.
     if not resuming:
@@ -259,6 +266,7 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
         if durable:
             plan = checkpoint.retain_task_plan(plan)
     evidence["task_plan"] = plan
+    plan_positions = {task["source_order"]:index for index,task in enumerate(plan["tasks"])}
     phases = ["recovery"] if resuming else ["initial", "recovery"]
     budget_exhausted = False
     # Attempt-owned measurements only: never part of provider evidence or replay identity.
@@ -284,11 +292,16 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
         for index, task in enumerate(phase_tasks):
             if durable and stable_json_hash(checkpoint.store.canonical_ranges(task["target_spans"])) in retained_by_ranges:
                 continue
+            if durable and checkpoint.skip_task(phase, plan_positions[task["source_order"]]):
+                continue
             result = None
             task_record = {key: deepcopy(task[key]) for key in ("task_id", "section_path", "target_spans", "priority", "source_order")}
             task_record["phase"] = phase
             timing = {"task_id": task["task_id"], "phase": phase, "index": index + 1, "planned": len(phase_tasks)}
+            allowed = checkpoint.before_task() if durable else None
             remaining = limits.total - (time.monotonic() - started)
+            if allowed is not None:
+                remaining = min(remaining, allowed)
             call = {"task_id": task["task_id"], "target_spans": task["target_spans"]}
 
             if remaining <= 0:

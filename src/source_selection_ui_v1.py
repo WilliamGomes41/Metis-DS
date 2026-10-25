@@ -156,7 +156,15 @@ def install(app, console, require, page, nav, esc):
                          'formation_accounted': 'Brondekking controleren', 'stopped': 'Verwerking gestopt'}.get(result['phase'], 'Bronselectie en controle')
                 progress = (f'<p>Fase: {esc(phase)} · Verstreken: {esc(_minutes(elapsed)) if elapsed is not None else "onbekend"}'
                             f' · Geschat resterend: {esc(_range(result["remaining_seconds"]))}</p>')
-            if result.get('budget_stopped'):
+            if result.get('blocked_reason'):
+                reason = {'processing_attempt_expired':'De totale tijdslimiet is bereikt',
+                          'source_task_budget_exhausted':'Het verwerkingsbudget is uitgeput',
+                          'processing_configuration_changed':'De verwerkingsconfiguratie is gewijzigd',
+                          'researcher_role_required':'De uitvoeringsbevoegdheid is ingetrokken',
+                          'not_authenticated':'Het verantwoordelijke account is niet meer actief'}.get(result['blocked_reason'], 'Een verwerkingsvoorwaarde blokkeert de uitvoering')
+                progress = (f'<p>Verwerking geblokkeerd: {esc(reason)}. '
+                            f'{esc(result.get("required_action") or "Los de blokkade op voordat u opnieuw start.")}</p>')
+            if result.get('budget_stopped') and not result.get('blocked_reason'):
                 counts = result.get('progress') or {}
                 done, open_ = counts.get('terminal_task_count'), counts.get('pending_task_count')
                 progress = (f'<p>Gestopt op taakbudget: {esc(done) if done is not None else "onbekend"} taken klaar, '
