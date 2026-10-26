@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from copy import deepcopy
 from typing import Any, Iterator
-from urllib.parse import quote
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -55,13 +55,6 @@ def _norm(value: str) -> str:
 
 def _esc(value: Any) -> str:
     return html.escape(str(value or ""), quote=True)
-
-
-def _review_url(snapshot_id: str, object_id: str) -> str:
-    return (
-        f"/review?document={quote(snapshot_id, safe='')}"
-        f"&object={quote(object_id, safe='')}"
-    )
 
 
 def _hidden(name: str, value: Any) -> str:
@@ -883,47 +876,78 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         return REPAIR_SOURCE_UNITS
 
 
-def install_deterministic_review_repair_routes(
-    app: FastAPI, console: DeterministicRepairReviewConsole
-) -> None:
-    """Add the pre-write repair specification step and atomic resolve POST."""
-
-    def account_for(request: Request) -> dict[str, Any]:
-        return console.session_account(request.cookies.get("console_session"))
-
-    def chrome(request: Request, body: str) -> str:
-        from src.operations_console_app import _nav, _page
-
-        account = account_for(request)
-        return _page(
-            f"{_nav(account, 'review')}"
-            f"<section class='room'>{body}</section>",
-            title="Review — reparatie specificeren — V&amp;VN Data Services",
-        )
-
+def render_repair(console, request: Request, submission: dict[str, Any], *, repair_kind="", error="", saved=False) -> str:
+    """One Vorming presentation of the complete existing atomic repair command."""
+    from src import operations_console_app as ui
+    from src.review_passage_read_v1 import read_review_passage
+    account = console.session_account(request.cookies.get("console_session"))
+    submission = dict(submission)
+    sid, oid = str(submission["snapshot_id"]), str(submission["object_id"])
+    kind = repair_kind or console.repair_kind_for_submission(submission)
+    if kind not in _REPAIR_KINDS:
+        raise ConsoleError("unknown_repair_kind")
+    if kind == REPAIR_CLASSIFICATION:
+        inputs = read_review_passage(console, account, sid, oid)
+        envelope, objects, revision = inputs.envelope, inputs.objects, inputs.revision
+    else:
+        envelope = console._envelope(sid)
+        if "reviewer" not in account.get("roles", []) or account["account_id"] not in envelope.get("named_reviewers", []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        objects, revision = console.snapshot_objects_and_revision(sid)
+    focal = next((row for row in objects if row["object_id"] == oid), None)
+    if focal is None:
+        raise ConsoleError("unknown_object")
+    if not submission.get("expected_revision"):
+        submission["expected_revision"] = revision
+    submission.setdefault("suitability", {REPAIR_SOURCE_UNITS: "mist_context", REPAIR_MERGE_OBJECTS: "samenvoegen",
+        REPAIR_SUPPORT_RELATION: "alleen_onderbouwing", REPAIR_CLASSIFICATION: "ja"}[kind])
+    overview = "/source-selection?" + urlencode({"document": sid})
+    review = "/review?" + urlencode({"document": sid, "object": oid})
+    notice = ('<p class="banner ok" role="status">Het nieuwe voorstel is opgeslagen. Beoordeel de huidige versie opnieuw in Review.</p>' if saved else '')
+    lead = ('Je ziet de huidige opgeslagen passage. Een volgende correctie maakt opnieuw een voorstel voor beoordeling.'
+            if saved else 'Er is nog niets gewijzigd. Bevestigen maakt een nieuw voorstel voor beoordeling.')
+    body = ('<h1>Vorming</h1><h2>Correctie specificeren</h2>' + notice +
+        '<p><a href="' + _esc(overview) + '">Voortgang en vormingsproblemen</a> · '
+        '<a href="' + _esc(review) + '">Deze passage beoordelen in Review</a></p>'
+        '<p class="lead">' + lead + '</p>'
+        '<p><b>Huidige passage:</b> ' + _esc((focal.get("content") or {}).get("clean_text")) + '</p>')
+    body += ui._broncontext_html(focal, sid, oid, inputs.source_available if kind == REPAIR_CLASSIFICATION else True)
+    body += '<nav aria-label="Soort correctie">' + ' · '.join(
+        '<a href="' + _esc('/source-selection?' + urlencode(dict(document=sid, object=oid, task='repair', repair_kind=k))) + '">' + label + '</a>'
+        for k, label in [(REPAIR_SOURCE_UNITS, 'Bronpassage kiezen'), (REPAIR_MERGE_OBJECTS, 'Passages samenvoegen'),
+                         (REPAIR_SUPPORT_RELATION, 'Onderbouwing verbinden'), (REPAIR_CLASSIFICATION, 'Type of plaats corrigeren')]) + '</nav>'
+    if error:
+        body += '<p class="banner warn" role="alert">Niet opgeslagen: ' + _esc(ui.ERROR_COPY.get(error, error)) + '. Bij een gewijzigd document: herlaad de correctie en controleer je keuzes opnieuw.</p>'
+    def chrome(body):
+        return ui._page(ui._nav(account, 'selection') + '<section class="room" data-formation-repair>' + body + '</section>')
+    from src.source_accountability_v1 import is_source_record
+    if is_source_record(focal):
+        return chrome(body + '<p>Dit is een bronregel, geen kennisvoorstel. <a href="' + _esc('/source-selection?' + urlencode(dict(document=sid, object=oid))) + '">Brongebruik bepalen of bronbewijs herstellen in Vorming</a>.</p>')
+    if console.snapshot_is_published(sid):
+        return chrome(body + '<p>Deze gepubliceerde werkversie is alleen te lezen.</p>')
+    if kind == REPAIR_CLASSIFICATION and not inputs.source_available:
+        return chrome(body + '<p>De oorspronkelijke bron is niet beschikbaar voor correctie.</p>')
+    if kind == REPAIR_CLASSIFICATION and is_admission_blocked(focal, review_path=review_path_for_klasse(envelope['class'])):
+        return chrome(body + '<p>Herstel eerst de bronpassage. Type- of plaatscorrectie maakt een geblokkeerd voorstel niet reviewbaar.</p>')
     def common_fields(submission: dict[str, Any], repair_kind: str) -> str:
         values = {
             "snapshot_id": submission.get("snapshot_id"),
             "object_id": submission.get("object_id"),
             "snapshot_revision": submission.get("expected_revision"),
             "suitability": submission.get("suitability"),
-            "comment": submission.get("comment"),
-            "proposed_correction": submission.get("proposed_correction"),
-            "confirmed_object_type": submission.get("confirmed_object_type"),
-            "recommendation_strength": submission.get("recommendation_strength"),
-            "documentpositie_action": submission.get("documentpositie_action"),
-            "found_under": submission.get("found_under"),
-            "parent_choice": submission.get("parent_choice"),
-            "type_action": submission.get("type_action"),
             "repair_kind": repair_kind,
         }
+        if repair_kind != REPAIR_CLASSIFICATION:
+            values.update({name: submission.get(name) for name in (
+                "confirmed_object_type", "recommendation_strength", "documentpositie_action",
+                "found_under", "parent_choice", "type_action")})
         return "".join(_hidden(name, value) for name, value in values.items()) + "".join(
             _hidden("source_discrepancy", code) for code in submission.get("source_discrepancy") or [])
 
     def source_units_form(submission: dict[str, Any]) -> str:
         snapshot_id = str(submission["snapshot_id"])
         object_id = str(submission["object_id"])
-        current = console._current_object(snapshot_id, object_id)
+        current = focal
         current_text = str((current.get("content") or {}).get("clean_text") or "")
         units = console.source_units(snapshot_id=snapshot_id, object_id=object_id)
         options: list[str] = []
@@ -931,7 +955,7 @@ def install_deterministic_review_repair_routes(
             path = " › ".join(unit.get("section_path") or [])
             label = f"{path + ' — ' if path else ''}{unit['text']}"
             options.append(
-                f'<option value="{_esc(unit["unit_id"])}">{_esc(label[:500])}</option>'
+                f'<option value="{_esc(unit["unit_id"])}" {"selected" if unit["unit_id"] in submission.get("source_unit_ids", []) else ""}>{_esc(label)}</option>'
             )
         if not options:
             raise ConsoleError("repair_source_units_required")
@@ -947,10 +971,10 @@ def install_deterministic_review_repair_routes(
     def merge_form(submission: dict[str, Any]) -> str:
         snapshot_id = str(submission["snapshot_id"])
         object_id = str(submission["object_id"])
-        current = console._current_object(snapshot_id, object_id)
+        current = focal
         section = tuple((current.get("structure") or {}).get("section_path") or [])
         options: list[str] = []
-        for row in console.snapshot_objects(snapshot_id):
+        for row in objects:
             row_id = str(row.get("object_id") or "")
             if not row_id or row_id == object_id or row.get("object_type") in {"document", "heading"}:
                 continue
@@ -964,8 +988,8 @@ def install_deterministic_review_repair_routes(
             text = str((row.get("content") or {}).get("clean_text") or row_id)
             options.append(
                 '<label class="check">'
-                f'<input type="checkbox" name="merge_object_ids" value="{_esc(row_id)}"> '
-                f'{_esc(text[:500])}</label>'
+                f'<input type="checkbox" name="merge_object_ids" value="{_esc(row_id)}" {"checked" if row_id in submission.get("merge_object_ids", []) else ""}> '
+                f'{_esc(text)}</label>'
             )
         if not options:
             raise ConsoleError("merge_target_required")
@@ -979,7 +1003,7 @@ def install_deterministic_review_repair_routes(
         snapshot_id = str(submission["snapshot_id"])
         object_id = str(submission["object_id"])
         options: list[str] = []
-        for row in console.snapshot_objects(snapshot_id):
+        for row in objects:
             row_id = str(row.get("object_id") or "")
             if not row_id or row_id == object_id or row.get("object_type") == "document":
                 continue
@@ -987,7 +1011,7 @@ def install_deterministic_review_repair_routes(
                 continue
             text = str((row.get("content") or {}).get("clean_text") or row_id)
             options.append(
-                f'<option value="{_esc(row_id)}">{_esc(text[:500])}</option>'
+                f'<option value="{_esc(row_id)}" {"selected" if row_id == submission.get("claim_object_id") else ""}>{_esc(text)}</option>'
             )
         if not options:
             raise ConsoleError("support_target_required")
@@ -998,45 +1022,78 @@ def install_deterministic_review_repair_routes(
             + "</select></label>"
         )
 
-    async def structured_repair_handler(
-        request: Request, exc: StructuredRepairRequired
-    ) -> HTMLResponse:
+    if kind == REPAIR_SOURCE_UNITS:
+        action = source_units_form(submission)
+    elif kind == REPAIR_MERGE_OBJECTS:
+        action = merge_form(submission)
+    elif kind == REPAIR_SUPPORT_RELATION:
+        action = support_form(submission)
+    else:
+        chosen_type = str(submission.get('confirmed_object_type') or focal.get('confirmed_object_type') or ui.confirmable_proposed_type(focal))
+        selected_parent = str(submission.get('parent_choice') or focal.get('parent_object_id') or '')
+        action = ('<fieldset><legend>Type corrigeren</legend>'
+            '<label><input type="radio" name="type_action" value="dit_klopt" ' + ('checked' if submission.get('type_action', 'dit_klopt') == 'dit_klopt' else '') + '>Huidig type behouden</label>'
+            '<label><input type="radio" name="type_action" value="type_wijzigen" ' + ('checked' if submission.get('type_action') == 'type_wijzigen' else '') + '>Type wijzigen</label></fieldset>'
+            '<fieldset><legend>Plaats corrigeren</legend>'
+            '<label><input type="radio" name="documentpositie_action" value="dit_klopt" ' + ('checked' if submission.get('documentpositie_action', 'dit_klopt') == 'dit_klopt' else '') + '>Huidige plaats behouden</label>'
+            '<label><input type="radio" name="documentpositie_action" value="andere_kop" ' + ('checked' if submission.get('documentpositie_action') == 'andere_kop' else '') + '>Andere kop kiezen</label></fieldset>'
+            '<input type="hidden" name="found_under" value="' + _esc(ui.found_under_path(focal)) + '">'
+            '<input type="hidden" name="confirmed_object_type" data-retained-type value="' + _esc(chosen_type) + '">'
+            '<label>Type<select name="confirmed_object_type">' + ui._type_options(chosen_type,
+                review_path=review_path_for_klasse(envelope['class']), proposed=ui.confirmable_proposed_type(focal)) + '</select></label>'
+            + '<input type="hidden" name="parent_choice" data-retained-parent value="' + _esc(selected_parent) + '">'
+            + ui._heading_chooser(focal, objects, sid, selected_parent))
+        # This chooser belongs to Vorming; its old Review-only toggle is gone.
+        action = action.replace('data-heading-chooser hidden', 'data-heading-chooser')
+        if review_path_for_klasse(envelope['class']) == 'boom':
+            action += '<label>Sterkte<select name="recommendation_strength">' + ui._strength_options(
+                submission.get('recommendation_strength') or focal.get('confirmed_recommendation_strength') or '') + '</select></label>'
+        action += '<p>Kies een werkelijk ander type, een andere kop of sterkte. Zonder wijziging kan deze correctie niet worden opgeslagen.</p>'
+    body += ('<form method="post" action="/review/resolve" data-repair-type="' + _esc(submission.get('confirmed_object_type') or focal.get('confirmed_object_type') or ui.confirmable_proposed_type(focal)) + '">' + common_fields(submission, kind) + action +
+        '<label>Reden (verplicht)<textarea name="comment" required>' + _esc(submission.get('comment')) + '</textarea></label>'
+        '<label>Correctieopmerking (geen vervangende brontekst)<textarea name="proposed_correction">' + _esc(submission.get('proposed_correction')) + '</textarea></label>'
+        '<button class="btn-primary" type="submit">Maak nieuw voorstel en zet opnieuw in Review</button></form>')
+    body += """<script>
+    const repair = document.querySelector('form[action="/review/resolve"]');
+    if (repair) {
+      const type = repair.querySelector('select[name="confirmed_object_type"]');
+      const retained = repair.querySelector('[data-retained-parent]');
+      const chooser = repair.querySelector('[data-heading-chooser]');
+      const updateRepair = () => {
+        if (type) {
+          const changing = Boolean(repair.querySelector('[name="type_action"][value="type_wijzigen"]:checked'));
+          type.disabled = !changing;
+          repair.querySelector('[data-retained-type]').disabled = changing;
+          if (!changing) type.value = repair.dataset.repairType;
+        }
+        if (retained && chooser) {
+          const changing = Boolean(repair.querySelector('[name="documentpositie_action"][value="andere_kop"]:checked'));
+          retained.disabled = changing;
+          chooser.hidden = !changing;
+          chooser.querySelectorAll('[name="parent_choice"]').forEach(field => field.disabled = !changing);
+        }
+      };
+      repair.querySelectorAll('[name="type_action"], [name="documentpositie_action"]').forEach(field => field.addEventListener('change', updateRepair));
+      updateRepair();
+    }
+    document.querySelectorAll('[data-heading-search]').forEach(input => {
+      input.addEventListener('input', () => input.closest('[data-heading-chooser]').querySelectorAll('[data-parent-choice-list] li').forEach(item => {
+        item.hidden = !item.textContent.toLowerCase().includes(input.value.trim().toLowerCase());
+      }));
+    });</script>"""
+    return chrome(body)
+
+
+def install_deterministic_review_repair_routes(app: FastAPI, console: DeterministicRepairReviewConsole) -> None:
+    """Keep the existing exception and POST callers over one Vorming renderer."""
+    def account_for(request):
+        return console.session_account(request.cookies.get("console_session"))
+
+    async def structured_repair_handler(request: Request, exc: StructuredRepairRequired) -> HTMLResponse:
         account = account_for(request)
-        submission = exc.submission
-        if str(submission.get("actor_id") or "") != str(account.get("account_id") or ""):
-            raise ConsoleError("correction_role_required")
-        repair_kind = console.repair_kind_for_submission(submission)
-        if repair_kind == REPAIR_SOURCE_UNITS:
-            action = source_units_form(submission)
-        elif repair_kind == REPAIR_MERGE_OBJECTS:
-            action = merge_form(submission)
-        elif repair_kind == REPAIR_SUPPORT_RELATION:
-            action = support_form(submission)
-        else:
-            action = (
-                "<h2>Bevestig de gekozen type- of plaatsingscorrectie</h2>"
-                "<p>Metis past alleen de al gekozen structurele correctie toe en zet "
-                "het gewijzigde object daarna opnieuw in Review.</p>"
-            )
-        note = str(submission.get("proposed_correction") or "")
-        note_html = (
-            f"<p><strong>Jouw opmerking:</strong> {_esc(note)}</p>"
-            if note
-            else ""
-        )
-        body = (
-            "<p><a href='" + _esc(_review_url(str(submission["snapshot_id"]), str(submission["object_id"]))) + "'>← Terug naar Review</a></p>"
-            "<h1>Correctie specificeren</h1>"
-            "<p class='lead'>Er is nog niets gewijzigd. Bevestigen maakt een nieuw voorstel voor beoordeling.</p>"
-            f"<p><strong>Reden:</strong> {_esc(submission.get('comment'))}</p>"
-            + note_html
-            + '<form method="post" action="/review/resolve">'
-            + common_fields(submission, repair_kind)
-            + action
-            + '<button class="btn-primary" type="submit">Maak nieuw voorstel en zet opnieuw in Review</button>'
-            + "</form>"
-        )
-        return HTMLResponse(chrome(request, body), status_code=200)
+        if str(exc.submission.get('actor_id') or '') != str(account['account_id']):
+            raise ConsoleError('correction_role_required')
+        return HTMLResponse(render_repair(console, request, exc.submission))
 
     app.add_exception_handler(StructuredRepairRequired, structured_repair_handler)
 
@@ -1062,24 +1119,38 @@ def install_deterministic_review_repair_routes(
         source_discrepancy: list[str] = Form(default=[]),
     ) -> RedirectResponse:
         account = account_for(request)
-        console.submit_review_resolution(
-            actor_id=account["account_id"],
-            snapshot_id=snapshot_id,
-            object_id=object_id,
-            expected_revision=snapshot_revision.strip(),
-            suitability=suitability,
-            comment=comment,
-            repair_kind=repair_kind,
-            source_unit_ids=list(source_unit_ids or []),
-            merge_object_ids=list(merge_object_ids or []),
-            claim_object_id=claim_object_id,
-            proposed_correction=proposed_correction,
-            confirmed_object_type=confirmed_object_type,
-            recommendation_strength=recommendation_strength,
-            documentpositie_action=documentpositie_action,
-            found_under=found_under,
-            parent_choice=parent_choice,
-            type_action=type_action,
-            source_discrepancy=list(source_discrepancy or []),
-        )
-        return RedirectResponse(_review_url(snapshot_id, object_id), status_code=303)
+        submission = dict(snapshot_id=snapshot_id, object_id=object_id, expected_revision=snapshot_revision,
+            suitability=suitability, comment=comment, repair_kind=repair_kind, source_unit_ids=list(source_unit_ids or []),
+            merge_object_ids=list(merge_object_ids or []), claim_object_id=claim_object_id, proposed_correction=proposed_correction,
+            confirmed_object_type=confirmed_object_type, recommendation_strength=recommendation_strength,
+            documentpositie_action=documentpositie_action, found_under=found_under, parent_choice=parent_choice,
+            type_action=type_action, source_discrepancy=list(source_discrepancy or []))
+        try:
+            from src.review_passage_read_v1 import resolve_review_revision
+            revision = resolve_review_revision(console, snapshot_id, snapshot_revision.strip())
+            console.submit_review_resolution(
+                actor_id=account["account_id"],
+                snapshot_id=snapshot_id,
+                object_id=object_id,
+                expected_revision=revision,
+                suitability=suitability,
+                comment=comment,
+                repair_kind=repair_kind,
+                source_unit_ids=list(source_unit_ids or []),
+                merge_object_ids=list(merge_object_ids or []),
+                claim_object_id=claim_object_id,
+                proposed_correction=proposed_correction,
+                confirmed_object_type=confirmed_object_type,
+                recommendation_strength=recommendation_strength,
+                documentpositie_action=documentpositie_action,
+                found_under=found_under,
+                parent_choice=parent_choice,
+                type_action=type_action,
+                source_discrepancy=list(source_discrepancy or []),
+            )
+        except ConsoleError as exc:
+            if exc.code in {'reviewer_role_required', 'reviewer_not_named_on_snapshot', 'published_working_revision_immutable', 'correction_role_required'}:
+                raise
+            return HTMLResponse(render_repair(console, request, submission, repair_kind=repair_kind, error=exc.code), status_code=400)
+        return RedirectResponse('/source-selection?' + urlencode(dict(document=snapshot_id, object=object_id,
+            task='repair', repair_saved='yes')), status_code=303)

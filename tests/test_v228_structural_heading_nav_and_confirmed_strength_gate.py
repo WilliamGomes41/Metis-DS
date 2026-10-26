@@ -545,18 +545,13 @@ def test_block_a_console_parent_list_is_body_structure_onderzoekers_taal(tmp_pat
     receipt = _ingest(console, accounts)
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     target = next(obj for obj in objects if "Bespreek" in _text_of(obj) or obj.get("object_type") == "heading")
-    html = _client(console, production_app=production_app).get(
-        f"/review?document={receipt['snapshot_id']}&object={target['object_id']}"
-    ).text
+    from src.operations_console_app import _heading_chooser
+    html = _heading_chooser(target, console.snapshot_objects(receipt['snapshot_id']), receipt['snapshot_id'])
     visible = _visible_text(html)
     assert "data-parent-choice-list" in html
     assert "hoofdtekst" in html.lower() or "documentlichaam" in visible.lower()
-    assert "Gevonden onder" in html
-    assert "Andere kop kiezen" in html
     assert 'data-heading-role="body"' in html
     assert "envelope" not in html.lower()
-    assert "Documenten" in html
-    assert "Documentenhiërarchie" not in html
     toc_choice = re.search(
         r'data-parent-choice-list[\s\S]*data-heading-role="toc"',
         html,
@@ -748,9 +743,8 @@ def test_block_a_parent_choice_rows_are_actionable(tmp_path: Path, *, production
     }
     rows.extend([parent, child])
     console._save_objects(receipt["snapshot_id"], rows)
-    html = _client(console, production_app=production_app).get(
-        f"/review?document={receipt['snapshot_id']}&object={child['object_id']}"
-    ).text
+    from src.operations_console_app import _heading_chooser
+    html = _heading_chooser(child, console.snapshot_objects(receipt['snapshot_id']), receipt['snapshot_id'])
     assert "data-parent-choice-list" in html
     assert not re.search(
         r'data-parent-choice-list[\s\S]*href="/review\?document=',

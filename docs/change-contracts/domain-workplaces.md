@@ -120,6 +120,17 @@ alle actieve aanroepers van die handeling. Een read-only bronopener is geen edit
 ### Domeinbotsingen die een volgende slice niet mag wegpoetsen
 
 **C1 — beoordeling en bewerking zijn deels één operatie.**
+
+Uitwerking voor afronding van B op main `559ab4f05ef6a70689051dd4cf79444233bba1f3`:
+de volledige bestaande `submit_review_resolution` kan als één opdracht op Vorming
+worden aangeboden. Een vooraf opgeslagen Review-besluit is geen preconditie.
+De interne revise/correctie/heropening blijft atomair; er komt geen losse
+revisieovergang of extra writer. Inhoudelijke bevestiging van bestaande
+voorstellen blijft Review. Het concrete onderscheid, de ongewijzigde guards,
+callers en bewijsvoering staan in
+[859-b-final-workplaces.md](859-b-final-workplaces.md). De hieronder vastgelegde
+waarschuwing blijft gelden voor iedere poging de transactie alsnog los te knippen.
+
 `review_post` stuurt type, aanbevelingssemantiek, documentpositie, relaties,
 geschiktheid en besluit naar dezelfde `review_object`. De runtime kan bij revise
 met suitability `StructuredRepairRequired` opwerpen; de exceptionhandler rendert
@@ -133,8 +144,8 @@ toestemming een tweede endpoint, tijdelijke probleemstatus of post-reviewrecht
 toe te voegen. Verplaats alleen wat met de bestaande operatie kan; als de
 Review-belofte een nieuwe domeinovergang vereist, stop die deelslice en herscope
 volgens continuous-development/execution-contract. PR 2 (#859-A) is hiervan
-onafhankelijk uitvoerbaar. Een volledige B-belofte is hier niet als bewezen
-haalbaar aangemerkt.
+onafhankelijk uitvoerbaar. Bij het opstellen van dit basiscontract was de volledige B-belofte nog niet
+als haalbaar bewezen; de latere uitwerking hierboven verplaatst de gehele bestaande opdracht.
 
 **C2 — graaf en structuur zijn inhoudelijk verschillend.** Koppenbevestiging
 blijft haar bestaande per-object bevestiging uitvoeren in Vorming. Een

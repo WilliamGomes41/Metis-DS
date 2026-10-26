@@ -1,0 +1,76 @@
+const {chromium} = require(process.env.METIS_PLAYWRIGHT_MODULE || 'playwright');
+const assert = require('node:assert/strict');
+(async () => {
+  const base = process.env.METIS_BROWSER_BASE;
+  const m = await (await fetch(base + '/browser-manifest')).json();
+  const browser = await chromium.launch({executablePath: process.env.METIS_BROWSER_EXECUTABLE});
+  const page = await browser.newPage();
+  await page.goto(base + '/login');
+  await page.locator('[name=username]').fill(m.username);
+  await page.locator('[name=password]').fill(m.password);
+  await Promise.all([page.waitForURL(url => url.pathname !== '/login'), page.locator('button[type=submit]').click()]);
+  const state = async () => (await page.request.get(base + '/browser-repair-state')).json();
+  async function proof(stage, width) {
+    await page.evaluate(() => scrollTo(0, 0));
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, stage);
+    assert.equal(await page.locator('form form').count(), 0);
+    await page.screenshot({path: `${process.env.METIS_BROWSER_OUTPUT}/${stage}-${width}.png`, fullPage: true});
+  }
+  for (const [index, width] of [1440, 390].entries()) {
+    const d = m.documents[index];
+    await page.setViewportSize({width, height: 1000});
+    const before = await state();
+    await page.goto(base + '/review?' + new URLSearchParams({document: d.snapshot_id, object: d.object_id}));
+    assert.equal(await page.locator('[name=type_action][value=type_wijzigen], [name=documentpositie_action][value=andere_kop], [name=proposed_correction]').count(), 0);
+    await proof('review-before-repair', width);
+    await page.getByRole('link', {name: 'Passage herstellen in Vorming', exact: true}).focus();
+    await Promise.all([page.waitForURL(url => url.pathname === '/source-selection'), page.keyboard.press('Enter')]);
+    await page.getByRole('link', {name: 'Type of plaats corrigeren', exact: true}).click();
+    const form = page.locator('form[action="/review/resolve"]');
+    assert.equal(await form.count(), 1);
+    await Promise.all([page.waitForURL(url => url.pathname === '/review/bronpassage'),
+      page.getByRole('link', {name: 'Open oorspronkelijke bron', exact: true}).click()]);
+    await page.goBack();
+    assert.deepEqual(await state(), before, 'Opening owner and source must not write');
+    await form.locator('[name=type_action][value=type_wijzigen]').check();
+    await form.locator('select[name=confirmed_object_type]').selectOption('explanation');
+    await form.locator('[name=type_action][value=dit_klopt]').check();
+    assert.equal(await form.locator('select[name=confirmed_object_type]').inputValue(), 'definition');
+    await form.locator('[name=type_action][value=type_wijzigen]').check();
+    await form.locator('select[name=confirmed_object_type]').selectOption('explanation');
+    await form.locator('[name=documentpositie_action][value=andere_kop]').check();
+    await form.locator(`[name=parent_choice][value="${d.parent_id}"]`).check();
+    await form.locator('[name=comment]').fill('Type en kop gecontroleerd tegen de bron.');
+    await proof('formation-repair-selected', width);
+    await form.locator('button[type=submit]').focus();
+    await Promise.all([page.waitForNavigation({waitUntil: 'domcontentloaded'}), page.keyboard.press('Enter')]);
+    assert.equal(new URL(page.url()).pathname, '/source-selection');
+    assert.equal(await page.getByRole('status').count(), 1);
+    const repaired = await state();
+    assert.notEqual(repaired[index].version, before[index].version);
+    assert.equal(repaired[index].status, 'needs_review');
+    assert.equal(repaired[index].type, 'explanation');
+    assert.equal(repaired[index].parent, d.parent_id);
+    assert.ok(repaired[index].text_unchanged && repaired[index].source_unchanged && repaired[index].others_unchanged);
+    await page.reload();
+    assert.deepEqual(await state(), repaired);
+    await page.getByRole('link', {name: 'Deze passage beoordelen in Review', exact: true}).click();
+    assert.equal(new URL(page.url()).searchParams.get('object'), d.object_id);
+    const review = page.locator('form[action="/review"]');
+    assert.equal(await review.locator('[name=confirmed_object_type]').inputValue(), 'explanation');
+    assert.equal(await review.locator('[name=parent_choice]').inputValue(), d.parent_id);
+    assert.ok((await page.locator(`[data-current-parent="${d.parent_id}"]`).innerText()).includes('2 Vervolg'));
+    await proof('review-after-repair', width);
+    await review.locator('[name=suitability][value=ja]').check();
+    await review.locator('[name=documentpositie_action][value=dit_klopt]').check();
+    await review.locator('[name=type_action][value=dit_klopt]').check();
+    await review.locator('[name=eindoordeel][value=goedkeuren]').check();
+    await Promise.all([page.waitForNavigation({waitUntil: 'domcontentloaded'}), review.locator('[data-submit-review]').click()]);
+    const approved = await state();
+    assert.equal(approved[index].status, 'approved');
+    assert.equal(approved[index].type, 'explanation');
+    assert.equal(approved[index].parent, d.parent_id);
+    console.log('Vorming repair followed by exact Review approval', width, 'PASSED');
+  }
+  await browser.close();
+})().catch(e => { console.error(e); process.exit(1); });

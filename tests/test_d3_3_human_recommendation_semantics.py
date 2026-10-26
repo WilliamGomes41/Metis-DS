@@ -626,13 +626,13 @@ def test_strength_retry_preserves_selected_parent(tmp_path: Path, *, production_
 
         def handle_starttag(self, tag, attrs):
             attrs = dict(attrs)
-            if tag == "input" and "checked" in attrs:
+            if tag == "input" and ("checked" in attrs or (attrs.get("name") == "parent_choice" and attrs.get("type") == "hidden")):
                 self.values[attrs.get("name")] = attrs.get("value")
 
     form = CheckedInputs()
     form.feed(response.text)
     assert form.values["parent_choice"] == parent_id
-    assert form.values["documentpositie_action"] == "andere_kop"
+    assert 'type="radio" name="documentpositie_action" value="andere_kop"' not in response.text
     assert console.snapshot_objects(sid) == before
     # Retry uses the actual controls returned by the error response, changing
     # only the invalid strength. The selected heading must reach the command.

@@ -294,17 +294,18 @@ def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_p
     )
     console._save_objects(sid, rows)
     before = console.snapshot_objects(sid)
-    card = client.get(f'/review?document={sid}&object={obj["object_id"]}&task=repair')
+    card = client.get(f'/review?document={sid}&object={obj["object_id"]}')
     assert card.status_code == 200
-    assert "Eerst de passage herstellen" in card.text
+    assert "Passage herstellen in Vorming" in card.text
     inputs = Inputs(card.text).inputs
     approval = next(row for row in inputs if row.get("name") == "eindoordeel" and row.get("value") == "goedkeuren")
-    correction = next(row for row in inputs if row.get("name") == "eindoordeel" and row.get("value") == "goedkeuren_na_correctie")
     assert "disabled" in approval
-    assert "disabled" not in correction
+    assert 'action="/review/resolve"' not in card.text
+    owner = client.get(f'/source-selection?document={sid}&object={obj["object_id"]}&task=repair')
+    assert owner.status_code == 200 and 'action="/review/resolve"' in owner.text
     assert console.snapshot_objects(sid) == before
     inventory = client.get(f'/review?document={sid}&task=repair')
-    assert "Bekijk bronpassage" in inventory.text
+    assert "Passages herstellen" in inventory.text
 
     approval_payload = _review_payload(console, sid, target)
     approval_payload.update(suitability="ja", eindoordeel="goedkeuren")
@@ -318,6 +319,7 @@ def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_p
     assert console.snapshot_objects(sid) == before
     payload = {row["name"]: row.get("value", "") for row in Inputs(specification.text).inputs if row.get("type") == "hidden"}
     fragments = {str(ref.get("raw_object_id") or "") for ref in obj["provenance"]["source_fragments"]}
+    payload["comment"] = "Context ontbreekt."
     payload["source_unit_ids"] = [unit["unit_id"] for unit in console.source_units(snapshot_id=sid, object_id=obj["object_id"]) if unit["fragment_id"] in fragments]
     assert payload["source_unit_ids"]
     response = client.post("/review/resolve", data=payload, follow_redirects=False)

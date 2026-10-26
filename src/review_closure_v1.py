@@ -267,7 +267,7 @@ def install_review_recovery_page(app: FastAPI, console: ReviewClosureConsole) ->
                     "<article class='doc-card'>"
                     f"<p class='doc-title'>{_esc(text)}</p>"
                     "<p>Legacy herstelstatus. Dit object moet opnieuw via Review worden beoordeeld.</p>"
-                    f"<p><a href='/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}'>Open in Review</a></p>"
+                    f"<p><a href='/source-selection?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task=repair'>Herstellen in Vorming</a></p>"
                     "</article>"
                 )
         from src.operations_console_app import _nav, _page
@@ -275,7 +275,7 @@ def install_review_recovery_page(app: FastAPI, console: ReviewClosureConsole) ->
         body = (
             f"{_nav(account, 'review')}"
             "<section class='room'><h1>Review — herstelstatus</h1>"
-            "<p class='lead'>Alleen read-only herstelzicht. Canonieke correcties lopen uitsluitend via Review → correctie specificeren.</p>"
+            "<p class='lead'>Alleen read-only herstelzicht. Canonieke correcties voer je uit op Vorming.</p>"
             + ("".join(cards) or "<p class='muted'>Geen achtergebleven herstelwerk.</p>")
             + "</section>"
         )

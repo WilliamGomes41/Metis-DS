@@ -144,7 +144,9 @@ def test_graph_review_form_and_class_conversion_cannot_drop_routes(tmp_path, *, 
         client.post("/login", data={"username": "researcher.anne", "password": "anne-secret"})
         response = client.get("/review/decision-graph", params={"document": sid})
         assert response.status_code == 200, response.text
-        assert "Beslisroutes controleren" in response.text
+        assert "Beslisroutes beoordelen" in response.text
+        assert 'name="node_mode"' not in response.text
+        response = client.get("/source-selection", params={"document": sid, "task": "graph"})
         assert "Lijnbewijs" in response.text
         response = client.get("/review/policy", params={"document": sid})
         assert response.status_code == 200, response.text

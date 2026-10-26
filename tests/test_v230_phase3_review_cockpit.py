@@ -419,59 +419,25 @@ def test_step_d_documentpositie_is_gevonden_onder_not_parent_dump(tmp_path: Path
     assert "Gevonden onder:" in visible or "Gevonden onder" in visible
     assert CURRENT_HEADING in visible
     assert "Dit klopt" in visible
-    assert "Andere kop kiezen" in visible
-    assert "Koppen uit de hoofdtekst" not in primary
-    assert "data-parent-choice-list" not in primary
-    assert "Inhoudsopgave" not in visible
-    chooser = re.search(
-        r'<(details|section|div)[^>]*(data-heading-chooser|id="heading-chooser")[^>]*>.*?</\1>',
-        step,
-        flags=re.S,
-    )
-    assert chooser, "heading chooser must exist, collapsed until Andere kop"
-    chooser_html = chooser.group(0)
-    assert "hidden" in chooser.group(0)[:200].casefold() or chooser.group(0).startswith("<details")
-    assert "data-parent-choice-list" in chooser_html
-    assert 'name="parent_choice"' in chooser_html
-    assert 'type="search"' in chooser_html or 'data-heading-search' in chooser_html
-    assert "Inhoudsopgave" not in _visible_text(chooser_html)
-    assert "1. Signalering" not in chooser_html or 'data-heading-role="toc"' not in chooser_html
-    assert 'data-heading-role="toc"' not in chooser_html
-    assert 'data-heading-role="body"' in chooser_html
-    radios = re.findall(r'<input[^>]*type="radio"[^>]*name="parent_choice"[^>]*>', chooser_html)
-    links = re.findall(r'<a[^>]*href="/review\?document=', chooser_html)
-    assert radios, "select must be a distinct radio"
-    assert not links, "the production chooser keeps heading labels and radios without duplicate navigation"
-    assert 'form="relations-' not in chooser_html
+    assert "Andere kop kiezen" not in visible
+    assert "data-parent-choice-list" not in step
+    assert "data-heading-chooser" not in step
+    assert "Passage herstellen in Vorming" in card
 
 
 def test_heading_chooser_browse_does_not_silently_select(tmp_path: Path, *, production_app, production_console) -> None:
-    console, accounts, receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
-    card = _card(html, adviseert["object_id"])
-    step = _step(card, "d")
-    radio_values = re.findall(
-        r'<input[^>]*name="parent_choice"[^>]*value="([^"]+)"',
-        step,
-    )
-    assert radio_values
-    heading_id = radio_values[0]
-    client = _client(console, production_app=production_app)
-    browsed = client.get(
-        f"/review?document={receipt['snapshot_id']}&object={heading_id}"
-    ).text
-    assert f'value="{heading_id}"' not in browsed or 'checked' not in browsed.split(heading_id, 1)[0][-80:]
-    live = next(
-        obj
-        for obj in console.snapshot_objects(receipt["snapshot_id"])
-        if obj["object_id"] == adviseert["object_id"]
-    )
-    assert live.get("parent_object_id") in (None, "")
-    confirmed = [
-        row
-        for row in (live.get("confirmed_relations") or [])
-        if row.get("relation_type") in {"child", "parent"}
-    ]
-    assert confirmed == []
+    from copy import deepcopy
+    from tests.test_formation_repair_workplace import classification_system
+    console, client, _, _, sid, objects = classification_system(tmp_path, production_app=production_app, production_console=production_console)
+    obj = objects[0]
+    before = deepcopy(console.snapshot_objects(sid))
+    owner = client.get('/source-selection', params=dict(document=sid, object=obj['object_id'], task='repair', repair_kind='classification'))
+    assert owner.status_code == 200
+    radios = re.findall(r'<input[^>]*type="radio"[^>]*name="parent_choice"[^>]*>', owner.text)
+    assert radios and not any('checked' in radio for radio in radios)
+    heading = next(row for row in before if row['object_type'] == 'heading')
+    assert client.get('/review', params=dict(document=sid, object=heading['object_id'])).status_code == 200
+    assert console.snapshot_objects(sid) == before
 
 
 # ---------------------------------------------------------------------------
@@ -486,7 +452,8 @@ def test_step_e_starts_from_metis_proposal_not_only_unconfirmed(tmp_path: Path, 
     assert "Metis stelt voor:" in primary
     assert "Aanbeveling" in primary
     assert "Dit klopt" in primary
-    assert "Type wijzigen" in primary
+    assert "Type wijzigen" not in primary
+    assert 'name="confirmed_object_type"' in step
     assert primary.strip().startswith("Metis") or "Metis stelt voor" in primary
     assert not re.search(r"^nog niet bevestigd$", primary)
     select = re.search(r"<select[^>]*name=\"confirmed_object_type\"[^>]*>.*?</select>", step, flags=re.S)
@@ -1000,7 +967,7 @@ def test_dit_klopt_reveals_sterkte_before_one_save(tmp_path: Path, *, production
     card = _card(html, adviseert["object_id"])
     assert 'value="dit_klopt" checked' not in card
     source = (ROOT / "src/operations_console_app.py").read_text(encoding="utf-8")
-    stamp_fn = source[source.find("const strengthTypes") : source.find("const updateChooser")]
+    stamp_fn = source[source.find("const updateStamp") : source.find("const update =")]
     assert "dit_klopt" in stamp_fn
     assert "liveType" in stamp_fn
     assert "recommendation" in stamp_fn
