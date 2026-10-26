@@ -280,3 +280,57 @@ def test_shared_review_helpers_are_unchanged_for_other_callers(system):
     objects = console.snapshot_objects(sid)
     assert 'class="processing-diagnostics"' in _processing_diagnostics_html(objects)
     assert 'class="review-coverage"' in _coverage_panel(objects)
+
+
+def _with_last_attempt(console, monkeypatch, diagnostic):
+    original = console._envelope
+
+    def envelope(document):
+        result = dict(original(document))
+        result["processing_attempts"] = [*(result.get("processing_attempts") or []), {"diagnostic": diagnostic}]
+        return result
+    monkeypatch.setattr(console, "_envelope", envelope)
+
+
+def _blocked_step(html):
+    blocked = re.findall(r'<li class="blocked"><h3>(\d)\.', html)
+    assert len(blocked) == 1, blocked
+    return int(blocked[0])
+
+
+@pytest.mark.parametrize(("diagnostic", "step"), [
+    ({"phase": "task_plan_pinned", "checkpoints": [{"phase": "reserved"}, {"phase": "task_plan_pinned"}]}, 2),
+    ({"phase": "joint_validation_rejected", "checkpoints": [{"phase": "reserved"}, {"phase": "joint_validation_rejected"}]}, 4),
+    ({"phase": "unmapped_854", "checkpoints": [{"phase": "reserved"}, {"phase": "source_views_pinned"}, {"phase": "unmapped_854"}]}, 2),
+    ({"phase": "unmapped_854", "checkpoints": [{"phase": "unmapped_854"}]}, 1),
+])
+def test_other_failed_codes_stop_at_recorded_step_or_first_after_last_success(system, monkeypatch, diagnostic, step, *, production_app):
+    console, sid = system
+    _fixed_status(console, monkeypatch, {"state": "failed", "error_code": "source_processing_strategy_unconfigured",
+                                         "reason_code": "source_processing_strategy_unconfigured", "retry_allowed": False})
+    _with_last_attempt(console, monkeypatch, diagnostic)
+    assert _blocked_step(_page(_client(console, production_app, "uploader.854"), sid)) == step
+
+
+@pytest.mark.parametrize(("status", "icon"), [
+    ({"state": "failed", "reason_code": "source_processing_strategy_unconfigured",
+      "error_code": "source_processing_strategy_unconfigured"}, "blocked"),
+    ({"state": "running", "reason_code": "processing_attempt_in_progress"}, "running"),
+    ({"state": "succeeded"}, "info"),
+])
+def test_purple_exclamation_only_for_blocked_neutral_water_icons_otherwise(system, monkeypatch, status, icon, *, production_app):
+    console, sid = system
+    _fixed_status(console, monkeypatch, status)
+    html = _page(_client(console, production_app, "uploader.854"), sid)
+    label = re.search(r'<p class="diagnosis-label">(.*?)</p>', html, flags=re.S).group(1)
+    assert f'class="diagnosis-icon is-{icon}"' in label
+    assert ("!" in label) is (icon == "blocked")
+    assert ("<svg" in label) is (icon == "running")
+    assert not any(mark in label for mark in ("✓", "✔", "check"))
+    if icon == "info":
+        assert ">i</span>" in label
+    style = html[html.index(".diagnosis-icon"):html.index("</style>", html.index(".diagnosis-icon"))]
+    assert re.search(r"\.diagnosis-icon\.is-running \{[^}]*#45AAC7", style)
+    assert re.search(r"\.diagnosis-icon\.is-info \{[^}]*#45AAC7", style)
+    assert re.search(r"\.diagnosis-icon\.is-blocked \{[^}]*#5D3297", style)
+    assert "animation" not in style
