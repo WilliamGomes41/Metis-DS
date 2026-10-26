@@ -89,11 +89,15 @@ def test_bulk_exclusion_only_for_v1_metadata_and_category_tiles(tmp_path, *, pro
     console, sid, account = guideline_document(tmp_path, production_console=production_console)
     rows = console.snapshot_objects(sid)
     legacy, unresolved = _source_id(rows, LEGACY_TEXT), _source_id(rows, OPEN_TEXT)
+    from src.source_selection_ui_v1 import render_source_accountability
+    owner = render_source_accountability(console, account, sid)
+    form = owner[owner.index('action="/review/source-exclusions"'):owner.index('</form>', owner.index('action="/review/source-exclusions"'))]
+    assert f'value="{legacy}"' in form and unresolved not in form
     for task in ("inventory", "disposition"):
         html = _room(console, account, sid, task=task)
-        form = html[html.index('action="/review/source-exclusions"'):html.index('</form>', html.index('action="/review/source-exclusions"'))]
-        assert f'value="{legacy}"' in form and unresolved not in form
-        assert f'name="source_object_ids" value="{unresolved}"' not in html
+        assert 'action="/review/source-exclusions"' not in html
+        assert 'name="source_object_ids"' not in html
+        assert 'Bronregels gemotiveerd uitsluiten in Vorming' in html
         assert 'data-review-filter' in html and f'task=disposition">Onbeslist' in html
         tiles = re.findall(r'data-source-category="(\w+)"[^>]*><b>(\d+)</b>', html)
         assert dict(tiles) == {"unresolved": "2", "invalid_evidence": "0", "linked_context": "0",

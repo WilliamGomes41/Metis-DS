@@ -2957,6 +2957,8 @@ def _review_inventory(
     task: str,
     snapshot_revision: str = "",
     fragments=None,
+    source_only: bool = False,
+    edit_exclusions: bool = False,
 ) -> str:
     """Every current passage remains reachable; no admission or finality writes."""
     from src.source_containers_v1 import source_accountability, partition
@@ -2991,6 +2993,8 @@ def _review_inventory(
     for obj in objects:
         if obj.get("object_type") == "document":
             continue
+        if source_only and not is_source_record(obj):
+            continue
         if bindings is None:
             duty = review_duty_for(obj, review_path=review_path, bindings=None, fragments=fragments)
             route_task = ""
@@ -3007,7 +3011,7 @@ def _review_inventory(
                     route_task or followup_tasks.get(object_id) or "history")
         if task != "inventory" and category != task:
             continue
-        if is_source_record(obj) and (evidence_of(obj).get("version") == "source-accountability-v2" or projection[object_id]["human_action"] == "technical_repair"):
+        if is_source_record(obj) and (evidence_of(obj).get("version") == "source-accountability-v2" or role_of(obj) or projection[object_id]["human_action"] == "technical_repair"):
             usage = source_usage[object_id]
             kind = usage["kind"]
             label = _SOURCE_KIND_LABELS[kind]
@@ -3047,9 +3051,10 @@ def _review_inventory(
                        f'<a href="{link}">Bekijk bronpassage</a> · '
                        f'<a href="/source-selection?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}">Brongebruik bepalen of herstellen</a>')
             if evidence.get("proposed_role") in {"metadata", "structure"} and not role_of(obj):
-                metadata_items.append(f'<li data-source-record="{_esc(object_id)}"><label>'
+                selection = (f'<label>'
                     f'<input type="checkbox" name="source_object_ids" value="{_esc(object_id)}" checked>'
-                    f' Opnemen in mijn bronbesluit</label>{content}</li>')
+                    ' Opnemen in mijn bronbesluit</label>' if source_only and edit_exclusions else '')
+                metadata_items.append(f'<li data-source-record="{_esc(object_id)}">{selection}{content}</li>')
             else:
                 source_items.append(f'<li data-source-record="{_esc(object_id)}">{content}</li>')
             continue
@@ -3096,7 +3101,7 @@ def _review_inventory(
         for (label, section), group in source_groups.items():
             source_html += (f'<details data-source-group><summary>{_esc(label)} · {_esc(section)} ({len(group)} bronregels)</summary>'
                             + '<ol>' + "".join(group) + '</ol></details>')
-        if metadata_items:
+        if metadata_items and source_only and edit_exclusions:
             source_html += ('<form method="post" action="/review/source-exclusions">'
                 f'<input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">'
                 + _snapshot_revision_input(snapshot_revision)
@@ -3108,10 +3113,18 @@ def _review_inventory(
                 + '<label><input type="checkbox" name="source_checked" value="1" required>'
                 + ' Ik heb de geselecteerde bronregels gecontroleerd; zij bevatten geen op te nemen kennis.</label>'
                 + '<button type="submit">Geselecteerde bronregels gemotiveerd uitsluiten</button></form>')
+        elif metadata_items:
+            source_html += (f'<h4>Voorgestelde metadata en structuur ({len(metadata_items)})</h4><ol>'
+                            + ''.join(metadata_items) + '</ol>')
+            if not source_only:
+                source_html += (f'<p><a class="btn-secondary" href="/source-selection?document={_esc(snapshot_id)}&amp;task=disposition">'
+                                'Bronregels gemotiveerd uitsluiten in Vorming</a></p>')
         if source_items:
             source_html += (f'<h4>Brongebruik nog te bepalen ({len(source_items)})</h4><ol>'
                             + "".join(source_items) + '</ol>')
         source_html += '</section>'
+    if source_only:
+        return source_html or '<p class="review-task-empty">Er zijn geen bronregels om af te handelen.</p>'
     title = ("Kennisvoorstellen en bronverantwoording" if source_groups else "Alle passages en hun afhandeling") if task == "inventory" else labels[task]
     if task == "repair":
         title += f" ({len(items)})"
@@ -6021,7 +6034,7 @@ def create_console_app(
         confirm_source_exclusions(state, actor_id=account["account_id"], snapshot_id=snapshot_id,
             source_object_ids=source_object_ids, reason=reason, command_id=command_id,
             expected_revision=snapshot_revision)
-        return RedirectResponse(_review_location(state, snapshot_id, task="disposition"), status_code=303)
+        return RedirectResponse('/source-selection?' + urlencode({'document': snapshot_id, 'task': 'disposition'}), status_code=303)
 
     @app.post("/review/source-context")
     def review_source_context(request: Request, snapshot_id: str = Form(...), source_object_id: str = Form(...),

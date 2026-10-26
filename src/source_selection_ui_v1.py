@@ -248,6 +248,31 @@ def render_context(console, account, document, object, *, context_target='', con
         ui._broncontext_html(obj, document, object, available) + panel + '</section>')
 
 
+@source_reconstruction_scope(reuse_existing=True)
+def render_source_accountability(console, account, document):
+    """Move the existing document inventory and exclusion form as one view."""
+    from src import operations_console_app as ui
+    from src.beslisboom_path_v1 import review_path_for_klasse
+    console._require_role(account['account_id'], 'reviewer')
+    envelope = console._envelope(document)
+    if account['account_id'] not in envelope.get('named_reviewers', []):
+        raise ConsoleError('reviewer_not_named_on_snapshot')
+    objects, revision = console.snapshot_objects_and_revision(document)
+    bindings = ui._review_bindings(console, document, objects=objects)
+    panel = ui._review_inventory(document, objects,
+        review_path=review_path_for_klasse(envelope['class']), bindings=bindings,
+        reviewer_id=account['account_id'], task='inventory', snapshot_revision=revision,
+        fragments=console.review_source_fragments(document), source_only=True,
+        edit_exclusions=not console.snapshot_is_published(document))
+    overview = '/source-selection?' + urlencode({'document': document})
+    review = '/review?' + urlencode({'document': document})
+    return ui._page(ui._nav(account, 'selection') +
+        '<section class="room review-room" data-formation-accountability><h1>Vorming</h1>'
+        '<h2>Brongebruik verantwoorden</h2>'
+        '<p><a href="' + ui._esc(overview) + '">Voortgang en vormingsproblemen</a> · '
+        '<a href="' + ui._esc(review) + '">Kennisvoorstellen beoordelen in Review</a></p>' + panel + '</section>')
+
+
 def install(app, console, require, page, nav, esc):
     from src.source_processing_dispatch_v1 import install_dispatcher
     dispatcher = install_dispatcher(app, console)
@@ -255,13 +280,16 @@ def install(app, console, require, page, nav, esc):
     @app.get('/source-selection', response_class=HTMLResponse)
     def selection_get(request: Request, document: str = '', offset: int = Query(0, ge=0),
                       object: str = '', context_target: str = '', context_mode: str = '',
-                      context_page: int = 0, context_q: str = '', context_saved: str = ''):
+                      context_page: int = 0, context_q: str = '', context_saved: str = '',
+                      task: str = ''):
         with diagnostic_phase("authorization"):
             actor = require(request)
         if object:
             return render_context(console, actor, document, object, context_target=context_target,
                 context_mode=context_mode, context_page=context_page, context_q=context_q,
                 context_saved=context_saved == 'yes')
+        if task == 'disposition' and document:
+            return render_source_accountability(console, actor, document)
         # Overview owns compact progress inputs; only the chosen document loads detail.
         scoped_document = actor.get('_view_document')
         documents = ([console._envelope(scoped_document)] if scoped_document else
@@ -368,6 +396,10 @@ def install(app, console, require, page, nav, esc):
                 summary = '<p>Aantallen kandidaten en bronpassages zijn nog niet gecontroleerd. Open het document voor de actuele controles en vervolgacties.</p>'
             diagnosis_link = ('' if detail else f'<a class="btn-secondary" href="/source-selection?{esc(urlencode({"document": sid}))}#formation-problems">Vormingsproblemen</a>')
             diagnosis_link += f'<a class="btn-secondary" href="/inzicht/document?{esc(urlencode({"document": sid}))}">Bekijk diagnose in Inzicht</a>'
+            if (detail and 'reviewer' in actor.get('roles', [])
+                    and actor['account_id'] in envelope.get('named_reviewers', [])):
+                diagnosis_link += (f'<a class="btn-secondary" href="/source-selection?{esc(urlencode({"document": sid, "task": "disposition"}))}">'
+                                   'Brongebruik verantwoorden</a>')
             review = f'<a class="btn-primary" href="/review?document={esc(sid)}">Naar Review</a>' if result['review_available'] else ''
             extent = _size(result["bytes"]) if result['bytes'] is not None else 'Bestandsgrootte onbekend'
             fragment_count = envelope.get('source_fragment_count')

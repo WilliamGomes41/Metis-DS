@@ -81,7 +81,8 @@ def test_metadata_batch_preserves_unselected_condition_history_and_restart(tmp_p
     from src.operations_console_app import _render_review_index
     page = _render_review_index(command["snapshot_id"], before, "richtlijn",
         snapshot_revision=command["expected_revision"], task="inventory")
-    assert 'data-source-accountability' in page and '/review/source-exclusions' in page
+    assert 'data-source-accountability' in page and 'task=disposition' in page
+    assert 'action="/review/source-exclusions"' not in page
     assert 'data-source-record' in page and CONDITION in page
     definition = next(r for r in before if r.get("proposed_object_type") == "definition")
     assert definition["metadata"]["admission"]["gate_result"] == "allowed"
@@ -121,20 +122,73 @@ def test_source_records_cannot_be_approved_or_distributed_as_knowledge(tmp_path,
     assert "source_context_not_knowledge" in blocked[0]["errors"]
 
 
-def test_http_source_batch_requires_named_reviewer_and_explicit_confirmation(tmp_path, *, production_app, production_console):
+def test_http_source_batch_requires_named_reviewer_and_explicit_confirmation(tmp_path, monkeypatch, *, production_app, production_console):
     from fastapi.testclient import TestClient
     from src.operations_console_app import create_console_app
     state, before, command = system(tmp_path, production_console=production_console)
+    from tests.test_source_context_review_ui_v1 import Forms
+    sid = command['snapshot_id']
+    events = deepcopy(state.workflow_review_store.read_events())
+    calls = {}
+    for name in ('snapshot_objects_and_revision', 'object_review_bindings', 'review_source_fragments'):
+        original = getattr(state, name)
+        def counted(*args, _name=name, _original=original, **kwargs):
+            calls[_name] = calls.get(_name, 0) + 1
+            return _original(*args, **kwargs)
+        monkeypatch.setattr(state, name, counted)
     with TestClient(production_app(state), base_url="https://testserver") as client:
         assert client.post("/login", data={"username": "reviewer", "password": "long-test-password"},
                            follow_redirects=False).status_code == 303
-        data = {"snapshot_id": command["snapshot_id"], "source_object_ids": command["source_object_ids"],
-                "reason": command["reason"], "command_id": command["command_id"],
-                "snapshot_revision": command["expected_revision"]}
+        for task in ('inventory', 'disposition'):
+            review = client.get('/review', params={'document': sid, 'task': task})
+            assert review.status_code == 200
+            assert not any(f['attrs'].get('action') == '/review/source-exclusions' for f in Forms(review.text).forms)
+            assert 'name="source_object_ids"' not in review.text
+            assert 'Bronregels gemotiveerd uitsluiten in Vorming' in review.text
+        calls.clear()
+        client.get('/review', params={'document': sid, 'task': 'inventory'})
+        baseline = dict(calls)
+        calls.clear()
+        owner = client.get('/source-selection', params={'document': sid, 'task': 'disposition'})
+        assert owner.status_code == 200 and '<h1>Vorming</h1>' in owner.text
+        assert calls.get('snapshot_objects_and_revision') == 1
+        assert all(calls.get(name, 0) <= baseline.get(name, 0) for name in calls)
+        assert state.snapshot_objects(sid) == before
+        assert state.workflow_review_store.read_events() == events
+        form = next(f for f in Forms(owner.text).forms if f['attrs'].get('action') == '/review/source-exclusions')
+        selected = [f['value'] for f in form['inputs'] if f.get('name') == 'source_object_ids']
+        assert set(selected) == set(command['source_object_ids'])
+        data = {f['name']: f.get('value', '') for f in form['inputs'] if f.get('type') == 'hidden'}
+        data.update(source_object_ids=selected, reason=command['reason'])
+        assert data['snapshot_revision'] == command['expected_revision']
+        with monkeypatch.context() as published:
+            published.setattr(state, 'snapshot_is_published', lambda _: True)
+            frozen = client.get('/source-selection', params={'document': sid, 'task': 'disposition'})
+            assert frozen.status_code == 200
+            assert not any(f['attrs'].get('action') == '/review/source-exclusions' for f in Forms(frozen.text).forms)
+            assert 'name="source_object_ids"' not in frozen.text
+        assert client.post('/review/source-exclusions', data={**data, 'snapshot_revision': 'stale', 'source_checked': '1'}).status_code == 409
+        outsider = TestClient(client.app, base_url='https://testserver')
+        assert outsider.post('/login', data={'username': 'author', 'password': 'long-test-password'}, follow_redirects=False).status_code == 303
+        assert outsider.get('/source-selection', params={'document': sid, 'task': 'disposition'}).status_code == 403
+        assert outsider.post('/review/source-exclusions', data={**data, 'source_checked': '1'}).status_code == 403
         assert client.post("/review/source-exclusions", data=data).status_code == 400
         assert state.snapshot_objects(command["snapshot_id"]) == before
+        assert state.workflow_review_store.read_events() == events
         response = client.post("/review/source-exclusions", data={**data, "source_checked": "1"}, follow_redirects=False)
         assert response.status_code == 303, response.text
+        assert response.headers['location'].startswith('/source-selection?') and 'task=disposition' in response.headers['location']
+        refresh = client.get(response.headers['location'])
+        assert refresh.status_code == 200 and 'action="/review/source-exclusions"' not in refresh.text
+        assert 'data-source-category="reviewed"><b>2</b>' in refresh.text
+        current = state.snapshot_objects(sid)
+        assert all(row['metadata']['passage_register']['status'] == 'excluded_with_reason'
+                   for row in current if row['object_id'] in selected)
+        assert all(row in current for row in before if row['object_id'] not in selected)
+        assert client.post('/review/source-exclusions', data={**data, 'source_checked': '1'}, follow_redirects=False).status_code == 303
+        assert state.snapshot_objects(sid) == current
+        restarted = production_console(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime', processing_binder=lambda console: None)
+        assert restarted.snapshot_objects(sid) == current
 
 
 def test_native_source_batch_commit_failure_stale_worker_and_restart(recovery_postgres, tmp_path, *, production_console):
