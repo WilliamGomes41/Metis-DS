@@ -148,3 +148,41 @@ eerdere stappen: **117 gerichte tests geslaagd** (87,83 s). De browserroute
 slaagt eveneens (17,27 s). Repository-/releasepreflight, architectuurgrenzen,
 compileall en diffcontrole slagen. De volledige lokale suite en alle vijf
 CI-workflows worden opnieuw op de definitieve commit uitgevoerd.
+
+## Retrybeperking is geen mislukte verwerking
+
+De review op 719211c vond een afzonderlijke oorspronkelijke fout: de
+retryprojectie kan na een geslaagde laatste poging nog een limiet-/wachttijdreden
+dragen. Onderzoek van de hele `processing_retry_v1.status`-beslisboom bevestigt
+dat `reason_code` ook beschikbaarheid van een volgende poging beschrijft.
+De projectie en haar opslag-/budgetregels blijven ongewijzigd.
+
+De weergave moet daarom technische/retrycode behouden voor inzage, maar voor
+het primaire oordeel/tijdlijn apart uitgaan van actuele vormingsproblemen,
+vastgelegde fouten/ongelukte toestanden en toelatingsblokkades. Bij een
+geslaagde poging is een retryreden zonder fout/bronprobleem geen stopreden.
+Een echt mislukte/onderbroken/verlopen of budgetgestopte poging blijft ook
+zonder foutcode zichtbaar gestopt. Een overbodig eenmalig herstelformulier
+wordt na volledig geslaagde verwerking niet aangeboden; de bestaande guards
+voor werkelijk geblokkeerd werk blijven staan.
+
+De native GET-matrix gebruikt de echte retryprojectie met opgeslagen
+poginggeschiedenis: limiet/wachttijd × geslaagd/mislukt × wel/geen
+toelatingsblokkade × drie toegestane rollen. De vier onvolledige toestanden
+zonder code zijn aparte tegenvoorbeelden. De eerdere volledige poging op
+719211c blijft expliciet onvolledig, ongeacht de losse groene CI-browserjob.
+
+Rood vóór deze statusscheiding: **16 failed, 12 passed** (62,05 s).
+De eerste uitgebreide groene opdracht had een verkeerd testpad en voerde
+nul tests uit; zij telt niet als bewijs. Een volgende opdracht gaf vier
+onjuiste stopstapverwachtingen: de basisfixture bevatte al een opgeslagen
+fase. De proef onderscheidt nu expliciet geen fase (stap 1) en bekende
+validatie (stap 4), zonder productgedrag af te zwakken.
+
+Daarna **164 gerichte tests geslaagd** (136,96 s), inclusief de bestaande
+native retry-/herstelproeven. Twee aanvullende tegenvoorbeelden slagen
+(2,76 s): een geslaagde laatste poging met werkelijk onvolledige vorming
+blijft geblokkeerd bij stap 2/4 en behoudt de bestaande eenmalige herstelactie.
+De echte browserroute slaagt opnieuw (14,88 s). Alle preflights, compileall,
+architectuur- en diffcontrole slagen. Alleen de volledige lokale collectie en
+alle CI-workflows op de hierna vastgelegde definitieve head tellen als eindbewijs.

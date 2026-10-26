@@ -112,6 +112,7 @@ _DIAGNOSIS_FAMILY_COPY = {
 
 _DIAGNOSIS_STEPS = ("Bron ingelezen en verwerkt", "Tekst opgedeeld in taken", "Passages gemaakt",
                     "Passages gecontroleerd", "Publicatie")
+_DIAGNOSIS_UNFINISHED_STATES = frozenset({"failed", "expired", "interrupted", "incomplete_budget"})
 
 
 def _diagnosis_families(diagnostics: dict | None) -> list[tuple[str, dict]]:
@@ -166,7 +167,7 @@ def _diagnosis_active_step(diagnostic: dict) -> int:
     return 1
 
 
-def _diagnosis_steps_html(processing: dict, code: str, progress: dict, diagnostics: dict | None,
+def _diagnosis_steps_html(processing: dict, blocking_code: str, progress: dict, diagnostics: dict | None,
                           diagnostic: dict | None = None, *, admission_blocked: bool = False) -> str:
     blocked = int((diagnostics or {}).get("blocked_candidate_count") or 0)
     pending = int(progress.get("pending_task_count") or 0)
@@ -174,11 +175,11 @@ def _diagnosis_steps_html(processing: dict, code: str, progress: dict, diagnosti
     active = _diagnosis_active_step(diagnostic or {}) if running else None
     reached = {_DIAGNOSIS_PHASE_STEP.get(row.get("phase"))
                for row in (diagnostic or {}).get("checkpoints") or [] if isinstance(row, dict)}
-    if code == "source_formation_incomplete":
+    if blocking_code == "source_formation_incomplete":
         stop = 2 if pending else 4
     elif running:
         stop = None
-    elif code:
+    elif blocking_code or processing.get("state") in _DIAGNOSIS_UNFINISHED_STATES:
         stop = _diagnosis_failed_step(diagnostic or {})
     elif blocked or admission_blocked:
         stop = 4
@@ -534,6 +535,11 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
         query = escape(urlencode({"document": document}), quote=True)
         code = ("source_formation_incomplete" if processing.get("formation_incomplete")
                 else processing.get("error_code") or processing.get("reason_code") or "")
+        # Retry availability can carry a reason even after successful processing.
+        # Keep that code for inspection; it is not a processing/publication failure.
+        blocking_code = ("" if processing.get("state") == "succeeded"
+                         and not processing.get("formation_incomplete") and not processing.get("error_code") else code)
+        processing_blocked = bool(blocking_code) or processing.get("state") in _DIAGNOSIS_UNFINISHED_STATES
         controls = ""
         if processing.get("resume_allowed") or processing.get("retry_allowed"):
             controls += f'<p><a class="btn-primary" href="/source-selection?{query}">Naar Bronselectie voor Starten of Hervatten</a></p>'
@@ -541,6 +547,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
                 and (account["account_id"] in envelope.get("named_reviewers", [])
                      or account["account_id"] == envelope.get("uploader_account_id"))
                 and processing.get("reason_code") == "processing_attempt_limit_reached"
+                and processing_blocked
                 and not envelope.get("processing_recovery")):
             controls += f'''<form method="post" action="/tree/processing-recovery">
               <input type="hidden" name="snapshot_id" value="{escape(document, quote=True)}">
@@ -584,7 +591,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
               <li><a href="/inzicht/document/verwerkingsbewijs?{query}">Verwerkingsbewijs als CSV-pakket</a></li>'''
         if processing_access:
             label = ("Verwerking loopt" if processing.get("state") == "running"
-                     else "Niet publiceerbaar" if code or admission_blocked
+                     else "Niet publiceerbaar" if processing_blocked or admission_blocked
                      else "Geen blokkade vastgelegd")
             facts = []
             if progress.get("planned_task_count"):
@@ -602,14 +609,14 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
                                   ("recovery_advice", "Advies laatste poging")) if diagnostic.get(key))
             verdict = f'''<div class="diagnosis-verdict"{' data-state="blocked"' if label == "Niet publiceerbaar" else ""} role="status">
               <p class="diagnosis-label">{_diagnosis_icon(label)} {escape(label)}</p>
-              <p class="lead">{escape(ERROR_COPY.get(code, "Controleer de actuele verwerking."))}</p>
+              <p class="lead">{escape(ERROR_COPY.get(blocking_code, "Controleer de actuele verwerking."))}</p>
               <p>Een technisch geslaagde poging bewijst niet dat bronverwerking, review of publicatievoorwaarden volledig zijn afgerond.</p>
               <dl class="diagnosis-facts">{facts_html}</dl>{review_button}
               <details><summary>Technische details</summary><dl class="diagnosis-summary">
                 <dt>Status</dt><dd><code>{escape(str(processing.get("state") or "niet vastgelegd"))}</code></dd>
                 <dt>Code</dt><dd><code>{escape(str(code))}</code></dd>{attempt_rows}</dl></details></div>'''
             processing_html = (f'''<section id="verwerking" aria-labelledby="oordeel"><h2 id="oordeel">Oordeel</h2>{verdict}</section>
-          {_diagnosis_steps_html(processing, code, progress, diagnostics, diagnostic, admission_blocked=admission_blocked)}
+          {_diagnosis_steps_html(processing, blocking_code, progress, diagnostics, diagnostic, admission_blocked=admission_blocked)}
           <section id="acties"><h2>Wat er nu moet gebeuren</h2>
             {_diagnosis_actions_html(diagnostics, repair)}{controls}{pages_html}</section>''')
         else:

@@ -340,6 +340,88 @@ def test_completed_processing_verdict_agrees_with_admission_blockers(
         assert "/inzicht/document/passages?" not in html
 
 
+@pytest.mark.parametrize("username", ["reviewer.854", "researcher.854", "uploader.854"])
+@pytest.mark.parametrize("has_blockers", [False, True])
+@pytest.mark.parametrize("last_state", ["succeeded", "failed"])
+@pytest.mark.parametrize("restriction", ["limit", "cooldown"])
+def test_retry_restriction_is_not_a_publication_failure_after_success(
+        system, username, has_blockers, last_state, restriction, *, production_app):
+    from datetime import datetime, timedelta, timezone
+    console, sid = system
+    if not has_blockers:
+        _clear_admission_blocks(console, sid)
+    envelope = deepcopy(console._envelope(sid))
+    now = datetime.now(timezone.utc)
+    limit = console._processing_limits().max_attempts
+    total = limit if restriction == "limit" else 1
+    envelope["processing_attempts"] = [
+        {"attempt_id": f"pa_{index + 1:032x}", "command_id": f"retry-verdict-{index}",
+         "version": "source-reprocessing-v3", "limits": console._processing_limits().record(),
+         "expected_revision": console.objects_revision(sid),
+         "actor_id": envelope["uploader_account_id"], "source_hash": envelope["sha256"],
+         "source_version": envelope["version"], "kind": "retry",
+         "state": last_state if index == total - 1 else "failed",
+         "error_code": (None if index == total - 1 and last_state == "succeeded"
+                        else "pre_review_llm_proposal_rejected"),
+         "started_at": now.isoformat(), "finished_at": now.isoformat(),
+         "expires_at": (now + timedelta(hours=1)).isoformat(),
+         "retry_not_before": (now + timedelta(hours=1)).isoformat() if restriction == "cooldown" else None,
+         "diagnostic": {"phase": "formation_accounted" if last_state == "succeeded" else "validation_rejected"}}
+        for index in range(total)]
+    with console._reprocessing_transaction(sid):
+        console._commit_prepared_store(envelopes={sid: envelope}, snapshot_id=sid)
+    actor = next(a for a in console.list_accounts() if a["username"] == username)
+    status = console.processing_status(sid, actor_id=actor["account_id"])
+    expected_reason = "processing_attempt_limit_reached" if restriction == "limit" else "processing_retry_cooldown"
+    assert status["state"] == last_state and status["reason_code"] == expected_reason
+    assert not status["retry_allowed"]
+    html = _page(_client(console, production_app, username), sid)
+    label = re.search(r'<p class="diagnosis-label">(.*?)</p>', html, flags=re.S).group(1)
+    blocked = has_blockers or last_state == "failed"
+    assert ("Niet publiceerbaar" in label) is blocked
+    assert ("Geen blokkade vastgelegd" in label) is (not blocked)
+    if blocked:
+        assert _blocked_step(html) == 4
+    else:
+        assert '<li class="blocked">' not in html
+    if last_state == "succeeded":
+        lead = re.search(r'<div class="diagnosis-verdict".*?<p class="lead">(.*?)</p>', html, flags=re.S).group(1)
+        assert ERROR_COPY[expected_reason] not in lead
+        assert 'action="/tree/processing-recovery"' not in html
+
+
+@pytest.mark.parametrize("state", ["failed", "expired", "interrupted", "incomplete_budget"])
+@pytest.mark.parametrize("diagnostic,step", [({}, 1), ({"phase": "validation_rejected"}, 4)])
+def test_unsuccessful_stored_state_without_error_code_is_still_shown_as_stopped(
+        system, monkeypatch, state, diagnostic, step, *, production_app):
+    console, sid = system
+    _clear_admission_blocks(console, sid)
+    _fixed_status(console, monkeypatch, {"state": state})
+    _with_last_attempt(console, monkeypatch, diagnostic)
+    html = _page(_client(console, production_app, "uploader.854"), sid)
+    label = re.search(r'<p class="diagnosis-label">(.*?)</p>', html, flags=re.S).group(1)
+    assert "Niet publiceerbaar" in label
+    assert _blocked_step(html) == step
+
+
+@pytest.mark.parametrize("pending,step", [(1, 2), (0, 4)])
+def test_successful_attempt_at_retry_limit_keeps_open_formation_and_recovery_visible(
+        system, monkeypatch, pending, step, *, production_app):
+    console, sid = system
+    _clear_admission_blocks(console, sid)
+    _fixed_status(console, monkeypatch, {
+        "state": "succeeded", "reason_code": "processing_attempt_limit_reached",
+        "formation_incomplete": True,
+        "formation_progress": {"planned_task_count": 2, "terminal_task_count": 2 - pending,
+                               "pending_task_count": pending}})
+    html = _page(_client(console, production_app, "uploader.854"), sid)
+    label = re.search(r'<p class="diagnosis-label">(.*?)</p>', html, flags=re.S).group(1)
+    assert "Niet publiceerbaar" in label
+    assert _blocked_step(html) == step
+    assert ERROR_COPY["source_formation_incomplete"] in html
+    assert 'action="/tree/processing-recovery"' in html
+
+
 @pytest.mark.parametrize(("diagnostic", "active_step", "earlier_steps"), [
     ({"phase": "task_plan_pinned"}, 2, set()),
     ({"phase": "model_request"}, 2, set()),
