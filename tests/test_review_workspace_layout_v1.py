@@ -59,7 +59,9 @@ def test_workspace_preserves_task_destinations_and_passage_progress():
     projection = Projection()
     html = render(projection)
     hrefs = Links(html).hrefs
-    for task in ('structure', 'contextual', 'batch', 'disposition', 'history', 'inventory'):
+    assert '/source-selection?document=snapshot-1&task=structure' in hrefs
+    assert '/review?document=snapshot-1&task=structure' not in hrefs
+    for task in ('contextual', 'batch', 'disposition', 'history', 'inventory'):
         assert f'/review?document=snapshot-1&task={task}' in hrefs
     assert projection.calls == [('reviewer-1', 'snapshot-1')]
     assert html.count('Document &lt;voorbeeld&gt;') == 1
@@ -75,6 +77,7 @@ def test_workspace_empty_work_does_not_imply_publication_readiness():
     assert 'Geen inhoudelijke beoordeling voor jou beschikbaar.' in html
     assert 'Klaar voor publicatie' not in html
     assert '/review?document=snapshot-1&task=structure' not in Links(html).hrefs
+    assert '/source-selection?document=snapshot-1&task=structure' not in Links(html).hrefs
     assert '/review?document=snapshot-1&task=repair' in Links(html).hrefs
 
 

@@ -164,3 +164,15 @@ regressie, en 18 bestaande kaart-/bronregressies. De kaarttests onderscheiden nu
 werkelijke kennisvoorstellen van structurele koppen: kennis behoudt de expliciete
 goedkeurkeuze; koppen niet. Type-/bronweigering en de bestaande backendasserties
 blijven behouden. Geen kernelregel aangepast.
+
+De volledige GitHub-suites vonden nog afwijkingen in drie presentatie-/bewijscategorieën:
+de bestaande koppenlabeltelling was niet overgenomen, twee navigatieasserties
+verwachtte de oude Review-bestemming en de bronhergebruikproef veronderstelde
+dat ook een koppenlijst kennisbronblokken reconstrueert. Vorming gebruikt nu
+dezelfde fast_title-projectie met hetzelfde open-koppenaantal. De ongewijzigde
+bestaande tellertest slaagt. De navigatieproef controleert expliciet de ene
+eigenaarlink en de afwezigheid van de oude. De readproef gebruikt een werkelijk
+niet-leeg koppenformulier en vereist exact nul reconstructies; voor alle andere
+Review-taken blijft exact één reconstructie per request vereist. Opgeslagen
+toestand en gelijke HTML blijven gecontroleerd. De gerichte set: 64 PASS;
+de afzonderlijke structure-readproef eveneens PASS. Geen kernel-/opslagwijziging.

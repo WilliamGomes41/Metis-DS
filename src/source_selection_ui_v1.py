@@ -316,7 +316,7 @@ def render_structure(console, account, document, *, conflict=False, q='', page=1
     return ui._page(ui._nav(account, 'selection') +
         '<section class="room review-room" data-formation-structure><h1>Vorming</h1>'
         + ui._task_links('review') +
-        '<h2>Koppen controleren</h2><p>Controleer de koppen tegen de oorspronkelijke bron en bevestig je selectie als structuur.</p>'
+        '<h2>' + ui._esc(copy['fast_title']) + '</h2><p>Controleer de koppen tegen de oorspronkelijke bron en bevestig je selectie als structuur.</p>'
         '<p><a href="' + ui._esc(overview) + '">Voortgang en vormingsproblemen</a> · '
         '<a href="' + ui._esc(review) + '">Kennisvoorstellen beoordelen in Review</a></p>'
         + ui._review_conflict_html(conflict) + '<section class="review-section review-lane-fast">' + panel + '</section></section>')
