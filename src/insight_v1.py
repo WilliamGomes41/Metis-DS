@@ -162,19 +162,19 @@ def _diagnosis_active_step(diagnostic: dict) -> int:
 
 
 def _diagnosis_steps_html(processing: dict, code: str, progress: dict, diagnostics: dict | None,
-                          diagnostic: dict | None = None) -> str:
+                          diagnostic: dict | None = None, *, admission_blocked: bool = False) -> str:
     blocked = int((diagnostics or {}).get("blocked_candidate_count") or 0)
     pending = int(progress.get("pending_task_count") or 0)
     running = processing.get("state") == "running"
     active = _diagnosis_active_step(diagnostic or {}) if running else None
     if code == "source_formation_incomplete":
         stop = 2 if pending else 4
-    elif blocked:
-        stop = 4
     elif running:
         stop = None
     elif code:
         stop = _diagnosis_failed_step(diagnostic or {})
+    elif blocked or admission_blocked:
+        stop = 4
     else:
         stop = None
     items = []
@@ -503,6 +503,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
 
     @app.get("/inzicht/document", response_class=HTMLResponse)
     def document_diagnosis(request: Request, document: str = "") -> HTMLResponse:
+        from src.domain_dimensions_v1 import processing_issue_objects
         from src.operations_console_app import ERROR_COPY
         from src.processing_diagnostics_v1 import processing_diagnostics
         from src.review_interaction_v1 import review_burden_projection
@@ -552,9 +553,17 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
                               if "publisher" in roles else "")
         repair = f'/review?{query}&amp;task=repair'
         diagnostics = None
+        admission_blocked = False
+        if processing_access:
+            # Reuse the existing request-owned object reader and its captured inputs.
+            # Researchers may see the aggregate block, never reviewer-only details.
+            objects = state._read_current_objects(document)
+            if reviewer:
+                diagnostics = processing_diagnostics(objects)
+                admission_blocked = bool(diagnostics["blocked_candidate_count"])
+            else:
+                admission_blocked = bool(processing_issue_objects(objects))
         if reviewer:
-            objects = state.snapshot_objects(document)
-            diagnostics = processing_diagnostics(objects)
             burden = review_burden_projection(read_events(state._ledger_path), snapshot_id=document)
             passages = (_diagnosis_findings_html(diagnostics) + _diagnosis_coverage_html(objects)
                 + f'<details><summary>Reviewinteracties</summary><p>{int(burden["review_interactions"])} gemeten menselijke interacties voor '
@@ -568,7 +577,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
               <li><a href="/inzicht/document/verwerkingsbewijs?{query}">Verwerkingsbewijs als CSV-pakket</a></li>'''
         if processing_access:
             label = ("Verwerking loopt" if processing.get("state") == "running"
-                     else "Niet publiceerbaar" if code or (diagnostics or {}).get("blocked_candidate_count")
+                     else "Niet publiceerbaar" if code or admission_blocked
                      else "Geen blokkade vastgelegd")
             facts = []
             if progress.get("planned_task_count"):
@@ -593,7 +602,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
                 <dt>Status</dt><dd><code>{escape(str(processing.get("state") or "niet vastgelegd"))}</code></dd>
                 <dt>Code</dt><dd><code>{escape(str(code))}</code></dd>{attempt_rows}</dl></details></div>'''
             processing_html = (f'''<section id="verwerking" aria-labelledby="oordeel"><h2 id="oordeel">Oordeel</h2>{verdict}</section>
-          {_diagnosis_steps_html(processing, code, progress, diagnostics, diagnostic)}
+          {_diagnosis_steps_html(processing, code, progress, diagnostics, diagnostic, admission_blocked=admission_blocked)}
           <section id="acties"><h2>Wat er nu moet gebeuren</h2>
             {_diagnosis_actions_html(diagnostics, repair)}{controls}{pages_html}</section>''')
         else:

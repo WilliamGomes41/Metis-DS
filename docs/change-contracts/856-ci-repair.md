@@ -82,3 +82,43 @@ toetsenbordproef, zodat de gedeelde sticky header het beeld niet midden in de
 pagina bedekt. De bestaande beoordelings- en downloadcontroles blijven staan.
 Voor het definitieve bewijs wordt de inmiddels bijgewerkte main geïntegreerd;
 de volledige lokale collectie en CI draaien vervolgens op één vaste head.
+
+## Aanvullende review: onderzoeker zonder reviewerrol
+
+De review op 8dda279 wees terecht op dezelfde ontbrekende blokkade voor
+onderzoekers/uploaderaccounts. De eerdere correctie ontving alleen de
+reviewerdiagnostiek. De uitgebreide GET-matrix reproduceert dit: 2 failed,
+4 passed (7,77 s), met en zonder toelatingsblokkades voor alle drie toegestane
+rollen. De eerdere volledige runs worden daarom niet als eindbewijs gebruikt.
+
+Voor reparatie: hergebruik de bestaande requestgebonden `_read_current_objects`
+waaruit `processing_status` bij onuitgegeven werk al leest.
+`processing_issue_objects` is dezelfde pure blokkadeprojectie die
+`processing_diagnostics` in Documenten gebruikt. Gebruik voor
+het oordeel/tijdlijn alleen de booleaanse blokkade; details, aantallen, codes,
+passage-exports en ledger blijven uitsluitend bij de aangewezen reviewer.
+Geen nieuwe querydefinitie of autoriteitsregel toevoegen. De onderzoekerroute
+gebruikt nu expliciet de bestaande objectreader; requesteigendom hergebruikt
+reeds geladen invoer. Het bewijs is maximaal één objectload, geen universele
+claim van exact hetzelfde SQL-aantal bij iedere publicatietoestand.
+De GET-bewijsgrens
+wordt uitgebreid tot alle vier rollen: hoogstens één objectload, één
+objectkopie, geen ledgerread voor onderzoekers/publishers en geen mutaties.
+
+Een vastgelegde verwerkingsfout bepaalt de stopstap vóór onafhankelijke
+toelatingsblokkades; bij foutloze afgeronde verwerking blokkeren die stap 4.
+Lopende verwerking blijft de actuele fase tonen. De volledige suite en CI
+moeten op de uiteindelijke nieuwe head opnieuw afronden.
+
+Na die aanvullende correctie: **68 gerichte tests geslaagd** (87,18 s),
+waaronder alle 39 diagnosetests en de budget-/toegangsproeven voor vier rollen.
+De echte bronselectie-browserroute slaagt opnieuw (14,79 s), inclusief de
+diagnose op drie breedtes en toetsenbordbediening. Preflights, compileall,
+architectuurgrenzen en diffcontrole slagen.
+
+De eerste volledige lokale poging miste `psql` op PATH; een afzonderlijke
+SQL-proef reproduceerde dat en slaagde na herstel van het zoekpad (3,79 s).
+De daarna gestarte volledige poging op 8dda279 is gestopt vanwege de nieuwe
+inhoudelijke reviewbevinding. Beide pogingen blijven expliciet onvolledig en
+tellen niet als groen eindbewijs. De definitieve run gebruikt PostgreSQL 16
+met zijn tools op PATH en opnieuw vier geïsoleerde databases op de nieuwe head.

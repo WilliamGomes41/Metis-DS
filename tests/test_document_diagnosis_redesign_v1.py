@@ -174,14 +174,16 @@ def test_coverage_is_a_five_column_table_without_filter_or_script(system, monkey
     assert "alleen koppen met open punten" not in html.lower()
 
 
-def test_read_budget_one_objects_read_one_ledger_read_and_no_writes(system, monkeypatch, *, production_app):
+@pytest.mark.parametrize("username", ["reviewer.854", "researcher.854", "uploader.854", "publisher.854"])
+def test_read_budget_one_objects_read_one_ledger_read_and_no_writes(system, monkeypatch, username, *, production_app):
     console, sid = system
     import src.review_ledger as ledger
-    client = _client(console, production_app, "reviewer.854")
+    client = _client(console, production_app, username)
     before = (deepcopy(console.snapshot_objects(sid)), console.objects_revision(sid),
               deepcopy(console._envelope(sid)), read_events(console._ledger_path))
-    calls = {"objects": 0, "ledger": 0}
+    calls = {"objects": 0, "ledger": 0, "loads": 0}
     original_objects, original_events = console.snapshot_objects, ledger.read_events
+    original_load = console._load_objects
 
     def objects(*args, **kwargs):
         calls["objects"] += 1
@@ -190,11 +192,17 @@ def test_read_budget_one_objects_read_one_ledger_read_and_no_writes(system, monk
     def events(*args, **kwargs):
         calls["ledger"] += 1
         return original_events(*args, **kwargs)
+    def load(*args, **kwargs):
+        calls["loads"] += 1
+        return original_load(*args, **kwargs)
     monkeypatch.setattr(console, "snapshot_objects", objects)
     monkeypatch.setattr(ledger, "read_events", events)
+    monkeypatch.setattr(console, "_load_objects", load)
     html = _page(client, sid)
     assert 'class="diagnosis-verdict"' in html
     assert calls["objects"] <= 1 and calls["ledger"] <= 1, calls
+    assert calls["loads"] <= (0 if username == "publisher.854" else 1), calls
+    assert calls["ledger"] == (1 if username == "reviewer.854" else 0), calls
     monkeypatch.undo()
     assert before == (console.snapshot_objects(sid), console.objects_revision(sid),
                       console._envelope(sid), read_events(console._ledger_path))
@@ -299,28 +307,37 @@ def _blocked_step(html):
     return int(blocked[0])
 
 
+def _clear_admission_blocks(console, sid):
+    rows = console.snapshot_objects(sid)
+    for row in rows:
+        admission = (row.get("metadata") or {}).get("admission")
+        if admission:
+            admission.update(gate_result="allowed", reason_codes=[])
+            stamp_canonical_hashes(row)
+    install_fixture_history(console, sid, rows)
+
+
+@pytest.mark.parametrize("username", ["reviewer.854", "researcher.854", "uploader.854"])
 @pytest.mark.parametrize("has_blockers", [True, False])
 def test_completed_processing_verdict_agrees_with_admission_blockers(
-        system, monkeypatch, has_blockers, *, production_app):
+        system, monkeypatch, has_blockers, username, *, production_app):
     from src.knowledge_path_v1 import knowledge_publication_blockers
     console, sid = system
     if not has_blockers:
-        rows = console.snapshot_objects(sid)
-        for row in rows:
-            admission = (row.get("metadata") or {}).get("admission")
-            if admission:
-                admission.update(gate_result="allowed", reason_codes=[])
-                stamp_canonical_hashes(row)
-        install_fixture_history(console, sid, rows)
+        _clear_admission_blocks(console, sid)
     assert any("admission_blocked" in knowledge_publication_blockers(row)
                for row in console.snapshot_objects(sid)) is has_blockers
     _fixed_status(console, monkeypatch, {"state": "succeeded"})
-    html = _page(_client(console, production_app, "reviewer.854"), sid)
+    html = _page(_client(console, production_app, username), sid)
     label = re.search(r'<p class="diagnosis-label">(.*?)</p>', html, flags=re.S).group(1)
     assert ("Niet publiceerbaar" in label) is has_blockers
     assert ("Geen blokkade vastgelegd" in label) is (not has_blockers)
     if has_blockers:
         assert _blocked_step(html) == 4
+    if username != "reviewer.854":
+        for protected in (UNKNOWN, "Passages met controlepunten", "Controlepunten", "De passage is niet los te lezen"):
+            assert protected not in html
+        assert "/inzicht/document/passages?" not in html
 
 
 @pytest.mark.parametrize(("diagnostic", "active_step"), [
@@ -371,6 +388,8 @@ def test_other_failed_codes_stop_at_recorded_step_or_first_after_last_success(sy
 ])
 def test_purple_exclamation_only_for_blocked_neutral_water_icons_otherwise(system, monkeypatch, status, icon, *, production_app):
     console, sid = system
+    if icon == "info":
+        _clear_admission_blocks(console, sid)
     _fixed_status(console, monkeypatch, status)
     html = _page(_client(console, production_app, "uploader.854"), sid)
     label = re.search(r'<p class="diagnosis-label">(.*?)</p>', html, flags=re.S).group(1)
