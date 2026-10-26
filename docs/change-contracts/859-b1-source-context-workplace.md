@@ -129,3 +129,32 @@ Lokale controle op de gepubliceerde tree; exacte commit-SHA staat in de PR
 
 Native/browser/characterization-CI op de nieuwe head is de vereiste vervolgstap.
 Menselijke inhoudelijke acceptatie en gedrag in productie zijn niet vastgesteld.
+
+## Herstel van de eerste CI-run
+
+De run op `359eb2808cf3ab6fe8a5f7faf421e89df01cf176` faalde op drie
+unieke HTTP-tests, twee characterization-cases en dezelfde browserproef in
+zowel CI als source-processing-proof. De afsluitende suitejobs werden daardoor
+ook rood. De opzettelijk rode autorisatie-mutatieproef in source-processing-proof
+is geen nieuwe autorisatiefout; de normale native proeven daar slagen.
+
+Oorzaken en begrensd herstel:
+
+- Twee nieuwe negatieve HTML-asserties zagen de selector `data-review-form` in
+  het gedeelde JavaScript aan voor een echt formulier. Controleer de bestaande
+  HTML-parseruitkomst op daadwerkelijke formulieren (attribuut én action);
+  ook de positieve Review-assertie is zo aangescherpt.
+- De oudere HTTP-contextcommandproef opende de editor nog onder Review. Alleen
+  de editor-GET verhuist in deze proef naar Vorming; de command en de
+  read-only bewijscontrole op Review blijven gelijk.
+- De browser las de oude URL direct na toetsenbord-Enter. Wacht op de verwachte
+  navigatie, met dezelfde bestemming en alle bestaande UI-/opslagasserties.
+- Twee goldens misten de tweede broncontextcaller: `Bronbesluit bekijken of
+  wijzigen`. Pas uitsluitend die href aan naar de bestaande Vorming-pagina.
+
+De werkelijke `_page`-renderer is geïsoleerd uitgevoerd: de oude substringtest
+faalt ondanks nul reviewformulieren; de formulierparser slaagt en detecteert een
+bewust toegevoegd concurrerend reviewformulier. Dit bewijst de assertiereparatie,
+geen native HTTP-/PG-acceptatie. Lokaal blijven pytest/psycopg/PG16 ontbreken;
+GitHub moet alle oorspronkelijke rode proeven op de herstelhead opnieuw uitvoeren.
+Geen productcode, domeinregel, guard, writer of opslag gewijzigd voor dit herstel.

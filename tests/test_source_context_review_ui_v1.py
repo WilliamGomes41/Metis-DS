@@ -72,7 +72,8 @@ def test_review_exposes_context_evidence_but_only_formation_can_edit(tmp_path, *
         assert 'Broncontext vastleggen of aanpassen in Vorming' in page.text
     review = client.get('/review', params={'document': sid, 'object': target['object_id']})
     assert 'data-confirmed-source-context' in review.text and 'DOEN' in review.text
-    assert 'data-review-form' in review.text
+    assert any('data-review-form' in form['attrs'] and form['attrs'].get('action') == '/review'
+               for form in Forms(review.text).forms)
     old = client.get('/review', params={'document': sid, 'object': source['object_id'],
         'context_target': target['object_id'], 'context_mode': 'source',
         'context_page': 2, 'context_q': 'DOEN'}, follow_redirects=False)
@@ -80,7 +81,9 @@ def test_review_exposes_context_evidence_but_only_formation_can_edit(tmp_path, *
     assert 'context_page=2' in old.headers['location'] and 'context_q=DOEN' in old.headers['location']
     owner = client.get(old.headers['location'])
     assert owner.status_code == 200 and '<h1>Vorming</h1>' in owner.text
-    assert _link_form(owner) and 'data-review-form' not in owner.text
+    assert _link_form(owner)
+    assert not any('data-review-form' in form['attrs'] or form['attrs'].get('action') == '/review'
+                   for form in Forms(owner.text).forms)
     outsider = _client(state, researcher['username'], 'anne-secret', production_app=production_app)
     denied = outsider.get(old.headers['location'])
     assert denied.status_code in {400, 403}
@@ -99,7 +102,8 @@ def test_passage_first_navigation_preserves_existing_targets_and_reopens_reviews
     assert 'Context toevoegen uit de bron' in page.text
     assert 'Bronrol en contextkoppeling' not in page.text
     assert 'data-source-context-form' not in page.text
-    assert 'data-review-form' not in page.text
+    assert not any('data-review-form' in form['attrs'] or form['attrs'].get('action') == '/review'
+                   for form in Forms(page.text).forms)
     assert '<h1>Vorming</h1>' in page.text
     Forms(page.text)  # Reject browser-invalid nested forms.
     label_page = client.get('/source-selection', params={'document': sid, 'object': source['object_id'], 'context_target': target['object_id']})

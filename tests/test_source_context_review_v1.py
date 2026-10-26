@@ -118,7 +118,7 @@ def test_context_http_projection_and_command(tmp_path, *, production_app, produc
     state, _, reviewer, source, target, command = _system(tmp_path, production_console=production_console)
     client = TestClient(production_app(state), headers={"Origin": "https://testserver"})
     assert client.post('/login', data={'username': reviewer['username'], 'password': 'bert-secret'}, follow_redirects=False).status_code == 303
-    before = client.get('/review', params={'document': command['snapshot_id'], 'object': source['object_id']})
+    before = client.get('/source-selection', params={'document': command['snapshot_id'], 'object': source['object_id']})
     assert 'Bij welke passage hoort dit label?' in before.text
     result = client.post('/review/source-context', data={'snapshot_id': command['snapshot_id'],
         'source_object_id': source['object_id'], 'role': 'label', 'target_object_ids': [target['object_id']],

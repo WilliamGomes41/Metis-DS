@@ -41,7 +41,10 @@ const assert = require('node:assert/strict');
     assert.equal(await page.locator('form[action="/review/source-context"]').count(), 0);
     assert.equal(await page.locator('[data-context-picker]').count(), 0);
     await page.getByRole('link', {name: 'Broncontext vastleggen of aanpassen in Vorming'}).focus();
-    await page.keyboard.press('Enter');
+    await Promise.all([
+      page.waitForURL(url => url.pathname === '/source-selection'),
+      page.keyboard.press('Enter'),
+    ]);
     assert.equal(new URL(page.url()).pathname, '/source-selection');
     assert.equal(await page.locator('[data-review-form]').count(), 0);
     await page.locator('[data-context-picker] > summary').click();
