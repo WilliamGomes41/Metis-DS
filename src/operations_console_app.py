@@ -3596,6 +3596,13 @@ def _render_review_card(
             if confirmed else
             f'Huidige indeling: <b>{_esc(proposed_label)}</b>. Dit type is nog niet door jou bevestigd.'
         )
+    # Legacy POST drafts survive conflicts without restoring an editable correction entrance.
+    correction_draft = (
+        '<label>Niet opgeslagen correctie (alleen lezen)'
+        '<textarea name="proposed_correction" readonly data-unsaved-review-draft>' +
+        _esc(draft['proposed_correction']) + '</textarea></label>'
+        if draft.get('proposed_correction') else ''
+    )
     return f"""
                 <p><a class="btn-secondary" href="{_review_location(console, snapshot_id, task=task)}">← Terug naar taken</a></p>
                 <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
@@ -3682,6 +3689,7 @@ def _render_review_card(
                         <label for="comment-{_esc(obj["object_id"])}">Toelichting (verplicht)</label>
                         <textarea id="comment-{_esc(obj["object_id"])}" name="comment">{html.escape(draft.get("comment", ""), quote=True)}</textarea>
                       </div>
+                      {correction_draft}
                       <button class="btn-primary" type="submit" data-submit-review>Review opslaan en volgende</button>
                     </section>
                   </form>

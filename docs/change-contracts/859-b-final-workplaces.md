@@ -46,6 +46,9 @@ Behoud directe Python-/HTTP-callers, probes en runtime-overrides. `StructuredRep
 blijft werken voor oude/niet-UI-aanroepers; zijn ongeschreven submission wordt alleen
 in de ene Vorming-presentatie getoond. Historische repair-GETs navigeren/verklaren;
 zij schrijven niets. Alle normale links/werkbord-/probleemcallers wijzen naar de eigenaar.
+Legacy Review-POSTs behouden bij een conflict hun ingediende correctietekst als
+alleen-lezen, escaped formulierveld. Daardoor blijft een retry zonder gegevensverlies
+mogelijk zonder de verwijderde bewerkbare correctie-ingang terug te brengen.
 
 Niet elke bronselectie is bounded: bestaande merge/support-keuzes vereisen hun
 documentset; bronselectie gebruikt de bestaande geverifieerde catalogus. Laad alleen

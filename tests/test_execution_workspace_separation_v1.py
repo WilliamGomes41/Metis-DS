@@ -108,7 +108,12 @@ def test_review_exposes_source_and_explicit_choices_without_embedded_manual(tmp_
     assert 'Een definitie legt een begrip uit' not in page.text
     assert 'why-selected' not in page.text
     radios = [a for tag, a in surface.tags if tag == 'input' and a.get('name') in {'documentpositie_action', 'type_action'}]
-    assert len(radios) == 4
+    assert len(radios) == 2
+    assert all(a["value"] == "dit_klopt" for a in radios)
+    assert not any(tag == "select" and a.get("name") in {"confirmed_object_type", "parent_choice"}
+                   for tag, a in surface.tags)
+    assert not any(a.get("name") == "proposed_correction" for _, a in surface.tags)
+    assert any(a.get("href", "").startswith("/source-selection?") for _, a in surface.tags)
     assert all('checked' not in a for a in radios)
     assert len([a for tag, a in surface.tags if tag == 'button' and 'data-submit-review' in a]) == 1
     assert '<summary>Broncontext' not in page.text
