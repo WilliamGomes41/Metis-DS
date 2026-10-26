@@ -157,3 +157,24 @@ Dat is geen reproductie van de afwijkende runtimefixture. De bestaande strenge
 browserassertie rapporteert daarom voortaan stadium, breedte en de concrete
 overlopende DOM-elementen. Layoutoorzaak en browserherstel zijn op dit moment
 nog niet bewezen; de vervolguitvoering wordt in de PR vastgelegd.
+
+## Vastgestelde layoutoorzaak en herstel
+
+De tussentijdse run op `48b92e327716b9e2d3c2e635a7aadda54c01defd` wijst
+exact één overlopend element aan: de kennisvoorstel-anchor `review-row-title`
+in Review-inventory. Op 390 px is die anchor in CI 601 px breed. De globale
+titelstijl gebruikt nowrap; de bestaande wrapregel voor review-section bereikt
+de inventaris niet. De korte titel uit de golden maskeerde die situatie.
+
+Met dezelfde lange titel als CI in de bestaande inventarismarkup is de lokale
+Chromium-assertie rood op de oude stylesheet: 533 px inhoud bij 390 px viewport.
+Na de beperkte regel `.review-passage-inventory .review-row-title` met normal
+white-space en overflow-wrap anywhere is diezelfde assertie groen op 390 en
+1440 px. De fontmetrics verschillen per omgeving; beide tonen dezelfde nowrap-
+fout. Geen overflow hidden, afkappen of afgezwakte breedteassertie toegevoegd.
+
+De 32 bestaande HTML-goldens krijgen uitsluitend de nieuwe contenthash van de
+stylesheet in hun bestaande asset-URL. Geen andere JSON-velden veranderen.
+De concrete DOM-diagnose blijft bij de browserassertie, zodat een terugval de
+precieze rij en breedte meldt. Volledige native/browser/CI-acceptatie van de
+herstelhead en exacte SHA worden na afloop in de PR vastgelegd.

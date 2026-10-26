@@ -1049,6 +1049,11 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
+.review-passage-inventory .review-row-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .review-row-status {
   flex: 0 0 auto;
   color: var(--muted);
