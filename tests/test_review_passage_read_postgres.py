@@ -75,12 +75,12 @@ def test_context_picker_pages_preserve_access_without_loading_all_payloads(revie
         return original(snapshot_id, ids)
 
     monkeypatch.setattr(console.workflow_document_store, 'review_object_histories', selected)
-    page = client.get('/review', params={'document': sid, 'object': obj['object_id']})
+    page = client.get('/source-selection', params={'document': sid, 'object': obj['object_id']})
     assert page.status_code == 200 and len(set(loaded)) <= 26
     assert '59 teksten' in page.text and 'Volgende' in page.text
     assert 'Begrip 59 is' not in page.text
     loaded.clear()
-    last = client.get('/review', params={'document': sid, 'object': obj['object_id'], 'context_page': 3})
+    last = client.get('/source-selection', params={'document': sid, 'object': obj['object_id'], 'context_page': 3})
     assert last.status_code == 200 and 'Begrip 59 is' in last.text
     assert len(set(loaded)) <= 26
     choices, total = console.workflow_document_store.review_choice_ids(

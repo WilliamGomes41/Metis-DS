@@ -114,7 +114,7 @@ def collect(console, *, actor_id, snapshot_id):
         actions = []
         if obj:
             actions.append({'label': 'Brongebruik bepalen of herstellen' if is_source_record(obj) else 'Kandidaat herstellen',
-                'url': _url('/review', snapshot_id, object=oid,
+                'url': _url('/source-selection' if is_source_record(obj) else '/review', snapshot_id, object=oid,
                             task='disposition' if is_source_record(obj) else 'repair')})
         else:
             # Source dispositions use the current materialised source register,
@@ -125,7 +125,7 @@ def collect(console, *, actor_id, snapshot_id):
                     and max(a.get('start', 0), b.get('start', 0)) < min(a.get('end', 0), b.get('end', 0))
                     for a in spans for b in source_spans):
                     actions.append({'label': 'Bronbereik bekijken en behandelen',
-                        'url': _url('/review', snapshot_id, object=source['object_id'], task='disposition')})
+                        'url': _url('/source-selection', snapshot_id, object=source['object_id'], task='disposition')})
         actions.append({'label': 'Diagnose en herstelvoorwaarden', 'url': _url('/inzicht/document', snapshot_id)})
         problems[pid] = {'problem_id': pid, 'kind': kind, **explain(reason), 'spans': spans,
                          'object_id': oid, 'page': page, 'actions': actions,
