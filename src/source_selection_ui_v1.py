@@ -405,7 +405,9 @@ def install(app, console, require, page, nav, esc):
             panel = ui._review_inventory(document, objects, review_path=review_path_for_klasse(envelope['class']),
                 bindings=ui._review_bindings(console, document, objects=objects), reviewer_id=actor['account_id'],
                 task='repair', fragments=console.review_source_fragments(document))
-            return page(nav(actor, 'selection') + '<section class="room"><h1>Vorming</h1><h2>Passages herstellen</h2>' + panel + '</section>')
+            diagnosis = '/inzicht/document?' + urlencode(dict(document=document))
+            return page(nav(actor, 'selection') + '<section class="room"><h1>Vorming</h1><h2>Passages herstellen</h2>' + panel +
+                '<p><a href="' + esc(diagnosis) + '">Documentdiagnose en bewijs bekijken</a></p></section>')
         if task == 'continuation' and object:
             return render_continuation(console, actor, document, object,
                 return_task=return_task, saved=continuation_saved == 'yes')

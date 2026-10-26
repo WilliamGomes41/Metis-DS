@@ -133,9 +133,12 @@ def test_exports_and_technical_repair_preserve_document_authorization(tmp_path, 
     assert "Documentdiagnose" in technical.text
     assert "Reviewinteracties" in technical.text
     redirect = client.get("/review", params={"document": snapshot, "task": "repair"}, follow_redirects=False)
-    assert redirect.status_code == 200
-    assert "Passages corrigeren" in redirect.text
-    assert "Diagnostiek en brondekking" not in redirect.text
+    assert redirect.status_code == 303
+    assert redirect.headers['location'].startswith('/source-selection?')
+    owner = client.get(redirect.headers['location'])
+    assert owner.status_code == 200 and "Vorming" in owner.text
+    assert "Passages corrigeren" in owner.text
+    assert "Diagnostiek en brondekking" not in owner.text
     _login(client, "publisher.carla")
     assert client.get("/settings/technical/exports").status_code == 200
     publisher_diagnosis = client.get("/inzicht/document", params={"document": snapshot})

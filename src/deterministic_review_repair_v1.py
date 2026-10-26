@@ -921,8 +921,11 @@ def render_repair(console, request: Request, submission: dict[str, Any], *, repa
     def chrome(body):
         return ui._page(ui._nav(account, 'selection') + '<section class="room" data-formation-repair>' + body + '</section>')
     from src.source_accountability_v1 import is_source_record
-    if is_source_record(focal):
-        return chrome(body + '<p>Dit is een bronregel, geen kennisvoorstel. <a href="' + _esc('/source-selection?' + urlencode(dict(document=sid, object=oid))) + '">Brongebruik bepalen of bronbewijs herstellen in Vorming</a>.</p>')
+    hint = ui.source_label_hint(focal)
+    if is_source_record(focal) or ui.role_of(focal) or hint:
+        if hint:
+            body += '<p data-source-label-hint>' + _esc(hint['label']) + '</p>'
+        return chrome(body + '<p>Controleer het brongebruik op de bijbehorende werkplek: <a href="' + _esc('/source-selection?' + urlencode(dict(document=sid, object=oid))) + '">Brongebruik bepalen of bronbewijs herstellen in Vorming</a>.</p>')
     if console.snapshot_is_published(sid):
         return chrome(body + '<p>Deze gepubliceerde werkversie is alleen te lezen.</p>')
     if kind == REPAIR_CLASSIFICATION and not inputs.source_available:
