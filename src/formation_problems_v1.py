@@ -19,6 +19,27 @@ def _url(path, sid, **query):
     return path + '?' + urlencode({'document': sid, **query})
 
 
+def _source_excerpt(spans, blocks):
+    """Display only literal, bounded slices of the verified stored source."""
+    if not spans_are_exact(spans):
+        return None
+    located = []
+    for span in spans:
+        found = blocks.get(span['block_id'])
+        if not found or not 0 <= span['start'] < span['end'] <= len(found[1]['text']):
+            return None
+        located.append((found[0], span['start'], span, found[1]))
+    located.sort(key=lambda row: row[:2])
+    quotes, headings = [], []
+    for _, _, span, block in located:
+        literal = block['text'][span['start']:span['end']]
+        quotes.append({'text': literal[:480], 'truncated': len(literal) > 480})
+        heading = block.get('heading') or next(reversed(block.get('section_path') or []), '')
+        if heading and heading not in headings:
+            headings.append(heading)
+    return {'quotes': quotes, 'location': ' · '.join(headings), 'order': list(located[0][:2])}
+
+
 def collect(console, *, actor_id, snapshot_id):
     from src.source_selection_v1 import authorize
     from src.source_preparation_context_v1 import stored_extraction
@@ -28,6 +49,9 @@ def collect(console, *, actor_id, snapshot_id):
     objects = console._read_current_objects(snapshot_id)
     bindings = console.object_review_bindings(snapshot_id, objects=objects)
     fragments = stored_extraction(envelope)
+    from src.semantic_passage_v1 import semantic_source_blocks
+    source_blocks = {block['block_id']: (index, block)
+                     for index, block in enumerate(semantic_source_blocks(fragments or []))}
     processing = console.processing_status(snapshot_id, actor_id=actor_id)
     replay = envelope.get('semantic_replay') or {}
     pending = unresolved_rejections(envelope, objects=objects, bindings=bindings, fragments=fragments)
@@ -41,7 +65,6 @@ def collect(console, *, actor_id, snapshot_id):
         # successful calls. Never promote diagnostics to candidates.
         from src.workflows.formation_task_store_v1 import FormationTaskStore
         from src.bounded_formation_v1 import _merge_task_proposals, _durable_targets
-        from src.semantic_passage_v1 import semantic_source_blocks
         store = FormationTaskStore(console.workflow_document_store)
         data = store.resolve_input(reference, expected_snapshot_id=snapshot_id)
         blocks = semantic_source_blocks(data['fragments'])
@@ -102,7 +125,8 @@ def collect(console, *, actor_id, snapshot_id):
                         'url': _url('/review', snapshot_id, object=source['object_id'], task='disposition')})
         actions.append({'label': 'Diagnose en herstelvoorwaarden', 'url': _url('/inzicht/document', snapshot_id)})
         problems[pid] = {'problem_id': pid, 'kind': kind, **explain(reason), 'spans': spans,
-                         'object_id': oid, 'page': page, 'actions': actions}
+                         'object_id': oid, 'page': page, 'actions': actions,
+                         'source_excerpt': _source_excerpt(spans, source_blocks)}
 
     for row in pending:
         add(row.get('kind') or 'formation', row.get('reason_code') or 'source_formation_incomplete', row.get('spans') or [], page=row.get('page'))

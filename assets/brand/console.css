@@ -1905,7 +1905,7 @@ html[data-theme="dark"] .care-owl-pupil { fill: #0b1b34; }
    home tiles are not touched. */
 .topbar { gap: 18px 24px; }
 
-/* The links never break inside the row: the account text gives way first. */
+/* Desktop links stay together; wrapped navigation also accommodates enlarged text. */
 .rooms { flex: 1 1 auto; flex-wrap: nowrap; align-items: center; gap: 2px; }
 .rooms form { margin: 0; }
 
@@ -1955,6 +1955,7 @@ html[data-theme="dark"] .theme-icon-sun { display: block; }
 @media (max-width: 1359px) {
   .topbar { flex-wrap: wrap; }
   .rooms { order: 3; flex-basis: 100%; flex-wrap: wrap; margin-left: -10px; }
+  .rooms a, .rooms button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
   .theme-toggle { margin-left: auto; }
   .who { margin-left: 0; }
 }
@@ -1965,6 +1966,8 @@ html[data-theme="dark"] .theme-icon-sun { display: block; }
 }
 
 @media (max-width: 560px) {
+  .metis-brand { max-width: 100%; min-width: 0; }
+  .brand-copy { min-width: 0; overflow-wrap: anywhere; }
   .who { text-align: left; }
 }
 
@@ -2544,4 +2547,51 @@ html[data-theme="dark"] mark.broncontext-marked { color: #1f2933; }
 @media (max-height: 480px) {
   .care-companion[data-open="1"] .care-toggle { display: none; }
   .care-companion[data-open="1"] .care-panel { max-height: calc(100dvh - var(--care-offset) - 1rem); }
+}
+
+/* Vormingsproblemen: source first, one next action, supporting detail on demand. */
+.formation-room { overflow-wrap: anywhere; }
+.formation-header h2 { margin: 0; color: var(--text); font-size: 1.25rem; }
+.formation-header p { margin: .35rem 0 0; }
+.formation-intro { max-width: 70ch; margin: 1rem 0 .5rem; }
+.formation-navigation { display: flex; flex-wrap: wrap; gap: 0 1.5rem; margin-bottom: 1rem; }
+.formation-navigation a, .formation-next a, .formation-documents a {
+  display: inline-flex; align-items: center; min-height: 2.75rem;
+  text-underline-offset: .18em;
+}
+.formation-recovery {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem 2rem;
+  padding: 1rem 1.25rem; margin: 0 0 1.75rem; background: var(--surface-soft);
+}
+.formation-recovery p { margin: 0; max-width: 64ch; }
+.formation-recovery h3 { margin: 0 0 .5rem; }
+.formation-recovery form { margin: 0; flex-shrink: 0; }
+.formation-findings > h2 { margin: 0 0 .4rem; color: var(--text); font-size: 1.25rem; }
+.formation-findings > p { margin-top: 0; max-width: 72ch; }
+.formation-item { border-top: 1px solid var(--line); padding: 1.5rem 0; }
+.formation-item h3 { margin: 0 0 .65rem; color: var(--muted); font-size: .9375rem; font-weight: 600; }
+.formation-quote { margin: 0 0 1rem; padding: 0; max-width: 70ch; }
+.formation-quote p { margin: 0; color: var(--text); font-size: 1.125rem; line-height: 1.6; white-space: pre-wrap; }
+.formation-reason { max-width: 72ch; margin: .75rem 0; color: var(--muted); line-height: 1.6; }
+.formation-reason strong { color: var(--text); font-weight: 600; }
+.formation-next { margin: .5rem 0; font-weight: 600; }
+.formation-related, .formation-technical { max-width: 72ch; }
+.formation-related summary, .formation-technical summary {
+  min-height: 2.75rem; padding: .65rem 0; cursor: pointer;
+}
+.formation-technical { color: var(--muted); font-size: .9375rem; }
+.formation-technical code { overflow-wrap: anywhere; color: var(--text); }
+.formation-related summary:focus-visible, .formation-technical summary:focus-visible {
+  outline: 3px solid var(--paars); outline-offset: 3px;
+}
+.formation-unlocated, .formation-publication { max-width: 72ch; color: var(--muted); }
+.formation-empty { padding: 1.25rem 0; max-width: 70ch; }
+.formation-empty h2 { color: var(--text); font-size: 1.25rem; }
+.formation-documents { list-style: none; padding: 0; margin: 1rem 0; max-width: 70ch; }
+.formation-documents li { border-top: 1px solid var(--line); padding: .5rem 0; }
+@media (max-width: 640px) {
+  .formation-recovery { flex-direction: column; align-items: stretch; padding: 1rem; }
+  .formation-recovery button { width: 100%; }
+  .formation-item { padding: 1.25rem 0; }
+  .formation-item, .formation-publication { padding-inline-end: 3.5rem; }
 }

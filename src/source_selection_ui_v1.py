@@ -33,6 +33,126 @@ def _size(count):
     return f"{value:.1f}\u00a0{unit}".replace(".", ",")
 
 
+def _formation_groups(rows):
+    """Group only known identical source ranges; never infer unknown scope."""
+    grouped = {}
+    for row in rows:
+        key = (tuple((s['block_id'], s['start'], s['end']) for s in row['spans'])
+               if row.get('source_excerpt') else row['problem_id'])
+        grouped.setdefault(key, []).append(row)
+    return sorted(grouped.values(), key=lambda group: (
+        (group[0].get('source_excerpt') or {}).get('order', [10**9, 0]), group[0]['problem_id']))
+
+
+def _formation_problem_html(group, esc):
+    first = group[0]
+    excerpt = first.get('source_excerpt')
+    title = (excerpt.get('location') or 'Bronfragment') if excerpt else (
+        'Pagina ' + str(first['page']) if first.get('page') is not None else 'Bronstuk nog niet vastgesteld')
+    body = '<article class="formation-item" id="problem-' + first['problem_id'] + '">'
+    body += ''.join('<span id="problem-' + row['problem_id'] + '"></span>' for row in group[1:])
+    body += '<h3>' + esc(title) + '</h3>'
+    if excerpt:
+        for quote in excerpt['quotes']:
+            body += '<blockquote class="formation-quote"><p>' + esc(quote['text']) + '</p></blockquote>'
+            if quote['truncated']:
+                body += '<p class="muted">Dit is een fragment. Open het bronstuk om de volledige tekst te lezen.</p>'
+    else:
+        body += '<p class="formation-unlocated">Er is nog geen exact bronfragment beschikbaar bij deze melding.</p>'
+
+    def reason(row):
+        copy = {
+            'semantic_evidence_literal_not_found': 'Metis kon het bewijs bij het voorstel niet terugvinden in dit bronstuk.',
+            'uncertain_source_role': 'Voor deze tekst moet nog worden bepaald hoe hij wordt gebruikt.',
+        }.get(row['code'], row['expected_condition'] or 'Bekijk de herstelvoorwaarden om te bepalen wat er nodig is.')
+        return '<p class="formation-reason"><strong>' + esc(row['title']) + '</strong><br>' + esc(copy) + '</p>'
+
+    body += reason(first)
+    if len(group) > 1:
+        n = len(group) - 1
+        body += '<details class="formation-related"><summary>' + str(n) + (
+            ' andere melding bij dit bronstuk' if n == 1 else ' andere meldingen bij dit bronstuk') + '</summary>'
+        body += ''.join(reason(row) for row in group[1:]) + '</details>'
+    actions = {}
+    for row in group:
+        for action in row['actions']:
+            actions.setdefault(action['url'], action)
+    direct = [a for a in actions.values() if not a['url'].startswith('/inzicht/')]
+    direct.sort(key=lambda a: 'task=repair' not in a['url'])
+    labels = {'Kandidaat herstellen': 'Herstel het voorstel',
+              'Bronbereik bekijken en behandelen': 'Bekijk en behandel dit bronstuk',
+              'Brongebruik bepalen of herstellen': 'Bekijk en behandel dit bronstuk',
+              'Diagnose en herstelvoorwaarden': 'Bekijk de herstelvoorwaarden'}
+    primary = direct[0] if direct else next(iter(actions.values()), None)
+    if primary:
+        body += '<p class="formation-next"><a href="' + esc(primary['url']) + '">' + esc(
+            labels.get(primary['label'], primary['label'])) + '</a></p>'
+    if len(direct) > 1:
+        body += '<details class="formation-related"><summary>Andere handelingen</summary><ul>'
+        body += ''.join('<li><a href="' + esc(a['url']) + '">' + esc(labels.get(a['label'], a['label'])) +
+                        '</a></li>' for a in direct[1:]) + '</ul></details>'
+    body += '<details class="formation-technical"><summary>Technische details</summary>'
+    for row in group:
+        spans = ', '.join(str(s['block_id']) + ' [' + str(s['start']) + '–' + str(s['end']) + ')' for s in row['spans'])
+        body += '<p><strong>' + esc(row['title']) + '</strong><br>Controlecode: <code>' + esc(
+            row['code'] or 'onbekend') + '</code><br>Bronbereik: ' + esc(spans or 'nog niet exact vastgesteld') + '</p>'
+    body += ''.join('<p><a href="' + esc(a['url']) + '">Diagnose en herstelvoorwaarden</a></p>'
+                    for a in actions.values() if a['url'].startswith('/inzicht/') and a != primary)
+    return body + '</details></article>'
+
+
+def _formation_problems_html(report, *, offset, revision, esc, work_revision_url=None):
+    sid = report['snapshot_id']
+    status = report['processing']
+    query = {'document': sid}
+    rows = report['problems']
+    groups = _formation_groups(rows)
+    recovery = ''
+    body = '<header class="formation-header"><h2>' + esc(report['title']) + '</h2>'
+    body += '<p class="muted">Bronversie ' + esc(report['version']) + '</p></header>'
+    body += '<p class="formation-intro">Bekijk de bronstukken die nog aandacht nodig hebben.</p>'
+    body += '<nav class="formation-navigation" aria-label="Verder met dit document"><a href="/review?' + esc(
+        urlencode(query)) + '">Naar Review</a><a href="/source-selection?' + esc(urlencode(query)) + '">Naar Bronselectie</a></nav>'
+    if status.get('resume_allowed') or status.get('retry_allowed'):
+        label = 'Open werk opnieuw verwerken' if status.get('resume_allowed') else 'Bronverwerking starten'
+        hint = ('Metis kan het open werk opnieuw proberen. Geldige voorstellen blijven bewaard.'
+                if status.get('resume_allowed') else 'Start de bronverwerking om te bepalen welke tekst naar Review kan.')
+        recovery = '<section class="formation-recovery" aria-label="Vervolgstap"><p>' + hint + '</p>'
+        recovery += ('<form method="post" action="/source-selection/start">'
+                 '<input type="hidden" name="document" value="' + esc(sid) + '">'
+                 '<input type="hidden" name="command_id" value="' + uuid.uuid4().hex + '">'
+                 '<input type="hidden" name="expected_revision" value="' + esc(revision) + '">'
+                 '<button class="btn-primary">' + label + '</button></form></section>')
+    elif status.get('state') == 'running':
+        body += '<section class="formation-recovery"><h3>Metis verwerkt de bron</h3><p>Je kunt andere kamers openen. De verwerking loopt door.</p></section>'
+    elif status.get('formation_incomplete'):
+        body += '<p class="formation-recovery">Opnieuw verwerken is nu niet beschikbaar. Gebruik de handelingen bij de bronstukken hieronder. Menselijke beoordelingen blijven beschermd.</p>'
+        if work_revision_url:
+            body += '<p><a href="' + esc(work_revision_url) + '">Nieuwe werkrevisie voorbereiden</a></p>'
+    if rows:
+        located = sum(bool(group[0].get('source_excerpt')) for group in groups)
+        unknown = len(groups) - located
+        body += '<section class="formation-findings" aria-labelledby="formation-findings-title"><h2 id="formation-findings-title">Te behandelen</h2>'
+        count = str(located) + (' bronstuk' if located == 1 else ' bronstukken') if located else ''
+        if unknown:
+            count += (' · ' if count else '') + str(unknown) + (' melding zonder exact bronfragment' if unknown == 1 else ' meldingen zonder exact bronfragment')
+        if located:
+            count += ' · ' + str(len(rows)) + (' melding' if len(rows) == 1 else ' meldingen')
+        body += '<p class="muted">' + count + '</p>'
+        body += ''.join(_formation_problem_html(group, esc) for group in groups[offset:offset + 100])
+        body += '<p class="formation-publication">Geldige voorstellen kun je alvast beoordelen in Review. Open bronproblemen blijven publicatie blokkeren.</p></section>'
+        for label, position in [('Vorige bronstukken', max(0, offset - 100)), ('Volgende bronstukken', offset + 100)]:
+            if label.startswith('Vorige') and offset or label.startswith('Volgende') and offset + 100 < len(groups):
+                body += '<p><a href="?' + esc(urlencode({**query, 'offset': position})) + '">' + label + '</a></p>'
+    elif status.get('state') == 'running':
+        body += '<section class="formation-empty"><h2>Nog geen meldingen</h2><p>Bronstukken die aandacht nodig hebben verschijnen hier zodra ze zijn vastgesteld.</p></section>'
+    elif not status.get('activated'):
+        body += '<section class="formation-empty"><h2>Nog geen verwerkingsresultaat</h2><p>Na bronverwerking zie je hier welke bronstukken aandacht nodig hebben.</p></section>'
+    else:
+        body += '<section class="formation-empty"><h2>Geen open vormingsproblemen</h2><p>Je kunt verder in Review. Voor publicatie blijven de overige review- en publicatievoorwaarden gelden.</p></section>'
+    return body + recovery
+
+
 def _estimate(estimate):
     """One short paragraph: the range, or that there is none yet, then its basis and sample count."""
     if estimate["range_seconds"] is None:
@@ -226,45 +346,22 @@ def install(app, console, require, page, nav, esc):
         if document:
             report = collect(console, actor_id=actor['account_id'], snapshot_id=document)
             status = report['processing']
-            query = {'document': document}
-            body = '<h2>' + esc(report['title']) + '</h2><p>Bronversie ' + esc(report['version']) + '.</p>'
-            body += '<p>Een afgewezen voorstel is geen inhoudelijke reviewtaak. Open bronproblemen blijven publicatie blokkeren totdat de relevante controle slaagt.</p>'
-            body += '<p><a href="/review?' + esc(urlencode(query)) + '">Naar Review</a> · <a href="/source-selection?' + esc(urlencode(query)) + '">Naar Bronselectie</a></p>'
-            if status.get('resume_allowed') or status.get('retry_allowed'):
-                label = 'Open bronwerk hervatten' if status.get('resume_allowed') else 'Bronverwerking starten'
-                body += ('<form method="post" action="/source-selection/start">'
-                    '<input type="hidden" name="document" value="' + esc(document) + '">'
-                    '<input type="hidden" name="command_id" value="' + uuid.uuid4().hex + '">'
-                    '<input type="hidden" name="expected_revision" value="' + esc(console.objects_revision(document)) + '">'
-                    '<button class="btn-primary">' + label + '</button></form>')
-            elif status.get('state') == 'running':
-                body += '<p>De verwerking loopt door. Je kunt andere kamers openen zonder de verwerking te onderbreken.</p>'
-            elif status.get('formation_incomplete'):
-                body += '<p>Modelherstel is nu niet beschikbaar. Gebruik de bron- of kandidaatreparatie hieronder. Na menselijke wijzigingen blijft herextractie beschermd; een nieuwe werkrevisie heeft eigen reviewbewijs.</p>'
-                if 'researcher' in actor['roles'] and actor['account_id'] in console._envelope(document).get('named_reviewers', []):
-                    body += '<p><a href="/review/policy?' + esc(urlencode(query)) + '">Nieuwe werkrevisie voorbereiden</a></p>'
-            rows = report['problems']
-            body += '<p>' + str(len(rows)) + ' actuele vormingsproblemen.</p>'
-            if not rows:
-                body += '<p>Geen actuele vormingsproblemen gevonden. De overige review- en publicatievoorwaarden blijven gelden.</p>'
-            for row in rows[offset:offset + 100]:
-                spans = ', '.join(str(s.get('block_id')) + ' [' + str(s.get('start')) + '–' + str(s.get('end')) + ')' for s in row['spans'])
-                if row.get('page') is not None:
-                    spans = 'pagina ' + str(row['page'])
-                body += '<article class="doc-card" id="problem-' + row['problem_id'] + '"><h3>' + esc(row['title']) + '</h3>'
-                body += '<p>' + esc(row['expected_condition'] or 'Controleer het bronbewijs en de bestaande herstelvoorwaarden.') + '</p>'
-                body += '<p>Controlecode: ' + esc(row['code'] or 'onbekend') + '. Bronbereik: ' + esc(spans or 'nog niet exact vastgesteld') + '.</p>'
-                body += ''.join('<p><a href="' + esc(action['url']) + '">' + esc(action['label']) + '</a></p>' for action in row['actions']) + '</article>'
-            for label, position in [('Vorige problemen', max(0, offset - 100)), ('Volgende problemen', offset + 100)]:
-                if label.startswith('Vorige') and offset or label.startswith('Volgende') and offset + 100 < len(rows):
-                    body += '<p><a href="?' + esc(urlencode({**query, 'offset': position})) + '">' + label + '</a></p>'
+            can_process = status.get('resume_allowed') or status.get('retry_allowed')
+            work_revision_url = None
+            if (not can_process and status.get('state') != 'running' and status.get('formation_incomplete') and 'researcher' in actor['roles']
+                    and actor['account_id'] in console._envelope(document).get('named_reviewers', [])):
+                work_revision_url = '/review/policy?' + urlencode({'document': document})
+            body = _formation_problems_html(report, offset=offset,
+                revision=console.objects_revision(document) if can_process else '', esc=esc, work_revision_url=work_revision_url)
         else:
             documents = ([console._envelope(scoped)] if scoped else
                          console.source_selection_documents(actor_id=actor['account_id']))
-            body = '<p>Kies een document om actuele bronproblemen en bestaande herstelacties te openen.</p>'
-            body += ''.join('<article class="doc-card"><h2><a href="/formation-problems?' +
-                esc(urlencode({'document': row['snapshot_id']})) + '">' + esc(row['title']) + '</a></h2></article>' for row in documents)
-        return HTMLResponse(page(nav(actor, 'formation') + '<section class="room" id="formation-problems" style="overflow-wrap:anywhere"><h1>Vormingsproblemen</h1>' + body + '</section>'),
+            body = '<p class="formation-intro">Kies een document. Daarna zie je welke bronstukken aandacht vragen en wat je kunt doen.</p>'
+            body += '<ul class="formation-documents">' + ''.join('<li><a href="/formation-problems?' +
+                esc(urlencode({'document': row['snapshot_id']})) + '">' + esc(row['title']) + '</a></li>' for row in documents) + '</ul>'
+            if not documents:
+                body += '<p>Er zijn nog geen documenten voor je beschikbaar. Zodra een document beschikbaar is, vind je het hier.</p>'
+        return HTMLResponse(page(nav(actor, 'formation') + '<section class="room formation-room" id="formation-problems"><h1>Vormingsproblemen</h1>' + body + '</section>'),
                             headers={'Cache-Control': 'no-store'})
 
     @app.get('/inzicht/document/verwerkingsspoor')
