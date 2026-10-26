@@ -32,7 +32,13 @@ const fs = require('fs');
   if (!(await page.locator('[role=status]').allTextContents()).some(t=>t.includes('nog niet gestart'))) throw Error('receipt auto-started');
   await page.screenshot({path:output+'/received.png',fullPage:true});
   await page.getByRole('link',{name:'Bekijk diagnose in Inzicht',exact:true}).click();
-  await page.getByRole('heading',{name:'Verwerking',exact:true}).waitFor();
+  await page.getByRole('heading',{name:'Oordeel',exact:true}).waitFor();
+  const diagnosisURL = new URL(page.url());
+  if (diagnosisURL.pathname!=='/inzicht/document' || diagnosisURL.searchParams.get('document')!==sid)
+    throw Error('diagnosis lost selected source '+page.url());
+  await page.locator('.diagnosis-verdict[role=status]').waitFor();
+  if ((await page.locator('.diagnosis-facts dd').last().innerText()).trim()!=='0')
+    throw Error('diagnosis started processing the received source');
   await page.getByRole('link',{name:'Blokkade en bewijs per verwerkingspoging onderzoeken',exact:true}).click();
   await page.getByRole('heading',{name:'Blokkade en bewijs',exact:true}).waitFor();
   // Use the browser's authenticated fetch: its localhost Secure-cookie handling
@@ -76,9 +82,30 @@ const fs = require('fs');
   await page.waitForURL(url => url.pathname === '/review' && url.searchParams.get('document')===sid);
   await page.getByRole('heading',{name:'Review',exact:true}).waitFor();
   await page.screenshot({path:output+'/review.png',fullPage:true});
+  await page.goto(base+'/inzicht/document?document='+encodeURIComponent(sid));
+  await page.getByRole('heading',{name:'Oordeel',exact:true}).waitFor();
+  await page.getByRole('heading',{name:'Wat Metis met dit document deed',exact:true}).waitFor();
+  const technical = page.locator('.diagnosis-verdict details');
+  await technical.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  if (!await technical.evaluate(node=>node.open)) throw Error('diagnosis keyboard disclosure did not open');
+  await page.keyboard.press('Enter');
+  if (await technical.evaluate(node=>node.open)) throw Error('diagnosis keyboard disclosure did not close');
+  fs.mkdirSync(output+'/diagnosis',{recursive:true});
+  for (const width of [320,390,1280]) {
+    await page.setViewportSize({width,height:1000});
+    const layout=await page.evaluate(()=>({width:innerWidth,scrollWidth:document.documentElement.scrollWidth,
+      smallTargets:[...document.querySelectorAll('.document-diagnosis a,.document-diagnosis summary,.document-diagnosis button')]
+        .filter(node=>node.getBoundingClientRect().height>0 && node.getBoundingClientRect().height<44)
+        .map(node=>({text:node.textContent,height:node.getBoundingClientRect().height}))}));
+    if (layout.scrollWidth>layout.width || layout.smallTargets.length)
+      throw Error('diagnosis layout failed: '+JSON.stringify(layout));
+    await page.screenshot({path:output+'/diagnosis/'+width+'.png',fullPage:true});
+  }
   if (errors.length) throw Error('script errors '+JSON.stringify(errors));
   fs.writeFileSync(output+'/browser-result.json',JSON.stringify({layout:titles,selected:sid,
     receiptDidNotStart:true,explicitStart:true,reviewOpened:true,unassignedUploaderDirectedToTrajectory:true,namedReviewerEnteredReview:true,
-    blockageOpenedBeforeProcessing:true,blockageDownloadReadOnly:true,blockageMobileOverflow:false,mobileOverflow:false,pageErrors:errors},null,2));
+    blockageOpenedBeforeProcessing:true,blockageDownloadReadOnly:true,blockageMobileOverflow:false,mobileOverflow:false,
+    diagnosisViewports:[320,390,1280],diagnosisKeyboardDisclosure:true,pageErrors:errors},null,2));
   await browser.close();
 })().catch(e=>{console.error(e);process.exit(1)});

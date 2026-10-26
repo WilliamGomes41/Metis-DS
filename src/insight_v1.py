@@ -150,11 +150,23 @@ def _diagnosis_failed_step(diagnostic: dict) -> int:
     return min(max(reached) + 1, len(_DIAGNOSIS_STEPS)) if reached else 1
 
 
+def _diagnosis_active_step(diagnostic: dict) -> int:
+    """Current recorded phase, otherwise the most recent known checkpoint."""
+    phase = diagnostic.get("phase")
+    if phase in _DIAGNOSIS_PHASE_STEP:
+        return _DIAGNOSIS_PHASE_STEP[phase]
+    for row in reversed(diagnostic.get("checkpoints") or []):
+        if isinstance(row, dict) and row.get("phase") in _DIAGNOSIS_PHASE_STEP:
+            return _DIAGNOSIS_PHASE_STEP[row["phase"]]
+    return 1
+
+
 def _diagnosis_steps_html(processing: dict, code: str, progress: dict, diagnostics: dict | None,
                           diagnostic: dict | None = None) -> str:
     blocked = int((diagnostics or {}).get("blocked_candidate_count") or 0)
     pending = int(progress.get("pending_task_count") or 0)
     running = processing.get("state") == "running"
+    active = _diagnosis_active_step(diagnostic or {}) if running else None
     if code == "source_formation_incomplete":
         stop = 2 if pending else 4
     elif blocked:
@@ -176,7 +188,12 @@ def _diagnosis_steps_html(processing: dict, code: str, progress: dict, diagnosti
                       'Een controlepunt is geen inhoudelijk oordeel: een reviewer beslist.'
                       if diagnostics is not None else 'De uitkomst per passage is zichtbaar voor de aangewezen reviewer.')
         if running:
-            status, css = ("Bezig", "") if number == 1 else ("Wacht op stap 1", "waiting")
+            if number < active:
+                status, css = "Eerder bereikt", ""
+            elif number == active:
+                status, css = "Bezig", ""
+            else:
+                status, css = f"Wacht op stap {active}", "waiting"
         elif stop is None:
             status, css = ("Geen blokkade vastgelegd", "") if number == 5 else ("Klaar", "")
         elif number < stop:
@@ -551,7 +568,8 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
               <li><a href="/inzicht/document/verwerkingsbewijs?{query}">Verwerkingsbewijs als CSV-pakket</a></li>'''
         if processing_access:
             label = ("Verwerking loopt" if processing.get("state") == "running"
-                     else "Niet publiceerbaar" if code else "Geen blokkade vastgelegd")
+                     else "Niet publiceerbaar" if code or (diagnostics or {}).get("blocked_candidate_count")
+                     else "Geen blokkade vastgelegd")
             facts = []
             if progress.get("planned_task_count"):
                 facts.append(("Vormingstaken klaar", f'{int(progress.get("terminal_task_count") or 0)}/{int(progress["planned_task_count"])}'))

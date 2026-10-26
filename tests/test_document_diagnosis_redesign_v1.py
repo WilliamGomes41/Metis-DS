@@ -6,6 +6,7 @@ Same data, same authorization and the same reads as before; only presentation.
 # release-control-evidence: toegang
 # release-control-evidence: kwaliteit
 # release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from __future__ import annotations
 
@@ -296,6 +297,56 @@ def _blocked_step(html):
     blocked = re.findall(r'<li class="blocked"><h3>(\d)\.', html)
     assert len(blocked) == 1, blocked
     return int(blocked[0])
+
+
+@pytest.mark.parametrize("has_blockers", [True, False])
+def test_completed_processing_verdict_agrees_with_admission_blockers(
+        system, monkeypatch, has_blockers, *, production_app):
+    from src.knowledge_path_v1 import knowledge_publication_blockers
+    console, sid = system
+    if not has_blockers:
+        rows = console.snapshot_objects(sid)
+        for row in rows:
+            admission = (row.get("metadata") or {}).get("admission")
+            if admission:
+                admission.update(gate_result="allowed", reason_codes=[])
+                stamp_canonical_hashes(row)
+        install_fixture_history(console, sid, rows)
+    assert any("admission_blocked" in knowledge_publication_blockers(row)
+               for row in console.snapshot_objects(sid)) is has_blockers
+    _fixed_status(console, monkeypatch, {"state": "succeeded"})
+    html = _page(_client(console, production_app, "reviewer.854"), sid)
+    label = re.search(r'<p class="diagnosis-label">(.*?)</p>', html, flags=re.S).group(1)
+    assert ("Niet publiceerbaar" in label) is has_blockers
+    assert ("Geen blokkade vastgelegd" in label) is (not has_blockers)
+    if has_blockers:
+        assert _blocked_step(html) == 4
+
+
+@pytest.mark.parametrize(("diagnostic", "active_step"), [
+    ({"phase": "task_plan_pinned"}, 2),
+    ({"phase": "model_request"}, 2),
+    ({"phase": "worker_handover"}, 2),
+    ({"phase": "reserved", "checkpoints": [{"phase": "task_plan_pinned"}]}, 1),
+    ({"phase": "unknown", "checkpoints": [{"phase": "reserved"}, {"phase": "model_request"}]}, 2),
+    ({"checkpoints": [{"phase": "model_request"}, {"phase": "reserved"}]}, 1),
+    ({"phase": "unknown", "checkpoints": [{"phase": "unknown"}]}, 1),
+])
+def test_running_timeline_follows_current_phase_or_latest_known_checkpoint(
+        system, monkeypatch, diagnostic, active_step, *, production_app):
+    console, sid = system
+    _fixed_status(console, monkeypatch, {"state": "running", "reason_code": "processing_attempt_in_progress"})
+    _with_last_attempt(console, monkeypatch, diagnostic)
+    html = _page(_client(console, production_app, "reviewer.854"), sid)
+    steps = re.search(r'<ol class="diagnosis-steps">(.*?)</ol>', html, flags=re.S).group(1)
+    rows = re.findall(r'<li[^>]*>(.*?)</li>', steps, flags=re.S)
+    assert len(rows) == 5
+    for number, row in enumerate(rows, start=1):
+        status = re.search(r'<p class="diagnosis-status">(.*?)</p>', row).group(1)
+        assert status == ("Eerder bereikt" if number < active_step else "Bezig" if number == active_step
+                          else f"Wacht op stap {active_step}")
+    assert 'class="blocked"' not in steps
+    assert "Verwerking loopt" in html
 
 
 @pytest.mark.parametrize(("diagnostic", "step"), [
