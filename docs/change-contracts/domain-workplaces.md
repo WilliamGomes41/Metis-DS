@@ -343,8 +343,8 @@ stil als inhoudsreview voorgesteld. Er is geen impliciete uitrolautorisatie.
 ## Scrap en daadwerkelijke verificatie van PR 1
 
 Ground en Sketch zijn uitgevoerd op de genoemde basis; Agree volgt de expliciete
-#858-opdracht; Implement levert dit bestand. Scrap: einddiff moet uitsluitend dit
-bestand bevatten. Er zijn geen vervangen productbranches/imports/forms in deze
+#858-opdracht; Implement levert dit bestand met één gerichte referentiecontrole
+in `tests/test_domain_workplaces_contract.py`. Er zijn geen vervangen productbranches/imports/forms in deze
 PR; voor iedere latere verplaatsing staat het verwijdermoment hierboven. Herontwerp
 alleen als een tweede authority/route of gewijzigde review-/herstelovergang nodig
 blijkt; C1 is daarvan de nu aangetroffen concrete waarschuwing.
@@ -359,6 +359,11 @@ preflight PASS, release-control-preflight PASS (nog geen changed paths),
 `python -m compileall -q src` geslaagd en architecture-boundaries PASS.
 Deze artefactchecks moeten op de uiteindelijke documentcommit opnieuw worden
 uitgevoerd en met de exacte head-SHA in de PR worden gerapporteerd.
+De eerste release-controlcheck met de documentdiff blokkeerde terecht op ontbrekend
+gewijzigd testbewijs voor scope/belofte, slop en releasebewijs. De gerichte
+artefactcontrole toetst de bestaande bronpaden/symbolen en letterlijke POST-routes
+zonder productimports of mutaties; de bijbehorende markers verwijzen naar die
+concrete controle. Dit voegt geen product- of governanceregel toe.
 
 **Geblokkeerd lokaal:** `bash scripts/test_postgres.sh` faalde op ontbrekende
 `psycopg`; PostgreSQL 16-binaries zijn ook niet aanwezig. Daarna faalde
