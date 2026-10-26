@@ -40,6 +40,7 @@ de schermindeling passend te maken.
 | object_ids | Bestaande structure-projectie → batchcommand | Alleen expliciete selectie; kernel hercontroleert gehele set. Geen nieuwe kandidaat. |
 | snapshot_revision | Bestaande snapshotread → expected_revision | Bestaande objectset-CAS. Stale geeft bestaande 409 en verse Vorming-weergave, geen write. |
 | interaction_id | Bestaande tijdelijke formulier-ID → build_review_interaction_evidence | Bestaand auditbewijs, geen opgeslagen UI-cursor of nieuwe commandstore. |
+| q / page | Bestaande Review-lijst → Vorming GET → Review-teruglink | Alleen tijdelijke navigatiecontext. Zowel actuele dashboardlinks als historische bookmarks behouden zoekterm/pagina; geen opslag of commandwijziging. |
 | Actuele rechten/publicatie | Account/envelope/runtime → command | Op mutatie opnieuw gecontroleerd; GET verleent geen bevoegdheid. |
 
 Domain entity/aggregate: bestaande mutable WorkingRevision/objectset en reviewbindings.
@@ -150,3 +151,16 @@ de uiteindelijke native uitvoering is dus wel lokaal mogelijk en niet als skip
 gepresenteerd. Oude ongetrackte debug-testkopieën zijn buiten de repo bewaard
 na een collectieconflict. De gewone volledige run is vervolgens voor de bestaande
 complete vierpartities-uitvoering afgebroken; de afgebroken run telt niet als PASS.
+
+De brede lokale collectie vond vervolgens verlies van q/page bij verplaatsing
+vanuit een gefilterde Review-lijst. De bestaande regressie
+test_task_back_link_keeps_selected_document_and_search bleef ongewijzigd:
+de GET-overdracht en teruglink bewaren nu de bestaande tijdelijke filters.
+De door die fout achterhaalde lokale partities zijn gestopt; zij gelden niet
+als complete groene suite. De gerichte regressies worden opnieuw uitgevoerd
+en de volledige definitieve head wordt in GitHub geverifieerd.
+Na dit navigatieherstel slagen 59 gerichte proeven, inclusief die ongewijzigde
+regressie, en 18 bestaande kaart-/bronregressies. De kaarttests onderscheiden nu
+werkelijke kennisvoorstellen van structurele koppen: kennis behoudt de expliciete
+goedkeurkeuze; koppen niet. Type-/bronweigering en de bestaande backendasserties
+blijven behouden. Geen kernelregel aangepast.

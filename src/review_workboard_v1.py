@@ -713,8 +713,9 @@ def _workboard_page(
         for element_id in ("review-task-title", "review-next-title", "review-progress-title"):
             dashboard = dashboard.replace(element_id, element_id + "-" + _esc(chosen))
         context = _esc(urlencode({"q": q, "page": page}))
-        dashboard = dashboard.replace(f'/review?document={_esc(chosen)}&amp;task=',
-                                      f'/review?document={_esc(chosen)}&amp;{context}&amp;task=')
+        for workplace in ('/review', '/source-selection'):
+            dashboard = dashboard.replace(f'{workplace}?document={_esc(chosen)}&amp;task=',
+                                          f'{workplace}?document={_esc(chosen)}&amp;{context}&amp;task=')
         opened = " open" if chosen == snapshot_id else ""
         cards.append(f'''<details class="doc-card document-disclosure review-document-card"{opened}>
           <summary>{console_ui._document_summary({**envelope, "meaningful_status": item["meaningful_status"]})}
@@ -918,7 +919,10 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             return RedirectResponse('/review/trajectory?' + urlencode({'document': document}), status_code=303)
         if (selected and not object.strip() and chosen_task == 'structure'
                 and review_path_for_klasse(selected['class']) != 'boom'):
-            return RedirectResponse('/source-selection?' + urlencode({'document': document, 'task': 'structure'}), status_code=303)
+            params = {'document': document, 'task': 'structure'}
+            if q or page != 1:
+                params.update(q=q, page=page)
+            return RedirectResponse('/source-selection?' + urlencode(params), status_code=303)
         chosen = document.strip()
         chosen_task = normalize_review_task(task)
         if not chosen or (not object.strip() and not chosen_task):

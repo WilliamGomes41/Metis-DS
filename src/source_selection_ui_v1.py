@@ -275,7 +275,7 @@ def render_source_accountability(console, account, document):
 
 
 @source_reconstruction_scope(reuse_existing=True)
-def render_structure(console, account, document, *, conflict=False):
+def render_structure(console, account, document, *, conflict=False, q='', page=1):
     """One presentation owner for the existing prose heading confirmation."""
     from src import operations_console_app as ui
     from src.beslisboom_path_v1 import review_path_for_klasse
@@ -309,7 +309,10 @@ def render_structure(console, account, document, *, conflict=False):
     if not editable:
         panel = '<p class="banner warn">Deze gepubliceerde werkversie is alleen te lezen.</p>' + panel
     overview = '/source-selection?' + urlencode({'document': document})
-    review = '/review?' + urlencode({'document': document})
+    review_params = {'document': document}
+    if q or page != 1:
+        review_params.update(q=q, page=page)
+    review = '/review?' + urlencode(review_params)
     return ui._page(ui._nav(account, 'selection') +
         '<section class="room review-room" data-formation-structure><h1>Vorming</h1>'
         + ui._task_links('review') +
@@ -327,11 +330,11 @@ def install(app, console, require, page, nav, esc):
     def selection_get(request: Request, document: str = '', offset: int = Query(0, ge=0),
                       object: str = '', context_target: str = '', context_mode: str = '',
                       context_page: int = 0, context_q: str = '', context_saved: str = '',
-                      task: str = ''):
+                      task: str = '', q: str = '', review_page: int = Query(1, alias='page')):
         with diagnostic_phase("authorization"):
             actor = require(request)
         if task == 'structure' and document:
-            return render_structure(console, actor, document)
+            return render_structure(console, actor, document, q=q, page=review_page)
         if object:
             return render_context(console, actor, document, object, context_target=context_target,
                 context_mode=context_mode, context_page=context_page, context_q=context_q,

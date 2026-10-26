@@ -215,7 +215,7 @@ def test_review_card_uses_clear_labels_and_requires_an_explicit_decision(tmp_pat
     target = next(
         obj
         for obj in console.snapshot_objects(receipt["snapshot_id"])
-        if obj["object_type"] != "document"
+        if obj["object_type"] not in {"document", "heading"}
     )
     html = _review_page(console, receipt["snapshot_id"], target["object_id"], production_app=production_app)
     card = next(block for block in _cards(html) if target["object_id"] in block)
@@ -352,8 +352,8 @@ def test_type_and_approve_still_disabled_when_passage_cannot_open(tmp_path: Path
         html.find(f'id="type-{target["object_id"]}"') : html.find(f'id="decision-{target["object_id"]}"') + 800
     ]
     assert "disabled" in type_block
-    approve_line = next(line for line in card.split("<") if 'value="goedkeuren"' in line)
-    assert "disabled" in approve_line
+    assert 'data-heading-owner' in card
+    assert 'name="eindoordeel" value="goedkeuren"' not in card
     assert 'value="goedkeuren_na_correctie"' in html
     assert 'value="afwijzen"' in html
 

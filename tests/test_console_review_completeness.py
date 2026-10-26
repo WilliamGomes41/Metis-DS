@@ -383,8 +383,8 @@ def test_type_and_approve_disabled_when_open_source_passage_fails(tmp_path: Path
     html = client.get(f"/review?document={receipt['snapshot_id']}&object={target['object_id']}").text
     type_block = html[html.find(f'id="type-{target["object_id"]}"') : html.find(f'id="decision-{target["object_id"]}"') + 800]
     assert "disabled" in type_block
-    approve_line = next(line for line in html.split("<") if 'value="goedkeuren"' in line)
-    assert "disabled" in approve_line
+    assert 'data-heading-owner' in html
+    assert 'name="eindoordeel" value="goedkeuren"' not in html
     assert 'value="goedkeuren_na_correctie"' in html
     assert 'value="afwijzen"' in html
 
