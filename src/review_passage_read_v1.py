@@ -2,7 +2,6 @@
 from dataclasses import dataclass
 import base64
 import json
-import re
 
 from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
@@ -46,7 +45,11 @@ def resolve_review_revision(console, snapshot_id, revision):
         if not isinstance(payload, list) or len(payload) != 2:
             raise ValueError()
         identity, generation = payload
-        if identity != snapshot_id or not isinstance(generation, str) or not re.fullmatch(r'\d+:\d+', generation):
+        if identity != snapshot_id or not isinstance(generation, str):
+            raise ValueError()
+        # Scan each counter once; form input must not enter a backtracking regex.
+        document_revision, _, object_generation = generation.partition(':')
+        if not document_revision.isdecimal() or not object_generation.isdecimal():
             raise ValueError()
         store = console.workflow_document_store
         with workflow_read_transaction(store):

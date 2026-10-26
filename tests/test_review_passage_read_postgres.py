@@ -88,7 +88,12 @@ def test_context_picker_pages_preserve_access_without_loading_all_payloads(revie
     assert choices == [] and total == 59
 
 
-@pytest.mark.parametrize('case', ['current', 'stale', 'wrong_document', 'malformed', 'role_removed'])
+@pytest.mark.parametrize('case', [
+    'current', 'stale', 'wrong_document', 'malformed', 'role_removed',
+    'empty_generation', 'missing_separator', 'empty_document_revision',
+    'empty_object_generation', 'extra_separator', 'non_decimal_generation',
+    'trailing_newline', 'non_string_generation', 'oversized_token',
+])
 def test_compact_form_uses_the_real_review_command_and_refuses_invalid_context(review_client, case):
     import base64
     import json
@@ -112,6 +117,21 @@ def test_compact_form_uses_the_real_review_command_and_refuses_invalid_context(r
         revision = 'review-generation-v1:' + base64.urlsafe_b64encode(json.dumps(payload).encode()).decode()
     elif case == 'malformed':
         revision = 'review-generation-v1:not-json'
+    elif case in {
+        'empty_generation', 'missing_separator', 'empty_document_revision',
+        'empty_object_generation', 'extra_separator', 'non_decimal_generation',
+        'trailing_newline', 'non_string_generation', 'oversized_token',
+    }:
+        generation = {
+            'empty_generation': '', 'missing_separator': '0' * 160,
+            'empty_document_revision': ':1', 'empty_object_generation': '1:',
+            'extra_separator': '1:2:3',
+            'non_decimal_generation': '0' * 160 + ':0' + '0' * 80 + '!',
+            'trailing_newline': '1:2\n', 'non_string_generation': 12,
+            'oversized_token': '0' * 600 + ':1',
+        }[case]
+        revision = 'review-generation-v1:' + base64.urlsafe_b64encode(
+            json.dumps([sid, generation]).encode()).decode()
     elif case == 'role_removed':
         reviewer_id = console._envelope(sid)['named_reviewers'][0]
         console.workflow_identity_store.update_roles(reviewer_id, ['researcher'])

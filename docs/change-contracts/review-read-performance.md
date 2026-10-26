@@ -261,3 +261,29 @@ mutatie van `REPEATABLE READ` naar `READ COMMITTED` maakt de native raceproef
 aantoonbaar rood op gemengde generaties. De normale code is groen. Het meetverslag
 bevat de oorzaken en controles; volledige CI op de reparatiecommit moet nog
 afzonderlijk worden bevestigd.
+
+## CodeQL-opvolging — 26 oktober 2026
+
+De afzonderlijke code-scanningcheck `121324805859` op head `345a455` faalde
+met `Polynomial regular expression used on uncontrolled data` in de
+formuliergeneratieparser. De eerdere rapportage controleerde alleen de vijf
+pull-requestworkflows en miste deze beveiligingscheck; die groene workflows
+betekenden dus niet dat alle PR-checks groen waren.
+
+De parser splitst nu eenmaal op `:` en controleert beide niet-lege tellers met
+`isdecimal()`, zonder regex. De bestaande grens van 512 tekens, documentidentiteit,
+exacte generatievergelijking, herhaalbare leessnapshot en command-CAS blijven
+behouden. Dit is een lokale Class B-reparatie binnen het bestaande change
+contract, zonder nieuwe authority, writes of wijziging van lifecycle-invarianten.
+
+De native HTTP-proef is uitgebreid met ontbrekende/extra scheidingstekens,
+lege tellers, lange ongeldige cijferrijen, een afsluitende newline, een verkeerd
+JSON-type en een te lange token. Elk ongeldig formulier moet HTTP 409 geven
+zonder object- of revieweventmutatie; het bestaande geldige formulier moet
+blijven slagen. Een afzonderlijke differentiële controle op 137.257 korte
+invoeren, inclusief Unicode-cijfers, vindt dezelfde grammatica als voorheen.
+Lokaal slagen 40 proeven zonder skips: passagelezen, echte Review-POST,
+formuliergebonden revisie, concurrent schrijven en architectuurinvarianten.
+Ook repository-/releasepreflight, compileall, architectuurgrenzen en de
+change-contractvalidatie slagen. De definitieve CodeQL-check en nieuwe CI worden afzonderlijk gecontroleerd;
+lokale functionele tests vervangen geen code-scanningresultaat.
