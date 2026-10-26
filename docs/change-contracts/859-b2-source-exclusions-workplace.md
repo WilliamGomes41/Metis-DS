@@ -178,3 +178,12 @@ stylesheet in hun bestaande asset-URL. Geen andere JSON-velden veranderen.
 De concrete DOM-diagnose blijft bij de browserassertie, zodat een terugval de
 precieze rij en breedte meldt. Volledige native/browser/CI-acceptatie van de
 herstelhead en exacte SHA worden na afloop in de PR vastgelegd.
+
+De volledige suite op herstelhead `e09eced2cbdac99c3929778d0567926a463d0f97`
+bewijst het HTTP-conflictcontract en alle acht browserproeven. Zij vindt ook
+twee bestaande shared-layout-hashasserties: de titelregel stond vóór de
+Task-only execution/evidence-grens. Dezelfde regel is daarom naar dat bestaande
+taakspecifieke blok verplaatst. De gedeelde stylesheetprefix heeft nu weer
+exact de bewaakte oorspronkelijke SHA-256; de test is niet gewijzigd. De
+32 asset-URL-hashes volgen de nieuwe stylesheetinhoud. De mobiele/desktop-
+layoutproef wordt met die definitieve positie opnieuw uitgevoerd.

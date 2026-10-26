@@ -1049,11 +1049,6 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
-.review-passage-inventory .review-row-title {
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
 .review-row-status {
   flex: 0 0 auto;
   color: var(--muted);
@@ -1734,6 +1729,11 @@ html[data-theme="dark"] .metis-mark-frame { background: #fff; }
 [data-review-diagnostics] { overflow-wrap: anywhere; }
 
 /* Task-only execution/evidence layout; home tiles and navigation are excluded. */
+.review-passage-inventory .review-row-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .review-decision-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; }
 .review-source-column, .review-choices-column { min-width: 0; }
 .review-source-column [data-source-bound-fields] { overflow-x: auto; }
