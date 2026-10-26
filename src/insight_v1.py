@@ -134,8 +134,8 @@ def _diagnosis_steps_html(processing: dict, code: str, progress: dict, diagnosti
     for number, title in enumerate(_DIAGNOSIS_STEPS, start=1):
         detail = ""
         if number == 2 and progress.get("planned_task_count"):
-            detail = (f'{int(progress.get("terminal_task_count") or 0)} van {int(progress["planned_task_count"])} '
-                      f'vormingstaken afgehandeld; {pending} nog open.')
+            detail = (f'Vormingstaken: {int(progress.get("terminal_task_count") or 0)} van '
+                      f'{int(progress["planned_task_count"])} afgehandeld; {pending} nog open.')
         if number == 4:
             detail = (f'{int(diagnostics["issue_occurrence_count"])} controlepunten bij {blocked} passages. '
                       'Een controlepunt is geen inhoudelijk oordeel: een reviewer beslist.'
@@ -527,6 +527,10 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
             facts_html = "".join(f"<div><dt>{escape(name)}</dt><dd>{escape(str(value))}</dd></div>" for name, value in facts)
             review_button = (f'<p class="diagnosis-buttons"><a class="btn-primary" href="{repair}">Passages corrigeren in Review</a>'
                              '<a class="btn-secondary" href="#acties">Bekijk wat er moet gebeuren</a></p>' if reviewer else "")
+            attempt_rows = "".join(
+                f'<dt>{escape(name)}</dt><dd><code>{escape(str(diagnostic[key]))}</code></dd>'
+                for key, name in (("outcome", "Uitkomst laatste poging"), ("reason_code", "Reden laatste poging"),
+                                  ("recovery_advice", "Advies laatste poging")) if diagnostic.get(key))
             verdict = f'''<div class="diagnosis-verdict"{' data-state="blocked"' if label == "Niet publiceerbaar" else ""} role="status">
               <p class="diagnosis-label"><span aria-hidden="true">!</span> {escape(label)}</p>
               <p class="lead">{escape(ERROR_COPY.get(code, "Controleer de actuele verwerking."))}</p>
@@ -534,7 +538,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
               <dl class="diagnosis-facts">{facts_html}</dl>{review_button}
               <details><summary>Technische details</summary><dl class="diagnosis-summary">
                 <dt>Status</dt><dd><code>{escape(str(processing.get("state") or "niet vastgelegd"))}</code></dd>
-                <dt>Code</dt><dd><code>{escape(str(code))}</code></dd></dl></details></div>'''
+                <dt>Code</dt><dd><code>{escape(str(code))}</code></dd>{attempt_rows}</dl></details></div>'''
             processing_html = (f'''<section id="verwerking" aria-labelledby="oordeel"><h2 id="oordeel">Oordeel</h2>{verdict}</section>
           {_diagnosis_steps_html(processing, code, progress, diagnostics)}
           <section id="acties"><h2>Wat er nu moet gebeuren</h2>
