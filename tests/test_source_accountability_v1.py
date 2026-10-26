@@ -167,7 +167,13 @@ def test_http_source_batch_requires_named_reviewer_and_explicit_confirmation(tmp
             assert frozen.status_code == 200
             assert not any(f['attrs'].get('action') == '/review/source-exclusions' for f in Forms(frozen.text).forms)
             assert 'name="source_object_ids"' not in frozen.text
-        assert client.post('/review/source-exclusions', data={**data, 'snapshot_revision': 'stale', 'source_checked': '1'}).status_code == 409
+        stale = client.post('/review/source-exclusions', data={**data, 'snapshot_revision': 'stale', 'source_checked': '1'})
+        # This endpoint retains the existing generic ConsoleError mapping (400).
+        # The kernel must still report the actual revision conflict, without writes.
+        assert stale.status_code == 400
+        assert 'Het document is tussentijds gewijzigd.' in stale.text
+        assert state.snapshot_objects(sid) == before
+        assert state.workflow_review_store.read_events() == events
         outsider = TestClient(client.app, base_url='https://testserver')
         assert outsider.post('/login', data={'username': 'author', 'password': 'long-test-password'}, follow_redirects=False).status_code == 303
         assert outsider.get('/source-selection', params={'document': sid, 'task': 'disposition'}).status_code == 403

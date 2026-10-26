@@ -11,7 +11,16 @@ const assert = require('node:assert/strict');
   await page.locator('input[name=password]').fill(m.password);
   await Promise.all([page.waitForURL(url => url.pathname !== '/login'), page.locator('button[type=submit]').click()]);
   async function proof(stage, width) {
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    const layout = await page.evaluate(() => ({
+      width: innerWidth, scrollWidth: document.documentElement.scrollWidth,
+      offenders: [...document.querySelectorAll('body *')].filter(el => {
+        const rect = el.getBoundingClientRect();
+        return el.getClientRects().length && (rect.right > innerWidth + 1 || rect.left < -1);
+      }).map(el => ({tag: el.tagName, class: el.className,
+        right: el.getBoundingClientRect().right, left: el.getBoundingClientRect().left,
+        text: el.textContent.slice(0, 160)})).slice(-12),
+    }));
+    assert.equal(layout.scrollWidth > layout.width, false, `${stage}-${width}: ${JSON.stringify(layout)}`);
     assert.equal(await page.locator('form form').count(), 0);
     await page.screenshot({path: `${process.env.METIS_BROWSER_OUTPUT}/${stage}-${width}.png`, fullPage: true});
   }

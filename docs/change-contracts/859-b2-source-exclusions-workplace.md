@@ -134,3 +134,26 @@ zijn geadverteerd maar niet beschikbaar; geen verzonnen context toegepast.
 Verplichte statische checks en werkelijk gestarte/geblokkeerde runtimechecks
 worden bij oplevering met exacte head en resultaten in de PR vastgelegd.
 Geen productie-/inhoudelijke gebruikersacceptatie uit synthetische proeven afleiden.
+
+## Eerste CI-diagnose
+
+Head `8febdd955034aabd462e8a4a613fb5bfa3e02756` faalde op de nieuwe
+HTTP-stale-assertie (400 ontvangen, 409 verwacht) en horizontale overflow in de
+nieuwe browserfixture; dezelfde browsercase faalde ook in source-processing-proof.
+Characterization, de statische gates en de normale native source-processing-
+proeven (12 + 158) slagen. De vroege rode autorisatieproef in die workflow is
+de verplichte historische mutatieproef.
+
+De batch-POST heeft altijd de generieke ConsoleError-afhandeling gebruikt:
+die retourneert 400 bij snapshot_object_write_conflict. De test respecteert die
+bestaande HTTP-uitkomst en controleert nu expliciet de conflictmelding plus
+ongewijzigde objecten en events. Geen domein-/API-regel aangepast om 409 te maken.
+De werkelijke statusselectie uit de handler is lokaal geïsoleerd uitgevoerd: 400.
+
+Chromium is lokaal beschikbaar; de sandbox blokkeert zijn sockets. De lokale,
+netwerkloze markup-/CSS-proef is daarna via de goedgekeurde executorroute
+uitgevoerd op de bestaande inventarisgolden: geen overflow op 1440 en 390 px.
+Dat is geen reproductie van de afwijkende runtimefixture. De bestaande strenge
+browserassertie rapporteert daarom voortaan stadium, breedte en de concrete
+overlopende DOM-elementen. Layoutoorzaak en browserherstel zijn op dit moment
+nog niet bewezen; de vervolguitvoering wordt in de PR vastgelegd.
