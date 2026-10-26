@@ -61,7 +61,7 @@ const fs=require('node:fs');
       await page.unroute('**/raad/meldingen');
       const healthy=await run(page);
       const paths=healthy.map(r=>r.path);
-      for(const expected of ['/','/ingest','/source-selection','/review','/publish','/tree','/formation-problems','/settings','/inzicht'])
+      for(const expected of ['/','/ingest','/source-selection','/review','/publish','/tree','/settings','/inzicht'])
         if(!paths.includes(expected))throw Error(username+' missing page '+expected+': '+JSON.stringify(paths));
       results[username]={healthy};
       if(username===manifest.author){

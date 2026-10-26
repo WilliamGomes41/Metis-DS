@@ -20,7 +20,8 @@ const fs = require('node:fs');
     await page.getByRole('button',{name:'Starten',exact:true}).click();
     await page.waitForURL('**/source-selection?**');
     await page.goto(base+'/formation-problems?document='+sid);
-    await page.getByRole('heading',{name:'Vormingsproblemen',exact:true}).waitFor();
+    await page.getByRole('heading',{name:'Vorming',exact:true}).waitFor();
+    if (new URL(page.url()).pathname !== '/source-selection') throw Error('legacy bookmark did not open Vorming');
     fs.writeFileSync(process.env.METIS_PROBLEM_NAVIGATED, 'yes');
     for (let i=0;i<50;i++) {
       await page.goto(base+'/source-selection?document='+sid);
@@ -29,7 +30,7 @@ const fs = require('node:fs');
     }
     await page.getByRole('link',{name:'Naar Review',exact:true}).waitFor();
     await page.goto(base+'/formation-problems?document='+sid);
-    await page.getByRole('button',{name:'Open werk opnieuw verwerken',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Hervatten',exact:true}).waitFor();
     const contrast = () => page.evaluate(() => {
       const luminance = color => {
         const c=color.match(/[\d.]+/g).slice(0,3).map(Number).map(v=>{

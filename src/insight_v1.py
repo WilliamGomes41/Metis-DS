@@ -310,7 +310,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
                 else processing.get("error_code") or processing.get("reason_code") or "")
         controls = ""
         if processing.get("resume_allowed") or processing.get("retry_allowed"):
-            controls += f'<p><a class="btn-primary" href="/source-selection?{query}">Naar Bronselectie voor Starten of Hervatten</a></p>'
+            controls += f'<p><a class="btn-primary" href="/source-selection?{query}">Naar Vorming voor Starten of Hervatten</a></p>'
         if ("publisher" in roles
                 and (account["account_id"] in envelope.get("named_reviewers", [])
                      or account["account_id"] == envelope.get("uploader_account_id"))

@@ -75,7 +75,7 @@ def test_selected_source_survives_slow_document_decode(
                    for cause in finished.get('error', {}).get('causes', [])],
     })
     assert response.status_code == 200
-    assert 'Bronselectie' in response.text
+    assert 'Vorming' in response.text
 
 
 def test_source_pages_stay_available_during_real_large_checkpoints(
@@ -211,7 +211,7 @@ def test_source_summary_does_not_reread_toasted_diagnostics(
     started = time.perf_counter()
     response = client.get('/source-selection')
     print('SOURCE_SUMMARY_HTTP_SECONDS', round(time.perf_counter() - started, 3))
-    assert response.status_code == 200 and 'Bronselectie' in response.text
+    assert response.status_code == 200 and 'Vorming' in response.text
     assert 'validator_input' not in response.text
     with store._connect() as con:
         assert con.execute(

@@ -821,11 +821,10 @@ def _nav(account: dict[str, Any] | None, current: str = "") -> str:
     rooms = [
         ("home", "/", "Mijn werk"),
         ("ingest", "/ingest", "Inleveren"),
-        ("selection", "/source-selection", "Bronselectie"),
+        ("selection", "/source-selection", "Vorming"),
         ("review", "/review", "Review"),
         ("publish", "/publish", "Publicatie"),
         ("tree", "/tree", "Documenten"),
-        ("formation", "/formation-problems", "Vormingsproblemen"),
         ("settings", "/settings", "Instellingen"),
     ]
     links = []
@@ -3726,7 +3725,7 @@ def _formation_incomplete_banner(console, snapshot_id: str) -> str:
         return ""
     if not status.get("formation_incomplete"):
         return ""
-    link = f'/formation-problems?{urlencode({"document": snapshot_id})}'
+    link = f'/source-selection?{urlencode({"document": snapshot_id})}'
     return ('<div class="banner warn" role="alert" data-formation-incomplete>'
             '<p><strong>Kennisvorming onvolledig.</strong> Zelfstandig geldige voorstellen kunnen worden beoordeeld. '
             'Resterende bronproblemen en hun herstelacties blijven beschikbaar; publicatie is geblokkeerd.</p>'
@@ -4200,9 +4199,9 @@ def create_console_app(
                 _home_tile(
                     href="/source-selection",
                     icon="▤",
-                    title="Bronselectie",
+                    title="Vorming",
                     description="Start of hervat verwerking per document",
-                    badge="Bronselectie openen",
+                    badge="Vorming openen",
                 ),
                 _home_tile(
                     href="/review",
@@ -4250,7 +4249,7 @@ def create_console_app(
               De gekozen reviewvorm bepaalt de aanvullende deelname; bestaande onafhankelijke
               controles blijven gelden. Bij bestaande reviewregels mag de uploader niet de enige reviewer zijn.</p>
               <h2>Verwerking</h2><p>Metis maakt voorstellen; een voorstel is geen inhoudelijk besluit.
-              De verwerking kan worden geblokkeerd. Diagnose staat in Inzicht; starten en hervatten doe je in Bronselectie.</p>"""),
+              De verwerking kan worden geblokkeerd. Diagnose staat in Inzicht; starten en hervatten doe je in Vorming.</p>"""),
             "review": ("Beoordelen", "/review", """
               <h2>Bron en betekenis</h2><p>Controleer de passage met de oorspronkelijke bron en de relevante context.
               Metis doet een voorstel; jij bepaalt wat met de passage gebeurt.
@@ -4284,7 +4283,7 @@ def create_console_app(
             "documents": ("Documenten", "/tree", """
               <h2>Documentbeheer</h2><p>Zoek een document en open de beschikbare taak.
               Gepubliceerde versies blijven ongewijzigd. Een wijziging van documenttype kan een nieuwe
-              beoordeling of verwerking vereisen. Documentdiagnostiek staat in Inzicht; starten en hervatten doe je in Bronselectie.</p>"""),
+              beoordeling of verwerking vereisen. Documentdiagnostiek staat in Inzicht; starten en hervatten doe je in Vorming.</p>"""),
         }
         if topic not in topics:
             raise ConsoleError("unknown_document")
@@ -5172,7 +5171,7 @@ def create_console_app(
                 button.disabled = true;
                 button.textContent = "Bezig met inleveren…";
                 status.hidden = false;
-                status.textContent = "Je document wordt veilig opgeslagen. Daarna opent Bronselectie met je document geselecteerd. Bronselectie start pas wanneer je op Starten klikt.";
+                status.textContent = "Je document wordt veilig opgeslagen. Daarna opent Vorming met je document geselecteerd. De bronverwerking start pas wanneer je op Starten klikt.";
               }});
               var fourEyes = document.getElementById("review-four-eyes");
               function showFourEyes() {{
@@ -5358,7 +5357,7 @@ def create_console_app(
                     rows.append(_document_action_row("Wijzigen", "".join(locked)))
                 if blocked:
                     next_step = (
-                        f' <a href="/source-selection?{_esc(urlencode({"document": child["snapshot_id"]}))}">Naar Bronselectie</a> om de verwerking te starten of te hervatten.'
+                        f' <a href="/source-selection?{_esc(urlencode({"document": child["snapshot_id"]}))}">Naar Vorming</a> om de verwerking te starten of te hervatten.'
                         if can_move else ""
                     )
                     pre_review_notice = f'<p class="banner warn">Verwerking niet afgerond. Beoordelen is nog niet beschikbaar.{next_step}</p>'

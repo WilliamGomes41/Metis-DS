@@ -353,7 +353,7 @@ def test_installed_layout_receipt_and_automatic_selection(tmp_path, *, productio
         login(client)
         home=client.get('/').text
         titles=re.findall(r'<span class="home-tile-title">(.*?)</span>',home)
-        assert titles[:5]==['Inleveren','Bronselectie','Review','Publicatie','Documenten'],titles
+        assert titles[:5]==['Inleveren','Vorming','Review','Publicatie','Documenten'],titles
         receipt=upload(client,reviewer)
         selected=client.get(receipt.headers['location'])
         sid=console.list_envelopes()[0]['snapshot_id']
@@ -361,7 +361,7 @@ def test_installed_layout_receipt_and_automatic_selection(tmp_path, *, productio
         assert f'data-source-document="{sid}" data-selected="true"' in selected.text
         nav=re.search(r'<nav class="rooms">(.*?)</nav>',selected.text,re.S).group(1)
         labels=re.findall(r'<a[^>]*>(.*?)</a>',nav)
-        assert labels[:5]==['Inleveren','Bronselectie','Review','Publicatie','Documenten']
+        assert labels[:5]==['Inleveren','Vorming','Review','Publicatie','Documenten']
 
 
 def test_estimates_require_comparable_complete_observations_and_config(tmp_path):

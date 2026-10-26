@@ -101,28 +101,19 @@ def _formation_problem_html(group, esc):
     return body + '</details></article>'
 
 
-def _formation_problems_html(report, *, offset, revision, esc, work_revision_url=None):
+def _formation_problems_html(report, *, offset, esc, work_revision_url=None):
     sid = report['snapshot_id']
     status = report['processing']
     query = {'document': sid}
     rows = report['problems']
     groups = _formation_groups(rows)
-    recovery = ''
-    body = '<header class="formation-header"><h2>' + esc(report['title']) + '</h2>'
+    body = '<header class="formation-header"><h2>Vormingsproblemen</h2>'
     body += '<p class="muted">Bronversie ' + esc(report['version']) + '</p></header>'
     body += '<p class="formation-intro">Bekijk de bronstukken die nog aandacht nodig hebben.</p>'
-    body += '<nav class="formation-navigation" aria-label="Verder met dit document"><a href="/review?' + esc(
-        urlencode(query)) + '">Naar Review</a><a href="/source-selection?' + esc(urlencode(query)) + '">Naar Bronselectie</a></nav>'
     if status.get('resume_allowed') or status.get('retry_allowed'):
-        label = 'Open werk opnieuw verwerken' if status.get('resume_allowed') else 'Bronverwerking starten'
         hint = ('Metis kan het open werk opnieuw proberen. Geldige voorstellen blijven bewaard.'
                 if status.get('resume_allowed') else 'Start de bronverwerking om te bepalen welke tekst naar Review kan.')
-        recovery = '<section class="formation-recovery" aria-label="Vervolgstap"><p>' + hint + '</p>'
-        recovery += ('<form method="post" action="/source-selection/start">'
-                 '<input type="hidden" name="document" value="' + esc(sid) + '">'
-                 '<input type="hidden" name="command_id" value="' + uuid.uuid4().hex + '">'
-                 '<input type="hidden" name="expected_revision" value="' + esc(revision) + '">'
-                 '<button class="btn-primary">' + label + '</button></form></section>')
+        body += '<p class="formation-recovery">' + hint + '</p>'
     elif status.get('state') == 'running':
         body += '<section class="formation-recovery"><h3>Metis verwerkt de bron</h3><p>Je kunt andere kamers openen. De verwerking loopt door.</p></section>'
     elif status.get('formation_incomplete'):
@@ -150,7 +141,7 @@ def _formation_problems_html(report, *, offset, revision, esc, work_revision_url
         body += '<section class="formation-empty"><h2>Nog geen verwerkingsresultaat</h2><p>Na bronverwerking zie je hier welke bronstukken aandacht nodig hebben.</p></section>'
     else:
         body += '<section class="formation-empty"><h2>Geen open vormingsproblemen</h2><p>Je kunt verder in Review. Voor publicatie blijven de overige review- en publicatievoorwaarden gelden.</p></section>'
-    return body + recovery
+    return body
 
 
 def _estimate(estimate):
@@ -211,7 +202,7 @@ def install(app, console, require, page, nav, esc):
     dispatcher = install_dispatcher(app, console)
 
     @app.get('/source-selection', response_class=HTMLResponse)
-    def selection_get(request: Request, document: str = ''):
+    def selection_get(request: Request, document: str = '', offset: int = Query(0, ge=0)):
         with diagnostic_phase("authorization"):
             actor = require(request)
         # Overview owns compact progress inputs; only the chosen document loads detail.
@@ -232,8 +223,12 @@ def install(app, console, require, page, nav, esc):
             # Volledige controle alleen voor het expliciet gekozen document (D-PERF-2).
             from src.source_selection_v1 import summary_projection
             detail = bool(document) and sid == document
+            report = None
+            if detail:
+                from src.formation_problems_v1 import collect
+                report = collect(console, actor_id=actor['account_id'], snapshot_id=sid)
             result = (projection(console, actor_id=actor['account_id'], snapshot_id=sid, documents=documents,
-                                 observations=observations) if detail
+                                 observations=observations, processing=report['processing']) if detail
                       else summary_projection(console, envelope=envelope, observations=observations))
             action = ''
             if result['state'] in {'bezig', 'wacht op uitvoering'}:
@@ -265,7 +260,7 @@ def install(app, console, require, page, nav, esc):
                           f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
                           f'<button class="btn-primary">{label}</button></form>')
             else:
-                action = '<p>Hervatten is nu niet beschikbaar. Bekijk de diagnose in Inzicht voor de bron- en reviewvoorwaarden.</p>'
+                action = '<p>Hervatten is nu niet beschikbaar. Bekijk de vormingsproblemen hieronder voor de vervolgstap.</p>'
             progress = ''
             if result['state'] == 'bezig':
                 elapsed = result['elapsed_seconds']
@@ -314,55 +309,50 @@ def install(app, console, require, page, nav, esc):
                            f'Volledige bronverwerking: {"ja" if result["formation_complete"] else "nog niet bevestigd"}.</p>')
             if result['candidates'] is None:
                 summary = '<p>Aantallen kandidaten en bronpassages zijn nog niet gecontroleerd. Open het document voor de actuele controles en vervolgacties.</p>'
-            diagnosis_link = f'<a class="btn-secondary" href="/formation-problems?{esc(urlencode({"document": sid}))}">Vormingsproblemen</a>'
+            diagnosis_link = ('' if detail else f'<a class="btn-secondary" href="/source-selection?{esc(urlencode({"document": sid}))}#formation-problems">Vormingsproblemen</a>')
             diagnosis_link += f'<a class="btn-secondary" href="/inzicht/document?{esc(urlencode({"document": sid}))}">Bekijk diagnose in Inzicht</a>'
             review = f'<a class="btn-primary" href="/review?document={esc(sid)}">Naar Review</a>' if result['review_available'] else ''
             extent = _size(result["bytes"]) if result['bytes'] is not None else 'Bestandsgrootte onbekend'
             fragment_count = envelope.get('source_fragment_count')
             if fragment_count is not None:
                 extent += f' · {fragment_count} opgeslagen bronfragmenten'
+            problems = ''
+            if report is not None:
+                status = report['processing']
+                work_revision_url = None
+                if (not result['can_start'] and status.get('state') != 'running' and status.get('formation_incomplete')
+                        and 'researcher' in actor['roles'] and actor['account_id'] in envelope.get('named_reviewers', [])):
+                    work_revision_url = '/review/policy?' + urlencode({'document': sid})
+                problems = ('<section class="formation-room" id="formation-problems">' +
+                    _formation_problems_html(report, offset=offset, esc=esc, work_revision_url=work_revision_url) + '</section>')
             cards.append(f'<article class="doc-card" id="source-{esc(sid)}" data-source-document="{esc(sid)}" data-selected="{str(sid == selected).lower()}">'
                          f'<h2>{esc(result["title"])}</h2><p class="source-meta">{esc(result["filename"])} · Bronversie {esc(result["version"])} · {esc(extent)}</p>'
                          f'<p role="status">Status: {esc(result["state"])}</p>'
                          f'<p class="source-estimate">{esc(_estimate(result["estimate"]))}</p>'
-                         f'{progress}{summary}<div class="source-actions">{action}{review}{diagnosis_link}</div></article>')
-        notice = '<div class="banner ok">Document veilig ontvangen. Start bronselectie wanneer je wilt.</div>' if request.query_params.get('received') == 'yes' else ''
+                         f'{progress}{summary}<div class="source-actions">{action}{review}{diagnosis_link}</div>{problems}</article>')
+        notice = '<div class="banner ok">Document veilig ontvangen. Start de bronverwerking wanneer je wilt.</div>' if request.query_params.get('received') == 'yes' else ''
         # Any visible running/waiting document keeps the overview current.
         # Every refresh reads the
         # durable authority; no browser state can start another attempt.
         script = '<script>setTimeout(function(){ window.location.reload(); }, 5000);</script>' if running_visible else ''
         script += '<script>document.querySelectorAll("form[action=\\"/source-selection/start\\"]").forEach(function(form){form.addEventListener("submit",function(event){if(form.dataset.submitting){event.preventDefault();return;}form.dataset.submitting="yes";form.querySelector("button").disabled=true;});});</script>'
-        return page(nav(actor, 'selection') + '<section class="room" id="source-selection"><h1>Bronselectie</h1>' + notice
+        return HTMLResponse(page(nav(actor, 'selection') + '<section class="room" id="source-selection"><h1>Vorming</h1>' + notice
                     + '<form method="get" class="source-picker"><label for="source-document">Document</label>'
                     + '<div class="source-picker-row"><select id="source-document" name="document">' + options + '</select>'
                     + '<button class="btn-secondary" type="submit">Document selecteren</button></div></form>'
-                    + (''.join(sorted(cards, key=lambda card: 'data-selected="true"' not in card)) or '<p data-source-empty>Geen documenten beschikbaar voor bronselectie.</p>') + '</section>' + script)
+                    + (''.join(sorted(cards, key=lambda card: 'data-selected="true"' not in card)) or '<p data-source-empty>Geen documenten beschikbaar voor bronverwerking.</p>') + '</section>' + script),
+                            headers={'Cache-Control': 'no-store'})
 
     @app.get('/formation-problems', response_class=HTMLResponse)
     def formation_problems_get(request: Request, document: str = '', offset: int = Query(0, ge=0)):
-        from src.formation_problems_v1 import collect
-        actor = require(request)
-        scoped = actor.get('_view_document')
-        if document:
-            report = collect(console, actor_id=actor['account_id'], snapshot_id=document)
-            status = report['processing']
-            can_process = status.get('resume_allowed') or status.get('retry_allowed')
-            work_revision_url = None
-            if (not can_process and status.get('state') != 'running' and status.get('formation_incomplete') and 'researcher' in actor['roles']
-                    and actor['account_id'] in console._envelope(document).get('named_reviewers', [])):
-                work_revision_url = '/review/policy?' + urlencode({'document': document})
-            body = _formation_problems_html(report, offset=offset,
-                revision=console.objects_revision(document) if can_process else '', esc=esc, work_revision_url=work_revision_url)
-        else:
-            documents = ([console._envelope(scoped)] if scoped else
-                         console.source_selection_documents(actor_id=actor['account_id']))
-            body = '<p class="formation-intro">Kies een document. Daarna zie je welke bronstukken aandacht vragen en wat je kunt doen.</p>'
-            body += '<ul class="formation-documents">' + ''.join('<li><a href="/formation-problems?' +
-                esc(urlencode({'document': row['snapshot_id']})) + '">' + esc(row['title']) + '</a></li>' for row in documents) + '</ul>'
-            if not documents:
-                body += '<p>Er zijn nog geen documenten voor je beschikbaar. Zodra een document beschikbaar is, vind je het hier.</p>'
-        return HTMLResponse(page(nav(actor, 'formation') + '<section class="room formation-room" id="formation-problems"><h1>Vormingsproblemen</h1>' + body + '</section>'),
-                            headers={'Cache-Control': 'no-store'})
+        require(request)
+        # Historical bookmarks only navigate; the existing owner checks the
+        # selected document and renders its one command form on the next GET.
+        query = {'document': document} if document else {}
+        if offset:
+            query['offset'] = offset
+        return RedirectResponse('/source-selection' + ('?' + urlencode(query) if query else ''),
+                                status_code=303, headers={'Cache-Control': 'no-store'})
 
     @app.get('/inzicht/document/verwerkingsspoor')
     def processing_trace_export(request: Request, document: str = ''):
