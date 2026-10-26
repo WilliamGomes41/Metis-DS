@@ -10,7 +10,6 @@ quality report store.
 from __future__ import annotations
 
 import time
-import json
 import logging
 from html import escape
 from typing import Any, Callable
@@ -49,6 +48,172 @@ _TAB_STYLE = """<style>
 .insight-tabs a:focus-visible { outline:2px solid var(--water); outline-offset:2px; }
 </style>"""
 
+
+# Documentdiagnose (#854): presentation only, over projections the handler already read.
+_DIAGNOSIS_STYLE = """<style>
+.document-diagnosis { overflow-wrap:anywhere; }
+.document-diagnosis section { margin-top:28px; }
+.document-diagnosis a, .document-diagnosis summary, .document-diagnosis button { min-height:44px; }
+.document-diagnosis a { display:inline-flex; align-items:center; }
+.document-diagnosis summary { display:flex; align-items:center; cursor:pointer; }
+.diagnosis-verdict { border:1px solid var(--line); border-radius:12px; padding:16px; background:var(--water-soft); }
+.diagnosis-verdict[data-state="blocked"] { border:2px solid #5D3297; background:#F3EEF9; color:#1C1724; }
+.diagnosis-label { font-weight:700; text-transform:uppercase; letter-spacing:.04em; margin:0 0 8px; }
+.diagnosis-verdict[data-state="blocked"] .diagnosis-label, .diagnosis-steps li.blocked .diagnosis-status { color:#4A2679; }
+.diagnosis-facts { display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px; margin:12px 0; }
+.diagnosis-facts div { background:var(--surface, #fff); border:1px solid var(--line); border-radius:8px; padding:8px 12px; }
+.diagnosis-facts dt { font-size:.85em; color:var(--muted); }
+.diagnosis-facts dd { margin:0; font-size:1.4em; font-weight:700; font-variant-numeric:tabular-nums; }
+.diagnosis-buttons { display:flex; flex-wrap:wrap; gap:8px; }
+.diagnosis-steps { list-style:none; padding:0; }
+.diagnosis-steps li { border-left:3px solid var(--line); padding:4px 0 12px 16px; }
+.diagnosis-steps li.blocked { border:2px solid #5D3297; border-radius:8px; background:#F3EEF9; color:#1C1724; padding:12px 16px; }
+.diagnosis-steps h3 { margin:0; font-size:1em; }
+.diagnosis-status { font-weight:600; font-size:.9em; }
+.diagnosis-table { width:100%; border-collapse:collapse; }
+.diagnosis-table th, .diagnosis-table td { text-align:left; padding:8px; border-bottom:1px solid var(--line); }
+.diagnosis-table .num { text-align:right; font-variant-numeric:tabular-nums; }
+.diagnosis-family { border:1px solid var(--line); border-radius:8px; padding:12px 16px; margin:12px 0; }
+.diagnosis-family h3 { margin:0 0 4px; font-size:1em; }
+.diagnosis-cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px; }
+.diagnosis-card { border:1px solid var(--line); border-radius:8px; padding:12px 16px; min-width:0; }
+.diagnosis-summary { display:grid; grid-template-columns:auto 1fr; gap:4px 12px; }
+.diagnosis-summary dd { margin:0; }
+@media (max-width:640px) {
+  .diagnosis-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+  .diagnosis-table, .diagnosis-table tbody, .diagnosis-table tr, .diagnosis-table th, .diagnosis-table td { display:block; width:auto; }
+  .diagnosis-table tr { border-bottom:1px solid var(--line); padding:8px 0; }
+  .diagnosis-table td { border:0; padding:2px 0; }
+  .diagnosis-table td[data-label]::before { content:attr(data-label) ": "; font-weight:600; }
+  .diagnosis-table .num { text-align:left; }
+}
+</style>"""
+
+# Concept texts (Metis #854 answer 3); Vignet reviews house style before merge.
+_DIAGNOSIS_FAMILY_COPY = {
+    "semantic_contract": ("Zorg dat elke passage zegt wat hij bedoelt en welke soort tekst het is",
+                          "De bedoeling van de passage is niet duidelijk",
+                          "Metis kan niet vaststellen wat voor tekst een passage is (een aanbeveling, uitleg of definitie) of welke kern erin staat."),
+    "unit_completeness": ("Maak passages zelfstandig leesbaar", "De passage is niet los te lezen",
+                          "De passage bevat geen zelfstandige bewering, of verwijst naar iets dat er niet in staat. Los gelezen is hij niet te begrijpen."),
+    "dependency_resolution": ("Voeg ontbrekende context toe of koppel de juiste passage", "Er ontbreekt context",
+                              "De passage heeft andere tekst nodig om te kloppen, en die is nog niet gevonden of gekoppeld."),
+    "source_binding": ("Koppel de passage aan de juiste plek in de bron", "De passage is niet goed aan de bron gekoppeld",
+                       "Metis vindt de passage of de onderbouwing niet terug op de aangegeven plek in de bron."),
+    "processing_completeness": ("Rond de contextcontrole af", "De controle van de passage is niet afgerond",
+                                "Metis heeft voor deze passage nog niet vastgelegd of er andere tekst nodig is om hem te begrijpen."),
+    "unclassified": ("Controleer de punten die nog niet zijn ingedeeld", "Punten die nog niet zijn ingedeeld",
+                     "Metis heeft deze punten nog niet aan een soort gekoppeld. De codes staan bij de technische details."),
+}
+
+_DIAGNOSIS_STEPS = ("Bron ingelezen en verwerkt", "Tekst opgedeeld in taken", "Passages gemaakt",
+                    "Passages gecontroleerd", "Publicatie")
+
+
+def _diagnosis_families(diagnostics: dict | None) -> list[tuple[str, dict]]:
+    """Families with the most check points first; ties keep the projection's order."""
+    rows = list(((diagnostics or {}).get("by_family") or {}).items())
+    return sorted(rows, key=lambda row: -int(row[1]["issue_occurrence_count"]))
+
+
+def _diagnosis_steps_html(processing: dict, code: str, progress: dict, diagnostics: dict | None) -> str:
+    blocked = int((diagnostics or {}).get("blocked_candidate_count") or 0)
+    pending = int(progress.get("pending_task_count") or 0)
+    running = processing.get("state") == "running"
+    if code == "source_formation_incomplete":
+        stop = 2 if pending else 4
+    elif blocked:
+        stop = 4
+    elif running:
+        stop = None
+    elif code:
+        stop = 1
+    else:
+        stop = None
+    items = []
+    for number, title in enumerate(_DIAGNOSIS_STEPS, start=1):
+        detail = ""
+        if number == 2 and progress.get("planned_task_count"):
+            detail = (f'{int(progress.get("terminal_task_count") or 0)} van {int(progress["planned_task_count"])} '
+                      f'vormingstaken afgehandeld; {pending} nog open.')
+        if number == 4:
+            detail = (f'{int(diagnostics["issue_occurrence_count"])} controlepunten bij {blocked} passages. '
+                      'Een controlepunt is geen inhoudelijk oordeel: een reviewer beslist.'
+                      if diagnostics is not None else 'De uitkomst per passage is zichtbaar voor de aangewezen reviewer.')
+        if running:
+            status, css = ("Bezig", "") if number == 1 else ("Wacht op stap 1", "waiting")
+        elif stop is None:
+            status, css = ("Geen blokkade vastgelegd", "") if number == 5 else ("Klaar", "")
+        elif number < stop:
+            status, css = "Klaar", ""
+        elif number == stop:
+            status, css = "Hier stopt het", "blocked"
+        else:
+            status, css = f"Wacht op stap {stop}", "waiting"
+        css_attr = f' class="{css}"' if css else ""
+        items.append(f'<li{css_attr}><h3>{number}. {escape(title)}</h3>'
+                     f'<p class="diagnosis-status">{escape(status)}</p>{f"<p>{escape(detail)}</p>" if detail else ""}</li>')
+    return (f'<section aria-labelledby="proces"><h2 id="proces">Wat Metis met dit document deed</h2>'
+            f'<ol class="diagnosis-steps">{"".join(items)}</ol></section>')
+
+
+def _diagnosis_actions_html(diagnostics: dict | None, repair: str) -> str:
+    families = _diagnosis_families(diagnostics)
+    if not families:
+        return ""
+    rows = "".join(
+        f'<tr><td data-label="Volgorde">{index}</td>'
+        f'<td data-label="Actie">{escape(_DIAGNOSIS_FAMILY_COPY.get(family, (family,))[0])}</td>'
+        f'<td data-label="Passages" class="num">{int(values["candidate_count"])}</td>'
+        f'<td data-label="Punten" class="num">{int(values["issue_occurrence_count"])}</td>'
+        f'<td><a class="btn-secondary" href="{repair}">Open in Review</a></td></tr>'
+        for index, (family, values) in enumerate(families, start=1))
+    return ('<p>Begin bovenaan: daar zitten de meeste controlepunten.</p>'
+            '<table class="diagnosis-table"><caption>Acties, op volgorde van aantal controlepunten</caption>'
+            '<thead><tr><th scope="col">#</th><th scope="col">Actie</th><th scope="col" class="num">Passages</th>'
+            '<th scope="col" class="num">Punten</th><th scope="col">Openen</th></tr></thead>'
+            f'<tbody>{rows}</tbody></table>')
+
+
+def _diagnosis_findings_html(diagnostics: dict) -> str:
+    from src.operations_console_app import _PROCESSING_FAMILY_LABELS
+    if not int(diagnostics.get("blocked_candidate_count") or 0):
+        return "<p>De controle vond geen geblokkeerde passages.</p>"
+    articles = "".join(
+        f'<article class="diagnosis-family"><h3>{escape(_DIAGNOSIS_FAMILY_COPY.get(family, ("", family, ""))[1])}</h3>'
+        f'<p class="muted">{escape(_PROCESSING_FAMILY_LABELS.get(family, family))} · {int(values["candidate_count"])} passages · '
+        f'{int(values["issue_occurrence_count"])} punten</p>'
+        f'<p>{escape(_DIAGNOSIS_FAMILY_COPY.get(family, ("", "", ""))[2])}</p></article>'
+        for family, values in _diagnosis_families(diagnostics))
+    without = int(diagnostics.get("blocked_without_reason_count") or 0)
+    anomaly = (f'<p>{without} geblokkeerde passage(s) hebben geen code. Meld dit bij de beheerder.</p>' if without else "")
+    from src.processing_diagnostics_v1 import processing_issue_family
+    codes = "".join(
+        f'<tr><td><code>{escape(code)}</code></td>'
+        f'<td>{escape(_PROCESSING_FAMILY_LABELS.get(processing_issue_family(code), processing_issue_family(code)))}</td>'
+        f'<td class="num">{int(values["candidate_count"])}</td><td class="num">{int(values["issue_occurrence_count"])}</td></tr>'
+        for code, values in diagnostics["by_reason_code"].items())
+    return (f'{articles}{anomaly}<details><summary>Technische details: alle codes en aantallen</summary>'
+            '<table class="diagnosis-table"><caption>Controlecodes</caption><thead><tr><th scope="col">Code</th>'
+            '<th scope="col">Soort</th><th scope="col" class="num">Passages</th><th scope="col" class="num">Keer</th></tr></thead>'
+            f'<tbody>{codes}</tbody></table></details>')
+
+
+def _diagnosis_coverage_html(objects: list[dict]) -> str:
+    from src.extract_coverage_v1 import DUTCH_STATUS_LABELS, coverage_panel_rows
+    rows = coverage_panel_rows(objects)
+    if not rows:
+        return ""
+    labels = list(DUTCH_STATUS_LABELS.values())
+    head = "".join(f'<th scope="col" class="num">{escape(label)}</th>' for label in labels)
+    body = "".join(
+        f'<tr><th scope="row">{escape(str(row["section"]))}</th>'
+        + "".join(f'<td data-label="{escape(label, quote=True)}" class="num">{int((row.get("labels") or {}).get(label) or 0)}</td>'
+                  for label in labels) + "</tr>"
+        for row in rows)
+    return ('<details><summary>Controleoverzicht per kop</summary>'
+            '<table class="diagnosis-coverage diagnosis-table"><caption>Status van de passages per kop van de bron</caption>'
+            f'<thead><tr><th scope="col">Kop</th>{head}</tr></thead><tbody>{body}</tbody></table></details>')
 
 def _authorized_documents(state, account, documents) -> list[dict[str, Any]]:
     """Processing scope plus publishers' existing publication document list."""
@@ -286,7 +451,8 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
 
     @app.get("/inzicht/document", response_class=HTMLResponse)
     def document_diagnosis(request: Request, document: str = "") -> HTMLResponse:
-        from src.operations_console_app import ERROR_COPY, _processing_diagnostics_html, _coverage_panel
+        from src.operations_console_app import ERROR_COPY
+        from src.processing_diagnostics_v1 import processing_diagnostics
         from src.review_interaction_v1 import review_burden_projection
         from src.review_ledger import read_events
 
@@ -321,60 +487,83 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
               <label>Reden voor eenmalig herstel<input name="reason" required maxlength="1000"></label>
               <button type="submit">Een herstelpoging autoriseren</button></form>'''
         progress = processing.get("formation_progress") or {}
-        progress_html = ""
-        if progress.get("planned_task_count"):
-            progress_html = (f'<p>Vormingstaken: {int(progress.get("terminal_task_count") or 0)} van '
-                             f'{int(progress["planned_task_count"])} afgehandeld; '
-                             f'{int(progress.get("pending_task_count") or 0)} nog open.</p>')
         attempts = (envelope.get("processing_attempts") or []) if processing_access else []
         diagnostic = (attempts[-1].get("diagnostic") or {}) if attempts else {}
         pages = [str(page) for page in diagnostic.get("unverified_pages") or [] if type(page) is int]
         pages_html = f'<p>Pagina’s zonder verwerkbare brontekst: {escape(", ".join(pages))}</p>' if pages else ""
         pages_html += _source_pages_html(envelope, diagnostic, document) if processing_access else ""
-        detail = escape(json.dumps(diagnostic, ensure_ascii=False, indent=2))
         passages = '<p>Passagediagnostiek en passage-exports zijn beschikbaar voor de aangewezen reviewer.</p>'
         passage_exports = ""
         source_exports = (f'<li><a href="/inzicht/document/verwerkingsspoor?{query}">Verwerkingsspoor (JSON)</a></li>'
                           if processing_access else "")
         publication_export = (f'<li><a href="/inzicht/document/publicatiebewijs?{query}">Publicatiebewijs (JSON)</a></li>'
                               if "publisher" in roles else "")
+        repair = f'/review?{query}&amp;task=repair'
+        diagnostics = None
         if reviewer:
             objects = state.snapshot_objects(document)
+            diagnostics = processing_diagnostics(objects)
             burden = review_burden_projection(read_events(state._ledger_path), snapshot_id=document)
-            passages = (_processing_diagnostics_html(objects) + _coverage_panel(objects)
+            passages = (_diagnosis_findings_html(diagnostics) + _diagnosis_coverage_html(objects)
                 + f'<details><summary>Reviewinteracties</summary><p>{int(burden["review_interactions"])} gemeten menselijke interacties voor '
                   f'{int(burden["object_decisions"])} objectbesluiten. Historische besluiten zonder meting: '
                   f'{int(burden["legacy_unmeasured_decisions"])}.</p></details>'
-                + f'<p><a href="/review?{query}&amp;task=repair">Passages corrigeren in Review</a></p>')
+                + f'<p><a class="btn-secondary" href="{repair}">Passages corrigeren in Review</a></p>')
             passage_exports = f'''<li>Bronpassages: <a href="/inzicht/document/passages?{query}&amp;format=csv">CSV</a> ·
               <a href="/inzicht/document/passages?{query}&amp;format=json">JSON</a></li>
               <li><a href="/inzicht/document/diagnostiek?{query}">Diagnostiek (JSON)</a></li>
               <li><a href="/inzicht/document/detaildiagnostiek?{query}">Detaildiagnostiek (JSON)</a></li>
               <li><a href="/inzicht/document/verwerkingsbewijs?{query}">Verwerkingsbewijs als CSV-pakket</a></li>'''
-        processing_html = f'''
-          <section id="verwerking"><h2>Verwerking</h2>
-            <p>{escape(ERROR_COPY.get(code, "Controleer de actuele verwerking."))}</p>
-            <p>Status: {escape(str(processing.get("state") or "niet vastgelegd"))}</p>
-            <p>Code: <code>{escape(str(code))}</code></p>{pages_html}{progress_html}
-            <p>Een technisch geslaagde poging bewijst niet dat bronverwerking, review of publicatievoorwaarden volledig zijn afgerond.</p>
-            <p>Nieuwe poging vanaf: {escape(str(processing.get("retry_not_before") or "niet van toepassing"))}</p>
-            {controls}<details><summary>Laatste verwerkingspoging ({len(attempts)} opgeslagen)</summary><pre>{detail}</pre></details>
-            <p><a href="/inzicht/document/blokkade?{query}">Blokkade en bewijs per verwerkingspoging onderzoeken</a></p>
-          </section>''' if processing_access else '<section id="verwerking"><h2>Verwerking</h2><p>Verwerkingsdiagnostiek is beschikbaar voor onderzoekers en aangewezen reviewers.</p></section>'
+        if processing_access:
+            label = ("Verwerking loopt" if processing.get("state") == "running"
+                     else "Niet publiceerbaar" if code else "Geen blokkade vastgelegd")
+            facts = []
+            if progress.get("planned_task_count"):
+                facts.append(("Vormingstaken klaar", f'{int(progress.get("terminal_task_count") or 0)}/{int(progress["planned_task_count"])}'))
+            if diagnostics is not None:
+                facts += [("Passages met controlepunten", int(diagnostics["blocked_candidate_count"])),
+                          ("Controlepunten", int(diagnostics["issue_occurrence_count"]))]
+            facts.append(("Opgeslagen pogingen", len(attempts)))
+            facts_html = "".join(f"<div><dt>{escape(name)}</dt><dd>{escape(str(value))}</dd></div>" for name, value in facts)
+            review_button = (f'<p class="diagnosis-buttons"><a class="btn-primary" href="{repair}">Passages corrigeren in Review</a>'
+                             '<a class="btn-secondary" href="#acties">Bekijk wat er moet gebeuren</a></p>' if reviewer else "")
+            verdict = f'''<div class="diagnosis-verdict"{' data-state="blocked"' if label == "Niet publiceerbaar" else ""} role="status">
+              <p class="diagnosis-label"><span aria-hidden="true">!</span> {escape(label)}</p>
+              <p class="lead">{escape(ERROR_COPY.get(code, "Controleer de actuele verwerking."))}</p>
+              <p>Een technisch geslaagde poging bewijst niet dat bronverwerking, review of publicatievoorwaarden volledig zijn afgerond.</p>
+              <dl class="diagnosis-facts">{facts_html}</dl>{review_button}
+              <details><summary>Technische details</summary><dl class="diagnosis-summary">
+                <dt>Status</dt><dd><code>{escape(str(processing.get("state") or "niet vastgelegd"))}</code></dd>
+                <dt>Code</dt><dd><code>{escape(str(code))}</code></dd></dl></details></div>'''
+            processing_html = (f'''<section id="verwerking" aria-labelledby="oordeel"><h2 id="oordeel">Oordeel</h2>{verdict}</section>
+          {_diagnosis_steps_html(processing, code, progress, diagnostics)}
+          <section id="acties"><h2>Wat er nu moet gebeuren</h2>
+            {_diagnosis_actions_html(diagnostics, repair)}{controls}{pages_html}</section>''')
+        else:
+            processing_html = ('<section id="verwerking" aria-labelledby="oordeel"><h2 id="oordeel">Oordeel</h2>'
+                               '<div class="diagnosis-verdict" role="status"><p class="diagnosis-label">Geen verwerkingsinzage</p>'
+                               '<p>Verwerkingsdiagnostiek is beschikbaar voor onderzoekers en aangewezen reviewers.</p></div></section>')
+        attempt_card = (f'''<div class="diagnosis-card"><h3>Laatste verwerkingspoging</h3><dl class="diagnosis-summary">
+              <dt>Opgeslagen pogingen</dt><dd>{len(attempts)}</dd>
+              <dt>Bronversie</dt><dd>{escape(str(envelope.get("version") or ""))}</dd>
+              <dt>Nieuwe poging vanaf</dt><dd>{escape(str(processing.get("retry_not_before") or "niet van toepassing"))}</dd></dl>
+              <p><a href="/inzicht/document/blokkade?{query}">Blokkade en bewijs per verwerkingspoging onderzoeken</a></p></div>'''
+                        if processing_access else "")
         from src.view_check import panel as view_check_panel
         view_checks = view_check_panel(app, state, account, document, request.query_params.get('attempt', ''))
-        body = f'''{nav(account, "settings")}<section class="room">
+        body = f'''{nav(account, "settings")}{_DIAGNOSIS_STYLE}<section class="room document-diagnosis">
           {insight_tabs("documenten")}
           <p><a href="/inzicht?tab=documenten">← Alle documentdiagnoses</a></p>
           <h1>Documentdiagnose: {escape(str(envelope.get("title") or document))}</h1>
           <p>Bronversie {escape(str(envelope.get("version") or ""))}</p>
-          <nav aria-label="Documentdiagnose"><a href="#verwerking">Verwerking</a> ·
-            <a href="#passages">Passages en brondekking</a> · <a href="#bewijs">Bewijs en downloads</a></nav>
+          <nav aria-label="Documentdiagnose"><a href="#verwerking">Oordeel</a> ·
+            <a href="#passages">Passages en brondekking</a> · <a href="#bewijs">Bewijs</a></nav>
           {processing_html}
-          <section id="passages"><h2>Passages en brondekking</h2>{passages}</section>
+          <section id="passages"><h2>Wat de controle vond</h2>{passages}</section>
           {view_checks}
-          <section id="bewijs"><h2>Bewijs en downloads</h2><ul class="export-options">
-            {source_exports}{publication_export}{passage_exports}</ul></section></section>'''
+          <section id="bewijs"><h2>Bewijs en downloads</h2><div class="diagnosis-cards">{attempt_card}
+            <div class="diagnosis-card"><h3>Downloads</h3><ul class="export-options">
+            {source_exports}{publication_export}{passage_exports}</ul></div></div></section></section>'''
         return HTMLResponse(render_page(body, title="Documentdiagnose — Inzicht — Metis"), headers=_HEADERS)
 
     @app.get("/telemetry")
