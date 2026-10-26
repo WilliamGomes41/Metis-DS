@@ -20,7 +20,8 @@ const fs = require('node:fs');
     await page.getByRole('button',{name:'Starten',exact:true}).click();
     await page.waitForURL('**/source-selection?**');
     await page.goto(base+'/formation-problems?document='+sid);
-    await page.getByRole('heading',{name:'Vormingsproblemen',exact:true}).waitFor();
+    await page.getByRole('heading',{name:'Vorming',exact:true}).waitFor();
+    if (new URL(page.url()).pathname !== '/source-selection') throw Error('legacy bookmark did not open Vorming');
     fs.writeFileSync(process.env.METIS_PROBLEM_NAVIGATED, 'yes');
     for (let i=0;i<50;i++) {
       await page.goto(base+'/source-selection?document='+sid);
@@ -29,7 +30,7 @@ const fs = require('node:fs');
     }
     await page.getByRole('link',{name:'Naar Review',exact:true}).waitFor();
     await page.goto(base+'/formation-problems?document='+sid);
-    await page.getByRole('button',{name:'Open werk opnieuw verwerken',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Hervatten',exact:true}).waitFor();
     const contrast = () => page.evaluate(() => {
       const luminance = color => {
         const c=color.match(/[\d.]+/g).slice(0,3).map(Number).map(v=>{
@@ -74,7 +75,12 @@ const fs = require('node:fs');
     if (Math.min(...darkContrast)<4.5) throw Error('dark text contrast below AA');
     await page.screenshot({path:process.env.METIS_PROBLEM_SCREENSHOT.replace('.png','-dark.png'),fullPage:true});
     await page.evaluate(()=>document.documentElement.style.fontSize='200%');
-    if (await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth)) throw Error('text zoom overflow');
+    const zoomOverflow = await page.evaluate(()=>({
+      width:window.innerWidth, scrollWidth:document.documentElement.scrollWidth,
+      nodes:[...document.querySelectorAll('body *')].filter(n=>n.getBoundingClientRect().right>window.innerWidth)
+        .map(n=>({tag:n.tagName,classes:n.className,right:n.getBoundingClientRect().right}))
+    }));
+    if (zoomOverflow.scrollWidth>zoomOverflow.width) throw Error('text zoom overflow: '+JSON.stringify(zoomOverflow));
     await page.screenshot({path:process.env.METIS_PROBLEM_SCREENSHOT.replace('.png','-zoom.png'),fullPage:true});
     // Wider fallback metrics reproduced CI's overflow in the shared room navigation.
     await page.evaluate(()=>{

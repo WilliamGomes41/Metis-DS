@@ -2100,9 +2100,12 @@ h1, h2,
 
 .source-picker-row .btn-secondary { margin: 0; }
 
-#source-selection .doc-card { display: grid; gap: 10px; padding: 20px 22px; margin-bottom: 16px; }
+#source-selection .doc-card {
+  display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0;
+  gap: 10px; padding: 20px 22px; margin-bottom: 16px; overflow-wrap: anywhere;
+}
 
-#source-selection .doc-card > * { margin: 0; }
+#source-selection .doc-card > * { margin: 0; min-width: 0; }
 
 #source-selection .source-meta { color: var(--muted); }
 

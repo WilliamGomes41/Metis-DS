@@ -101,7 +101,7 @@ def test_problems_restart_targeted_recovery_and_duplicate(tmp_path, production_c
     login(client)
     page = client.get('/formation-problems', params={'document': sid})
     assert page.status_code == 200
-    assert 'Open werk opnieuw verwerken' in page.text
+    assert 'Hervatten</button>' in page.text
     assert 'Bekijk en behandel dit bronstuk' in page.text
     assert restarted.snapshot_objects(sid) == before and len(calls) == 3
     mode['broken'] = False
@@ -140,7 +140,7 @@ def test_review_does_not_hide_remaining_problems_or_allow_reextract(tmp_path, pr
     login(client, 'reviewer')
     page = client.get('/formation-problems', params={'document': sid})
     assert page.status_code == 200 and 'Opnieuw verwerken is nu niet beschikbaar' in page.text
-    assert 'Bekijk en behandel dit bronstuk' in page.text and 'Open werk opnieuw verwerken' not in page.text
+    assert 'Bekijk en behandel dit bronstuk' in page.text and 'Hervatten</button>' not in page.text
     with pytest.raises(ConsoleError, match='pre_review_retry_existing_work'):
         execute(console, sid, author, 'guarded')
     assert console.snapshot_objects(sid) == reviewed
@@ -152,9 +152,15 @@ def test_unauthorized_problem_read_is_denied(tmp_path, production_console, monke
     outsider = console.create_account(username='outsider', password='fixture-only', roles=('reviewer',))
     client = TestClient(console._metis_test_application)
     login(client, 'outsider')
+    before = deepcopy(console._envelope(sid)), console.snapshot_objects(sid)
     denied = client.get('/formation-problems', params={'document': sid})
     assert denied.status_code == 400  # Existing ConsoleError HTTP contract.
     assert 'Smetten patroon' not in denied.text
+    refused = client.post('/source-selection/start', data={
+        'document': sid, 'command_id': 'outsider', 'expected_revision': console.objects_revision(sid)},
+        follow_redirects=False)
+    assert refused.status_code == 400
+    assert before == (console._envelope(sid), console.snapshot_objects(sid))
     assert len(calls) == 0
 
 

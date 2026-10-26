@@ -56,7 +56,7 @@ def simplify_console_html(path: str, body: str) -> str:
         html = _PARENT_CHOOSER.sub(_plain_parent_labels, html)
 
     if path == "/ingest":
-        # After receipt, Bronselectie is the workflow continuation. Document
+        # After receipt, Vorming is the workflow continuation. Document
         # management remains reachable through normal navigation.
         html = _POST_INGEST_DOCUMENTS_LINK.sub("", html)
 

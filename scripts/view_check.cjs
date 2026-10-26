@@ -105,8 +105,8 @@ async function run(input) {
     const selected = await page.locator('[data-source-document][data-selected="true"]').getAttribute('data-source-document');
     const selectedValue = await page.locator('select[name=document]').inputValue();
     step='formation_problems'; expectedState='problem_room_and_existing_actions';
-    const problems = await page.goto(origin+'/formation-problems?'+query);
-    if (problems.status() !== 200 || new URL(page.url()).pathname !== '/formation-problems') throw Error('formation_problems_unavailable');
+    // Problem details now share the selected source page. Observe the same
+    // captured page instead of repeating its potentially deep document read.
     await page.getByRole('heading', {name:'Vormingsproblemen', exact:true}).waitFor();
     coverage.formation_problems='first_page_read_only';
     step='review_inventory'; expectedState='visible_inventory_with_stored_text';

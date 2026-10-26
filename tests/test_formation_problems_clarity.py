@@ -12,9 +12,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.formation_problems_v1 import _source_excerpt, collect
-from src.source_selection_ui_v1 import _formation_groups, _formation_problem_html
+from src.source_selection_ui_v1 import _formation_groups, _formation_problem_html, _formation_problems_html
 from tests.test_review_formation_problems import received, execute, SECOND
 from tests.test_availability_repair import login
+
+
+def test_completed_processing_without_findings_is_not_reported_as_unstarted():
+    report = {'snapshot_id': 'fixture', 'title': 'Bron', 'version': '1', 'problems': [],
+              'processing': {'state': 'succeeded', 'formation_incomplete': False}}
+    before = deepcopy(report)
+    rendered = _formation_problems_html(report, offset=0, esc=escape)
+    assert 'Geen open vormingsproblemen' in rendered
+    assert 'Nog geen verwerkingsresultaat' not in rendered
+    assert report == before
 
 
 @pytest.mark.parametrize('span', [

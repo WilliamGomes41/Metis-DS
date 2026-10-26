@@ -123,7 +123,7 @@ def test_review_points_to_problems_with_or_without_candidate(tmp_path, *, produc
     client.cookies.set(COOKIE, state.authenticate('reviewer', 'strong-test-password')['token'])
     page = client.get('/review', params={'document': sid, 'task': 'individual'}).text
     assert 'data-formation-incomplete' in page and 'Kennisvorming onvolledig' in page
-    assert f'/formation-problems?document={sid}' in page
+    assert f'/source-selection?document={sid}' in page
     # The current-state projection decides, not the stored flag alone.
     real_status = state.processing_status
     for change in ({'formation_incomplete': False},):
@@ -173,7 +173,7 @@ def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path, *, produ
     assert len(calls) == 2
     client.cookies.set(COOKIE, state.authenticate('author', 'strong-test-password')['token'])
     page = client.get('/settings/technical/processing', params={'document': sid})
-    assert 'Naar Bronselectie voor Starten of Hervatten' in page.text and 'publicatie is geblokkeerd' in page.text
+    assert 'Naar Vorming voor Starten of Hervatten' in page.text and 'publicatie is geblokkeerd' in page.text
     assert 'Vormingstaken:' in page.text and 'nog open' in page.text
     mode['broken'] = False
     response = client.post('/tree/resume-formation', data=command, follow_redirects=False)

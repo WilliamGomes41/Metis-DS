@@ -12,7 +12,7 @@ const fs = require('fs');
   await page.locator('[name=username]').fill('author');
   await page.locator('[name=password]').fill('fixture-only');
   await Promise.all([page.waitForURL(base+'/'), page.locator('button[type=submit]').click()]);
-  const expected = ['Inleveren','Bronselectie','Review','Publicatie','Documenten'];
+  const expected = ['Inleveren','Vorming','Review','Publicatie','Documenten'];
   const titles = await page.locator('.home-tile-title').allTextContents();
   if (JSON.stringify(titles)!==JSON.stringify(expected)) throw Error('workflow order '+JSON.stringify(titles));
   await page.screenshot({path:output+'/home.png',fullPage:true});
