@@ -60,6 +60,10 @@ _DIAGNOSIS_STYLE = """<style>
 .diagnosis-verdict[data-state="blocked"] { border:2px solid #5D3297; background:#F3EEF9; color:#1C1724; }
 .diagnosis-label { font-weight:700; text-transform:uppercase; letter-spacing:.04em; margin:0 0 8px; }
 .diagnosis-verdict[data-state="blocked"] .diagnosis-label, .diagnosis-steps li.blocked .diagnosis-status { color:#4A2679; }
+.diagnosis-icon { display:inline-flex; align-items:center; justify-content:center; width:1.4em; height:1.4em; border-radius:50%; font-weight:700; text-transform:none; vertical-align:middle; }
+.diagnosis-icon.is-blocked { background:#5D3297; color:#FFFFFF; }
+.diagnosis-icon.is-running { color:#45AAC7; }
+.diagnosis-icon.is-info { border:2px solid #45AAC7; color:#45AAC7; font-style:normal; }
 .diagnosis-facts { display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px; margin:12px 0; }
 .diagnosis-facts div { background:var(--surface, #fff); border:1px solid var(--line); border-radius:8px; padding:8px 12px; }
 .diagnosis-facts dt { font-size:.85em; color:var(--muted); }
@@ -116,7 +120,38 @@ def _diagnosis_families(diagnostics: dict | None) -> list[tuple[str, dict]]:
     return sorted(rows, key=lambda row: -int(row[1]["issue_occurrence_count"]))
 
 
-def _diagnosis_steps_html(processing: dict, code: str, progress: dict, diagnostics: dict | None) -> str:
+def _diagnosis_icon(label: str) -> str:
+    """Purple '!' only for a block; neutral Water icons otherwise (Vignet, #854)."""
+    if label == "Niet publiceerbaar":
+        return '<span class="diagnosis-icon is-blocked" aria-hidden="true">!</span>'
+    if label == "Verwerking loopt":
+        return ('<span class="diagnosis-icon is-running" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" '
+                'fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/>'
+                '<path d="M12 7v5l3 2"/></svg></span>')
+    return '<span class="diagnosis-icon is-info" aria-hidden="true">i</span>'
+
+
+# Recorded attempt phase -> timeline step (1 bron, 2 taken, 4 controle). Presentation only.
+_DIAGNOSIS_PHASE_STEP = {
+    "reserved": 1, "extraction_checkpoint": 1, "source_views_pinned": 1,
+    "task_plan_pinned": 2, "worker_claimed": 2, "worker_handover": 2, "model_request": 2,
+    "response_received": 2, "proposal_received": 2, "task_rejected": 2, "budget_exhausted": 2,
+    "joint_validation_rejected": 4,
+}
+
+
+def _diagnosis_failed_step(diagnostic: dict) -> int:
+    """The step where the failure is recorded; else the first step after the last reached one; else 1."""
+    phase = diagnostic.get("phase")
+    if phase in _DIAGNOSIS_PHASE_STEP:
+        return _DIAGNOSIS_PHASE_STEP[phase]
+    reached = [_DIAGNOSIS_PHASE_STEP[row.get("phase")] for row in diagnostic.get("checkpoints") or []
+               if isinstance(row, dict) and row.get("phase") in _DIAGNOSIS_PHASE_STEP]
+    return min(max(reached) + 1, len(_DIAGNOSIS_STEPS)) if reached else 1
+
+
+def _diagnosis_steps_html(processing: dict, code: str, progress: dict, diagnostics: dict | None,
+                          diagnostic: dict | None = None) -> str:
     blocked = int((diagnostics or {}).get("blocked_candidate_count") or 0)
     pending = int(progress.get("pending_task_count") or 0)
     running = processing.get("state") == "running"
@@ -127,7 +162,7 @@ def _diagnosis_steps_html(processing: dict, code: str, progress: dict, diagnosti
     elif running:
         stop = None
     elif code:
-        stop = 1
+        stop = _diagnosis_failed_step(diagnostic or {})
     else:
         stop = None
     items = []
@@ -532,7 +567,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
                 for key, name in (("outcome", "Uitkomst laatste poging"), ("reason_code", "Reden laatste poging"),
                                   ("recovery_advice", "Advies laatste poging")) if diagnostic.get(key))
             verdict = f'''<div class="diagnosis-verdict"{' data-state="blocked"' if label == "Niet publiceerbaar" else ""} role="status">
-              <p class="diagnosis-label"><span aria-hidden="true">!</span> {escape(label)}</p>
+              <p class="diagnosis-label">{_diagnosis_icon(label)} {escape(label)}</p>
               <p class="lead">{escape(ERROR_COPY.get(code, "Controleer de actuele verwerking."))}</p>
               <p>Een technisch geslaagde poging bewijst niet dat bronverwerking, review of publicatievoorwaarden volledig zijn afgerond.</p>
               <dl class="diagnosis-facts">{facts_html}</dl>{review_button}
@@ -540,7 +575,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
                 <dt>Status</dt><dd><code>{escape(str(processing.get("state") or "niet vastgelegd"))}</code></dd>
                 <dt>Code</dt><dd><code>{escape(str(code))}</code></dd>{attempt_rows}</dl></details></div>'''
             processing_html = (f'''<section id="verwerking" aria-labelledby="oordeel"><h2 id="oordeel">Oordeel</h2>{verdict}</section>
-          {_diagnosis_steps_html(processing, code, progress, diagnostics)}
+          {_diagnosis_steps_html(processing, code, progress, diagnostics, diagnostic)}
           <section id="acties"><h2>Wat er nu moet gebeuren</h2>
             {_diagnosis_actions_html(diagnostics, repair)}{controls}{pages_html}</section>''')
         else:
