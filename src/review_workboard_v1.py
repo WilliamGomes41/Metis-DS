@@ -170,8 +170,9 @@ def _work_item_from_counts(
         work_state = "complete"
 
     next_title, next_description = _TASK_COPY.get(next_task, ("", ""))
+    workplace = '/source-selection' if next_task == 'structure' and _review_path_of(envelope) != 'boom' else '/review'
     next_href = (
-        f"/review?document={quote(snapshot_id, safe='')}&task={quote(next_task, safe='')}"
+        f"{workplace}?document={quote(snapshot_id, safe='')}&task={quote(next_task, safe='')}"
         if next_task
         else ""
     )
@@ -529,13 +530,14 @@ def _work_summary(item: dict[str, Any]) -> str:
     return "Geen open reviewplicht."
 
 
-def _work_queue_link(snapshot_id: str, task: str, label: str) -> str:
-    """Link one visible non-empty work bucket to its existing Review task."""
+def _work_queue_link(snapshot_id: str, task: str, label: str, *, review_path: str = 'richtlijn') -> str:
+    """Link one visible non-empty work bucket to its existing owner workplace."""
     snap = quote(snapshot_id, safe="")
     safe_task = quote(task, safe="")
+    workplace = '/source-selection' if task == 'structure' and review_path != 'boom' else '/review'
     return (
         f'<a class="review-work-queue-link" data-work-queue="{_esc(task)}" '
-        f'href="/review?document={snap}&amp;task={safe_task}">{_esc(label)}</a>'
+        f'href="{workplace}?document={snap}&amp;task={safe_task}">{_esc(label)}</a>'
     )
 
 
@@ -567,7 +569,7 @@ def _workboard_card(item: dict[str, Any]) -> str:
             ("second_review", int(item.get("actionable_second_review_duties") or 0), "tweede beoordeling"),
         ):
             if count:
-                detail_parts.append(_work_queue_link(snapshot_id, task, f"{count} {label}"))
+                detail_parts.append(_work_queue_link(snapshot_id, task, f"{count} {label}", review_path=_review_path_of(envelope)))
         if item.get("waiting_for_reviewer_duties"):
             detail_parts.append(
                 _work_queue_link(snapshot_id, "waiting", f"{item['waiting_for_reviewer_duties']} wacht op andere reviewer")
@@ -914,6 +916,9 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             raise ConsoleError("unknown_snapshot")
         if selected and account["account_id"] not in selected["named_reviewers"]:
             return RedirectResponse('/review/trajectory?' + urlencode({'document': document}), status_code=303)
+        if (selected and not object.strip() and chosen_task == 'structure'
+                and review_path_for_klasse(selected['class']) != 'boom'):
+            return RedirectResponse('/source-selection?' + urlencode({'document': document, 'task': 'structure'}), status_code=303)
         chosen = document.strip()
         chosen_task = normalize_review_task(task)
         if not chosen or (not object.strip() and not chosen_task):
@@ -952,6 +957,8 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             interaction_id=interaction_id,
         )
         if isinstance(response, RedirectResponse) and response.status_code == 303:
+            if response.headers['location'].startswith('/source-selection?'):
+                return response
             envelope = console._envelope(snapshot_id)
             item = review_work_item(
                 console,

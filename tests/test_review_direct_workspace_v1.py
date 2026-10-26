@@ -158,17 +158,37 @@ def test_waiting_duties_are_not_counted_as_completed_work():
 def test_task_page_returns_to_selected_document(monkeypatch):
     def render(console, account, document, object='', *, task='', counts=None,
                context_target='', context_mode='', context_saved=False, read_inputs=None):
-        assert document == 'two' and task == 'structure'
+        assert document == 'two' and task == 'contextual'
         assert (context_target, context_mode, context_saved) == ('', '', False)
         assert read_inputs is None
-        return '<h1>Koppen controleren</h1><a class="btn-secondary" href="/review">Ander document kiezen</a>'
+        return '<h1>Passages beoordelen</h1><a class="btn-secondary" href="/review">Ander document kiezen</a>'
     monkeypatch.setattr('src.review_workboard_v1._render_review_room', render)
     console = Console(documents=[('one', document('One')), ('two', document('Two'))])
-    response = client(console).get('/review?document=two&task=structure')
+    response = client(console).get('/review?document=two&task=contextual')
     assert response.status_code == 200
-    assert 'Koppen controleren' in response.text
+    assert 'Passages beoordelen' in response.text
     assert 'href="/review?document=two&amp;q=&amp;page=1"' in response.text
     assert "Terug naar documenten" in response.text
+
+
+def test_historical_heading_task_navigates_without_rendering_or_writing(monkeypatch):
+    console = Console(documents=[('two', document('Two'))])
+    before = deepcopy(console.documents)
+    monkeypatch.setattr('src.review_workboard_v1._render_review_room',
+                        lambda *a, **kw: (_ for _ in ()).throw(AssertionError('old editor rendered')))
+    response = client(console).get('/review?document=two&task=headings', follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers['location'] == '/source-selection?document=two&task=structure'
+    assert console.documents == before
+
+
+def test_boom_structure_retains_its_existing_review_workplace(monkeypatch):
+    value = document('Boom')
+    value['envelope']['class'] = 'beslisboom'
+    console = Console(documents=[('tree', value)])
+    monkeypatch.setattr('src.review_workboard_v1._render_review_room', lambda *a, **kw: 'Existing boom structure')
+    response = client(console).get('/review?document=tree&task=structure')
+    assert response.status_code == 200 and response.text == 'Existing boom structure'
 
 
 def test_hundreds_of_documents_are_paged_searchable_and_have_unique_workspace_ids():
