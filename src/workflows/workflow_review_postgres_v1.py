@@ -92,6 +92,21 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                 return parsed
         raise WorkflowReviewStoreError("workflow_review_event_payload_invalid")
 
+    def read_events_for_snapshots(self, snapshot_ids: list[str]) -> list[dict[str, Any]]:
+        """Read authorized document history without decoding the global ledger."""
+        if not snapshot_ids:
+            return []
+        try:
+            with self._connect() as con:
+                rows = con.execute(
+                    "SELECT event_payload FROM workflow.review_events "
+                    "WHERE event_payload->'details'->>'snapshot_id'=ANY(%s) ORDER BY event_id",
+                    (snapshot_ids,),
+                ).fetchall()
+            return [self._event_payload(row['event_payload']) for row in rows]
+        except Exception as exc:
+            raise WorkflowReviewStoreError('workflow_review_read_failed') from exc
+
     def read_events(self) -> list[dict[str, Any]]:
         try:
             with self._connect() as con:
@@ -322,19 +337,29 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
             raise WorkflowReviewStoreError("workflow_review_event_write_failed") from exc
 
 
-    def read_bindings(self, snapshot_ids: list[str] | None = None) -> dict[str, list[dict[str, Any]]]:
+    def read_bindings(self, snapshot_ids: list[str] | None = None, *,
+                      object_ids: list[str] | None = None) -> dict[str, list[dict[str, Any]]]:
         if snapshot_ids == []:
             return {}
+        if object_ids == []:
+            return {}
         try:
+            conditions, params = [], []
+            if snapshot_ids is not None:
+                conditions.append('snapshot_id=ANY(%s)')
+                params.append(snapshot_ids)
+            if object_ids is not None:
+                conditions.append('object_id=ANY(%s)')
+                params.append(object_ids)
             with self._connect() as con:
                 rows = con.execute(
                     "SELECT snapshot_id,object_id,object_version,canonical_object_hash,"
                     "confirmed_object_type,reviewer_account_id,reviewer_display_name,decision,valid,"
                     "authorization_payload "
                     "FROM workflow.publish_authorizations "
-                    + ("WHERE snapshot_id=ANY(%s) " if snapshot_ids is not None else "")
+                    + ('WHERE ' + ' AND '.join(conditions) + ' ' if conditions else '')
                     + "ORDER BY snapshot_id,position NULLS LAST,authorization_id",
-                    *(((snapshot_ids,),) if snapshot_ids is not None else ()),
+                    *((tuple(params),) if params else ()),
                 ).fetchall()
             out: dict[str, list[dict[str, Any]]] = {}
             for row in rows:

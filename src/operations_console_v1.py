@@ -495,6 +495,14 @@ def is_slow_review_duty(obj: dict[str, Any], review_path: str | None = None, *, 
         obj, review_path=path, bindings=bindings, fragments=fragments
     ):
         return False
+    return slow_review_kind(obj, review_path=path)
+
+
+def slow_review_kind(obj: dict[str, Any], *, review_path: str) -> bool:
+    """Classify work whose current duty was already established by its owner."""
+    path = review_path
+    if obj.get("object_type") == "document":
+        return False
     if is_admission_blocked(obj, review_path=path):
         return False
     if review_lane(obj, review_path=path) == "fast":
@@ -521,7 +529,8 @@ def slow_review_duty(
 ) -> list[dict[str, Any]]:
     """Presented Inhoud cards: recommendation + condition/exception/high-risk."""
     bindings = tuple(bindings or ())
-    fragments = tuple(fragments) if fragments is not None else None
+    from src.prepared_source_views_v1 import preserve_fragments
+    fragments = preserve_fragments(fragments) if fragments is not None else None
     rows = [obj for obj in objects if is_slow_review_duty(obj, review_path=review_path, bindings=bindings, fragments=fragments)]
     return rows if review_path == "boom" else sorted(rows, key=review_priority_rank)
 

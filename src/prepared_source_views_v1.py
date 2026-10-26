@@ -40,16 +40,22 @@ class FrozenList(list):
         return [deepcopy(v,memo) for v in self]
 
 
-def freeze(value):
+def freeze(value, _memo=None):
     if isinstance(value,(FrozenDict,FrozenList)):
         return value
+    if not isinstance(value,(dict,list,tuple)):
+        return value
+    memo = {} if _memo is None else _memo
+    if id(value) in memo:
+        return memo[id(value)]
     if isinstance(value,dict):
-        return FrozenDict({k:freeze(v) for k,v in value.items()})
-    if isinstance(value,list):
-        return FrozenList(freeze(v) for v in value)
-    if isinstance(value,tuple):
-        return tuple(freeze(v) for v in value)
-    return value
+        result = FrozenDict({k:freeze(v,memo) for k,v in value.items()})
+    elif isinstance(value,list):
+        result = FrozenList(freeze(v,memo) for v in value)
+    else:
+        result = tuple(freeze(v,memo) for v in value)
+    memo[id(value)] = result
+    return result
 
 
 class SourceFragments(FrozenList):
@@ -66,11 +72,9 @@ class SourceFragments(FrozenList):
     def extraction_record(self):
         return deepcopy(self.root.docling_record)
     def filtered(self,name):
-        selected=set(self.root.carriers[name].indices)
-        indices=tuple(i for i in self.indices if i in selected)
-        for carrier in self.root.carriers.values():
-            if carrier.indices==indices:
-                return carrier
+        carrier = self.root.filters[(self.name,name)]
+        if carrier is not None:
+            return carrier
         fail('source_views_filter_incompatible')
 
 
@@ -119,6 +123,15 @@ class PreparedSource:
                         raise ValueError()
                     seen.add(public['block_id'])
                 self.carriers[name]=SourceFragments(self,name)
+            # Six immutable views have at most 36 intersections. Resolve them
+            # once instead of intersecting the complete source per candidate.
+            self.filters = {}
+            for name, carrier in self.carriers.items():
+                for target, other in self.carriers.items():
+                    selected = set(other.indices)
+                    indices = tuple(i for i in carrier.indices if i in selected)
+                    self.filters[(name,target)] = next(
+                        (row for row in self.carriers.values() if row.indices == indices), None)
         except (KeyError,ValueError,IndexError,TypeError):
             fail('source_views_integrity_failed')
     @property
@@ -143,9 +156,10 @@ def prepare(raw):
         indices=[positions[id(row)] for row in fragments]
         key=tuple(indices)
         if key not in identical:
-            identical[key]=_reconstructed_blocks(fragments)
+            # Normalize each distinct view once. Serializing the whole payload
+            # duplicates identical full/content/candidate views before freezing.
+            identical[key]=json.loads(json.dumps(_reconstructed_blocks(fragments),ensure_ascii=False))
         payload['views'][name]={'fragment_indices':indices,'blocks':identical[key]}
-    payload=json.loads(json.dumps(payload,ensure_ascii=False))
     return PreparedSource(rows,payload,docling_record=getattr(raw,'extraction_record',None))
 
 

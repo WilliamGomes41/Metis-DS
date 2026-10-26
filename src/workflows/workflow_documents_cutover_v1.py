@@ -72,6 +72,129 @@ def _document_cards_from_rows(rows):
 class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
     """Runtime operations added on top of the migration-only document store."""
 
+    def review_document_input(self, snapshot_id: str) -> tuple[dict[str, Any], str]:
+        """Source/authorization inputs without replay and historical attempts."""
+        try:
+            with self._connect() as con:
+                columns = _DOCUMENT_CARD_COLUMNS.replace('d.envelope_payload', 'd.review_envelope')
+                row = con.execute(
+                    "WITH selected AS MATERIALIZED ("
+                    "SELECT d.*, d.envelope_payload - ARRAY['semantic_replay','processing_attempts',"
+                    "'quality_processing_runs'] AS review_envelope FROM workflow.documents d WHERE snapshot_id=%s) "
+                    f"SELECT {columns}, d.object_generation, d.revision, d.review_envelope, "
+                    "jsonb_build_object('provider_evidence',jsonb_build_object('formation_incomplete',"
+                    "d.envelope_payload#>'{semantic_replay,provider_evidence,formation_incomplete}')) AS formation_notice, "
+                    "COALESCE(d.envelope_payload->'semantic_replay' NOT IN ('null'::jsonb,'{}'::jsonb),false) AS has_replay, "
+                    "(SELECT p.payload->'processing_attempts'->0->>'state' "
+                    "FROM workflow.processing_document_summaries p WHERE p.snapshot_id=d.snapshot_id) AS latest_processing_state "
+                    "FROM selected d LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id", (snapshot_id,),
+                ).fetchone()
+            if row is None:
+                raise WorkflowDocumentStoreError('unknown_snapshot')
+            envelope = dict(row['review_envelope'])
+            from src.recoverable_formation_v1 import incomplete
+            # A negative prefilter only: uncertain/open formation still runs
+            # the existing complete check, including current source closure.
+            envelope['_review_check_formation'] = incomplete({'semantic_replay': row['formation_notice']}) or (
+                envelope.get('processing_storage') == 'task-v1' and (
+                    not row['has_replay'] or row['latest_processing_state'] not in {'succeeded', 'incomplete_budget'}))
+            card = _document_cards_from_rows([row])[0]
+            envelope.update({k: v for k, v in card.items()
+                             if k not in {'review_envelope', 'object_generation', 'revision',
+                                          'formation_notice', 'has_replay', 'latest_processing_state'}})
+            return envelope, f"{int(row['revision'])}:{int(row['object_generation'])}"
+        except WorkflowDocumentStoreError:
+            raise
+        except Exception as exc:
+            raise WorkflowDocumentStoreError('workflow_document_read_failed') from exc
+
+    def review_object_histories(self, snapshot_id: str, object_ids: list[str]) -> list[dict[str, Any]]:
+        """Retain lineage validation, but fetch only the requested identities."""
+        if not object_ids:
+            return []
+        try:
+            with self._connect() as con:
+                rows = con.execute(
+                    "SELECT payload FROM workflow.document_objects WHERE snapshot_id=%s "
+                    "AND object_id=ANY(%s) ORDER BY position", (snapshot_id, object_ids),
+                ).fetchall()
+            return current_revisions([dict(row['payload']) for row in rows], snapshot_id=snapshot_id)
+        except Exception as exc:
+            raise WorkflowDocumentStoreError('workflow_document_objects_read_failed') from exc
+
+    def review_neighbor_ids(self, snapshot_id: str, object_ids: list[str], block_ids: list[str]) -> list[str]:
+        """Incoming relations, context links and source-usage dependencies.
+
+        SQL inspects only edge fields and returns identities. Full candidate
+        payloads cross the boundary only for actual dependencies.
+        """
+        try:
+            probes = [json.dumps({key: [{'target_object_id': oid}]})
+                      for oid in object_ids for key in ('proposed_knowledge_relations',
+                      'confirmed_knowledge_relations', 'relations', 'confirmed_relations')]
+            probes.extend(json.dumps({'metadata': {'confirmed_source_context': [{'source_object_id': oid}]}})
+                          for oid in object_ids)
+            probes.extend(json.dumps({'metadata': {'source_bound_context': {'entries': [{'span': {'block_id': bid}}]}}})
+                          for bid in block_ids)
+            with self._connect() as con:
+                rows = con.execute("""
+                    SELECT DISTINCT neighbor.object_id FROM unnest(%s::jsonb[]) AS wanted(probe)
+                    CROSS JOIN LATERAL (
+                      SELECT object_id FROM workflow.document_objects
+                      WHERE snapshot_id=%s AND payload @> wanted.probe OFFSET 0
+                    ) neighbor
+                    """, (probes, snapshot_id)).fetchall()
+            return [str(row['object_id']) for row in rows]
+        except Exception as exc:
+            raise WorkflowDocumentStoreError('workflow_review_context_read_failed') from exc
+
+    def review_heading_ids(self, snapshot_id: str) -> list[str]:
+        try:
+            with self._connect() as con:
+                rows = con.execute(
+                    "SELECT DISTINCT object_id FROM workflow.document_objects WHERE snapshot_id=%s "
+                    "AND payload @> ANY(ARRAY['{\"object_type\":\"heading\"}', "
+                    "'{\"object_type\":\"path\"}']::jsonb[])", (snapshot_id,),
+                ).fetchall()
+            return [str(row['object_id']) for row in rows]
+        except Exception as exc:
+            raise WorkflowDocumentStoreError('workflow_review_context_read_failed') from exc
+
+    def review_choice_ids(self, snapshot_id: str, object_id: str, *, query: str, page: int):
+        """A bounded context picker, separate from opening the passage."""
+        try:
+            with self._connect() as con:
+                # Empty-query browsing needs only identity/position columns.
+                # Inspect payloads for a text search only when the user asks.
+                search = ("AND EXISTS (SELECT 1 FROM workflow.document_objects p WHERE p.snapshot_id=%s "
+                          "AND p.object_id=latest.object_id AND p.position=latest.position "
+                          "AND COALESCE(p.payload->'content'->>'clean_text','') ILIKE %s) " if query.strip() else '')
+                params = [snapshot_id, snapshot_id, object_id]
+                if query.strip():
+                    params += [snapshot_id, '%' + query.strip() + '%']
+                params.append((max(page, 1)-1)*25)
+                rows = con.execute("""
+                    WITH latest AS (
+                      SELECT DISTINCT ON (object_id) object_id,position
+                      FROM workflow.document_objects WHERE snapshot_id=%s
+                      ORDER BY object_id,position DESC
+                    ), structural AS MATERIALIZED (
+                      SELECT s.object_id FROM workflow.document_objects s
+                      WHERE s.snapshot_id=%s AND s.payload @> ANY(ARRAY[
+                        '{"object_type":"document"}', '{"object_type":"heading"}',
+                        '{"object_type":"path"}']::jsonb[])
+                      AND s.position=(SELECT position FROM latest WHERE object_id=s.object_id)
+                    ), matches AS MATERIALIZED (SELECT object_id,position FROM latest
+                    WHERE object_id<>%s AND object_id NOT IN (SELECT object_id FROM structural)
+                    """ + search + """), selected AS (
+                      SELECT object_id,position FROM matches ORDER BY position LIMIT 25 OFFSET %s
+                    ) SELECT selected.object_id,(SELECT count(*) FROM matches) AS total
+                    FROM (SELECT 1) AS one LEFT JOIN selected ON true ORDER BY selected.position
+                    """, tuple(params)).fetchall()
+            return [str(row['object_id']) for row in rows if row['object_id'] is not None], int(rows[0]['total'])
+        except Exception as exc:
+            raise WorkflowDocumentStoreError('workflow_review_context_read_failed') from exc
+
     def verify_cutover_schema(self) -> None:
         try:
             with self._connect() as con:

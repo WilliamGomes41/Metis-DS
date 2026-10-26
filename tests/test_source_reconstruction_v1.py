@@ -81,6 +81,31 @@ def test_reconstructs_adjacent_lowercase_continuation_without_invention() -> Non
     }
 
 
+def test_review_window_never_cuts_a_reconstructed_sentence():
+    from src.source_reconstruction_v1 import review_source_window
+    from src.semantic_passage_v1 import _reconstructed_blocks
+    fragments = [_fragment('before', 'Een afgeronde zin.'), _fragment('f1', FIRST),
+                 _fragment('f2', CONTINUATION), _fragment('after', 'Een andere afgeronde zin.')]
+    blocks = _reconstructed_blocks(fragments)
+    joined = next(public for public, _ in blocks if public['text'] == COMPLETE)
+    obj = {'metadata': {'semantic_passage': {'spans': [
+        {'block_id': joined['block_id'], 'start': 0, 'end': len(COMPLETE)}]}},
+        'provenance': {'source_fragments': [{'raw_object_id': 'f1'}, {'raw_object_id': 'f2'}]}}
+    assert review_source_window(fragments, [obj]) is fragments
+
+
+def test_review_window_preserves_extractor_evidence():
+    from src.docling_contract_v1 import ExtractedFragments
+    from src.source_reconstruction_v1 import review_source_window
+    fragments = ExtractedFragments([_fragment('first', 'Een afgeronde zin.'),
+        _fragment('other', 'Een andere afgeronde zin.')], {'set_aside_pages': [3]})
+    window = review_source_window(fragments, [{'provenance': {'source_fragments': [
+        {'raw_object_id': 'first'}]}}])
+    assert [row['fragment_id'] for row in window] == ['first']
+    assert window.extraction_record == fragments.extraction_record
+    assert window.extraction_record is not fragments.extraction_record
+
+
 def test_reconstructs_chained_continuations_until_sentence_is_closed() -> None:
     fragments = [
         _fragment("f1", "De werkgroep adviseert het gebruik van een betrouwbare", line=1),
