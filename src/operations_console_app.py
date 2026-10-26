@@ -3553,7 +3553,7 @@ def _render_review_card(
             <p><b>Ontbrekende brontekst:</b> {_esc(missing)}</p>
             <p><b>Herstelde passage:</b> {_esc(merged_text)}</p>
             <p class="field-help">Na aanvullen ontstaat een nieuwe versie. Die versie is nog niet goedgekeurd en moet opnieuw worden beoordeeld.</p>
-            <button class="btn-secondary" type="submit" form="review-form-{_esc(obj["object_id"])}" formaction="/review/context/accept" formmethod="post">Passage aanvullen met brontekst</button>
+            <a class="btn-secondary" href="{_esc('/source-selection?' + urlencode({'document': snapshot_id, 'object': obj['object_id'], 'task': 'continuation', 'return_task': normalize_review_task(task)}))}">Bronaanvulling herstellen in Vorming</a>
           </aside>
         '''
     proposed = proposed_type_of(obj)
@@ -6113,12 +6113,8 @@ def create_console_app(
         )
         safe_task = normalize_review_task(return_task)
         return RedirectResponse(
-            _review_location(
-                state,
-                snapshot_id,
-                object_id,
-                task=safe_task,
-            ),
+            '/source-selection?' + urlencode({'document': snapshot_id, 'object': object_id,
+                'task': 'continuation', 'return_task': safe_task, 'continuation_saved': 'yes'}),
             status_code=303,
         )
 

@@ -23,6 +23,7 @@ import pytest
     ('tests.browser_source_context_fixture', 'browser_source_context_check.cjs'),
     ('tests.browser_source_exclusions_fixture', 'browser_source_exclusions_check.cjs'),
     ('tests.browser_heading_workplace_fixture', 'browser_heading_workplace_check.cjs'),
+    ('tests.browser_continuation_workplace_fixture', 'browser_continuation_workplace_check.cjs'),
 ])
 def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_path, fixture, script):
     root = Path(__file__).resolve().parents[1]
