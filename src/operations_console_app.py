@@ -3689,8 +3689,7 @@ def _render_review_card(
                         <label for="comment-{_esc(obj["object_id"])}">Toelichting (verplicht)</label>
                         <textarea id="comment-{_esc(obj["object_id"])}" name="comment">{html.escape(draft.get("comment", ""), quote=True)}</textarea>
                       </div>
-                      {correction_draft}
-                      <button class="btn-primary" type="submit" data-submit-review>Review opslaan en volgende</button>
+                      {correction_draft}<button class="btn-primary" type="submit" data-submit-review>Review opslaan en volgende</button>
                     </section>
                   </form>
                     </div></div>
