@@ -75,3 +75,10 @@ geen wijziging van verwerkings- of publicatieautoriteit.
 Volledige lokale regressie, alle verplichte browsercases en CI op de
 uiteindelijke head moeten nog afronden; historische of gedeeltelijke runs
 worden niet als dat eindbewijs voorgesteld. Geen productieacceptatie.
+
+Alle zeven verplichte browsercases zijn daarna lokaal geslaagd zonder skips
+(241,25 s). De screenshots scrollen expliciet terug naar boven na de
+toetsenbordproef, zodat de gedeelde sticky header het beeld niet midden in de
+pagina bedekt. De bestaande beoordelings- en downloadcontroles blijven staan.
+Voor het definitieve bewijs wordt de inmiddels bijgewerkte main geïntegreerd;
+de volledige lokale collectie en CI draaien vervolgens op één vaste head.

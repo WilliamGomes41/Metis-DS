@@ -100,6 +100,7 @@ const fs = require('fs');
         .map(node=>({text:node.textContent,height:node.getBoundingClientRect().height}))}));
     if (layout.scrollWidth>layout.width || layout.smallTargets.length)
       throw Error('diagnosis layout failed: '+JSON.stringify(layout));
+    await page.evaluate(()=>window.scrollTo(0,0));
     await page.screenshot({path:output+'/diagnosis/'+width+'.png',fullPage:true});
   }
   if (errors.length) throw Error('script errors '+JSON.stringify(errors));
