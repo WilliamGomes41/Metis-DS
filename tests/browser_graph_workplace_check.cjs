@@ -1,0 +1,65 @@
+const {chromium} = require(process.env.METIS_PLAYWRIGHT_MODULE || 'playwright');
+const assert = require('node:assert/strict');
+(async () => {
+  const base = process.env.METIS_BROWSER_BASE;
+  const m = await (await fetch(base + '/browser-manifest')).json();
+  const browser = await chromium.launch({executablePath: process.env.METIS_BROWSER_EXECUTABLE});
+  const page = await browser.newPage();
+  await page.goto(base + '/login');
+  await page.locator('[name=username]').fill(m.username);
+  await page.locator('[name=password]').fill(m.password);
+  await Promise.all([page.waitForURL(url => url.pathname !== '/login'), page.locator('button[type=submit]').click()]);
+  const state = async () => (await page.request.get(base + '/browser-graph-state')).json();
+  async function proof(stage, width) {
+    await page.evaluate(() => scrollTo(0, 0));
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, stage);
+    assert.equal(await page.locator('form form').count(), 0);
+    await page.screenshot({path: `${process.env.METIS_BROWSER_OUTPUT}/${stage}-${width}.png`, fullPage: true});
+  }
+  for (const [index, width] of [1440, 390].entries()) {
+    const d = m.documents[index];
+    await page.setViewportSize({width, height: 1000});
+    const before = await state();
+    await page.goto(base + '/review/decision-graph?' + new URLSearchParams({document: d.snapshot_id}));
+    assert.equal(await page.locator('[name=node_mode], [name=action][value=graph]').count(), 0);
+    assert.equal(await page.locator('[name=action][value=confirm]').count(), 1);
+    await proof('review-graph', width);
+    await page.getByRole('link', {name: 'Beslisstructuur herstellen in Vorming', exact: true}).focus();
+    await Promise.all([page.waitForURL(url => url.pathname === '/source-selection'), page.keyboard.press('Enter')]);
+    const form = page.locator('form[action="/review/decision-graph"]');
+    assert.equal(await form.count(), 1);
+    assert.equal(await form.locator('[name=action][value=confirm]').count(), 0);
+    assert.deepEqual(await state(), before, 'Graph GETs must not write');
+    await form.locator('[name=node_mode]').nth(0).selectOption('continue');
+    await form.locator('[name=node_mode]').nth(1).selectOption('terminal');
+    for (const checkbox of await form.locator('[name=entrypoint]').all()) await checkbox.uncheck();
+    await form.locator(`[name=entrypoint][value="${d.ids[0]}"]`).check();
+    const edge = form.locator('fieldset').first();
+    await edge.locator('[name=from]').selectOption(d.ids[0]);
+    await edge.locator('[name=to]').selectOption(d.ids[1]);
+    await edge.locator('[name=kind]').selectOption('continue');
+    await edge.locator('[name="evidence-0"]').selectOption([d.evidence]);
+    await form.locator('[name=reason]').fill('Verbindingen en bronbewijs gecontroleerd.');
+    await proof('formation-graph-selected', width);
+    await form.locator('[name=action][value=graph]').focus();
+    await Promise.all([page.waitForNavigation({waitUntil: 'domcontentloaded'}), page.keyboard.press('Enter')]);
+    assert.equal(new URL(page.url()).pathname, '/source-selection');
+    assert.equal(await page.getByRole('status').count(), 1);
+    const saved = await state();
+    assert.notEqual(saved[index].revision, before[index].revision);
+    assert.ok(saved[index].source_unchanged && saved[index].candidate_sources_unchanged);
+    assert.equal(saved[index].graph.edges[0].from, d.ids[0]);
+    assert.equal(saved[index].graph.edges[0].to, d.ids[1]);
+    assert.equal(saved[index].reviews.length, 0, 'Graph edit does not approve interpretation');
+    assert.deepEqual(saved[1-index], before[1-index]);
+    await page.reload();
+    assert.deepEqual(await state(), saved);
+    await page.getByRole('link', {name: 'Deze beslisroutes beoordelen in Review', exact: true}).click();
+    assert.equal(await page.locator('[name=node_mode], [name=action][value=graph]').count(), 0);
+    assert.equal(await page.locator('[name=action][value=confirm]').count(), 1);
+    await proof('review-graph-saved', width);
+    assert.deepEqual(await state(), saved);
+    console.log('Graph editor and judgement separated over unchanged source', width, 'PASSED');
+  }
+  await browser.close();
+})().catch(e => { console.error(e); process.exit(1); });

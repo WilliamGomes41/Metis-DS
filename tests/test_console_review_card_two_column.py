@@ -196,7 +196,8 @@ def test_review_card_object_left_bronpassage_right(tmp_path: Path, *, production
     assert "Geselecteerde passage" in left or "Geselecteerd omdat" in left
     assert "Relatie bevestigen" not in left
     assert 'name="relation"' not in left
-    assert f'id="type-{rec["object_id"]}"' in card
+    assert 'name="confirmed_object_type"' in card
+    assert 'data-type-chooser' not in card
     assert f'id="decision-{rec["object_id"]}"' in card
     prose = researcher_visible_prose(opened["passage"])
     assert "Broncontext" in right
@@ -221,14 +222,15 @@ def test_review_card_uses_clear_labels_and_requires_an_explicit_decision(tmp_pat
     card = next(block for block in _cards(html) if target["object_id"] in block)
     assert "Geselecteerde passage" in card
     assert "Metis stelt voor:" in card
-    assert re.search(r'<option value="heading"[^>]*>Kop</option>', card)
+    assert not re.search(r'<select[^>]*name="confirmed_object_type"', card)
+    assert "Passage herstellen in Vorming" in card
     assert "Broncontext" in card
     assert 'name="eindoordeel"' in card
     assert 'value="goedkeuren"' in card
     assert 'value="goedkeuren" selected' not in card
     assert "Review opslaan en volgende" in card
     assert 'data-comment-field hidden' in card
-    assert 'data-correction-field hidden' in card
+    assert 'name="proposed_correction"' not in card
     assert 'data-submit-review' in card
 
 
@@ -348,10 +350,8 @@ def test_type_and_approve_still_disabled_when_passage_cannot_open(tmp_path: Path
     assert TWO_COLUMN_CLASS in html
     card = next(block for block in _cards(html) if target["object_id"] in block)
     assert PASSAGE_COL in card
-    type_block = html[
-        html.find(f'id="type-{target["object_id"]}"') : html.find(f'id="decision-{target["object_id"]}"') + 800
-    ]
-    assert "disabled" in type_block
+    confirmation = re.search(r'<input[^>]*name="confirmed_object_type"[^>]*>', html)
+    assert confirmation and 'disabled' in confirmation.group()
     assert 'data-heading-owner' in card
     assert 'name="eindoordeel" value="goedkeuren"' not in card
     assert 'value="goedkeuren_na_correctie"' in html

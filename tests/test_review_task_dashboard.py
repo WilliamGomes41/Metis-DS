@@ -91,7 +91,7 @@ def test_control_card_highlights_blocked_passages_as_work():
     assert "1 passage is nog niet beschikbaar voor goedkeuring." in dashboard
     assert "Passages corrigeren" in dashboard
     assert 'class="review-blocked-notice"' in dashboard
-    assert '/review?document=snap-1&amp;task=repair' in dashboard
+    assert '/source-selection?document=snap-1&amp;task=repair' in dashboard
 
 
 
@@ -348,7 +348,7 @@ def test_dashboard_accounts_for_every_passage_without_hiding_followup_work():
     assert inventory.count('data-passage-id=') == 436
     assert followup.count('data-passage-id=') == 338
     assert 'Metis heeft nog niet vastgesteld' in followup
-    assert dashboard.count('/review?document=snap-430&amp;task=repair') == 1
+    assert dashboard.count('/source-selection?document=snap-430&amp;task=repair') == 1
     assert rows == before
 
 

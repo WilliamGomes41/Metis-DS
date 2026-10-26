@@ -9,6 +9,7 @@ from __future__ import annotations
 from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -305,12 +306,10 @@ def test_type_select_does_not_silently_submit_heading(tmp_path: Path, *, product
     assert 'disabled' in html
     assert "Metis stelt voor:" in html
     assert "Dit klopt" in html
-    assert "Type wijzigen" in html
-    type_block = html[html.find(f'id="type-{heading["object_id"]}"') : html.find(f'id="type-{heading["object_id"]}"') + 800]
-    heading_option = next(
-        line for line in type_block.split(">") if 'value="heading"' in line
-    )
-    assert "selected" in heading_option
+    assert "Type wijzigen" not in html
+    assert 'name="confirmed_object_type" value="heading"' in html
+    assert 'data-type-chooser' not in html
+    assert "Passage herstellen in Vorming" in html
     assert 'data-submit-review' in html
 
 
@@ -381,8 +380,9 @@ def test_type_and_approve_disabled_when_open_source_passage_fails(tmp_path: Path
     client = TestClient(production_app(console))
     client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
     html = client.get(f"/review?document={receipt['snapshot_id']}&object={target['object_id']}").text
-    type_block = html[html.find(f'id="type-{target["object_id"]}"') : html.find(f'id="decision-{target["object_id"]}"') + 800]
-    assert "disabled" in type_block
+    confirmation = re.search(r'<input[^>]*name="confirmed_object_type"[^>]*>', html)
+    assert confirmation and 'disabled' in confirmation.group()
+    assert 'data-type-chooser' not in html
     assert 'data-heading-owner' in html
     assert 'name="eindoordeel" value="goedkeuren"' not in html
     assert 'value="goedkeuren_na_correctie"' in html

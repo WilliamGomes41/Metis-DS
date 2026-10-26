@@ -378,11 +378,36 @@ def install(app, console, require, page, nav, esc):
                       object: str = '', context_target: str = '', context_mode: str = '',
                       context_page: int = 0, context_q: str = '', context_saved: str = '',
                       task: str = '', q: str = '', review_page: int = Query(1, alias='page'),
-                      return_task: str = '', continuation_saved: str = ''):
+                      return_task: str = '', continuation_saved: str = '',
+                      repair_kind: str = 'source_units', repair_saved: str = '', graph_saved: str = ''):
         with diagnostic_phase("authorization"):
             actor = require(request)
         if task == 'structure' and document:
             return render_structure(console, actor, document, q=q, page=review_page)
+        if task == 'graph' and document:
+            from src.decision_review_ui_v1 import render_graph
+            body = render_graph(console, actor, document, editing=True)
+            if graph_saved == 'yes':
+                body = body.replace('<h2>Beslisstructuur vastleggen</h2>', '<h2>Beslisstructuur vastleggen</h2><p class="banner ok" role="status">De beslisstructuur is opgeslagen. Beoordeel de huidige graaf in Review.</p>')
+            return body
+        if task == 'repair' and document:
+            if object:
+                from src.deterministic_review_repair_v1 import render_repair
+                body = render_repair(console, request, {'snapshot_id': document, 'object_id': object},
+                    repair_kind=repair_kind, saved=repair_saved == 'yes')
+                return body
+            console._require_role(actor['account_id'], 'reviewer')
+            envelope = console._envelope(document)
+            if actor['account_id'] not in envelope['named_reviewers']:
+                raise ConsoleError('reviewer_not_named_on_snapshot')
+            from src import operations_console_app as ui
+            objects = console.snapshot_objects(document)
+            panel = ui._review_inventory(document, objects, review_path=review_path_for_klasse(envelope['class']),
+                bindings=ui._review_bindings(console, document, objects=objects), reviewer_id=actor['account_id'],
+                task='repair', fragments=console.review_source_fragments(document))
+            diagnosis = '/inzicht/document?' + urlencode(dict(document=document))
+            return page(nav(actor, 'selection') + '<section class="room"><h1>Vorming</h1><h2>Passages herstellen</h2>' + panel +
+                '<p><a href="' + esc(diagnosis) + '">Documentdiagnose en bewijs bekijken</a></p></section>')
         if task == 'continuation' and object:
             return render_continuation(console, actor, document, object,
                 return_task=return_task, saved=continuation_saved == 'yes')

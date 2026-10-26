@@ -120,7 +120,7 @@ def test_reviewer_sees_verdict_first_then_steps_actions_findings_and_evidence(sy
     points = [int(value) for value in re.findall(r'data-label="Punten" class="num">(\d+)<', actions)]
     assert points == sorted(points, reverse=True)
     assert len(points) == len(diagnostics["by_family"])
-    assert actions.count(f'href="/review?document={sid}&amp;task=repair"') == len(points)
+    assert actions.count(f'href="/source-selection?document={sid}&amp;task=repair"') == len(points)
     assert "Wie" not in actions and "Redacteur" not in actions
     assert "De passage is niet los te lezen" in html  # plain-language family text
 

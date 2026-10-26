@@ -35,12 +35,13 @@ def test_decision_review_moves_type_explanations_to_help_without_mutating_eviden
         if obj["object_type"] == "document":
             continue
         html = client.get(f"/review?document={sid}&object={obj['object_id']}").text
+        html = client.get(f"/source-selection?document={sid}&object={obj['object_id']}&task=repair&repair_kind=classification").text
         assert 'value="path"' in html and "Pad — route of resultaatbundel" in html
         assert 'value="node"' in html and "Knoop — vraag of beslispunt" in html
         assert 'value="outcome"' in html and "Uitkomst — afsluitend advies" in html
         assert "scorelijstitem" not in html and "Een pad is zelf geen advies" not in html
         assert "Metis stelt voor" not in html
-        assert "Huidige indeling:" in html
+        assert "Huidige passage:" in html
         assert "standaard het type Knoop" not in html
         assert "automatisch gegroepeerd" not in html
         assert "automatisch afgesplitst" not in html
@@ -50,6 +51,8 @@ def test_decision_review_moves_type_explanations_to_help_without_mutating_eviden
     assert "geen inhoudelijke classificatie" in help_page.text
     graph = client.get(f"/review/decision-graph?document={sid}")
     assert graph.status_code == 200
+    assert 'name="node_mode"' not in graph.text
+    graph = client.get(f"/source-selection?document={sid}&task=graph")
     assert "Verbinding 1" in graph.text and "Soort verbinding" in graph.text
     assert "Een route bestaat uit opeenvolgende stappen" not in graph.text
     assert 'href="/help/review"' in graph.text

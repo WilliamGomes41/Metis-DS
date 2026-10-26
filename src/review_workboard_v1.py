@@ -170,7 +170,7 @@ def _work_item_from_counts(
         work_state = "complete"
 
     next_title, next_description = _TASK_COPY.get(next_task, ("", ""))
-    workplace = '/source-selection' if next_task == 'structure' and _review_path_of(envelope) != 'boom' else '/review'
+    workplace = '/source-selection' if next_task == 'repair' or (next_task == 'structure' and _review_path_of(envelope) != 'boom') else '/review'
     next_href = (
         f"{workplace}?document={quote(snapshot_id, safe='')}&task={quote(next_task, safe='')}"
         if next_task
@@ -534,7 +534,7 @@ def _work_queue_link(snapshot_id: str, task: str, label: str, *, review_path: st
     """Link one visible non-empty work bucket to its existing owner workplace."""
     snap = quote(snapshot_id, safe="")
     safe_task = quote(task, safe="")
-    workplace = '/source-selection' if task == 'structure' and review_path != 'boom' else '/review'
+    workplace = '/source-selection' if task == 'repair' or (task == 'structure' and review_path != 'boom') else '/review'
     return (
         f'<a class="review-work-queue-link" data-work-queue="{_esc(task)}" '
         f'href="{workplace}?document={snap}&amp;task={safe_task}">{_esc(label)}</a>'
@@ -900,6 +900,10 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             return RedirectResponse('/source-selection?' + urlencode(params) + '#passage-context',
                                     status_code=303)
         chosen_task = normalize_review_task(task)
+        if document and chosen_task == 'repair':
+            if 'reviewer' not in account.get('roles', []) or account['account_id'] not in console._envelope(document)['named_reviewers']:
+                raise ConsoleError('reviewer_not_named_on_snapshot')
+            return RedirectResponse('/source-selection?' + urlencode(dict(document=document, object=object, task='repair')), status_code=303)
         read_inputs = None
         if document and object.strip() and chosen_task != 'history':
             from src.review_passage_read_v1 import read_review_passage

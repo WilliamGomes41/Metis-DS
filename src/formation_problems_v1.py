@@ -114,7 +114,7 @@ def collect(console, *, actor_id, snapshot_id):
         actions = []
         if obj:
             actions.append({'label': 'Brongebruik bepalen of herstellen' if is_source_record(obj) else 'Kandidaat herstellen',
-                'url': _url('/source-selection' if is_source_record(obj) else '/review', snapshot_id, object=oid,
+                'url': _url('/source-selection', snapshot_id, object=oid,
                             task='disposition' if is_source_record(obj) else 'repair')})
         else:
             # Source dispositions use the current materialised source register,

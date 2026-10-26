@@ -617,7 +617,8 @@ def test_phase3_cockpit_and_sterkte_still_present(tmp_path: Path, *, production_
     card = _card(html, adviseert["object_id"])
     assert "Gevonden onder" in card
     assert "Dit klopt" in card
-    assert "Andere kop kiezen" in card
+    assert "Andere kop kiezen" not in card
+    assert "Passage herstellen in Vorming" in card
     assert "Open volledige richtlijn" in card or "broncontext" in card.lower()
     assert "Geen zelfstandig stukje kennis" in card
     assert is_slow_review_duty(adviseert, fragments=console.review_source_fragments(receipt["snapshot_id"]), bindings=console.object_review_bindings(receipt["snapshot_id"])) is True

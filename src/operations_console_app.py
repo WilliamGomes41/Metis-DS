@@ -663,11 +663,9 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
   const eindoordeel = form.querySelectorAll('[name="eindoordeel"]');
   const type = form.querySelector('[name="confirmed_object_type"]');
   const typeAction = form.querySelectorAll('[name="type_action"]');
-  const typeChooser = form.querySelector('[data-type-chooser]');
   const proposed = form.querySelector('[name="proposed_object_type"]');
   const comment = form.querySelector('[name="comment"]');
   const commentField = form.querySelector('[data-comment-field]');
-  const correctionField = form.querySelector('[data-correction-field]');
   const hint = form.querySelector('[data-decision-hint]');
   const submit = form.querySelector('[data-submit-review]');
   const stamp = form.querySelector('[data-stamp-block]');
@@ -675,12 +673,8 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
   const semantics = form.querySelector('[data-recommendation-semantics-block]');
   const direction = form.querySelectorAll('[name="recommendation_direction"]');
   const strengthLevel = form.querySelectorAll('[name="recommendation_strength_level"]');
-  const chooser = form.querySelector('[data-heading-chooser]');
-  const search = form.querySelector('[data-heading-search]');
-  const posAction = form.querySelectorAll('[name="documentpositie_action"]');
   const suitability = form.querySelectorAll('[name="suitability"]');
   const relationAck = form.querySelector('[name="relation_review_ack"]');
-  const strengthTypes = new Set(['recommendation', 'outcome']);
   const selected = (nodes) => {{
     const hit = Array.from(nodes || []).find((node) => node.checked);
     return hit ? hit.value : '';
@@ -693,19 +687,17 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
   const updateStamp = () => {{
     const card = form.closest('[data-confirmed-type]');
     const confirmedType = card ? (card.getAttribute('data-confirmed-type') || '') : '';
-    const changingType = selected(typeAction) === 'type_wijzigen';
     const confirmingProposal = selected(typeAction) === 'dit_klopt';
     const live = liveType();
     const showLegacy = Boolean(stamp) && live === 'outcome' && (
-      confirmedType === 'outcome' || changingType || confirmingProposal
+      confirmedType === 'outcome' || confirmingProposal
     );
     const showSemantics = Boolean(semantics) && live === 'recommendation' && (
-      confirmedType === 'recommendation' || changingType || confirmingProposal
+      confirmedType === 'recommendation' || confirmingProposal
     );
     if (stamp) stamp.hidden = !showLegacy;
     if (strength) {{
-      strength.disabled = !showLegacy;
-      if (!showLegacy) strength.value = '';
+      strength.disabled = !showLegacy || (selected(eindoordeel) !== 'goedkeuren' && (!decision || decision.value !== 'approve'));
     }}
     if (semantics) semantics.hidden = !showSemantics;
     direction.forEach((node) => {{
@@ -717,16 +709,6 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
       if (!showSemantics) node.checked = false;
     }});
   }};
-  const updateChooser = () => {{
-    if (chooser) chooser.hidden = selected(posAction) !== 'andere_kop';
-    if (typeChooser) typeChooser.hidden = selected(typeAction) !== 'type_wijzigen';
-    if (type) {{
-      if (selected(typeAction) === 'dit_klopt' && proposed && proposed.value) {{
-        type.value = proposed.value;
-      }}
-      type.hidden = selected(typeAction) !== 'type_wijzigen';
-    }}
-  }};
   const update = () => {{
     const value = selected(eindoordeel) || (decision ? decision.value : '');
     if (decision && selected(eindoordeel)) {{
@@ -737,12 +719,9 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
     }}
     const mapped = decision ? decision.value : value;
     const needsComment = mapped === 'reject' || mapped === 'revise' || value === 'afwijzen' || value === 'goedkeuren_na_correctie';
-    const needsCorrection = mapped === 'revise' || value === 'goedkeuren_na_correctie';
     const needsType = mapped === 'approve' || value === 'goedkeuren';
     if (commentField) commentField.hidden = !needsComment;
-    if (correctionField) correctionField.hidden = !needsCorrection;
     if (comment) comment.required = needsComment;
-    if (type) type.required = needsType && selected(typeAction) === 'type_wijzigen';
     const hasType = !needsType || liveType();
     const hasComment = !needsComment || (comment && comment.value.trim());
     const hasSuitability = Boolean(selected(suitability));
@@ -765,12 +744,10 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
       else if (needsRelationReview && !hasRelationReview) hint.textContent = 'Controleer en bevestig de voorgestelde relaties.';
       else hint.textContent = '';
     }}
-    updateChooser();
     updateStamp();
   }};
   eindoordeel.forEach((node) => node.addEventListener('change', update));
   typeAction.forEach((node) => node.addEventListener('change', update));
-  posAction.forEach((node) => node.addEventListener('change', update));
   suitability.forEach((node) => node.addEventListener('change', update));
   if (relationAck) relationAck.addEventListener('change', update);
   if (type) type.addEventListener('change', update);
@@ -778,16 +755,6 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
   strengthLevel.forEach((node) => node.addEventListener('change', update));
   if (comment) comment.addEventListener('input', update);
   if (decision) decision.addEventListener('change', update);
-  if (search && chooser) {{
-    search.addEventListener('input', () => {{
-      const query = search.value.trim().toLowerCase();
-      chooser.querySelectorAll('[data-parent-choice-list] li').forEach((item) => {{
-        item.hidden = Boolean(query) && !item.textContent.toLowerCase().includes(query);
-      }});
-    }});
-  }}
-  updateChooser();
-  updateStamp();
   update();
 }});
 </script>
@@ -900,14 +867,11 @@ def _review_validation_script() -> str:
           if (decision && decision.value === 'goedkeuren') {
             const position = selected('documentpositie_action');
             const type = selected('type_action');
-            if (!position) add('documentpositie_action', 'Bevestig de kop of kies een andere kop.');
-            if (position && position.value === 'andere_kop' && !selected('parent_choice'))
-              add('parent_choice', 'Kies een kop.');
-            if (!type) add('type_action', 'Bevestig het type of kies een ander type.');
+            if (!position) add('documentpositie_action', 'Bevestig de actuele kop.');
+            if (!type) add('type_action', 'Bevestig het actuele type.');
             const typeField = form.querySelector('[name="confirmed_object_type"]');
             const proposal = form.querySelector('[name="proposed_object_type"]');
             const kind = type && type.value === 'dit_klopt' ? proposal.value : typeField.value;
-            if (type && type.value === 'type_wijzigen' && !kind) add('confirmed_object_type', 'Kies een type.');
             if (kind === 'recommendation' && form.querySelector('[data-recommendation-semantics-block]')) {
               if (!selected('recommendation_direction')) add('recommendation_direction', 'Kies de richting van de aanbeveling.');
               if (!selected('recommendation_strength_level')) add('recommendation_strength_level', 'Kies de sterkte die de bron vermeldt.');
@@ -1428,10 +1392,7 @@ def _stamp_block(obj: dict[str, Any], *, hidden: bool = False) -> str:
                     <section class="review-step review-stamp" data-stamp-block{hidden_attr}>
                       <h4>Sterkte van de aanbeveling</h4>
                       <p class="stamp-sentence">{_esc(sentence)}</p>
-                      <label for="strength-{_esc(obj["object_id"])}">Sterkte</label>
-                      <select id="strength-{_esc(obj["object_id"])}" name="recommendation_strength"{disabled_attr}>
-                        {_strength_options(shown or None)}
-                      </select>
+                      <input type="hidden" name="recommendation_strength" value="{_esc(shown)}"{disabled_attr}>
                     </section>
     """
 
@@ -1514,7 +1475,6 @@ def _heading_chooser(
     selected_parent: str = "",
 ) -> str:
     choice = parent_choice_list(objects)
-    snap = quote(str(snapshot_id), safe="")
     choice_items = []
     for row in choice:
         text = heading_visible_text(row)
@@ -1538,7 +1498,7 @@ def _heading_chooser(
         ) * may_select
         choice_items.append(
             f'<li data-heading-role="body"{attrs}>'
-            f'<a href="/review?document={snap}&object={quote(object_id, safe="")}">{_esc(text)}</a>'
+            f'<span>{_esc(text)}</span>'
             f"{locator}{radio}</li>"
         )
     return f"""
@@ -1807,8 +1767,9 @@ def _review_index_item(
     title = review_row_title(obj)
     status = review_row_status(obj)
     task_query = f"&amp;task={_esc(task)}" if task in REVIEW_TASKS else ""
+    workplace = "/source-selection" if task == "repair" else "/review"
     link = (
-        f'<a class="review-row-title" href="/review?document={_esc(snapshot_id)}&amp;object={_esc(obj["object_id"])}{task_query}">'
+        f'<a class="review-row-title" href="{workplace}?document={_esc(snapshot_id)}&amp;object={_esc(obj["object_id"])}{task_query}">'
         f"{_esc(title)}</a>"
     )
     status_html = f'<span class="review-row-status">{_esc(status)}</span>'
@@ -2414,7 +2375,7 @@ def _review_task_dashboard(
     repair_notice = (
         f'<p class="review-blocked-notice">{blocked_count} '
         f'{"passage is" if blocked_count == 1 else "passages zijn"} nog niet beschikbaar voor goedkeuring. '
-        f'<a href="/review?document={_esc(snapshot_id)}&amp;task=repair">Passages corrigeren</a></p>'
+        f'<a href="/source-selection?document={_esc(snapshot_id)}&amp;task=repair">Passages corrigeren</a></p>'
         if blocked_count else ''
     )
     return f'''
@@ -3035,7 +2996,8 @@ def _review_inventory(
                               for oid in usage["target_ids"])
             source_task = "repair" if usage["human_action"] == "technical_repair" else "disposition"
             source_link = "Bronbewijs herstellen" if source_task == "repair" else "Bronbesluit bekijken of wijzigen"
-            source_path = '/review' if source_task == 'repair' else '/source-selection'
+            source_path = '/source-selection'
+            source_task = 'disposition'
             group.append(f'<li data-source-record="{_esc(object_id)}"><p>{_esc((obj.get("content") or {}).get("clean_text"))}</p>'
                 f'<p>{_esc(status)} · {_esc(usage_reason)}</p>{targets}'
                 f'<a href="{source_path}?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={source_task}">{source_link}</a></li>')
@@ -3088,9 +3050,10 @@ def _review_inventory(
         if source_role:
             role_label = {"label": "Bevestigd bronlabel", "context": "Bevestigd contextfragment", "excluded": "Niet opgenomen met reden"}.get(source_role.get("role"), "Bronrol controleren")
             hint_html += f'<p data-confirmed-source-role>{_esc(role_label)} · {_esc(source_role.get("reason"))}</p>'
+        workplace = "/source-selection" if target_task == "repair" else "/review"
         items.append(
             f'<li data-passage-id="{_esc(object_id)}" data-passage-category="{_esc(category)}">'
-            f'<a class="review-row-title" href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">{_esc(review_card_sentence(obj))}</a>'
+            f'<a class="review-row-title" href="{workplace}?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">{_esc(review_card_sentence(obj))}</a>'
             f'{hint_html}'
             f'<p>{_esc(labels[category])} · {_esc(outcome)}</p>'
             f'<p class="review-next-action">{_esc(next_action)}</p>'
@@ -3557,13 +3520,8 @@ def _render_review_card(
           </aside>
         '''
     proposed = proposed_type_of(obj)
-    confirmable = confirmable_proposed_type(obj)
+    confirmable = str(obj.get("confirmed_object_type") or confirmable_proposed_type(obj))
     confirmed = obj.get("confirmed_object_type") or ""
-    type_options = _type_options(
-        draft.get("confirmed_object_type") or confirmed,
-        review_path=review_path,
-        proposed=confirmable,
-    )
     if read_inputs is not None:
         passage_ok = read_inputs.source_available
     else:
@@ -3593,27 +3551,19 @@ def _render_review_card(
     structural_heading = review_path != "boom" and is_structural_projection(obj)
     heading_owner = (
         f'<p data-heading-owner>Koppen bevestig je op <a href="/source-selection?document={_esc(snapshot_id)}&amp;task=structure">Vorming</a>. '
-        'Correctie en afwijzing blijven hieronder beschikbaar.</p>'
+        'Correcties voer je uit op Vorming; afwijzen blijft hieronder beschikbaar.</p>'
         if structural_heading else ""
     )
     approval_choice = (
         f'<label class="check"><input type="radio" name="eindoordeel" value="goedkeuren"{approval_disabled}{_checked(draft.get("eindoordeel", ""), "goedkeuren")}> Goedkeuren — inhoud en indeling kloppen</label>'
         if not structural_heading else ""
     )
-    repair_guidance = (
-        '<aside class="banner warn"><b>Eerst de passage herstellen.</b> '
-        'Kies hieronder wat ontbreekt en vervolgens <b>Correctie specificeren</b>. '
-        'Je kiest daarna de oorspronkelijke bronfragmenten of de passende structurele correctie. '
-        'De herstelde passage wordt een nieuw voorstel dat opnieuw beoordeeld moet worden.</aside>'
-        if is_admission_blocked(obj, review_path=review_path) else ""
-    )
-    if review_path == "boom" and "decision_unit_graph_unresolved" in admission_of(obj).get("reason_codes", []):
-        repair_guidance = (
-            '<aside class="banner warn"><b>Eerst de beslisstructuur controleren.</b> '
-            'Controleer vragen, antwoordlabels en verbindingen tegen de bron. '
-            f'<a href="/review/decision-graph?document={_esc(snapshot_id)}">Open beslisroutes</a>. '
-            'Onvolledige bronpassages blijven daarna afzonderlijk herstelwerk.</aside>'
-        )
+    owner = '/source-selection?' + urlencode(dict(document=snapshot_id, object=obj['object_id'], task='repair'))
+    repair_guidance = ('<aside class="banner warn" data-repair-owner>'
+        '<a href="' + _esc(owner) + '">Passage herstellen in Vorming</a>. '
+        'Bronpassage, type en plaats corrigeren maakt een voorstel dat opnieuw beoordeeld moet worden.</aside>')
+    if review_path == 'boom' and 'decision_unit_graph_unresolved' in admission_of(obj).get('reason_codes', []):
+        repair_guidance += '<p><a href="/source-selection?' + _esc(urlencode(dict(document=snapshot_id, task='graph'))) + '">Beslisstructuur herstellen in Vorming</a></p>'
     four_eyes_html = ""
     if requires_four_eyes(obj, confirmed_type=confirmed or None):
         four_eyes_html = (
@@ -3621,6 +3571,18 @@ def _render_review_card(
             "<b>onafhankelijke tweede beoordeling nodig</b>.</div>"
         )
     path_text = found_under_path(obj)
+    parent_id = str(obj.get('parent_object_id') or '')
+    parent = next((row for row in snapshot_objects if row['object_id'] == parent_id), None)
+    placement = (
+        '<p data-current-parent="' + _esc(parent_id) + '">Actuele kop: <b>' +
+        _esc(heading_visible_text(parent)) + '</b>. De vindplaats hierboven hoort bij de oorspronkelijke bron.</p>'
+        if parent is not None else ''
+    )
+    requested_parent_id = str(draft.get('parent_choice') or '')
+    requested_parent = next((row for row in snapshot_objects if row['object_id'] == requested_parent_id), None)
+    if requested_parent is not None and requested_parent_id != parent_id:
+        placement += ('<p data-requested-parent="' + _esc(requested_parent_id) +
+            '">Nog niet opgeslagen kopkeuze: <b>' + _esc(heading_visible_text(requested_parent)) + '</b>.</p>')
     proposed_label = _object_type_label(proposed or confirmable)
     classification_note = (
         f'Eerder bevestigd type: <b>{_esc(_object_type_label(str(confirmed)))}</b>. '
@@ -3634,6 +3596,13 @@ def _render_review_card(
             if confirmed else
             f'Huidige indeling: <b>{_esc(proposed_label)}</b>. Dit type is nog niet door jou bevestigd.'
         )
+    # Legacy POST drafts survive conflicts without restoring an editable correction entrance.
+    correction_draft = (
+        '<label>Niet opgeslagen correctie (alleen lezen)'
+        '<textarea name="proposed_correction" readonly data-unsaved-review-draft>' +
+        _esc(draft['proposed_correction']) + '</textarea></label>'
+        if draft.get('proposed_correction') else ''
+    )
     return f"""
                 <p><a class="btn-secondary" href="{_review_location(console, snapshot_id, task=task)}">← Terug naar taken</a></p>
                 <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
@@ -3677,19 +3646,15 @@ def _render_review_card(
                     <section class="review-step" data-review-step="d">
                       <h4>Staat de passage onder de juiste kop?</h4>
                       <p>Gevonden onder: <b>{_esc(path_text or "het document")}</b></p>
+                      {placement}
                       <label class="check"><input type="radio" name="documentpositie_action" value="dit_klopt"{_checked(draft.get("documentpositie_action", ""), "dit_klopt")}> Dit klopt</label>
-                      <label class="check"><input type="radio" name="documentpositie_action" value="andere_kop"{_checked(draft.get("documentpositie_action", ""), "andere_kop")}> Andere kop kiezen</label>
-                      {_heading_chooser(obj, snapshot_objects, snapshot_id, draft.get("parent_choice", ""))}
+                      <input type="hidden" name="parent_choice" value="{_esc(draft.get('parent_choice') or obj.get('parent_object_id') or '')}">
                     </section>
                     <section class="review-step" data-review-step="e" id="classification-{_esc(obj["object_id"])}">
                       <h4>Wat voor informatie is dit?</h4>
                       <p>{classification_note}</p>
                       <label class="check"><input type="radio" name="type_action" value="dit_klopt"{_checked(draft.get("type_action", ""), "dit_klopt")}> Dit klopt</label>
-                      <label class="check"><input type="radio" name="type_action" value="type_wijzigen"{_checked(draft.get("type_action", ""), "type_wijzigen")}> Type wijzigen</label>
-                      <div data-type-chooser hidden>
-                        <label for="type-{_esc(obj["object_id"])}">Ander type</label>
-                        <select id="type-{_esc(obj["object_id"])}" name="confirmed_object_type" hidden{disabled}>{type_options}</select>
-                      </div>
+                      <input type="hidden" name="confirmed_object_type" value="{_esc(confirmable)}"{disabled}>
                     </section>
                     {(
                         _stamp_block(obj, hidden=not recommendation_strength_ui_applies(obj))
@@ -3724,11 +3689,7 @@ def _render_review_card(
                         <label for="comment-{_esc(obj["object_id"])}">Toelichting (verplicht)</label>
                         <textarea id="comment-{_esc(obj["object_id"])}" name="comment">{html.escape(draft.get("comment", ""), quote=True)}</textarea>
                       </div>
-                      <div class="decision-correction" data-correction-field hidden>
-                        <label for="correction-{_esc(obj["object_id"])}">Voorgestelde correctie</label>
-                        <textarea id="correction-{_esc(obj["object_id"])}" name="proposed_correction">{html.escape(draft.get("proposed_correction", ""), quote=True)}</textarea>
-                      </div>
-                      <button class="btn-primary" type="submit" data-submit-review>Review opslaan en volgende</button>
+                      {correction_draft}<button class="btn-primary" type="submit" data-submit-review>Review opslaan en volgende</button>
                     </section>
                   </form>
                     </div></div>

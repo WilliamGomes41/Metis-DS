@@ -85,7 +85,7 @@ def test_non_empty_workboard_queues_are_independent_links() -> None:
         in html
     )
     assert (
-        'data-work-queue="repair" href="/review?document=snap-test&amp;task=repair">361 technisch herstel</a>'
+        'data-work-queue="repair" href="/source-selection?document=snap-test&amp;task=repair">361 technisch herstel</a>'
         in html
     )
     assert "Volgende stap" in html

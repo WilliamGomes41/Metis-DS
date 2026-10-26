@@ -224,6 +224,7 @@ def test_stale_review_save_keeps_submitted_input_in_the_form(tmp_path: Path, *, 
     assert 'data-review-form' in body
     assert UNIQUE_COMMENT in _textarea_value(body, "comment")
     assert UNIQUE_CORRECTION in _textarea_value(body, "proposed_correction")
+    assert re.search(r'<textarea[^>]*name="proposed_correction"[^>]*readonly', body)
     assert _radio_checked(body, "suitability", UNIQUE_SUITABILITY)
     assert _radio_checked(body, "eindoordeel", "afwijzen")
     assert f'name="object_id" value="{object_id}"' in body

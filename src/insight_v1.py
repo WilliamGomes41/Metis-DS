@@ -226,7 +226,7 @@ def _diagnosis_actions_html(diagnostics: dict | None, repair: str) -> str:
         f'<td data-label="Actie">{escape(_DIAGNOSIS_FAMILY_COPY.get(family, (family,))[0])}</td>'
         f'<td data-label="Passages" class="num">{int(values["candidate_count"])}</td>'
         f'<td data-label="Punten" class="num">{int(values["issue_occurrence_count"])}</td>'
-        f'<td><a class="btn-secondary" href="{repair}">Open in Review</a></td></tr>'
+        f'<td><a class="btn-secondary" href="{repair}">Open in Vorming</a></td></tr>'
         for index, (family, values) in enumerate(families, start=1))
     return ('<p>Begin bovenaan: daar zitten de meeste controlepunten.</p>'
             '<table class="diagnosis-table"><caption>Acties, op volgorde van aantal controlepunten</caption>'
@@ -565,7 +565,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
                           if processing_access else "")
         publication_export = (f'<li><a href="/inzicht/document/publicatiebewijs?{query}">Publicatiebewijs (JSON)</a></li>'
                               if "publisher" in roles else "")
-        repair = f'/review?{query}&amp;task=repair'
+        repair = f'/source-selection?{query}&amp;task=repair'
         diagnostics = None
         admission_blocked = False
         if processing_access:
@@ -583,7 +583,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
                 + f'<details><summary>Reviewinteracties</summary><p>{int(burden["review_interactions"])} gemeten menselijke interacties voor '
                   f'{int(burden["object_decisions"])} objectbesluiten. Historische besluiten zonder meting: '
                   f'{int(burden["legacy_unmeasured_decisions"])}.</p></details>'
-                + f'<p><a class="btn-secondary" href="{repair}">Passages corrigeren in Review</a></p>')
+                + f'<p><a class="btn-secondary" href="{repair}">Passages corrigeren in Vorming</a></p>')
             passage_exports = f'''<li>Bronpassages: <a href="/inzicht/document/passages?{query}&amp;format=csv">CSV</a> ·
               <a href="/inzicht/document/passages?{query}&amp;format=json">JSON</a></li>
               <li><a href="/inzicht/document/diagnostiek?{query}">Diagnostiek (JSON)</a></li>
@@ -601,7 +601,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
                           ("Controlepunten", int(diagnostics["issue_occurrence_count"]))]
             facts.append(("Opgeslagen pogingen", len(attempts)))
             facts_html = "".join(f"<div><dt>{escape(name)}</dt><dd>{escape(str(value))}</dd></div>" for name, value in facts)
-            review_button = (f'<p class="diagnosis-buttons"><a class="btn-primary" href="{repair}">Passages corrigeren in Review</a>'
+            review_button = (f'<p class="diagnosis-buttons"><a class="btn-primary" href="{repair}">Passages corrigeren in Vorming</a>'
                              '<a class="btn-secondary" href="#acties">Bekijk wat er moet gebeuren</a></p>' if reviewer else "")
             attempt_rows = "".join(
                 f'<dt>{escape(name)}</dt><dd><code>{escape(str(diagnostic[key]))}</code></dd>'

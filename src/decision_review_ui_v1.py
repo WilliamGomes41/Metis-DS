@@ -4,12 +4,13 @@ from __future__ import annotations
 import asyncio
 import html
 import uuid
+from urllib.parse import urlencode
 from typing import Any
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from src.decision_graph_v1 import CONTRACT, publication_issues
+from src.decision_graph_v1 import CONTRACT
 from src.operations_console_v1 import ConsoleError
 
 
@@ -19,6 +20,94 @@ def esc(value: Any) -> str:
 
 def options(values, selected=""):
     return "".join(f'<option value="{esc(k)}" {"selected" if k == selected else ""}>{esc(v)}</option>' for k, v in values)
+
+
+def render_graph(console, actor, document, *, editing=False):
+    """Separate the existing graph editor from interpretation confirmation."""
+    env = console._envelope(document)
+    if 'reviewer' not in actor.get('roles', []) or actor['account_id'] not in env.get('named_reviewers', []):
+        raise ConsoleError('reviewer_not_named_on_snapshot')
+    if 'decision_graph' not in env:
+        raise ConsoleError('decision_graph_not_available')
+    rows = [o for o in console.snapshot_objects(document) if o["object_type"] != "document"]
+    graph = env["decision_graph"]
+    nodes = {n["object_id"]: n for n in graph["nodes"]}
+    names = [(o["object_id"], o["content"]["clean_text"][:150]) for o in rows]
+    text_evidence = [("", "Geen antwoordlabel")]
+    graphic_evidence = []
+    for k, v in env["decision_graph_evidence"]["items"].items():
+        if v["kind"] == "text":
+            text_evidence.append((k, v["text"]))
+        elif v["kind"] == "export_edge":
+            graphic_evidence.append((k, f'Bronverbinding: {v["record"]}'))
+            if v.get("text"):
+                text_evidence.append((k, v["text"]))
+        elif v["kind"] == "graphic":
+            graphic_evidence.append((k, f'Pagina {v["page"]}, lijngebied {v["bbox"]}'))
+    modes = [("unresolved", "Nog bepalen"), ("single", "Eén antwoord"), ("multiple", "Meerdere antwoorden"),
+             ("continue", "Vervolgstap"), ("terminal", "Eindpunt"), ("context", "Broncontext / label")]
+    fields = []
+    for o in rows:
+        oid = o["object_id"]
+        from src.decision_unit_construction_v1 import KEY
+        construction = (o.get("metadata") or {}).get(KEY, {})
+        construction_note = ('<small>Antwoordlabel: verbind dit met een tak; beoordeel het niet als vraag.</small>'
+                             if construction.get("role") == "branch_label" else
+                             '<small>Controleer de samenhang van deze bronfragmenten vóór inhoudelijke beoordeling.</small>'
+                             if construction.get("reason_codes") else '')
+        bundle = (o.get("metadata") or {}).get("result_bundle")
+        bundle_note = ('<small>Onderdeel van een resultaatbundel: kies broncontext; de route hoort bij de bundel.</small>'
+                       if bundle and bundle["role"] == "member" else '')
+        fields.append(f'<p>{esc(o["content"]["clean_text"])}<input type="hidden" name="node_id" value="{esc(oid)}">'
+                      f'{bundle_note}{construction_note}'
+                      f'<select name="node_mode">{options(modes, nodes.get(oid, {}).get("mode", "unresolved"))}</select>'
+                      f'<label><input type="checkbox" name="entrypoint" value="{esc(oid)}" {"checked" if oid in graph["entrypoints"] else ""}>Beginpunt</label></p>')
+    edges = []
+    for i, edge in enumerate([*graph["edges"], {}, {}, {}]):
+        evidence = edge.get("evidence_ids", [])
+        label_id = next((k for k, text in text_evidence if k in evidence and text == edge.get("label")), "")
+        edges.append(f'<fieldset><legend>Verbinding {i + 1}</legend>'
+                     f'<label>Van<select name="from">{options([("", "Geen verbinding"), *names], edge.get("from"))}</select></label>'
+                     f'<label>Naar<select name="to">{options(names, edge.get("to"))}</select></label>'
+                     f'<label>Soort verbinding<select name="kind">{options([("continue", "Onvoorwaardelijk vervolg"), ("answer", "Antwoord")], edge.get("kind"))}</select></label>'
+                     f'<label>Letterlijk antwoord<select name="label">{options(text_evidence, label_id)}</select></label>'
+                     f'<label>Lijnbewijs<select name="evidence-{i}" multiple>{"".join(options([(k, v)], k if k in evidence else "") for k,v in graphic_evidence)}</select></label></fieldset>')
+    revision = console.objects_revision(document)
+    common = f'<input type="hidden" name="document" value="{esc(document)}"><input type="hidden" name="expected_revision" value="{esc(revision)}">'
+    co_review = ""
+    if not editing and actor["account_id"] != env["review_policy"]["primary"]:
+        co_review = "<h2>Passages mede-beoordelen</h2>" + "".join(
+            f'<form method="post" action="/review/decision-passage">{common}'
+            f'<p>{esc(o["content"]["clean_text"])}</p><input type="hidden" name="object_id" value="{esc(o["object_id"])}">'
+            '<button>Deze actuele passage bevestigen</button></form>' for o in rows
+            if not (o.get("metadata") or {}).get("decision_unit_construction", {}).get("role") == "branch_label")
+    unresolved = [u for u in graph.get("unresolved", []) if u != "human_route_confirmation_required"]
+    proposal_note = (f'<p>{len(unresolved)} verbindingen of rollen zijn niet uit de bron te binden en blijven open. '
+                     'Voorgestelde verbindingen zijn nog niet bevestigd; controleer ook verbindingen die ontbreken.</p>'
+                     if "decision_tree_formation" in env else '')
+    original = f'/review/brondocument?document={esc(document)}&amp;object={esc(rows[0]["object_id"])}' if rows else ""
+    from src.operations_console_app import _task_links, _nav, _page
+    owner = '/source-selection?' + urlencode(dict(document=document, task='graph'))
+    review = '/review/decision-graph?' + urlencode(dict(document=document))
+    immutable = console.snapshot_is_published(document)
+    if immutable:
+        co_review = ""
+    graph_form = (f'<form method="post" action="/review/decision-graph">{common}<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
+        + ''.join(fields + edges) + '<label>Toelichting<input name="reason" required></label>'
+        '<button class="btn-primary" name="action" value="graph">Verbindingen opslaan</button></form>') if editing and not immutable else ''
+    confirm = (f'<form method="post" action="/review/decision-graph">{common}<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
+        '<label>Verklaring broncontrole<input name="reason" required></label><button class="btn-primary" name="action" value="confirm">Actuele volledige graaf bevestigen</button></form>') if not editing and not immutable else ''
+    by_id = dict(names)
+    evidence_view = '<h2>Actuele beslisroutes</h2><ul>' + ''.join(
+        '<li>' + esc(by_id.get(n['object_id'], n['object_id'])) + ': ' + esc(dict(modes).get(n['mode'], n['mode'])) + '</li>' for n in graph['nodes']) + '</ul><ol>'
+    evidence_view += ''.join('<li>' + esc(by_id.get(e['from'], e['from'])) + ' → ' + esc(by_id.get(e['to'], e['to']))
+        + ' · ' + esc(e.get('label') or {'continue': 'Onvoorwaardelijk vervolg', 'answer': 'Antwoord'}.get(e['kind'], e['kind'])) + ' · bronbewijs: ' + esc('; '.join(dict(text_evidence + graphic_evidence).get(k, k) for k in e.get('evidence_ids', []))) + '</li>' for e in graph['edges']) + '</ol>'
+    heading = '<h1>Vorming</h1><h2>Beslisstructuur vastleggen</h2>' if editing else '<h1>Beslisroutes beoordelen</h1>'
+    links = '<p><a href="' + esc(original) + '">Open origineel</a> · <a href="' + esc(review if editing else owner) + '">' + ('Deze beslisroutes beoordelen in Review' if editing else 'Beslisstructuur herstellen in Vorming') + '</a></p>'
+    return _page(_nav(actor, 'selection' if editing else 'review') + '<section class="room" data-graph-workplace="' + ('formation' if editing else 'review') + '">'
+        + heading + _task_links('review') + links + proposal_note
+        + ('<p>Deze gepubliceerde werkversie is alleen te lezen.</p>' if immutable else '')
+        + evidence_view + graph_form + confirm + co_review + '</section>')
 
 
 def install_decision_review_routes(app, console, require, page):
@@ -90,74 +179,7 @@ def install_decision_review_routes(app, console, require, page):
 
     @app.get("/review/decision-graph", response_class=HTMLResponse)
     def graph_get(request: Request, document: str):
-        actor, env = authorized(request, document)
-        rows = [o for o in console.snapshot_objects(document) if o["object_type"] != "document"]
-        graph = env["decision_graph"]
-        nodes = {n["object_id"]: n for n in graph["nodes"]}
-        names = [(o["object_id"], o["content"]["clean_text"][:150]) for o in rows]
-        text_evidence = [("", "Geen antwoordlabel")]
-        graphic_evidence = []
-        for k, v in env["decision_graph_evidence"]["items"].items():
-            if v["kind"] == "text":
-                text_evidence.append((k, v["text"]))
-            elif v["kind"] == "export_edge":
-                graphic_evidence.append((k, f'Bronverbinding: {v["record"]}'))
-                if v.get("text"):
-                    text_evidence.append((k, v["text"]))
-            elif v["kind"] == "graphic":
-                graphic_evidence.append((k, f'Pagina {v["page"]}, lijngebied {v["bbox"]}'))
-        modes = [("unresolved", "Nog bepalen"), ("single", "Eén antwoord"), ("multiple", "Meerdere antwoorden"),
-                 ("continue", "Vervolgstap"), ("terminal", "Eindpunt"), ("context", "Broncontext / label")]
-        fields = []
-        for o in rows:
-            oid = o["object_id"]
-            from src.decision_unit_construction_v1 import KEY
-            construction = (o.get("metadata") or {}).get(KEY, {})
-            construction_note = ('<small>Antwoordlabel: verbind dit met een tak; beoordeel het niet als vraag.</small>'
-                                 if construction.get("role") == "branch_label" else
-                                 '<small>Controleer de samenhang van deze bronfragmenten vóór inhoudelijke beoordeling.</small>'
-                                 if construction.get("reason_codes") else '')
-            bundle = (o.get("metadata") or {}).get("result_bundle")
-            bundle_note = ('<small>Onderdeel van een resultaatbundel: kies broncontext; de route hoort bij de bundel.</small>'
-                           if bundle and bundle["role"] == "member" else '')
-            fields.append(f'<p>{esc(o["content"]["clean_text"])}<input type="hidden" name="node_id" value="{esc(oid)}">'
-                          f'{bundle_note}{construction_note}'
-                          f'<select name="node_mode">{options(modes, nodes.get(oid, {}).get("mode", "unresolved"))}</select>'
-                          f'<label><input type="checkbox" name="entrypoint" value="{esc(oid)}" {"checked" if oid in graph["entrypoints"] else ""}>Beginpunt</label></p>')
-        edges = []
-        for i, edge in enumerate([*graph["edges"], {}, {}, {}]):
-            evidence = edge.get("evidence_ids", [])
-            label_id = next((k for k, text in text_evidence if k in evidence and text == edge.get("label")), "")
-            edges.append(f'<fieldset><legend>Verbinding {i + 1}</legend>'
-                         f'<label>Van<select name="from">{options([("", "Geen verbinding"), *names], edge.get("from"))}</select></label>'
-                         f'<label>Naar<select name="to">{options(names, edge.get("to"))}</select></label>'
-                         f'<label>Soort verbinding<select name="kind">{options([("continue", "Onvoorwaardelijk vervolg"), ("answer", "Antwoord")], edge.get("kind"))}</select></label>'
-                         f'<label>Letterlijk antwoord<select name="label">{options(text_evidence, label_id)}</select></label>'
-                         f'<label>Lijnbewijs<select name="evidence-{i}" multiple>{"".join(options([(k, v)], k if k in evidence else "") for k,v in graphic_evidence)}</select></label></fieldset>')
-        revision = console.objects_revision(document)
-        common = f'<input type="hidden" name="document" value="{esc(document)}"><input type="hidden" name="expected_revision" value="{esc(revision)}">'
-        co_review = ""
-        if actor["account_id"] != env["review_policy"]["primary"]:
-            co_review = "<h2>Passages mede-beoordelen</h2>" + "".join(
-                f'<form method="post" action="/review/decision-passage">{common}'
-                f'<p>{esc(o["content"]["clean_text"])}</p><input type="hidden" name="object_id" value="{esc(o["object_id"])}">'
-                '<button>Deze actuele passage bevestigen</button></form>' for o in rows
-                if not (o.get("metadata") or {}).get("decision_unit_construction", {}).get("role") == "branch_label")
-        problems = publication_issues(env, console.snapshot_objects(document))
-        unresolved = [u for u in graph.get("unresolved", []) if u != "human_route_confirmation_required"]
-        proposal_note = (f'<p>{len(unresolved)} verbindingen of rollen zijn niet uit de bron te binden en blijven open. '
-                         'Voorgestelde verbindingen zijn nog niet bevestigd; controleer ook verbindingen die ontbreken.</p>'
-                         if "decision_tree_formation" in env else '')
-        original = f'/review/brondocument?document={esc(document)}&amp;object={esc(rows[0]["object_id"])}' if rows else ""
-        from src.operations_console_app import _task_links
-        return page('<h1>Beslisroutes controleren</h1>' + _task_links("review")
-                    + f'<p><a href="/review?document={esc(document)}">Passages beoordelen</a> · <a href="{original}">Open origineel</a> · <a href="/review/policy?document={esc(document)}">Reviewdeelname</a></p>'
-                    f'{proposal_note}<p>{"De beslisroutes vragen nog controle." if problems else "Alle vereiste routecontroles zijn afgerond."}</p>{co_review}'
-                    f'<form method="post">{common}<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
-                    + "".join(fields + edges) + '<label>Toelichting<input name="reason" required></label>'
-                    '<button name="action" value="graph">Verbindingen opslaan</button></form>'
-                    f'<form method="post">{common}<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
-                    '<label>Verklaring broncontrole<input name="reason" required></label><button name="action" value="confirm">Actuele volledige graaf bevestigen</button></form>')
+        return render_graph(console, require(request), document)
 
     @app.post("/review/decision-passage")
     async def passage_post(request: Request):
@@ -203,6 +225,7 @@ def install_decision_review_routes(app, console, require, page):
             graph = {"contract": CONTRACT, "source_sha256": env["sha256"], "nodes": nodes,
                      "edges": edges, "entrypoints": form.getlist("entrypoint"), "unresolved": []}
             console.update_decision_graph(**command, graph=graph)
+            return RedirectResponse('/source-selection?' + urlencode(dict(document=sid, task='graph', graph_saved='yes')), status_code=303)
         else:
             raise ConsoleError("decision_review_action_invalid")
         return RedirectResponse(f"/review/decision-graph?document={sid}", status_code=303)
