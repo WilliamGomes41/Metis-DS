@@ -251,19 +251,21 @@ def test_failed_limit_and_running_keep_current_copy_and_controls(system, monkeyp
     code = status["error_code"] if status.get("error_code") else status["reason_code"]
     assert ERROR_COPY.get(code, "Controleer de actuele verwerking.") in html
     assert (status["retry_not_before"] or "niet van toepassing") in html
-    assert ('href="/source-selection?' in html) is bool(status["retry_allowed"])
     limit = status["reason_code"] == "processing_attempt_limit_reached"
-    assert ('action="/tree/processing-recovery"' in html) is limit
+    assert ('href="/source-selection?' in html) is (bool(status["retry_allowed"]) or limit)
+    assert 'action="/tree/processing-recovery"' not in html
+    assert ('#processing-recovery' in html) is limit
 
 
-def test_recovery_form_only_for_publisher_uploader_or_named_reviewer(system, monkeypatch, *, production_app):
+def test_recovery_link_keeps_insight_read_only_for_processing_roles(system, monkeypatch, *, production_app):
     console, sid = system
     _fixed_status(console, monkeypatch, {"state": "failed", "reason_code": "processing_attempt_limit_reached",
                                          "error_code": "processing_attempt_limit_reached", "retry_allowed": False})
-    assert 'action="/tree/processing-recovery"' in _page(_client(console, production_app, "uploader.854"), sid)
-    assert 'Een herstelpoging autoriseren' in _page(_client(console, production_app, "uploader.854"), sid)
-    for username in ("reviewer.854", "researcher.854"):
-        assert 'action="/tree/processing-recovery"' not in _page(_client(console, production_app, username), sid)
+    for username in ("uploader.854", "reviewer.854", "researcher.854"):
+        html = _page(_client(console, production_app, username), sid)
+        assert 'action="/tree/processing-recovery"' not in html
+        assert 'Herstelvoorwaarden bekijken in Vorming' in html
+        assert '#processing-recovery' in html
 
 
 def test_preserved_panels_source_pages_view_check_blockage_and_publication_evidence(system, monkeypatch, *, production_app):
@@ -419,7 +421,8 @@ def test_successful_attempt_at_retry_limit_keeps_open_formation_and_recovery_vis
     assert "Niet publiceerbaar" in label
     assert _blocked_step(html) == step
     assert ERROR_COPY["source_formation_incomplete"] in html
-    assert 'action="/tree/processing-recovery"' in html
+    assert 'action="/tree/processing-recovery"' not in html
+    assert '#processing-recovery' in html
 
 
 @pytest.mark.parametrize(("diagnostic", "active_step", "earlier_steps"), [

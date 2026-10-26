@@ -716,11 +716,16 @@ def test_unresolved_page_blocks_formation_until_accounted_then_is_left_out(tmp_p
         assert client.post("/login", data={"username": "reviewer", "password": "test-secret-long"},
                            follow_redirects=False).status_code == 303
         html = client.get("/inzicht/document", params={"document": sid}).text
-        assert "Onopgeloste pagina’s" in html and "Pagina verantwoorden" in html
+        assert "Onopgeloste pagina’s" in html and "Pagina verantwoorden in Vorming" in html
+        assert 'action="/inzicht/document/pagina-verantwoorden"' not in html
+        owner = client.get("/source-selection", params={"document": sid})
+        assert owner.status_code == 200
+        assert 'action="/inzicht/document/pagina-verantwoorden"' in owner.text
         assert "Docling vond op deze pagina geen tekst" in html
         assert "Alle rechten voorbehouden" not in html
         response = client.post("/inzicht/document/pagina-verantwoorden", data=command, follow_redirects=False)
         assert response.status_code == 303
+        assert response.headers["location"].startswith("/source-selection?")
         assert "Verantwoord; start de verwerking opnieuw." in client.get("/inzicht/document", params={"document": sid}).text
     with pytest.raises(ConsoleError, match="already_recorded"):
         restarted.account_source_page(actor_id=reviewer["account_id"], **command)

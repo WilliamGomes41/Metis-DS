@@ -5438,20 +5438,60 @@ def create_console_app(
             title="Documenten — V&amp;VN Data Services",
         )
 
+    def source_recovery_error(account, snapshot_id, draft, error):
+        # Presentation only: reuse the current processing-read guard and one form renderer.
+        # Publisher-only direct callers keep their original generic error response.
+        from src.source_selection_ui_v1 import source_recovery_controls
+        from src.source_selection_v1 import authorize_account
+        envelope = state._envelope(snapshot_id)
+        try:
+            authorize_account(account, envelope)
+        except ConsoleError:
+            return None
+        processing = state.processing_status(snapshot_id, actor_id=account['account_id'])
+        body = source_recovery_controls(envelope, processing, account, draft=draft, error=error)
+        back = '/source-selection?' + urlencode({'document': snapshot_id})
+        return HTMLResponse(_page(_nav(account, 'selection') + '<section class="room"><h1>Vorming</h1>' +
+            '<p><a href="' + _esc(back) + '">Terug naar dit document in Vorming</a></p>' + body + '</section>'), status_code=400)
+
     @app.post("/tree/processing-recovery")
     def tree_processing_recovery(request: Request, snapshot_id: str = Form(...), reason: str = Form(...)):
         account = _require(request)
-        state.authorize_processing_recovery(actor_id=account["account_id"], snapshot_id=snapshot_id, reason=reason)
-        return RedirectResponse("/inzicht/document?" + urlencode({"document": snapshot_id}), status_code=303)
+        try:
+            state.authorize_processing_recovery(actor_id=account["account_id"], snapshot_id=snapshot_id, reason=reason)
+        except ConsoleError as exc:
+            if exc.code in {'processing_recovery_reason_required', 'processing_recovery_not_required',
+                            'processing_recovery_already_authorized', 'processing_structural_limit',
+                            'pre_review_retry_existing_work'}:
+                response = source_recovery_error(account, snapshot_id, {'reason': reason}, exc.code)
+                if response is not None:
+                    return response
+            raise
+        from src.source_selection_v1 import authorize_account
+        try:
+            authorize_account(account, state._envelope(snapshot_id))
+        except ConsoleError:
+            # Supported publisher-only command callers have no processing-read rights.
+            return RedirectResponse('/inzicht/document?' + urlencode({'document': snapshot_id}), status_code=303)
+        return RedirectResponse('/source-selection?' + urlencode({'document': snapshot_id}) + '#processing-recovery', status_code=303)
 
     @app.post("/inzicht/document/pagina-verantwoorden")
     def account_source_page(request: Request, snapshot_id: str = Form(...), page: int = Form(...),
                             category: str = Form(...), note: str = Form(...)):
         account = _require(request)
-        state.account_source_page(actor_id=account["account_id"], snapshot_id=snapshot_id,
-                                  page=page, category=category, note=note)
-        return RedirectResponse("/inzicht/document?" + urlencode({"document": snapshot_id}) + "#paginas",
-                                status_code=303)
+        try:
+            state.account_source_page(actor_id=account["account_id"], snapshot_id=snapshot_id,
+                                      page=page, category=category, note=note)
+        except ConsoleError as exc:
+            if exc.code in {'source_page_accounting_category_invalid', 'source_page_accounting_note_required',
+                            'source_page_accounting_requires_unformed_source', 'source_page_accounting_not_required',
+                            'source_page_accounting_already_recorded'}:
+                response = source_recovery_error(account, snapshot_id,
+                    {'page': page, 'category': category, 'note': note}, exc.code)
+                if response is not None:
+                    return response
+            raise
+        return RedirectResponse('/source-selection?' + urlencode({'document': snapshot_id}) + '#paginas', status_code=303)
 
     @app.get("/inzicht/document/poging", response_class=JSONResponse)
     def review_processing_diagnostic_replay(request: Request, document: str, attempt_id: str):

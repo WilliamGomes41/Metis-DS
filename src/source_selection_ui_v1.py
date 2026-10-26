@@ -2,6 +2,7 @@
 from src.request_diagnostics_v1 import diagnostic_phase
 
 import asyncio
+from html import escape
 import uuid
 from urllib.parse import urlencode
 
@@ -13,6 +14,107 @@ from src.beslisboom_path_v1 import review_path_for_klasse
 from src.source_selection_v1 import UNCHECKED, comparable_observations, projection
 from src.knowledge_materialisation_v1 import source_reconstruction_scope
 
+
+def _source_pages_html(envelope: dict, diagnostic: dict, document: str, *, editable=False, draft=None) -> str:
+    """Existing page evidence; only Vorming explicitly enables the accounting form."""
+    draft = draft or {}
+    from src.docling_contract_v1 import DoclingError, set_aside_pages
+    from src.operations_console_app import PAGE_FINDING_COPY
+    from src.operations_console_v1 import ConsoleError, SOURCE_PAGE_ACCOUNTING_CATEGORIES
+    parts = []
+    findings = diagnostic.get("page_findings") or []
+    if findings:
+        options = "".join(f'<option value="{escape(key)}">{escape(label)}</option>'
+                          for key, label in SOURCE_PAGE_ACCOUNTING_CATEGORIES.items())
+        rows = []
+        for row in findings:
+            copy = [PAGE_FINDING_COPY.get(code, (code, "Meld dit bij de beheerder.")) for code in row.get("reasons") or []]
+            problem = " ".join(problem for problem, _ in copy)
+            action = " ".join(dict.fromkeys(action for _, action in copy))
+            accounted = any(done["page"] == row["page"] and done["reasons"] == row.get("reasons")
+                            and done["source_sha256"] == envelope.get("sha256")
+                            for done in envelope.get("source_page_accountings") or [])
+            if accounted:
+                rows.append(f'<tr><td>Pagina {int(row["page"])}</td><td>{escape(problem)}</td><td>{escape(action)}</td>'
+                            '<td>Verantwoord; start de verwerking opnieuw.</td></tr>')
+                continue
+            if editable:
+                selected = str(draft.get('category') or '') if str(draft.get('page')) == str(row['page']) else ''
+                page_options = options.replace('value="' + escape(selected) + '"', 'value="' + escape(selected) + '" selected') if selected else options
+                rows.append(f'''<tr><td>Pagina {int(row["page"])}</td><td>{escape(problem)}</td><td>{escape(action)}</td>
+              <td><form method="post" action="/inzicht/document/pagina-verantwoorden">
+                <input type="hidden" name="snapshot_id" value="{escape(document, quote=True)}">
+                <input type="hidden" name="page" value="{int(row["page"])}">
+                <label>Reden<select name="category" required>{page_options}</select></label>
+                <label>Toelichting<input name="note" value="{escape(str(draft.get("note") or ""), quote=True) if str(draft.get("page")) == str(row["page"]) else ""}" required minlength="10" maxlength="500"></label>
+                <button type="submit">Pagina verantwoorden</button></form></td></tr>''')
+            else:
+                owner = '/source-selection?' + urlencode({'document': document}) + '#paginas'
+                rows.append(f'<tr><td>Pagina {int(row["page"])}</td><td>{escape(problem)}</td><td>{escape(action)}</td>'
+                            f'<td><a href="{escape(owner, quote=True)}">Pagina verantwoorden in Vorming</a></td></tr>')
+        parts.append('<section id="paginas"><h3>Onopgeloste pagina’s</h3>'
+                     '<p>Verantwoord alleen een pagina zonder kennisinhoud in Vorming. Start daarna de verwerking opnieuw.</p>'
+                     '<table><thead><tr><th>Pagina</th><th>Probleem</th><th>Herstelactie</th><th>Verantwoorden</th></tr></thead>'
+                     f'<tbody>{"".join(rows)}</tbody></table></section>')
+    try:
+        left_out = set_aside_pages(envelope)
+    except (DoclingError, ConsoleError):
+        left_out = []
+    if left_out:
+        labels = {"pdf_page_without_content": "leeg volgens de PDF", "recorded_accounting": "verantwoord"}
+        listed = "; ".join(f'pagina {int(row["page"])} ({labels.get(row.get("basis"), "onbekend")})' for row in left_out)
+        parts.append(f'<p>Buiten de bron gelaten pagina’s: {escape(listed)}.</p>')
+    accountings = envelope.get("source_page_accountings") or []
+    if accountings:
+        items = "".join(f'<li>Pagina {int(row["page"])}: {escape(SOURCE_PAGE_ACCOUNTING_CATEGORIES.get(row["category"], row["category"]))}'
+                        f' — {escape(row["note"])} ({escape(row["recorded_at"][:10])})</li>' for row in accountings)
+        parts.append(f'<details><summary>Vastgelegde verantwoordingen ({len(accountings)})</summary><ul>{items}</ul></details>')
+    return "".join(parts)
+
+
+def source_recovery_controls(envelope, processing, account, *, draft=None, error=''):
+    """Pure form composition over already-read source/processing inputs; no authority."""
+    draft = draft or {}
+    sid = envelope['snapshot_id']
+    roles = set(account.get('roles') or [])
+    code = ('source_formation_incomplete' if processing.get('formation_incomplete') else
+            processing.get('error_code') or processing.get('reason_code') or '')
+    blocking_code = ('' if processing.get('state') == 'succeeded' and not processing.get('formation_incomplete')
+                     and not processing.get('error_code') else code)
+    from src.insight_v1 import _DIAGNOSIS_UNFINISHED_STATES
+    blocked = bool(blocking_code) or processing.get('state') in _DIAGNOSIS_UNFINISHED_STATES
+    controls = ''
+    if ('publisher' in roles and (account['account_id'] in envelope.get('named_reviewers', [])
+            or account['account_id'] == envelope.get('uploader_account_id'))
+            and processing.get('reason_code') == 'processing_attempt_limit_reached'
+            and blocked and not envelope.get('processing_recovery')):
+        controls += ('<h3>Eenmalig herstel autoriseren</h3><p>Autoriseren start geen verwerking. Starten of Hervatten blijft een afzonderlijke handeling.</p>'
+            '<form method="post" action="/tree/processing-recovery">'
+            '<input type="hidden" name="snapshot_id" value="' + escape(sid, quote=True) + '">'
+            '<label>Reden voor eenmalig herstel<input name="reason" value="' + escape(str(draft.get('reason') or ''), quote=True) + '" required maxlength="1000"></label>'
+            '<button type="submit">Een herstelpoging autoriseren</button></form>')
+    if envelope.get('processing_recovery'):
+        controls += '<p>Een herstelpoging is geautoriseerd. Alleen expliciet Starten of Hervatten kan deze autorisatie gebruiken.</p>'
+    attempts = envelope.get('processing_attempts') or []
+    diagnostic = (attempts[-1].get('diagnostic') or {}) if attempts else {}
+    pages = _source_pages_html(envelope, diagnostic, sid, editable=True, draft=draft)
+    if not (controls or pages or error):
+        return ''
+    failure = ''
+    if error:
+        from src.operations_console_app import ERROR_COPY
+        failure = '<div class="banner warn" role="alert">Niet opgeslagen: ' + escape(ERROR_COPY.get(error, error)) + '</div>'
+    mobile = """<style>@media(max-width:640px){
+      #processing-recovery table,#processing-recovery tbody,#processing-recovery tr,#processing-recovery td{
+        display:block;width:100%;box-sizing:border-box}
+      #processing-recovery thead{display:none}
+      #processing-recovery td{border:0;padding:.35rem 0}
+      #processing-recovery tr{margin:1rem 0;padding:.5rem;border:1px solid var(--border,#ccc)}
+      #processing-recovery td:first-child{font-weight:bold}
+      #processing-recovery input,#processing-recovery select,#processing-recovery button{
+        width:100%;max-width:100%;min-width:0;box-sizing:border-box}
+    }</style>""" if pages else ''
+    return mobile + '<section id="processing-recovery" data-source-recovery>' + failure + controls + pages + '</section>'
 
 def _minutes(seconds):
     import math
@@ -542,7 +644,9 @@ def install(app, console, require, page, nav, esc):
                 if (not result['can_start'] and status.get('state') != 'running' and status.get('formation_incomplete')
                         and 'researcher' in actor['roles'] and actor['account_id'] in envelope.get('named_reviewers', [])):
                     work_revision_url = '/review/policy?' + urlencode({'document': sid})
-                problems = ('<section class="formation-room" id="formation-problems">' +
+                # collect has already loaded this request's full envelope; the list row is compact.
+                problems = source_recovery_controls(console._envelope(sid), status, actor)
+                problems += ('<section class="formation-room" id="formation-problems">' +
                     _formation_problems_html(report, offset=offset, esc=esc, work_revision_url=work_revision_url) + '</section>')
             cards.append(f'<article class="doc-card" id="source-{esc(sid)}" data-source-document="{esc(sid)}" data-selected="{str(sid == selected).lower()}">'
                          f'<h2>{esc(result["title"])}</h2><p class="source-meta">{esc(result["filename"])} · Bronversie {esc(result["version"])} · {esc(extent)}</p>'

@@ -126,6 +126,12 @@ def collect(console, *, actor_id, snapshot_id):
                     for a in spans for b in source_spans):
                     actions.append({'label': 'Bronbereik bekijken en behandelen',
                         'url': _url('/source-selection', snapshot_id, object=source['object_id'], task='disposition')})
+        if page is not None:
+            actions.append({'label': 'Pagina-afhandeling in Vorming',
+                            'url': _url('/source-selection', snapshot_id) + '#paginas'})
+        elif reason == 'processing_attempt_limit_reached':
+            actions.append({'label': 'Herstelvoorwaarden in Vorming',
+                            'url': _url('/source-selection', snapshot_id) + '#processing-recovery'})
         actions.append({'label': 'Diagnose en herstelvoorwaarden', 'url': _url('/inzicht/document', snapshot_id)})
         problems[pid] = {'problem_id': pid, 'kind': kind, **explain(reason), 'spans': spans,
                          'object_id': oid, 'page': page, 'actions': actions,
