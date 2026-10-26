@@ -340,17 +340,18 @@ def test_completed_processing_verdict_agrees_with_admission_blockers(
         assert "/inzicht/document/passages?" not in html
 
 
-@pytest.mark.parametrize(("diagnostic", "active_step"), [
-    ({"phase": "task_plan_pinned"}, 2),
-    ({"phase": "model_request"}, 2),
-    ({"phase": "worker_handover"}, 2),
-    ({"phase": "reserved", "checkpoints": [{"phase": "task_plan_pinned"}]}, 1),
-    ({"phase": "unknown", "checkpoints": [{"phase": "reserved"}, {"phase": "model_request"}]}, 2),
-    ({"checkpoints": [{"phase": "model_request"}, {"phase": "reserved"}]}, 1),
-    ({"phase": "unknown", "checkpoints": [{"phase": "unknown"}]}, 1),
+@pytest.mark.parametrize(("diagnostic", "active_step", "earlier_steps"), [
+    ({"phase": "task_plan_pinned"}, 2, set()),
+    ({"phase": "model_request"}, 2, set()),
+    ({"phase": "worker_handover"}, 2, set()),
+    ({"phase": "validation_started", "checkpoints": [{"phase": "proposal_received"}]}, 4, {2}),
+    ({"phase": "reserved", "checkpoints": [{"phase": "task_plan_pinned"}]}, 1, set()),
+    ({"phase": "unknown", "checkpoints": [{"phase": "reserved"}, {"phase": "model_request"}]}, 2, {1}),
+    ({"checkpoints": [{"phase": "model_request"}, {"phase": "reserved"}]}, 1, set()),
+    ({"phase": "unknown", "checkpoints": [{"phase": "unknown"}]}, 1, set()),
 ])
 def test_running_timeline_follows_current_phase_or_latest_known_checkpoint(
-        system, monkeypatch, diagnostic, active_step, *, production_app):
+        system, monkeypatch, diagnostic, active_step, earlier_steps, *, production_app):
     console, sid = system
     _fixed_status(console, monkeypatch, {"state": "running", "reason_code": "processing_attempt_in_progress"})
     _with_last_attempt(console, monkeypatch, diagnostic)
@@ -360,8 +361,9 @@ def test_running_timeline_follows_current_phase_or_latest_known_checkpoint(
     assert len(rows) == 5
     for number, row in enumerate(rows, start=1):
         status = re.search(r'<p class="diagnosis-status">(.*?)</p>', row).group(1)
-        assert status == ("Eerder bereikt" if number < active_step else "Bezig" if number == active_step
-                          else f"Wacht op stap {active_step}")
+        expected = (("Eerder bereikt" if number in earlier_steps else "Geen fase vastgelegd")
+                    if number < active_step else "Bezig" if number == active_step else f"Wacht op stap {active_step}")
+        assert status == expected
     assert 'class="blocked"' not in steps
     assert "Verwerking loopt" in html
 
@@ -369,6 +371,7 @@ def test_running_timeline_follows_current_phase_or_latest_known_checkpoint(
 @pytest.mark.parametrize(("diagnostic", "step"), [
     ({"phase": "task_plan_pinned", "checkpoints": [{"phase": "reserved"}, {"phase": "task_plan_pinned"}]}, 2),
     ({"phase": "joint_validation_rejected", "checkpoints": [{"phase": "reserved"}, {"phase": "joint_validation_rejected"}]}, 4),
+    ({"phase": "validation_rejected", "checkpoints": [{"phase": "proposal_received"}]}, 4),
     ({"phase": "unmapped_854", "checkpoints": [{"phase": "reserved"}, {"phase": "source_views_pinned"}, {"phase": "unmapped_854"}]}, 2),
     ({"phase": "unmapped_854", "checkpoints": [{"phase": "unmapped_854"}]}, 1),
 ])

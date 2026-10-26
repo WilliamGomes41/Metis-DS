@@ -131,12 +131,17 @@ def _diagnosis_icon(label: str) -> str:
     return '<span class="diagnosis-icon is-info" aria-hidden="true">i</span>'
 
 
-# Recorded attempt phase -> timeline step (1 bron, 2 taken, 4 controle). Presentation only.
+# Existing trace/checkpoint phases -> UI stages; extraction, model work, control.
+# No persisted phase independently denotes human publication. Presentation only.
 _DIAGNOSIS_PHASE_STEP = {
-    "reserved": 1, "extraction_checkpoint": 1, "source_views_pinned": 1,
+    "reserved": 1, "extraction_started": 1, "extraction_finished": 1,
+    "extraction_checkpoint": 1, "extraction_reused": 1,
+    "source_reconstructed": 1, "source_views_pinned": 1,
     "task_plan_pinned": 2, "worker_claimed": 2, "worker_handover": 2, "model_request": 2,
-    "response_received": 2, "proposal_received": 2, "task_rejected": 2, "budget_exhausted": 2,
-    "joint_validation_rejected": 4,
+    "response_received": 2, "model_response": 2, "proposal_parsed": 2,
+    "proposal_received": 2, "task_rejected": 2, "budget_exhausted": 2,
+    "validation_started": 4, "validation_rejected": 4, "proposal_gate_rejected": 4,
+    "evidence_resolved": 4, "formation_accounted": 4, "joint_validation_rejected": 4,
 }
 
 
@@ -167,6 +172,8 @@ def _diagnosis_steps_html(processing: dict, code: str, progress: dict, diagnosti
     pending = int(progress.get("pending_task_count") or 0)
     running = processing.get("state") == "running"
     active = _diagnosis_active_step(diagnostic or {}) if running else None
+    reached = {_DIAGNOSIS_PHASE_STEP.get(row.get("phase"))
+               for row in (diagnostic or {}).get("checkpoints") or [] if isinstance(row, dict)}
     if code == "source_formation_incomplete":
         stop = 2 if pending else 4
     elif running:
@@ -189,7 +196,7 @@ def _diagnosis_steps_html(processing: dict, code: str, progress: dict, diagnosti
                       if diagnostics is not None else 'De uitkomst per passage is zichtbaar voor de aangewezen reviewer.')
         if running:
             if number < active:
-                status, css = "Eerder bereikt", ""
+                status, css = ("Eerder bereikt" if number in reached else "Geen fase vastgelegd"), ""
             elif number == active:
                 status, css = "Bezig", ""
             else:

@@ -122,3 +122,29 @@ De daarna gestarte volledige poging op 8dda279 is gestopt vanwege de nieuwe
 inhoudelijke reviewbevinding. Beide pogingen blijven expliciet onvolledig en
 tellen niet als groen eindbewijs. De definitieve run gebruikt PostgreSQL 16
 met zijn tools op PATH en opnieuw vier geïsoleerde databases op de nieuwe head.
+
+## Volledigheid van de vastgelegde fasen
+
+De review op 011e6e9 vond dat `validation_started` en `validation_rejected`
+nog ontbraken in de oorspronkelijke beperkte fasenkaart. Onderzoek van
+`processing_trace_v1.PHASES` en alle checkpointproducenten in
+`pre_review_semantic_v1`, `formation_checkpoint_v1`, `processing_retry_v1`,
+`worker_handover_v1` en `source_preparation_context_v1` bepaalt nu de hele
+bestaande lijst: extractie/reconstructie bij stap 1, taak-/modelvoorstellen
+bij stap 2 en controle/bronverantwoording bij stap 4. Geen nieuwe fase of
+runtime-workflow wordt geïntroduceerd. Stap 3/5 krijgen geen verzonnen
+actieve verwerkingsfase.
+
+Bewijs vóór reparatie: de pure HTML-projectie wordt voor alle bestaande
+fasen zowel lopend als mislukt getoetst, met een vroeger modelcheckpoint
+als tegenvoorbeeld. Nieuwe canonieke fases vereisen een expliciete
+presentatieverwachting. Twee aanvullende echte GET-cases toetsen specifiek
+lopende validatie en afgewezen validatie. Ook de volledige poging op
+011e6e9 is daarom onvolledig; alleen de uiteindelijke head telt als eindbewijs.
+
+Rood vóór de volledige fasenkaart: **22 failed, 29 passed** (5,23 s).
+Na de kaart en expliciete dekking van uitsluitend werkelijk vastgelegde
+eerdere stappen: **117 gerichte tests geslaagd** (87,83 s). De browserroute
+slaagt eveneens (17,27 s). Repository-/releasepreflight, architectuurgrenzen,
+compileall en diffcontrole slagen. De volledige lokale suite en alle vijf
+CI-workflows worden opnieuw op de definitieve commit uitgevoerd.
