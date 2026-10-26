@@ -83,7 +83,7 @@ def _formation_problem_html(group, esc):
               'Bronbereik bekijken en behandelen': 'Bekijk en behandel dit bronstuk',
               'Brongebruik bepalen of herstellen': 'Bekijk en behandel dit bronstuk',
               'Diagnose en herstelvoorwaarden': 'Bekijk de herstelvoorwaarden'}
-    primary = direct[0] if direct else next(iter(actions.values()), None)
+    primary = direct[0] if direct else None
     if primary:
         body += '<p class="formation-next"><a href="' + esc(primary['url']) + '">' + esc(
             labels.get(primary['label'], primary['label'])) + '</a></p>'
@@ -96,8 +96,6 @@ def _formation_problem_html(group, esc):
         spans = ', '.join(str(s['block_id']) + ' [' + str(s['start']) + '–' + str(s['end']) + ')' for s in row['spans'])
         body += '<p><strong>' + esc(row['title']) + '</strong><br>Controlecode: <code>' + esc(
             row['code'] or 'onbekend') + '</code><br>Bronbereik: ' + esc(spans or 'nog niet exact vastgesteld') + '</p>'
-    body += ''.join('<p><a href="' + esc(a['url']) + '">Diagnose en herstelvoorwaarden</a></p>'
-                    for a in actions.values() if a['url'].startswith('/inzicht/') and a != primary)
     return body + '</details></article>'
 
 
@@ -137,7 +135,7 @@ def _formation_problems_html(report, *, offset, esc, work_revision_url=None):
                 body += '<p><a href="?' + esc(urlencode({**query, 'offset': position})) + '">' + label + '</a></p>'
     elif status.get('state') == 'running':
         body += '<section class="formation-empty"><h2>Nog geen meldingen</h2><p>Bronstukken die aandacht nodig hebben verschijnen hier zodra ze zijn vastgesteld.</p></section>'
-    elif not status.get('activated'):
+    elif status.get('state') == 'not_recorded':
         body += '<section class="formation-empty"><h2>Nog geen verwerkingsresultaat</h2><p>Na bronverwerking zie je hier welke bronstukken aandacht nodig hebben.</p></section>'
     else:
         body += '<section class="formation-empty"><h2>Geen open vormingsproblemen</h2><p>Je kunt verder in Review. Voor publicatie blijven de overige review- en publicatievoorwaarden gelden.</p></section>'

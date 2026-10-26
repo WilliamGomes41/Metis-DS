@@ -75,7 +75,12 @@ const fs = require('node:fs');
     if (Math.min(...darkContrast)<4.5) throw Error('dark text contrast below AA');
     await page.screenshot({path:process.env.METIS_PROBLEM_SCREENSHOT.replace('.png','-dark.png'),fullPage:true});
     await page.evaluate(()=>document.documentElement.style.fontSize='200%');
-    if (await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth)) throw Error('text zoom overflow');
+    const zoomOverflow = await page.evaluate(()=>({
+      width:window.innerWidth, scrollWidth:document.documentElement.scrollWidth,
+      nodes:[...document.querySelectorAll('body *')].filter(n=>n.getBoundingClientRect().right>window.innerWidth)
+        .map(n=>({tag:n.tagName,classes:n.className,right:n.getBoundingClientRect().right}))
+    }));
+    if (zoomOverflow.scrollWidth>zoomOverflow.width) throw Error('text zoom overflow: '+JSON.stringify(zoomOverflow));
     await page.screenshot({path:process.env.METIS_PROBLEM_SCREENSHOT.replace('.png','-zoom.png'),fullPage:true});
     // Wider fallback metrics reproduced CI's overflow in the shared room navigation.
     await page.evaluate(()=>{

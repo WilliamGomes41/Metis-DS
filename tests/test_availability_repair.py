@@ -230,7 +230,7 @@ def test_layout_and_estimate_unknown(tmp_path, *, production_app, production_con
     with TestClient(production_app(console),base_url='https://testserver') as client:
         login(client)
         home=client.get('/').text
-        positions=[home.index(f'title="{name}"') if f'title="{name}"' in home else home.index(f'>{name}<') for name in ('Inleveren','Bronselectie','Review','Publicatie','Documenten')]
+        positions=[home.index(f'title="{name}"') if f'title="{name}"' in home else home.index(f'>{name}<') for name in ('Inleveren','Vorming','Review','Publicatie','Documenten')]
         assert positions==sorted(positions)
         upload(client,reviewer)
         screen=client.get('/source-selection').text

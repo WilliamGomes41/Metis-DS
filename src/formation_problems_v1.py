@@ -52,7 +52,10 @@ def collect(console, *, actor_id, snapshot_id):
     from src.semantic_passage_v1 import semantic_source_blocks
     source_blocks = {block['block_id']: (index, block)
                      for index, block in enumerate(semantic_source_blocks(fragments or []))}
-    processing = console.processing_status(snapshot_id, actor_id=actor_id)
+    # Share this request's already verified immutable input with the existing
+    # status projection; do not reconstruct the same source a second time.
+    processing = console.processing_status(snapshot_id, actor_id=actor_id,
+        formation_fragments=fragments if fragments is not None else ())
     replay = envelope.get('semantic_replay') or {}
     pending = unresolved_rejections(envelope, objects=objects, bindings=bindings, fragments=fragments)
     latest = next(reversed(envelope.get('processing_attempts') or []), {})

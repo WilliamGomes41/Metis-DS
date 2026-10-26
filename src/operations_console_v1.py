@@ -1840,7 +1840,8 @@ class OperationsConsole:
         return kind in {"html", "pdf", "boom"}  # every supported source gets a model proposal
 
     @diagnostic_phase("processing_status")
-    def processing_status(self, snapshot_id: str, *, actor_id: str | None = None) -> dict[str, Any]:
+    def processing_status(self, snapshot_id: str, *, actor_id: str | None = None,
+                          formation_fragments=None) -> dict[str, Any]:
         """Actuele detailcontrole; compacte overzichten gebruiken eigen expliciete invoer."""
         from src.processing_retry_v1 import status
         if actor_id is not None:
@@ -1861,11 +1862,12 @@ class OperationsConsole:
             result["formation_checked"] = not stored_incomplete
         else:
             objects = self._read_current_objects(snapshot_id)
-            from src.source_preparation_context_v1 import stored_extraction
-            try:
-                formation_fragments = stored_extraction(envelope)
-            except ConsoleError:
-                formation_fragments = None
+            if formation_fragments is None:
+                from src.source_preparation_context_v1 import stored_extraction
+                try:
+                    formation_fragments = stored_extraction(envelope)
+                except ConsoleError:
+                    formation_fragments = None
             result["formation_incomplete"] = incomplete(envelope, objects=objects,
                 bindings=self.object_review_bindings(snapshot_id, objects=objects),
                 fragments=formation_fragments)

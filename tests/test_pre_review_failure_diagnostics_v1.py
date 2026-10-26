@@ -85,7 +85,11 @@ def test_blocked_capture_retry_diagnostics_and_restart_preserve_state(workflow_p
         response = client.get("/source-selection", params={"document": sid})
         assert "Status: mislukt" in response.text
         envelope = console._envelope(sid)
-        assert code not in response.text
+        # The combined workspace now includes the former problem room's
+        # collapsed technical evidence. Keep codes out of the primary copy.
+        public_copy = re.sub(r'<details class="formation-technical">.*?</details>', '', response.text, flags=re.S)
+        assert code not in public_copy
+        assert 'private-provider-response' not in response.text
         assert envelope["publication_eligibility"] == PRE_REVIEW_BLOCKED
         assert envelope["processing_blocker"] == code
         assert console.snapshot_objects(sid) == []

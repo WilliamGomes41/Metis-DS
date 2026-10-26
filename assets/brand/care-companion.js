@@ -219,8 +219,8 @@
   const SETTLE = 1500;
   // Same rooms as the server-side navigation (_nav), plus Inzicht.
   const DEPLOY_PAGES = [
-    ['Mijn werk', '/'], ['Inleveren', '/ingest'], ['Bronselectie', '/source-selection'], ['Review', '/review'],
-    ['Publicatie', '/publish'], ['Documenten', '/tree'], ['Vormingsproblemen', '/formation-problems'], ['Instellingen', '/settings'], ['Inzicht', '/inzicht']
+    ['Mijn werk', '/'], ['Inleveren', '/ingest'], ['Vorming', '/source-selection'], ['Review', '/review'],
+    ['Publicatie', '/publish'], ['Documenten', '/tree'], ['Instellingen', '/settings'], ['Inzicht', '/inzicht']
   ].map(([label, path]) => ({label, path}));
 
   // The header lists the roles after "rollen:" (separated by "·" or ","); a refusal

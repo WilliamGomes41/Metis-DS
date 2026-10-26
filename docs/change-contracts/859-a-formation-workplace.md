@@ -119,3 +119,43 @@ De PR rapporteert alle laatste verplichte controles op de exacte head en vraagt
 CI om het ontbrekende runtimebewijs; geen skip of oudere CI als groen bewijs.
 Geen claim van volledige acceptatie of productiegedrag. Geen merge/deploy of
 productiemutatie in deze run.
+
+## CI-reparatie van PR #865
+
+De eerste head `bccda50` faalde op zes unieke suitegevallen (gelijk op Python
+3.12/3.13) en twee browsergevallen. De oorspronkelijke CI en
+source-processing-proof zijn de rode regressielus; de reparatie verandert geen
+testgrens voor rechten, revisies, bronidentiteit, review of publicatie.
+De inmiddels geïntegreerde Documentdiagnose-wijziging op main
+`184293c08bddc8f5a9874bf98f52054056ee1f8c` is in de PR-branch overgenomen.
+
+- `collect` had de opgeslagen extractie al geverifieerd, maar `processing_status`
+  reconstrueerde dezelfde invoer opnieuw. De bestaande statusprojectie accepteert
+  nu die verzoekgebonden fragmenten; andere callers blijven hun eigen input lezen.
+  Geen cache of nieuwe reader. De bestaande grens van één extractielezing en één
+  diepe controle voor uitsluitend het gekozen document blijft intact. Een native
+  pariteitsproef vergelijkt de gewone en gedeelde-inputstatus zonder writes.
+- De lege probleemweergave keek naar `activated`, een veld dat de bestaande
+  processing-status niet levert. Zij gebruikt nu de bestaande `not_recorded`-stand
+  voor een nog niet verwerkt document. De herstelproef blijft eisen dat volledig
+  hersteld werk geen open vormingsproblemen toont; die eis is niet verwijderd.
+- De ene diagnose-ingang boven het document blijft behouden; identieke
+  Inzicht-links per bevinding zijn uit de gecombineerde renderer verwijderd.
+  Technische codes blijven in de bestaande gesloten technische disclosure.
+  De oude diagnoseproef toetst nu de primaire tekst buiten die disclosure en blijft
+  providerresponse/-geheimen uit alle HTML weren.
+- Raads vaste deploypaginalijst volgde nog de verwijderde aparte kamer.
+  Deze caller volgt nu exact de bestaande navigatie, met één Vorming-ingang.
+  Eén resterende oude naam in de home-volgordeproef is bijgewerkt.
+- De nieuwe geneste probleeminhoud kon de automatische minimumkolom van de
+  documentkaart verbreden bij tekstzoom. De kaart gebruikt een begrensde gridkolom,
+  krimpbare kinderen en tekstafbreking. De bestaande 200%-zoom-, mobiele en
+  fallbacklettertypeproeven blijven ongewijzigd streng; een fout vermeldt nu de
+  overlopende elementen. Goldenwijzigingen hiervoor betreffen alleen de bestaande
+  inhoudsgebonden CSS-/JavaScript-assetversies.
+
+Lokaal geeft de geïsoleerd uitgevoerde werkelijke rendererregressie rood op de
+oude functie en groen op de reparatie. De bestaande navigatielijstvergelijking
+geeft eveneens rood/groen. Dit is geen vervanging voor de oorspronkelijke native
+en browserproeven. De definitieve CI-uitkomst op de reparatiehead en de exacte
+gecontroleerde SHA worden in de PR bijgehouden.
