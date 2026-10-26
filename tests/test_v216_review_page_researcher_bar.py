@@ -268,10 +268,10 @@ def test_beoordeel_is_the_single_door_openen_and_reviewen_are_gone(tmp_path: Pat
     assert f'/review?document={receipt["snapshot_id"]}' in html
     assert 'class="btn-primary"' in html
     assert re.search(
-        rf'<a[^>]*class="[^"]*btn-primary[^"]*"[^>]*href="/review\?document={re.escape(receipt["snapshot_id"])}[^"]*"',
+        rf'<a[^>]*class="[^"]*btn-primary[^"]*"[^>]*href="/source-selection\?document={re.escape(receipt["snapshot_id"])}[^"]*task=structure[^"]*"',
         html,
     ) or re.search(
-        rf'<a[^>]*href="/review\?document={re.escape(receipt["snapshot_id"])}[^"]*"[^>]*class="[^"]*btn-primary',
+        rf'<a[^>]*href="/source-selection\?document={re.escape(receipt["snapshot_id"])}[^"]*task=structure[^"]*"[^>]*class="[^"]*btn-primary',
         html,
     )
     assert not re.search(r">\s*Openen\s*<", html)

@@ -2287,10 +2287,12 @@ def _review_task_card(
     description: str,
     status: str,
     recommended: bool = False,
+    review_path: str = "richtlijn",
 ) -> str:
     action = "Ga verder" if recommended else "Open taak"
+    workplace = '/source-selection' if task == 'structure' and review_path != 'boom' else '/review'
     return f'''
-      <a class="review-task-card" href="/review?document={_esc(snapshot_id)}&amp;task={_esc(task)}">
+      <a class="review-task-card" href="{workplace}?document={_esc(snapshot_id)}&amp;task={_esc(task)}">
         <span class="review-task-card-title">{_esc(title)}</span>
         <span class="review-task-card-status">{_esc(status)}</span>
         <span class="review-task-card-action">{action} <span aria-hidden="true">→</span></span>
@@ -2361,12 +2363,13 @@ def _review_task_dashboard(
         "disposition": f"{disposition_pending} af te handelen",
     }
     if recommended:
+        workplace = '/source-selection' if recommended[0] == 'structure' and review_path != 'boom' else '/review'
         next_step = f'''
           <section class="review-next-step" aria-labelledby="review-next-title">
             <p class="eyebrow">Volgende stap</p>
             <h2 id="review-next-title">{_esc(recommended[1])}</h2>
             <p>{_esc(statuses[recommended[0]])}</p>
-            <a class="btn-primary" href="/review?document={_esc(snapshot_id)}&amp;task={recommended[0]}">Ga verder met beoordelen</a>
+            <a class="btn-primary" href="{workplace}?document={_esc(snapshot_id)}&amp;task={recommended[0]}">Ga verder met beoordelen</a>
           </section>
         '''
     else:
@@ -2376,6 +2379,7 @@ def _review_task_dashboard(
             snapshot_id, task=task, title=title,
             description="", status=statuses[task],
             recommended=bool(recommended and task == recommended[0]),
+            review_path=review_path,
         )
         for task, title, description, count in available
         if recommended is None or task != recommended[0]
@@ -2395,6 +2399,7 @@ def _review_task_dashboard(
             task: _review_task_card(
                 snapshot_id, task=task, title=title, description="", status=statuses[task],
                 recommended=False,
+                review_path=review_path,
             )
             for task, title, description, count in available
             if recommended is None or task != recommended[0]
@@ -3426,6 +3431,15 @@ def _render_review_index(
           {normal_content_html or '<p class="review-task-empty">Deze taak is afgerond.</p>'}
         '''
     if task == "structure":
+        if review_path != "boom":
+            return f'''
+              {_review_task_header(snapshot_id, "Koppen controleren", "Bevestig koppen op Vorming")}
+              <section class="review-section review-lane-fast">
+                <p>Koppen controleren en bevestigen gebeurt op Vorming.</p>
+                <p><a class="btn-primary" href="/source-selection?document={_esc(snapshot_id)}&amp;task=structure">Koppen controleren op Vorming</a></p>
+                <ol class="object-index review-heading-list">{"".join(_review_index_item(obj, snapshot_id, task="structure") for obj in koppen)}</ol>
+              </section>
+            '''
         return f'''
           {_review_task_header(snapshot_id, copy["fast_title"], copy["fast_lead"])}
           <section class="review-lane-fast">
@@ -3575,6 +3589,17 @@ def _render_review_card(
         bindings=bindings, fragments=fragments,
     )
     approval_disabled = disabled or (" disabled" if current_duty is None else "")
+    from src.knowledge_path_v1 import is_structural_projection
+    structural_heading = review_path != "boom" and is_structural_projection(obj)
+    heading_owner = (
+        f'<p data-heading-owner>Koppen bevestig je op <a href="/source-selection?document={_esc(snapshot_id)}&amp;task=structure">Vorming</a>. '
+        'Correctie en afwijzing blijven hieronder beschikbaar.</p>'
+        if structural_heading else ""
+    )
+    approval_choice = (
+        f'<label class="check"><input type="radio" name="eindoordeel" value="goedkeuren"{approval_disabled}{_checked(draft.get("eindoordeel", ""), "goedkeuren")}> Goedkeuren — inhoud en indeling kloppen</label>'
+        if not structural_heading else ""
+    )
     repair_guidance = (
         '<aside class="banner warn"><b>Eerst de passage herstellen.</b> '
         'Kies hieronder wat ontbreekt en vervolgens <b>Correctie specificeren</b>. '
@@ -3637,7 +3662,7 @@ def _render_review_card(
                     <input type="hidden" name="proposed_object_type" value="{_esc(confirmable)}">
                     <input type="hidden" name="found_under" value="{_esc(path_text)}">
                     <input type="hidden" name="decision" value="">
-                    {four_eyes_html}
+                    {four_eyes_html}{heading_owner}
                     {conflict_html}
 
                     {f'<p>{_esc(admission_notice)}</p>' if admission_notice else ''}{repair_guidance}
@@ -3689,7 +3714,7 @@ def _render_review_card(
                     <section class="review-step" data-review-step="f">
                       <h4>Wat is je besluit?</h4>
                       <fieldset id="decision-{_esc(obj["object_id"])}">
-                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren"{approval_disabled}{_checked(draft.get("eindoordeel", ""), "goedkeuren")}> Goedkeuren — inhoud en indeling kloppen</label>
+                      {approval_choice}
                       <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren_na_correctie"{_checked(draft.get("eindoordeel", ""), "goedkeuren_na_correctie")}> Correctie specificeren — maak een nieuw voorstel voor beoordeling</label>
                       <label class="check"><input type="radio" name="eindoordeel" value="afwijzen"{_checked(draft.get("eindoordeel", ""), "afwijzen")}> Afwijzen — niet gebruiken als kennisobject</label>
                       <label class="check"><input type="radio" name="eindoordeel" value="later_beoordelen"{_checked(draft.get("eindoordeel", ""), "later_beoordelen")}> Later beoordelen — nog geen besluit</label>
@@ -6136,6 +6161,9 @@ def create_console_app(
         except ConsoleError as exc:
             if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT:
                 raise
+            if review_path_for_klasse(state._envelope(snapshot_id)["class"]) != "boom":
+                from src.source_selection_ui_v1 import render_structure
+                return HTMLResponse(render_structure(state, account, snapshot_id, conflict=True), status_code=409)
             return HTMLResponse(
                 _render_review_room(
                     state,
@@ -6146,6 +6174,8 @@ def create_console_app(
                 ),
                 status_code=409,
             )
+        if review_path_for_klasse(state._envelope(snapshot_id)["class"]) != "boom":
+            return RedirectResponse('/source-selection?' + urlencode({'document': snapshot_id, 'task': 'structure'}), status_code=303)
         return RedirectResponse(_review_location(state, snapshot_id, task="structure"), status_code=303)
 
     @app.post("/review/relations")

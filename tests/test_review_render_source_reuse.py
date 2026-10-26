@@ -50,9 +50,11 @@ def review_client(tmp_path, request, monkeypatch, *, production_app, production_
         }, post_json=provider)
     else:
         bind_fixture_selections(console, [(text, "definition") for text in texts])
+    heading = ('<h1>Bronindeling</h1>' if getattr(request.node, 'callspec', None)
+               and request.node.callspec.params.get('task') == 'structure' else '')
     sid = console.ingest(
         actor_id=author["account_id"], filename="source.html", content_type="text/html",
-        data=("<html><body>" + "".join(f"<p>{text}</p>" for text in texts) + "</body></html>").encode(),
+        data=("<html><body>" + heading + "".join(f"<p>{text}</p>" for text in texts) + "</body></html>").encode(),
         ingest_kind="new", title="Review render proof", version="1.0", date="2026-10-08",
         live_url="", class_="richtlijn", family="fixture", named_reviewers=[reviewer["account_id"]],
     )["snapshot_id"]
@@ -77,6 +79,7 @@ def test_http_review_render_reuses_source_and_matches_uncached_read(review_clien
     import src.semantic_passage_v1 as semantic
     import src.operations_console_app as ui
     import src.review_workboard_v1 as workboard
+    import src.source_selection_ui_v1 as selection
 
     console, client, sid = review_client
     before = deepcopy(console.snapshot_objects(sid))
@@ -88,9 +91,10 @@ def test_http_review_render_reuses_source_and_matches_uncached_read(review_clien
     # Only generated form identifiers differ between identical read requests.
     monkeypatch.setattr(ui, "new_review_interaction_id", lambda: "fixture-interaction")
     monkeypatch.setattr(ui.uuid, "uuid4", lambda: UUID(int=1))
-    renderer = workboard._render_review_room
+    owner, name = (selection, 'render_structure') if task == 'structure' else (workboard, '_render_review_room')
+    renderer = getattr(owner, name)
     with monkeypatch.context() as baseline:
-        baseline.setattr(workboard, "_render_review_room", getattr(renderer, "__wrapped__", renderer))
+        baseline.setattr(owner, name, getattr(renderer, "__wrapped__", renderer))
         expected = client.get("/review", params=params)
     assert expected.status_code == 200
 
@@ -106,7 +110,11 @@ def test_http_review_render_reuses_source_and_matches_uncached_read(review_clien
 
     monkeypatch.setattr(semantic, "_reconstructed_blocks", counted)
     monkeypatch.setattr(materialisation, "_reconstructed_blocks", counted)
-    for expected_calls in (1, 2):
+    # The heading owner presents structural rows, without reconstructing source
+    # blocks for knowledge. Other Review tasks retain their exact reuse bound.
+    if task == 'structure':
+        assert 'action="/review/headings/batch-confirm"' in expected.text
+    for expected_calls in ((0, 0) if task == 'structure' else (1, 2)):
         response = client.get("/review", params=params)
         assert response.status_code == 200
         assert response.text == expected.text

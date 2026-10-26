@@ -40,7 +40,7 @@ def test_default_review_page_is_a_clickable_task_dashboard():
     assert 'class="review-task-grid"' in html
     assert "Een onafhankelijke tweede beoordeling geven" not in html
     assert "task=repair" not in html
-    assert 'href="/review?document=snap-1&amp;task=structure"' in html
+    assert 'href="/source-selection?document=snap-1&amp;task=structure"' in html
     assert 'href="/review?document=snap-1&amp;task=contextual"' in html
     assert 'href="/review?document=snap-1&amp;task=batch"' in html
     assert "Passage r1." not in html

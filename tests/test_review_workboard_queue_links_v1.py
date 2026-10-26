@@ -64,7 +64,7 @@ def _item() -> dict[str, object]:
         "next_task": "structure",
         "next_title": "Koppen controleren",
         "next_description": "Controleer de indeling van het document",
-        "next_href": "/review?document=snap-test&task=structure",
+        "next_href": "/source-selection?document=snap-test&task=structure",
     }
 
 
@@ -73,7 +73,7 @@ def test_non_empty_workboard_queues_are_independent_links() -> None:
 
     assert html.count('class="review-work-queue-link"') == 4
     assert (
-        'data-work-queue="structure" href="/review?document=snap-test&amp;task=structure">56 structuur</a>'
+        'data-work-queue="structure" href="/source-selection?document=snap-test&amp;task=structure">56 structuur</a>'
         in html
     )
     assert (

@@ -303,7 +303,7 @@ def test_selected_document_keeps_existing_review_dashboard(tmp_path: Path, *, pr
     assert "Document A" in page.text
 
 
-def test_heading_batch_success_returns_to_live_document_dashboard(tmp_path: Path, *, production_app, production_console) -> None:
+def test_heading_batch_success_returns_to_formation_structure(tmp_path: Path, *, production_app, production_console) -> None:
     console, _accounts, first, _second = _system(tmp_path, production_console=production_console)
     snapshot_id = str(first["snapshot_id"])
     objects = console.snapshot_objects(snapshot_id)
@@ -329,16 +329,13 @@ def test_heading_batch_success_returns_to_live_document_dashboard(tmp_path: Path
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == f"/review?document={snapshot_id}"
-    assert "task=structure" not in response.headers["location"]
+    assert response.headers["location"] == f"/source-selection?document={snapshot_id}&task=structure"
 
     page = client.get(response.headers["location"])
     assert page.status_code == 200
-    assert "Jouw open werk" in page.text
-    assert (
-        f'href="/review?document={snapshot_id}&amp;task=structure">Ga verder</a>'
-        not in page.text
-    )
+    assert 'data-formation-structure' in page.text
+    assert '/review/headings/batch-confirm' not in page.text
+    assert 'Er zijn geen open koppen' in page.text
 
 
 def test_workboard_read_does_not_persist_progress_or_change_objects(tmp_path: Path, *, production_app, production_console) -> None:
