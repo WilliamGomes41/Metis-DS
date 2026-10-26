@@ -269,48 +269,67 @@ def test_conflict_does_not_rollback_winner_already_committed_work(tmp_path: Path
     assert _disk_envelopes(restarted)[snap_a]["class"] == "handreiking"
 
 
-def test_review_form_content_and_revision_are_read_together(tmp_path: Path, *, production_app, production_console) -> None:
-    """Promise 3: GET form content and snapshot_revision MUST be one co-read."""
+def test_review_form_content_and_revision_are_read_together(tmp_path: Path, monkeypatch, *, production_app, production_console) -> None:
+    """Promise 3: a concurrent commit cannot mix new content with an old pin."""
+    from concurrent.futures import ThreadPoolExecutor
+    from src.review_passage_read_v1 import PREFIX, resolve_review_revision
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snapshot_id = _ingest(console, accounts)["snapshot_id"]
     target = _content_rows(console, snapshot_id)[0]
     original_revision = console.objects_revision(snapshot_id)
-    real_snapshot_objects = console.snapshot_objects_and_revision
+    other = _console(tmp_path, production_console=production_console)
+    real_histories = console.workflow_document_store.review_object_histories
+    raced, captured = [], []
 
-    def raced_snapshot_objects(
-        snapshot_id_arg: str,
-        include_blocked: bool = False,
-        *,
-        for_update: bool = False,
-    ) -> list[dict]:
-        rows, revision = real_snapshot_objects(snapshot_id_arg, include_blocked)
-        other = _console(tmp_path, production_console=production_console)
-        loaded = other._load_objects(snapshot_id_arg)
+    def commit_other_writer():
+        loaded = other._load_objects(snapshot_id)
         for row in loaded:
             if row["object_id"] == target["object_id"]:
                 row["reliability_marker"] = RACED_MARKER
-                metadata = row.setdefault("metadata", {})
-                passage = metadata.setdefault("review_passage", {})
-                passage["suitability"] = BERT_SUIT
-        other._save_objects(snapshot_id_arg, loaded)
-        return rows, revision
+                row.setdefault("metadata", {}).setdefault("review_passage", {})["suitability"] = BERT_SUIT
+        other._save_objects(snapshot_id, loaded)
 
-    console.snapshot_objects_and_revision = raced_snapshot_objects  # type: ignore[method-assign]
+    def raced_histories(snapshot_id_arg, object_ids):
+        if not raced:
+            # The detail already captured its document generation. A different
+            # thread/connection commits BEFORE the object's SQL read, so this
+            # fails if the production read loses repeatable-read isolation.
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                pool.submit(commit_other_writer).result(timeout=10)
+            raced.append(True)
+        rows = real_histories(snapshot_id_arg, object_ids)
+        captured.extend(deepcopy(rows))
+        return rows
+
+    monkeypatch.setattr(console.workflow_document_store, 'review_object_histories', raced_histories)
     client = _client(console, "researcher.anne", production_app=production_app)
     body, revision = _open_review_form(client, snapshot_id, target["object_id"])
     live_revision = console.objects_revision(snapshot_id)
-    assert live_revision != original_revision
-    shown_raced = RACED_MARKER in body or _radio_checked(body, "suitability", BERT_SUIT)
-    if shown_raced:
-        assert revision == live_revision
-    else:
-        assert revision == original_revision
-        assert revision != live_revision
+    assert raced and live_revision != original_revision
+    assert revision.startswith(PREFIX)
+    assert any(row["object_id"] == target["object_id"] for row in captured)
+    assert all(row.get("reliability_marker") != RACED_MARKER for row in captured)
+    assert RACED_MARKER not in body and not _radio_checked(body, "suitability", BERT_SUIT)
+    with pytest.raises(ConsoleError) as caught:
+        resolve_review_revision(console, snapshot_id, revision)
+    assert caught.value.code == SNAPSHOT_OBJECT_WRITE_CONFLICT
+
+    before = deepcopy(console.snapshot_objects(snapshot_id))
+    events = console.workflow_review_store.read_events()
+    response = client.post('/review', data=_review_payload(snapshot_id, target["object_id"],
+        snapshot_revision=revision, suitability=ANNE_SUIT, comment=ANNE_COMMENT), follow_redirects=False)
+    assert response.status_code == 409
+    assert console.snapshot_objects(snapshot_id) == before
+    assert console.workflow_review_store.read_events() == events
+    _body, fresh = _open_review_form(client, snapshot_id, target["object_id"])
+    assert resolve_review_revision(console, snapshot_id, fresh) == live_revision
+    assert any(row.get("reliability_marker") == RACED_MARKER for row in captured)
 
 
 def test_get_form_revision_is_not_taken_from_threading_local(tmp_path: Path, *, production_app, production_console) -> None:
-    """Promise 3: form pin is file-bound, not TLS / worker reuse."""
+    """Promise 3: form pin is durable, not TLS / worker reuse."""
+    from src.review_passage_read_v1 import PREFIX, resolve_review_revision
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snapshot_id = _ingest(console, accounts)["snapshot_id"]
@@ -319,7 +338,8 @@ def test_get_form_revision_is_not_taken_from_threading_local(tmp_path: Path, *, 
     console._objects_tls.expected = {snapshot_id: "0" * 64}
     client = _client(console, "researcher.anne", production_app=production_app)
     _body, revision = _open_review_form(client, snapshot_id, target["object_id"])
-    assert revision == expected
+    assert revision.startswith(PREFIX)
+    assert resolve_review_revision(console, snapshot_id, revision) == expected
     assert revision != "0" * 64
 
 

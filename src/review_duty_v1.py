@@ -9,6 +9,7 @@ This module deliberately performs no writes and creates no task store.
 from __future__ import annotations
 
 from typing import Any, Iterable
+from src.prepared_source_views_v1 import preserve_fragments
 
 from src.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, admission_of
 from src.four_eyes_v1 import requires_four_eyes, reviewer_is_agent
@@ -55,7 +56,7 @@ def exact_current_approver_ids(
     object_version = str(obj.get("object_version") or "")
     confirmed_type = str(obj.get("confirmed_object_type") or "")
     from src.integrity_kernel import exact_review_snapshot_hash
-    canonical_hash = exact_review_snapshot_hash(obj)
+    canonical_hash = None
     seen: set[str] = set()
     out: list[str] = []
     for row in bindings:
@@ -73,9 +74,13 @@ def exact_current_approver_ids(
             continue
         if str(row.get("object_version") or "") != object_version:
             continue
-        if str(row.get("canonical_object_hash") or "") != canonical_hash:
-            continue
         if str(row.get("confirmed_object_type") or "") != confirmed_type:
+            continue
+        # Without a potentially matching approval there is no hash to compare.
+        # Keep the exact authoritative hash check for every matching tuple.
+        if canonical_hash is None:
+            canonical_hash = exact_review_snapshot_hash(obj)
+        if str(row.get("canonical_object_hash") or "") != canonical_hash:
             continue
         seen.add(reviewer_id)
         out.append(reviewer_id)
@@ -299,7 +304,7 @@ def review_duties(
     fragments: Iterable[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     bindings = tuple(bindings or ())
-    fragments = tuple(fragments) if fragments is not None else None
+    fragments = preserve_fragments(fragments) if fragments is not None else None
     out: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
     for obj in objects:
@@ -336,6 +341,10 @@ def review_duty_counts(
         bindings=bindings,
         fragments=fragments,
     )
+    return _duty_counts(duties)
+
+
+def _duty_counts(duties):
     return {
         "review_duties": len(duties),
         "first_review_duties": sum(
@@ -367,7 +376,7 @@ def reviewer_route_for(
     """Actor-specific actionability over one current ReviewDuty."""
 
     bindings = tuple(bindings)
-    fragments = tuple(fragments) if fragments is not None else None
+    fragments = preserve_fragments(fragments) if fragments is not None else None
     duty = review_duty_for(
         obj,
         review_path=review_path,
@@ -376,6 +385,11 @@ def reviewer_route_for(
     )
     if duty is None:
         return None
+
+    return _route_for_duty(obj, duty, reviewer_id=reviewer_id, bindings=bindings)
+
+
+def _route_for_duty(obj, duty, *, reviewer_id, bindings):
 
     approvers = exact_current_approver_ids(obj, bindings)
     already_approved = reviewer_id in set(approvers)
@@ -416,7 +430,7 @@ def reviewer_route_counts(
     fragments: Iterable[dict[str, Any]] | None = None,
 ) -> dict[str, int]:
     bindings = tuple(bindings)
-    fragments = tuple(fragments) if fragments is not None else None
+    fragments = preserve_fragments(fragments) if fragments is not None else None
     routes = [
         route
         for obj in objects
@@ -430,6 +444,10 @@ def reviewer_route_counts(
             )
         ) is not None
     ]
+    return _route_counts(routes)
+
+
+def _route_counts(routes):
     return {
         "actionable_review_duties": sum(bool(row["actionable"]) for row in routes),
         "waiting_for_reviewer_duties": sum(
@@ -452,6 +470,30 @@ def reviewer_route_counts(
             for row in routes
         ),
     }
+
+
+def review_work_projection(objects, *, review_path, reviewer_id, bindings=None, fragments=None):
+    """One call-local duty calculation shared by a workboard's queues/counts.
+
+    Reuse the existing single-object authority, including source and exact-tuple
+    validation. Indexing bindings only narrows lookup; it never decides validity.
+    Commands do not consume this disposable projection.
+    """
+    from collections import defaultdict
+    by_object = defaultdict(list)
+    for binding in bindings or ():
+        by_object[str(binding.get('object_id') or '')].append(binding)
+    duties, routes = {}, []
+    for obj in objects:
+        oid = str(obj.get('object_id') or '')
+        current_bindings = by_object[oid]
+        duty = review_duty_for(obj, review_path=review_path,
+                               bindings=current_bindings, fragments=fragments)
+        if duty is not None:
+            duties[oid] = duty
+            routes.append(_route_for_duty(obj, duty, reviewer_id=reviewer_id,
+                                          bindings=current_bindings))
+    return duties, _duty_counts(list(duties.values())), _route_counts(routes)
 
 
 def review_repair_duties(

@@ -178,6 +178,7 @@ def _open_review_form(
 
 
 def test_review_form_get_embeds_snapshot_revision(tmp_path: Path, *, production_app, production_console) -> None:
+    from src.review_passage_read_v1 import PREFIX, resolve_review_revision
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
@@ -186,9 +187,10 @@ def test_review_form_get_embeds_snapshot_revision(tmp_path: Path, *, production_
     client = _client(console, "researcher.anne", production_app=production_app)
     body, revision = _open_review_form(client, snapshot_id, first["object_id"])
     expected = console.objects_revision(snapshot_id)
-    assert revision == expected
-    assert f'name="snapshot_revision" value="{expected}"' in body or (
-        f'value="{expected}"' in body and 'name="snapshot_revision"' in body
+    assert revision.startswith(PREFIX)
+    assert resolve_review_revision(console, snapshot_id, revision) == expected
+    assert f'name="snapshot_revision" value="{revision}"' in body or (
+        f'value="{revision}"' in body and 'name="snapshot_revision"' in body
     )
     assert "data-review-form" in body
 
@@ -406,38 +408,39 @@ def test_batch_confirm_carries_and_compares_form_revision(tmp_path: Path, *, pro
     assert any(row.get("reliability_marker") == "batch-concurrent-winner" for row in stored.values())
 
 
-def test_form_content_and_revision_are_co_read_not_separate_gets(tmp_path: Path, *, production_app, production_console) -> None:
-    """GET MUST pin revision to the same objects generation as the shown fields."""
+def test_form_content_and_revision_are_co_read_not_separate_gets(tmp_path: Path, monkeypatch, *, production_app, production_console) -> None:
+    """A commit after SQL capture must not change the captured form's pin."""
+    import src.review_passage_read_v1 as reads
+    from src.operations_console_v1 import ConsoleError
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     snapshot_id = receipt["snapshot_id"]
     target = _content_rows(console, snapshot_id)[0]
     original = console.objects_revision(snapshot_id)
-    real = console.snapshot_objects_and_revision
+    real = reads.read_review_passage
+    other = _console(tmp_path, production_console=production_console)
+    captured = []
 
-    def raced(snapshot_id_arg: str, include_blocked: bool = False, *, for_update: bool = False):
-        rows, revision = real(snapshot_id_arg, include_blocked)
-        other = production_console(processing_binder=bind_fixture_selections,
-            root=tmp_path,
-            source_store=tmp_path / "sources" / "private",
-            runtime=tmp_path / "output" / "runtime" / "operations-console",
-        )
-        loaded = other._load_objects(snapshot_id_arg)
+    def raced(*args, **kwargs):
+        inputs = real(*args, **kwargs)
+        assert reads.resolve_review_revision(console, snapshot_id, inputs.revision) == original
+        captured.append(inputs)
+        loaded = other._load_objects(snapshot_id)
         for row in loaded:
             if row["object_id"] == target["object_id"]:
                 row["reliability_marker"] = "form-coread-winner"
-        other._save_objects(snapshot_id_arg, loaded)
-        return rows, revision
+        other._save_objects(snapshot_id, loaded)
+        return inputs
 
-    console.snapshot_objects_and_revision = raced  # type: ignore[method-assign]
+    monkeypatch.setattr(reads, 'read_review_passage', raced)
     client = _client(console, "researcher.anne", production_app=production_app)
     body, revision = _open_review_form(client, snapshot_id, target["object_id"])
     live = console.objects_revision(snapshot_id)
-    assert live != original
-    shown_winner = "form-coread-winner" in body
-    if shown_winner:
-        assert revision == live
-    else:
-        assert revision == original
-        assert revision != live
+    assert len(captured) == 1 and live != original
+    assert revision == captured[0].revision
+    assert all(row.get('reliability_marker') != 'form-coread-winner' for row in captured[0].objects)
+    assert 'form-coread-winner' not in body
+    with pytest.raises(ConsoleError) as error:
+        reads.resolve_review_revision(console, snapshot_id, revision)
+    assert error.value.code == SNAPSHOT_WRITE_CONFLICT

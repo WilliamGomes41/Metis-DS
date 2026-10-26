@@ -27,7 +27,8 @@ def review_client(tmp_path, request, monkeypatch, *, production_app, production_
                                    runtime=tmp_path / "runtime")
     author = console.create_account(username="author", password="fixture-only", roles=("researcher",))
     reviewer = console.create_account(username="reviewer", password="fixture-only", roles=("reviewer",))
-    texts = [f"Begrip {i} is een beschrijving van een afzonderlijke waarneming." for i in range(20)]
+    count = 60 if getattr(request, 'param', None) == 'large' else 20
+    texts = [f"Begrip {i} is een beschrijving van een afzonderlijke waarneming." for i in range(count)]
     retained = getattr(request, "param", None) == "retained"
     if retained:
         from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
@@ -73,6 +74,7 @@ def review_client(tmp_path, request, monkeypatch, *, production_app, production_
                                   "waiting", "history", "second_review", "repair", "object"])
 def test_http_review_render_reuses_source_and_matches_uncached_read(review_client, monkeypatch, task):
     import src.knowledge_materialisation_v1 as materialisation
+    import src.semantic_passage_v1 as semantic
     import src.operations_console_app as ui
     import src.review_workboard_v1 as workboard
 
@@ -92,14 +94,18 @@ def test_http_review_render_reuses_source_and_matches_uncached_read(review_clien
         expected = client.get("/review", params=params)
     assert expected.status_code == 200
 
-    original = materialisation._selection_blocks
+    original = semantic._reconstructed_blocks
     calls = []
 
     def counted(rows):
-        calls.append(1)
+        from src.prepared_source_views_v1 import preserve_fragments, stored_blocks
+        rows = preserve_fragments(rows)
+        if rows and stored_blocks(rows) is None:
+            calls.append(1)
         return original(rows)
 
-    monkeypatch.setattr(materialisation, "_selection_blocks", counted)
+    monkeypatch.setattr(semantic, "_reconstructed_blocks", counted)
+    monkeypatch.setattr(materialisation, "_reconstructed_blocks", counted)
     for expected_calls in (1, 2):
         response = client.get("/review", params=params)
         assert response.status_code == 200
@@ -184,3 +190,65 @@ def test_postgres_overview_reuses_full_source_for_retained_records(review_client
         assert 1 <= len(calls) <= 2
         assert len(batch_reads) == request_number
     assert console.snapshot_objects(sid) == before
+
+
+def test_workboard_projects_each_current_duty_once(review_client, monkeypatch):
+    """One workboard result must share its duties across counts and routes."""
+    from collections import Counter
+    import src.review_duty_v1 as duties
+
+    console, client, sid = review_client
+    current = console.snapshot_objects(sid)
+    candidates = {obj['object_id'] for obj in current
+                  if (obj.get('metadata') or {}).get('semantic_passage', {}).get('spans')}
+    calls = Counter()
+    original = duties.review_duty_for
+
+    def counted(obj, **kwargs):
+        calls[obj['object_id']] += 1
+        return original(obj, **kwargs)
+
+    # Observe the existing authority at every imported call site.
+    import sys
+    for module in list(sys.modules.values()):
+        if (getattr(module, '__name__', '') or '').startswith('src.'):
+            if getattr(module, 'review_duty_for', None) is original:
+                monkeypatch.setattr(module, 'review_duty_for', counted)
+    response = client.get('/review')
+    assert response.status_code == 200 and sid in response.text
+    assert candidates and {calls[oid] for oid in candidates} == {1}
+
+
+def test_workboard_pages_metadata_before_native_enrichment(review_client, monkeypatch):
+    console, client, sid = review_client
+    reviewer_id = console._envelope(sid)['named_reviewers'][0]
+    actual = console.review_workboard_summaries(reviewer_id, metadata_only=True)[sid]
+    # An adapter fixture expands only the metadata list. The visible card still
+    # goes through the native PG reader and real duty/source projection.
+    summaries = {f'hidden-{i}': {'envelope': {**actual['envelope'],
+        'snapshot_id': f'hidden-{i}', 'title': f'Ander document {i}'}, '_metadata_only': True}
+        for i in range(25)}
+    summaries[sid] = actual
+    monkeypatch.setattr(console, 'review_workboard_summaries', lambda *a, **kw: deepcopy(summaries))
+    enrich = console._enrich_review_workboard_summaries
+    seen = []
+    def visible_only(account_id, selected):
+        seen.extend(selected)
+        assert list(selected) == [sid]
+        return enrich(account_id, selected)
+    monkeypatch.setattr(console, '_enrich_review_workboard_summaries', visible_only)
+    page = client.get('/review', params={'page': 2})
+    assert page.status_code == 200
+    assert '26 documenten' in page.text and 'pagina 2 van 2' in page.text
+    assert seen == [sid]
+
+
+def test_workboard_does_not_read_global_event_history(review_client, monkeypatch):
+    import src.review_workboard_v1 as workboard
+    _console, client, _sid = review_client
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Review must select activity for its authorized documents')
+
+    monkeypatch.setattr(workboard, 'read_events', forbidden)
+    assert client.get('/review').status_code == 200

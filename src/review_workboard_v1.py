@@ -33,11 +33,9 @@ from src.operations_console_app import (
 from src.operations_console_v1 import PRE_REVIEW_BLOCKED, ConsoleError, OperationsConsole, review_stacks, slow_review_duty
 from src.proportionate_review_v1 import (
     ProportionateReviewConsole,
-    normal_risk_batch_counts,
-    regular_individual_review_queue,
 )
 from src.publication_readiness_v1 import source_passage_closure, review_followup_queues
-from src.review_duty_v1 import review_duty_counts, reviewer_route_counts
+from src.review_duty_v1 import review_work_projection
 from src.review_interaction_v1 import _is_decision_event
 from src.review_ledger import read_events
 from src.knowledge_materialisation_v1 import source_reconstruction_scope
@@ -274,18 +272,29 @@ def review_work_item(
             bindings = None
 
     fragments = console.review_source_fragments(snapshot_id, envelope=envelope)
+    if fragments is not None:
+        from src.prepared_source_views_v1 import prepare
+        fragments = prepare(fragments).fragments
 
     review_path = review_path_for_klasse(str(envelope.get("class") or ""))
     headings, _ = review_stacks(objects, review_path=review_path)
     open_headings = [row for row in headings if not _review_is_final(row)]
     heading_pending = len(open_headings)
 
-    duty = slow_review_duty(objects, review_path=review_path, bindings=bindings, fragments=fragments)
-    regular_individual = (
-        regular_individual_review_queue(objects, review_path=review_path, fragments=fragments, bindings=bindings)
-        if review_path != "boom"
-        else []
-    )
+    duties, duty_counts, route_counts = review_work_projection(
+        objects, review_path=review_path, reviewer_id=account_id,
+        bindings=bindings, fragments=fragments)
+    from src.operations_console_v1 import slow_review_kind
+    from src.object_taxonomy_v1 import review_priority_rank
+    if review_path == 'boom':
+        duty = slow_review_duty(objects, review_path=review_path, bindings=bindings, fragments=fragments)
+        regular_individual = []
+    else:
+        duty = sorted([obj for obj in objects if obj['object_id'] in duties
+                       and slow_review_kind(obj, review_path=review_path)], key=review_priority_rank)
+        regular_individual = sorted([obj for obj in objects if obj['object_id'] in duties
+            and duties[obj['object_id']]['lane'] != 'batch'
+            and not slow_review_kind(obj, review_path=review_path)], key=review_priority_rank)
     individual = [*duty, *regular_individual]
     open_individual = [row for row in individual if not _review_is_final(row)]
     individual_pending = len(open_individual)
@@ -293,10 +302,15 @@ def review_work_item(
     normal_passages = 0
     normal_batches = 0
     if isinstance(console, ProportionateReviewConsole):
-        normal_passages, normal_batches = normal_risk_batch_counts(
-            objects,
-            review_path=review_path, fragments=fragments, bindings=bindings
-        )
+        from collections import Counter
+        from src.proportionate_review_v1 import _section_key, _batch_type, NORMAL_RISK_BATCH_MAX
+        groups = Counter((_section_key(obj), _batch_type(obj)) for obj in objects
+            if review_path != 'boom' and obj['object_id'] in duties
+            and duties[obj['object_id']]['stage'] == 'first_review'
+            and duties[obj['object_id']]['lane'] == 'batch')
+        normal_passages = sum(groups.values())
+        normal_batches = sum((n + NORMAL_RISK_BATCH_MAX - 1) // NORMAL_RISK_BATCH_MAX
+                             for n in groups.values())
 
     from src.source_containers_v1 import source_accountability
     projection = source_accountability(objects, review_path=review_path, bindings=bindings, fragments=fragments)
@@ -305,11 +319,6 @@ def review_work_item(
     blocked_count = len(followups["repair"])
     closure_gap_ids = [str(obj["object_id"]) for obj in followups["disposition"]]
 
-    duty_counts = review_duty_counts(
-        objects,
-        review_path=review_path,
-        bindings=bindings, fragments=fragments
-    )
     if bindings is None:
         route_counts = {
             "actionable_review_duties": duty_counts["review_duties"],
@@ -319,13 +328,6 @@ def review_work_item(
             "actionable_batch_duties": duty_counts["batch_review_duties"],
             "actionable_second_review_duties": duty_counts["second_review_duties"],
         }
-    else:
-        route_counts = reviewer_route_counts(
-            objects,
-            review_path=review_path,
-            reviewer_id=account_id,
-            bindings=bindings, fragments=fragments
-        )
     if review_path != "boom":
         # Koppen stay a structure check. They are not content-review duties.
         route_counts["actionable_structure_duties"] = heading_pending
@@ -626,24 +628,43 @@ def _workboard_page(
     """Compact document disclosures over existing, authorized review projections."""
     if "reviewer" not in set(account.get("roles") or []):
         raise ConsoleError("reviewer_role_required")
-    items = review_workboard_items(console, account=account)
+    summary_reader = getattr(console, 'review_workboard_summaries', None)
+    enrich = getattr(console, '_enrich_review_workboard_summaries', None)
+    summaries = None
+    if callable(summary_reader) and callable(enrich):
+        # Metadata determines visibility and exact list totals. Duty/source
+        # calculation belongs only to cards the user is actually opening.
+        summaries = summary_reader(account['account_id'], metadata_only=True)
+        envelopes = [summary['envelope'] for summary in summaries.values()]
+        items = []
+    else:
+        items = review_workboard_items(console, account=account)
+        envelopes = [item['envelope'] for item in items]
     if theme:
-        items = [i for i in items if i["envelope"].get("family") == theme]
-    by_id = {item["snapshot_id"]: item for item in items}
-    if snapshot_id and snapshot_id not in by_id:
+        envelopes = [row for row in envelopes if row.get('family') == theme]
+    by_envelope = {row['snapshot_id']: row for row in envelopes}
+    if snapshot_id and snapshot_id not in by_envelope:
         raise ConsoleError("reviewer_not_named_on_snapshot")
     visible, controls = console_ui._document_list_page(
-        [item["envelope"] for item in items], q=q, page=page, path="/review",
+        envelopes, q=q, page=page, path="/review",
     )
     from src.review_participation_ui_v1 import filters, roster, people
     controls = controls[controls.index('<nav '):]
     controls = controls.replace('/review?', '/review?' + _esc(urlencode({'work': 'mine', 'theme': theme})) + '&amp;')
-    controls = filters(console, work='mine', theme=theme, q=q, rows=[i['envelope'] for i in items]) + controls
+    controls = filters(console, work='mine', theme=theme, q=q, rows=envelopes) + controls
     reviewer_names = people(console)
     if snapshot_id and not any(row["snapshot_id"] == snapshot_id for row in visible):
-        visible = [by_id[snapshot_id]["envelope"], *visible]
+        visible = [by_envelope[snapshot_id], *visible]
+    if summaries is not None:
+        selected = {row['snapshot_id']: summaries[row['snapshot_id']] for row in visible}
+        enrich(account['account_id'], selected)
+        items = review_workboard_items(console, account=account, summaries=selected)
+    by_id = {item['snapshot_id']: item for item in items}
     ledger_path = getattr(console, "_ledger_path", None)
-    events = [event for event in (read_events(ledger_path) if ledger_path is not None else [])
+    reader = getattr(getattr(console, 'workflow_review_store', None), 'read_events_for_snapshots', None)
+    history = (reader([row['snapshot_id'] for row in visible]) if callable(reader) else
+               read_events(ledger_path) if ledger_path is not None else [])
+    events = [event for event in history
               if str(event.get("actor") or "").strip()
               and not is_forbidden_reviewer(str(event["actor"]))]
     started = {
@@ -855,6 +876,8 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         context_target: str = "",
         context_mode: str = "",
         context_saved: str = "",
+        context_page: int = 0,
+        context_q: str = "",
     ) -> str:
         account = _current_account(console, request)
         from src.review_participation_ui_v1 import overview, require_overview
@@ -863,7 +886,20 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             raise ConsoleError("invalid_review_filter")
         if not document and (work == "all" or "reviewer" not in account["roles"]):
             return overview(console, account, theme=theme, q=q, page=page)
-        selected = console._envelope(document) if document else None
+        chosen_task = normalize_review_task(task)
+        read_inputs = None
+        if document and object.strip() and chosen_task != 'history':
+            from src.review_passage_read_v1 import read_review_passage
+            try:
+                read_inputs = read_review_passage(console, account, document, object.strip(),
+                    context_target=context_target, choice_page=max(context_page, 0), choice_query=context_q)
+            except ConsoleError as exc:
+                if exc.code == 'reviewer_not_named_on_snapshot':
+                    return RedirectResponse('/review/trajectory?' + urlencode({'document': document}), status_code=303)
+                raise
+            selected = read_inputs.envelope
+        else:
+            selected = console._envelope(document) if document else None
         if document and selected is None:
             raise ConsoleError("unknown_snapshot")
         if selected and account["account_id"] not in selected["named_reviewers"]:
@@ -881,6 +917,7 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             context_target=context_target,
             context_mode=context_mode,
             context_saved=context_saved == "yes",
+            read_inputs=read_inputs,
         )
 
         back = "/review?" + urlencode({"document": chosen, "q": q, "page": page})

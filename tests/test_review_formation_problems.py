@@ -71,6 +71,7 @@ def test_durable_independent_valid_proposal_reaches_review(tmp_path, production_
     login(client, 'reviewer')
     response = client.get('/review', params={'document': sid, 'object': candidates[0]['object_id'], 'task': 'contextual'})
     assert response.status_code == 200 and FIRST in response.text
+    assert 'data-formation-incomplete' in response.text and 'Vormingsproblemen behandelen' in response.text
 
 
 def test_whitespace_ranges_are_not_model_work():
@@ -100,8 +101,8 @@ def test_problems_restart_targeted_recovery_and_duplicate(tmp_path, production_c
     login(client)
     page = client.get('/formation-problems', params={'document': sid})
     assert page.status_code == 200
-    assert 'Open bronwerk hervatten' in page.text
-    assert 'Bronbereik bekijken en behandelen' in page.text
+    assert 'Open werk opnieuw verwerken' in page.text
+    assert 'Bekijk en behandel dit bronstuk' in page.text
     assert restarted.snapshot_objects(sid) == before and len(calls) == 3
     mode['broken'] = False
     revision = restarted.objects_revision(sid)
@@ -138,8 +139,8 @@ def test_review_does_not_hide_remaining_problems_or_allow_reextract(tmp_path, pr
     client = TestClient(console._metis_test_application)
     login(client, 'reviewer')
     page = client.get('/formation-problems', params={'document': sid})
-    assert page.status_code == 200 and 'Modelherstel is nu niet beschikbaar' in page.text
-    assert 'Bronbereik bekijken en behandelen' in page.text and 'Open bronwerk hervatten' not in page.text
+    assert page.status_code == 200 and 'Opnieuw verwerken is nu niet beschikbaar' in page.text
+    assert 'Bekijk en behandel dit bronstuk' in page.text and 'Open werk opnieuw verwerken' not in page.text
     with pytest.raises(ConsoleError, match='pre_review_retry_existing_work'):
         execute(console, sid, author, 'guarded')
     assert console.snapshot_objects(sid) == reviewed

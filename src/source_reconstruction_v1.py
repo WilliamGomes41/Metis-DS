@@ -101,6 +101,69 @@ def _may_join(left: dict[str, Any], right: dict[str, Any]) -> bool:
     return is_continuation_fragment(right_text)
 
 
+def review_source_window(fragments, objects):
+    """Select independently closed source blocks required by a read package.
+
+    Never guess a boundary of a reconstructed sentence. If a requested block
+    cannot be proved to be one independently closed raw fragment, retain the
+    full source and let the existing reconstruction/validation decide.
+    Candidate text, identities and source mappings are never changed here.
+    """
+    from src.prepared_source_views_v1 import stored_blocks
+    if stored_blocks(fragments) is not None:
+        return fragments
+    from src.semantic_passage_v1 import _block_id
+    block_ids, raw_ids = set(), set()
+
+    def references(value):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key == 'block_id' and isinstance(item, str):
+                    block_ids.add(item)
+                elif key in {'raw_object_id', 'fragment_id'} and isinstance(item, str):
+                    raw_ids.add(item)
+                elif key == 'source_fragment_ids' and isinstance(item, list):
+                    raw_ids.update(v for v in item if isinstance(v, str))
+                references(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                references(item)
+
+    references(objects)
+    if not block_ids and not raw_ids:
+        return fragments
+    selected, found, positions = [], set(), set()
+    # Canonical provenance usually identifies every required raw row directly.
+    # Avoid normalizing/hashing all other paragraphs just to locate those rows.
+    for index, fragment in enumerate(fragments):
+        if fragment.get('fragment_id') in raw_ids:
+            positions.add(index)
+            found.add(_block_id(fragment, _fragment_text(fragment)))
+    if not block_ids <= found:
+        for index, fragment in enumerate(fragments):
+            if index not in positions and _block_id(fragment, _fragment_text(fragment)) in block_ids - found:
+                positions.add(index)
+                found.add(_block_id(fragment, _fragment_text(fragment)))
+    for index in sorted(positions):
+        fragment = fragments[index]
+        text = _fragment_text(fragment)
+        block = _block_id(fragment, text)
+        boundary = _is_boundary(fragment)
+        if not boundary and (not has_terminal_sentence_boundary(text)
+                or index and not has_terminal_sentence_boundary(_fragment_text(fragments[index-1]))
+                and not _is_boundary(fragments[index-1])):
+            return fragments
+        selected.append(fragment)
+        found.add(block)
+    if not block_ids <= found or not raw_ids <= {row.get('fragment_id') for row in selected}:
+        return fragments
+    extraction = getattr(fragments, 'extraction_record', None)
+    if extraction is not None:
+        from src.docling_contract_v1 import ExtractedFragments
+        return ExtractedFragments(selected, deepcopy(extraction))
+    return selected
+
+
 def _merge_text(left: str, right: str) -> str:
     return re.sub(r"\s+", " ", f"{left} {right}").strip()
 

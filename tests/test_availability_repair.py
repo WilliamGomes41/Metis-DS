@@ -322,7 +322,15 @@ def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(backend
         # A changed representation is rebuilt on the next request, never held
         # in an application-wide validation/authority cache.
         fragments=console.review_source_fragments(sid)
-        fragments=deepcopy(fragments);fragments[-1]['raw_text']=fragments[-1]['clean_text']='Gewijzigde bron.'
+        fragments=deepcopy(fragments)
+        changed_fragment = fragments[-1]
+        if query.get('object') == candidate['object_id']:
+            # A passage read deliberately excludes unrelated source rows. Race
+            # evidence used by this candidate, so the test still detects stale
+            # validation inputs without requiring a document-wide detail read.
+            raw_ids = {row['raw_object_id'] for row in candidate['provenance']['source_fragments']}
+            changed_fragment = next(row for row in fragments if row['fragment_id'] in raw_ids)
+        changed_fragment['raw_text']=changed_fragment['clean_text']='Gewijzigde bron.'
         monkeypatch.setattr(console,'review_source_fragments',lambda *args,**kwargs:deepcopy(fragments))
         calls.clear();representations.clear()
         changed=client.get(path,params=query)
