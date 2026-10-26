@@ -196,7 +196,7 @@ def test_sentence_boundary_rule_covers_the_reported_break() -> None:
     assert is_truncated_sentence(MERGED) is False
 
 
-def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: Path, *, production_app, production_console) -> None:
+def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: Path, monkeypatch, *, production_app, production_console) -> None:
     console, researcher, reviewer = _console(tmp_path, production_console=production_console)
     source = f"<html><body><h1>Eenzaamheid</h1><p>{FIRST}</p><p>{CONTINUATION}</p></body></html>"
     receipt = console.ingest(
@@ -230,9 +230,53 @@ def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: P
     assert "Voorstel: afgebroken zin aanvullen" in page.text
     assert "Ontbrekende brontekst:" in page.text
     assert CONTINUATION in page.text
-    assert "Passage aanvullen met brontekst" in page.text
+    assert '/review/context/accept' not in page.text
+    assert 'Bronaanvulling herstellen in Vorming' in page.text
     assert "Ontbrekende brontekst:" in page.text
     assert "Herstelde passage:" in page.text
+
+    from tests.test_source_context_review_ui_v1 import Forms
+    from urllib.parse import urlencode
+    owner_url = '/source-selection?' + urlencode(dict(document=snapshot_id, object=object_id,
+        task='continuation', return_task='contextual'))
+    before = deepcopy(console.snapshot_objects(snapshot_id, include_blocked=True))
+    events = deepcopy(console.workflow_review_store.read_events())
+    bindings = deepcopy(console.object_review_bindings(snapshot_id))
+    # The owner must use the existing bounded reader, never a full snapshot fallback.
+    import src.review_passage_read_v1 as reader
+    original_read = reader.read_review_passage
+    reads = []
+    with monkeypatch.context() as patch:
+        patch.setattr(reader, 'read_review_passage', lambda *args, **kwargs:
+            (reads.append((args, kwargs)) or original_read(*args, **kwargs)))
+        patch.setattr(console, 'snapshot_objects', lambda *a, **kw: pytest.fail('unbounded owner read'))
+        patch.setattr(console, 'snapshot_objects_and_revision', lambda *a, **kw: pytest.fail('unbounded owner read'))
+        owner = client.get(owner_url)
+    assert owner.status_code == 200 and len(reads) == 1
+    assert 'data-formation-continuation' in owner.text
+    assert 'data-source-context-form' not in owner.text
+    forms = [form for form in Forms(owner.text).forms if form['attrs'].get('action') == '/review/context/accept']
+    assert len(forms) == 1
+    data = {field['name']: field.get('value', '') for field in forms[0]['inputs']}
+    assert data['snapshot_revision'].startswith('review-generation-v1:')
+    assert data['snapshot_id'] == snapshot_id and data['object_id'] == object_id
+    assert console.snapshot_objects(snapshot_id, include_blocked=True) == before
+    assert console.workflow_review_store.read_events() == events
+    assert console.object_review_bindings(snapshot_id) == bindings
+
+    outsider = TestClient(production_app(console))
+    outsider.post('/login', data={'username': 'researcher.anne', 'password': 'anne-secret'})
+    assert outsider.get(owner_url).status_code in {400, 403}
+    assert outsider.post('/review/context/accept', data=data).status_code == 403
+    console.create_account(username='not.named', password='outsider-secret', roles=('reviewer',), display_name='Niet benoemd')
+    outsider.post('/login', data={'username': 'not.named', 'password': 'outsider-secret'})
+    assert outsider.get(owner_url).status_code == 400
+    assert outsider.post('/review/context/accept', data=data).status_code == 400
+    with monkeypatch.context() as patch:
+        patch.setattr(console, 'snapshot_is_published', lambda sid: True)
+        assert '/review/context/accept' not in client.get(owner_url).text
+        assert client.post('/review/context/accept', data=data).status_code == 400
+    assert console.snapshot_objects(snapshot_id, include_blocked=True) == before
 
     stale_revision = console.objects_revision(snapshot_id)
     rows = console._load_objects(snapshot_id)
@@ -255,16 +299,21 @@ def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: P
     unchanged = next(row for row in console.snapshot_objects(snapshot_id) if row["object_id"] == object_id)
     assert unchanged["object_version"] == target["object_version"]
 
+    owner = client.get(owner_url)
+    form = next(form for form in Forms(owner.text).forms if form['attrs'].get('action') == '/review/context/accept')
+    data = {field['name']: field.get('value', '') for field in form['inputs']}
+
     response = client.post(
         "/review/context/accept",
-        data={
-            "snapshot_id": snapshot_id,
-            "object_id": object_id,
-            "snapshot_revision": console.objects_revision(snapshot_id),
-        },
+        data=data,
         follow_redirects=False,
     )
     assert response.status_code == 303
+    assert response.headers['location'].startswith('/source-selection?')
+    saved = client.get(response.headers['location'])
+    assert saved.status_code == 200 and 'De bronaanvulling is opgeslagen.' in saved.text
+    assert '/review/context/accept' not in saved.text
+    assert 'task=contextual' in saved.text
     revised = next(row for row in console.snapshot_objects(snapshot_id) if row["object_id"] == object_id)
     assert revised["object_version"] != target["object_version"]
     assert revised["content"]["clean_text"] == MERGED
@@ -278,6 +327,12 @@ def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: P
     assert history[0] == target
     assert revised["provenance"]["previous_object_version"] == target["object_version"]
     assert len(history) == 2
+    after = deepcopy(console.snapshot_objects(snapshot_id, include_blocked=True))
+    replay = client.post('/review/context/accept', data=data)
+    assert replay.status_code == 400 and 'snapshot_object_write_conflict' in replay.text
+    client.get(response.headers['location'])
+    assert console.snapshot_objects(snapshot_id, include_blocked=True) == after
+    assert len([row for row in console.snapshot_objects(snapshot_id, include_blocked=True) if row['object_id'] == object_id]) == 2
 
 
 def test_source_bound_repair_reopens_only_changed_candidate_and_survives_restart(tmp_path: Path, *, production_console) -> None:
