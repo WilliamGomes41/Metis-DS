@@ -13,7 +13,7 @@ sid = command['snapshot_id']
 @app.get('/browser-manifest')
 def manifest():
     return {'target': f'/review?document={sid}&object={target["object_id"]}',
-            'source': f'/review?document={sid}&object={source["object_id"]}',
+            'source': f'/source-selection?document={sid}&object={source["object_id"]}',
             'target_id': target['object_id'], 'source_id': source['object_id'],
             'username': 'bert', 'password': 'bert-secret'}
 

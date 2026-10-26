@@ -56,19 +56,57 @@ def _payload(form, role='label', reason='Dit label hoort bij de geselecteerde pa
     return values
 
 
+def test_review_exposes_context_evidence_but_only_formation_can_edit(tmp_path, *, production_app, production_console):
+    state, researcher, _, source, target, command = _system(tmp_path,
+        console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
+    client = _client(state, production_app=production_app)
+    sid = command['snapshot_id']
+    state.confirm_source_context(**command)
+    before = deepcopy(state.snapshot_objects(sid))
+    events = state.workflow_review_store.read_events()
+    for oid in (source['object_id'], target['object_id']):
+        page = client.get('/review', params={'document': sid, 'object': oid})
+        assert page.status_code == 200
+        assert 'action="/review/source-context"' not in page.text
+        assert 'data-context-picker' not in page.text
+        assert 'Broncontext vastleggen of aanpassen in Vorming' in page.text
+    review = client.get('/review', params={'document': sid, 'object': target['object_id']})
+    assert 'data-confirmed-source-context' in review.text and 'DOEN' in review.text
+    assert any('data-review-form' in form['attrs'] and form['attrs'].get('action') == '/review'
+               for form in Forms(review.text).forms)
+    old = client.get('/review', params={'document': sid, 'object': source['object_id'],
+        'context_target': target['object_id'], 'context_mode': 'source',
+        'context_page': 2, 'context_q': 'DOEN'}, follow_redirects=False)
+    assert old.status_code == 303 and old.headers['location'].startswith('/source-selection?')
+    assert 'context_page=2' in old.headers['location'] and 'context_q=DOEN' in old.headers['location']
+    owner = client.get(old.headers['location'])
+    assert owner.status_code == 200 and '<h1>Vorming</h1>' in owner.text
+    assert _link_form(owner)
+    assert not any('data-review-form' in form['attrs'] or form['attrs'].get('action') == '/review'
+                   for form in Forms(owner.text).forms)
+    outsider = _client(state, researcher['username'], 'anne-secret', production_app=production_app)
+    denied = outsider.get(old.headers['location'])
+    assert denied.status_code in {400, 403}
+    assert 'action="/review/source-context"' not in denied.text
+    assert state.snapshot_objects(sid) == before
+    assert state.workflow_review_store.read_events() == events
+
+
 def test_passage_first_navigation_preserves_existing_targets_and_reopens_reviews(tmp_path, *, production_app, production_console):
     state, _, reviewer, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     sid = command['snapshot_id']
     client = _client(state, production_app=production_app)
     before = deepcopy(state.snapshot_objects(sid))
-    page = client.get('/review', params={'document': sid, 'object': target['object_id']})
+    page = client.get('/source-selection', params={'document': sid, 'object': target['object_id']})
     assert page.status_code == 200
     assert 'Context toevoegen uit de bron' in page.text
     assert 'Bronrol en contextkoppeling' not in page.text
     assert 'data-source-context-form' not in page.text
-    assert page.text.index('data-passage-context') < page.text.index('data-review-form')
+    assert not any('data-review-form' in form['attrs'] or form['attrs'].get('action') == '/review'
+                   for form in Forms(page.text).forms)
+    assert '<h1>Vorming</h1>' in page.text
     Forms(page.text)  # Reject browser-invalid nested forms.
-    label_page = client.get('/review', params={'document': sid, 'object': source['object_id'], 'context_target': target['object_id']})
+    label_page = client.get('/source-selection', params={'document': sid, 'object': source['object_id'], 'context_target': target['object_id']})
     form = _link_form(label_page)
     assert not any('checked' in field for field in form['inputs'] if field.get('name') == 'role')
     assert 'Passage waarvoor je context kiest' in label_page.text
@@ -86,7 +124,7 @@ def test_passage_first_navigation_preserves_existing_targets_and_reopens_reviews
                         expected_revision=state.objects_revision(sid))
     other = next(row for row in state.snapshot_objects(sid)
                  if 'bespreekt passende ondersteuning' in row.get('content', {}).get('clean_text', ''))
-    pair = client.get('/review', params={'document': sid, 'object': source['object_id'], 'context_target': other['object_id']})
+    pair = client.get('/source-selection', params={'document': sid, 'object': source['object_id'], 'context_target': other['object_id']})
     data = _payload(_link_form(pair))
     assert set(data['target_object_ids']) == {target['object_id'], other['object_id']}
     assert client.post('/review/source-context', data=data, follow_redirects=False).status_code == 303
@@ -106,7 +144,7 @@ def test_separate_exclude_and_reset_commands_have_no_hidden_targets(tmp_path, *,
     state.confirm_source_context(**command)
     client = _client(state, production_app=production_app)
     sid = command['snapshot_id']
-    page = client.get('/review', params={'document': sid, 'object': source['object_id']})
+    page = client.get('/source-selection', params={'document': sid, 'object': source['object_id']})
     forms = Forms(page.text).forms
     commands = {field['value']: form for form in forms for field in form['inputs']
                 if field.get('name') == 'role' and field.get('type') == 'hidden'}
@@ -117,7 +155,7 @@ def test_separate_exclude_and_reset_commands_have_no_hidden_targets(tmp_path, *,
     rows = state.snapshot_objects(sid)
     assert not links_of(next(row for row in rows if row['object_id'] == target['object_id']))
     assert role_of(next(row for row in rows if row['object_id'] == source['object_id']))['role'] == 'excluded'
-    page = client.get('/review', params={'document': sid, 'object': source['object_id']})
+    page = client.get('/source-selection', params={'document': sid, 'object': source['object_id']})
     reset = next(form for form in Forms(page.text).forms if any(field.get('name') == 'role' and field.get('value') == 'reset' for field in form['inputs']))
     assert client.post('/review/source-context', data=_payload(reset, role='reset'), follow_redirects=False).status_code == 303
     row = next(row for row in state.snapshot_objects(sid) if row['object_id'] == source['object_id'])
@@ -129,7 +167,7 @@ def test_invalid_and_stale_submission_retains_draft_without_mutation(tmp_path, *
     state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     client = _client(state, production_app=production_app)
     sid = command['snapshot_id']
-    page = client.get('/review', params={'document': sid, 'object': source['object_id'], 'context_target': target['object_id']})
+    page = client.get('/source-selection', params={'document': sid, 'object': source['object_id'], 'context_target': target['object_id']})
     form = _link_form(page)
     before = deepcopy(state.snapshot_objects(sid))
     data = _payload(form, reason='Mijn gecontroleerde keuze <script>onveilig</script>')
@@ -182,7 +220,7 @@ def test_context_navigation_cannot_bypass_authorization_or_redirect_externally(t
     sid = command['snapshot_id']
     client = _client(state, production_app=production_app)
     before = deepcopy(state.snapshot_objects(sid))
-    invalid = client.get('/review', params={'document': sid, 'object': source['object_id'], 'context_target': 'other-snapshot-object'})
+    invalid = client.get('/source-selection', params={'document': sid, 'object': source['object_id'], 'context_target': 'other-snapshot-object'})
     assert invalid.status_code == 400
     data = dict(snapshot_id=sid, source_object_id=source['object_id'], role='label',
                 target_object_ids=[target['object_id']], reason=command['reason'], command_id='ui-access',
@@ -192,8 +230,8 @@ def test_context_navigation_cannot_bypass_authorization_or_redirect_externally(t
     assert state.snapshot_objects(sid) == before
     result = client.post('/review/source-context', data=data, follow_redirects=False)
     assert result.status_code == 303
-    assert result.headers['location'].startswith('/review?')
+    assert result.headers['location'].startswith('/source-selection?')
     assert 'example.com' not in result.headers['location']
     monkeypatch.setattr(state, 'snapshot_is_published', lambda sid: True)
-    assert 'data-source-context-form' not in client.get('/review', params={'document': sid, 'object': source['object_id']}).text
+    assert 'data-source-context-form' not in client.get('/source-selection', params={'document': sid, 'object': source['object_id']}).text
     assert client.post('/review/source-context', data=data).status_code == 400

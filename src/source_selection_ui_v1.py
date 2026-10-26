@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from src.operations_console_v1 import ConsoleError
 from src.source_selection_v1 import UNCHECKED, comparable_observations, projection
+from src.knowledge_materialisation_v1 import source_reconstruction_scope
 
 
 def _minutes(seconds):
@@ -195,14 +196,72 @@ def _blockage_html(report, esc):
 
 
 
+@source_reconstruction_scope(reuse_existing=True)
+def render_context(console, account, document, object, *, context_target='', context_mode='',
+                   context_page=0, context_q='', context_saved=False,
+                   context_draft=None, context_error=''):
+    """Present the existing bounded context read and command in its one workplace."""
+    from src import operations_console_app as ui
+    from src.review_passage_read_v1 import read_review_passage
+    from src.beslisboom_path_v1 import review_path_for_klasse
+    # Error rendering keeps the existing full-snapshot path: unsaved selected
+    # targets may be outside the bounded GET picker. Never silently drop them.
+    inputs = None
+    if context_draft is not None:
+        envelope = console._envelope(document)
+        if ('reviewer' not in account.get('roles', [])
+                or account['account_id'] not in envelope.get('named_reviewers', [])):
+            raise ConsoleError('reviewer_not_named_on_snapshot')
+        objects, revision = console.snapshot_objects_and_revision(document)
+    else:
+        inputs = read_review_passage(console, account, document, object,
+            context_target=context_target, choice_page=max(context_page, 0), choice_query=context_q)
+        envelope, objects, revision = inputs.envelope, inputs.objects, inputs.revision
+    obj = next((row for row in objects if row['object_id'] == object), None)
+    if obj is None:
+        raise ConsoleError('unknown_object')
+    projection, _ = ui._review_detail_projection(console, account, document, obj,
+        objects, review_path_for_klasse(envelope['class']), inputs)
+    editable = not console.snapshot_is_published(document)
+    panel = ui._source_context_panel(obj, objects, document, revision,
+        context_target=context_target, source_mode=context_mode == 'source',
+        draft=context_draft, error=context_error, projection=projection, editable=editable,
+        choices_html=ui._passage_choices_html(document, obj, inputs,
+            context_mode=context_mode, context_target=context_target) if editable else '')
+    saved = ('<p class="banner ok" role="status">Het contextbesluit is opgeslagen. '
+             'Beoordeel de betrokken passages opnieuw.</p>' if context_saved else '')
+    back = '/review?' + urlencode({'document': document, 'object': object})
+    overview = '/source-selection?' + urlencode({'document': document})
+    if inputs is not None:
+        available = inputs.source_available
+    else:
+        try:
+            console.open_source_passage(snapshot_id=document, object_id=object)
+            available = True
+        except ConsoleError:
+            available = False
+    return ui._page(ui._nav(account, 'selection') +
+        '<section class="room review-room" data-formation-context><h1>Vorming</h1>' +
+        '<p><a href="' + ui._esc(overview) + '">Voortgang en vormingsproblemen</a> · '
+        '<a href="' + ui._esc(back) + '">Deze passage beoordelen in Review</a></p>' + saved +
+        '<h2>Broncontext vastleggen</h2>' +
+        ui._broncontext_html(obj, document, object, available) + panel + '</section>')
+
+
 def install(app, console, require, page, nav, esc):
     from src.source_processing_dispatch_v1 import install_dispatcher
     dispatcher = install_dispatcher(app, console)
 
     @app.get('/source-selection', response_class=HTMLResponse)
-    def selection_get(request: Request, document: str = '', offset: int = Query(0, ge=0)):
+    def selection_get(request: Request, document: str = '', offset: int = Query(0, ge=0),
+                      object: str = '', context_target: str = '', context_mode: str = '',
+                      context_page: int = 0, context_q: str = '', context_saved: str = ''):
         with diagnostic_phase("authorization"):
             actor = require(request)
+        if object:
+            return render_context(console, actor, document, object, context_target=context_target,
+                context_mode=context_mode, context_page=context_page, context_q=context_q,
+                context_saved=context_saved == 'yes')
         # Overview owns compact progress inputs; only the chosen document loads detail.
         scoped_document = actor.get('_view_document')
         documents = ([console._envelope(scoped_document)] if scoped_document else

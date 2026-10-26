@@ -886,6 +886,16 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             raise ConsoleError("invalid_review_filter")
         if not document and (work == "all" or "reviewer" not in account["roles"]):
             return overview(console, account, theme=theme, q=q, page=page)
+        if document and object.strip() and (context_target or context_mode == 'source'):
+            # Historical editor bookmarks only navigate; context commands live
+            # on Vorming and still enforce their original kernel permissions.
+            if account['account_id'] not in console._envelope(document)['named_reviewers']:
+                return RedirectResponse('/review/trajectory?' + urlencode({'document': document}), status_code=303)
+            params = {'document': document, 'object': object.strip(),
+                      'context_target': context_target, 'context_mode': context_mode,
+                      'context_page': context_page, 'context_q': context_q}
+            return RedirectResponse('/source-selection?' + urlencode(params) + '#passage-context',
+                                    status_code=303)
         chosen_task = normalize_review_task(task)
         read_inputs = None
         if document and object.strip() and chosen_task != 'history':

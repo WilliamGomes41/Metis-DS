@@ -3026,9 +3026,10 @@ def _review_inventory(
                               for oid in usage["target_ids"])
             source_task = "repair" if usage["human_action"] == "technical_repair" else "disposition"
             source_link = "Bronbewijs herstellen" if source_task == "repair" else "Bronbesluit bekijken of wijzigen"
+            source_path = '/review' if source_task == 'repair' else '/source-selection'
             group.append(f'<li data-source-record="{_esc(object_id)}"><p>{_esc((obj.get("content") or {}).get("clean_text"))}</p>'
                 f'<p>{_esc(status)} · {_esc(usage_reason)}</p>{targets}'
-                f'<a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={source_task}">{source_link}</a></li>')
+                f'<a href="{source_path}?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={source_task}">{source_link}</a></li>')
             continue
         if is_source_record(obj):
             evidence = evidence_of(obj)
@@ -3044,7 +3045,7 @@ def _review_inventory(
             link = f'/review/bronpassage?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task=disposition'
             content = (f'<p>{_esc(text)}</p><p>{_esc(reason)}</p>'
                        f'<a href="{link}">Bekijk bronpassage</a> · '
-                       f'<a href="/review?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task=disposition">Brongebruik bepalen of herstellen</a>')
+                       f'<a href="/source-selection?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}">Brongebruik bepalen of herstellen</a>')
             if evidence.get("proposed_role") in {"metadata", "structure"} and not role_of(obj):
                 metadata_items.append(f'<li data-source-record="{_esc(object_id)}"><label>'
                     f'<input type="checkbox" name="source_object_ids" value="{_esc(object_id)}" checked>'
@@ -3135,7 +3136,8 @@ def _review_inventory(
 def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], snapshot_id: str,
                           snapshot_revision: str, *, context_target: str = "",
                           source_mode: bool = False, draft: dict[str, Any] | None = None,
-                          error: str = "", projection=None, choices_html: str = "") -> str:
+                          error: str = "", projection=None, choices_html: str = "",
+                          editable: bool = True) -> str:
     """Present existing context decisions; navigation never confirms a relation."""
     if obj.get("object_type") in {"document", "heading", "path"}:
         return ""
@@ -3159,7 +3161,7 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
         raise ConsoleError("source_context_target_invalid")
 
     def review_url(row_id: str, *, pair_target: str = "", edit_source: bool = False) -> str:
-        url = f"/review?document={quote(snapshot_id, safe='')}&object={quote(row_id, safe='')}"
+        url = f"/source-selection?document={quote(snapshot_id, safe='')}&object={quote(row_id, safe='')}"
         if pair_target:
             url += f"&context_target={quote(pair_target, safe='')}"
         if edit_source:
@@ -3199,6 +3201,12 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
                 parts.append('<p>De contextbron ontbreekt. Laat de beheerder de bronverwijzing controleren.</p>')
             parts.append('</div>')
         parts.append('</section>')
+    if not editable:
+        if role:
+            role_label = {'label': 'bronlabel', 'context': 'contextfragment', 'excluded': 'niet opnemen'}.get(role.get('role'), 'bronfragment')
+            parts.append(f'<p data-confirmed-source-role>Vastgelegd als {_esc(role_label)}: {_esc(role.get("reason"))}</p>')
+        parts.append(f'<p><a class="btn-secondary" href="{review_url(oid)}">Broncontext vastleggen of aanpassen in Vorming</a></p>')
+        return ''.join(parts) + '</section>'
     if not is_source:
         if choices_html:
             parts.append(choices_html)
@@ -3747,9 +3755,9 @@ def _passage_choices_html(snapshot_id, obj, inputs, *, context_mode='', context_
     for page, label in ((inputs.choice_page-1, 'Vorige'), (inputs.choice_page+1, 'Volgende')):
         if page >= 1 and (page <= inputs.choice_page or inputs.choice_page*25 < inputs.choice_total):
             url = urlencode({**params, 'context_page': page, 'context_q': inputs.choice_query})
-            links.append(f'<a href="/review?{_esc(url)}#passage-context">{label}</a>')
+            links.append(f'<a href="/source-selection?{_esc(url)}#passage-context">{label}</a>')
     return ('<h4>Context toevoegen uit de bron</h4>'
-            f'<form method="get" action="/review">{hidden}'
+            f'<form method="get" action="/source-selection">{hidden}'
             f'<label>Zoek brontekst<input name="context_q" value="{_esc(inputs.choice_query)}"></label>'
             '<button class="btn-secondary">Zoeken</button></form>'
             f'<nav aria-label="Bronpassages">{inputs.choice_total} teksten · '
@@ -3913,8 +3921,7 @@ def _render_review_room(
                     context_html = _source_context_panel(obj, snapshot_objects, chosen, snapshot_revision,
                         context_target=context_target, source_mode=context_mode == "source",
                         draft=context_draft, error=context_error, projection=detail_projection,
-                        choices_html=_passage_choices_html(chosen, obj, read_inputs,
-                            context_mode=context_mode, context_target=context_target))
+                        editable=False)
                 if context_saved:
                     objects_html += '<p class="banner ok" role="status">Het contextbesluit is opgeslagen. Beoordeel de betrokken passages opnieuw.</p>'
                 conflict_html = _review_conflict_html(conflict, current=obj, draft=draft)
@@ -6040,12 +6047,13 @@ def create_console_app(
                 raise
             if pair_target and any(row["object_id"] == pair_target and role_of(row) for row in state.snapshot_objects(snapshot_id)):
                 pair_target = ""
-            return HTMLResponse(_render_review_room(state, account, snapshot_id, source_object_id,
+            from src.source_selection_ui_v1 import render_context
+            return HTMLResponse(render_context(state, account, snapshot_id, source_object_id,
                 context_target=pair_target, context_mode="source",
                 context_draft={"role": role, "reason": reason, "target_object_ids": target_object_ids},
                 context_error=ERROR_COPY.get(exc.code, "Het document is gewijzigd. Controleer je keuzes opnieuw."),
                 ), status_code=409 if exc.code == SNAPSHOT_OBJECT_WRITE_CONFLICT else 400)
-        location = _review_location(state, snapshot_id, return_id)
+        location = '/source-selection?' + urlencode({'document': snapshot_id, 'object': return_id})
         return RedirectResponse(location + "&context_saved=yes#passage-context", status_code=303)
 
     @app.post("/review/context/accept")

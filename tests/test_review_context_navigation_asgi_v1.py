@@ -61,7 +61,7 @@ def test_installed_context_choice_save_redirect_reopen_and_add_target(installed)
     client, state, _, _, source, target, command = installed
     sid, tid, soid = command['snapshot_id'], target['object_id'], source['object_id']
     before = deepcopy(state.snapshot_objects(sid))
-    page = client.get('/review', params={'document': sid, 'object': tid})
+    page = client.get('/source-selection', params={'document': sid, 'object': tid})
     assert page.status_code == 200
     choice = client.get(_context_link(page, soid, tid))
     assert choice.status_code == 200
@@ -72,7 +72,7 @@ def test_installed_context_choice_save_redirect_reopen_and_add_target(installed)
     saved = client.post('/review/source-context', data=data, follow_redirects=False)
     assert saved.status_code == 303
     location = saved.headers['location']
-    assert location.startswith('/review?')
+    assert location.startswith('/source-selection?')
     assert parse_qs(urlsplit(location).query)['object'] == [tid]
     after = client.get(location)
     assert after.status_code == 200
@@ -110,7 +110,7 @@ def test_installed_source_mode_invalid_target_and_failed_posts(installed):
     client, state, _, _, source, target, command = installed
     sid, tid, soid = command['snapshot_id'], target['object_id'], source['object_id']
     before = deepcopy(state.snapshot_objects(sid))
-    ordinary = client.get('/review', params={'document': sid, 'object': tid})
+    ordinary = client.get('/source-selection', params={'document': sid, 'object': tid})
     assert 'data-source-context-form' not in ordinary.text  # No label heuristic.
     source_mode = client.get(_context_link(ordinary, tid))
     assert source_mode.status_code == 200
@@ -143,7 +143,7 @@ def test_installed_navigation_access_redirect_and_workboard_contract(installed):
     sid, tid, soid = command['snapshot_id'], target['object_id'], source['object_id']
     before = deepcopy(state.snapshot_objects(sid))
     for signal in ('', 'true', 'YES', '1', 'yes'):
-        response = client.get('/review', params={'document': sid, 'object': tid, 'context_saved': signal})
+        response = client.get('/source-selection', params={'document': sid, 'object': tid, 'context_saved': signal})
         assert response.status_code == 200
         assert ('Het contextbesluit is opgeslagen' in response.text) == (signal == 'yes')
         assert 'Koppeling aanpassen of verwijderen' not in response.text
@@ -154,7 +154,8 @@ def test_installed_navigation_access_redirect_and_workboard_contract(installed):
     assert client.get('/review', params={'document': sid, 'work': 'invalid'}).status_code == 400
     detail = client.get('/review', params={'document': sid, 'object': tid, 'q': 'observatie', 'page': 2})
     assert '/review?document=' in detail.text and 'q=observatie&amp;page=2' in detail.text
-    choice = client.get(_context_link(detail, soid, tid))
+    owner = client.get('/source-selection', params={'document': sid, 'object': tid})
+    choice = client.get(_context_link(owner, soid, tid))
     data = _payload(_link_form(choice))
     anonymous = TestClient(client.app, base_url='https://testserver')
     assert anonymous.get('/review', params={'document': sid, 'object': soid,
@@ -189,7 +190,7 @@ def test_installed_navigation_access_redirect_and_workboard_contract(installed):
     external = client.post('/review/source-context', data={**data, 'return_object_id': 'https://example.com'},
                            follow_redirects=False)
     assert external.status_code == 303
-    assert external.headers['location'].startswith('/review?')
+    assert external.headers['location'].startswith('/source-selection?')
     assert 'example.com' not in external.headers['location']
 
 
@@ -209,7 +210,7 @@ def test_context_links_keep_url_values_inside_html_attributes(installed):
     assert '&amp;object=' in panel and '&amp;amp;' not in panel
     back = next(href for href in parsed.hrefs
                 if parse_qs(urlsplit(href).query).get('object') == [target_id])
-    assert urlsplit(back).path == '/review'
+    assert urlsplit(back).path == '/source-selection'
     assert parse_qs(urlsplit(back).query) == {'document': [sid], 'object': [target_id]}
     fields = _payload(next(form for form in Forms(panel).forms
                            if 'data-source-context-form' in form['attrs']))
