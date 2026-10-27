@@ -1,6 +1,10 @@
 """Integrated workplace boundaries and historical navigation on native PostgreSQL.
 
-# release-control-evidence: scope/belofte toegang kwaliteit slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: toegang
+# release-control-evidence: kwaliteit
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from copy import deepcopy
 import json
