@@ -41,12 +41,21 @@ def test_343_to_5_keeps_all_338_missing_admission_passages_reachable():
     contextual = _render_review_index("snap-test", objects, "tekst", task="contextual", bindings=[], fragments=_allowed_source())
     assert "allowed-0" in contextual
     assert "missing-0" not in contextual
-    remaining = _render_review_index("snap-test", objects, "tekst", task="disposition", bindings=[], fragments=_allowed_source())
-    assert set(_inventory_ids(remaining)) == {f"missing-{i}" for i in range(338)}
-    assert "Gebruik van bronpassage bepalen" in remaining
-    inventory = _render_review_index("snap-test", objects, "tekst", task="inventory", bindings=[], fragments=_allowed_source())
-    assert len(_inventory_ids(inventory)) == 343
-    assert len(set(_inventory_ids(inventory))) == 343
+    from src.prepared_source_views_v1 import prepare
+    fragments = prepare(_allowed_source()).fragments
+    for task, expected in (("disposition", {f"missing-{i}" for i in range(338)}),
+                           ("inventory", {obj['object_id'] for obj in objects})):
+        seen = set()
+        for page in range(1, (len(expected) + 24) // 25 + 1):
+            body = _render_review_index("snap-test", objects, "tekst", task=task,
+                                       page=page, bindings=[], fragments=fragments)
+            ids = _inventory_ids(body)
+            assert 0 < len(ids) <= 25 and len(ids) == len(set(ids))
+            assert not seen & set(ids)
+            seen.update(ids)
+            if task == 'disposition':
+                assert "Gebruik van bronpassage bepalen" in body
+        assert seen == expected
     assert objects == before  # All projections are read-only.
 
 

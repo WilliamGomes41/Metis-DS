@@ -123,3 +123,29 @@ available; the complete affected Tier-D test module passes on rerun (**98 passed
 A complete green suite on the final PR head
 remains a CI requirement; the PR is offered as a draft performance improvement,
 not as proof that the original production latency is resolved.
+
+## CI follow-up on PR #872
+
+Run `40429746475` on `c272d2d` failed in suite shards 0, 1 and 2 on both Python
+3.12 and 3.13, with five unique failing tests. Other workflows, preflights,
+characterization and browser checks passed. The aggregate jobs' missing XML
+files followed the failed suite gate; no CI gate is removed or weakened.
+
+All five failures reproduce locally in one 3.48-second command. The remaining
+regressions still assumed unpaged lists or injected changes above the old
+snapshot helper, which the explicit captured read no longer calls. Tests now:
+
+* verify every one of 338 unresolved and 343 total passages across all pages,
+  preserving exact identities, uniqueness and read-only behavior;
+* observe the captured input boundary for navigation and the actual concurrent
+  writer, retaining the stale form/refusal and visible-text assertions;
+* bound native object-payload reads on both Review and Vorming instead of
+  comparing invocation counts of different high-level helpers;
+* retain the full 2,000-candidate/100-group oracle and compare the first, middle
+  and last HTTP pages against those exact coherent group memberships.
+
+The five-case reproduction is green (5 passed, 5.03 seconds). The complete
+affected modules plus native Review, passage, stale-command, batch and unchanged
+characterization coverage pass: **114 passed, no skips** (Python 3.12,
+PostgreSQL 16.2). Production code is unchanged in this CI correction. Final
+Python 3.12/3.13 CI results must be checked on the new pushed head.

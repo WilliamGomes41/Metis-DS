@@ -156,11 +156,22 @@ def test_waiting_duties_are_not_counted_as_completed_work():
 
 
 def test_task_page_returns_to_selected_document(monkeypatch):
+    from src.review_passage_read_v1 import ReviewDocumentInputs
+    captured = []
+
+    def read(console, account, snapshot_id):
+        assert snapshot_id == 'two' and account['account_id'] == 'reviewer'
+        inputs = ReviewDocumentInputs(console._envelope(snapshot_id), [], [], 'captured-revision', None)
+        captured.append(inputs)
+        return inputs
+
+    monkeypatch.setattr('src.review_passage_read_v1.read_review_document', read)
     def render(console, account, document, object='', *, task='', counts=None,
-               context_target='', context_mode='', context_saved=False, read_inputs=None):
+               context_target='', context_mode='', context_saved=False, read_inputs=None, queue_page=1):
         assert document == 'two' and task == 'contextual'
         assert (context_target, context_mode, context_saved) == ('', '', False)
-        assert read_inputs is None
+        assert captured == [read_inputs] and read_inputs.revision == 'captured-revision'
+        assert queue_page == 1
         return '<h1>Passages beoordelen</h1><a class="btn-secondary" href="/review">Ander document kiezen</a>'
     monkeypatch.setattr('src.review_workboard_v1._render_review_room', render)
     console = Console(documents=[('one', document('One')), ('two', document('Two'))])

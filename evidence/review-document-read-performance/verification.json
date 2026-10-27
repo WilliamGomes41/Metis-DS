@@ -155,5 +155,21 @@
     },
     "full_final_head_suite": "CI pending",
     "psql_targeted_rerun_passed": 98
+  },
+  "ci_follow_up": {
+    "failed_head": "c272d2d5f253df2a2163615feda0e85bc2eedf02",
+    "failed_run_id": 40429746475,
+    "unique_failures": 5,
+    "local_red": "5 failed in 3.48s",
+    "local_green": "5 passed in 5.03s",
+    "expanded_regression": {
+      "passed": 114,
+      "skipped": 0,
+      "seconds": 94.88,
+      "python": "3.12",
+      "postgres": "16.2"
+    },
+    "production_code_changed": false,
+    "final_ci": "pending on next pushed head"
   }
 }
