@@ -50,6 +50,7 @@ build/
 dist/
 .python_packages/
 *.azure-deploy.zip
+config/console_build.json
 
 # Human review returns / audit exports belong in controlled data storage, not source control
 output/v2/review_return/

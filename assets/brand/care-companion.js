@@ -12,6 +12,7 @@
   const dot = root.querySelector('[data-care-dot]');
   const room = root.dataset.room || 'page';
   const commit = root.dataset.commit || '';
+  const version = root.dataset.version || '';
   const browserErrors = [];
   const OPEN_KEY = 'metis-care-open';
   const DEPLOY_KEY = 'metis-care-deploy-check';
@@ -88,7 +89,8 @@
     'Foutcode: ' + (error && error.code ? error.code : '-'),
     'Melding op de pagina: ' + (error && error.text ? error.text : '-'),
     'Referentie: ' + (error && error.reference ? error.reference : '-'),
-    'Versie: ' + (commit || '-'),
+    'Versie: ' + (version || 'niet beschikbaar'),
+    'Buildreferentie: ' + (commit || '-'),
     'Browserfouten: ' + (browserErrors.length ? browserErrors.slice(0, 5).join(' | ') : 'geen'),
     '',
     'Wat deed je net, en wat verwachtte je?',
@@ -325,7 +327,8 @@
   const deployText = (run) => [
     'Bruikbaarheidscontrole Metis-console',
     'Tijd: ' + run.at,
-    'Versie: ' + (run.commit || '-'),
+    'Versie: ' + (run.version || 'niet beschikbaar'),
+    'Buildreferentie: ' + (run.commit || '-'),
     ...run.rows.map((row) => (row.verdict === 'not_checked_access' ? 'NIET  ' : row.verdict === 'not_established' ? 'ONBEKEND  ' : row.ok ? 'OK    ' : 'FOUT  ') + row.label + ' (' + row.path + ') — '
       + (row.skipped ? 'geen toegang met jouw rol' : row.ok ? 'bruikbaar, ' + row.seconds + ' s' : deployProblem(row))
       + (row.diagnosis ? '\n  ' + JSON.stringify(row.diagnosis) : ''))
@@ -364,7 +367,7 @@
       const counts = verdict => run.rows.filter(row => row.verdict === verdict).length;
       status.textContent = counts('pass') + ' bruikbaar · ' + counts('fail') + ' afwijking(en) · '
         + counts('not_established') + ' niet vastgesteld · ' + counts('not_checked_access') + ' niet gecontroleerd.'
-        + ' Versie ' + (run.commit || 'onbekend') + ', gecontroleerd ' + run.at.slice(11, 16) + ' (UTC).'
+        + ' Versie ' + (run.version || 'niet beschikbaar') + ', gecontroleerd ' + run.at.slice(11, 16) + ' (UTC).'
         + (run.rows.some(row => row.problem === 'login') ? ' Gestopt: meld je opnieuw aan en controleer daarna opnieuw. '
           + (DEPLOY_PAGES.length - run.rows.length) + ' overige pagina’s zijn niet gecontroleerd.' : '')
         + (counts('not_established') ? ' Probeer opnieuw. Blijft de controle onvolledig? Open de controledetails of maak hieronder een melding.' : '');
@@ -387,7 +390,7 @@
         // Further pages would only start more sign-in flows.
         if (row.problem === 'login') break;
       }
-      const run = {schema:'task-ready-v2', at: new Date().toISOString(), commit, who, rows};
+      const run = {schema:'task-ready-v2', at: new Date().toISOString(), commit, version, who, rows};
       storage((s) => s.setItem(DEPLOY_KEY, JSON.stringify(run)));
       deployProgress = '';
       deployView.done(run);

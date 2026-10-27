@@ -45,9 +45,11 @@ def _script_url() -> str:
 def markup(current: str = "") -> str:
     """Companion shell for authenticated navigation; content is built client side."""
     from src.request_diagnostics_v1 import deployed_commit
+    from src.console_release_v1 import console_release
     room = escape(current or "page", quote=True)
     commit = escape(deployed_commit() or "", quote=True)
-    return f'''<div class="care-companion" data-care-companion data-room="{room}" data-commit="{commit}">
+    version = escape(console_release()["version"] or "", quote=True)
+    return f'''<div class="care-companion" data-care-companion data-room="{room}" data-commit="{commit}" data-version="{version}">
   <div class="care-panel" id="care-panel" role="dialog" aria-modal="false" aria-labelledby="care-title" hidden>
     <div class="care-panel-head">
       <h2 id="care-title">Raad</h2>

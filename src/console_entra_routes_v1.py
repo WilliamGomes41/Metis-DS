@@ -70,7 +70,7 @@ def install_entra_routes(app, console, identity, *, render_page):
         if _denied_path(request.url.path):
             note_handled_error("route_denied")
             return HTMLResponse("Not Found", status_code=404, headers={"Cache-Control": "no-store"})
-        public = request.url.path in {"/", "/login", "/health", "/auth/microsoft", "/auth/microsoft/callback", "/session/status", "/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} or request.url.path.startswith("/brand/")
+        public = request.url.path in {"/", "/login", "/wat-is-nieuw", "/health", "/auth/microsoft", "/auth/microsoft/callback", "/session/status", "/mcp", "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"} or request.url.path.startswith("/brand/")
         if request.method == "GET" and not public:
             from starlette.concurrency import run_in_threadpool
             try:

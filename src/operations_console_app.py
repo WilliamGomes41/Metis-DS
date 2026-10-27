@@ -501,7 +501,9 @@ def _login_brand() -> str:
     """
 
 
-def _page(body: str, *, title: str | None = None) -> str:
+def _page(body: str, *, title: str | None = None, light: bool = False) -> str:
+    from src.console_release_v1 import console_release
+    release = console_release()
     page_title = title or "V&amp;VN Data Services — Interne operations console"
     stylesheet = BRAND_DIR / "console.css"
     stylesheet_url = "/brand/console.css"
@@ -517,7 +519,7 @@ def _page(body: str, *, title: str | None = None) -> str:
 <title>{page_title}</title>
 <script>
 try {{
-  const saved = location.pathname === '/login' ? 'light' : localStorage.getItem('metis-theme');
+  const saved = location.pathname === '/login' || {'true' if light else 'false'} ? 'light' : localStorage.getItem('metis-theme');
   document.documentElement.dataset.theme = saved === 'light' || saved === 'dark'
     ? saved : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 }} catch (_) {{ document.documentElement.dataset.theme = 'light'; }}
@@ -528,6 +530,10 @@ try {{
 <div class="shell">
 <div class="canvas">
 {body}
+<footer class="console-release" aria-label="Metis-versie">
+  <span data-product-version>{_esc(release['label'])}</span>
+  <a class="quiet release-notes-link" href="/wat-is-nieuw">Wat is nieuw?</a>
+</footer>
 </div>
 </div>
 <script>
@@ -3903,16 +3909,7 @@ def create_console_app(
     def home(request: Request) -> str:
         account = _current(request)
         if not account:
-            return _page(
-                f"""
-                <section class="room login-card">
-                  {_login_brand()}
-                  <h1>Interne operations console</h1>
-                  <p class="lead">Meld je aan om documenten in te leveren, te reviewen of te publiceren.</p>
-                  <p><a class="btn-primary" href="/login" style="display:inline-block;text-decoration:none;">Aanmelden</a></p>
-                </section>
-                """
-            )
+            return login_form()
         tiles = "".join(
             (
                 _home_tile(
@@ -4704,16 +4701,31 @@ def create_console_app(
             title="Metis uitgelegd — V&amp;VN Data Services",
         )
 
+    @app.get("/wat-is-nieuw", response_class=HTMLResponse)
+    def release_notes() -> str:
+        from src.console_release_v1 import console_release
+        release = console_release()
+        changes = ''.join(f'<li>{_esc(change)}</li>' for change in release['changes'])
+        return _page(f"""
+            <section class="room login-card">
+              {_login_brand()}
+              <h1>Wat is nieuw?</h1>
+              <p>{_esc(release['label'])}</p>
+              <ul>{changes}</ul>
+              <p><a href="/">Terug naar Metis</a></p>
+            </section>""", title="Wat is nieuw? — Metis", light=True)
+
     @app.get("/login", response_class=HTMLResponse)
     def login_form() -> str:
         if entra is not None:
             return _page(f"""
                 <section class="room login-card">{_login_brand()}
                 <h1>Aanmelden bij Metis</h1>
+                <p class="lead">Lever documenten in, review of publiceer.</p>
                 <p>Gebruik je werkaccount. Je organisatie bepaalt of je toegang hebt.</p>
                 <a class="btn-primary" href="/auth/microsoft">Inloggen met Microsoft</a>
                 <p>Je hebt geen apart Metis-wachtwoord nodig. Geen toegang? Neem contact op met je Metis-beheerder.</p>
-                </section>""")
+                </section>""", light=True)
         return _page(
             f"""
             <section class="room login-card">
@@ -4728,7 +4740,7 @@ def create_console_app(
                 <button class="btn-primary" type="submit">Aanmelden</button>
               </form>
             </section>
-            """
+            """, light=True
         )
 
     @app.post("/login")
@@ -6166,10 +6178,12 @@ def create_console_app(
 
     @app.get("/health")
     def health() -> dict[str, Any]:
+        from src.console_release_v1 import console_release
         return {
             "status": "ok",
             "service": "operations-console",
             "version": SERVICE_VERSION,
+            "product_version": console_release()["version"],
             "deployed_commit": _deployed_commit() or "not_recorded",
             "product_api": False,
             "chat_room": False,
