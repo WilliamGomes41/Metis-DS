@@ -170,11 +170,11 @@ def test_task_page_returns_to_selected_document(monkeypatch):
 
     monkeypatch.setattr('src.review_passage_read_v1.read_review_document', read)
     def render(console, account, document, object='', *, task='', counts=None,
-               context_target='', context_mode='', context_saved=False, read_inputs=None, queue_page=1):
+               context_target='', context_mode='', context_saved=False, read_inputs=None, queue_page=1, review_revision=''):
         assert document == 'two' and task == 'contextual'
         assert (context_target, context_mode, context_saved) == ('', '', False)
         assert captured == [read_inputs] and read_inputs.revision == 'captured-revision'
-        assert queue_page == 1
+        assert queue_page == 1 and review_revision == ''
         return '<h1>Passages beoordelen</h1><a class="btn-secondary" href="/review">Ander document kiezen</a>'
     monkeypatch.setattr('src.review_workboard_v1._render_review_room', render)
     console = Console(documents=[('one', document('One')), ('two', document('Two'))])

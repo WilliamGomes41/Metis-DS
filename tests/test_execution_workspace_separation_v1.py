@@ -171,7 +171,8 @@ def test_mijn_werk_keeps_shared_layout_with_neutral_navigation(tmp_path, usernam
     assert 'Geen open taken' not in html
     assert sum(tag == 'a' and 'home-tile' in attrs.get('class', '').split() for tag, attrs in Surface(html).tags) == 5
     css = (Path(__file__).parents[1] / 'assets/brand/console.css').read_text()
+    # #861 removes only obsolete review selectors; shared home rules were compared unchanged.
     original = css.split('\n/* Task-only execution/evidence layout;')[0]
-    assert hashlib.sha256(original.replace("repeat(5, minmax(0, 1fr))", "repeat(4, minmax(0, 1fr))").encode()).hexdigest() == '1d1c9a4ea0881394f3e22ffaf7cff8958482a401d23e98fe65a947586db98b77'
+    assert hashlib.sha256(original.replace("repeat(5, minmax(0, 1fr))", "repeat(4, minmax(0, 1fr))").encode()).hexdigest() == '764e336627161f4d279c8af575c1018c817478388f324c6e28ce89dbe5c24f99'
     # Added selectors must not touch the shared home layout.
     assert '.home-tiles' not in css[len(original):]

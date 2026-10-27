@@ -77,8 +77,9 @@ def test_followup_counts_lists_and_final_blocked_history_are_disjoint():
         assert set(_inventory_ids(html)) == {r["object_id"] for r in queues[task]}
     dashboard = _render_review_index("snap", objects, "tekst", bindings=[], fragments=_allowed_source())
     assert "Alle reviewtaken zijn afgerond" not in dashboard
-    assert 'task=disposition' in dashboard
-    assert '/source-selection?document=snap&amp;task=repair' in dashboard
+    assert 'data-content-review-workplace' in dashboard
+    assert 'task=inventory' in dashboard
+    assert 'task=disposition' not in dashboard and 'task=repair' not in dashboard
     inventory = _render_review_index("snap", objects, "tekst", task="inventory", bindings=[], fragments=_allowed_source())
     assert set(_inventory_ids(inventory)) == {"blocked", "excluded", "unknown"}
     assert 'object=excluded&amp;task=history' in inventory
