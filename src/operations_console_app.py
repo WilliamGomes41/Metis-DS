@@ -122,6 +122,7 @@ from src.proportionate_review_v1 import (
     normal_risk_batch_counts,
     regular_individual_review_queue,
     render_normal_risk_batch_panel,
+    review_queue_page as _review_queue_page,
 )
 from src.serving_relations_v1 import CLOSED_RELATION_TYPES, proposed_relations
 from src.metis_dictionary_ui import render as render_metis_dictionary
@@ -2913,6 +2914,8 @@ def _source_category_tiles(source_usage: dict[str, dict[str, Any]]) -> str:
             + '</ul>')
 
 
+
+
 def _review_inventory(
     snapshot_id: str,
     objects: list[dict[str, Any]],
@@ -2925,6 +2928,7 @@ def _review_inventory(
     fragments=None,
     source_only: bool = False,
     edit_exclusions: bool = False,
+    page: int = 1,
 ) -> str:
     """Every current passage remains reachable; no admission or finality writes."""
     from src.source_containers_v1 import source_accountability, partition
@@ -2956,6 +2960,7 @@ def _review_inventory(
     containers = partition(objects, projection=projection)
     source_usage = {row["record"]["object_id"]: row["usage"] for row in containers["source"]}
     from src.source_accountability_v1 import is_source_record, evidence_of
+    selected = []
     for obj in objects:
         if obj.get("object_type") == "document":
             continue
@@ -2977,6 +2982,13 @@ def _review_inventory(
                     route_task or followup_tasks.get(object_id) or "history")
         if task != "inventory" and category != task:
             continue
+        selected.append((obj, category, disposition))
+    # Source-selection owns its existing complete exclusion form. Review pages
+    # render only visible rows after exact source/actor classification.
+    visible, navigation = ((selected, '') if source_only else
+                           _review_queue_page(selected, snapshot_id, task, page))
+    for obj, category, disposition in visible:
+        object_id = str(obj.get('object_id') or '')
         if is_source_record(obj) and (evidence_of(obj).get("version") == "source-accountability-v2" or role_of(obj) or projection[object_id]["human_action"] == "technical_repair"):
             usage = source_usage[object_id]
             kind = usage["kind"]
@@ -3095,12 +3107,12 @@ def _review_inventory(
         return source_html or '<p class="review-task-empty">Er zijn geen bronregels om af te handelen.</p>'
     title = ("Kennisvoorstellen en bronverantwoording" if source_groups else "Alle passages en hun afhandeling") if task == "inventory" else labels[task]
     if task == "repair":
-        title += f" ({len(items)})"
+        title += f" ({len(selected)})"
     panel_class = "review-blocked-audit" if task == "repair" else "review-passage-inventory"
     return (
         f'<section class="{panel_class}">'
         + _review_task_header(snapshot_id, title, "Beoordelingswerk en bronafhandeling zijn afzonderlijke controles; de aantallen mogen overlappen")
-        + f'<p>{len(items)} beoordelings- of historieregels; {len(metadata_items) + len(source_items) + sum(len(g) for g in source_groups.values())} bronregels.</p>'
+        + f'<p>{"Op deze pagina: " if navigation else ""}{len(items)} beoordelings- of historieregels; {len(metadata_items) + len(source_items) + sum(len(g) for g in source_groups.values())} bronregels.</p>'
         + f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p>'
         + (f'<nav class="review-filter" data-review-filter aria-label="Filter bronafhandeling">'
            f'<a{" aria-current=\"page\"" if task == "disposition" else ""} '
@@ -3108,6 +3120,7 @@ def _review_inventory(
            f'<a{" aria-current=\"page\"" if task == "inventory" else ""} '
            f'href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alles</a></nav>'
            if task in {"inventory", "disposition"} else '')
+        + navigation
         + '<ol data-knowledge-proposals class="object-index review-passage-inventory">' + "".join(items) + '</ol>' + source_html
         + ('<p class="review-task-empty">Deze lijst is leeg. Controleer het volledige passage-overzicht voor ander werk.</p>' if not items and not source_html else '')
         + '</section>'
@@ -3317,13 +3330,58 @@ def _render_review_index(
     reviewer_id: str = "",
     fragments=None,
     document_version: object = "",
+    page: int = 1,
 ) -> str:
     task = normalize_review_task(task)
     bindings = list(bindings) if bindings is not None else None
-    if task in {"inventory", "disposition", "waiting"}:
+    if task in {"inventory", "disposition", "waiting", "repair"}:
         return _review_inventory(snapshot_id, snapshot_objects, review_path=review_path,
                                  bindings=bindings, reviewer_id=reviewer_id, task=task,
-                                 snapshot_revision=snapshot_revision, fragments=fragments)
+                                 snapshot_revision=snapshot_revision, fragments=fragments, page=page)
+    if task in {'contextual', 'second_review'}:
+        queue = _review_route_objects(snapshot_objects, review_path=review_path,
+            bindings=bindings, reviewer_id=reviewer_id, canonical_task=task, fragments=fragments)
+        visible, navigation = _review_queue_page(queue, snapshot_id, task, page)
+        title, lead, lane, empty = (
+            ('Passages afzonderlijk beoordelen',
+             'Controleer iedere passage met de bron; passages staan hieronder per brononderdeel, niet per inhoudelijke relatie',
+             'slow', 'Deze beoordelingslijst is leeg. Bekijk alle passages voor resterend werk.')
+            if task == 'contextual' else
+            ('Tweede beoordelingen', 'Beoordeel onafhankelijk exact dezelfde goedgekeurde objectversie',
+             'second', 'Deze taak is afgerond of wacht op een andere reviewer.'))
+        content = (_review_section_groups(visible, snapshot_id,
+            priority_ids={str(obj['object_id']) for obj in visible} if task == 'contextual' else set(),
+            task=task, context_objects=snapshot_objects, review_path=review_path,
+            bindings=bindings, fragments=fragments) if queue else
+            f'<p class="review-task-empty">{empty}</p>')
+        inventory = (f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p>'
+                     if task == 'contextual' else '')
+        return (f'{_review_task_header(snapshot_id, title, lead)}'
+                f'<section class="review-lane-{lane}">{navigation}{content}{inventory}</section>')
+    if task == "batch":
+        return f'''
+          {_review_task_header(snapshot_id, "Passages selecteren en bevestigen", "Selecteer alleen passages die je hebt gecontroleerd; hetzelfde brononderdeel en type betekenen niet dezelfde inhoud")}
+          {normal_content_html or '<p class="review-task-empty">Deze taak is afgerond.</p>'}
+        '''
+    if task == "history":
+        progress = _review_progress_summary(snapshot_objects)
+        decision_rows = [
+            obj
+            for obj in snapshot_objects
+            if obj.get("object_type") != "document"
+            and (_review_is_final(obj) or _review_was_revised(obj))
+        ]
+        decision_rows, navigation = _review_queue_page(decision_rows, snapshot_id, task, page)
+        return navigation + f'''
+          {_review_task_header(snapshot_id, "Besluiten en historie", "Bekijk read-only welke passages zijn afgehandeld en welke na correctie opnieuw ter beoordeling staan")}
+          {_review_progress_overview(snapshot_id, progress)}
+          <section class="review-decision-history">
+            <ol class="object-index">
+              {"".join(_review_decision_row(obj, snapshot_id, audit_signals or []) for obj in decision_rows) if decision_rows else '<li class="review-task-empty">Nog geen besluiten of correcties vastgelegd.</li>'}
+            </ol>
+          </section>
+        '''
+
     followups = review_followup_queues(snapshot_objects, review_path=review_path, bindings=bindings, fragments=fragments)
     koppen = _review_route_objects(
         snapshot_objects,
@@ -3356,43 +3414,6 @@ def _render_review_index(
         )
     copy = _review_lane_copy(review_path, koppen)
     progress = _review_progress_summary(snapshot_objects)
-    if task == "history":
-        decision_rows = [
-            obj
-            for obj in snapshot_objects
-            if obj.get("object_type") != "document"
-            and (_review_is_final(obj) or _review_was_revised(obj))
-        ]
-        return f'''
-          {_review_task_header(snapshot_id, "Besluiten en historie", "Bekijk read-only welke passages zijn afgehandeld en welke na correctie opnieuw ter beoordeling staan")}
-          {_review_progress_overview(snapshot_id, progress)}
-          <section class="review-decision-history">
-            <ol class="object-index">
-              {"".join(_review_decision_row(obj, snapshot_id, audit_signals or []) for obj in decision_rows) if decision_rows else '<li class="review-task-empty">Nog geen besluiten of correcties vastgelegd.</li>'}
-            </ol>
-          </section>
-        '''
-    if task == "contextual":
-        return f'''
-          {_review_task_header(snapshot_id, "Passages afzonderlijk beoordelen", "Controleer iedere passage met de bron; passages staan hieronder per brononderdeel, niet per inhoudelijke relatie")}
-          <section class="review-lane-slow">
-            {_review_section_groups(
-                individual,
-                snapshot_id,
-                priority_ids={str(obj.get("object_id")) for obj in individual},
-                task="contextual",
-                context_objects=snapshot_objects,
-                review_path=review_path,
-                bindings=bindings, fragments=fragments,
-            ) if individual else '<p class="review-task-empty">Deze beoordelingslijst is leeg. Bekijk alle passages voor resterend werk.</p>'}
-            <p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p>
-          </section>
-        '''
-    if task == "batch":
-        return f'''
-          {_review_task_header(snapshot_id, "Passages selecteren en bevestigen", "Selecteer alleen passages die je hebt gecontroleerd; hetzelfde brononderdeel en type betekenen niet dezelfde inhoud")}
-          {normal_content_html or '<p class="review-task-empty">Deze taak is afgerond.</p>'}
-        '''
     if task == "structure":
         if review_path != "boom":
             return f'''
@@ -3419,27 +3440,6 @@ def _render_review_index(
               <button class="btn-primary" type="submit">{copy["fast_button"]}</button>
             </form>
           </section>
-        '''
-    if task == "second_review":
-        return f'''
-          {_review_task_header(snapshot_id, "Tweede beoordelingen", "Beoordeel onafhankelijk exact dezelfde goedgekeurde objectversie")}
-          <section class="review-lane-second">
-            {_review_section_groups(
-                second_review,
-                snapshot_id,
-                priority_ids=set(),
-                task="second_review",
-                context_objects=snapshot_objects,
-                review_path=review_path,
-                bindings=bindings, fragments=fragments,
-            ) if second_review else '<p class="review-task-empty">Deze taak is afgerond of wacht op een andere reviewer.</p>'}
-          </section>
-        '''
-    if task == "repair":
-        return f'''
-          {_review_task_header(snapshot_id, "Geblokkeerde passages herstellen", "Controleer de bron en handel verwerkingsproblemen af voordat je inhoudelijk beoordeelt")}
-          {_review_inventory(snapshot_id, snapshot_objects, review_path=review_path, bindings=bindings, reviewer_id=reviewer_id, task="repair", fragments=fragments)}
-
         '''
     return _review_task_dashboard(
         snapshot_id,
@@ -3724,10 +3724,11 @@ def _source_context_card(console: OperationsConsole, snapshot_id: str, obj: dict
     return ''.join(parts) + panel + '</section>'
 
 
-def _formation_incomplete_banner(console, snapshot_id: str) -> str:
+def _formation_incomplete_banner(console, snapshot_id: str, *, formation_fragments=None) -> str:
     """Keep unresolved formation visible alongside independent review work."""
     try:
-        status = console.processing_status(snapshot_id)
+        status = (console.processing_status(snapshot_id) if formation_fragments is None else
+                  console.processing_status(snapshot_id, formation_fragments=formation_fragments))
     except ConsoleError:
         return ""
     if not status.get("formation_incomplete"):
@@ -3763,12 +3764,26 @@ def _passage_choices_html(snapshot_id, obj, inputs, *, context_mode='', context_
             f'pagina {inputs.choice_page} · {" · ".join(links)}</nav>')
 
 
-def _review_formation_notice(console, snapshot_id, read_inputs):
+def _review_document_source_inputs(console, snapshot_id, objects, read_inputs):
+    """Share captured bindings and full source across status and document tasks."""
+    if read_inputs is not None:
+        return read_inputs.bindings, read_inputs.fragments
+    fragments = console.review_source_fragments(snapshot_id)
+    if fragments is not None:
+        from src.prepared_source_views_v1 import prepare
+        fragments = prepare(fragments).fragments
+    return _review_bindings(console, snapshot_id, objects=objects), fragments
+
+
+def _review_formation_notice(console, snapshot_id, read_inputs, *, document_source=None):
     """Use the complete formation authority when the passage cannot rule it out."""
     if read_inputs is None:
         return _formation_incomplete_banner(console, snapshot_id)
     if not read_inputs.envelope['_review_check_formation']:
         return ''
+    from src.review_passage_read_v1 import ReviewPassageInputs
+    if not isinstance(read_inputs, ReviewPassageInputs):
+        return _formation_incomplete_banner(console, snapshot_id, formation_fragments=document_source)
     reads = console._document_reads()
     if reads is not None:
         reads.envelopes.pop(snapshot_id, None)
@@ -3815,6 +3830,7 @@ def _render_review_room(
     batch_completed: int = 0,
     snapshot: tuple[list[dict[str, Any]], str] | None = None,
     read_inputs=None,
+    queue_page: int = 1,
 ) -> str:
     chosen = document.strip()
     chosen_object_id = object.strip()
@@ -3867,7 +3883,11 @@ def _render_review_room(
                 snapshot if snapshot is not None else console.snapshot_objects_and_revision(chosen))
             all_object_versions = []
         review_path = review_path_for_klasse(chosen_row["class"])
-        objects_html += _review_formation_notice(console, chosen, read_inputs)
+        fragments = None
+        bindings = None
+        if not chosen_object_id and not history_enabled:
+            bindings, fragments = _review_document_source_inputs(console, chosen, snapshot_objects, read_inputs)
+        objects_html += _review_formation_notice(console, chosen, read_inputs, document_source=fragments)
         audit_signals: list[dict[str, Any]] = []
         if history_enabled:
             audit_reader = getattr(console, "audit_review_signals", None)
@@ -3881,11 +3901,9 @@ def _render_review_room(
                     snapshot=(snapshot_objects, snapshot_revision),
                     selected_ids=batch_selection or (),
                     include_individual=False,
+                    source_inputs=(bindings, fragments),
+                    page=queue_page,
                 )
-            try:
-                bindings = _review_bindings(console, chosen, objects=snapshot_objects)
-            except AttributeError:
-                bindings = None
             objects_html += _render_review_index(
                 chosen,
                 snapshot_objects,
@@ -3896,8 +3914,9 @@ def _render_review_room(
                 normal_review_enabled=isinstance(console, ProportionateReviewConsole),
                 audit_signals=audit_signals,
                 bindings=bindings,
-                reviewer_id=str(account.get("account_id") or ""), fragments=console.review_source_fragments(chosen),
+                reviewer_id=str(account.get("account_id") or ""), fragments=fragments,
                 document_version=chosen_row.get("version"),
+                page=queue_page,
             )
         else:
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)

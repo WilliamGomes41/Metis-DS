@@ -9,6 +9,7 @@ from __future__ import annotations
 from src.request_diagnostics_v1 import diagnostic_phase
 
 import html
+import re
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote, urlencode
@@ -881,6 +882,7 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         context_saved: str = "",
         context_page: int = 0,
         context_q: str = "",
+        queue_page: int = 1,
     ) -> str:
         account = _current_account(console, request)
         from src.review_participation_ui_v1 import overview, require_overview
@@ -915,6 +917,15 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
                     return RedirectResponse('/review/trajectory?' + urlencode({'document': document}), status_code=303)
                 raise
             selected = read_inputs.envelope
+        elif document and chosen_task and chosen_task not in {'history', 'structure'}:
+            from src.review_passage_read_v1 import read_review_document
+            try:
+                read_inputs = read_review_document(console, account, document)
+            except ConsoleError as exc:
+                if exc.code == 'reviewer_not_named_on_snapshot':
+                    return RedirectResponse('/review/trajectory?' + urlencode({'document': document}), status_code=303)
+                raise
+            selected = read_inputs.envelope
         else:
             selected = console._envelope(document) if document else None
         if document and selected is None:
@@ -941,9 +952,16 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             context_mode=context_mode,
             context_saved=context_saved == "yes",
             read_inputs=read_inputs,
+            queue_page=queue_page,
         )
 
         back = "/review?" + urlencode({"document": chosen, "q": q, "page": page})
+        if theme:
+            back += '&' + urlencode({'theme': theme})
+        if q or page != 1 or theme:
+            suffix = _esc(urlencode({'q': q, 'page': page, 'theme': theme}))
+            rendered = re.sub(r'href="(/review\?[^"\n]*queue_page=[^"\n]*)"',
+                lambda match: f'href="{match[1]}&amp;{suffix}"', rendered)
         return rendered.replace(
             '<a class="btn-secondary" href="/review">Ander document kiezen</a>',
             f'<a class="btn-secondary" href="{_esc(back)}">Terug naar documenten</a>',

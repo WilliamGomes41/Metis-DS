@@ -29,19 +29,20 @@ def test_review_get_reuses_the_request_envelope_reads(workflow_postgres, tmp_pat
     assert expected.status_code == 200 and sid in expected.text
 
     store = console.workflow_document_store
-    single, listed = [], []
-    real_get, real_list = store.get_envelope, store.list_envelopes
-    monkeypatch.setattr(store, "get_envelope", lambda snapshot_id: single.append(snapshot_id) or real_get(snapshot_id))
+    single, full, listed = [], [], []
+    real_get, real_compact, real_list = store.get_envelope, store.review_document_input, store.list_envelopes
+    monkeypatch.setattr(store, "get_envelope", lambda snapshot_id: full.append(snapshot_id) or real_get(snapshot_id))
+    monkeypatch.setattr(store, "review_document_input", lambda snapshot_id: single.append(snapshot_id) or real_compact(snapshot_id))
     monkeypatch.setattr(store, "list_envelopes", lambda: listed.append(1) or real_list())
     response = client.get("/review", params=params)
     assert response.status_code == 200
-    assert single == [sid] and listed == [], "Detail loads one document without loading the corpus"
+    assert single == [sid] and full == [] and listed == [], "Document loads one compact input without the corpus or archives"
 
-    # Same page as the unscoped route, which re-read and copied each envelope.
+    # Explicitly captured inputs also survive without the outer reuse scope.
     monkeypatch.setattr(type(console), "_document_reads", lambda self: None)
     unscoped = client.get("/review", params=params)
     assert _norm(response.text) == _norm(unscoped.text)
-    assert len(single) > 1, "The unscoped comparison must expose repeated reads"
+    assert single == [sid, sid], "Each independent request captures its own current input"
 
     # The read scope wraps the route; it never replaces its authentication.
     client.cookies.clear()

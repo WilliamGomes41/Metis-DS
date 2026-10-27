@@ -12,16 +12,69 @@ PREFIX = 'review-generation-v1:'
 
 
 @dataclass(frozen=True)
-class ReviewPassageInputs:
+class ReviewDocumentInputs:
     envelope: dict
     objects: list
     bindings: list
     revision: str
     fragments: object
+
+
+@dataclass(frozen=True)
+class ReviewPassageInputs(ReviewDocumentInputs):
     source_available: bool
     choice_page: int = 0
     choice_total: int = 0
     choice_query: str = ''
+
+
+def read_review_document(console, account, snapshot_id):
+    """Capture exact document inputs, excluding unused processing archives.
+
+    Queue membership needs all current objects. Capture history only once so
+    existing document/batch forms keep their ordinary objectset revision.
+    Source work and hashing happen after the bounded SQL transaction closes.
+    """
+    from src.revision_workflow import current_revisions
+    store = console.workflow_document_store
+    try:
+        with workflow_read_transaction(store):
+            envelope, _generation = store.review_document_input(snapshot_id)
+            if ('reviewer' not in account.get('roles', [])
+                    or account['account_id'] not in envelope.get('named_reviewers', [])):
+                raise ConsoleError('reviewer_not_named_on_snapshot')
+            if envelope['_review_check_formation']:
+                # Uncertain/open formation needs its complete captured evidence,
+                # not another envelope generation fetched during rendering.
+                envelope = store.get_envelope(snapshot_id)
+                if envelope is None:
+                    raise WorkflowDocumentStoreError('unknown_snapshot')
+                envelope['_review_check_formation'] = True
+            rows = store.list_document_objects(snapshot_id)
+            bindings = console.workflow_review_store.read_bindings([snapshot_id]).get(snapshot_id, [])
+    except WorkflowDocumentStoreError as exc:
+        if str(exc) == 'unknown_snapshot':
+            raise ConsoleError('unknown_snapshot') from exc
+        raise ConsoleError('workflow_document_unavailable') from exc
+    except WorkflowReviewStoreError as exc:
+        raise ConsoleError('workflow_review_unavailable') from exc
+    objects = current_revisions(rows, snapshot_id=snapshot_id)
+    revision = store.revision_for_rows(rows)
+    reads = console._document_reads()
+    if reads is not None:
+        reads.envelopes[snapshot_id] = envelope
+        reads.objects[snapshot_id] = (rows, revision)
+        reads.current_objects[snapshot_id] = objects
+        reads.bindings[snapshot_id] = bindings
+    from src.publish_authorization_v1 import still_matches
+    by_id = {obj['object_id']: obj for obj in objects}
+    bindings = [{**row, 'valid': bool(by_id.get(row.get('object_id')))
+                 and still_matches(row, by_id[row['object_id']])} for row in bindings]
+    fragments = console.review_source_fragments(snapshot_id, envelope=envelope)
+    if fragments is not None:
+        from src.prepared_source_views_v1 import prepare
+        fragments = prepare(fragments).fragments
+    return ReviewDocumentInputs(envelope, objects, bindings, revision, fragments)
 
 
 def _revision(snapshot_id, generation):

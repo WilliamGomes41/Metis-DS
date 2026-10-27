@@ -327,6 +327,7 @@ def test_object_history_reuses_one_document_read_and_shows_stored_version_diff()
 
 def test_dashboard_accounts_for_every_passage_without_hiding_followup_work():
     from copy import deepcopy
+    import re
     rows = [_obj(f'h{i}', 'heading') for i in range(56)]
     rows += [_obj(f'r{i}', 'recommendation') for i in range(5)]
     rows += [_obj(f'd{i}', 'definition') for i in range(8)]
@@ -340,13 +341,25 @@ def test_dashboard_accounts_for_every_passage_without_hiding_followup_work():
         rows.append(obj)
     rows += [_with_register(_obj(f'c{i}', 'explanation', status='approved'), 'used_as_context') for i in range(6)]
     before = deepcopy(rows)
-    dashboard = _render_review_index('snap-430', rows, 'richtlijn', fragments=source_fragments(), bindings=approved_bindings(rows))
-    inventory = _render_review_index('snap-430', rows, 'richtlijn', task='inventory', fragments=source_fragments(), bindings=approved_bindings(rows))
-    followup = _render_review_index('snap-430', rows, 'richtlijn', task='disposition', fragments=source_fragments(), bindings=approved_bindings(rows))
+    from src.prepared_source_views_v1 import prepare
+    fragments = prepare(source_fragments()).fragments
+    dashboard = _render_review_index('snap-430', rows, 'richtlijn', fragments=fragments, bindings=approved_bindings(rows))
+    inventory = _render_review_index('snap-430', rows, 'richtlijn', task='inventory', fragments=fragments, bindings=approved_bindings(rows))
+    followup = _render_review_index('snap-430', rows, 'richtlijn', task='disposition', fragments=fragments, bindings=approved_bindings(rows))
     assert '6 van 436 bronpassages afgehandeld' in dashboard
     assert '<dt>Nog te beoordelen</dt><dd>430</dd>' in dashboard
-    assert inventory.count('data-passage-id=') == 436
-    assert followup.count('data-passage-id=') == 338
+    assert inventory.count('data-passage-id=') == 25
+    assert followup.count('data-passage-id=') == 25
+    for task, expected in (('inventory', {row['object_id'] for row in rows}),
+                           ('disposition', {f'u{i}' for i in range(338)})):
+        seen = set()
+        for page in range(1, (len(expected) + 24) // 25 + 1):
+            body = _render_review_index('snap-430', rows, 'richtlijn', task=task, page=page,
+                fragments=fragments, bindings=approved_bindings(rows))
+            ids = set(re.findall(r'data-passage-id="([^"]+)"', body))
+            assert 0 < len(ids) <= 25 and not seen & ids
+            seen.update(ids)
+        assert seen == expected
     assert 'Metis heeft nog niet vastgesteld' in followup
     assert dashboard.count('/source-selection?document=snap-430&amp;task=repair') == 1
     assert rows == before

@@ -27,7 +27,8 @@ def review_client(tmp_path, request, monkeypatch, *, production_app, production_
                                    runtime=tmp_path / "runtime")
     author = console.create_account(username="author", password="fixture-only", roles=("researcher",))
     reviewer = console.create_account(username="reviewer", password="fixture-only", roles=("reviewer",))
-    count = 60 if getattr(request, 'param', None) == 'large' else 20
+    size = getattr(request, 'param', None)
+    count = size if type(size) is int else 60 if size in ('large', 'batch-large') else 20
     texts = [f"Begrip {i} is een beschrijving van een afzonderlijke waarneming." for i in range(count)]
     retained = getattr(request, "param", None) == "retained"
     if retained:
@@ -50,8 +51,8 @@ def review_client(tmp_path, request, monkeypatch, *, production_app, production_
         }, post_json=provider)
     else:
         bind_fixture_selections(console, [(text, "definition") for text in texts])
-    heading = ('<h1>Bronindeling</h1>' if getattr(request.node, 'callspec', None)
-               and request.node.callspec.params.get('task') == 'structure' else '')
+    heading = ('<h1>Bronindeling</h1>' if size == 'batch-large' or (getattr(request.node, 'callspec', None)
+               and request.node.callspec.params.get('task') == 'structure') else '')
     sid = console.ingest(
         actor_id=author["account_id"], filename="source.html", content_type="text/html",
         data=("<html><body>" + heading + "".join(f"<p>{text}</p>" for text in texts) + "</body></html>").encode(),
@@ -110,11 +111,11 @@ def test_http_review_render_reuses_source_and_matches_uncached_read(review_clien
 
     monkeypatch.setattr(semantic, "_reconstructed_blocks", counted)
     monkeypatch.setattr(materialisation, "_reconstructed_blocks", counted)
-    # The heading owner presents structural rows, without reconstructing source
-    # blocks for knowledge. Other Review tasks retain their exact reuse bound.
+    # Structural navigation and historical outcomes need no current source
+    # reconstruction. Content tasks retain their exact per-request reuse bound.
     if task == 'structure':
         assert 'action="/review/headings/batch-confirm"' in expected.text
-    for expected_calls in ((0, 0) if task == 'structure' else (1, 2)):
+    for expected_calls in ((0, 0) if task in {'structure', 'history'} else (1, 2)):
         response = client.get("/review", params=params)
         assert response.status_code == 200
         assert response.text == expected.text
