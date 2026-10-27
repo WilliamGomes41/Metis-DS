@@ -247,7 +247,8 @@ def test_closed_historical_revision_never_reopens_from_stale_review_rows() -> No
 
     card = _workboard_card(item)
     assert 'data-workflow-status="closed"' in card
-    assert 'data-release-status="published"' in card
-    assert 'data-serving-status="active"' in card
+    assert 'data-personal-state="complete"' in card
+    assert 'data-personal-review-action' not in card
+    assert "Geen open beoordeling voor jou" in card
     assert "kop/pad" not in card
     assert "Ga verder" not in card

@@ -245,8 +245,8 @@ def test_authenticated_tree_and_review_gets_use_production_list_installers(hotpa
     review=h.client.get('/review')
     assert review.status_code==200
     assert 'Published fixture' in review.text and 'Unpublished fixture' in review.text
-    assert 'Jouw open werk' in review.text
-    assert review.text.count('class="doc-card document-disclosure review-document-card"')==2
+    assert 'data-personal-group=' in review.text
+    assert review.text.count('data-workboard-document=')==2
     assert h.calls['statuses']==1 and h.calls['summaries']==1,dict(h.calls)
     assert h.calls['snapshot_api']==0 and h.calls['single_objects']==0,dict(h.calls)
     assert h.calls['bulk_objects']<=2,dict(h.calls)
@@ -256,10 +256,11 @@ def test_review_default_document_dashboard_uses_projection_without_snapshot_read
     h=hotpath
     review=h.client.get('/review',params={'document':h.snapshots[1]})
     assert review.status_code==200 and 'Unpublished fixture' in review.text
-    assert 'Reviewvoortgang' in review.text
+    assert 'Reviewvoortgang' not in review.text
     # The counts come from the projection; which passages start as handled is formation output.
     assert h.summary['progress_total']>=205 and h.summary['progress_done']<h.summary['progress_total']
-    assert f"{h.summary['progress_done']} van {h.summary['progress_total']} bronpassages afgehandeld" in review.text
+    assert "bronpassages afgehandeld" not in review.text
+    assert 'data-workboard-document=' in review.text
     assert h.calls['snapshot_api']==0 and h.calls['single_objects']==0,dict(h.calls)
 
 

@@ -17,7 +17,7 @@ from src.review_duty_v1 import (
     review_duty_counts,
     review_duty_for,
 )
-from src.review_workboard_v1 import _work_item_from_counts, _work_summary
+from src.review_workboard_v1 import _work_item_from_counts, _workboard_card
 from test_t4_single_knowledge_path_invariants import _allowed_source, _binding
 
 
@@ -234,7 +234,7 @@ def test_workboard_review_count_excludes_disposition_and_repair_counts() -> None
     assert item["review_duties"] == 6
     assert item["disposition_duties"] == 2
     assert item["repair_duties"] == 7
-    assert _work_summary(item) == "6 inhoudelijke beoordelingen open; 6 voor jou uitvoerbaar."
+    assert 'data-personal-open>6<' in _workboard_card(item)
 
 
 def test_closure_only_work_is_not_mislabeled_as_review_duty() -> None:
@@ -267,4 +267,6 @@ def test_closure_only_work_is_not_mislabeled_as_review_duty() -> None:
     assert item["review_duties"] == 0
     assert item["disposition_duties"] == 1
     assert item["next_task"] == "disposition"
-    assert _work_summary(item) == "Geen inhoudelijke review open; 1 bronpassage nog afhandelen."
+    card = _workboard_card(item)
+    assert "Geen open beoordeling voor jou." in card
+    assert 'data-personal-review-action' not in card

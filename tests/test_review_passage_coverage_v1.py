@@ -35,8 +35,11 @@ def test_343_to_5_keeps_all_338_missing_admission_passages_reachable():
     assert item["closure_gap_count"] == 338
     assert not item["source_passage_review_complete"]
     card = _workboard_card(item)
-    assert 'task=disposition">338 bronpassages afhandelen' in card
-    assert 'task=inventory' in card
+    assert 'data-personal-open>5<' in card
+    assert 'task=contextual' in card
+    assert '338' not in card  # Source handling is owned by Vorming, not personal review.
+    assert 'task=disposition' not in card
+    assert 'task=inventory' not in card
 
     contextual = _render_review_index("snap-test", objects, "tekst", task="contextual", bindings=[], fragments=_allowed_source())
     assert "allowed-0" in contextual

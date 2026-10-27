@@ -11,7 +11,6 @@ from urllib.parse import urlsplit, parse_qs
 
 from src.operations_console_app import _document_list_page
 from src.review_ledger import append_event, read_events
-from src.review_workboard_v1 import _review_activity_status
 from test_vsa_review_workboard_v1 import _client, _login, _system
 
 
@@ -62,7 +61,7 @@ def test_search_reaches_later_pages_is_bounded_and_escapes_input():
     assert "<script>" not in html
 
 
-def test_review_read_is_collapsed_and_only_human_decisions_start_review(tmp_path, *, production_app, production_console):
+def test_review_action_is_visible_and_only_own_human_decisions_start_review(tmp_path, *, production_app, production_console):
     console, _, first, _ = _system(tmp_path, production_console=production_console)
     snapshot = first["snapshot_id"]
     client = _client(console, production_app=production_app)
@@ -71,18 +70,20 @@ def test_review_read_is_collapsed_and_only_human_decisions_start_review(tmp_path
     revision = console.objects_revision(snapshot)
     landing = client.get("/review")
     assert landing.status_code == 200
-    assert "Nog niet gestart" in landing.text
-    assert all("open" not in attrs for attrs in Tags(landing.text).documents())
+    assert ">Beginnen</a>" in landing.text
+    assert not Tags(landing.text).documents()
     assert "Reviewinteracties" not in landing.text
     assert "Passages herstellen" not in landing.text
     opened = client.get("/review", params={"document": snapshot, "q": "Document A"})
-    assert "open" in Tags(opened.text).documents()[0]
-    assert "Jouw open werk" in opened.text and "Reviewvoortgang" in opened.text
+    assert not Tags(opened.text).documents()
+    assert "Jouw open beoordelingen" in opened.text
+    assert 'data-personal-review-action' in opened.text
+    assert "Reviewvoortgang" not in opened.text
     assert read_events(console._ledger_path) == before
     assert console.objects_revision(snapshot) == revision
     append_event(console._ledger_path, event_type="clinical_review_approve", object_id="automatic",
                  object_version="1", actor="Metis", details={"snapshot_id": snapshot})
-    assert "Review: Nog niet gestart" in client.get("/review").text
+    assert ">Beginnen</a>" in client.get("/review").text
     heading = next(obj for obj in console.snapshot_objects(snapshot)
                    if obj.get("object_type") == "heading" or obj.get("proposed_object_type") == "heading")
     response = client.post("/review/headings/batch-confirm", data={
@@ -90,19 +91,8 @@ def test_review_read_is_collapsed_and_only_human_decisions_start_review(tmp_path
         "object_ids": [heading["object_id"]],
     }, follow_redirects=False)
     assert response.status_code == 303
-    assert "Review: Gestart" in client.get("/review").text
-
-
-def test_automatic_progress_is_not_human_start_and_waiting_is_not_complete():
-    item = {"snapshot_id": "s", "lifecycle_status": {"workflow_status": "reviewing"},
-            "source_passage_review_complete": False, "review_duties": 1,
-            "closure_gap_count": 0, "blocked_count": 0, "progress": {"done": 2}}
-    assert _review_activity_status(item, set()) == "Nog niet gestart"
-    assert _review_activity_status(item, {"s"}) == "Gestart"
-    item.update(source_passage_review_complete=True, review_duties=0)
-    assert _review_activity_status(item, {"s"}) == "Afgerond"
-    item.update(blocked_count=1)
-    assert _review_activity_status(item, {"s"}) == "Gestart"
+    # A heading confirmation in Vorming does not prove a personal content decision.
+    assert ">Beginnen</a>" in client.get("/review").text
 
 
 def test_exports_and_technical_repair_preserve_document_authorization(tmp_path, *, production_app, production_console):

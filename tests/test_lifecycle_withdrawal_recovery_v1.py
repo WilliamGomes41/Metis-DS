@@ -172,9 +172,10 @@ def _assert_review_projection(console, client, snapshot_id):
     bindings = deepcopy(console.object_review_bindings(snapshot_id))
     dashboard = client.get("/review", params={"document": snapshot_id})
     assert dashboard.status_code == 200
-    assert "Jouw open werk" in dashboard.text
-    assert 'class="doc-card document-disclosure review-document-card"' in dashboard.text
-    assert f'href="/inzicht/document?document={snapshot_id}"' in dashboard.text
+    assert f'data-workboard-document="{snapshot_id}"' in dashboard.text
+    assert 'data-personal-state=' in dashboard.text
+    assert 'document-disclosure' not in dashboard.text
+    assert f'href="/inzicht/document?document={snapshot_id}"' not in dashboard.text
     repair = client.get("/inzicht/document", params={"document": snapshot_id})
     assert repair.status_code == 200
     assert "Passages en brondekking" in repair.text

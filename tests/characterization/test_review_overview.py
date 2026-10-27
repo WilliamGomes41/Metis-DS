@@ -36,7 +36,8 @@ def test_review_overview_golden(case, tmp_path, monkeypatch, golden, production_
         task = {"guideline_inventory": "inventory", "guideline_disposition": "disposition"}.get(case, "")
         html = ui._render_review_room(console, account, sid, task=task)
     if case.endswith("_native"):
-        assert calls == [sid], "The native summary branch must render this document"
+        assert calls == [sid], "Native branch must enrich the visible document"
+        assert f'data-workboard-document="{sid}"' in html
     assert console._envelopes == before, "Rendering must not mutate envelope state"
     golden("review_overview", case, {"html": html})
 
