@@ -23,7 +23,6 @@ from src.four_eyes_v1 import is_forbidden_reviewer
 from src.document_status_ui_v1 import current_document_lifecycle_status
 from src.operations_console_app import (
     COOKIE,
-    REVIEW_TASKS,
     normalize_review_task,
     _esc,
     _nav,
@@ -494,149 +493,79 @@ def review_workboard_items(
     ]
 
 
-def _work_summary(item: dict[str, Any]) -> str:
-    state = item["work_state"]
-    review_duties = int(item.get("review_duties") or 0)
-    actionable = int(item.get("actionable_review_duties") or 0)
-    waiting = int(item.get("waiting_for_reviewer_duties") or 0)
-    if state == "review":
-        return (
-            f"{review_duties} inhoudelijke beoordeling"
-            f"{'' if review_duties == 1 else 'en'} open; {actionable} voor jou uitvoerbaar."
-        )
-    if state == "waiting_for_reviewer":
-        return (
-            f"{waiting} beoordeling"
-            f"{'' if waiting == 1 else 'en'} wacht op een andere onafhankelijke reviewer."
-        )
-    if state == "disposition":
-        count = int(item.get("disposition_duties") or 0)
-        return f"Geen inhoudelijke review open; {count} bronpassage{' ' if count == 1 else 's '}nog afhandelen."
-    if state == "technical_repair":
-        blocked = int(item.get("blocked_count") or 0)
-        noun = "passage vereist" if blocked == 1 else "passages vereisen"
-        return f"Geen inhoudelijke review open; {blocked} {noun} technisch herstel."
-    if state == "publication_blocked":
-        return "Review afgerond; publicatie is technisch geblokkeerd."
-    if item["meaningful_status"] == "published":
-        return "Review afgerond; deze release wordt actief gepubliceerd."
-    if item["meaningful_status"] == "published_inactive":
-        return "Review afgerond; deze release is gepubliceerd maar niet actief."
-    if item["meaningful_status"] == "superseded":
-        return "Review afgerond; deze release is vervangen door nieuwere publicatie."
-    if item["meaningful_status"] == "withdrawn":
-        return "Review afgerond; deze release is ingetrokken."
-    if item["meaningful_status"] == "ready_for_publication":
-        return "Review afgerond; document is klaar voor publicatie."
-    return "Geen open reviewplicht."
-
-
-def _work_queue_link(snapshot_id: str, task: str, label: str, *, review_path: str = 'richtlijn') -> str:
-    """Link one visible non-empty work bucket to its existing owner workplace."""
-    snap = quote(snapshot_id, safe="")
-    safe_task = quote(task, safe="")
-    workplace = '/source-selection' if task == 'repair' or (task == 'structure' and review_path != 'boom') else '/review'
-    return (
-        f'<a class="review-work-queue-link" data-work-queue="{_esc(task)}" '
-        f'href="{workplace}?document={snap}&amp;task={safe_task}">{_esc(label)}</a>'
-    )
-
-
-def _workboard_card(item: dict[str, Any]) -> str:
-    envelope = item["envelope"]
-    lifecycle = item["lifecycle_status"]
-    next_step = ""
-    if item["next_task"]:
-        next_step = f'''
-          <div class="review-next-step" data-next-task="{_esc(item['next_task'])}">
-            <p class="eyebrow">Volgende stap</p>
-            <h3>{_esc(item['next_title'])}</h3>
-            <p>{_esc(item['next_description'])}.</p>
-            <a class="btn-primary" href="{_esc(item['next_href'])}">Ga verder</a>
-          </div>
-        '''
+def _personal_review_view(item: dict[str, Any]) -> dict[str, Any]:
+    """Disposable landing presentation; existing duties/routes remain authority."""
+    closed = item['lifecycle_status']['workflow_status'] == 'closed'
+    opened = 0 if closed else int(item.get('actionable_review_duties') or 0)
+    second = 0 if closed else int(item.get('actionable_second_review_duties') or 0)
+    href = ''
+    graph = str(item.get('next_href') or '').startswith('/review/decision-graph?')
+    if not closed and graph and item['work_state'] == 'review':
+        href = item['next_href']
+    elif opened:
+        # Preserve the existing relative lane order; prose headings belong to Vorming.
+        tasks = []
+        if _review_path_of(item['envelope']) == 'boom':
+            tasks.append(('structure', int(item.get('actionable_structure_duties') or 0)))
+        tasks.extend([
+            ('contextual', int(item.get('actionable_contextual_duties') or 0)),
+            ('batch', int(item.get('actionable_batch_duties') or 0)),
+            ('second_review', second),
+        ])
+        task = next((name for name, count in tasks if count), '')
+        if task:
+            href = '/review?' + urlencode({'document': item['snapshot_id'], 'task': task})
+    if href:
+        state = 'review'
+    elif not closed and (int(item.get('review_duties') or 0)
+                         or item['work_state'] == 'waiting_for_reviewer'):
+        state = 'waiting'
     else:
-        next_step = (
-            '<p class="muted" data-next-task="none">Voor dit document is geen reviewactie nodig.</p>'
-        )
-
-    detail_parts: list[str] = []
-    if lifecycle["workflow_status"] != "closed":
-        snapshot_id = str(item["snapshot_id"])
-        for task, count, label in (
-            ("structure", int(item.get("actionable_structure_duties") or 0), "structuur"),
-            ("contextual", int(item.get("actionable_contextual_duties") or 0), "in samenhang"),
-            ("batch", int(item.get("actionable_batch_duties") or 0), "vergelijkbaar"),
-            ("second_review", int(item.get("actionable_second_review_duties") or 0), "tweede beoordeling"),
-        ):
-            if count:
-                detail_parts.append(_work_queue_link(snapshot_id, task, f"{count} {label}", review_path=_review_path_of(envelope)))
-        if item.get("waiting_for_reviewer_duties"):
-            detail_parts.append(
-                _work_queue_link(snapshot_id, "waiting", f"{item['waiting_for_reviewer_duties']} wacht op andere reviewer")
-            )
-        if item["closure_gap_count"]:
-            detail_parts.append(_work_queue_link(snapshot_id, "disposition", f"{item['closure_gap_count']} bronpassages afhandelen"))
-        if item["blocked_count"]:
-            detail_parts.append(
-                _work_queue_link(
-                    snapshot_id,
-                    "repair",
-                    f"{item['blocked_count']} technisch herstel",
-                )
-            )
-    detail_html = (
-        f'<p class="muted review-work-queues">{" · ".join(detail_parts)}</p>'
-        if detail_parts
-        else ""
-    )
-    detail_html += (
-        f'<p><a href="/review?document={_esc(item["snapshot_id"])}&amp;task=inventory">'
-        'Alle passages en hun afhandeling bekijken</a></p>'
-    )
-
-    return f'''
-      <article class="doc-card{' review-document-card' if item['work_state'] == 'review' else ''}" data-workboard-document="{_esc(item['snapshot_id'])}" data-workboard-state="{_esc(item['work_state'])}" data-workflow-status="{_esc(lifecycle['workflow_status'])}" data-release-status="{_esc(lifecycle['release_status'])}" data-serving-status="{_esc(lifecycle['serving_status'])}">
-        {console_ui._document_card_heading({**envelope, "meaningful_status": item["meaningful_status"]})}
-        <p class="lead">{_esc(_work_summary(item))}</p>
-        {detail_html}
-        {next_step}
-      </article>
-    '''
+        state = 'complete'
+    return dict(state=state, opened=opened, first=opened - second, second=second, href=href, graph=graph)
 
 
-def _review_activity_status(item: dict[str, Any], started: set[str]) -> str:
-    # Display only: completion remains a projection of the existing closure/duties.
-    if item["lifecycle_status"]["workflow_status"] == "closed" or (
-        item["source_passage_review_complete"]
-        and not item["review_duties"] and not item["closure_gap_count"]
-        and not item["blocked_count"]
-    ):
-        return "Afgerond"
-    has_human_review = (item["snapshot_id"] in started or item.get("has_review_decision")
-                        or (item.get("summary") or {}).get("has_review_decision"))
-    return "Gestart" if has_human_review else "Nog niet gestart"
+def _workboard_card(item: dict[str, Any], *, started: bool = False,
+                    observed_at: str = '', q: str = '', page: int = 1) -> str:
+    """One visible personal action over one existing actor-specific work item."""
+    envelope, lifecycle = item['envelope'], item['lifecycle_status']
+    view = _personal_review_view(item)
+    sid = str(item['snapshot_id'])
+    if view['href']:
+        href = view['href'] + '&' + urlencode({'q': q, 'page': page})
+        title = 'Verder beoordelen' if started else 'Beginnen'
+        action = f'<a class="btn-primary" data-personal-review-action href="{_esc(href)}">{title}</a>'
+    else:
+        action = '<a href="/review?' + _esc(urlencode({'document': sid, 'task': 'history'})) + '">Beoordelingen inzien</a>'
+    if view['state'] == 'waiting':
+        summary = '<p class="lead">Wachten op een andere reviewer.</p>'
+    elif view['state'] == 'complete':
+        summary = '<p class="lead">Geen open beoordeling voor jou.</p>'
+    elif view['graph'] and not view['opened']:
+        summary = '<p class="lead">De beslisroutes vragen jouw beoordeling.</p>'
+    else:
+        summary = ('<p class="lead">Voor jou open: <b data-personal-open>' + str(view['opened']) + '</b></p>'
+                   '<p>Eerste beoordeling: <b data-personal-first>' + str(view['first']) + '</b> · '
+                   'Tweede beoordeling: <b data-personal-second>' + str(view['second']) + '</b></p>')
+    evidence_href = '/inzicht/document?' + urlencode({'document': sid})
+    evidence = f'<p><a href="{_esc(evidence_href)}">Verklaring en bewijs in Inzicht</a></p>'
+    scope = console_ui.count_scope_label(envelope.get('version'), observed_at=observed_at or _observed_at())
+    return ('<article class="doc-card" data-workboard-document="' + _esc(sid) +
+            '" data-personal-state="' + view['state'] + '" data-workflow-status="' + _esc(lifecycle['workflow_status']) + '">'
+            '<h2>' + _esc(str(envelope.get('title') or 'Document')) + '</h2>'
+            '<p class="muted" data-count-scope>' + _esc(scope) + '</p>' + summary + action + evidence + '</article>')
 
 
 @diagnostic_phase("review_render")
-def _workboard_page(
-    console: OperationsConsole,
-    *,
-    account: dict[str, Any],
-    snapshot_id: str = "",
-    q: str = "",
-    page: int = 1,
-    theme: str = "",
-) -> str:
-    """Compact document disclosures over existing, authorized review projections."""
-    if "reviewer" not in set(account.get("roles") or []):
-        raise ConsoleError("reviewer_role_required")
+def _workboard_page(console: OperationsConsole, *, account: dict[str, Any],
+                    snapshot_id: str = '', q: str = '', page: int = 1, theme: str = '') -> str:
+    """Personal visible-page inventory over the existing authorized read path."""
+    if 'reviewer' not in set(account.get('roles') or []):
+        raise ConsoleError('reviewer_role_required')
     summary_reader = getattr(console, 'review_workboard_summaries', None)
     enrich = getattr(console, '_enrich_review_workboard_summaries', None)
     summaries = None
     if callable(summary_reader) and callable(enrich):
-        # Metadata determines visibility and exact list totals. Duty/source
-        # calculation belongs only to cards the user is actually opening.
         summaries = summary_reader(account['account_id'], metadata_only=True)
         envelopes = [summary['envelope'] for summary in summaries.values()]
         items = []
@@ -647,86 +576,53 @@ def _workboard_page(
         envelopes = [row for row in envelopes if row.get('family') == theme]
     by_envelope = {row['snapshot_id']: row for row in envelopes}
     if snapshot_id and snapshot_id not in by_envelope:
-        raise ConsoleError("reviewer_not_named_on_snapshot")
-    visible, controls = console_ui._document_list_page(
-        envelopes, q=q, page=page, path="/review",
-    )
-    from src.review_participation_ui_v1 import filters, roster, people
+        raise ConsoleError('reviewer_not_named_on_snapshot')
+    visible, controls = console_ui._document_list_page(envelopes, q=q, page=page, path='/review')
+    from src.review_participation_ui_v1 import filters
     controls = controls[controls.index('<nav '):]
     controls = controls.replace('/review?', '/review?' + _esc(urlencode({'work': 'mine', 'theme': theme})) + '&amp;')
     controls = filters(console, work='mine', theme=theme, q=q, rows=envelopes) + controls
-    reviewer_names = people(console)
-    if snapshot_id and not any(row["snapshot_id"] == snapshot_id for row in visible):
+    if snapshot_id and not any(row['snapshot_id'] == snapshot_id for row in visible):
         visible = [by_envelope[snapshot_id], *visible]
     if summaries is not None:
         selected = {row['snapshot_id']: summaries[row['snapshot_id']] for row in visible}
         enrich(account['account_id'], selected)
         items = review_workboard_items(console, account=account, summaries=selected)
     by_id = {item['snapshot_id']: item for item in items}
-    ledger_path = getattr(console, "_ledger_path", None)
+    ledger_path = getattr(console, '_ledger_path', None)
     reader = getattr(getattr(console, 'workflow_review_store', None), 'read_events_for_snapshots', None)
     history = (reader([row['snapshot_id'] for row in visible]) if callable(reader) else
                read_events(ledger_path) if ledger_path is not None else [])
-    events = [event for event in history
-              if str(event.get("actor") or "").strip()
-              and not is_forbidden_reviewer(str(event["actor"]))]
-    started = {
-        str((event.get("details") or {}).get("snapshot_id") or "")
-        for event in events
-        if _is_decision_event(event) or event.get("event_type") == "review_audit_evidence"
-    }
-    cards = []
+    started = set()
+    for event in history:
+        if not (_is_decision_event(event) or event.get('event_type') == 'review_audit_evidence'):
+            continue
+        details = event.get('details') or {}
+        reviewer = str(details.get('reviewer_id') or details.get('reviewer_account_id') or '')
+        actor = str(event.get('actor') or '').strip()
+        own = (reviewer == account['account_id'] if reviewer else
+               actor in {account['account_id'], account.get('username')})
+        if own and not is_forbidden_reviewer(actor):
+            started.add(str(details.get('snapshot_id') or ''))
+    groups = {'review': [], 'waiting': [], 'complete': []}
+    observed = _observed_at()
     for envelope in visible:
-        chosen = str(envelope["snapshot_id"])
-        item = by_id[chosen]
-        status = _review_activity_status(item, started)
-        if item["lifecycle_status"]["workflow_status"] == "closed":
-            dashboard = ('<h2>Jouw open werk</h2><p>' + _esc(_work_summary(item)) + '</p>'
-                         f'<a href="/review?document={quote(chosen, safe="")}&amp;task=history">Besluiten en historie</a>')
-        else:
-            dashboard = _projected_document_dashboard(
-                console, account=account, snapshot_id=chosen,
-                summary=item.get("summary"), content_only=True,
-            ) if item.get("summary") else None
-            if dashboard is None:
-                dashboard = console_ui._review_task_dashboard(
-                    chosen, koppen=[], individual=[],
-                    normal_passages=item["actionable_batch_duties"],
-                    normal_batches=item["normal_batches"], blocked_count=item["blocked_count"],
-                    progress=item["progress"],
-                    heading_pending_override=item["actionable_structure_duties"],
-                    individual_pending_override=item["actionable_contextual_duties"],
-                    second_review_pending=item["actionable_second_review_duties"],
-                    disposition_pending=item["closure_gap_count"],
-                    waiting_pending=item["waiting_for_reviewer_duties"],
-                    review_path=_review_path_of(envelope),
-                    knowledge_open=(None if _review_path_of(envelope) == "boom" else
-                                    int(item.get("actionable_contextual_duties") or 0)
-                                    + int(item.get("actionable_batch_duties") or 0)),
-                    knowledge_progress=item.get("knowledge_progress"),
-                    count_scope=console_ui.count_scope_label(envelope.get("version"), observed_at=_observed_at()),
-                )
-        dashboard = (roster(console, envelope, reviewer_names)
-                     + f'<a href="/review/trajectory?{_esc(urlencode({"document": chosen}))}">Traject en deelnemers</a>'
-                     + dashboard
-                     + f'<p><a href="/inzicht/document?{_esc(urlencode({"document": chosen}))}">Bekijk diagnose in Inzicht</a></p>')
-        # IDs must remain unique when several workspaces share one page.
-        for element_id in ("review-task-title", "review-next-title", "review-progress-title"):
-            dashboard = dashboard.replace(element_id, element_id + "-" + _esc(chosen))
-        context = _esc(urlencode({"q": q, "page": page}))
-        for workplace in ('/review', '/source-selection'):
-            dashboard = dashboard.replace(f'{workplace}?document={_esc(chosen)}&amp;task=',
-                                          f'{workplace}?document={_esc(chosen)}&amp;{context}&amp;task=')
-        opened = " open" if chosen == snapshot_id else ""
-        cards.append(f'''<details class="doc-card document-disclosure review-document-card"{opened}>
-          <summary>{console_ui._document_summary({**envelope, "meaningful_status": item["meaningful_status"]})}
-            <span class="review-status">Review: {_esc(status)}</span>
-            <span class="document-work-summary">{_esc(_work_summary(item))}</span>
-          </summary>{dashboard}</details>''')
-    return _page(_nav(account, "review") + '<section class="room review-room"><h1>Review</h1>'
-                 + console_ui._task_links("review") + controls + '<div class="doc-list">' + ''.join(cards)
-                 + (('<p class="review-empty">Geen documenten gevonden.</p>' if q else '<p class="review-empty">Geen aan jou toegewezen reviewdocumenten. Nieuw werk verschijnt hier zodra iemand je als reviewer kiest.</p>') if not cards else '')
-                 + '</div></section>', title="Review — Metis")
+        sid = str(envelope['snapshot_id'])
+        item = by_id[sid]
+        state = _personal_review_view(item)['state']
+        groups[state].append(_workboard_card(item, started=sid in started, observed_at=observed, q=q, page=page))
+    body = ''
+    if not groups['review']:
+        body += '<p class="review-empty" data-personal-empty>Op deze pagina heb je geen uitvoerbare beoordelingen.</p>'
+    for state, title in [('review', 'Jouw open beoordelingen'), ('waiting', 'Wachten op anderen'),
+                         ('complete', 'Geen open werk voor jou')]:
+        if groups[state]:
+            body += '<section data-personal-group="' + state + '"><h2>' + title + '</h2><div class="doc-list">' + ''.join(groups[state]) + '</div></section>'
+    if not visible:
+        body += ('<p class="review-empty">Geen documenten gevonden.</p>' if q else
+                 '<p class="review-empty">Geen aan jou toegewezen reviewdocumenten. Nieuw werk verschijnt hier zodra iemand je als reviewer kiest.</p>')
+    return _page(_nav(account, 'review') + '<section class="room review-room"><h1>Review</h1>' +
+                 console_ui._task_links('review') + controls + body + '</section>', title='Review — Metis')
 
 
 def _review_path_of(envelope: dict[str, Any]) -> str:
@@ -739,109 +635,6 @@ def _review_path_of(envelope: dict[str, Any]) -> str:
 def _observed_at() -> str:
     import src.operations_console_v1 as console_kernel
     return console_kernel.utc_now()
-
-
-def _projected_document_dashboard(
-    console: OperationsConsole,
-    *,
-    account: dict[str, Any],
-    snapshot_id: str,
-    summary: dict[str, Any] | None = None,
-    content_only: bool = False,
-) -> str | None:
-    """Render the default selected-document dashboard without materializing objects."""
-    if summary is None:
-        summary_reader = getattr(console, "review_workboard_summaries", None)
-        if not callable(summary_reader):
-            return None
-        account_id = str(account.get("account_id") or "")
-        if not account_id:
-            return None
-        summary = summary_reader(account_id, snapshot_id).get(snapshot_id)
-    if not isinstance(summary, dict):
-        return None
-    envelope = summary.get("envelope")
-    if not isinstance(envelope, dict):
-        return None
-
-    progress_total = int(summary.get("progress_total") or 0)
-    progress_done = int(summary.get("progress_done") or 0)
-    progress = {
-        "total": progress_total,
-        "done": progress_done,
-        "open": max(progress_total - progress_done, 0),
-        "approved": int(summary.get("progress_approved") or 0),
-        "rejected": int(summary.get("progress_rejected") or 0),
-        "not_included": int(summary.get("progress_not_included") or 0),
-        "context": int(summary.get("progress_context") or 0),
-        "support": int(summary.get("progress_support") or 0),
-        "superseded": int(summary.get("progress_superseded") or 0),
-        "revised": int(summary.get("progress_revised") or 0),
-    }
-    actionable_structure = (
-        int(summary.get("actionable_structure_duties") or 0)
-        if "actionable_structure_duties" in summary
-        else int(summary.get("heading_pending") or 0)
-    )
-    actionable_contextual = (
-        int(summary.get("actionable_contextual_duties") or 0)
-        if "actionable_contextual_duties" in summary
-        else int(summary.get("individual_pending") or 0)
-    )
-    actionable_batch = (
-        int(summary.get("actionable_batch_duties") or 0)
-        if "actionable_batch_duties" in summary
-        else int(summary.get("normal_passages") or 0)
-    )
-    actionable_second = int(summary.get("actionable_second_review_duties") or 0)
-    dashboard = console_ui._review_task_dashboard(
-        snapshot_id,
-        koppen=[],
-        individual=[],
-        normal_passages=actionable_batch,
-        normal_batches=int(summary.get("normal_batches") or 0),
-        blocked_count=int(summary.get("blocked_count") or 0),
-        progress=progress,
-        heading_pending_override=actionable_structure,
-        heading_total_override=int(summary.get("heading_total") or 0),
-        heading_done_override=max(int(summary.get("heading_total") or 0) - int(summary.get("heading_pending", summary.get("heading_total")) or 0), 0),
-        individual_pending_override=actionable_contextual,
-        individual_done_override=max(int(summary.get("individual_total") or 0) - int(summary.get("individual_pending", summary.get("individual_total")) or 0), 0),
-        individual_total_override=(
-            int(summary.get("contextual_review_duties") or 0)
-            if "contextual_review_duties" in summary
-            else int(summary.get("individual_total") or 0)
-        ),
-        second_review_pending=actionable_second,
-        disposition_pending=int(summary.get("closure_gap_count") or 0),
-        waiting_pending=int(summary.get("waiting_for_reviewer_duties") or 0),
-        review_path=_review_path_of(envelope),
-        # Native summaries carry no content_reviewable denominator: open counter only (OPENVRAAG-T2).
-        knowledge_open=None if _review_path_of(envelope) == "boom" else actionable_contextual + actionable_batch,
-        knowledge_progress=None,
-        count_scope=console_ui.count_scope_label(envelope.get("version"), observed_at=_observed_at()),
-    )
-    if content_only:
-        return dashboard
-    heading = console_ui._document_card_heading(
-        {**envelope, "status": envelope.get("state") or ""}
-    )
-    return _page(
-        f"""
-        {_nav(account, "review")}
-        <section class="room review-room">
-          <h1>Review</h1>
-          {console_ui._task_links("review")}
-          <div class="doc-card review-document-card">
-            <div class="review-document-card-top"><span class="review-document-kicker">Document in review</span>
-              <a class="btn-secondary" href="/review">Ander document kiezen</a>
-            </div>
-            {heading}
-          </div>
-          {dashboard}
-        </section>
-        """
-    )
 
 
 def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:

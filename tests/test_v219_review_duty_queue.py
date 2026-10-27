@@ -404,7 +404,8 @@ def test_researchers_are_not_required_to_open_thousands_of_inhoud_cards(tmp_path
     html = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
     control = client.get(f"/review?document={receipt['snapshot_id']}&task=inventory").text
     visible = _visible_text(dashboard + html + control)
-    assert f"{len(koppen)} te controleren" in dashboard
+    assert 'data-workboard-document=' in dashboard
+    assert f"{len(koppen)} te controleren" not in dashboard
     assert f"Inhoud ({len(old_inhoud)})" not in dashboard
     assert f"Inhoud ({len(leftover)})" not in dashboard
     slow = _section(html, "review-lane-slow")

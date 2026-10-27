@@ -20,7 +20,6 @@ from src.four_eyes_v1 import publish_authorization_contract
 from src.integrity_kernel import exact_review_snapshot_hash
 from src.operations_console_v1 import ConsoleError
 from src.review_duty_v1 import review_duty_counts, review_duty_for, review_stage
-from src.review_workboard_v1 import _work_summary
 from src.semantic_passage_v1 import SELECTION_ORIGIN_COVERAGE, SELECTION_ORIGIN_PROPOSAL
 from src.source_accountability_v1 import KEY as SOURCE_KEY
 from src.source_containers_v1 import partition
@@ -226,16 +225,6 @@ def _observed_lifecycle(obj: dict) -> str:
     return candidate_lifecycle(obj)
 
 
-def _content_phrase(duties: int) -> str:
-    return _work_summary({
-        "work_state": "review",
-        "review_duties": duties,
-        "actionable_review_duties": duties,
-        "waiting_for_reviewer_duties": 0,
-        "meaningful_status": "open",
-    })
-
-
 def test_heading_needs_review_is_not_content_reviewable():
     obj = _heading()
     assert obj["governance"]["validation_status"] == "needs_review"
@@ -259,7 +248,6 @@ def test_blocked_admission_is_not_content_review():
     assert review_duty_for(obj, review_path=REVIEW_PATH, fragments=_allowed_source()) is None
     counts = review_duty_counts([obj], review_path=REVIEW_PATH, fragments=_allowed_source())
     assert counts["review_duties"] == 0
-    assert "inhoudelijke beoordeling" not in _content_phrase(counts["review_duties"]) or counts["review_duties"] == 0
     emitted = {row["object_id"] for row in build_review_queue([obj], "clinical", fragments=_allowed_source())}
     assert emitted == set()
 

@@ -27,6 +27,7 @@ import pytest
     ('tests.browser_formation_repair_fixture', 'browser_formation_repair_check.cjs'),
     ('tests.browser_graph_workplace_fixture', 'browser_graph_workplace_check.cjs'),
     ('tests.browser_source_recovery_fixture', 'browser_source_recovery_check.cjs'),
+    ('tests.browser_personal_review_fixture', 'browser_personal_review_check.cjs'),
 ])
 def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_path, fixture, script):
     root = Path(__file__).resolve().parents[1]

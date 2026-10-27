@@ -120,7 +120,10 @@ def test_tree_document_has_no_knowledge_counter_in_room(tmp_path, *, production_
 def test_tree_document_has_no_knowledge_counter_in_workboard_object_path(tmp_path, *, production_console):
     from src.review_workboard_v1 import _workboard_page
     console, sid, account = tree_document(tmp_path, production_console=production_console)
-    _assert_tree_overview(_workboard_page(console, account=account, snapshot_id=sid))
+    html = _workboard_page(console, account=account, snapshot_id=sid)
+    assert 'data-personal-open>3<' in html
+    assert 'task=structure' in html
+    assert 'data-knowledge-progress' not in html
 
 
 def test_tree_document_has_no_knowledge_counter_on_native_summary_path(tmp_path, monkeypatch, *, production_console):
@@ -131,7 +134,8 @@ def test_tree_document_has_no_knowledge_counter_on_native_summary_path(tmp_path,
         actionable_structure_duties=1, actionable_contextual_duties=2, contextual_review_duties=2))
     html = board._workboard_page(console, account=account, snapshot_id=sid)
     assert calls == [sid]
-    _assert_tree_overview(html)
+    assert 'data-personal-open>3<' in html
+    assert 'task=structure' in html
 
 
 def test_guideline_native_summary_shows_knowledge_counter_without_progress(tmp_path, monkeypatch, *, production_console):
@@ -142,5 +146,7 @@ def test_guideline_native_summary_shows_knowledge_counter_without_progress(tmp_p
         closure_gap_count=2, actionable_structure_duties=1, actionable_batch_duties=1, actionable_contextual_duties=2))
     html = board._workboard_page(console, account=account, snapshot_id=sid)
     assert calls == [sid]
-    assert _count(html, "kennis") == 3 and _count(html, "bronafhandeling") == 2
+    assert 'data-personal-open>3<' in html
+    assert 'task=contextual' in html
+    assert 'data-count="bronafhandeling"' not in html
     assert 'data-knowledge-progress' not in html and 'data-count-scope' in html

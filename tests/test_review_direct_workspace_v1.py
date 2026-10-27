@@ -65,7 +65,8 @@ def document(title, *, reviewers=('reviewer',), waiting=False, closed=False):
         'heading_total': 10, 'heading_pending': 8, 'review_duties': 8,
         'structure_review_duties': 8,
         'actionable_review_duties': 0 if waiting else 8,
-        'actionable_structure_duties': 0 if waiting else 8,
+        'actionable_structure_duties': 8,
+        'actionable_contextual_duties': 0 if waiting else 8,
         'waiting_for_reviewer_duties': 8 if waiting else 0,
     }
     if closed:
@@ -93,38 +94,38 @@ def client(console, *, login=True):
     return result
 
 
-def test_single_document_contains_collapsed_work_and_is_read_only():
+def test_single_document_has_visible_personal_action_and_is_read_only():
     console = Console(documents=[('one', document('Document A'))])
     before = deepcopy(console.documents)
     response = client(console).get('/review')
     assert response.status_code == 200
-    assert 'Jouw open werk' in response.text
+    assert 'Jouw open beoordelingen' in response.text
     assert 'Document A' in response.text
-    assert 'Ga verder' in response.text
-    assert '8 te controleren · 2 afgerond' in response.text
+    assert '>Beginnen</a>' in response.text
+    assert 'data-personal-open>8<' in response.text
+    assert 'data-open-work-ratio' not in response.text
     assert 'data-review-workboard' not in response.text
     assert '<details class="review-document-picker">' not in response.text
     assert console.documents == before
 
 
-def test_multiple_documents_expand_without_leaking_assignments():
+def test_multiple_documents_group_personal_work_without_leaking_assignments():
     console = Console(documents=[('wait', document('Waiting', waiting=True)),
                                  ('active', document('Active <safe>')),
                                  ('private', document('Private', reviewers=('other',)))])
     browser = client(console)
     response = browser.get('/review')
     assert response.status_code == 200
-    assert response.text.count('<details class="doc-card document-disclosure review-document-card"') == 2
+    assert response.text.count('data-workboard-document=') == 2
     assert 'Active &lt;safe&gt;' in response.text
     assert 'review-document-card" open' not in response.text
-    assert 'wacht op een andere onafhankelijke reviewer' in response.text
+    assert 'Wachten op een andere reviewer.' in response.text
     assert 'Private' not in response.text
     waiting = browser.get('/review?document=wait')
     assert waiting.status_code == 200
-    assert '8 wachten op een andere beoordelaar' in waiting.text
-    selected = waiting.text.split('review-document-card" open>', 1)[1].split('</details>', 1)[0]
-    assert 'class="review-task-card"' not in selected
-    assert 'task=waiting' in waiting.text
+    assert 'Wachten op anderen' in waiting.text
+    assert 'data-personal-state="waiting"' in waiting.text
+    assert 'task=history' in waiting.text
     readonly = browser.get('/review?document=private', follow_redirects=False)
     assert readonly.status_code == 303
     assert readonly.headers['location'] == '/review/trajectory?document=private'
@@ -133,7 +134,8 @@ def test_multiple_documents_expand_without_leaking_assignments():
 def test_closed_document_with_stale_duties_has_history_not_continuation():
     response = client(Console(documents=[('old', document('Old', closed=True))])).get('/review')
     assert response.status_code == 200
-    assert 'ingetrokken' in response.text
+    assert 'data-workflow-status="closed"' in response.text
+    assert 'Geen open beoordeling voor jou.' in response.text
     assert 'task=history' in response.text
     assert 'Ga verder' not in response.text
     assert 'task=structure' not in response.text
@@ -147,12 +149,13 @@ def test_empty_and_access_boundaries():
 
 def test_waiting_duties_are_not_counted_as_completed_work():
     value = document('Mixed')
-    value.update(actionable_structure_duties=3, actionable_review_duties=3,
+    value.update(actionable_contextual_duties=3, actionable_review_duties=3,
                  waiting_for_reviewer_duties=5)
     response = client(Console(documents=[('mixed', value)])).get('/review')
-    assert '3 te controleren · 2 afgerond' in response.text
-    assert '3 te controleren · 7 afgerond' not in response.text
-    assert '5 wachten op een andere beoordelaar' in response.text
+    assert 'data-personal-open>3<' in response.text
+    assert 'data-personal-first>3<' in response.text
+    assert 'data-personal-second>0<' in response.text
+    assert 'afgerond' not in response.text
 
 
 def test_task_page_returns_to_selected_document(monkeypatch):
@@ -253,7 +256,7 @@ def test_hundreds_of_documents_are_paged_searchable_and_have_unique_workspace_id
     browser = client(console)
     response = browser.get('/review?page=2')
     assert response.status_code == 200
-    assert response.text.count('class="doc-card document-disclosure review-document-card"') == 25
+    assert response.text.count('data-workboard-document=') == 25
     assert '103 documenten' in response.text and 'pagina 2 van 5' in response.text
     assert 'Document 025' in response.text and 'Document 000' not in response.text
     ids = re.findall(r'\bid="([^"]+)"', response.text)
@@ -264,11 +267,11 @@ def test_hundreds_of_documents_are_paged_searchable_and_have_unique_workspace_id
     assert not hasattr(console, 'snapshot_objects')  # Projection-only rendering.
 
 
-def test_projected_legacy_human_review_stamp_starts_review_but_context_count_does_not():
+def test_document_wide_legacy_stamp_and_context_count_do_not_prove_own_activity():
     value = document('Legacy')
     value['progress_context'] = 2
     console = Console(documents=[('legacy', value)])
     browser = client(console)
-    assert 'Review: Nog niet gestart' in browser.get('/review').text
+    assert '>Beginnen</a>' in browser.get('/review').text
     value['has_review_decision'] = True
-    assert 'Review: Gestart' in browser.get('/review').text
+    assert '>Beginnen</a>' in browser.get('/review').text

@@ -73,24 +73,24 @@ def native_summary(console, sid, **counts):
             "normal_passages": 0, "normal_batches": 0, "blocked_count": 0, "closure_gap_count": 0,
             "actionable_structure_duties": 0, "actionable_contextual_duties": 0, "actionable_batch_duties": 0,
             "actionable_second_review_duties": 0, "waiting_for_reviewer_duties": 0, "contextual_review_duties": 0}
-    return {"envelope": deepcopy(console._envelope(sid)), **base, **counts}
+    result = {"envelope": deepcopy(console._envelope(sid)), **base, **counts}
+    # The native projection now supplies actor content duties explicitly; a prose
+    # heading is formation work and must not be part of this fixture denominator.
+    structure = result["actionable_structure_duties"] if result["envelope"]["class"] == "beslisboom" else 0
+    opened = structure + result["actionable_contextual_duties"] + result["actionable_batch_duties"] + result["actionable_second_review_duties"]
+    result.setdefault("actionable_review_duties", opened)
+    result.setdefault("review_duties", opened)
+    return result
 
 
 def install_native_summaries(monkeypatch, console, sid, summary):
     """Fake summary reader; no PostgreSQL and no workflow-store code is touched."""
-    import src.review_workboard_v1 as board
     calls = []
-    original = board._projected_document_dashboard
-
-    def spy(*args, **kwargs):
-        calls.append(kwargs.get("snapshot_id"))
-        return original(*args, **kwargs)
-
     monkeypatch.setattr(console, "review_workboard_summaries",
                         lambda account_id, snapshot_id=None, **kw: {sid: deepcopy(summary)}, raising=False)
-    # The fixture already contains the supplied domain counts. Production now
-    # separates metadata selection from visible-card enrichment; neither step
-    # in this characterization double should invoke the real PG projection.
-    monkeypatch.setattr(console, '_enrich_review_workboard_summaries', lambda *args: None)
-    monkeypatch.setattr(board, "_projected_document_dashboard", spy)
+    def enrich(account_id, selected):
+        calls.extend(selected)
+    # Explicit summary counts: exercise selection/enrichment without replacing
+    # production PostgreSQL behavior in the native integration tests.
+    monkeypatch.setattr(console, '_enrich_review_workboard_summaries', enrich)
     return calls

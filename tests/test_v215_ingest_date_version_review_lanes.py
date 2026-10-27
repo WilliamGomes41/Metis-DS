@@ -496,7 +496,8 @@ def test_review_lanes_from_type_without_speed_toggle(tmp_path: Path, *, producti
     headings = client.get(f"/review?document={receipt['snapshot_id']}&task=headings").text
     individual = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
     lower = (dashboard + headings + individual).lower()
-    assert "review-task-dashboard" in dashboard
+    assert 'data-workboard-document=' in dashboard
+    assert "review-task-dashboard" not in dashboard
     assert "review-lane-fast" in headings
     assert "review-lane-slow" in individual
     assert "/review/headings/batch-confirm" in headings

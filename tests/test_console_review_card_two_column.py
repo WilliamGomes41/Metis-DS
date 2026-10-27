@@ -139,7 +139,8 @@ def test_review_document_index_does_not_open_passages(tmp_path: Path, *, product
     assert objects
     assert TWO_COLUMN_CLASS not in html
     assert PASSAGE_COL not in html
-    assert "review-task-dashboard" in html
+    assert 'data-workboard-document=' in html
+    assert "review-task-dashboard" not in html
     assert "Onderbouwing uit het brondocument" not in html
     assert not any(obj["object_id"] in html for obj in objects)
     assert "envelope" not in html.lower()

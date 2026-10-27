@@ -281,13 +281,15 @@ def test_review_landing_is_assignment_scoped_workboard(tmp_path: Path, *, produc
 
     assert page.status_code == 200
     assert "data-review-workboard" not in page.text
-    assert "Jouw open werk" in page.text
+    assert "Jouw open beoordelingen" in page.text
     assert "Document A" in page.text
     assert str(first["snapshot_id"]) in page.text
     assert "Document B" not in page.text
     assert str(second["snapshot_id"]) not in page.text
-    assert "status <b>in review</b>" in page.text
-    assert "Ga verder" in page.text
+    assert 'data-personal-review-action' in page.text
+    assert "Beginnen" in page.text
+    assert 'data-personal-open' in page.text
+    assert 'data-open-work-ratio' not in page.text
 
 
 def test_selected_document_keeps_existing_review_dashboard(tmp_path: Path, *, production_app, production_console) -> None:
@@ -299,7 +301,7 @@ def test_selected_document_keeps_existing_review_dashboard(tmp_path: Path, *, pr
 
     assert page.status_code == 200
     assert "data-review-workboard" not in page.text
-    assert "Jouw open werk" in page.text
+    assert "Jouw open beoordelingen" in page.text
     assert "Document A" in page.text
 
 
