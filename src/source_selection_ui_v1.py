@@ -104,6 +104,11 @@ def source_recovery_controls(envelope, processing, account, *, draft=None, error
     if error:
         from src.operations_console_app import ERROR_COPY
         failure = '<div class="banner warn" role="alert">Niet opgeslagen: ' + escape(ERROR_COPY.get(error, error)) + '</div>'
+        pending = ''.join('<dt>' + label + '</dt><dd>' + escape(str(draft[key])) + '</dd>'
+                          for key, label in (('page', 'Ingediende pagina'), ('category', 'Categorie'),
+                                             ('note', 'Toelichting'), ('reason', 'Reden')) if draft.get(key))
+        if pending:
+            failure += '<aside data-unsaved-source-draft><h3>Niet opgeslagen invoer</h3><dl>' + pending + '</dl></aside>'
     mobile = """<style>@media(max-width:640px){
       #processing-recovery table,#processing-recovery tbody,#processing-recovery tr,#processing-recovery td{
         display:block;width:100%;box-sizing:border-box}

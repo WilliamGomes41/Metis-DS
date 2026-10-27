@@ -36,6 +36,7 @@ def test_page_accounting_owner_errors_and_native_restart(tmp_path, *, production
     for bad in (dict(command, category='invalid'), dict(command, note='kort'), dict(command, page=99)):
         response = browser.post('/inzicht/document/pagina-verantwoorden', data=bad)
         assert response.status_code == 400 and '<h1>Vorming</h1>' in response.text
+        assert escape(bad["note"], quote=True) in response.text
         assert console._envelope(sid) == before
     response = browser.post('/inzicht/document/pagina-verantwoorden', data=dict(command, category='invalid'))
     assert escape(command['note'], quote=True) in response.text
@@ -79,7 +80,11 @@ def test_grant_only_authorizes_and_publisher_only_caller_is_preserved(tmp_path, 
     assert grant['consumed_by'] is None and grant['source_hash'] == before['sha256']
     assert grant['source_version'] == before['version']
     assert after['processing_attempts'] == before['processing_attempts']
-    assert browser.post('/tree/processing-recovery', data={'snapshot_id': sid, 'reason': 'Dubbel'}).status_code == 400
+    duplicate_reason = 'Dubbel <test> & controle'
+    duplicate = browser.post('/tree/processing-recovery', data={'snapshot_id': sid, 'reason': duplicate_reason})
+    assert duplicate.status_code == 400
+    assert escape(duplicate_reason, quote=True) in duplicate.text
+    assert 'action="/tree/processing-recovery"' not in duplicate.text
     for url in (response.headers['location'], '/inzicht/document?document=' + sid):
         assert browser.get(url).status_code == 200
     assert restart_production(console)._envelope(sid) == after
