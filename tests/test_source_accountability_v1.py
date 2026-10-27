@@ -130,6 +130,13 @@ def test_http_source_batch_requires_named_reviewer_and_explicit_confirmation(tmp
     sid = command['snapshot_id']
     events = deepcopy(state.workflow_review_store.read_events())
     calls = {}
+    native_objects = state.workflow_document_store.list_document_objects
+
+    def read_objects(*args, **kwargs):
+        calls['native_object_reads'] = calls.get('native_object_reads', 0) + 1
+        return native_objects(*args, **kwargs)
+
+    monkeypatch.setattr(state.workflow_document_store, 'list_document_objects', read_objects)
     for name in ('snapshot_objects_and_revision', 'object_review_bindings', 'review_source_fragments'):
         original = getattr(state, name)
         def counted(*args, _name=name, _original=original, **kwargs):
@@ -147,12 +154,14 @@ def test_http_source_batch_requires_named_reviewer_and_explicit_confirmation(tmp
             assert 'Bronregels gemotiveerd uitsluiten in Vorming' in review.text
         calls.clear()
         client.get('/review', params={'document': sid, 'task': 'inventory'})
-        baseline = dict(calls)
+        assert calls.get('native_object_reads') == 1
         calls.clear()
         owner = client.get('/source-selection', params={'document': sid, 'task': 'disposition'})
         assert owner.status_code == 200 and '<h1>Vorming</h1>' in owner.text
         assert calls.get('snapshot_objects_and_revision') == 1
-        assert all(calls.get(name, 0) <= baseline.get(name, 0) for name in calls)
+        # Review now captures below the old snapshot helper. Count actual native
+        # payload reads on both routes rather than comparing unlike API calls.
+        assert calls.get('native_object_reads') == 1
         assert state.snapshot_objects(sid) == before
         assert state.workflow_review_store.read_events() == events
         form = next(f for f in Forms(owner.text).forms if f['attrs'].get('action') == '/review/source-exclusions')

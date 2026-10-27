@@ -156,11 +156,22 @@ def test_waiting_duties_are_not_counted_as_completed_work():
 
 
 def test_task_page_returns_to_selected_document(monkeypatch):
+    from src.review_passage_read_v1 import ReviewDocumentInputs
+    captured = []
+
+    def read(console, account, snapshot_id):
+        assert snapshot_id == 'two' and account['account_id'] == 'reviewer'
+        inputs = ReviewDocumentInputs(console._envelope(snapshot_id), [], [], 'captured-revision', None)
+        captured.append(inputs)
+        return inputs
+
+    monkeypatch.setattr('src.review_passage_read_v1.read_review_document', read)
     def render(console, account, document, object='', *, task='', counts=None,
-               context_target='', context_mode='', context_saved=False, read_inputs=None):
+               context_target='', context_mode='', context_saved=False, read_inputs=None, queue_page=1):
         assert document == 'two' and task == 'contextual'
         assert (context_target, context_mode, context_saved) == ('', '', False)
-        assert read_inputs is None
+        assert captured == [read_inputs] and read_inputs.revision == 'captured-revision'
+        assert queue_page == 1
         return '<h1>Passages beoordelen</h1><a class="btn-secondary" href="/review">Ander document kiezen</a>'
     monkeypatch.setattr('src.review_workboard_v1._render_review_room', render)
     console = Console(documents=[('one', document('One')), ('two', document('Two'))])
@@ -169,6 +180,49 @@ def test_task_page_returns_to_selected_document(monkeypatch):
     assert 'Passages beoordelen' in response.text
     assert 'href="/review?document=two&amp;q=&amp;page=1"' in response.text
     assert "Terug naar documenten" in response.text
+
+
+def test_queue_navigation_does_not_backtrack_over_incomplete_hrefs():
+    """Exercise the HTTP post-render path with CodeQL's repeated-token input."""
+    import subprocess
+    import sys
+    import textwrap
+
+    script = textwrap.dedent('''
+        from unittest.mock import patch
+        from tests.test_review_direct_workspace_v1 import Console, client, document
+
+        rendered = 'href="/review?' + 'queue_page=' * 50000
+        console = Console(documents=[('one', document('One'))])
+        with patch('src.review_workboard_v1._render_review_room', return_value=rendered):
+            response = client(console).get('/review', params={
+                'document': 'one', 'task': 'history', 'q': 'keep', 'page': 2})
+        assert response.status_code == 200
+        assert response.text == rendered
+    ''')
+    # A separate process makes a regression terminate even while re holds the GIL.
+    subprocess.run([sys.executable, '-c', script], check=True, timeout=5,
+                   capture_output=True)
+
+
+def test_queue_navigation_only_updates_complete_queue_links(monkeypatch):
+    from html import unescape
+    from urllib.parse import parse_qs, urlsplit
+
+    ordinary = '<a href="/review?document=one">Document</a>'
+    queue = '<a href="/review?document=one&amp;queue_page=2">Volgende</a>'
+    monkeypatch.setattr('src.review_workboard_v1._render_review_room',
+                        lambda *args, **kwargs: ordinary + queue)
+    console = Console(documents=[('one', document('One'))])
+    response = client(console).get('/review', params={
+        'document': 'one', 'task': 'history', 'q': 'zorg & huid',
+        'page': 3, 'theme': 'huid'})
+    assert response.status_code == 200
+    assert response.text.startswith(ordinary)
+    href = unescape(response.text.split('href="')[2].split('"')[0])
+    assert parse_qs(urlsplit(href).query) == {
+        'document': ['one'], 'queue_page': ['2'],
+        'q': ['zorg & huid'], 'page': ['3'], 'theme': ['huid']}
 
 
 def test_historical_heading_task_navigates_without_rendering_or_writing(monkeypatch):

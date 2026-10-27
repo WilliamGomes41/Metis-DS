@@ -1,0 +1,175 @@
+{
+  "base_commit": "559ab4f05ef6a70689051dd4cf79444233bba1f3",
+  "state": "Reviewed performance improvement; production resolution not established",
+  "verification": {
+    "passed": 254,
+    "skipped": 1,
+    "skip_reason": "existing Chromium acceptance requires METIS_BROWSER_EXECUTABLE",
+    "postgres_skipped": 0,
+    "full_repository_suite": false,
+    "repository_preflight": "PASS",
+    "architecture_boundaries": "PASS",
+    "compileall": "PASS",
+    "change_contract": "PASS",
+    "read_only_review": "no remaining blocker in bounded review",
+    "scope_note": "The 254-test combined run and timing figures predate integration with origin/main. Post-integration results are recorded in the change contract and PR."
+  },
+  "benchmark": {
+    "candidates": 300,
+    "requests_per_task": 3,
+    "python": "3.12",
+    "postgres": "16.2 disposable local",
+    "includes": "authenticated ASGI GET, source preparation, native SQL and full response",
+    "before": {
+      "individual": [
+        {
+          "seconds": 0.8158474300000762,
+          "html_bytes": 114830
+        },
+        {
+          "seconds": 0.7721624759999486,
+          "html_bytes": 114830
+        },
+        {
+          "seconds": 0.8417225210000652,
+          "html_bytes": 114830
+        }
+      ],
+      "inventory": [
+        {
+          "seconds": 0.4475400520000221,
+          "html_bytes": 250556
+        },
+        {
+          "seconds": 0.47088209200001074,
+          "html_bytes": 250556
+        },
+        {
+          "seconds": 0.42934694499990655,
+          "html_bytes": 250556
+        }
+      ],
+      "batch": [
+        {
+          "seconds": 0.6659057570000186,
+          "html_bytes": 17364
+        },
+        {
+          "seconds": 0.668687552999927,
+          "html_bytes": 17364
+        },
+        {
+          "seconds": 0.5420272119999936,
+          "html_bytes": 17364
+        }
+      ]
+    },
+    "final": {
+      "individual": [
+        {
+          "seconds": 0.21994831900019562,
+          "html_bytes": 25917
+        },
+        {
+          "seconds": 0.31024837100039804,
+          "html_bytes": 25917
+        },
+        {
+          "seconds": 0.23038199899974643,
+          "html_bytes": 25917
+        }
+      ],
+      "inventory": [
+        {
+          "seconds": 0.21931433800000377,
+          "html_bytes": 37426
+        },
+        {
+          "seconds": 0.3038799350001682,
+          "html_bytes": 37426
+        },
+        {
+          "seconds": 0.22354770599986296,
+          "html_bytes": 37426
+        }
+      ],
+      "batch": [
+        {
+          "seconds": 0.2924952840003243,
+          "html_bytes": 17364
+        },
+        {
+          "seconds": 0.19563167900014378,
+          "html_bytes": 17364
+        },
+        {
+          "seconds": 0.19621348500004387,
+          "html_bytes": 17364
+        }
+      ]
+    },
+    "comparison": {
+      "individual": {
+        "before_median_seconds": 0.8158,
+        "final_median_seconds": 0.2304,
+        "speedup": 3.54,
+        "before_html_bytes": 114830,
+        "final_html_bytes": 25917
+      },
+      "inventory": {
+        "before_median_seconds": 0.4475,
+        "final_median_seconds": 0.2235,
+        "speedup": 2.0,
+        "before_html_bytes": 250556,
+        "final_html_bytes": 37426
+      },
+      "batch": {
+        "before_median_seconds": 0.6659,
+        "final_median_seconds": 0.1962,
+        "speedup": 3.39,
+        "before_html_bytes": 17364,
+        "final_html_bytes": 17364
+      }
+    },
+    "batch_fixture_note": "The 300-candidate source has no section paths, so its batch queue is empty. Real batch paging and stale recovery are verified separately with 60 batch-eligible candidates."
+  },
+  "limits": [
+    "Original diagnosis, combined test run and 300-candidate timing comparison predate integration onto origin/main at 96b22c1. The original production symptom has not been replayed.",
+    "Exact document queue membership still requires full object payloads once.",
+    "Conflict recovery may show multiple groups to retain every surviving selection.",
+    "No production or Azure/browser latency acceptance."
+  ],
+  "implementation_commit_before_evidence": "902f3af335febf804474786bc0f8dc174445bb5a",
+  "integration_base": "96b22c16c6aacc554d64ccf75971595a5d549000",
+  "post_integration_verification": {
+    "implementation_commit": "902f3af",
+    "base_commit": "96b22c16c6aacc554d64ccf75971595a5d549000",
+    "focused_passed": 154,
+    "browser_skipped": 1,
+    "postgres_skipped": 0,
+    "full_suite_attempt": {
+      "command": "python -m pytest -q --maxfail=1",
+      "passed": 115,
+      "failed": 1,
+      "reason": "psql missing from PATH in the execution environment"
+    },
+    "full_final_head_suite": "CI pending",
+    "psql_targeted_rerun_passed": 98
+  },
+  "ci_follow_up": {
+    "failed_head": "c272d2d5f253df2a2163615feda0e85bc2eedf02",
+    "failed_run_id": 40429746475,
+    "unique_failures": 5,
+    "local_red": "5 failed in 3.48s",
+    "local_green": "5 passed in 5.03s",
+    "expanded_regression": {
+      "passed": 114,
+      "skipped": 0,
+      "seconds": 94.88,
+      "python": "3.12",
+      "postgres": "16.2"
+    },
+    "production_code_changed": false,
+    "final_ci": "pending on next pushed head"
+  }
+}

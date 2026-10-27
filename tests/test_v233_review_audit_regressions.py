@@ -120,8 +120,10 @@ def test_real_human_reclassification_cannot_be_batch_overwritten(review_system):
 
 
 def test_real_get_pins_text_and_revision_together_and_preserves_conflict_selection(review_system, monkeypatch):
+    import src.review_passage_read_v1 as reads
+
     console, client, sid, actor, ids = review_system
-    original_read = console.snapshot_objects_and_revision
+    original_read = reads.read_review_document
     old_text = next(obj for obj in console.snapshot_objects(sid) if obj["object_id"] == ids[0])["content"]["clean_text"]
     source_objects = {obj["object_id"]: obj for obj in console.snapshot_objects(sid)}
     new_text = old_text + " " + source_objects[ids[1]]["content"]["clean_text"]
@@ -130,9 +132,9 @@ def test_real_get_pins_text_and_revision_together_and_preserves_conflict_selecti
 
     from tests.production_support import restart_production
     writer = restart_production(console)
-    def concurrent_edit(snapshot_id):
-        snapshot = original_read(snapshot_id)
-        monkeypatch.setattr(console, "snapshot_objects_and_revision", original_read)
+    def concurrent_edit(*args, **kwargs):
+        snapshot = original_read(*args, **kwargs)
+        monkeypatch.setattr(reads, "read_review_document", original_read)
         errors = []
         def edit():
             try:
@@ -147,7 +149,7 @@ def test_real_get_pins_text_and_revision_together_and_preserves_conflict_selecti
         assert not thread.is_alive() and not errors
         return snapshot
 
-    monkeypatch.setattr(console, "snapshot_objects_and_revision", concurrent_edit)
+    monkeypatch.setattr(reads, "read_review_document", concurrent_edit)
     response = client.get("/review", params={"document": sid, "task": "batch"})
     assert old_text in response.text and new_text not in response.text
     form = Page(response.text).batches[0]
@@ -220,6 +222,10 @@ def test_http_batch_requires_the_displayed_revision(review_system):
 
 
 def test_two_thousand_objects_need_one_selection_and_confirmation_per_twenty(review_system, monkeypatch):
+    from dataclasses import replace
+    import src.review_passage_read_v1 as reads
+    from src.proportionate_review_v1 import render_normal_risk_batch_panel
+
     console, client, sid, actor, ids = review_system
     template = next(obj for obj in console.snapshot_objects(sid) if obj["object_id"] == ids[0])
     rows = []
@@ -227,15 +233,36 @@ def test_two_thousand_objects_need_one_selection_and_confirmation_per_twenty(rev
         obj = deepcopy(template)
         obj["object_id"] = f"load-{index}"
         rows.append(obj)
-    monkeypatch.setattr(console, "snapshot_objects_and_revision", lambda _sid: (rows, "load-revision"))
-    page = Page(client.get("/review", params={"document": sid, "task": "batch"}).text)
-    assert len(page.batches) == 100
-    assert all(form["select_all"] and len(form["ids"]) == 20 for form in page.batches)
-    assert all(not form["checked"] for form in page.batches)
-    assert len({oid for form in page.batches for oid in form["ids"]}) == 2000
-    # Reading remains necessary; selecting and confirming a coherent section
-    # requires 200 UI actions, not 2000 individual open/select/save cycles.
-    selection_and_confirmation_actions = 2 * len(page.batches)
+    real_capture = reads.read_review_document
+    captured = []
+
+    def load_fixture(*args, **kwargs):
+        inputs = replace(real_capture(*args, **kwargs), objects=rows, revision='load-revision')
+        captured.append(inputs)
+        return inputs
+
+    monkeypatch.setattr(reads, 'read_review_document', load_fixture)
+    first = Page(client.get('/review', params={'document': sid, 'task': 'batch'}).text)
+    inputs = captured[0]
+    # Preserve the complete 100-group oracle, then compare real HTTP pages at
+    # the beginning, middle and end with those exact group memberships.
+    complete = Page(render_normal_risk_batch_panel(console, sid, snapshot=(rows, inputs.revision),
+        include_individual=False, source_inputs=(inputs.bindings, inputs.fragments)))
+    assert len(complete.batches) == 100
+    assert all(form['select_all'] and len(form['ids']) == 20 for form in complete.batches)
+    assert all(not form['checked'] for form in complete.batches)
+    assert {oid for form in complete.batches for oid in form['ids']} == {f'load-{i}' for i in range(2000)}
+    for number in (1, 50, 100):
+        page = first if number == 1 else Page(client.get('/review', params={
+            'document': sid, 'task': 'batch', 'queue_page': number}).text)
+        assert len(page.batches) == 1
+        form = page.batches[0]
+        assert form['ids'] == complete.batches[number - 1]['ids']
+        assert form['select_all'] and not form['checked']
+        assert form['fields']['snapshot_revision'] == 'load-revision'
+    # Selecting and confirming the 100 coherent groups still takes 200 actions;
+    # page navigation and reading are separate from that confirmation count.
+    selection_and_confirmation_actions = 2 * len(complete.batches)
     assert selection_and_confirmation_actions == 200
 
 

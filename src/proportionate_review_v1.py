@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections import defaultdict
 from html import escape
 from typing import Any, Iterable
+from urllib.parse import urlencode
 from src.prepared_source_views_v1 import preserve_fragments
 
 from fastapi import FastAPI, Form, Request
@@ -117,19 +118,43 @@ def regular_individual_review_queue(objects: Iterable[dict[str, Any]], *, review
     key=review_priority_rank)
 
 
+def review_queue_page(rows, snapshot_id, task, page, *, page_size=25, label='passages'):
+    """Page a fully validated queue; required context remains outside the slice."""
+    total = len(rows)
+    pages = max(1, (total + page_size - 1) // page_size)
+    page = min(max(1, page), pages)
+    start = (page - 1) * page_size
+    if pages == 1:
+        return rows, ''
+    links = []
+    for number, text in ((page - 1, 'Vorige'), (page + 1, 'Volgende')):
+        if 1 <= number <= pages:
+            query = urlencode({'document': snapshot_id, 'task': task, 'queue_page': number})
+            links.append(f'<a href="/review?{escape(query, quote=True)}">{text}</a>')
+    navigation = (f'<nav aria-label="Reviewpassages">{total} {label} · pagina {page} van {pages}'
+                  f' · {" · ".join(links)}</nav>')
+    return rows[start:start + page_size], navigation
+
+
+
 def render_normal_risk_batch_panel(
     console: "ProportionateReviewConsole", snapshot_id: str,
     *, snapshot: tuple[list[dict[str, Any]], str] | None = None,
     selected_ids: Iterable[str] = (),
     include_individual: bool = True,
+    source_inputs: tuple | None = None,
+    page: int | None = None,
 ) -> str:
     """Render reachable normal-risk review work in bounded coherent batches."""
     envelope = console._envelope(snapshot_id)
     review_path = review_path_for_klasse(envelope["class"])
     objects, revision = snapshot if snapshot is not None else console.snapshot_objects_and_revision(snapshot_id)
     all_objects = objects
-    bindings = _review_bindings_or_legacy(console, snapshot_id)
-    fragments = console.review_source_fragments(snapshot_id)
+    if source_inputs is None:
+        bindings = _review_bindings_or_legacy(console, snapshot_id)
+        fragments = console.review_source_fragments(snapshot_id)
+    else:
+        bindings, fragments = source_inputs
     queue = normal_risk_batch_queue(
         all_objects,
         review_path=review_path,
@@ -142,62 +167,77 @@ def render_normal_risk_batch_panel(
     for obj in queue:
         proposed = _batch_type(obj)
         groups[(_section_key(obj), proposed)].append(obj)
+    # Preserve the existing coherent groups; paging must never split a group
+    # differently or change the workboard's number of required confirmations.
+    batches = [(section, proposed, rows[start:start + NORMAL_RISK_BATCH_MAX])
+               for (section, proposed), rows in groups.items()
+               for start in range(0, len(rows), NORMAL_RISK_BATCH_MAX)]
+    selected = set(selected_ids)
+    retry_groups = [i for i, (_, _, rows) in enumerate(batches)
+                    if any(str(row['object_id']) in selected for row in rows)]
+    if page is not None and retry_groups:
+        # A concurrent edit can move a group to another page or split it. Keep
+        # all surviving retry selections visible, using current group membership.
+        page = retry_groups[0] + 1
+    if page is not None and len(retry_groups) > 1:
+        batches, navigation = ([batches[i] for i in retry_groups], '')
+    else:
+        batches, navigation = ((batches, '') if page is None else
+            review_queue_page(batches, snapshot_id, 'batch', page, page_size=1, label='groepen'))
     revision = escape(revision, quote=True)
     safe_snapshot = escape(snapshot_id, quote=True)
-    selected = set(selected_ids)
     panels: list[str] = [
         '<section class="review-normal-risk" aria-labelledby="normal-risk-title">',
         '<h2 id="normal-risk-title">Passages selecteren en bevestigen</h2>',
         f'<p>Maximaal {NORMAL_RISK_BATCH_MAX} passages per bevestiging.</p>',
+        navigation,
     ]
     batch_index = 0
-    for (section, proposed), group_objects in groups.items():
+    for section, proposed, batch in batches:
         label = escape(" › ".join(section))
         type_label = "Definitie" if proposed == "definition" else "Toelichting"
-        for start in range(0, len(group_objects), NORMAL_RISK_BATCH_MAX):
-            batch = group_objects[start : start + NORMAL_RISK_BATCH_MAX]
-            batch_index += 1
-            if len(batch) == 1:
-                obj = batch[0]
-                object_id = escape(str(obj.get("object_id") or ""), quote=True)
-                type_origin = "Bevestigd type" if obj.get("confirmed_object_type") else "Voorstel van Metis"
-                panels.append(
-                    '<article class="normal-risk-single">'
-                    f'<h3>{escape(section[-1])}</h3>'
-                    f'<p><strong>{type_origin}: {type_label}</strong> — {escape(_object_text(obj))}</p>'
-                    f'<a href="/review?document={safe_snapshot}&amp;object={object_id}&amp;task=batch#classification-{object_id}">Type of gebruik controleren</a> · '
-                    f'<a href="/review?document={safe_snapshot}&amp;object={object_id}&amp;task=batch">Passage beoordelen</a>'
-                    '</article>'
-                )
-                continue
+        batch_index += 1
+        if len(batch) == 1:
+            obj = batch[0]
+            object_id = escape(str(obj.get("object_id") or ""), quote=True)
+            type_origin = "Bevestigd type" if obj.get("confirmed_object_type") else "Voorstel van Metis"
             panels.append(
-                f'<form method="post" action="/review/normal-risk/batch-confirm" class="normal-risk-batch">'
-                f'<input type="hidden" name="snapshot_id" value="{safe_snapshot}">'
-                f'<input type="hidden" name="snapshot_revision" value="{revision}">'
-                f'<input type="hidden" name="interaction_id" value="{new_review_interaction_id()}">'
-                f'<fieldset><legend>{escape(section[-1])} — {type_label} ({len(batch)})</legend>'
-                f'<details class="review-source-path"><summary>Volledig bronpad</summary><p>{label}</p></details>'
-                '<button class="btn-secondary" type="button" data-select-review-batch>Alles in deze groep selecteren</button>'
+                '<article class="normal-risk-single">'
+                f'<h3>{escape(section[-1])}</h3>'
+                f'<p><strong>{type_origin}: {type_label}</strong> — {escape(_object_text(obj))}</p>'
+                f'<a href="/review?document={safe_snapshot}&amp;object={object_id}&amp;task=batch#classification-{object_id}">Type of gebruik controleren</a> · '
+                f'<a href="/review?document={safe_snapshot}&amp;object={object_id}&amp;task=batch">Passage beoordelen</a>'
+                '</article>'
             )
-            for obj in batch:
-                object_id = escape(str(obj.get("object_id") or ""), quote=True)
-                text = escape(_object_text(obj))
-                checked = " checked" if str(obj.get("object_id")) in selected else ""
-                type_origin = "Bevestigd type" if obj.get("confirmed_object_type") else "Voorstel van Metis"
-                panels.append(
-                    '<div class="normal-risk-row">'
-                    '<label class="normal-risk-item">'
-                    f'<input type="checkbox" name="object_ids" value="{object_id}"{checked}> '
-                    f'<strong>{type_origin}: {type_label}</strong> — {text}'
-                    '</label>'
-                    f' <a href="/review?document={safe_snapshot}&amp;object={object_id}&amp;task=batch#classification-{object_id}">Type of gebruik controleren</a>'
-                    f' <a href="/review/bronpassage?document={safe_snapshot}&amp;object={object_id}">Bronpassage</a>'
-                    '</div>'
-                )
+            continue
+        panels.append(
+            f'<form method="post" action="/review/normal-risk/batch-confirm" class="normal-risk-batch">'
+            f'<input type="hidden" name="snapshot_id" value="{safe_snapshot}">'
+            f'<input type="hidden" name="snapshot_revision" value="{revision}">'
+            f'<input type="hidden" name="interaction_id" value="{new_review_interaction_id()}">'
+            f'<fieldset><legend>{escape(section[-1])} — {type_label} ({len(batch)})</legend>'
+            f'<details class="review-source-path"><summary>Volledig bronpad</summary><p>{label}</p></details>'
+            '<button class="btn-secondary" type="button" data-select-review-batch>Alles in deze groep selecteren</button>'
+        )
+        for obj in batch:
+            object_id = escape(str(obj.get("object_id") or ""), quote=True)
+            text = escape(_object_text(obj))
+            checked = " checked" if str(obj.get("object_id")) in selected else ""
+            type_origin = "Bevestigd type" if obj.get("confirmed_object_type") else "Voorstel van Metis"
             panels.append(
-                '</fieldset><button class="btn-primary" type="submit">Bevestig geselecteerde passages</button>'
-                f'<span class="sr-only">Batch {batch_index}</span></form>'
+                '<div class="normal-risk-row">'
+                '<label class="normal-risk-item">'
+                f'<input type="checkbox" name="object_ids" value="{object_id}"{checked}> '
+                f'<strong>{type_origin}: {type_label}</strong> — {text}'
+                '</label>'
+                f' <a href="/review?document={safe_snapshot}&amp;object={object_id}&amp;task=batch#classification-{object_id}">Type of gebruik controleren</a>'
+                f' <a href="/review/bronpassage?document={safe_snapshot}&amp;object={object_id}">Bronpassage</a>'
+                '</div>'
             )
+        panels.append(
+            '</fieldset><button class="btn-primary" type="submit">Bevestig geselecteerde passages</button>'
+            f'<span class="sr-only">Batch {batch_index}</span></form>'
+        )
     if include_individual:
         individual = regular_individual_review_queue(all_objects, review_path=review_path, bindings=bindings, fragments=fragments)
         if individual:
