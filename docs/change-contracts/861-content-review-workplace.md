@@ -42,8 +42,8 @@ boom/graaf-override en bounded passage-reader blijven behouden. Geen nieuwe CLI.
 - Invariants: toegewezen bevoegde reviewer, geldige bron, exact ID/versie/hash/type, onafhankelijke vereiste deelname; immutable bron/gepubliceerd werk; bestaande batchgeschiktheid.
 - Durable state before: actuele kandidaat met bestaande reviewplicht en bindings.
 - Durable state after: uitsluitend bestaande individuele approve/reject/revise of tweede-reviewuitkomst, exacte binding/events; herstel via bestaande Vorming-command maakt opnieuw te beoordelen werk.
-- Transaction boundary: bestaande review_object/approve_second_review workflowcommit, PG-documentlock/CAS. Batch behoudt bestaande opeenvolgende per-object commits met revision-pin; geen claim van alles-of-niets-batchtransactie.
-- Failure/recovery result: bestaande validatie/conflict/rollback; gedeeltelijke batch blijft expliciet zichtbaar en alleen resterende geldige selectie retrybaar. Refresh/herstart leest PostgreSQL; geen UI-compensatie.
+- Transaction boundary: bestaande review_object/approve_second_review workflowcommit, PG-documentlock/CAS. De base batchimplementatie voert per-object review_object aanroepen met revision-pin uit. De productie-override ClosedLoopReviewConsole.batch_review_normal_risk omvat die hele reeks met _atomic_snapshot_mutation; _PostgresWorkflowReviewMixin sluit aan op de bestaande Storeopdracht/workflow_transaction. Objecten, bindings en events committen daardoor als één native batchopdracht. Die buitenste transactie blijft intact.
+- Failure/recovery result: bestaande validatie/conflict/native rollback: een fout in een batchlid laat de hele productie-batch ongewijzigd. De bestaande partial-batch-foutrenderer blijft compatibel maar definieert geen alternatieve productiecommit. Refresh/herstart leest PostgreSQL; geen UI-compensatie.
 - Duplicate execution / idempotency result: bestaande expected_revision/conflict en bestaande command-ID-regels; interaction_id is bewijs, geen nieuwe deduplicatieautoriteit.
 - Concurrency result: actuele bindings/CAS hercontroleert command; oude browserrevisie mag geen nieuwere schrijver overschrijven. Geen browserlock.
 - Audit/evidence requirement: bestaande review_events/ledger en exacte binding per object, bestaande repair-evidence; geen extra register.
@@ -121,3 +121,11 @@ Bij contextkeuze uit een ander bronfragment blijft context_target het terugkeero
 de bestaande return_object_id stuurt de POST terug naar datzelfde voorstel.
 Oorspronkelijke reviewrevisie blijft bewaard in links, GET-keuzes en bestaande
 POSTs; actuele formulierrevisie blijft de enige CAS-invoer.
+
+De afsluitende MRO-controle corrigeert de eerste beschrijving van de batch:
+alleen de base per-objectlus bekijken was onvoldoende. De buitenste
+`ClosedLoopReviewConsole.batch_review_normal_risk` en
+`_PostgresWorkflowReviewMixin._atomic_snapshot_mutation` bepalen de werkelijke
+productietransactie. `tests/test_review_batch_atomic_postgres.py` bewijst native
+rollback, herstart en stale replay. Geen productcode of transactie is hiervoor
+gewijzigd; de bestaande legacy-foutrendering blijft behouden.
