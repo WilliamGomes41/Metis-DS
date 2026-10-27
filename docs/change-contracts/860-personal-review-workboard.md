@@ -159,3 +159,10 @@ Open bewijsgrens: screenshots uit #857 zijn geen reproduceerbare productiepopula
 deze run stelt hun werkelijke historische aantallen niet vast. Er is geen
 productiedata, deployment of volledige persoonlijke afgehandeld/totaal-noemer
 onderzocht of gewijzigd.
+
+Tijdens de bredere verificatie is de noodzakelijke eenvoudige navigatie naar
+`/inzicht/document?document=...` behouden als secundaire leeslink "Verklaring en
+bewijs in Inzicht". Deze leest geen diagnose voor de landing en toont geen
+publicatie-/diagnosestatus. De bestaande Inzicht-navigatie-/GET-invariantietest
+blijft daardoor ongewijzigd. Dit verfijnt de Sketch; er is geen nieuwe reader,
+route of eigendomsgrens nodig.

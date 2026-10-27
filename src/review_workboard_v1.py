@@ -546,11 +546,13 @@ def _workboard_card(item: dict[str, Any], *, started: bool = False,
         summary = ('<p class="lead">Voor jou open: <b data-personal-open>' + str(view['opened']) + '</b></p>'
                    '<p>Eerste beoordeling: <b data-personal-first>' + str(view['first']) + '</b> · '
                    'Tweede beoordeling: <b data-personal-second>' + str(view['second']) + '</b></p>')
+    evidence_href = '/inzicht/document?' + urlencode({'document': sid})
+    evidence = f'<p><a href="{_esc(evidence_href)}">Verklaring en bewijs in Inzicht</a></p>'
     scope = console_ui.count_scope_label(envelope.get('version'), observed_at=observed_at or _observed_at())
     return ('<article class="doc-card" data-workboard-document="' + _esc(sid) +
             '" data-personal-state="' + view['state'] + '" data-workflow-status="' + _esc(lifecycle['workflow_status']) + '">'
             '<h2>' + _esc(str(envelope.get('title') or 'Document')) + '</h2>'
-            '<p class="muted" data-count-scope>' + _esc(scope) + '</p>' + summary + action + '</article>')
+            '<p class="muted" data-count-scope>' + _esc(scope) + '</p>' + summary + action + evidence + '</article>')
 
 
 @diagnostic_phase("review_render")

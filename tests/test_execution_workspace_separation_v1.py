@@ -97,7 +97,8 @@ def test_review_exposes_source_and_explicit_choices_without_embedded_manual(tmp_
     client = client_for(console, production_app=production_app)
     login(client, 'reviewer.bert')
     dashboard = client.get('/review', params={'document': sid}).text
-    assert 'review-next-step' in dashboard  # Production middleware must preserve the primary action.
+    assert f'data-workboard-document="{sid}"' in dashboard
+    assert 'data-personal-state=' in dashboard  # Middleware preserves the actor-specific landing.
     obj = next(o for o in console.snapshot_objects(sid) if o['object_type'] not in {'document', 'heading'})
     page = client.get('/review', params={'document': sid, 'object': obj['object_id']})
     assert page.status_code == 200

@@ -27,8 +27,9 @@ def test_personal_card_escapes_document_and_search_without_an_extra_workplace():
     item['snapshot_id'] = 'snapshot&1'
     item['envelope']['title'] = 'Document <voorbeeld>'
     html = simplify_console_html('/review', _workboard_card(item, q='"><script>bad</script>', page=2))
-    hrefs = Links(html).hrefs
+    hrefs = [href for href in Links(html).hrefs if urlsplit(href).path == "/review"]
     assert len(hrefs) == 1
+    assert 'Verklaring en bewijs in Inzicht' in html
     assert 'Document &lt;voorbeeld&gt;' in html and '<script>bad</script>' not in html
     target = urlsplit(hrefs[0])
     assert target.path == '/review'
