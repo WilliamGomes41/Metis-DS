@@ -119,7 +119,6 @@ from src.publication_readiness_v1 import review_followup_queues
 from src.product_security_v1 import SlidingWindowRateLimiter
 from src.proportionate_review_v1 import (
     ProportionateReviewConsole,
-    normal_risk_batch_counts,
     regular_individual_review_queue,
     render_normal_risk_batch_panel,
     review_queue_page as _review_queue_page,
@@ -2241,251 +2240,6 @@ def _review_progress_overview(
     """
 
 
-def _review_task_card(
-    snapshot_id: str,
-    *,
-    task: str,
-    title: str,
-    description: str,
-    status: str,
-    recommended: bool = False,
-    review_path: str = "richtlijn",
-) -> str:
-    action = "Ga verder" if recommended else "Open taak"
-    workplace = '/source-selection' if task == 'structure' and review_path != 'boom' else '/review'
-    return f'''
-      <a class="review-task-card" href="{workplace}?document={_esc(snapshot_id)}&amp;task={_esc(task)}">
-        <span class="review-task-card-title">{_esc(title)}</span>
-        <span class="review-task-card-status">{_esc(status)}</span>
-        <span class="review-task-card-action">{action} <span aria-hidden="true">→</span></span>
-      </a>
-    '''
-
-
-def _review_task_dashboard(
-    snapshot_id: str,
-    *,
-    koppen: list[dict[str, Any]],
-    individual: list[dict[str, Any]],
-    normal_passages: int,
-    normal_batches: int,
-    blocked_count: int,
-    progress: dict[str, int],
-    heading_pending_override: int | None = None,
-    heading_total_override: int | None = None,
-    individual_pending_override: int | None = None,
-    individual_total_override: int | None = None,
-    second_review_pending: int = 0,
-    disposition_pending: int = 0,
-    waiting_pending: int = 0,
-    heading_done_override: int | None = None,
-    individual_done_override: int | None = None,
-    review_path: str = "richtlijn",
-    knowledge_open: int | None = None,
-    knowledge_progress: dict[str, int] | None = None,
-    count_scope: str = "",
-) -> str:
-    heading_pending = (
-        int(heading_pending_override)
-        if heading_pending_override is not None
-        else sum(not _review_is_final(obj) for obj in koppen)
-    )
-    heading_total = (
-        int(heading_total_override)
-        if heading_total_override is not None
-        else len(koppen)
-    )
-    heading_done = max(heading_total - heading_pending, 0) if heading_done_override is None else heading_done_override
-    individual_pending = (
-        int(individual_pending_override)
-        if individual_pending_override is not None
-        else sum(not _review_is_final(obj) for obj in individual)
-    )
-    individual_total = (
-        int(individual_total_override)
-        if individual_total_override is not None
-        else len(individual)
-    )
-    individual_done = max(individual_total - individual_pending, 0) if individual_done_override is None else individual_done_override
-    # Navigation is a projection of existing duties, never a second review policy.
-    tasks = [
-        ("structure", "Documentindeling controleren", "Controleer koppen en hun plaats in de bron", heading_pending),
-        ("contextual", "Passages afzonderlijk beoordelen", "Controleer inhoud, type en benodigde broncontext", individual_pending),
-        ("batch", "Passages selecteren en bevestigen", "Bekijk iedere passage; bevestig alleen geschikte selecties samen", normal_passages),
-        ("second_review", "Een onafhankelijke tweede beoordeling geven", "Beoordeel dezelfde versie zonder het eerdere besluit over te nemen", second_review_pending),
-        ("disposition", "Gebruik van bronpassages bepalen", "Bekijk per passage wat ontbreekt en welke afhandeling mogelijk is", disposition_pending),
-    ]
-    available = [row for row in tasks if row[3]]
-    recommended = available[0] if available else None
-    statuses = {
-        "structure": f"{heading_pending} te controleren · {heading_done} afgerond",
-        "contextual": f"{individual_pending} te beoordelen · {individual_done} afgerond",
-        "batch": f"{normal_passages} passages",
-        "second_review": f"{second_review_pending} te beoordelen",
-        "disposition": f"{disposition_pending} af te handelen",
-    }
-    if recommended:
-        workplace = '/source-selection' if recommended[0] == 'structure' and review_path != 'boom' else '/review'
-        next_step = f'''
-          <section class="review-next-step" aria-labelledby="review-next-title">
-            <p class="eyebrow">Volgende stap</p>
-            <h2 id="review-next-title">{_esc(recommended[1])}</h2>
-            <p>{_esc(statuses[recommended[0]])}</p>
-            <a class="btn-primary" href="{workplace}?document={_esc(snapshot_id)}&amp;task={recommended[0]}">Ga verder met beoordelen</a>
-          </section>
-        '''
-    else:
-        next_step = '<p class="review-task-empty">Geen inhoudelijke beoordeling voor jou beschikbaar.</p>'
-    rows = "".join(
-        _review_task_card(
-            snapshot_id, task=task, title=title,
-            description="", status=statuses[task],
-            recommended=bool(recommended and task == recommended[0]),
-            review_path=review_path,
-        )
-        for task, title, description, count in available
-        if recommended is None or task != recommended[0]
-    )
-    waiting = (
-        f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=waiting">'
-        f'{waiting_pending} wachten op een andere beoordelaar</a>. Jij kunt deze tweede beoordeling niet overnemen.</p>'
-        if waiting_pending else ''
-    )
-    scope_html = (f'<p class="review-count-scope" data-count-scope>{_esc(count_scope)}</p>'
-                  if count_scope else '')
-    if review_path == "boom" or knowledge_open is None:
-        # Beslisboom: no knowledge counter; the existing task list stays as is.
-        work_html = f'<div class="review-task-grid">{rows}</div>\n        {waiting}'
-    else:
-        cards = {
-            task: _review_task_card(
-                snapshot_id, task=task, title=title, description="", status=statuses[task],
-                recommended=False,
-                review_path=review_path,
-            )
-            for task, title, description, count in available
-            if recommended is None or task != recommended[0]
-        }
-        work_html = _review_layers_html(
-            snapshot_id, cards=cards, waiting_html=waiting,
-            knowledge_open=int(knowledge_open), knowledge_progress=knowledge_progress,
-            second_review_pending=second_review_pending, heading_pending=heading_pending,
-            heading_done=heading_done, blocked_count=blocked_count,
-            disposition_pending=disposition_pending,
-        )
-    repair_notice = (
-        f'<p class="review-blocked-notice">{blocked_count} '
-        f'{"passage is" if blocked_count == 1 else "passages zijn"} nog niet beschikbaar voor goedkeuring. '
-        f'<a href="/source-selection?document={_esc(snapshot_id)}&amp;task=repair">Passages corrigeren</a></p>'
-        if blocked_count else ''
-    )
-    return f'''
-      <section class="review-task-dashboard" aria-labelledby="review-task-title">
-        <div class="review-workspace-layout">
-        <div class="review-work-main">
-        {next_step}
-        <div class="review-work-header">
-          <div>
-            <h2 id="review-task-title">Jouw open werk</h2>
-          </div>
-          <a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a>
-        </div>
-        {scope_html}
-        {work_html}
-        </div>
-        <aside class="review-sidebar" aria-label="Reviewvoortgang">
-        {_review_progress_overview(snapshot_id, progress)}
-        {repair_notice}
-        </aside>
-        </div>
-      </section>
-    '''
-
-
-def _review_count(name: str, value: int) -> str:
-    return f'<p class="review-group-count" data-count="{_esc(name)}">{int(value)}</p>'
-
-
-def _review_layers_html(
-    snapshot_id: str,
-    *,
-    cards: dict[str, str],
-    waiting_html: str,
-    knowledge_open: int,
-    knowledge_progress: dict[str, int] | None,
-    second_review_pending: int,
-    heading_pending: int,
-    heading_done: int,
-    blocked_count: int,
-    disposition_pending: int,
-) -> str:
-    """Three presentation layers over existing task counts; no own selection or policy."""
-    doc = _esc(snapshot_id)
-    progress_html = ""
-    if knowledge_progress is not None:
-        total = int(knowledge_progress.get("total") or 0)
-        done = int(knowledge_progress.get("done") or 0)
-        superseded = int(knowledge_progress.get("superseded") or 0)
-        progress_html = (
-            f'<p class="review-knowledge-progress-text">{done} van {total} inhoudelijk beoordeelbare '
-            f'kennisvoorstellen afgehandeld</p>'
-            f'<progress data-knowledge-progress aria-label="Afgehandelde kennisvoorstellen" value="{done}" max="{total}">'
-            f'{done}/{total}</progress>'
-            + (f'<p class="muted">{superseded} vervangen door een opvolger; niet als afgehandeld geteld.</p>'
-               if superseded else '')
-        )
-    ratio_total = knowledge_open + disposition_pending
-    return f'''
-        <section class="review-layer review-layer-assess" data-review-layer="beoordelen" aria-label="Beoordelen">
-          <h3>Beoordelen</h3>
-          <div class="review-group" data-review-group="kennis">
-            <h4>Kennisvoorstellen</h4>
-            {_review_count("kennis", knowledge_open)}
-            <p class="review-group-lead">Open inhoudelijke beoordelingen voor jou. Wat beslist u hier: klopt dit voorstel inhoudelijk met de bron?</p>
-            {progress_html}
-            <div class="review-task-grid">{cards.get("contextual", "")}{cards.get("batch", "")}</div>
-          </div>
-          <div class="review-group" data-review-group="tweede">
-            <h4>Tweede review</h4>
-            {_review_count("tweede", second_review_pending)}
-            <p class="review-group-lead">Onafhankelijk dezelfde versie beoordelen.</p>
-            <div class="review-task-grid">{cards.get("second_review", "")}</div>
-            {waiting_html}
-          </div>
-          <div class="review-group" data-review-group="koppen">
-            <h4>Koppen</h4>
-            {_review_count("koppen", heading_pending)}
-            <p class="review-group-lead">Documentstructuur controleren; geen inhoudelijke goedkeuring. {heading_done} afgerond.</p>
-            <div class="review-task-grid">{cards.get("structure", "")}</div>
-          </div>
-        </section>
-        <details class="review-layer review-layer-source" data-review-layer="bronwerk">
-          <summary>Bronwerk en afhandeling · herstel {blocked_count} · bronafhandeling open {disposition_pending}</summary>
-          <div class="review-group" data-review-group="herstel">
-            <h4>Herstel</h4>
-            {_review_count("herstel", blocked_count)}
-            <p class="review-group-lead">Bron of verwerking herstellen; goedkeuren kan pas daarna.</p>
-            <p class="muted">{"Zie de herstelmelding bij de voortgang." if blocked_count else "Geen herstel open."}</p>
-          </div>
-          <div class="review-group" data-review-group="bronafhandeling">
-            <h4>Bronafhandeling open</h4>
-            {_review_count("bronafhandeling", disposition_pending)}
-            <p class="review-group-lead">Gebruik van bronregels bepalen. Beoordelingswerk en bronafhandeling zijn afzonderlijke controles; de aantallen mogen overlappen.</p>
-            <div class="review-task-grid">{cards.get("disposition", "")}</div>
-            <p class="review-filter-links"><a href="/review?document={doc}&amp;task=disposition">Onbeslist</a> · <a href="/review?document={doc}&amp;task=inventory">Alles</a></p>
-          </div>
-          <div class="review-open-work-ratio" data-open-work-ratio>
-            <p>Verhouding open werk: {knowledge_open} kennisvoorstellen · {disposition_pending} bronafhandeling open</p>
-            <progress aria-label="Aandeel kennisvoorstellen in open werk" value="{knowledge_open}" max="{ratio_total}">{knowledge_open}/{ratio_total}</progress>
-          </div>
-        </details>
-        <details class="review-layer review-layer-history" data-review-layer="inzage">
-          <summary>Ter inzage</summary>
-          <p><a href="/review?document={doc}&amp;task=history">Besluiten en historie</a> (alleen lezen)</p>
-        </details>
-    '''
-
-
 def knowledge_open_count(
     objects: list[dict[str, Any]],
     *,
@@ -2544,7 +2298,7 @@ def count_scope_label(version: Any, *, revision: str = "", observed_at: str = ""
 def _review_task_header(snapshot_id: str, title: str, description: str) -> str:
     return f'''
       <header class="review-task-workspace">
-        <a class="btn-secondary review-task-back" href="/review?document={_esc(snapshot_id)}">← Terug naar taken</a>
+        <a class="btn-secondary review-task-back" href="/review?document={_esc(snapshot_id)}">← Terug naar werkvoorraad</a>
         <h2>{_esc(title)}</h2>
         {_task_links("review")}
       </header>
@@ -2665,6 +2419,7 @@ def _review_route_objects(
     reviewer_id: str,
     canonical_task: str,
     fragments=None,
+    routes=None,
 ) -> list[dict[str, Any]]:
     if canonical_task == "structure" and review_path != "boom":
         from src.knowledge_path_v1 import is_structural_projection
@@ -2695,7 +2450,7 @@ def _review_route_objects(
                 rows.append(obj)
             continue
 
-        route = reviewer_route_for(
+        route = routes.get(str(obj.get("object_id") or "")) if routes is not None else reviewer_route_for(
             obj,
             review_path=review_path,
             reviewer_id=reviewer_id,
@@ -2817,7 +2572,7 @@ def _render_second_review_card(
     first_copy = ", ".join(dict.fromkeys(first_reviewers)) or "eerste reviewer"
     text = str((obj.get("content") or {}).get("clean_text") or "")
     return f"""
-      <p><a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=second_review">← Terug naar tweede beoordelingen</a></p>
+      <p><a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=second_review">← Terug naar kennisvoorstellen</a></p>
       <article class="object review-card-two-column second-review-card" data-object-id="{_esc(obj.get("object_id"))}">
         {_knowledge_review_html(obj, snapshot_objects)}
         <div class="review-cockpit-copy">
@@ -3324,13 +3079,12 @@ def _render_review_index(
     snapshot_revision: str = "",
     normal_content_html: str = "",
     task: str = "",
-    normal_review_enabled: bool = True,
     audit_signals: list[dict[str, Any]] | None = None,
     bindings: list[dict[str, Any]] | None = None,
     reviewer_id: str = "",
     fragments=None,
-    document_version: object = "",
     page: int = 1,
+    routes=None,
 ) -> str:
     task = normalize_review_task(task)
     bindings = list(bindings) if bindings is not None else None
@@ -3338,31 +3092,26 @@ def _render_review_index(
         return _review_inventory(snapshot_id, snapshot_objects, review_path=review_path,
                                  bindings=bindings, reviewer_id=reviewer_id, task=task,
                                  snapshot_revision=snapshot_revision, fragments=fragments, page=page)
-    if task in {'contextual', 'second_review'}:
-        queue = _review_route_objects(snapshot_objects, review_path=review_path,
-            bindings=bindings, reviewer_id=reviewer_id, canonical_task=task, fragments=fragments)
-        visible, navigation = _review_queue_page(queue, snapshot_id, task, page)
-        title, lead, lane, empty = (
-            ('Passages afzonderlijk beoordelen',
-             'Controleer iedere passage met de bron; passages staan hieronder per brononderdeel, niet per inhoudelijke relatie',
-             'slow', 'Deze beoordelingslijst is leeg. Bekijk alle passages voor resterend werk.')
-            if task == 'contextual' else
-            ('Tweede beoordelingen', 'Beoordeel onafhankelijk exact dezelfde goedgekeurde objectversie',
-             'second', 'Deze taak is afgerond of wacht op een andere reviewer.'))
-        content = (_review_section_groups(visible, snapshot_id,
-            priority_ids={str(obj['object_id']) for obj in visible} if task == 'contextual' else set(),
-            task=task, context_objects=snapshot_objects, review_path=review_path,
-            bindings=bindings, fragments=fragments) if queue else
-            f'<p class="review-task-empty">{empty}</p>')
-        inventory = (f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p>'
-                     if task == 'contextual' else '')
-        return (f'{_review_task_header(snapshot_id, title, lead)}'
-                f'<section class="review-lane-{lane}">{navigation}{content}{inventory}</section>')
-    if task == "batch":
-        return f'''
-          {_review_task_header(snapshot_id, "Passages selecteren en bevestigen", "Selecteer alleen passages die je hebt gecontroleerd; hetzelfde brononderdeel en type betekenen niet dezelfde inhoud")}
-          {normal_content_html or '<p class="review-task-empty">Deze taak is afgerond.</p>'}
-        '''
+    if task in {"", "contextual", "batch", "second_review"}:
+        panels = []
+        for lane, title in (("contextual", "Voorstellen met een eigen oordeel"),
+                            ("second_review", "Onafhankelijke tweede beoordeling")):
+            queue = _review_route_objects(snapshot_objects, review_path=review_path,
+                bindings=bindings, reviewer_id=reviewer_id, canonical_task=lane, fragments=fragments, routes=routes)
+            visible, navigation = _review_queue_page(queue, snapshot_id, lane, page)
+            if queue:
+                panels.append('<section class="review-lane-' + ('slow' if lane == 'contextual' else 'second') + '"><h3>' + title + '</h3>' + navigation +
+                    _review_section_groups(visible, snapshot_id, task=lane,
+                        priority_ids={str(obj['object_id']) for obj in visible} if lane == 'contextual' else set(),
+                        context_objects=snapshot_objects, review_path=review_path,
+                        bindings=bindings, fragments=fragments) + '</section>')
+        if normal_content_html:
+            panels.append(normal_content_html)
+        content = ''.join(panels) or '<p class="review-task-empty">Geen inhoudelijke beoordeling voor jou beschikbaar. Je eigen werk is klaar of wacht op een andere reviewer.</p>'
+        return (_review_task_header(snapshot_id, "Kennisvoorstellen beoordelen", "") +
+            '<section data-content-review-workplace>' + content +
+            f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a> · '
+            f'<a href="/review?document={_esc(snapshot_id)}&amp;task=history">Besluiten en historie</a></p></section>')
     if task == "history":
         progress = _review_progress_summary(snapshot_objects)
         decision_rows = [
@@ -3382,38 +3131,9 @@ def _render_review_index(
           </section>
         '''
 
-    followups = review_followup_queues(snapshot_objects, review_path=review_path, bindings=bindings, fragments=fragments)
-    koppen = _review_route_objects(
-        snapshot_objects,
-        review_path=review_path,
-        bindings=bindings,
-        reviewer_id=reviewer_id,
-        canonical_task="structure", fragments=fragments
-    )
-    individual = _review_route_objects(
-        snapshot_objects,
-        review_path=review_path,
-        bindings=bindings,
-        reviewer_id=reviewer_id,
-        canonical_task="contextual", fragments=fragments
-    )
-    second_review = _review_route_objects(
-        snapshot_objects,
-        review_path=review_path,
-        bindings=bindings,
-        reviewer_id=reviewer_id,
-        canonical_task="second_review", fragments=fragments
-    )
-    blocked = followups["repair"]
-    normal_passages, normal_batches = (0, 0)
-    if normal_review_enabled:
-        normal_passages, normal_batches = normal_risk_batch_counts(
-            snapshot_objects,
-            review_path=review_path,
-            bindings=bindings, fragments=fragments
-        )
+    koppen = _review_route_objects(snapshot_objects, review_path=review_path,
+        bindings=bindings, reviewer_id=reviewer_id, canonical_task="structure", fragments=fragments)
     copy = _review_lane_copy(review_path, koppen)
-    progress = _review_progress_summary(snapshot_objects)
     if task == "structure":
         if review_path != "boom":
             return f'''
@@ -3441,41 +3161,7 @@ def _render_review_index(
             </form>
           </section>
         '''
-    return _review_task_dashboard(
-        snapshot_id,
-        koppen=koppen,
-        individual=individual,
-        normal_passages=normal_passages,
-        normal_batches=normal_batches,
-        blocked_count=len(blocked),
-        progress=progress,
-        heading_pending_override=len(koppen),
-        heading_total_override=_lane_total(
-            snapshot_objects,
-            review_path=review_path,
-            lane="structure",
-            open_rows=koppen,
-        ),
-        individual_pending_override=len(individual),
-        individual_total_override=_lane_total(
-            snapshot_objects,
-            review_path=review_path,
-            lane="contextual",
-            open_rows=individual,
-        ),
-        second_review_pending=len(second_review),
-        disposition_pending=len(followups["disposition"]),
-        waiting_pending=sum(
-            bool(route and route.get("waiting_for_other_reviewer"))
-            for obj in snapshot_objects
-            for route in [reviewer_route_for(obj, review_path=review_path, reviewer_id=reviewer_id, bindings=bindings, fragments=fragments)]
-        ) if bindings is not None else 0,
-        review_path=review_path,
-        knowledge_open=knowledge_open_count(snapshot_objects, review_path=review_path, bindings=bindings,
-                                            reviewer_id=reviewer_id, fragments=fragments),
-        knowledge_progress=knowledge_progress(snapshot_objects, review_path=review_path),
-        count_scope=count_scope_label(str(document_version or ""), revision=snapshot_revision),
-    )
+    return ""
 
 
 def _render_review_card(
@@ -3604,7 +3290,7 @@ def _render_review_card(
         if draft.get('proposed_correction') else ''
     )
     return f"""
-                <p><a class="btn-secondary" href="{_review_location(console, snapshot_id, task=task)}">← Terug naar taken</a></p>
+                <p><a class="btn-secondary" href="{_review_location(console, snapshot_id, task=task or "contextual")}">← Terug naar kennisvoorstellen</a></p>
                 <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
                     <div class="review-decision-layout">
                     <div class="review-source-column">
@@ -3831,6 +3517,7 @@ def _render_review_room(
     snapshot: tuple[list[dict[str, Any]], str] | None = None,
     read_inputs=None,
     queue_page: int = 1,
+    review_revision: str = "",
 ) -> str:
     chosen = document.strip()
     chosen_object_id = object.strip()
@@ -3895,10 +3582,17 @@ def _render_review_room(
                 audit_signals = list(audit_reader())
         if not chosen_object_id:
             normal_content_html = ""
-            if isinstance(console, ProportionateReviewConsole) and chosen_task == "batch":
+            routes = None
+            if bindings is not None and chosen_task in {"", "contextual", "batch", "second_review"}:
+                routes = {str(row['object_id']): reviewer_route_for(row, review_path=review_path,
+                    reviewer_id=str(account.get('account_id') or ''), bindings=bindings, fragments=fragments)
+                    for row in snapshot_objects}
+            if isinstance(console, ProportionateReviewConsole) and chosen_task in {"", "contextual", "batch", "second_review"}:
                 normal_content_html = render_normal_risk_batch_panel(
                     console, chosen,
-                    snapshot=(snapshot_objects, snapshot_revision),
+                    snapshot=(_review_route_objects(snapshot_objects, review_path=review_path,
+                        bindings=bindings, reviewer_id=str(account.get("account_id") or ""),
+                        canonical_task="batch", fragments=fragments, routes=routes), snapshot_revision),
                     selected_ids=batch_selection or (),
                     include_individual=False,
                     source_inputs=(bindings, fragments),
@@ -3911,12 +3605,10 @@ def _render_review_room(
                 snapshot_revision,
                 normal_content_html=normal_content_html,
                 task=chosen_task,
-                normal_review_enabled=isinstance(console, ProportionateReviewConsole),
                 audit_signals=audit_signals,
                 bindings=bindings,
                 reviewer_id=str(account.get("account_id") or ""), fragments=fragments,
-                document_version=chosen_row.get("version"),
-                page=queue_page,
+                page=queue_page, routes=routes,
             )
         else:
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
@@ -3930,6 +3622,9 @@ def _render_review_room(
                     audit_signals,
                 )
             else:
+                objects_html += '<h2>Kennisvoorstellen beoordelen</h2>'
+                if review_revision and review_revision != snapshot_revision:
+                    objects_html += '<p class="banner warn" data-review-return-changed>De revisie is gewijzigd sinds je naar Vorming ging. Controleer het huidige voorstel en beoordeel deze versie opnieuw.</p>'
                 detail_projection, route = _review_detail_projection(
                     console, account, chosen, obj, snapshot_objects, review_path, read_inputs)
                 context_html = ""
@@ -3968,7 +3663,7 @@ def _render_review_room(
                         )
                     else:
                         objects_html += f"""
-                          <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">← Terug naar taken</a></p>
+                          <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">← Terug naar kennisvoorstellen</a></p>
                           <div class="banner warn">Deze tweede beoordeling moet door een andere onafhankelijke reviewer worden uitgevoerd.</div>
                         """
                 elif chosen_task == "second_review":
@@ -3997,6 +3692,11 @@ def _render_review_room(
                         read_inputs=read_inputs,
                     )
 
+    if chosen_object_id and snapshot_revision:
+        # Lossy navigation evidence only. Never use an incoming origin token as CAS.
+        origin = _esc(urlencode({'review_revision': snapshot_revision}))
+        objects_html = re.sub(r'href="(/source-selection\?[^"#]*)(#[^"]*)?"',
+            lambda m: 'href="' + m[1] + '&amp;' + origin + (m[2] or '') + '"', objects_html)
     empty = '<p class="muted">Nog geen documenten om te reviewen.</p>' if not envelopes else ""
     return _page(
         f"""
@@ -6085,7 +5785,8 @@ def create_console_app(
     def review_source_context(request: Request, snapshot_id: str = Form(...), source_object_id: str = Form(...),
                               role: str = Form(""), target_object_ids: list[str] = Form(default=[]),
                               reason: str = Form(""), command_id: str = Form(""), snapshot_revision: str = Form(""),
-                              source_checked: str = Form(""), return_object_id: str = Form("")) -> Response:
+                              source_checked: str = Form(""), return_object_id: str = Form(""),
+                              review_revision: str = Form("")) -> Response:
         account = _require(request)
         objects = state.snapshot_objects(snapshot_id)
         return_id = return_object_id if any(row["object_id"] == return_object_id for row in objects) else source_object_id
@@ -6107,11 +5808,11 @@ def create_console_app(
                 pair_target = ""
             from src.source_selection_ui_v1 import render_context
             return HTMLResponse(render_context(state, account, snapshot_id, source_object_id,
-                context_target=pair_target, context_mode="source",
+                context_target=pair_target, context_mode="source", review_revision=review_revision,
                 context_draft={"role": role, "reason": reason, "target_object_ids": target_object_ids},
                 context_error=ERROR_COPY.get(exc.code, "Het document is gewijzigd. Controleer je keuzes opnieuw."),
                 ), status_code=409 if exc.code == SNAPSHOT_OBJECT_WRITE_CONFLICT else 400)
-        location = '/source-selection?' + urlencode({'document': snapshot_id, 'object': return_id})
+        location = '/source-selection?' + urlencode({'document': snapshot_id, 'object': return_id, **({'review_revision': review_revision} if review_revision else {})})
         return RedirectResponse(location + "&context_saved=yes#passage-context", status_code=303)
 
     @app.post("/review/context/accept")
@@ -6121,6 +5822,7 @@ def create_console_app(
         object_id: str = Form(...),
         snapshot_revision: str = Form(""),
         return_task: str = Form(""),
+        review_revision: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
         from src.review_passage_read_v1 import resolve_review_revision
@@ -6134,7 +5836,7 @@ def create_console_app(
         safe_task = normalize_review_task(return_task)
         return RedirectResponse(
             '/source-selection?' + urlencode({'document': snapshot_id, 'object': object_id,
-                'task': 'continuation', 'return_task': safe_task, 'continuation_saved': 'yes'}),
+                'task': 'continuation', 'return_task': safe_task, 'continuation_saved': 'yes', **({'review_revision': review_revision} if review_revision else {})}),
             status_code=303,
         )
 

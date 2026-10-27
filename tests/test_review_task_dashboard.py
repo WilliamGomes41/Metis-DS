@@ -22,7 +22,7 @@ def _obj(object_id: str, proposed: str, *, status: str = "needs_review", section
     return materialised_row(row)
 
 
-def test_default_review_page_is_a_clickable_task_dashboard():
+def test_default_review_index_is_one_content_task_without_category_choices():
     objects = [
         _obj("h1", "heading"),
         _obj("r1", "recommendation"),
@@ -32,19 +32,13 @@ def test_default_review_page_is_a_clickable_task_dashboard():
 
     html = _render_review_index("snap-1", objects, "richtlijn", fragments=source_fragments(), bindings=approved_bindings(objects))
 
-    assert "Volgende stap" in html
-    assert "Documentindeling controleren" in html
-    assert "Passages afzonderlijk beoordelen" in html
-    assert "Passages selecteren en bevestigen" in html
-    assert "Ga verder met beoordelen" in html
-    assert 'class="review-task-grid"' in html
-    assert "Een onafhankelijke tweede beoordeling geven" not in html
-    assert "task=repair" not in html
-    assert 'href="/source-selection?document=snap-1&amp;task=structure"' in html
-    assert 'href="/review?document=snap-1&amp;task=contextual"' in html
-    assert 'href="/review?document=snap-1&amp;task=batch"' in html
-    assert "Passage r1." not in html
-    assert "Alle passages en hun afhandeling" not in html
+    assert "Kennisvoorstellen beoordelen" in html
+    assert 'data-content-review-workplace' in html
+    assert 'review-task-grid' not in html
+    assert "Passage r1." in html
+    assert "Passage h1." not in html
+    assert 'task=inventory' in html and 'task=history' in html
+    assert 'task=repair' not in html
 
 
 def test_each_task_view_only_contains_its_own_work():
@@ -62,7 +56,7 @@ def test_each_task_view_only_contains_its_own_work():
     assert "Passage h1." not in individual
     assert "Passage h1." in headings
     assert "Passage r1." not in headings
-    assert "← Terug naar taken" in individual
+    assert "← Terug naar werkvoorraad" in individual
 
 
 def test_control_information_is_secondary_to_review_tasks():
@@ -88,10 +82,10 @@ def test_control_card_highlights_blocked_passages_as_work():
 
     dashboard = _render_review_index("snap-1", [blocked], "richtlijn", fragments=source_fragments(), bindings=approved_bindings([blocked]))
 
-    assert "1 passage is nog niet beschikbaar voor goedkeuring." in dashboard
-    assert "Passages corrigeren" in dashboard
-    assert 'class="review-blocked-notice"' in dashboard
-    assert '/source-selection?document=snap-1&amp;task=repair' in dashboard
+    assert "Geen inhoudelijke beoordeling voor jou beschikbaar" in dashboard
+    assert "Passage b1." not in dashboard
+    assert 'task=inventory' in dashboard
+    assert 'review-blocked-notice' not in dashboard
 
 
 
@@ -158,16 +152,9 @@ def test_review_dashboard_projects_distinct_final_dispositions_and_revision_work
 
     dashboard = _render_review_index("snap-1", objects, "richtlijn", fragments=source_fragments(), bindings=approved_bindings(objects))
 
-    assert "Reviewvoortgang" in dashboard
-    assert "5 van 7 bronpassages afgehandeld" in dashboard
-    assert 'class="review-progress-number">71<span>%</span>' in dashboard
-    assert "<dt>Nog te beoordelen</dt><dd>2</dd>" in dashboard
-    assert "<dt>Goedgekeurd</dt><dd>1</dd>" in dashboard
-    assert "<dt>Afgewezen</dt><dd>1</dd>" in dashboard
-    assert "<dt>Niet opgenomen</dt><dd>1</dd>" in dashboard
-    assert "<strong>1</strong> context" in dashboard
-    assert "<strong>1</strong> onderbouwing" in dashboard
-    assert "<strong>1</strong> herzien na correctie" in dashboard
+    assert 'Kennisvoorstellen beoordelen' in dashboard
+    assert 'Passage pending.' in dashboard and 'Passage revised.' in dashboard
+    assert 'bronpassages afgehandeld' not in dashboard
     assert 'task=history' in dashboard
 
     decisions = _render_review_index(
@@ -346,8 +333,8 @@ def test_dashboard_accounts_for_every_passage_without_hiding_followup_work():
     dashboard = _render_review_index('snap-430', rows, 'richtlijn', fragments=fragments, bindings=approved_bindings(rows))
     inventory = _render_review_index('snap-430', rows, 'richtlijn', task='inventory', fragments=fragments, bindings=approved_bindings(rows))
     followup = _render_review_index('snap-430', rows, 'richtlijn', task='disposition', fragments=fragments, bindings=approved_bindings(rows))
-    assert '6 van 436 bronpassages afgehandeld' in dashboard
-    assert '<dt>Nog te beoordelen</dt><dd>430</dd>' in dashboard
+    assert 'bronpassages afgehandeld' not in dashboard
+    assert 'Kennisvoorstellen beoordelen' in dashboard
     assert inventory.count('data-passage-id=') == 25
     assert followup.count('data-passage-id=') == 25
     for task, expected in (('inventory', {row['object_id'] for row in rows}),
@@ -361,14 +348,15 @@ def test_dashboard_accounts_for_every_passage_without_hiding_followup_work():
             seen.update(ids)
         assert seen == expected
     assert 'Metis heeft nog niet vastgesteld' in followup
-    assert dashboard.count('/source-selection?document=snap-430&amp;task=repair') == 1
+    assert 'task=inventory' in dashboard
+    assert 'task=repair' not in dashboard
     assert rows == before
 
 
 def test_dashboard_counts_passages_without_implying_semantic_or_selected_groups():
     rows = [_obj("d1", "definition"), _obj("d2", "definition")]
-    html = _render_review_index("snap-1", rows, "richtlijn", normal_review_enabled=True, fragments=source_fragments(), bindings=approved_bindings(rows))
-    assert "Passages selecteren en bevestigen" in html
-    assert "2 passages" in html
+    html = _render_review_index("snap-1", rows, "richtlijn", fragments=source_fragments(), bindings=approved_bindings(rows))
+    assert "Kennisvoorstellen beoordelen" in html
+    assert "review-task-grid" not in html
     assert "1 selecties" not in html
 

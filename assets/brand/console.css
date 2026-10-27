@@ -610,10 +610,6 @@ textarea:focus-visible {
   margin: 16px 0 0;
 }
 
-.review-task-dashboard {
-  margin-top: 20px;
-}
-
 .review-progress-overview {
   margin: 0 0 24px;
   padding: 18px 20px;
@@ -730,96 +726,17 @@ textarea:focus-visible {
   font-size: 0.78rem;
   font-weight: 700;
 }
-
-.review-next-step {
-  max-width: 52rem;
-  border: 2px solid var(--water);
-  border-radius: 16px;
-  padding: 22px 24px;
-  background: var(--water-light);
-}
-
-.review-next-step h2,
 .review-task-heading h2,
 .review-task-workspace h2 {
   margin-bottom: 6px;
 }
-
-.review-next-step p:not(.eyebrow),
 .review-task-heading p,
 .review-task-workspace p {
   margin: 0 0 14px;
 }
 
-.review-next-step .btn-primary {
-  display: inline-block;
-  margin-top: 4px;
-}
-
-.review-next-step-complete {
-  border-color: var(--line);
-  background: var(--wit);
-}
-
 .review-task-heading {
   margin: 28px 0 12px;
-}
-
-.review-task-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.review-task-card {
-  display: flex;
-  min-height: 15rem;
-  flex-direction: column;
-  padding: 22px;
-  border: 2px solid var(--line);
-  border-radius: 16px;
-  background: var(--wit);
-  color: var(--text);
-  text-decoration: none;
-  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
-}
-
-.review-task-card:hover {
-  border-color: var(--paars);
-  box-shadow: 0 8px 22px rgba(93, 50, 151, 0.12);
-  transform: translateY(-2px);
-}
-
-.review-task-card:focus-visible {
-  outline: 3px solid var(--paars);
-  outline-offset: 3px;
-}
-
-.review-task-card-title {
-  color: var(--paars);
-  font-family: var(--font-heading);
-  font-size: 1.15rem;
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-.review-task-card-copy {
-  margin: 12px 0;
-  line-height: 1.45;
-}
-
-.review-task-card-status {
-  margin-top: auto;
-  padding-top: 14px;
-  font-weight: 700;
-}
-
-.review-task-card-action {
-  margin-top: 14px;
-  color: var(--paars);
-  font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 0.18em;
 }
 
 .review-control-card {
@@ -1275,13 +1192,6 @@ mark.broncontext-marked {
 }
 
 @media (max-width: 720px) {
-  .review-task-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .review-task-card {
-    min-height: 0;
-  }
 
   .review-control-card {
     grid-template-columns: 1fr;
@@ -1516,7 +1426,6 @@ mark.broncontext-marked {
 .review-document-card .doc-title { color: var(--review-red); font-size: 1.2rem; }
 .review-document-card .meta { margin-bottom: 0; }
 .review-document-card-top,
-.review-work-header,
 .review-management,
 .review-batch-tools {
   display: flex;
@@ -1537,39 +1446,8 @@ mark.broncontext-marked {
   max-width: 72rem;
   background: var(--surface-soft);
 }
-.review-next-step { margin-bottom: 30px; }
-.review-workspace-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 32px;
-  align-items: start;
-}
-.review-work-main, .review-sidebar { min-width: 0; }
-.review-work-header { align-items: end; margin: 0 0 20px; }
-.review-work-header h2 { margin: 0 0 6px; }
-.review-work-header p { margin: 0; max-width: 52rem; color: var(--muted); }
-.review-work-header h2, .review-sidebar h2 { color: var(--text); }
-.review-work-header > .btn-secondary {
-  padding: 6px 0; min-height: 44px; border: 0; border-radius: 0; font-size: 0.875rem;
-}
-.review-task-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
-.review-task-card {
-  min-height: 224px; padding: 24px; background: var(--wit);
-  border: 1px solid var(--line); border-radius: 16px;
-  box-shadow: 0 3px 14px rgba(20, 42, 66, 0.04);
-}
-.review-task-card-title { font-size: 1.125rem; line-height: 1.4; color: var(--text); }
-.review-task-card-copy { color: var(--muted); font-size: 0.94rem; line-height: 1.55; }
-.review-task-card-status { font-size: 0.9rem; }
-.review-task-card-action { text-decoration: none; font-size: 0.9rem; }
-.review-task-card:hover { border-color: var(--paars); }
-.review-task-card:hover .review-task-card-action { text-decoration: underline; }
-.review-sidebar .review-progress-overview { margin: 0; padding: 24px; border: 0; }
-.review-sidebar .review-task-heading h2 { font-size: 1rem; }
 .review-progress-number { font-size: 3rem; font-weight: 750; line-height: 1.1; letter-spacing: -0.04em; color: var(--text); }
 .review-progress-number span { font-size: 1.25rem; margin-left: 3px; letter-spacing: 0; color: var(--muted); }
-.review-sidebar .review-task-heading p { font-size: 0.875rem; color: var(--muted); margin-bottom: 0; }
-.review-sidebar .review-task-heading .review-progress-number { font-size: 3rem; margin: 16px 0 8px; color: var(--text); }
 .review-progress-counts { margin: 20px 0 12px; font-size: 0.875rem; }
 .review-progress-counts > div { display: flex; justify-content: space-between; gap: 16px; margin: 9px 0; }
 .review-progress-counts dt { color: var(--muted); }
@@ -1660,25 +1538,13 @@ mark.broncontext-marked {
   .review-heading-list .review-row-status { grid-column: 2; margin-top: -8px; }
 }
 
-@media (max-width: 1000px) {
-  .review-workspace-layout { grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; }
-  .review-task-grid { grid-template-columns: 1fr; }
-}
+
 @media (max-width: 720px) {
-  .review-workspace-layout { grid-template-columns: 1fr; }
-  .review-task-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .review-sidebar { margin-top: 8px; }
   .review-room > .review-document-card { grid-template-columns: 1fr; }
   .review-room > .review-document-card .review-document-card-top > a { grid-column: 1; grid-row: 4; justify-self: start; margin-top: 8px; }
 }
-@media (max-width: 520px) {
-  .review-task-grid { grid-template-columns: 1fr; }
-  .review-task-card { min-height: 0; padding: 20px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .review-task-card { transition: none; }
-  .review-task-card:hover { transform: none; }
-}
+
+
 
 /* Secondary surfaces previously used fixed light colors. */
 html[data-theme="dark"] .home-tile-badge { background: var(--surface-soft); color: var(--text); }
@@ -1755,39 +1621,6 @@ html[data-theme="dark"] .metis-mark-frame { background: #fff; }
 .context-literal { display: block; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: 400; }
 .passage-context textarea { width: 100%; min-height: 90px; }
 .passage-context a { overflow-wrap: anywhere; }
-
-/* Review overview per kind (presentation only) */
-.review-count-scope {
-  margin: 0 0 12px;
-  color: var(--muted);
-  font-size: .9rem;
-}
-.review-layer {
-  margin: 0 0 16px;
-  padding: 12px 0 0;
-  border-top: 1px solid var(--line);
-}
-.review-layer > summary {
-  cursor: pointer;
-  font-weight: 600;
-}
-.review-group {
-  margin: 0 0 12px;
-}
-.review-group-lead,
-.review-group-count {
-  color: var(--muted);
-}
-.review-open-work-ratio {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.review-open-work-ratio progress,
-.review-layer progress {
-  flex: 1 1 auto;
-  max-width: 320px;
-}
 .source-category-tiles {
   display: flex;
   flex-wrap: wrap;
@@ -2386,56 +2219,9 @@ details.review-document-card { border-left: 1px solid var(--line); background: v
 .review-task-back,
 .review-room > p > a.btn-secondary[href*="document="]:only-child { margin: 0 0 var(--space-5); }
 
-/* Overview: groups breathe, counts sit beside their label. */
-.review-next-step { margin: 0 0 var(--space-7); }
-.review-work-header { margin: 0 0 var(--space-4); }
-.review-count-scope { margin: 0 0 var(--space-5); color: var(--muted); font-size: 0.85rem; }
-.review-layer { margin: 0 0 var(--space-6); padding: var(--space-4) 0 0; }
-.review-layer > h3 { margin: 0 0 var(--space-4); }
-.review-group {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: center;
-  column-gap: var(--space-3);
-  row-gap: var(--space-2);
-  margin: 0 0 var(--space-6);
-}
-.review-group > * { grid-column: 1 / -1; margin: 0; }
-.review-group > h4 { grid-column: 1; margin: 0; }
-.review-group > .review-group-count {
-  grid-column: 2;
-  justify-self: start;
-  min-width: 1.75rem;
-  padding: 1px 10px;
-  border-radius: 999px;
-  background: var(--water-soft);
-  color: var(--text);
-  font-weight: 700;
-  text-align: center;
-}
-.review-group-lead { color: var(--muted); max-width: 60ch; }
-.review-group progress,
-.review-open-work-ratio progress {
-  appearance: none;
-  width: 100%;
-  max-width: 24rem;
-  height: 8px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--line);
-  overflow: hidden;
-}
-.review-group progress::-webkit-progress-bar,
-.review-open-work-ratio progress::-webkit-progress-bar { background: var(--line); border-radius: 999px; }
-.review-group progress::-webkit-progress-value,
-.review-open-work-ratio progress::-webkit-progress-value { background: var(--paars); border-radius: 999px; }
-.review-group progress::-moz-progress-bar,
-.review-open-work-ratio progress::-moz-progress-bar { background: var(--paars); border-radius: 999px; }
-.review-task-grid:empty { display: none; }
-.review-task-card { min-height: 0; display: grid; gap: var(--space-2); }
+/* Overview: groups breathe{ margin: 0 0 var(--space-7); }
 .review-room details > summary { padding-block: 12px; cursor: pointer; }
 .review-room .task-secondary-nav a { display: inline-flex; align-items: center; min-height: 44px; }
-.review-sidebar .review-progress-overview { padding: var(--space-5); }
 .review-room > p:last-child { margin-top: var(--space-6); }
 
 /* Passage review: source on the left as reading text, a calm decision rail on the right. */

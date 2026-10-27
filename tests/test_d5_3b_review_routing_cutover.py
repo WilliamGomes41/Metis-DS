@@ -290,7 +290,8 @@ def test_second_review_http_surface_is_read_only_for_canonical_semantics(tmp_pat
 
     lane = client.get(f"/review?document={snapshot_id}&task=second_review")
     assert lane.status_code == 200
-    assert "Tweede beoordelingen" in lane.text
+    assert "Kennisvoorstellen beoordelen" in lane.text
+    assert "Onafhankelijke tweede beoordeling" in lane.text
     assert f"object={object_id}" in lane.text
     assert "task=second_review" in lane.text
 
@@ -317,7 +318,7 @@ def test_legacy_individual_url_redirects_into_contextual_surface(tmp_path: Path,
 
     response = client.get(f"/review?document={snapshot_id}&task=individual")
     assert response.status_code == 200
-    assert "In samenhang" in response.text or "Passages afzonderlijk beoordelen" in response.text
+    assert "Kennisvoorstellen beoordelen" in response.text
     assert "task=individual" not in response.text
 
 

@@ -902,7 +902,7 @@ def render_repair(console, request: Request, submission: dict[str, Any], *, repa
     submission.setdefault("suitability", {REPAIR_SOURCE_UNITS: "mist_context", REPAIR_MERGE_OBJECTS: "samenvoegen",
         REPAIR_SUPPORT_RELATION: "alleen_onderbouwing", REPAIR_CLASSIFICATION: "ja"}[kind])
     overview = "/source-selection?" + urlencode({"document": sid})
-    review = "/review?" + urlencode({"document": sid, "object": oid})
+    review = "/review?" + urlencode({"document": sid, "object": oid, **({"review_revision": submission["review_revision"]} if submission.get("review_revision") else {})})
     notice = ('<p class="banner ok" role="status">Het nieuwe voorstel is opgeslagen. Beoordeel de huidige versie opnieuw in Review.</p>' if saved else '')
     lead = ('Je ziet de huidige opgeslagen passage. Een volgende correctie maakt opnieuw een voorstel voor beoordeling.'
             if saved else 'Er is nog niets gewijzigd. Bevestigen maakt een nieuw voorstel voor beoordeling.')
@@ -913,7 +913,7 @@ def render_repair(console, request: Request, submission: dict[str, Any], *, repa
         '<p><b>Huidige passage:</b> ' + _esc((focal.get("content") or {}).get("clean_text")) + '</p>')
     body += ui._broncontext_html(focal, sid, oid, inputs.source_available if kind == REPAIR_CLASSIFICATION else True)
     body += '<nav aria-label="Soort correctie">' + ' · '.join(
-        '<a href="' + _esc('/source-selection?' + urlencode(dict(document=sid, object=oid, task='repair', repair_kind=k))) + '">' + label + '</a>'
+        '<a href="' + _esc('/source-selection?' + urlencode(dict(document=sid, object=oid, task='repair', repair_kind=k, **({'review_revision': submission['review_revision']} if submission.get('review_revision') else {})))) + '">' + label + '</a>'
         for k, label in [(REPAIR_SOURCE_UNITS, 'Bronpassage kiezen'), (REPAIR_MERGE_OBJECTS, 'Passages samenvoegen'),
                          (REPAIR_SUPPORT_RELATION, 'Onderbouwing verbinden'), (REPAIR_CLASSIFICATION, 'Type of plaats corrigeren')]) + '</nav>'
     if error:
@@ -940,6 +940,8 @@ def render_repair(console, request: Request, submission: dict[str, Any], *, repa
             "suitability": submission.get("suitability"),
             "repair_kind": repair_kind,
         }
+        if submission.get("review_revision"):
+            values["review_revision"] = submission["review_revision"]
         if repair_kind != REPAIR_CLASSIFICATION:
             values.update({name: submission.get(name) for name in (
                 "confirmed_object_type", "recommendation_strength", "documentpositie_action",
@@ -1120,9 +1122,10 @@ def install_deterministic_review_repair_routes(app: FastAPI, console: Determinis
         parent_choice: str = Form(""),
         type_action: str = Form(""),
         source_discrepancy: list[str] = Form(default=[]),
+        review_revision: str = Form(""),
     ) -> RedirectResponse:
         account = account_for(request)
-        submission = dict(snapshot_id=snapshot_id, object_id=object_id, expected_revision=snapshot_revision,
+        submission = dict(review_revision=review_revision, snapshot_id=snapshot_id, object_id=object_id, expected_revision=snapshot_revision,
             suitability=suitability, comment=comment, repair_kind=repair_kind, source_unit_ids=list(source_unit_ids or []),
             merge_object_ids=list(merge_object_ids or []), claim_object_id=claim_object_id, proposed_correction=proposed_correction,
             confirmed_object_type=confirmed_object_type, recommendation_strength=recommendation_strength,
@@ -1156,4 +1159,4 @@ def install_deterministic_review_repair_routes(app: FastAPI, console: Determinis
                 raise
             return HTMLResponse(render_repair(console, request, submission, repair_kind=repair_kind, error=exc.code), status_code=400)
         return RedirectResponse('/source-selection?' + urlencode(dict(document=snapshot_id, object=object_id,
-            task='repair', repair_saved='yes')), status_code=303)
+            task='repair', repair_saved='yes', **({'review_revision': review_revision} if review_revision else {}))), status_code=303)

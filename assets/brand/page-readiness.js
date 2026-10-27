@@ -9,7 +9,7 @@
       '/': ['navigation_available', '.home-tiles a[href="/ingest"]'],
       '/ingest': ['upload_form_available', 'form[action="/ingest"] input[type="file"]'],
       '/source-selection': ['document_choice_and_status', '#source-document'],
-      '/review': ['review_inventory_or_empty', '.review-passage-inventory, .review-task-card, .review-empty, .doc-list .doc-card'],
+      '/review': ['review_inventory_or_empty', '.review-passage-inventory, [data-content-review-workplace], [data-review-form], .second-review-card, [data-personal-group], [data-personal-empty], .review-empty, .doc-list .doc-card'],
       '/publish': ['publication_inventory_or_empty', '.doc-list .doc-card, .doc-list > p'],
       '/tree': ['document_inventory_or_empty', '#documents .document-row, #documents .document-empty'],
       '/formation-problems': ['formation_problem_access_available', '#formation-problems'],
