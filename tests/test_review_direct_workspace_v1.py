@@ -182,6 +182,49 @@ def test_task_page_returns_to_selected_document(monkeypatch):
     assert "Terug naar documenten" in response.text
 
 
+def test_queue_navigation_does_not_backtrack_over_incomplete_hrefs():
+    """Exercise the HTTP post-render path with CodeQL's repeated-token input."""
+    import subprocess
+    import sys
+    import textwrap
+
+    script = textwrap.dedent('''
+        from unittest.mock import patch
+        from tests.test_review_direct_workspace_v1 import Console, client, document
+
+        rendered = 'href="/review?' + 'queue_page=' * 50000
+        console = Console(documents=[('one', document('One'))])
+        with patch('src.review_workboard_v1._render_review_room', return_value=rendered):
+            response = client(console).get('/review', params={
+                'document': 'one', 'task': 'history', 'q': 'keep', 'page': 2})
+        assert response.status_code == 200
+        assert response.text == rendered
+    ''')
+    # A separate process makes a regression terminate even while re holds the GIL.
+    subprocess.run([sys.executable, '-c', script], check=True, timeout=5,
+                   capture_output=True)
+
+
+def test_queue_navigation_only_updates_complete_queue_links(monkeypatch):
+    from html import unescape
+    from urllib.parse import parse_qs, urlsplit
+
+    ordinary = '<a href="/review?document=one">Document</a>'
+    queue = '<a href="/review?document=one&amp;queue_page=2">Volgende</a>'
+    monkeypatch.setattr('src.review_workboard_v1._render_review_room',
+                        lambda *args, **kwargs: ordinary + queue)
+    console = Console(documents=[('one', document('One'))])
+    response = client(console).get('/review', params={
+        'document': 'one', 'task': 'history', 'q': 'zorg & huid',
+        'page': 3, 'theme': 'huid'})
+    assert response.status_code == 200
+    assert response.text.startswith(ordinary)
+    href = unescape(response.text.split('href="')[2].split('"')[0])
+    assert parse_qs(urlsplit(href).query) == {
+        'document': ['one'], 'queue_page': ['2'],
+        'q': ['zorg & huid'], 'page': ['3'], 'theme': ['huid']}
+
+
 def test_historical_heading_task_navigates_without_rendering_or_writing(monkeypatch):
     console = Console(documents=[('two', document('Two'))])
     before = deepcopy(console.documents)

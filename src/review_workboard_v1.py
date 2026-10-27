@@ -960,8 +960,11 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             back += '&' + urlencode({'theme': theme})
         if q or page != 1 or theme:
             suffix = _esc(urlencode({'q': q, 'page': page, 'theme': theme}))
-            rendered = re.sub(r'href="(/review\?[^"\n]*queue_page=[^"\n]*)"',
-                lambda match: f'href="{match[1]}&amp;{suffix}"', rendered)
+            # Match each complete attribute once; overlapping wildcards around
+            # queue_page can backtrack quadratically on an unterminated href.
+            rendered = re.sub(r'href="(/review\?[^"\n]*)"',
+                lambda match: (f'href="{match[1]}&amp;{suffix}"'
+                               if 'queue_page=' in match[1] else match[0]), rendered)
         return rendered.replace(
             '<a class="btn-secondary" href="/review">Ander document kiezen</a>',
             f'<a class="btn-secondary" href="{_esc(back)}">Terug naar documenten</a>',

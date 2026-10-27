@@ -149,3 +149,46 @@ affected modules plus native Review, passage, stale-command, batch and unchanged
 characterization coverage pass: **114 passed, no skips** (Python 3.12,
 PostgreSQL 16.2). Production code is unchanged in this CI correction. Final
 Python 3.12/3.13 CI results must be checked on the new pushed head.
+
+## CodeQL navigation follow-up
+
+The earlier green Actions suites did not establish that every PR review finding
+was resolved. CodeQL comment `discussion_r4384100431` identified overlapping
+wildcards in the post-render queue-link expression. This is a separate defect
+from the original production latency: none of the uploaded slow requests ran
+the PR revision, and no production occurrence of this malformed-link case is
+established.
+
+Class B, rewrite risk none. The existing authenticated GET owner still captures
+and renders Review, then preserves document-return filters on queue links. Only
+that temporary HTML postprocessing changes; source validation, selection,
+authorization, revisions, commands and durable state remain unchanged.
+
+The HTTP regression supplies an unterminated href with repeated `queue_page=`
+tokens at the renderer boundary. Before repair, filtered requests with 1,000,
+2,000 and 4,000 tokens take 0.063, 0.250 and 0.924 seconds; the same unfiltered
+requests take 0.002–0.014 seconds. The 50,000-token regression exceeds its
+five-second child-process deadline. These observations distinguish expression
+backtracking from HTTP/setup cost. Tests require local loopback access; an
+earlier sandbox-blocked run is excluded from the measurements.
+
+Match a complete href once, then check queue membership with a string search.
+The same HTTP inputs after repair take approximately 0.003 seconds for 2,000
+and 4,000 tokens, and 0.013 seconds for 50,000 tokens. The bounded subprocess
+regression passes; an additional HTTP control preserves ordinary links and
+checks exact decoded queue/document/search/page/theme parameters. Existing
+native PostgreSQL navigation coverage remains required.
+
+Verification on the repaired tree: all three affected workspace, native document
+read/performance and source-reuse modules pass (**45 passed, no skips**), including
+the original malformed-link regression and real queue navigation with retained
+filters. Repository/release preflights, architecture boundaries, compileall and
+diff whitespace checks pass. An external CodeQL rescan is still required; local
+regressions are not evidence that GitHub has closed the alert.
+
+The production diagnosis remains blocked on an exact authenticated request and
+current runtime identity. The uploaded export has four successful slow Review
+requests on `96b22c1`; it contains neither task/query parameters nor replayable
+document objects. The configured environment exposes no Azure identity or
+authenticated application session. Do not substitute this regex reproduction
+or a synthetic fixture for replaying the original production symptom.
