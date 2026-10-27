@@ -199,6 +199,6 @@ def test_individual_review_surface_orders_focus_before_secondary_across_duty_lan
         [summary_recommendation, focus_unclassified],
         "richtlijn",
         task="individual",
-        normal_review_enabled=False, fragments=source_fragments())
+        fragments=source_fragments())
 
     assert html.index("Conclusies") < html.index("Samenvatting")

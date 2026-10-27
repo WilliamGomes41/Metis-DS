@@ -3077,14 +3077,14 @@ def _render_review_index(
     snapshot_objects: list[dict[str, Any]],
     review_path: str,
     snapshot_revision: str = "",
-    normal_content_html: str = "",
     task: str = "",
     audit_signals: list[dict[str, Any]] | None = None,
     bindings: list[dict[str, Any]] | None = None,
     reviewer_id: str = "",
     fragments=None,
     page: int = 1,
-    routes=None,
+    console: OperationsConsole | None = None,
+    batch_selection=None,
 ) -> str:
     task = normalize_review_task(task)
     bindings = list(bindings) if bindings is not None else None
@@ -3093,6 +3093,20 @@ def _render_review_index(
                                  bindings=bindings, reviewer_id=reviewer_id, task=task,
                                  snapshot_revision=snapshot_revision, fragments=fragments, page=page)
     if task in {"", "contextual", "batch", "second_review"}:
+        # This existing renderer owns all presentations of the one content task.
+        routes = None
+        if bindings is not None:
+            routes = {str(row['object_id']): reviewer_route_for(row, review_path=review_path,
+                reviewer_id=reviewer_id, bindings=bindings, fragments=fragments)
+                for row in snapshot_objects}
+        normal_content_html = ""
+        if isinstance(console, ProportionateReviewConsole):
+            normal_content_html = render_normal_risk_batch_panel(console, snapshot_id,
+                snapshot=(_review_route_objects(snapshot_objects, review_path=review_path,
+                    bindings=bindings, reviewer_id=reviewer_id, canonical_task="batch",
+                    fragments=fragments, routes=routes), snapshot_revision),
+                selected_ids=batch_selection or (), include_individual=False,
+                source_inputs=(bindings, fragments), page=page)
         panels = []
         for lane, title in (("contextual", "Voorstellen met een eigen oordeel"),
                             ("second_review", "Onafhankelijke tweede beoordeling")):
@@ -3519,6 +3533,7 @@ def _render_review_room(
     queue_page: int = 1,
     review_revision: str = "",
 ) -> str:
+    reviewer_id = str(account.get("account_id") or "")
     chosen = document.strip()
     chosen_object_id = object.strip()
     chosen_task = normalize_review_task(task)
@@ -3581,34 +3596,16 @@ def _render_review_room(
             if callable(audit_reader):
                 audit_signals = list(audit_reader())
         if not chosen_object_id:
-            normal_content_html = ""
-            routes = None
-            if bindings is not None and chosen_task in {"", "contextual", "batch", "second_review"}:
-                routes = {str(row['object_id']): reviewer_route_for(row, review_path=review_path,
-                    reviewer_id=str(account.get('account_id') or ''), bindings=bindings, fragments=fragments)
-                    for row in snapshot_objects}
-            if isinstance(console, ProportionateReviewConsole) and chosen_task in {"", "contextual", "batch", "second_review"}:
-                normal_content_html = render_normal_risk_batch_panel(
-                    console, chosen,
-                    snapshot=(_review_route_objects(snapshot_objects, review_path=review_path,
-                        bindings=bindings, reviewer_id=str(account.get("account_id") or ""),
-                        canonical_task="batch", fragments=fragments, routes=routes), snapshot_revision),
-                    selected_ids=batch_selection or (),
-                    include_individual=False,
-                    source_inputs=(bindings, fragments),
-                    page=queue_page,
-                )
             objects_html += _render_review_index(
                 chosen,
                 snapshot_objects,
                 review_path,
                 snapshot_revision,
-                normal_content_html=normal_content_html,
                 task=chosen_task,
                 audit_signals=audit_signals,
                 bindings=bindings,
-                reviewer_id=str(account.get("account_id") or ""), fragments=fragments,
-                page=queue_page, routes=routes,
+                reviewer_id=reviewer_id, fragments=fragments,
+                page=queue_page, console=console, batch_selection=batch_selection,
             )
         else:
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
@@ -3629,7 +3626,7 @@ def _render_review_room(
                     console, account, chosen, obj, snapshot_objects, review_path, read_inputs)
                 context_html = ""
                 if ('reviewer' in (account.get('roles') or [])
-                        and str(account.get('account_id') or '') in chosen_row.get('named_reviewers', [])
+                        and reviewer_id in chosen_row.get('named_reviewers', [])
                         and not console.snapshot_is_published(chosen)):
                     context_html = _source_context_panel(obj, snapshot_objects, chosen, snapshot_revision,
                         context_target=context_target, source_mode=context_mode == "source",
@@ -3657,7 +3654,7 @@ def _render_review_room(
                             obj,
                             snapshot_objects,
                             review_path,
-                            reviewer_id=str(account.get("account_id") or ""),
+                            reviewer_id=reviewer_id,
                             snapshot_revision=snapshot_revision,
                             read_inputs=read_inputs,
                         )
@@ -3673,7 +3670,7 @@ def _render_review_room(
                         obj,
                         snapshot_objects,
                         review_path,
-                        reviewer_id=str(account.get("account_id") or ""),
+                        reviewer_id=reviewer_id,
                         snapshot_revision=snapshot_revision,
                         read_inputs=read_inputs,
                     )

@@ -129,3 +129,10 @@ alleen de base per-objectlus bekijken was onvoldoende. De buitenste
 productietransactie. `tests/test_review_batch_atomic_postgres.py` bewijst native
 rollback, herstart en stale replay. Geen productcode of transactie is hiervoor
 gewijzigd; de bestaande legacy-foutrendering blijft behouden.
+
+De complexiteitscontrole op de buitenste roomrenderer blijft ongewijzigd.
+De bestaande _render_review_index bezit daarom zelf de actorprojectie én
+batchpresentatie, in plaats van extra coördinatie in _render_review_room.
+Dit verdiept de bestaande presentatieresponsibility, zonder nieuwe helper,
+reader, writer of route. De karakteriseringen en native call-countproef
+bewaken identieke uitvoer en één actorberekening per object.

@@ -335,7 +335,8 @@ def test_koppen_and_inhoud_stacks_show_counts(tmp_path: Path, *, production_app,
     assert "Documentindeling controleren" not in dashboard
     assert "Passages afzonderlijk beoordelen" not in dashboard
     assert "review-lane-fast" in headings
-    assert "review-lane-slow" in individual
+    assert "data-content-review-workplace" in individual
+    assert 'class="review-normal-risk"' in individual  # Batch is a presentation within this same task.
     assert "/review/headings/batch-confirm" in headings
     assert "review-task-dashboard" not in dashboard
     assert "unclassified" not in (dashboard + headings + individual).casefold()
