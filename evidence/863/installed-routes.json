@@ -1,0 +1,16 @@
+{
+  "/source-selection/start": "src.source_selection_ui_v1:install.<locals>.selection_start",
+  "/review/resolve": "src.deterministic_review_repair_v1:install_deterministic_review_repair_routes.<locals>.resolve_review",
+  "/review/source-context": "src.operations_console_app:create_console_app.<locals>.review_source_context",
+  "/review/source-exclusions": "src.operations_console_app:create_console_app.<locals>.review_source_exclusions",
+  "/review/headings/batch-confirm": "src.review_workboard_v1:install_review_workboard.<locals>.review_headings_batch_confirm",
+  "/tree/processing-recovery": "src.operations_console_app:create_console_app.<locals>.tree_processing_recovery",
+  "/inzicht/document/pagina-verantwoorden": "src.operations_console_app:create_console_app.<locals>.account_source_page",
+  "/review": "src.operations_console_app:create_console_app.<locals>.review_post",
+  "/review/normal-risk/batch-confirm": "src.proportionate_review_v1:install_proportionate_review_routes.<locals>.batch_confirm",
+  "/review/second-review": "src.operations_console_app:create_console_app.<locals>.second_review_post",
+  "/review/decision-graph": "src.decision_review_ui_v1:install_decision_review_routes.<locals>.graph_post",
+  "/review/decision-passage": "src.decision_review_ui_v1:install_decision_review_routes.<locals>.passage_post",
+  "/review/context/accept": "src.operations_console_app:create_console_app.<locals>.review_context_accept",
+  "/review/relations": "src.operations_console_app:create_console_app.<locals>.review_relations_post"
+}
