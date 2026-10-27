@@ -1,0 +1,46 @@
+{
+  "baseline": "efed882c8f2bef850ea2aff47d744214b83131c8",
+  "evaluated_revision": "7adbac56f17ae9fd0e278248240f04093beab00c",
+  "fixture": "personal_review_fixture_support.prepare: five documents, actor A",
+  "comparison_boundary": "historical Python presentation above identical current native backend",
+  "measurements": {
+    "baseline": {
+      "calls": {
+        "accounts": 1,
+        "bindings": 1,
+        "enrich": 1,
+        "events": 1,
+        "objects_batch": 1,
+        "source_fragments": 5,
+        "summaries": 1
+      },
+      "db": {
+        "connections": 13,
+        "queries": 13,
+        "json_bytes": 219835
+      }
+    },
+    "current": {
+      "calls": {
+        "bindings": 1,
+        "enrich": 1,
+        "events": 1,
+        "objects_batch": 1,
+        "source_fragments": 5,
+        "summaries": 1
+      },
+      "db": {
+        "connections": 12,
+        "queries": 12,
+        "json_bytes": 219823
+      }
+    }
+  },
+  "durable_state_unchanged": true,
+  "working_source_diff_sha256": "98bcfaefbb3c3d507a85a8a0485f837a16f8b977a60ca3ef17daffba7798ff43",
+  "environment": {
+    "python": "3.13.5",
+    "postgres": "17.11",
+    "transport": "native PostgreSQL; synthetic source/model fixtures"
+  }
+}

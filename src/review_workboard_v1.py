@@ -693,13 +693,19 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             params = {'document': document, 'object': object.strip(),
                       'context_target': context_target, 'context_mode': context_mode,
                       'context_page': context_page, 'context_q': context_q}
+            if review_revision:
+                params['review_revision'] = review_revision
             return RedirectResponse('/source-selection?' + urlencode(params) + '#passage-context',
                                     status_code=303)
         chosen_task = normalize_review_task(task)
         if document and chosen_task == 'repair':
             if 'reviewer' not in account.get('roles', []) or account['account_id'] not in console._envelope(document)['named_reviewers']:
                 raise ConsoleError('reviewer_not_named_on_snapshot')
-            return RedirectResponse('/source-selection?' + urlencode(dict(document=document, object=object, task='repair')), status_code=303)
+            params = dict(document=document, object=object, task='repair')
+            for field in ('repair_kind', 'review_revision'):
+                if value := request.query_params.get(field):
+                    params[field] = value
+            return RedirectResponse('/source-selection?' + urlencode(params), status_code=303)
         read_inputs = None
         if document and object.strip() and chosen_task != 'history':
             from src.review_passage_read_v1 import read_review_passage
