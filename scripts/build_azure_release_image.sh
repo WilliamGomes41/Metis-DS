@@ -44,8 +44,10 @@ context="$(mktemp -d)"
 trap 'rm -rf "${context}"' EXIT
 git -C "${ROOT}" archive "${commit}" | tar -x -C "${context}"
 printf '%s\n' "${commit}" > "${context}/config/deployed_commit.txt"
-PYTHONPATH="${ROOT}${PYTHONPATH:+:${PYTHONPATH}}" "${PYTHON:-python3}" "${ROOT}/scripts/stamp_console_release.py" \
-  --source "${ROOT}" --target "${context}" --commit "${commit}"
+if [ -f "${context}/src/console_release_v1.py" ]; then
+  PYTHONPATH="${ROOT}${PYTHONPATH:+:${PYTHONPATH}}" "${PYTHON:-python3}" "${ROOT}/scripts/stamp_console_release.py" \
+    --source "${ROOT}" --target "${context}" --commit "${commit}"
+fi
 image="${repository}:${commit}"
 
 echo "release_image_commit=${commit}"

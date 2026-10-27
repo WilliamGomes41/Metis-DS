@@ -137,3 +137,44 @@ def test_local_sign_in_is_the_same_form_on_both_entry_points(production_app):
             assert page.status_code == 200
             assert 'action="/login"' in page.text and 'type="password"' in page.text
             assert 'href="/auth/microsoft"' not in page.text
+
+
+def test_container_builder_preserves_legacy_rebuild_and_requires_new_metadata(tmp_path):
+    """Exercise the actual shell route without Azure or an image build."""
+    import sys
+    repo = Path(__file__).resolve().parents[1]
+    source = tmp_path / "source"
+    source.mkdir()
+    def git(*args):
+        return subprocess.run(["git", *args], cwd=source, check=True, capture_output=True, text=True).stdout.strip()
+    git("init", "-b", "main")
+    git("config", "user.email", "test@example.invalid")
+    git("config", "user.name", "Build test")
+    git("remote", "add", "origin", str(source))
+    (source / "config").mkdir()
+    (source / "config/legacy.json").write_text("{}")
+    git("add", ".")
+    git("commit", "-m", "before version tracking")
+    legacy = git("rev-parse", "HEAD")
+    for name in ("scripts/build_azure_release_image.sh", "scripts/stamp_console_release.py",
+                 "src/console_release_v1.py", "config/console_release.json"):
+        target = source / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(repo / name, target)
+    git("add", ".")
+    git("commit", "-m", "version tracking")
+    current = git("rev-parse", "HEAD")
+    import os
+    def build(commit):
+        return subprocess.run(["bash", str(source / "scripts/build_azure_release_image.sh"),
+                               "--registry", "fixture", "--repository", "metis", "--commit", commit, "--dry-run"],
+                              cwd=source, env={**os.environ, "PYTHON": sys.executable}, capture_output=True, text=True)
+    for commit in (legacy, current):
+        result = build(commit)
+        assert result.returncode == 0, result.stderr
+        assert "release_image_dry_run" in result.stdout
+    # A malformed new release must fail; only genuinely old code skips stamping.
+    (source / "config/console_release.json").unlink()
+    git("add", ".")
+    git("commit", "-m", "broken new release")
+    assert build(git("rev-parse", "HEAD")).returncode != 0
