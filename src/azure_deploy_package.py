@@ -534,7 +534,10 @@ def write_deploy_zip(
             shutil.copy2(src, dest)
         marker = stage / DEPLOY_COMMIT_MARKER
         marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text(git_head_commit(root) + "\n", encoding="utf-8")
+        commit = git_head_commit(root)
+        marker.write_text(commit + "\n", encoding="utf-8")
+        from scripts.stamp_console_release import stamp_release
+        stamp_release(root, stage, commit)
         vendor = stage / ".python_packages"
         vendor.mkdir(parents=True, exist_ok=True)
         _install_azure_dependency_graph(

@@ -20,6 +20,7 @@ from src.operations_console_app import _page
     [
         ("/login", "dark", True, "light"),
         ("/login", None, True, "light"),
+        ("/", "dark", True, "light"),
         ("/review", "dark", False, "dark"),
         ("/review", "light", True, "light"),
         ("/review", None, True, "dark"),
@@ -27,7 +28,7 @@ from src.operations_console_app import _page
 )
 def test_login_theme_preserves_console_preference(path, saved, system_dark, expected):
     # Execute the actual head initializer; deny preference access on login.
-    page = _page("<h1>Aanmelden</h1>")
+    page = _page("<h1>Aanmelden</h1>", light=path == "/")
     script = re.search(r"<script>([\s\S]*?)</script>", page).group(1)
     payload = json.dumps(dict(script=script, path=path, saved=saved, system_dark=system_dark))
     runner = r"""
@@ -55,4 +56,4 @@ process.stdout.write(JSON.stringify({theme: document.documentElement.dataset.the
     )
     actual = json.loads(result.stdout)
     assert actual["theme"] == expected
-    assert actual["reads"] == (0 if path == "/login" else 1)
+    assert actual["reads"] == (0 if path in {"/login", "/"} else 1)

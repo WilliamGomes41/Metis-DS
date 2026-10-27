@@ -66,7 +66,7 @@ def _result_html(report: dict[str, Any]) -> str:
       <p>{verdict}</p>
       <details><summary>Technische testdetails</summary>
         <p>suite <b>{_esc(report.get("suite_id"))}</b> · hash {_esc(report.get("suite_hash"))}</p>
-        <p>model <b>{_esc(report.get("model"))}</b> · baseline <b>{_esc(report.get("suite_baseline_commit"))}</b> · deployment <b>{_esc(report.get("deployed_commit"))}</b></p>
+        <p>model <b>{_esc(report.get("model"))}</b> · baseline <b>{_esc(report.get("suite_baseline_commit"))}</b> · buildreferentie <b>{_esc(report.get("deployed_commit"))}</b></p>
         <p><b>{"Machinecheck PASS" if report.get("machine_safety_pass") else "Menselijke beoordeling vereist"}</b></p>
       </details>
       <h2>Veiligheidscases</h2>
@@ -98,6 +98,7 @@ def install_semantic_safety_routes(
         return account
 
     def page(account: dict[str, Any], *, error: str = "", result: str = "") -> HTMLResponse:
+        from src.console_release_v1 import console_release
         suite = load_frozen_safety_suite(SUITE_PATH)
         provider = load_llm_provider_config()
         commit = deployed_commit()
@@ -115,7 +116,8 @@ def install_semantic_safety_routes(
           <article class="doc-card">
             <p><b>Suite</b> {_esc(suite["suite_id"])}</p>
             <p><b>Vaste baseline</b> {_esc(suite["evaluated_baseline_commit"])}</p>
-            <p><b>Deployment</b> {_esc(commit or "Niet beschikbaar")}</p>
+            <p><b>Versie</b> {_esc(console_release()['version'] or "Niet beschikbaar")}</p>
+            <details><summary>Technische buildreferentie</summary><code>{_esc(commit or "Niet beschikbaar")}</code></details>
             <p><b>Model</b> {_esc(provider.model or "Niet geconfigureerd")}</p>
             <p><b>Cases</b> {len(suite["cases"])}</p>
           </article>
