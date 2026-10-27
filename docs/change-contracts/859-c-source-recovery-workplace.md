@@ -22,8 +22,12 @@ Vorming heeft in zijn geselecteerde detail na `collect` de volledige request-env
 `formation_problems_v1.collect(...)[processing]`. Hergebruik deze invoer zonder
 extra statuslezing. De compacte lijstrow bevat niet alle attemptdiagnostiek;
 gebruik de al door `collect` geladen volledige envelope via dezelfde `_envelope`. De bestaande paginaweergave verhuist naar
-`source_selection_ui_v1` als pure renderer: read-only standaard, expliciet
+`source_selection_ui_v1` met read-only als standaard, expliciet
 bewerkbaar uitsluitend bij Vorming. Inzicht gebruikt dezelfde read-only weergave.
+De bestaande `set_aside_pages`-bewijspreparatie blijft uitsluitend bij de
+read-only Inzicht-weergave; Vorming laadt de geaccepteerde extractie daarvoor
+niet opnieuw. De bestaande één-`stored_extraction`-grens blijft toetsbaar met
+`test_source_selection_selected_document_runs_full_check_only_for_it`.
 Beide POSTs blijven direct hun huidige command aanroepen. Foutpresentatie gebruikt
 dezelfde pure formulierweergave met tijdelijke escaped invoer; geen duurzame UI-status.
 

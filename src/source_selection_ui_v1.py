@@ -56,10 +56,14 @@ def _source_pages_html(envelope: dict, diagnostic: dict, document: str, *, edita
                      '<p>Verantwoord alleen een pagina zonder kennisinhoud in Vorming. Start daarna de verwerking opnieuw.</p>'
                      '<table><thead><tr><th>Pagina</th><th>Probleem</th><th>Herstelactie</th><th>Verantwoorden</th></tr></thead>'
                      f'<tbody>{"".join(rows)}</tbody></table></section>')
-    try:
-        left_out = set_aside_pages(envelope)
-    except (DoclingError, ConsoleError):
-        left_out = []
+    # Accepted-extraction evidence belongs to Inzicht. Vorming only needs
+    # current findings/accountings; reading it here would repeat collect's read.
+    left_out = []
+    if not editable:
+        try:
+            left_out = set_aside_pages(envelope)
+        except (DoclingError, ConsoleError):
+            left_out = []
     if left_out:
         labels = {"pdf_page_without_content": "leeg volgens de PDF", "recorded_accounting": "verantwoord"}
         listed = "; ".join(f'pagina {int(row["page"])} ({labels.get(row.get("basis"), "onbekend")})' for row in left_out)
