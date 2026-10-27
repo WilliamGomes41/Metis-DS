@@ -77,7 +77,7 @@ def test_unknown_reason_and_missing_identity_are_evidence_not_invented_editor_id
 
 
 @pytest.mark.parametrize(('code', 'path', 'task'), [
-    ('source_passage_review_incomplete', '/source-selection', 'disposition'),
+    ('source_passage_review_incomplete', '/source-selection', None),
     ('review_disposition_inconsistent', '/source-selection', 'repair'),
     ('review_repair_incomplete', '/source-selection', 'repair'),
     ('source_formation_incomplete', '/source-selection', None),
@@ -96,3 +96,63 @@ def test_publication_explains_blocker_and_opens_its_existing_owner(code, path, t
 
 def test_unknown_publication_gate_does_not_invent_a_human_task():
     assert _blocker_view('unknown_integrity_gate', 'snapshot')['recovery_href'] is None
+
+
+def _publication_owner(client, sid, code):
+    publication = client.get('/publish', params={'document': sid})
+    assert publication.status_code == 200
+    blocker = publication.text.split(f'data-blocker-code="{code}">', 1)[1].split('</li>', 1)[0]
+    links = Links(blocker).hrefs
+    assert len(links) == 1
+    return links[0]
+
+
+def test_publication_source_blocker_opens_its_blocked_candidates(tmp_path, *, production_console, production_app):
+    console, sid = _system(tmp_path, production_console=production_console)
+    readiness = console.publication_readiness(sid)
+    blocked = {row['object_id'] for row in processing_diagnostic_rows(console.snapshot_objects(sid))}
+    assert blocked and blocked <= set(readiness['unresolved_source_passage_ids'])
+    publisher = _client(console, production_app, 'uploader.854')
+    href = _publication_owner(publisher, sid, 'source_passage_review_incomplete')
+    reviewer = _client(console, production_app, 'reviewer.854')
+    before = deepcopy((console.snapshot_objects(sid), console.objects_revision(sid),
+                       console.object_review_bindings(sid), read_events(console._ledger_path)))
+    owner = reviewer.get(href)
+    assert owner.status_code == 200
+    owner_links = [parse_qs(urlsplit(url).query) for url in Links(owner.text).hrefs]
+    assert blocked <= {q['object'][0] for q in owner_links if q.get('document') == [sid] and q.get('object')}
+    assert (console.snapshot_objects(sid), console.objects_revision(sid),
+            console.object_review_bindings(sid), read_events(console._ledger_path)) == before
+
+
+def test_publication_repair_blocker_opens_requested_revision(tmp_path, *, production_console, production_app):
+    from fastapi.testclient import TestClient
+    from tests.test_closed_review_loop_v1 import _system as setup, _review
+    console, _, reviewer, sid, ids = setup(tmp_path, production_console=production_console)
+    console.create_account(username='publisher.862', password='publisher-862-secret', roles=('publisher',))
+    oid = ids[0]
+    _review(console, reviewer, sid, oid, decision='revise', suitability='mist_context',
+            eindoordeel='goedkeuren_na_correctie', comment='Context ontbreekt.')
+    readiness = console.publication_readiness(sid)
+    assert oid in readiness['review_repair_object_ids']
+    publisher = TestClient(production_app(console), base_url='https://testserver')
+    assert publisher.post('/login', data={'username': 'publisher.862', 'password': 'publisher-862-secret'},
+                          follow_redirects=False).status_code == 303
+    href = _publication_owner(publisher, sid, 'review_repair_incomplete')
+    browser = TestClient(production_app(console), base_url='https://testserver')
+    assert browser.post('/login', data={'username': 'bert', 'password': 'bert-secret'},
+                        follow_redirects=False).status_code == 303
+    before = deepcopy((console.snapshot_objects(sid), console.objects_revision(sid),
+                       console.object_review_bindings(sid), read_events(console._ledger_path)))
+    owner = browser.get(href)
+    assert owner.status_code == 200
+    repair_links = [url for url in Links(owner.text).hrefs if parse_qs(urlsplit(url).query).get('object') == [oid]]
+    assert repair_links, 'The publication repair link must expose the requested revision'
+    assert all(parse_qs(urlsplit(url).query).get('object') != [ids[1]] for url in Links(owner.text).hrefs)
+    editor = browser.get(next(url for url in repair_links if urlsplit(url).path == '/source-selection'))
+    assert editor.status_code == 200 and 'data-formation-repair' in editor.text
+    assert oid in editor.text
+    assert browser.get(href).status_code == 200
+    assert publisher.get(href).status_code == 403
+    assert (console.snapshot_objects(sid), console.objects_revision(sid),
+            console.object_review_bindings(sid), read_events(console._ledger_path)) == before

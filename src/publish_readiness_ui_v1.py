@@ -65,8 +65,9 @@ def _blocker_view(code: str, snapshot_id: str) -> dict[str, Any]:
     recovery_label = None
     if code in {'source_passage_review_incomplete', 'review_disposition_inconsistent',
                 'review_repair_incomplete', 'source_formation_incomplete', 'pre_review_processing_incomplete'}:
-        task = ('&task=disposition' if code == 'source_passage_review_incomplete' else
-                '&task=repair' if code in {'review_disposition_inconsistent', 'review_repair_incomplete'} else '')
+        # Source closure covers knowledge candidates as well as source records.
+        # Its aggregate blocker needs the document overview, not the source-only editor.
+        task = '&task=repair' if code in {'review_disposition_inconsistent', 'review_repair_incomplete'} else ''
         recovery_href = f"/source-selection?document={quote(snapshot_id, safe='')}{task}"
         recovery_label = "Open Vorming"
     elif code in REVIEW_RECOVERY_BLOCKERS:

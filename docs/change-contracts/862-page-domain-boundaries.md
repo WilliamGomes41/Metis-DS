@@ -117,3 +117,49 @@ De aanvullende context-skill proof-scenarios-resource was eveneens onbereikbaar;
 de concrete native GET-/herstartvergelijking is wel werkelijk uitgevoerd.
 Scrap: geen terugkerende afwijking van het gekozen lokale ontwerp; geen nieuwe
 infrastructuur of tweede projectie-eigenaar nodig.
+
+## Reviewherstel: publicatieverwijzingen moeten het werk tonen
+
+Class B / Rewrite risk: none, gebaseerd op PR-head `13964dd` en main-base
+`038b2ee`. Dit is stateless presentatie: geen lifecycle-, eligibility-,
+publicatie-, autorisatie-, transactie- of opslagregel verandert.
+
+Ground: `source_passage_review_incomplete` komt uit `source_closure` over alle
+vereiste passages, inclusief kennisvoorstellen. `task=disposition` opent echter
+bewust `render_source_accountability` met `source_only=True`; die lijst is geen
+algemene lijst van publicatieblokkades. Een normaal `revise` levert bovendien
+een T9 `review_repair_duties`-rij op, maar `_review_inventory(task='repair')`
+gebruikte alleen de bronopvolging en reguliere reviewroute. De passage verdween
+daardoor uit de lijst terwijl haar directe bestaande editor wel bereikbaar was.
+
+Sketch (alternatieven door hoofdagent en afzonderlijke read-only ontwerpanalyse):
+
+- A: brede bronblokkade naar de bestaande Vorming-documentpagina; bestaande
+  herstellijst neemt ook de IDs uit `review_repair_duties` op. Geen extra I/O,
+  endpoint, viewmodel of authority. Bestaande source-only-editor blijft intact.
+- B: `considered`-objectqueues door het publicatieviewmodel voeren en afzonderlijke
+  passage-/werkpleklinks renderen. Preciezer bij gemengd werk, maar meer interface-
+  en rendersurface dan nodig voor deze twee aangetoonde fouten.
+
+A gekozen op correctheid, locality, access-fit en behoud van bestaande interfaces.
+Gebruik: Publicatie → Vorming-document → concrete bron-/kandidaatlink of Review;
+Publicatie → herstellijst → dezelfde actuele passage in de bestaande editor.
+Datavorm: één tijdelijke set van T9 object-IDs uit de reeds gelezen objectcapture;
+alleen de selectie van de bestaande repair-presentatie gebruikt die set. Gewone
+review-, bronuitsluitings- en historielijsten behouden hun classificatie.
+Concurrente wijzigingen blijven onder bestaande verse owner-reads en command-CAS;
+GET verleent geen bevoegdheid, sluit niets en schrijft niets. Alle duurzame state
+blijft eigendom van de bestaande kernel/PG-commands. Geen stateful overlay nodig.
+Agree: expliciete implementatieopdracht na review, geen extra akkoord vereist.
+
+Bewijs vóór de fix: echte Publicatie-HTML → link → owner-GET mist geblokkeerde
+kandidaten respectievelijk een normaal revisieverzoek. Regressies controleren de
+bereikbaarheid van de juiste passage, uitsluiting van gewoon reviewwerk, rechten
+en onveranderde objecten/revisie/bindings/events. De onafhankelijke reviewprobes
+worden opnieuw uitgevoerd op de fix. Bestaande browserproeven bewaken de eerdere
+diagnose- en pagina-anchorwijzigingen. PR-contractvelden worden afzonderlijk en
+parseerbaar vastgelegd; eerdere lokale suiteclaims gelden uitsluitend voor hun
+vermelde oude SHA. Nieuwe verificatie wordt apart gerapporteerd.
+
+Scrap: geen nieuwe layer/helper/route of fallback. Rollback zet presentatie en
+link samen terug; opgeslagen revisieverzoeken en besluiten blijven behouden.

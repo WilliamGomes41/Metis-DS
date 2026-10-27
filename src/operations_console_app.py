@@ -2687,12 +2687,16 @@ def _review_inventory(
 ) -> str:
     """Every current passage remains reachable; no admission or finality writes."""
     from src.source_containers_v1 import source_accountability, partition
+    from src.review_duty_v1 import review_repair_duties
     projection = source_accountability(objects, review_path=review_path, bindings=bindings, fragments=fragments)
     followups = review_followup_queues(objects, review_path=review_path, projection=projection)
     followup_tasks = {
         str(obj["object_id"]): name
         for name, rows in followups.items() for obj in rows
     }
+    # Publication uses these same T9 obligations for requested content revisions.
+    # They extend only the repair presentation, never ordinary review eligibility.
+    repair_ids = {row["object_id"] for row in review_repair_duties(objects, review_path=review_path)} if task == "repair" else set()
     labels = {
         "structure": "Documentindeling controleren", "contextual": "Passage afzonderlijk beoordelen",
         "batch": "Passages selecteren en bevestigen", "second_review": "Tweede beoordeling",
@@ -2733,7 +2737,7 @@ def _review_inventory(
                 route_task = str(route["canonical_task"]) if route["actionable"] else "waiting"
         object_id = str(obj.get("object_id") or "")
         disposition = definitive_review_disposition(obj)
-        category = ("repair" if followup_tasks.get(object_id) == "repair" else
+        category = ("repair" if object_id in repair_ids or followup_tasks.get(object_id) == "repair" else
                     route_task or followup_tasks.get(object_id) or "history")
         if task != "inventory" and category != task:
             continue
