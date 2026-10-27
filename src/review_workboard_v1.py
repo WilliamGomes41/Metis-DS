@@ -676,6 +676,7 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         context_page: int = 0,
         context_q: str = "",
         queue_page: int = 1,
+        review_revision: str = "",
     ) -> str:
         account = _current_account(console, request)
         from src.review_participation_ui_v1 import overview, require_overview
@@ -746,6 +747,7 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             context_saved=context_saved == "yes",
             read_inputs=read_inputs,
             queue_page=queue_page,
+            review_revision=review_revision,
         )
 
         back = "/review?" + urlencode({"document": chosen, "q": q, "page": page})

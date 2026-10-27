@@ -2,6 +2,7 @@
 from src.request_diagnostics_v1 import diagnostic_phase
 
 import asyncio
+import re
 from html import escape
 import uuid
 from urllib.parse import urlencode
@@ -309,7 +310,7 @@ def _blockage_html(report, esc):
 
 
 @source_reconstruction_scope(reuse_existing=True)
-def render_continuation(console, account, document, object, *, return_task='', saved=False):
+def render_continuation(console, account, document, object, *, return_task='', saved=False, review_revision=''):
     """Present the existing literal repair command over its bounded read."""
     from src import operations_console_app as ui
     from src.review_passage_read_v1 import read_review_passage
@@ -338,13 +339,14 @@ def render_continuation(console, account, document, object, *, return_task='', s
                 '<input type="hidden" name="object_id" value="' + ui._esc(object) + '">'
                 '<input type="hidden" name="return_task" value="' + ui._esc(ui.normalize_review_task(return_task)) + '">'
                 + ui._snapshot_revision_input(inputs.revision) +
+                ('<input type="hidden" name="review_revision" value="' + ui._esc(review_revision) + '">' if review_revision else '') +
                 '<button class="btn-primary" type="submit">Passage aanvullen met brontekst</button></form>')
         else:
             panel += '<p class="banner warn">Bronaanvulling is hier alleen te lezen.</p>'
     else:
         panel += '<p>Er is geen actueel voorstel voor letterlijke bronaanvulling. Beoordeel de huidige passage in Review.</p>'
     back = '/review?' + urlencode({'document': document, 'object': object,
-        'task': ui.normalize_review_task(return_task)})
+        'task': ui.normalize_review_task(return_task), **({'review_revision': review_revision} if review_revision else {})})
     overview = '/source-selection?' + urlencode({'document': document})
     notice = ('<p class="banner ok" role="status">De bronaanvulling is opgeslagen. '
               'Beoordeel de huidige versie opnieuw in Review.</p>' if saved else '')
@@ -358,7 +360,7 @@ def render_continuation(console, account, document, object, *, return_task='', s
 @source_reconstruction_scope(reuse_existing=True)
 def render_context(console, account, document, object, *, context_target='', context_mode='',
                    context_page=0, context_q='', context_saved=False,
-                   context_draft=None, context_error=''):
+                   context_draft=None, context_error='', review_revision=''):
     """Present the existing bounded context read and command in its one workplace."""
     from src import operations_console_app as ui
     from src.review_passage_read_v1 import read_review_passage
@@ -389,7 +391,12 @@ def render_context(console, account, document, object, *, context_target='', con
             context_mode=context_mode, context_target=context_target) if editable else '')
     saved = ('<p class="banner ok" role="status">Het contextbesluit is opgeslagen. '
              'Beoordeel de betrokken passages opnieuw.</p>' if context_saved else '')
-    back = '/review?' + urlencode({'document': document, 'object': object})
+    if review_revision:
+        origin = ui._esc(urlencode({'review_revision': review_revision}))
+        panel = re.sub(r'href="(/source-selection\?[^"#]*)(#[^"]*)?"',
+            lambda m: 'href="' + m[1] + '&amp;' + origin + (m[2] or '') + '"', panel)
+        panel = panel.replace('</form>',  '<input type="hidden" name="review_revision" value="' + ui._esc(review_revision) + '"></form>')
+    back = '/review?' + urlencode({'document': document, 'object': context_target or object, **({'review_revision': review_revision} if review_revision else {})})
     overview = '/source-selection?' + urlencode({'document': document})
     if inputs is not None:
         available = inputs.source_available
@@ -490,7 +497,7 @@ def install(app, console, require, page, nav, esc):
                       context_page: int = 0, context_q: str = '', context_saved: str = '',
                       task: str = '', q: str = '', review_page: int = Query(1, alias='page'),
                       return_task: str = '', continuation_saved: str = '',
-                      repair_kind: str = 'source_units', repair_saved: str = '', graph_saved: str = ''):
+                      repair_kind: str = 'source_units', repair_saved: str = '', graph_saved: str = '', review_revision: str = ''):
         with diagnostic_phase("authorization"):
             actor = require(request)
         if task == 'structure' and document:
@@ -504,7 +511,7 @@ def install(app, console, require, page, nav, esc):
         if task == 'repair' and document:
             if object:
                 from src.deterministic_review_repair_v1 import render_repair
-                body = render_repair(console, request, {'snapshot_id': document, 'object_id': object},
+                body = render_repair(console, request, {'snapshot_id': document, 'object_id': object, 'review_revision': review_revision},
                     repair_kind=repair_kind, saved=repair_saved == 'yes')
                 return body
             console._require_role(actor['account_id'], 'reviewer')
@@ -521,11 +528,11 @@ def install(app, console, require, page, nav, esc):
                 '<p><a href="' + esc(diagnosis) + '">Documentdiagnose en bewijs bekijken</a></p></section>')
         if task == 'continuation' and object:
             return render_continuation(console, actor, document, object,
-                return_task=return_task, saved=continuation_saved == 'yes')
+                return_task=return_task, saved=continuation_saved == 'yes', review_revision=review_revision)
         if object:
             return render_context(console, actor, document, object, context_target=context_target,
                 context_mode=context_mode, context_page=context_page, context_q=context_q,
-                context_saved=context_saved == 'yes')
+                context_saved=context_saved == 'yes', review_revision=review_revision)
         if task == 'disposition' and document:
             return render_source_accountability(console, actor, document)
         # Overview owns compact progress inputs; only the chosen document loads detail.

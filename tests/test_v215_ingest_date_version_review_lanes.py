@@ -430,10 +430,11 @@ def test_review_list_title_is_source_snippet_not_unclassified(tmp_path: Path, *,
     receipt = _ingest(console, accounts)
     objects = _non_document(console.snapshot_objects(receipt["snapshot_id"]))
     client = _client(console, production_app=production_app)
-    html = "".join(
+    pages = [
         client.get(f"/review?document={receipt['snapshot_id']}&task={task}").text
-        for task in ("headings", "individual", "together", "control")
-    )
+        for task in ("headings", "individual", "control")
+    ]
+    html = "".join(pages)
     titles = _index_link_titles(html)
     assert titles
     for title in titles:
@@ -451,7 +452,12 @@ def test_review_list_title_is_source_snippet_not_unclassified(tmp_path: Path, *,
         if any(_text_of(obj)[:40] in title for obj in unclassified)
     ]
     assert unclassified_titles
-    assert len(set(unclassified_titles)) == len(unclassified_titles)
+    # Read-only inventory and Review may show the same source evidence.
+    # A single rendered list must still distinguish its current proposals.
+    for page in pages:
+        page_titles = [title for title in _index_link_titles(page)
+                       if any(_text_of(obj)[:40] in title for obj in unclassified)]
+        assert len(set(page_titles)) == len(page_titles)
 
 
 def test_four_thousand_identical_unclassified_titles_is_a_fail(tmp_path: Path, *, production_app, production_console) -> None:
@@ -499,7 +505,8 @@ def test_review_lanes_from_type_without_speed_toggle(tmp_path: Path, *, producti
     assert 'data-workboard-document=' in dashboard
     assert "review-task-dashboard" not in dashboard
     assert "review-lane-fast" in headings
-    assert "review-lane-slow" in individual
+    assert "data-content-review-workplace" in individual
+    assert 'class="review-normal-risk"' in individual  # Batch is a presentation within this same task.
     assert "/review/headings/batch-confirm" in headings
     assert "bevestig geselecteerde koppen als structuur" in headings.lower()
     for forbidden in (

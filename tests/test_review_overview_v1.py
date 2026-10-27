@@ -19,12 +19,6 @@ from tests.characterization.support import REVIEWER
 from tests.semantic_fixture_support import install_fixture_history
 
 
-def _count(html, name):
-    match = re.search(rf'data-count="{name}"[^>]*>(\d+)<', html)
-    assert match, f"counter {name} missing"
-    return int(match.group(1))
-
-
 def _room(console, account, sid, task=""):
     import src.operations_console_app as ui
     return ui._render_review_room(console, account, sid, task=task)
@@ -34,7 +28,7 @@ def _source_id(rows, text):
     return next(r["object_id"] for r in rows if (r.get("content") or {}).get("clean_text") == text and evidence_of(r))
 
 
-def test_guideline_dashboard_has_three_layers_and_counts_duties_not_partition(tmp_path, *, production_console):
+def test_content_task_excludes_source_handling_and_preserves_duty_ground(tmp_path, *, production_console):
     console, sid, account = guideline_document(tmp_path, production_console=production_console)
     rows = console.snapshot_objects(sid)
     content = next(r for r in rows if content_reviewable(r))
@@ -49,24 +43,26 @@ def test_guideline_dashboard_has_three_layers_and_counts_duties_not_partition(tm
                                    bindings=console.object_review_bindings(sid),
                                    fragments=console.review_source_fragments(sid))
     html = _room(console, account, sid)
-    for layer in ("beoordelen", "bronwerk", "inzage"):
-        assert f'data-review-layer="{layer}"' in html
-    assert _count(html, "kennis") == routes["actionable_contextual_duties"] + routes["actionable_batch_duties"] == 1
+    assert 'data-content-review-workplace' in html
+    assert 'data-review-layer' not in html
+    assert routes["actionable_contextual_duties"] + routes["actionable_batch_duties"] == 1
+    assert legacy_rest['object_id'] not in html
     from src.publication_readiness_v1 import review_followup_queues
     open_source = len(review_followup_queues(rows, review_path="richtlijn", bindings=console.object_review_bindings(sid),
                                              fragments=console.review_source_fragments(sid))["disposition"])
     # The deterministic rest row is source handling too, so the label is not "bronpassages".
     assert open_source == 3
-    assert "Bronafhandeling open" in html and _count(html, "bronafhandeling") == open_source
-    assert 'data-open-work-ratio' in html and f'task=history' in html
+    assert "Bronafhandeling open" not in html
+    assert 'data-open-work-ratio' not in html and 'task=history' in html
 
 
-def test_counters_are_bound_to_the_rendered_revision(tmp_path, *, production_console):
+def test_workboard_counters_name_the_existing_version_and_observation_time(tmp_path, *, production_console):
     console, sid, account = guideline_document(tmp_path, production_console=production_console)
-    revision = console.objects_revision(sid)
-    html = _room(console, account, sid)
+    from src.review_workboard_v1 import _workboard_page
+    html = _workboard_page(console, account=account, snapshot_id=sid)
     scope = re.search(r'data-count-scope[^>]*>([^<]+)<', html)
-    assert scope and f"versie 1.0 · revisie {revision[:12]}" in scope.group(1)
+    assert scope and "versie 1.0 · peiltijd " in scope.group(1)
+    assert " UTC" in scope.group(1)
 
 
 def test_knowledge_progress_and_lane_total_exclude_excluded_source_record(tmp_path, *, production_console):
@@ -79,8 +75,9 @@ def test_knowledge_progress_and_lane_total_exclude_excluded_source_record(tmp_pa
         command_id="overview-exclusion", expected_revision=console.objects_revision(sid))
     rows = console.snapshot_objects(sid)
     html = _room(console, account, sid)
-    progress = re.search(r'<progress data-knowledge-progress[^>]*value="(\d+)" max="(\d+)"', html)
-    assert progress and progress.groups() == ("0", "1")
+    from src.operations_console_app import knowledge_progress
+    assert knowledge_progress(rows, review_path="richtlijn") == {"total": 1, "done": 0, "superseded": 0}
+    assert 'data-knowledge-progress' not in html
     # #672: an excluded source record is source handling, never a finished knowledge review.
     assert _lane_total(rows, review_path="richtlijn", lane="contextual", open_rows=[]) == 0
 
@@ -104,12 +101,10 @@ def test_bulk_exclusion_only_for_v1_metadata_and_category_tiles(tmp_path, *, pro
                                "document_information": "0", "reviewed": "0"}
 
 
-def _assert_tree_overview(html, structure="1 te controleren · 0 afgerond", contextual="2 te beoordelen · 0 afgerond"):
-    assert 'data-count-scope' in html
-    for marker in ('data-review-layer="beoordelen"', 'data-count="kennis"', 'data-knowledge-progress',
-                   'data-open-work-ratio', 'Kennisvoorstellen'):
-        assert marker not in html
-    assert structure in html and contextual in html
+def _assert_tree_overview(html):
+    assert 'data-content-review-workplace' in html
+    assert 'data-count="kennis"' not in html and 'data-open-work-ratio' not in html
+    assert 'Kennisvoorstellen beoordelen' in html
 
 
 def test_tree_document_has_no_knowledge_counter_in_room(tmp_path, *, production_console):
