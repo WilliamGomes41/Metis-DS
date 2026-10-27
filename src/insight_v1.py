@@ -15,6 +15,8 @@ from html import escape
 from typing import Any, Callable
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
+from src.source_selection_ui_v1 import _source_pages_html
+
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
@@ -543,16 +545,8 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
         controls = ""
         if processing.get("resume_allowed") or processing.get("retry_allowed"):
             controls += f'<p><a class="btn-primary" href="/source-selection?{query}">Naar Vorming voor Starten of Hervatten</a></p>'
-        if ("publisher" in roles
-                and (account["account_id"] in envelope.get("named_reviewers", [])
-                     or account["account_id"] == envelope.get("uploader_account_id"))
-                and processing.get("reason_code") == "processing_attempt_limit_reached"
-                and processing_blocked
-                and not envelope.get("processing_recovery")):
-            controls += f'''<form method="post" action="/tree/processing-recovery">
-              <input type="hidden" name="snapshot_id" value="{escape(document, quote=True)}">
-              <label>Reden voor eenmalig herstel<input name="reason" required maxlength="1000"></label>
-              <button type="submit">Een herstelpoging autoriseren</button></form>'''
+        if processing_access and processing_blocked and processing.get("reason_code") == "processing_attempt_limit_reached":
+            controls += f'<p><a href="/source-selection?{query}#processing-recovery">Herstelvoorwaarden bekijken in Vorming</a></p>'
         progress = processing.get("formation_progress") or {}
         attempts = (envelope.get("processing_attempts") or []) if processing_access else []
         diagnostic = (attempts[-1].get("diagnostic") or {}) if attempts else {}
@@ -718,52 +712,3 @@ def install_insight_legacy_routes(app: FastAPI, require_account: Callable[[Reque
         from urllib.parse import quote
         target = "/inzicht/routevergelijking/" + quote(comparison_id, safe="")
         return redirect_to(target)(request)
-
-
-def _source_pages_html(envelope: dict, diagnostic: dict, document: str) -> str:
-    """Per page: problem, repair action and the accounting form; never source text."""
-    from src.docling_contract_v1 import DoclingError, set_aside_pages
-    from src.operations_console_app import PAGE_FINDING_COPY
-    from src.operations_console_v1 import ConsoleError, SOURCE_PAGE_ACCOUNTING_CATEGORIES
-    parts = []
-    findings = diagnostic.get("page_findings") or []
-    if findings:
-        options = "".join(f'<option value="{escape(key)}">{escape(label)}</option>'
-                          for key, label in SOURCE_PAGE_ACCOUNTING_CATEGORIES.items())
-        rows = []
-        for row in findings:
-            copy = [PAGE_FINDING_COPY.get(code, (code, "Meld dit bij de beheerder.")) for code in row.get("reasons") or []]
-            problem = " ".join(problem for problem, _ in copy)
-            action = " ".join(dict.fromkeys(action for _, action in copy))
-            accounted = any(done["page"] == row["page"] and done["reasons"] == row.get("reasons")
-                            and done["source_sha256"] == envelope.get("sha256")
-                            for done in envelope.get("source_page_accountings") or [])
-            if accounted:
-                rows.append(f'<tr><td>{int(row["page"])}</td><td>{escape(problem)}</td><td>{escape(action)}</td>'
-                            '<td>Verantwoord; start de verwerking opnieuw.</td></tr>')
-                continue
-            rows.append(f'''<tr><td>{int(row["page"])}</td><td>{escape(problem)}</td><td>{escape(action)}</td>
-              <td><form method="post" action="/inzicht/document/pagina-verantwoorden">
-                <input type="hidden" name="snapshot_id" value="{escape(document, quote=True)}">
-                <input type="hidden" name="page" value="{int(row["page"])}">
-                <label>Reden<select name="category" required>{options}</select></label>
-                <label>Toelichting<input name="note" required minlength="10" maxlength="500"></label>
-                <button type="submit">Pagina verantwoorden</button></form></td></tr>''')
-        parts.append('<section id="paginas"><h3>Onopgeloste pagina’s</h3>'
-                     '<p>Verantwoord alleen een pagina zonder kennisinhoud. Start daarna de verwerking opnieuw.</p>'
-                     '<table><thead><tr><th>Pagina</th><th>Probleem</th><th>Herstelactie</th><th>Verantwoorden</th></tr></thead>'
-                     f'<tbody>{"".join(rows)}</tbody></table></section>')
-    try:
-        left_out = set_aside_pages(envelope)
-    except (DoclingError, ConsoleError):
-        left_out = []
-    if left_out:
-        labels = {"pdf_page_without_content": "leeg volgens de PDF", "recorded_accounting": "verantwoord"}
-        listed = "; ".join(f'pagina {int(row["page"])} ({labels.get(row.get("basis"), "onbekend")})' for row in left_out)
-        parts.append(f'<p>Buiten de bron gelaten pagina’s: {escape(listed)}.</p>')
-    accountings = envelope.get("source_page_accountings") or []
-    if accountings:
-        items = "".join(f'<li>Pagina {int(row["page"])}: {escape(SOURCE_PAGE_ACCOUNTING_CATEGORIES.get(row["category"], row["category"]))}'
-                        f' — {escape(row["note"])} ({escape(row["recorded_at"][:10])})</li>' for row in accountings)
-        parts.append(f'<details><summary>Vastgelegde verantwoordingen ({len(accountings)})</summary><ul>{items}</ul></details>')
-    return "".join(parts)
