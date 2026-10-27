@@ -97,12 +97,29 @@ is claimed.
 
 The separately measured 300-candidate fixture uses authenticated real ASGI GETs
 and disposable PostgreSQL 16.2, three requests per task, including source
-preparation, SQL capture and complete response rendering. Before/final JSON and
-the runnable fixture harness remain in `work/document-benchmark-*.json` and
-`work/test_document_benchmark.py`. Final measured values are recorded with the
-verification evidence in `work/review-document-read-verification.json`.
+preparation, SQL capture and complete response rendering. The measured JSON and
+runnable harness are versioned in `evidence/review-document-read-performance/`.
+The batch timing uses a sectionless source with an empty batch queue; populated
+batch paging and stale recovery have separate 60-candidate native regressions.
 
 Read-only design/code reviews found a stale-batch selection recovery regression
 and lost return filters during paging. Both were repaired and have native HTTP
 regressions; the follow-up review found no remaining blocker within this scope.
 Those reviews did not independently run the tests.
+
+## Integration before PR
+
+The implementation was rebased without conflicts onto `origin/main` at
+`96b22c16c6aacc554d64ccf75971595a5d549000`, retaining its Vorming/Review ownership
+changes. On the integrated code (`902f3af` before evidence-only updates), the
+focused native Review, source, stale-form, formation-repair, characterization and
+architecture selection passes: **154 passed, 1 browser skip**.
+
+The original 254-test result and timing comparison predate this integration;
+they are not presented as new timing measurements of the integrated head.
+The full local suite was attempted with fail-fast and stopped after 115 passes
+because `psql` was absent from PATH. The bundled PostgreSQL 16.2 client is now
+available; the complete affected Tier-D test module passes on rerun (**98 passed**).
+A complete green suite on the final PR head
+remains a CI requirement; the PR is offered as a draft performance improvement,
+not as proof that the original production latency is resolved.
