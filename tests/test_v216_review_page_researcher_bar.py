@@ -264,21 +264,18 @@ def test_beoordeel_is_the_single_door_openen_and_reviewen_are_gone(tmp_path: Pat
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     html = _client(console, production_app=production_app).get("/review").text
-    assert re.search(r">\s*Ga verder met beoordelen\s*<", html)
-    assert f'/review?document={receipt["snapshot_id"]}' in html
-    assert 'class="btn-primary"' in html
-    assert re.search(
-        rf'<a[^>]*class="[^"]*btn-primary[^"]*"[^>]*href="/source-selection\?document={re.escape(receipt["snapshot_id"])}[^"]*task=structure[^"]*"',
-        html,
-    ) or re.search(
-        rf'<a[^>]*href="/source-selection\?document={re.escape(receipt["snapshot_id"])}[^"]*task=structure[^"]*"[^>]*class="[^"]*btn-primary',
-        html,
-    )
+    from src.review_workboard_v1 import review_work_item
+    item = review_work_item(console, account=accounts['reviewer'], envelope=console._envelope(receipt['snapshot_id']))
+    assert f'data-workboard-document="{receipt["snapshot_id"]}"' in html
+    assert html.count('data-personal-review-action') == bool(item['actionable_review_duties'])
+    if item['actionable_review_duties']:
+        assert '>Beginnen</a>' in html
+        assert re.search(r'<a class="btn-primary" data-personal-review-action href="/review\?', html)
+    assert '/source-selection?' not in html
     assert not re.search(r">\s*Openen\s*<", html)
     assert not re.search(r">\s*Reviewen\s*<", html)
     assert "Openen" not in html
     assert "Reviewen" not in html
-    assert html.lower().count("ga verder") >= 1
     assert "envelope" not in html.lower()
     assert "Documenten" in html
     assert "Documentenhiërarchie" not in html
@@ -294,9 +291,9 @@ def test_first_review_screen_names_document_task_and_why(tmp_path: Path, *, prod
     _ingest(console, accounts, title="Continentie fixture")
     html = _client(console, production_app=production_app).get("/review").text
     assert "Continentie fixture" in html
-    assert "richtlijn" in html.lower()
+    assert "Tellers voor versie" in html
     assert "continentie" in html.lower()
-    assert "Ga verder" in html
+    assert 'data-personal-state=' in html
     assert "Dit wordt wat een EPD MAG zeggen." not in html
     assert "wat een EPD MAG zeggen" not in html
     first = _client(console, production_app=production_app).get("/review").text
@@ -331,15 +328,16 @@ def test_koppen_and_inhoud_stacks_show_counts(tmp_path: Path, *, production_app,
     dashboard = client.get(f"/review?document={receipt['snapshot_id']}").text
     headings = client.get(f"/review?document={receipt['snapshot_id']}&task=headings").text
     individual = client.get(f"/review?document={receipt['snapshot_id']}&task=individual").text
-    assert f"{len(koppen)} te controleren" in dashboard
+    assert f"{len(koppen)} te controleren" not in dashboard
+    assert 'data-workboard-document=' in dashboard
     assert not duty
     assert "0 te beoordelen" not in dashboard
-    assert "Documentindeling controleren" in dashboard
+    assert "Documentindeling controleren" not in dashboard
     assert "Passages afzonderlijk beoordelen" not in dashboard
     assert "review-lane-fast" in headings
     assert "review-lane-slow" in individual
     assert "/review/headings/batch-confirm" in headings
-    assert "review-task-dashboard" in dashboard
+    assert "review-task-dashboard" not in dashboard
     assert "unclassified" not in (dashboard + headings + individual).casefold()
     lower = (dashboard + headings + individual).lower()
     for forbidden in ("zwaar/licht", "snel/langzaam", "speed-toggle", "envelope"):

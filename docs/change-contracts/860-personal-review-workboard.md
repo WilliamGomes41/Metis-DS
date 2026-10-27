@@ -151,7 +151,14 @@ Review-landing-HTML-goldens wijzigen; detailgoldens en routetabel blijven gelijk
 
 ## Overdracht
 
-#861 is de volgende afzonderlijk toe te wijzen slice. Deze PR introduceert geen
+#861 is de volgende afzonderlijk toe te wijzen slice: individueel, batch en
+tweede review worden presentaties binnen Kennisvoorstellen beoordelen, met de
+bestaande actorroute als eigenaar. Behoud batchmaximaal 20, dezelfde sectie/type,
+expliciete selectie, per-object exacte besluiten en onafhankelijke tweede review.
+Die slice past de stateful Class B-overlay toe op de hergebruikte besliscommands
+en bewaart snapshot/object/revisie bij een herstelretour via Vorming.
+
+Deze PR introduceert geen
 extra beoordelingsroute: contextual, batch, second_review, boom-structure en de
 graaf-override houden hun bestaande eigenaren. De volgende slice moet op de dan
 actuele main opnieuw bevoegdheden, exact-tuple-binding en revisiecontrole toetsen.

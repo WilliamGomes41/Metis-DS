@@ -191,7 +191,9 @@ def _assert_room_statuses(
     assert tree.status_code == 200
     assert review.status_code == 200
     assert f'<span class="visually-hidden">Status: </span>{list_label}</span>' in tree.text
-    assert f"status <b>{list_label}</b>" in review.text
+    assert 'data-workboard-document=' in review.text
+    assert 'data-personal-state=' in review.text
+    assert f"status <b>{list_label}</b>" not in review.text
 
     _login(client, publisher_username)
     publish = _selected_publish(client)
@@ -234,7 +236,7 @@ def test_read_only_status_does_not_widen_publisher_authority(tmp_path: Path, *, 
         )
 
 
-def test_open_review_has_same_meaningful_status_in_all_three_rooms(tmp_path: Path, *, production_app, production_console) -> None:
+def test_open_review_keeps_owner_statuses_and_personal_review_work_separate(tmp_path: Path, *, production_app, production_console) -> None:
     console, _accounts, _receipt, _source = _system(tmp_path, production_console=production_console)
     client = _client(console, production_app=production_app)
 
