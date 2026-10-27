@@ -36,13 +36,13 @@ def _source_pages_html(envelope: dict, diagnostic: dict, document: str, *, edita
                             and done["source_sha256"] == envelope.get("sha256")
                             for done in envelope.get("source_page_accountings") or [])
             if accounted:
-                rows.append(f'<tr><td>Pagina {int(row["page"])}</td><td>{escape(problem)}</td><td>{escape(action)}</td>'
+                rows.append(f'<tr id="source-page-{int(row["page"])}"><td>Pagina {int(row["page"])}</td><td>{escape(problem)}</td><td>{escape(action)}</td>'
                             '<td>Verantwoord; start de verwerking opnieuw.</td></tr>')
                 continue
             if editable:
                 selected = str(draft.get('category') or '') if str(draft.get('page')) == str(row['page']) else ''
                 page_options = options.replace('value="' + escape(selected) + '"', 'value="' + escape(selected) + '" selected') if selected else options
-                rows.append(f'''<tr><td>Pagina {int(row["page"])}</td><td>{escape(problem)}</td><td>{escape(action)}</td>
+                rows.append(f'''<tr id="source-page-{int(row["page"])}"><td>Pagina {int(row["page"])}</td><td>{escape(problem)}</td><td>{escape(action)}</td>
               <td><form method="post" action="/inzicht/document/pagina-verantwoorden">
                 <input type="hidden" name="snapshot_id" value="{escape(document, quote=True)}">
                 <input type="hidden" name="page" value="{int(row["page"])}">
@@ -50,7 +50,7 @@ def _source_pages_html(envelope: dict, diagnostic: dict, document: str, *, edita
                 <label>Toelichting<input name="note" value="{escape(str(draft.get("note") or ""), quote=True) if str(draft.get("page")) == str(row["page"]) else ""}" required minlength="10" maxlength="500"></label>
                 <button type="submit">Pagina verantwoorden</button></form></td></tr>''')
             else:
-                owner = '/source-selection?' + urlencode({'document': document}) + '#paginas'
+                owner = '/source-selection?' + urlencode({'document': document}) + '#source-page-' + str(int(row['page']))
                 rows.append(f'<tr><td>Pagina {int(row["page"])}</td><td>{escape(problem)}</td><td>{escape(action)}</td>'
                             f'<td><a href="{escape(owner, quote=True)}">Pagina verantwoorden in Vorming</a></td></tr>')
         parts.append('<section id="paginas"><h3>Onopgeloste pagina’s</h3>'

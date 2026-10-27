@@ -219,18 +219,34 @@ def _diagnosis_steps_html(processing: dict, blocking_code: str, progress: dict, 
             f'<ol class="diagnosis-steps">{"".join(items)}</ol></section>')
 
 
-def _diagnosis_actions_html(diagnostics: dict | None, repair: str) -> str:
+def _diagnosis_actions_html(diagnostics: dict | None, document: str, objects: list[dict]) -> str:
+    from src.processing_diagnostics_v1 import processing_diagnostic_rows
+    from src.source_accountability_v1 import is_source_record
+
     families = _diagnosis_families(diagnostics)
     if not families:
         return ""
+    # Reuse this request's capture, never read the task store or invent a task
+    # from aggregate counts. Synthetic diagnostic IDs are not editable objects.
+    actual = {str(obj['object_id']): obj for obj in objects if obj.get('object_id')}
+    links = {family: [] for family, _ in families}
+    for row in processing_diagnostic_rows(actual.values()):
+        obj = actual[row['object_id']]
+        owner = '/source-selection?' + urlencode(dict(document=document, object=row['object_id'],
+            task='disposition' if is_source_record(obj) else 'repair'))
+        link = f'<li><a href="{escape(owner, quote=True)}">{escape(row["candidate_text"] or "Passage bekijken")}</a></li>'
+        for family in row['families'] or ['unclassified']:
+            links[family].append(link)
     rows = "".join(
         f'<tr><td data-label="Volgorde">{index}</td>'
         f'<td data-label="Actie">{escape(_DIAGNOSIS_FAMILY_COPY.get(family, (family,))[0])}</td>'
         f'<td data-label="Passages" class="num">{int(values["candidate_count"])}</td>'
         f'<td data-label="Punten" class="num">{int(values["issue_occurrence_count"])}</td>'
-        f'<td><a class="btn-secondary" href="{repair}">Open in Vorming</a></td></tr>'
+        '<td>' + ('<details><summary>Passages openen in Vorming</summary><ul>'
+                  + ''.join(links[family]) + '</ul></details>' if links[family]
+                  else 'Geen herleidbare passage; onderzoek het diagnosebewijs.') + '</td></tr>'
         for index, (family, values) in enumerate(families, start=1))
-    return ('<p>Begin bovenaan: daar zitten de meeste controlepunten.</p>'
+    return ('<p>Een passage kan meerdere controlepunten hebben. Deze aantallen zijn geen aantallen handmatige taken.</p>'
             '<table class="diagnosis-table"><caption>Acties, op volgorde van aantal controlepunten</caption>'
             '<thead><tr><th scope="col">#</th><th scope="col">Actie</th><th scope="col" class="num">Passages</th>'
             '<th scope="col" class="num">Punten</th><th scope="col">Openen</th></tr></thead>'
@@ -612,7 +628,7 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
             processing_html = (f'''<section id="verwerking" aria-labelledby="oordeel"><h2 id="oordeel">Oordeel</h2>{verdict}</section>
           {_diagnosis_steps_html(processing, blocking_code, progress, diagnostics, diagnostic, admission_blocked=admission_blocked)}
           <section id="acties"><h2>Wat er nu moet gebeuren</h2>
-            {_diagnosis_actions_html(diagnostics, repair)}{controls}{pages_html}</section>''')
+            {_diagnosis_actions_html(diagnostics, document, objects)}{controls}{pages_html}</section>''')
         else:
             processing_html = ('<section id="verwerking" aria-labelledby="oordeel"><h2 id="oordeel">Oordeel</h2>'
                                '<div class="diagnosis-verdict" role="status"><p class="diagnosis-label">Geen verwerkingsinzage</p>'

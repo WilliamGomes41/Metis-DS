@@ -120,7 +120,14 @@ def test_reviewer_sees_verdict_first_then_steps_actions_findings_and_evidence(sy
     points = [int(value) for value in re.findall(r'data-label="Punten" class="num">(\d+)<', actions)]
     assert points == sorted(points, reverse=True)
     assert len(points) == len(diagnostics["by_family"])
-    assert actions.count(f'href="/source-selection?document={sid}&amp;task=repair"') == len(points)
+    from tests.test_insight_diagnostics_navigation_v1 import Links
+    from urllib.parse import parse_qs, urlsplit
+    from src.processing_diagnostics_v1 import processing_diagnostic_rows
+    links = [parse_qs(urlsplit(url).query) for url in Links(actions).hrefs]
+    expected = {row['object_id'] for row in processing_diagnostic_rows(console.snapshot_objects(sid))}
+    assert {link['object'][0] for link in links} == expected
+    assert all(link['document'] == [sid] and link['task'] == ['repair'] for link in links)
+    assert 'geen aantallen handmatige taken' in actions
     assert "Wie" not in actions and "Redacteur" not in actions
     assert "De passage is niet los te lezen" in html  # plain-language family text
 
