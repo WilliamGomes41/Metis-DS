@@ -3498,7 +3498,38 @@ def _review_formation_notice(console, snapshot_id, read_inputs, *, document_sour
     if reads is not None:
         reads.envelopes.pop(snapshot_id, None)
     try:
-        return _formation_incomplete_banner(console, snapshot_id)
+        # A passage carrier is only a window. The formation check must use the
+        # complete, identity-verified extraction from the same full envelope
+        # that processing_status will read, never the passage's smaller view.
+        fragments = None
+        if reads is not None and read_inputs.fragments is not None:
+            from src.vorming.recoverable_formation_v1 import incomplete
+            from src.vorming.source_preparation_context_v1 import KEY, stored_extraction
+            try:
+                envelope = console._envelope(snapshot_id)
+                raw = stored_extraction(envelope) if incomplete(envelope) else None
+            except ConsoleError:
+                raw = None
+            if raw is not None:
+                from src.vorming.prepared_source_views_v1 import SourceFragments, prepare
+                try:
+                    passage = read_inputs.fragments
+                    identity_fields = ('snapshot_id', 'source_id', 'document_id', 'sha256', 'version', 'content_kind')
+                    same_identity = all(read_inputs.envelope.get(key) == envelope.get(key) for key in identity_fields)
+                    if (isinstance(passage, SourceFragments) and passage.name == 'full'
+                            and same_identity
+                            and passage.root.payload['fragments_hash'] == envelope[KEY]['fragments_hash']
+                            and passage.root.docling_record == getattr(raw, 'extraction_record', None)):
+                        # The existing passage carrier proves the entire exact
+                        # extraction, not merely a selected source window.
+                        fragments = passage
+                    else:
+                        fragments = prepare(raw).fragments
+                except (ConsoleError, KeyError, TypeError, ValueError):
+                    # Keep the original full-source validation path for legacy
+                    # inputs that cannot form a prepared carrier.
+                    fragments = None
+        return _formation_incomplete_banner(console, snapshot_id, formation_fragments=fragments)
     finally:
         if reads is not None:
             reads.envelopes[snapshot_id] = read_inputs.envelope
