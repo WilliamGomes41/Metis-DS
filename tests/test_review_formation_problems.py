@@ -19,7 +19,7 @@ FIRST = 'Gebruik geen zalf.'
 SECOND = 'Controleer dagelijks de huid.'
 
 
-def received(tmp_path, production_console, monkeypatch, *, source_html=None):
+def received(tmp_path, production_console, monkeypatch, *, source_html=None, all_blocks=False):
     monkeypatch.setenv('METIS_FORMATION_TASK_STORAGE', 'v1')
     console = production_console(root=tmp_path, processing_binder=lambda console: None)
     author, reviewer = accounts(console)
@@ -33,6 +33,9 @@ def received(tmp_path, production_console, monkeypatch, *, source_html=None):
             entered.set()
             assert release.wait(15)
         proposal = response_for(payload, text)
+        if all_blocks:
+            for block in data['source_blocks'][1:]:
+                proposal['objects'].extend(response_for(payload, block['text'])['objects'])
         if mode.get('missing_context') and text == SECOND:
             proposal['objects'][0]['context_evidence'] = [
                 {'role': 'condition', 'span': None, 'unresolved_reason': 'context_uncertain'}]

@@ -85,6 +85,9 @@ groeit niet mee. Kop-/contextmutaties worden afzonderlijk getoetst. De eerdere
 128-fixture met een eigen kop per kandidaat bleef ook met twee historiekandidaten
 tijdens setup volledige writes uitvoeren op257 actuele objecten en een envelope
 van circa1MB; die lokale tussenrun is onderbroken en telt niet als full-pass.
+De deterministische testprovider beantwoordt in deze schaalgevallen elk aangeboden
+bronblok. De native vormingsroute en activatie blijven de bestaande eigenaars;
+de proef eist daadwerkelijk32/128 gevormde kandidaten, niet alleen32/128 inputregels.
 Een tussenproef met acht historiekandidaten is na148s tijdens setup afgebroken
 en telt niet als geslaagde uitvoering. De eerdere fixture voerde voor iedere extra kandidaat opnieuw volledige writes uit
 en bereikte de CI-grens al tijdens setup. De diagnostische stack lokaliseerde

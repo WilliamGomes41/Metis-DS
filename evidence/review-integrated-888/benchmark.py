@@ -369,7 +369,7 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
         setup_file.write_text(json.dumps([{'case': 'setup_progress', 'size': size, 'stage': stage}]))
     setup_stage('receipt')
     console, sid, author, reviewer, calls, mode, _provider = received(
-        tmp_path, production_console, monkeypatch, source_html=source_html)
+        tmp_path, production_console, monkeypatch, source_html=source_html, all_blocks=size > 2)
     mode['broken'] = incomplete
     setup_stage('activation')
     execute(console, sid, author, 'native-task-review-proof')
