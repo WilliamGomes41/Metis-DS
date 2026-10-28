@@ -139,6 +139,8 @@ Afleiding bij lezen, nooit automatisch wegschrijven (B2-b). Een afgeleide route 
 leesbewijs, gelabeld als "afgeleid". Doorwerken op dezelfde werkrevisie vereist dat een actor de
 afgeleide route expliciet bevestigt met een reden; dat legt `origin = confirmed_legacy` vast.
 Dat mag alleen als de afleiding eenduidig is en de contractversie nog toegelaten en uitvoerbaar is.
+Deze afleiding geldt **alleen voor proza**. Voor een beslisboom is `processing_configuration.mode`
+een prozainstelling van de omgeving en dus geen routebewijs.
 Herstel en reconciliatie binden nooit (lifecycle-vsa §4, §13).
 
 | Bewijs in de envelope | Afgeleide status | Gedrag bij nieuwe poging |
@@ -147,6 +149,8 @@ Herstel en reconciliatie binden nooit (lifecycle-vsa §4, §13).
 | Geen poging met configuratie, wel `semantic_replay.identity` met een contractversie | `derived_legacy` uit de replay-identiteit | Idem |
 | Geen enkel routebewijs | `unrecorded` | Weigeren met `formation_route_unrecorded` (besluit B2-a); alleen een opvolger |
 | Tegenstrijdige modi tussen pogingen | `conflicting` | Weigeren met `formation_route_conflicting`; alleen een opvolger. Zichtbaar in de diagnostiek |
+| Beslisboom gevormd onder de vervallen route (geen `decision_tree_formation`, wel eenheden/graaf/objecten) | n.v.t. (geen bevestigingspad) | Weigeren zoals nu (`decision_tree_legacy_route_retired`, `operations_console_v1.py:2210–2214`); alleen een opvolger. Nooit `confirmed_legacy` |
+| Beslisboom met `decision_tree_formation` | `derived_legacy` uit dat contract (niet uit `mode`) | Als proza: weigeren tot expliciete bevestiging, dan `confirmed_legacy` |
 | Gepubliceerd | n.v.t. | Nooit opnieuw vormen (bestaande regel); alleen lezen |
 
 ## 6. Besluiten (projectlead)
@@ -199,9 +203,9 @@ High-risk-velden (`continuous-development.md`):
 | Why local patching is insufficient | zes writers (incl. directe herextractie) en de uitvoering lezen de omgeving onafhankelijk; zonder één binding blijft er een stille wissel mogelijk |
 | Current authority/writer/reader map | §2 |
 | Supported runtime topologies | console + PostgreSQL workflow-store; workers via dispatch/handover; Azure-productiecompositie (`console_asgi`) |
-| Persisted-state impact | één additief envelope-veld; pogingen ongewijzigd van vorm |
-| Compatibility/migration plan | expand: readers accepteren envelopes met én zonder binding (legacy-afleiding §5); geen migratie-run |
-| Rollback/recovery plan | softwareterugzetting: de oude code negeert het extra veld en leest de omgeving (vorig gedrag); geen data-rollback nodig |
+| Persisted-state impact | additief: envelope-veld `formation_route` én per poging `attempt.formation_route` (kopie van de binding plus effectieve route), ook in receipts en de poging-payload in de workflow-store. Oude pogingen zonder dit veld zijn legacy en worden niet herschreven |
+| Compatibility/migration plan | expand/contract in twee releases. **Release 1 (expand):** readers accepteren envelopes en pogingen met én zonder binding; bestaat er een binding, dan dwingen alle writers die af (ook retry/herextractie); er wordt nog niets gebonden. **Release 2:** de eerste reservering schrijft de binding. Geen migratie-run |
+| Rollback/recovery plan | terugzetten mag alleen naar release 1 of later: die leest en handhaaft bestaande bindingen, zodat N2 na een rollback blijft gelden. Terugzetten naar code van vóór release 1 is geblokkeerd zolang er envelopes met `formation_route` bestaan, want die code negeert de binding en zou een retry onder de omgevingsmodus reserveren (in strijd met N2). Als noodpad geldt een operationele poort: geen nieuwe pogingen op gebonden envelopes tot de rollforward. Geen data-rollback |
 | Cutover trigger | alle zes writers en de uitvoering (`pre_review_semantic_v1.py:1150`) gebruiken de binding; tests §8 groen op native PostgreSQL |
 | Cleanup/decommission criteria | omgevingsreads op `:1620`, `:2178`, `:2251`, `source_selection_v1.py:102` en `pre_review_semantic_v1.py:1150` alleen nog voor de eerste binding; `assert_resume_configuration` vergelijkt met de binding |
 | Failure blast radius | alleen nieuwe pogingen; lopende pogingen houden bestaande fences; geen effect op review/publicatie/serving |
@@ -216,8 +220,12 @@ High-risk-velden (`continuous-development.md`):
 3. Een dubbele registratie (zelfde `command_id`) maakt geen tweede poging of binding. Een stale writer
    (verouderde revisie) faalt. Een commit-failure laat geen gedeeltelijke binding achter.
 4. Gelijktijdige eerste reserveringen op dezelfde bronversie leveren precies één binding op.
-5. Legacy: eenduidig, ontbrekend en tegenstrijdig bewijs geven respectievelijk binding,
-   weigering (`formation_route_unrecorded`, B2-a) en weigering (`formation_route_conflicting`). Immutable releases en de live voorganger blijven intact.
+5. Legacy-proza: eenduidig bewijs geeft vóór bevestiging `formation_route_unconfirmed` en na
+   expliciete bevestiging door een actor met reden precies één `confirmed_legacy`-binding;
+   ontbrekend bewijs geeft `formation_route_unrecorded` (B2-a); tegenstrijdig bewijs geeft
+   `formation_route_conflicting`. Een beslisboom onder de vervallen route krijgt nooit een
+   bevestigingspad (`decision_tree_legacy_route_retired`, alleen een opvolger). Rollback naar
+   release 1 houdt een bestaande binding gehandhaafd. Immutable releases en de live voorganger blijven intact.
 6. Een providerfout leidt niet tot een andere route of een alternatieve kandidaatmaker.
 7. Een deploy tussen reservering en uitvoering blijft gefenst (bestaand). Een nieuwe poging na de deploy
    met dezelfde route, hetzelfde model en docling is toegestaan (B3-c). Is de vastgelegde
