@@ -91,11 +91,15 @@ referentiepad en de bestaande bron-/closure-/publicatieproeven blijven behouden.
 
 De documentrijprobe onderscheidt een echt `Lock/transactionid`-wait van CPU/trigger-
 of netwerkwerk en toont vrijgave gevolgd door303. De context/single-probe observeert
-de twee echte PostgreSQL-blocking edges; bij de bekende omgekeerde lockvolgorde
+de twee echte PostgreSQL-blocking edges; bij een te invalideren bestaande binding en de omgekeerde lockvolgorde
 wordt SQLSTATE40P01 plus één duurzame winnaar vereist. Een geslaagde diagnostische
 test betekent hier dat de fout aangetoond is, niet dat de writer deadlockvrij is.
 De veiligheidsassertie `assert not result['observed_cycle']` op deze native
-resultaatregel is de rode no-deadlock-baseline voor WP6. De bestaande writer blijft
+resultaatregel met `has_prior_binding=True` is de rode no-deadlock-baseline voor WP6.
+De negatieve controle zonder bindings heeft geen bindingdelta/authorizationlock:
+context commit, de gelijktijdige approval conflicteert op revisie. Dat is geen
+deadlock en moet als bestaand correct conflictgedrag behouden blijven.
+De bestaande writer blijft
 ongewijzigd; een latere fix moet het echte concurrerende pad opnieuw uitvoeren.
 
 `baseline_budget_violations` registreert de overschrijdingen van de vooraf genoemde

@@ -94,8 +94,9 @@ def test_native_context_retarget(tmp_path, production_console, monkeypatch):
     completion_probe(tmp_path, monkeypatch, 'context_retarget', tmp_path, production_console, monkeypatch)
 
 
-def test_native_context_single_lock_cycle(tmp_path, production_console, monkeypatch):
-    completion_probe(tmp_path, monkeypatch, 'context_lock_cycle', tmp_path, production_console, monkeypatch)
+@pytest.mark.parametrize('with_binding', [False, True])
+def test_native_context_single_lock_cycle(tmp_path, production_console, monkeypatch, with_binding):
+    completion_probe(tmp_path, monkeypatch, 'context_lock_cycle', tmp_path, production_console, monkeypatch, with_binding)
 
 
 @pytest.mark.parametrize('size', [32, 128])

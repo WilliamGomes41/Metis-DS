@@ -115,7 +115,7 @@ deelnemers gebruiken savepoints. Na rollback worden processmaps alleen herlezen.
 | Reviewledger | Globale ledger advisory lock en laatste eventrij FOR UPDATE; buffered flush controleert de keten en weigert een gewijzigde voorganger met workflow_review_chain_conflict | `workflow_review_postgres_v1.append_event/buffered/_flush_buffer` |
 
 **Bevinding:** authorization→document en document→authorization bestaan beide.
-Bij aparte storelocks is een cyclus mogelijk: review houdt authorization en wacht
+Bij een echte bindingdelta en aparte storelocks is een cyclus mogelijk: review houdt authorization en wacht
 op document; context houdt document en wacht op authorization. De lokale flock
 kan dat in één runtime serialiseren. De bekende batchproef bewijst alleen de
 batch/single-volgorde. Er is hier geen native context/single-deadlock gereproduceerd

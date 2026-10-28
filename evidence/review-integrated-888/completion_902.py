@@ -222,13 +222,22 @@ def lock_worker(folder, kind):
         (folder / (kind + '.result')).write_text(json.dumps(result))
 
 
-def context_lock_cycle(tmp_path, production_console, monkeypatch):
+def context_lock_cycle(tmp_path, production_console, monkeypatch, with_binding):
     """Two OS processes: real lock owners, hard cleanup and safe DB observation."""
     import subprocess
     import sys
     from src.publication.publish_authorization_v1 import still_matches
     from tests.production_support import restart_production
     console, sid, reviewer, focal = task_system(tmp_path, production_console, monkeypatch)
+    if with_binding:
+        console.review_object(actor_id=reviewer, snapshot_id=sid, object_id=focal['object_id'],
+            decision='approve', confirmed_object_type='recommendation', recommendation_direction='against',
+            recommendation_strength_level='not_stated', relation_review_ack=True)
+        BASE['append_post_fixture_revision'](console, sid, focal['object_id'], reviewer)
+        focal = next(o for o in console.snapshot_objects(sid) if o['object_id'] == focal['object_id'])
+        prior = console.workflow_review_store.read_bindings([sid])[sid]
+        assert any(b['valid'] and b['object_id'] == focal['object_id'] for b in prior)
+        assert not any(still_matches(b, focal) for b in prior)
     source = next(o for o in console.snapshot_objects(sid) if o.get('proposed_object_type') == 'recommendation'
                   and o['object_id'] != focal['object_id'])
     folder = tmp_path / 'lock-probe'
@@ -286,10 +295,15 @@ def context_lock_cycle(tmp_path, production_console, monkeypatch):
                 except subprocess.TimeoutExpired:
                     child.kill()
                     child.wait(timeout=5)
-    record('context_lock_cycle_observation', observed_cycle=cycle, results=results)
-    assert cycle, results
+    record('context_lock_cycle_observation', has_prior_binding=with_binding, observed_cycle=cycle, results=results)
+    assert cycle == with_binding, results
     assert sum(r['committed'] for r in results.values()) == 1, results
-    assert any('40P01' in r['sqlstates'] for r in results.values()), results
+    if with_binding:
+        assert any('40P01' in r['sqlstates'] for r in results.values()), results
+    else:
+        assert results['context']['committed']
+        assert results['single']['error_code'] == 'snapshot_object_write_conflict'
+        assert not any(r['sqlstates'] for r in results.values())
     fresh = restart_production(console)
     current = next(o for o in fresh.snapshot_objects(sid) if o['object_id'] == focal['object_id'])
     assert bool(current.get('metadata', {}).get('confirmed_source_context')) == results['context']['committed']
@@ -302,6 +316,7 @@ def context_lock_cycle(tmp_path, production_console, monkeypatch):
     context_events = [e for e in events if e.get('event_type') == 'source_context_review'
                       and (e.get('details') or {}).get('command_id') == 'context-concurrent']
     assert len(context_events) == int(results['context']['committed'])
-    record('context_lock_cycle', observed_cycle=True, wait_categories=['advisory', 'transactionid'],
+    record('context_lock_cycle', has_prior_binding=with_binding, observed_cycle=cycle,
+           wait_categories=['advisory', 'transactionid'] if cycle else [],
            results=results, restart_reads_single_winner=True, losing_source_and_context_audit_rolled_back=True,
            interpretation='controlled baseline defect; no production incident attribution; no fix in WP5')
