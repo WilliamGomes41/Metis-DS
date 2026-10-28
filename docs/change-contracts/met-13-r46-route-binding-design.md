@@ -84,10 +84,13 @@ modusnaam. Die is documenttoestand en verandert alleen via een opvolger (nieuwe 
 `model`, `docling` en `deployment` blijven uitvoeringsconfiguratie per poging, met de bestaande
 fences.
 
-1. **Eén binding per werkrevisie (B1, optie A).** In deze code is de envelop (`snapshot_id`) de
-   werkrevisie: een opvolger is een nieuwe envelop, eventueel over dezelfde bronbytes. Een nieuw veld
-   `envelope["formation_route"] = {route, source_kind, policy_version, actor_id, reason, command_id,
-   bound_at, origin}`. Het wordt **eenmalig** geschreven door de eerste reservering, binnen de
+1. **Eén binding per werkrevisie (B1, optie A).** De binding staat op de rij in
+   `workflow.documents` (de envelop). Die rij draagt naast de sleutel `snapshot_id` al de
+   lifecycle-identiteiten `working_revision_id` en `source_snapshot_id` (lifecycle-vsa §1: de
+   SourceSnapshot heeft `snapshot_id`, de WorkingRevision `working_revision_id`). De binding legt
+   beide expliciet vast, zodat zij aan de WorkingRevision hangt en niet aan een envelopsleutel. Een
+   nieuw veld `envelope["formation_route"] = {route, source_kind, policy_version, actor_id, reason,
+   command_id, bound_at, origin, working_revision_id, source_snapshot_id}`. Het wordt **eenmalig** geschreven door de eerste reservering, binnen de
    bestaande transactie- en CAS-grens. Daarna is het onveranderlijk; er komt geen nieuwe store.
    `origin ∈ {selected, default, confirmed_legacy}`. Er bestaat geen automatisch geschreven
    `derived_legacy`-binding (B2-b, lifecycle-vsa §4).
@@ -143,6 +146,20 @@ Deze afleiding geldt **alleen voor proza**. Voor een beslisboom is `processing_c
 een prozainstelling van de omgeving en dus geen routebewijs.
 Herstel en reconciliatie binden nooit (lifecycle-vsa §4, §13).
 
+**Bevestigingscommando.** `confirm_legacy_formation_route(actor_id, snapshot_id, route, reason,
+command_id, expected_revision)`:
+- het is idempotent op `command_id`; een herhaling met andere invoer geeft `processing_command_conflict`;
+- het draait binnen dezelfde schrijfgrens als `reserve_selection` (`_reprocessing_transaction` +
+  revisie-CAS + `_commit_prepared_store`), dus het is geen parallelle writer;
+- het eist `authorize` (bronselectierecht), een niet-lege reden, `unbound`, een eenduidige
+  afleiding gelijk aan `route` en een toegelaten, uitvoerbare route;
+- het schrijft alleen de binding (`origin = confirmed_legacy`) en maakt geen poging. "Gebonden,
+  nog geen poging" is een geldige duurzame toestand. De eerstvolgende retry, selectie of
+  herextractie leest de binding.
+
+Een gecombineerde variant (bevestigen en reserveren in één commit) is toegestaan, mits binnen
+dezelfde transactie.
+
 | Bewijs in de envelope | Afgeleide status | Gedrag bij nieuwe poging |
 | --- | --- | --- |
 | Alle pogingen hebben dezelfde `processing_configuration.mode` | `derived_legacy` (eenduidig) | Zonder bevestiging weigeren met `formation_route_unconfirmed`; na expliciete bevestiging door een actor (met reden) binden met `origin = confirmed_legacy`; een andere route alleen via een opvolger |
@@ -186,7 +203,7 @@ Lifecycle-velden (`docs/agents/lifecycle-vsa.md`, `validate_change_contract.LIFE
 | Workflow state before/after | ongewijzigd (processing/in_review/...); route is geen workflowstatus |
 | Release state before/after | ongewijzigd |
 | Serving state before/after | ongewijzigd |
-| Expected API result | receipt bevat `formation_route`; fouten `formation_route_mismatch/excluded/conflicting/unrecorded/unconfirmed/not_executable/not_resumable` |
+| Expected API result | receipt bevat `formation_route`; fouten `formation_route_mismatch/excluded/conflicting/unrecorded/unconfirmed/not_executable/not_resumable`; nieuw commando `confirm_legacy_formation_route` |
 | Expected UI result | document toont vastgelegde route; omgeving als "standaard voor nieuwe verwerking" |
 | Failure result | fail closed vóór commit; geen gedeeltelijke binding; geen poging zonder binding |
 | Restart result | binding staat in de durable envelope; herstart leest binding, niet omgeving |
@@ -203,10 +220,10 @@ High-risk-velden (`continuous-development.md`):
 | Why local patching is insufficient | zes writers (incl. directe herextractie) en de uitvoering lezen de omgeving onafhankelijk; zonder één binding blijft er een stille wissel mogelijk |
 | Current authority/writer/reader map | §2 |
 | Supported runtime topologies | console + PostgreSQL workflow-store; workers via dispatch/handover; Azure-productiecompositie (`console_asgi`) |
-| Persisted-state impact | additief: envelope-veld `formation_route` én per poging `attempt.formation_route` (kopie van de binding plus effectieve route), ook in receipts en de poging-payload in de workflow-store. Oude pogingen zonder dit veld zijn legacy en worden niet herschreven |
+| Persisted-state impact | additief: envelope-veld `formation_route` én per poging `attempt.formation_route` (kopie van de binding plus effectieve route), ook in receipts en de poging-payload in de workflow-store. Oude pogingen zonder dit veld zijn legacy en worden niet herschreven. Auditprojecties met vaste veldlijsten moeten het veld meenemen: `processing_evidence_export_v1.SCHEMAS["processing_attempts"]` (`/verwerkingsbewijs`, MCP-bewijstabellen) en `processing_trace_v1.project_attempt`. Beide krijgen compatibiliteitstests met en zonder het veld |
 | Compatibility/migration plan | expand/contract in twee releases. **Release 1 (expand):** readers accepteren envelopes en pogingen met én zonder binding; bestaat er een binding, dan dwingen alle writers die af (ook retry/herextractie); er wordt nog niets gebonden. **Release 2:** de eerste reservering schrijft de binding. Geen migratie-run |
 | Rollback/recovery plan | terugzetten mag alleen naar release 1 of later: die leest en handhaaft bestaande bindingen, zodat N2 na een rollback blijft gelden. Terugzetten naar code van vóór release 1 is geblokkeerd zolang er envelopes met `formation_route` bestaan, want die code negeert de binding en zou een retry onder de omgevingsmodus reserveren (in strijd met N2). Als noodpad geldt een operationele poort: geen nieuwe pogingen op gebonden envelopes tot de rollforward. Geen data-rollback |
-| Cutover trigger | alle zes writers en de uitvoering (`pre_review_semantic_v1.py:1150`) gebruiken de binding; tests §8 groen op native PostgreSQL |
+| Cutover trigger | alle zes writers en de uitvoering (`pre_review_semantic_v1.py:1150`) gebruiken de binding; de auditprojecties tonen `attempt.formation_route`; tests §8 groen op native PostgreSQL |
 | Cleanup/decommission criteria | omgevingsreads op `:1620`, `:2178`, `:2251`, `source_selection_v1.py:102` en `pre_review_semantic_v1.py:1150` alleen nog voor de eerste binding; `assert_resume_configuration` vergelijkt met de binding |
 | Failure blast radius | alleen nieuwe pogingen; lopende pogingen houden bestaande fences; geen effect op review/publicatie/serving |
 | Adversarial proof matrix | §8 plus: alternatieve ingang (MCP/CLI/ASGI) bereikt dezelfde writer; gelijktijdige eerste binding; deploy tussen reservering en uitvoering |
@@ -231,12 +248,17 @@ High-risk-velden (`continuous-development.md`):
    met dezelfde route, hetzelfde model en docling is toegestaan (B3-c). Is de vastgelegde
    contractversie na de deploy niet meer uitvoerbaar, dan volgt `formation_route_not_executable`
    zonder terugval.
-9. Legacy met eenduidige afleiding: zonder bevestiging `formation_route_unconfirmed`; herstel,
-   herstart en reconciliatie leggen nooit zelf een binding vast; na bevestiging door een actor
-   met reden volgt precies één `confirmed_legacy`-binding.
 8. Een beslisboom kan geen prozaroute binden en omgekeerd (N4). Een beslisboom die onder een
    prozastandaard (V2/V3) wordt verwerkt, bindt `decision-tree-source-bound-v1` en slaagt; een
    wissel van de prozamodus raakt een gebonden beslisboom niet.
+9. Legacy met eenduidige afleiding: zonder bevestiging `formation_route_unconfirmed`; herstel,
+   herstart en reconciliatie leggen nooit zelf een binding vast; na bevestiging door een actor
+   met reden volgt precies één `confirmed_legacy`-binding.
+10. Een opvolger over dezelfde bronbytes (policyrevisie) krijgt een nieuwe `working_revision_id`
+    met dezelfde `source_snapshot_id`, en de binding legt beide vast. Maakt de huidige
+    opvolgerroute (`decision_successor_v1.execute` → `ingest`) in plaats daarvan een nieuwe
+    `source_snapshot_id` aan, dan is dat een bestaande lifecycle-afwijking. Die wordt vóór #915
+    vastgesteld en apart opgelost; de binding wordt niet aan de verkeerde entiteit gehangen.
 
 Bewijs op native PostgreSQL en de productiecompositie; mocks gelden niet als herstelbewijs.
 
