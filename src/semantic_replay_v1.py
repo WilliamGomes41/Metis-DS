@@ -6,6 +6,7 @@ only for the exact same frozen source and semantic contract. Candidate text is
 always reconstructed again by semantic_passage_v1.
 """
 from __future__ import annotations
+from src.request_diagnostics_v1 import diagnostic_phase
 
 import hashlib
 import json
@@ -107,6 +108,7 @@ def validated_inference_record(
     return row
 
 
+@diagnostic_phase('formation_replay')
 def exact_replay_lookup(
     record: Any,
     *,

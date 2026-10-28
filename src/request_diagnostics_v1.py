@@ -30,7 +30,9 @@ PHASES = frozenset({'authorization', 'document_list', 'document_store_read', 'do
     'selection_projection', 'processing_status', 'objects_read', 'source_read',
     'source_reconstruction', 'source_verify', 'review_bindings', 'review_render', 'review_index',
     'db_connect', 'db_execute', 'db_fetch', 'document_summary', 'review_work_items',
-    'payload_copy', 'store_lock_wait', 'store_lock_hold', 'store_transaction'})
+    'payload_copy', 'store_lock_wait', 'store_lock_hold', 'store_transaction',
+    'source_prepare', 'source_build_blocks', 'review_capture', 'review_revision',
+    'review_projection', 'source_accountability', 'formation_replay'})
 COUNTERS = frozenset({'document_snapshot_reused', 'source_reconstruction_built', 'source_reconstruction_reused',
     'source_reconstruction_unscoped', 'source_input_compared', 'source_input_hashed'})
 HEARTBEAT_SECONDS = 15
@@ -491,6 +493,14 @@ class RequestDiagnostics:
                     return {k: {'calls': v['calls'], 'inclusive_ms': round(v['inclusive_ms'], 3),
                                 'exclusive_ms': round(v['exclusive_ms'], 3)} for k, v in table.items()}
                 extra = {'phase_tree_truncated': True} if evidence.tree_truncated else {}
+                if not evidence.tree_truncated:
+                    # Root phases may overlap. Their sum is therefore an upper
+                    # bound on covered time, making this only a lower bound on
+                    # unattributed time, never an exact remainder.
+                    root_ms = sum(value['inclusive_ms'] for path, value in evidence.tree.items()
+                                  if '/' not in path)
+                    elapsed_ms = (time.perf_counter() - evidence.started) * 1000
+                    extra['unattributed_lower_bound_ms'] = round(max(0.0, elapsed_ms - root_ms), 3)
                 template = getattr(scope.get('route'), 'path', None)
                 if isinstance(template, str) and template.startswith('/'):
                     evidence.route = template[:120]

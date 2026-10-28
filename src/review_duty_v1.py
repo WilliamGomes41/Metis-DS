@@ -7,6 +7,7 @@ exact object version/hash review binding and second-review state.
 This module deliberately performs no writes and creates no task store.
 """
 from __future__ import annotations
+from src.request_diagnostics_v1 import diagnostic_phase
 
 from typing import Any, Iterable
 from src.prepared_source_views_v1 import preserve_fragments
@@ -472,6 +473,7 @@ def _route_counts(routes):
     }
 
 
+@diagnostic_phase('review_projection')
 def review_work_projection(objects, *, review_path, reviewer_id, bindings=None, fragments=None):
     """One call-local duty calculation shared by a workboard's queues/counts.
 

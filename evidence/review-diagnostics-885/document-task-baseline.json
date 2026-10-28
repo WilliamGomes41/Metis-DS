@@ -1,0 +1,44 @@
+{
+  "individual": [
+    {
+      "seconds": 0.2594138649992601,
+      "html_bytes": 24787
+    },
+    {
+      "seconds": 0.34524829400015733,
+      "html_bytes": 24787
+    },
+    {
+      "seconds": 0.276762207999127,
+      "html_bytes": 24787
+    }
+  ],
+  "inventory": [
+    {
+      "seconds": 0.2681808569996065,
+      "html_bytes": 36105
+    },
+    {
+      "seconds": 0.30482728100014356,
+      "html_bytes": 36105
+    },
+    {
+      "seconds": 0.2656521099997917,
+      "html_bytes": 36105
+    }
+  ],
+  "batch": [
+    {
+      "seconds": 0.33853739200003474,
+      "html_bytes": 24787
+    },
+    {
+      "seconds": 0.24510175800060097,
+      "html_bytes": 24787
+    },
+    {
+      "seconds": 0.23915525099982915,
+      "html_bytes": 24787
+    }
+  ]
+}

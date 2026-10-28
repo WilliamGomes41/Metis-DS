@@ -8,6 +8,7 @@ from copy import deepcopy
 import json
 
 from src.integrity_kernel import stable_hash
+from src.request_diagnostics_v1 import diagnostic_phase
 
 VERSION = 'prepared-source-views-v1'
 
@@ -139,6 +140,7 @@ class PreparedSource:
         return self.carriers['full']
 
 
+@diagnostic_phase('source_prepare')
 def prepare(raw):
     if isinstance(raw,SourceFragments):
         return raw.root
@@ -158,7 +160,8 @@ def prepare(raw):
         if key not in identical:
             # Normalize each distinct view once. Serializing the whole payload
             # duplicates identical full/content/candidate views before freezing.
-            identical[key]=json.loads(json.dumps(_reconstructed_blocks(fragments),ensure_ascii=False))
+            with diagnostic_phase('source_build_blocks'):
+                identical[key]=json.loads(json.dumps(_reconstructed_blocks(fragments),ensure_ascii=False))
         payload['views'][name]={'fragment_indices':indices,'blocks':identical[key]}
     return PreparedSource(rows,payload,docling_record=getattr(raw,'extraction_record',None))
 
