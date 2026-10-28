@@ -10,6 +10,24 @@ import runpy
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def native_case_inventory(request, tmp_path, monkeypatch):
+    """A timed-out fixture/case remains in the artifact; JUnit owns the verdict."""
+    import json
+    if not os.environ.get('REVIEW_PROOF_OUTPUT'):
+        monkeypatch.setenv('REVIEW_PROOF_OUTPUT', str(tmp_path / 'post-proof.json'))
+    path = Path(os.environ['REVIEW_PROOF_OUTPUT']).with_suffix('.tests.json')
+    rows = json.loads(path.read_text()) if path.exists() else []
+    index = len(rows)
+    rows.append({'case': 'test_progress', 'test': request.node.name, 'state': 'started'})
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(rows, indent=2) + '\n')
+    yield
+    rows = json.loads(path.read_text())
+    rows[index]['state'] = 'finished'  # Not a pass claim; failure/skip comes from JUnit.
+    path.write_text(json.dumps(rows, indent=2) + '\n')
+
+
 def completion_probe(tmp_path, monkeypatch, name, *args):
     harness = Path(__file__).resolve().parents[1] / 'evidence/review-integrated-888/completion_902.py'
     namespace = runpy.run_path(str(harness))

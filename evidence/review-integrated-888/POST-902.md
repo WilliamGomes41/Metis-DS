@@ -6,7 +6,7 @@ Proof: Opt-in companion scenario in the existing #888 harness and retained nativ
 Touches lifecycle invariants: no
 Rewrite risk: none
 
-This is evidence work within #902, not completion of its workload or production SQL-isolation requirements. No production code or domain contract changes.
+This is evidence work within #902. The execution verdict and remaining limits belong to the inspected native artifact and tracker acceptance record. No production code or domain contract changes.
 
 ## Run
 
@@ -57,7 +57,9 @@ The concurrency control appends a validated successor to the current append-orde
 
 Reports include individual wall times, status, response size and existing aggregate diagnostic phases/counters. Phase trees may overlap or truncate; do not sum them or infer missing phases. `db_json_bytes` measures diagnostic JSON volume, not proven wire bytes. Reports contain no cookies, request identifiers, account IDs, SQL text, form values, original uploaded material or incident telemetry. The workload fingerprint is synthetic and reproducible. Neither one observation nor this small fixture supports p95 or production SLO claims.
 
-## Remaining MET-23 work
+## Completion matrix
+
+The current [WP5 acceptance contract](ACCEPTANCE-902.md) specifies the complete native invocation, retry oracles, workload and technical budget definitions. `completion_902.py` adds binding-only legacy/task-v1 renewal, reject/revise/later retries, context retargeting and native context/single lock-cycle diagnosis. The existing CI entry also selects unchanged semantic-duplicate, second-review, batch/single lock-order, context/publication and disjoint storage-merge reference paths. Actual execution status is recorded in the retained JSON/JUnit and trackers; code presence alone is not proof.
 
 The [writer/dependency/lock inventory](WRITERS-902.md) records the existing production compositions, command variants, explicit and derived invalidations, precondition differences and observed lock-order differences. It is static evidence, not a completed concurrency proof. Its first outstanding probe is context versus ordinary review across independent runtime locks.
 
@@ -67,11 +69,7 @@ The native suite also includes two task-v1 compatibility cases, complete and inc
 
 Two further task-v1 cases inject actual PostgreSQL failures: a BEFORE INSERT trigger on review bindings (SQLSTATE P9021) and an initially deferred constraint trigger on review events that fails COMMIT (P9022). A transparent observer forwards the real review command unchanged and records only its native SQLSTATE cause. The HTTP responses follow the existing mappings (400 for wrapped binding-store failure, 500 for the unhandled COMMIT exception). Object histories, envelopes, bindings, review/command events and object generation must equal the pre-request state, including after a new production composition reads the same database. After removing the trigger, the same original form must succeed. This proves rollback and retry at those two boundaries; it does not assert draft retention on the generic database-error page or cover every batch/second-review/authorization race.
 
-- Execute and inspect the added history/binding/incomplete profiles, including their measured counts and extraction/storage contracts; increase independent object counts for comparative cost evidence. Add relation/context dependency fixtures separately.
-- Separate validation before versus inside a transaction using observed native phases. Add native write/commit-fault probes and inspect the controlled row-lock probe with independent connections and bounded deadlines.
-- Attribute safe SQL categories and execute/fetch/lock wait separately, without exporting query parameters or incident identifiers. A controlled local lock proves observability only; production SQL cause remains unknown without corresponding live evidence.
-- Build the mutation/invalidation dependency fixture and writer/lock inventory for later work packages. Preserve the distinctions between passage generation, command equality and storage three-way merge, including binding-only and legacy writes.
-- Collect comparable completed runs at the agreed workload sizes. Keep failures and unfinished requests in the run inventory. Do not close #902 from this initial baseline.
+Task-v1 scale cases use 32/128 candidates and two native history cycles, with one first HTTP after a fresh production composition and two repeated GET/400 pairs. They retain actual object/history/binding/source counts and source/extraction identity. Transparent native cursor observation exports only fixed SQL categories, execute/fetch counts and time, fetched rows and affected write rows. Existing diagnostics retain JSON volume, source prepare/build, transaction and overlapping store-lock spans. Request/test progress inventories retain started but unfinished cases; JUnit owns the pass/fail/skip verdict. Engineering budget violations are baseline findings, not suppressed or confused with production SLO acceptance. The controlled SQL cause is separate from the unknown live incident cause.
 
 ## Local execution limitation
 

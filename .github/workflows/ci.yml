@@ -75,7 +75,7 @@ jobs:
           REVIEW_PROOF_OUTPUT: output/review-post-902.json
         run: |
           bash scripts/test_postgres.sh > /dev/null
-          python -m pytest -q tests/test_review_post_baseline_postgres.py \
+          python -m pytest -x -q tests/test_review_post_baseline_postgres.py \
             tests/test_t11_knowledge_revision_lineage.py::test_unchanged_review_retry_keeps_revision_and_legacy_history \
             tests/test_d5_4_review_interaction_evidence.py::test_second_review_uses_same_evidence_store_without_changing_object_tuple \
             tests/test_deterministic_review_repair_v1.py::test_source_unit_resolution_creates_new_proposal_and_no_revise_remains \

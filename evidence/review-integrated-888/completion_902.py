@@ -1,12 +1,10 @@
 """Native WP5 completion probes; no replacement production rules or writers."""
-from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 import json
 import os
 from pathlib import Path
 import re
 import runpy
-from threading import Event
 from time import monotonic, sleep
 
 from fastapi.testclient import TestClient
@@ -161,91 +159,149 @@ def context_retarget(tmp_path, production_console, monkeypatch):
            both_targets_require_review=True, restart_preserves_state=True)
 
 
-def context_lock_cycle(tmp_path, production_console, monkeypatch):
-    """Diagnose real lock inversion. A proven DB abort is a baseline finding."""
+def lock_worker(folder, kind):
+    """Child process: build the real production composition, then run one command."""
+    from contextlib import contextmanager
+    import src.workflows.workflow_transaction_v1 as transactions
+    import src.workflows.workflow_review_cutover_v1 as review_boundary
     import src.review.source_context_review_v1 as context
+    from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+    from tests.production_support import production_application
+    folder = Path(folder)
+    inputs = json.loads((folder / 'inputs.json').read_text())
+    result = {'committed': False, 'sqlstates': []}
+    try:
+        console = production_application(folder / kind,
+            PostgresCanonicalConfig(dsn=os.environ['METIS_WP5_TEST_DSN']),
+            source_store=inputs['source_store'], processing_binder=lambda _: None).state.operations_kernel
+        original_transaction = transactions.workflow_transaction
+        @contextmanager
+        def bounded_transaction(owner):
+            with original_transaction(owner) as con:
+                con.execute("SET LOCAL statement_timeout='15s'")
+                yield con
+        transactions.workflow_transaction = bounded_transaction
+        review_boundary.workflow_transaction = bounded_transaction
+        if kind == 'single':
+            original_lock = console.workflow_review_store._lock_authorizations
+            def hold_auth(con):
+                original_lock(con)
+                (folder / 'single.ready').write_text(str(con.info.backend_pid))
+                deadline = monotonic() + 15
+                while not (folder / 'context.ready').exists():
+                    if monotonic() >= deadline:
+                        raise TimeoutError('context_row_not_observed')
+                    sleep(0.01)
+            console.workflow_review_store._lock_authorizations = hold_auth
+            console.review_object(actor_id=inputs['reviewer'], snapshot_id=inputs['sid'],
+                object_id=inputs['focal'], decision='approve', confirmed_object_type='recommendation',
+                recommendation_direction='against', recommendation_strength_level='not_stated',
+                relation_review_ack=True, expected_revision=inputs['revision'])
+        else:
+            original_context = context._confirm_source_context
+            def observe_context(owner, **command):
+                with owner.workflow_document_store._connect() as con:
+                    (folder / 'context.ready').write_text(str(con.info.backend_pid))
+                return original_context(owner, **command)
+            context._confirm_source_context = observe_context
+            console.confirm_source_context(actor_id=inputs['reviewer'], snapshot_id=inputs['sid'],
+                source_object_id=inputs['source'], role='context', target_object_ids=[inputs['focal']],
+                reason='Synthetic lock-cycle probe.', command_id='context-concurrent',
+                expected_revision=inputs['revision'])
+        result['committed'] = True
+    except BaseException as exc:
+        result['error_type'] = type(exc).__name__
+        result['error_code'] = getattr(exc, 'code', None)
+        seen = set()
+        while exc is not None and id(exc) not in seen:
+            seen.add(id(exc))
+            if getattr(exc, 'sqlstate', None):
+                result['sqlstates'].append(exc.sqlstate)
+            exc = exc.__cause__
+    finally:
+        (folder / (kind + '.result')).write_text(json.dumps(result))
+
+
+def context_lock_cycle(tmp_path, production_console, monkeypatch):
+    """Two OS processes: real lock owners, hard cleanup and safe DB observation."""
+    import subprocess
+    import sys
     from src.publication.publish_authorization_v1 import still_matches
     from tests.production_support import restart_production
-    single, sid, reviewer, focal = task_system(tmp_path, production_console, monkeypatch)
-    contender = production_console(root=tmp_path / 'independent', source_store=single.source_store,
-                                   processing_binder=lambda _: None)
-    assert contender.runtime != single.runtime
-    source = next(o for o in single.snapshot_objects(sid) if o.get('proposed_object_type') == 'recommendation'
+    console, sid, reviewer, focal = task_system(tmp_path, production_console, monkeypatch)
+    source = next(o for o in console.snapshot_objects(sid) if o.get('proposed_object_type') == 'recommendation'
                   and o['object_id'] != focal['object_id'])
-    revision = single.objects_revision(sid)
-    auth_held, document_held = Event(), Event()
-    pids = {}
-    real_lock = single.workflow_review_store._lock_authorizations
-    real_context = context._confirm_source_context
-
-    def hold_auth(con):
-        real_lock(con)
-        pids['single'] = con.info.backend_pid
-        auth_held.set()
-        assert document_held.wait(15)
-
-    def observe_context(console, **command):
-        if console is contender:
-            with console.workflow_document_store._connect() as con:
-                pids['context'] = con.info.backend_pid
-            document_held.set()  # outer real context boundary already locks the row
-        return real_context(console, **command)
-
-    def outcome(fn, **kwargs):
-        try:
-            fn(**kwargs)
-            return {'committed': True, 'sqlstates': []}
-        except Exception as exc:
-            states, seen = [], set()
-            while exc is not None and id(exc) not in seen:
-                seen.add(id(exc))
-                if getattr(exc, 'sqlstate', None):
-                    states.append(exc.sqlstate)
-                exc = exc.__cause__
-            return {'committed': False, 'sqlstates': states}
-
-    monkeypatch.setattr(single.workflow_review_store, '_lock_authorizations', hold_auth)
-    monkeypatch.setattr(context, '_confirm_source_context', observe_context)
+    folder = tmp_path / 'lock-probe'
+    folder.mkdir()
+    (folder / 'inputs.json').write_text(json.dumps({'sid': sid, 'reviewer': reviewer,
+        'focal': focal['object_id'], 'source': source['object_id'],
+        'revision': console.objects_revision(sid), 'source_store': str(console.source_store)}))
+    environment = dict(os.environ, METIS_WP5_TEST_DSN=console.workflow_document_store.config.dsn)
+    # DB config remains in environment, never in argv, artifacts or result logs.
+    command = [sys.executable, '-c', 'import runpy,sys; runpy.run_path(sys.argv[1])["lock_worker"](sys.argv[2],sys.argv[3])',
+               str(Path(__file__).resolve()), str(folder)]
+    children = {}
     cycle = False
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        approval = pool.submit(outcome, single.review_object, actor_id=reviewer, snapshot_id=sid,
-            object_id=focal['object_id'], decision='approve', confirmed_object_type='recommendation',
-            recommendation_direction='against', recommendation_strength_level='not_stated',
-            relation_review_ack=True, expected_revision=revision)
-        try:
-            assert auth_held.wait(15)
-            linking = pool.submit(outcome, contender.confirm_source_context, actor_id=reviewer,
-                snapshot_id=sid, source_object_id=source['object_id'], role='context',
-                target_object_ids=[focal['object_id']], reason='Synthetic lock-cycle probe.',
-                command_id='context-concurrent', expected_revision=revision)
-            assert document_held.wait(15)
-            with single.workflow_document_store._connect() as observer:
-                observer.autocommit = True
-                deadline = monotonic() + 10
-                while monotonic() < deadline and not (approval.done() and linking.done()):
-                    rows = observer.execute('SELECT pid,wait_event_type,wait_event,pg_blocking_pids(pid) AS blockers '
-                        'FROM pg_stat_activity WHERE pid=ANY(%s)', (list(pids.values()),)).fetchall()
-                    waits = {r['pid']: r for r in rows}
-                    if all(pid in waits for pid in pids.values()):
-                        a, b = pids['single'], pids['context']
-                        if b in waits[a]['blockers'] and a in waits[b]['blockers']:
-                            assert {waits[a]['wait_event'], waits[b]['wait_event']} == {'advisory', 'transactionid'}
-                            cycle = True
-                            break
-                    sleep(0.01)
-        finally:
-            document_held.set()
-        results = {'single': approval.result(timeout=30), 'context': linking.result(timeout=30)}
-    assert cycle, 'must observe the real PostgreSQL wait-for cycle, not just two threads'
-    assert sum(r['committed'] for r in results.values()) == 1
+    try:
+        children['single'] = subprocess.Popen([*command, 'single'], env=environment,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        deadline = monotonic() + 30
+        while not (folder / 'single.ready').exists():
+            assert children['single'].poll() is None, 'single process exited before its lock'
+            assert monotonic() < deadline, 'single process did not acquire authorization lock'
+            sleep(0.01)
+        children['context'] = subprocess.Popen([*command, 'context'], env=environment,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        deadline = monotonic() + 30
+        while not (folder / 'context.ready').exists():
+            assert children['context'].poll() is None, 'context process exited before its row lock'
+            assert monotonic() < deadline, 'context process did not acquire document lock'
+            sleep(0.01)
+        a = int((folder / 'single.ready').read_text())
+        b = int((folder / 'context.ready').read_text())
+        with console.workflow_document_store._connect() as observer:
+            observer.autocommit = True
+            observer.execute("SET statement_timeout='2s'")
+            deadline = monotonic() + 10
+            while monotonic() < deadline:
+                rows = observer.execute('SELECT pid,wait_event_type,wait_event,pg_blocking_pids(pid) AS blockers '
+                    'FROM pg_stat_activity WHERE pid=ANY(%s)', ([a, b],)).fetchall()
+                waits = {r['pid']: r for r in rows}
+                if a in waits and b in waits and b in waits[a]['blockers'] and a in waits[b]['blockers']:
+                    assert {waits[a]['wait_event'], waits[b]['wait_event']} == {'advisory', 'transactionid'}
+                    cycle = True
+                    break
+                if all(p.poll() is not None for p in children.values()):
+                    break
+                sleep(0.01)
+        for child in children.values():
+            child.wait(timeout=30)
+        results = {name: json.loads((folder / (name + '.result')).read_text()) for name in children}
+    finally:
+        for child in children.values():
+            if child.poll() is None:
+                child.terminate()
+                try:
+                    child.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait(timeout=5)
+    record('context_lock_cycle_observation', observed_cycle=cycle, results=results)
+    assert cycle, results
+    assert sum(r['committed'] for r in results.values()) == 1, results
     assert any('40P01' in r['sqlstates'] for r in results.values()), results
-    fresh = restart_production(single)
+    fresh = restart_production(console)
     current = next(o for o in fresh.snapshot_objects(sid) if o['object_id'] == focal['object_id'])
-    linked = bool(current.get('metadata', {}).get('confirmed_source_context'))
-    assert linked == results['context']['committed']
+    assert bool(current.get('metadata', {}).get('confirmed_source_context')) == results['context']['committed']
     assert (current['governance']['validation_status'] == 'approved') == results['single']['committed']
     assert any(still_matches(b, current) for b in fresh.object_review_bindings(sid)
                if b['object_id'] == focal['object_id']) == results['single']['committed']
+    current_source = next(o for o in fresh.snapshot_objects(sid) if o['object_id'] == source['object_id'])
+    assert (current_source['object_version'] != source['object_version']) == results['context']['committed']
+    events = fresh.workflow_review_store.read_events()
+    context_events = [e for e in events if e.get('event_type') == 'source_context_review'
+                      and (e.get('details') or {}).get('command_id') == 'context-concurrent']
+    assert len(context_events) == int(results['context']['committed'])
     record('context_lock_cycle', observed_cycle=True, wait_categories=['advisory', 'transactionid'],
-           results=results, restart_reads_single_winner=True,
+           results=results, restart_reads_single_winner=True, losing_source_and_context_audit_rolled_back=True,
            interpretation='controlled baseline defect; no production incident attribution; no fix in WP5')

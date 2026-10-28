@@ -412,11 +412,15 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
     bindings = console.workflow_review_store.read_bindings([sid]).get(sid, [])
     env = console.workflow_document_store.get_envelope(sid)
     from src.vorming.source_preparation_context_v1 import stored_extraction
+    from src.vorming.prepared_source_views_v1 import contract as prepared_contract
+    result['configuration'] = {'route': '/review', 'task': 'default passage form',
+        'actor_role': 'reviewer', 'document_class': env['class'],
+        'prepared_view_contract': prepared_contract(), 'field_contract': 'source-bound-fields-v3'}
     result['workload'] = {'candidates': len(candidates), 'history_depth': history_depth,
         'current_objects': len(current), 'stored_versions': len(rows), 'bindings': len(bindings),
         'matching_bindings': sum(still_matches(b, current[b['object_id']]) for b in bindings),
         'source_fragments': len(stored_extraction(env)),
-        'source_bytes': len(source_html) if source_html else None,
+        'source_bytes': len(console._verified_source_bytes(env)[1]),
         'source_sha256': env['sha256'], 'extraction_contract': env['prepared_source_extraction']['version']}
     result['temperature'] = ('fresh production composition for first HTTP, then two repeated GET/400 pairs; '
         'OS and PostgreSQL caches are not flushed') if size > 2 else 'compatibility fixture'
