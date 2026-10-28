@@ -358,3 +358,15 @@ def test_second_review_uses_same_evidence_store_without_changing_object_tuple(tm
         if row.get("event_type") == "second_review_approve"
     )
     assert event["details"]["review_interaction"]["interaction_id"] == "ri_second1"
+
+    # WP5 compatibility oracle: a fresh second-review retry has no new writes.
+    from copy import deepcopy
+    before_retry = deepcopy(console._load_objects(snapshot_id, remember=False))
+    before_bindings = deepcopy(console.object_review_bindings(snapshot_id))
+    before_events = deepcopy(read_events(console._ledger_path))
+    console.approve_second_review(actor_id=accounts["reviewer_b"]["account_id"],
+        snapshot_id=snapshot_id, object_id=object_id,
+        expected_revision=console.objects_revision(snapshot_id), interaction_evidence=evidence)
+    assert console._load_objects(snapshot_id, remember=False) == before_retry
+    assert console.object_review_bindings(snapshot_id) == before_bindings
+    assert read_events(console._ledger_path) == before_events
