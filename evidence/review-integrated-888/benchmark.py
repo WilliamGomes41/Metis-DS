@@ -259,12 +259,13 @@ def test_native_review_matrix(case, tmp_path, production_console, production_app
 
 
 @pytest.mark.parametrize('incomplete', [False, True])
-def test_native_task_v1_review(tmp_path, production_console, production_app, monkeypatch, incomplete):
+def test_native_task_v1_review(tmp_path, production_console, production_app, monkeypatch, incomplete, fault=None):
     """Actual bounded processing activates storage v1 before measured HTTP review."""
     from src.request_diagnostics_v1 import RequestDiagnostics
     import src.console_performance_v1 as performance
     from tests.test_review_formation_problems import received, execute, FIRST
     from src.publication.publish_authorization_v1 import still_matches
+    assert fault in {None, 'binding', 'commit'}
 
     console, sid, author, reviewer, calls, mode, _provider = received(
         tmp_path, production_console, monkeypatch)
@@ -296,7 +297,7 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
 
     monkeypatch.setattr(RequestDiagnostics, 'emit', emit)
     monkeypatch.setattr(performance._LOGGER, 'info', lambda *args, **kwargs: None)
-    result = {'case': 'task_v1_review', 'formation_incomplete': incomplete,
+    result = {'case': 'task_v1_review', 'formation_incomplete': incomplete, 'fault_point': fault,
         'commit': git('rev-parse', 'HEAD'), 'harness_sha256': sha256(Path(__file__).read_bytes()).hexdigest(),
         'runtime': 'authenticated ASGI + native disposable PostgreSQL',
         'fixture': 'existing synthetic two-passage bounded-processing provider; production activation',
@@ -323,7 +324,7 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
             'recommendation_direction': 'against', 'recommendation_strength_level': 'not_stated',
             'relation_review_ack': '1', 'comment': 'synthetic task-v1 draft'}
 
-    with TestClient(production_app(console), base_url='https://testserver') as client:
+    with TestClient(production_app(console), base_url='https://testserver', raise_server_exceptions=False) as client:
         assert client.post('/login', data={'username': 'reviewer', 'password': 'fixture-only'},
                            follow_redirects=False).status_code == 303
         params = {'document': sid, 'object': focal['object_id']}
@@ -337,6 +338,51 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
                           data={**data, 'source_discrepancy': 'context_ontbreekt'})
         assert refused.status_code == 400 and 'synthetic task-v1 draft' in refused.text
         assert durable(console, [sid]) == before
+        if fault:
+            from tests.production_support import restart_production
+            expected_sqlstate = 'P9021' if fault == 'binding' else 'P9022'
+            table = 'publish_authorizations' if fault == 'binding' else 'review_events'
+            sqlstates = []
+            original_review = console.review_object
+
+            def observe_real_review(*args, **kwargs):
+                try:
+                    return original_review(*args, **kwargs)
+                except BaseException as exc:
+                    # Observe native causes without substituting the command or fault.
+                    seen = set()
+                    while exc is not None and id(exc) not in seen:
+                        seen.add(id(exc))
+                        if getattr(exc, 'sqlstate', None):
+                            sqlstates.append(exc.sqlstate)
+                        exc = exc.__cause__
+                    raise
+
+            monkeypatch.setattr(console, 'review_object', observe_real_review)
+            with console.workflow_document_store._connect() as con:
+                con.execute("CREATE FUNCTION workflow.met23_review_fault() RETURNS trigger LANGUAGE plpgsql AS $$ "
+                            "BEGIN RAISE EXCEPTION 'controlled review fault' USING ERRCODE = '" + expected_sqlstate + "'; END $$")
+                if fault == 'binding':
+                    con.execute('CREATE TRIGGER met23_review_fault BEFORE INSERT ON workflow.publish_authorizations '
+                                'FOR EACH ROW EXECUTE FUNCTION workflow.met23_review_fault()')
+                else:
+                    con.execute('CREATE CONSTRAINT TRIGGER met23_review_fault AFTER INSERT ON workflow.review_events '
+                                'DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION workflow.met23_review_fault()')
+            try:
+                failed = request(client, 'approve_with_native_database_fault', 'post', data=data)
+                assert failed.status_code == (400 if fault == 'binding' else 500)
+                assert expected_sqlstate in sqlstates, 'the real PostgreSQL trigger must cause the failure'
+            finally:
+                with console.workflow_document_store._connect() as con:
+                    con.execute('DROP TRIGGER met23_review_fault ON workflow.' + table)
+                    con.execute('DROP FUNCTION workflow.met23_review_fault()')
+            assert durable(console, [sid]) == before
+            assert storage_state() == initial_storage
+            restarted = restart_production(console)
+            assert durable(restarted, [sid]) == before
+            result['native_fault'] = {'sqlstate': expected_sqlstate, 'http_status': failed.status_code,
+                'durable_rollback': True, 'generation_rollback': True, 'restart_preserves_state': True}
+            # Retry the same form after fault removal; rollback must preserve its precondition.
         approved = request(client, 'approve', 'post', data=data)
         assert approved.status_code == 303
         winner = durable(console, [sid])

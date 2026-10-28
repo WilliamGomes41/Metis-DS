@@ -30,3 +30,13 @@ def test_native_task_v1_post(tmp_path, production_console, production_app, monke
         monkeypatch.setenv('REVIEW_PROOF_OUTPUT', str(tmp_path / 'task-v1-post.json'))
     namespace['test_native_task_v1_review'](
         tmp_path, production_console, production_app, monkeypatch, incomplete)
+
+
+@pytest.mark.parametrize('fault', ['binding', 'commit'])
+def test_native_task_v1_rollback(tmp_path, production_console, production_app, monkeypatch, fault):
+    harness = Path(__file__).resolve().parents[1] / 'evidence/review-integrated-888/benchmark.py'
+    namespace = runpy.run_path(str(harness))
+    if not os.environ.get('REVIEW_PROOF_OUTPUT'):
+        monkeypatch.setenv('REVIEW_PROOF_OUTPUT', str(tmp_path / 'task-v1-rollback.json'))
+    namespace['test_native_task_v1_review'](
+        tmp_path, production_console, production_app, monkeypatch, False, fault=fault)
