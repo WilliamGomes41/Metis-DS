@@ -9,8 +9,11 @@ Rewrite risk: none
 ## Measurement protocol
 
 The baseline is `49e50be279925b7e87d4ffa551609b998cac5869` (WP1,
-before WP2/WP3). The integrated production code is main
-`36c80413ced37e5a4dc74a380c6b54e23235e007`. WP4 changes evidence only.
+before WP2/WP3). The original integrated production code is main
+`36c80413ced37e5a4dc74a380c6b54e23235e007`. Current integration also includes
+the publication-layout move from main `e2d2302e930bbf0d10afe5dd6faad6d689648770`,
+measured on `09629b9eab64116e3dbe970ed581093ba498869a`. The `current-*` artifacts
+record that follow-up independently. WP4 changes evidence only.
 Each measurement records its actual HEAD, reconstruction-file hash, identical
 harness hash, Python version, configuration, source hashes/size and
 fragment/block/object/candidate/binding counts. An assertion rejects a module
