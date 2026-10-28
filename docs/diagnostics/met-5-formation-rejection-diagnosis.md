@@ -227,7 +227,7 @@ Aangetoond (`pre_review_semantic_v1.py:1123–1153`, `source_selection_v1.py:48�
 | #848 | reviewweergave vormingsproblemen | reader van `pending_rejections`; geen wijziging nodig |
 | #836/#839/#840 | checkpoints, taakhergebruik, overdracht | budgetuitputting (§3) |
 
-Nieuw (nog geen issue): P2-cascadereikwijdte, P1-uitzonderingscontext (besluit), testgat 2.6.
+Nieuw: P2-cascadereikwijdte (#909), testgat 2.6 (#910), bewijs per geval (#911); P1-uitzonderingscontext blijft besluit B5-a.
 
 ## 8. Open besluiten en ontbrekend bewijs
 
@@ -240,15 +240,15 @@ Nieuw (nog geen issue): P2-cascadereikwijdte, P1-uitzonderingscontext (besluit),
 | E3 | Azure-SHA en route van het v12-incident | UNKNOWN |
 | E4 | Baseline reads/writes/runtime per snapshot | NOT TESTED |
 
-## 9. Voorgestelde vervolgissues (niet aangemaakt; needs-triage)
+## 9. Vervolgissues (needs-triage)
 
-1. **MET-6 — relatiefout begrenst quarantaine tot eindpunten.** Class B, rewrite risk none
+1. **#909 — MET-6 — relatiefout begrenst quarantaine tot eindpunten.** Class B, rewrite risk none
    (validator in bestaande producergrens, geen persistentie- of lifecyclewijziging). Promise: een
    relatie-evidencefout wijst alleen de eindpunten af; onbekende eindpunten blijven call-breed.
    Proof: P2 als regressietest, positief en negatief. Pas na besluit B5-b.
-2. **MET-6 — negatieve test voor een object buiten de taakgrens** (`semantic_supplement_outside_target`).
+2. **#910 — MET-6 — negatieve test voor een object buiten de taakgrens** (`semantic_supplement_outside_target`).
    Class C, alleen een test.
-3. **MET-5 vervolg — echte evidence-export per foutcode** (E1/E2) op één snapshot, om de
+3. **#911 — MET-5 vervolg — echte evidence-export per foutcode** (E1/E2) op één snapshot, om de
    oorzaakklasse per geval te bewijzen; `observed_value is None` apart tellen voor 2.4.
 
 ## 10. Status gereedcriteria #878
