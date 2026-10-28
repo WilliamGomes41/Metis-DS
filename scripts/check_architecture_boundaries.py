@@ -10,11 +10,11 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKER_ONLY_PREFIXES = ("docling", "docling_core", "src.docling_worker_v1")
 SDK_OWNER = "src/docling_worker_v1.py"
 PROTECTED_MODULES = (
-    "src/docling_contract_v1.py",
     "src/integrity_kernel.py",
-    "src/candidate_eligibility_v1.py",
     "src/object_taxonomy_v1.py",
-    "src/recommendation_semantics_v1.py",
+    "src/vorming/docling_contract_v1.py",
+    "src/vorming/candidate_eligibility_v1.py",
+    "src/vorming/recommendation_semantics_v1.py",
 )
 INFRA_PREFIXES = (
     "fastapi", "starlette", "psycopg", "psycopg2", "sqlite3", "azure",

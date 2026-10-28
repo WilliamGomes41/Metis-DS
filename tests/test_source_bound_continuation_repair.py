@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.admission_gate_v1 import (
+from src.vorming.admission_gate_v1 import (
     GATE_ALLOWED,
     GATE_BLOCKED,
     admission_of,
@@ -25,7 +25,7 @@ from src.admission_gate_v1 import (
     apply_admission_gate,
     build_candidate_record,
 )
-from src.context_scan_v1 import propose_expand_merge
+from src.vorming.context_scan_v1 import propose_expand_merge
 from src.integrity_kernel import compute_canonical_object_hash, stamp_canonical_hashes
 from src.operations_console_v1 import OperationsConsole
 from src.object_taxonomy_v1 import has_terminal_sentence_boundary, is_truncated_sentence
@@ -88,7 +88,7 @@ def _split_existing_object(console: OperationsConsole, snapshot_id: str) -> str:
     envelope = console._envelope(snapshot_id)
     source_path, _ = console._verified_source_bytes(envelope)
     fragments = console._read_source_fragments(envelope, source_path)
-    from src.knowledge_materialisation_v1 import resolve_source_selection
+    from src.vorming.knowledge_materialisation_v1 import resolve_source_selection
     selected_span = original["metadata"]["semantic_passage"]["spans"][0]
     def bind_literal(row, start, end):
         spans = [{**selected_span, "start": start, "end": end}]
@@ -243,7 +243,7 @@ def test_reviewer_can_create_new_version_from_literal_source_context(tmp_path: P
     events = deepcopy(console.workflow_review_store.read_events())
     bindings = deepcopy(console.object_review_bindings(snapshot_id))
     # The owner must use the existing bounded reader, never a full snapshot fallback.
-    import src.review_passage_read_v1 as reader
+    import src.review.review_passage_read_v1 as reader
     original_read = reader.read_review_passage
     reads = []
     with monkeypatch.context() as patch:

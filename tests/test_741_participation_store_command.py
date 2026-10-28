@@ -13,7 +13,7 @@ import psycopg
 import pytest
 
 from src.operations_console_v1 import ConsoleError
-from src.review_policy_v1 import participants
+from src.review.review_policy_v1 import participants
 from src.workflows.workflow_badge_counts_postgres_v1 import (
     FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
     FastBadgePostgresCompleteWorkflowDurablePublicationConsole,

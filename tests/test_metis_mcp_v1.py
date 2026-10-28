@@ -22,11 +22,11 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from src.g2_source_store import AzureBlobSourceStore, build_g2_locator
-from src.metis_mcp_auth_v1 import McpAuthenticator, McpConfig
-from src.metis_mcp_queries_v1 import McpQueries, McpQueryError
-from src.metis_mcp_v1 import TOOLS, redact
-from src.processing_evidence_export_v1 import processing_evidence_tables
-from src.review_ledger import read_events
+from src.settings.metis_mcp_auth_v1 import McpAuthenticator, McpConfig
+from src.settings.metis_mcp_queries_v1 import McpQueries, McpQueryError
+from src.settings.metis_mcp_v1 import TOOLS, redact
+from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
+from src.review.review_ledger import read_events
 from test_vsa_review_workboard_v1 import _system, _login
 
 TENANT = '11111111-1111-4111-8111-111111111111'
@@ -114,7 +114,7 @@ def connection(tmp_path, monkeypatch, signed, *, production_app, production_cons
     auth = McpAuthenticator(CONFIG, SimpleNamespace(store=identity_store))
     auth.keys = SimpleNamespace(get_signing_key_from_jwt=lambda token: SimpleNamespace(key=key.public_key()))
     token = jwt.encode(claims, key, algorithm='RS256')
-    import src.metis_mcp_v1 as mcp
+    import src.settings.metis_mcp_v1 as mcp
     monkeypatch.setattr(mcp, 'configuration', lambda identity, origin: (CONFIG, 'Geconfigureerd; verbinding met ChatGPT nog testen'))
     monkeypatch.setattr(mcp, 'McpAuthenticator', lambda config, identity: auth)
     client = TestClient(production_app(console, trusted_origin='https://testserver'), base_url='https://testserver')
@@ -323,7 +323,7 @@ def test_entra_navigation_does_not_intercept_mcp_discovery(tmp_path, monkeypatch
 
 
 def test_processing_evidence_uses_only_current_object_versions(monkeypatch):
-    import src.metis_mcp_queries_v1 as queries_module
+    import src.settings.metis_mcp_queries_v1 as queries_module
 
     old = {"object_id": "obj-1", "object_version": "1.0"}
     current = {"object_id": "obj-1", "object_version": "1.1"}

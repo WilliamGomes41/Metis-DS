@@ -15,12 +15,12 @@ from copy import deepcopy
 import pytest
 
 from src.operations_console_v1 import ConsoleError
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing, semantic_spec_from_fragments
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing, semantic_spec_from_fragments
 from src.publication_readiness_v1 import source_passage_closure
-from src.review_duty_v1 import review_duty_for
-from src.source_accountability_v1 import KEY, evidence_of, validate_assessments
-from src.source_bound_fields_v2 import FIELDS
-from src.source_context_review_v1 import confirm_source_exclusions
+from src.review.review_duty_v1 import review_duty_for
+from src.vorming.source_accountability_v1 import KEY, evidence_of, validate_assessments
+from src.vorming.source_bound_fields_v2 import FIELDS
+from src.review.source_context_review_v1 import confirm_source_exclusions
 from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: F401
 
 DEFINITION = "Een observatie is een systematische waarneming van gedrag."
@@ -30,7 +30,7 @@ CONDITION = "Bij verslechtering is extra observatie nodig."
 def proposal(data, *, v3=False, supplemental=False):
     blocks = data["source_blocks"]
     if v3:
-        from src.source_bound_fields_v3 import FIELDS as fields
+        from src.vorming.source_bound_fields_v3 import FIELDS as fields
     else:
         fields = FIELDS
     target = next(b for b in blocks if DEFINITION in b["text"])
@@ -292,7 +292,7 @@ def test_v3_supplement_examines_unselected_definition_outside_recommendations():
 
 
 def test_partial_supplement_preserves_unresolved_prefix_and_suffix():
-    from src.recommendation_coverage_v1 import merge_proposals
+    from src.vorming.recommendation_coverage_v1 import merge_proposals
     span = {"block_id": "b", "start": 0, "end": 100}
     primary = {"objects": [], "relations": [], "source_assessments": [
         {"span": span, "role": "unresolved", "reason": "unformed_meaning"}]}
@@ -319,8 +319,8 @@ def test_damaged_source_evidence_cannot_close_after_human_disposition(tmp_path, 
 
 
 def test_exact_duplicate_source_occurrence_keeps_principal_span_and_role():
-    from src.source_accountability_v1 import record
-    from src.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
+    from src.vorming.source_accountability_v1 import record
+    from src.vorming.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
     text = "A repeated source sentence."
     summary_span = {"block_id": "summary", "start": 0, "end": len(text)}
     primary_span = {"block_id": "primary", "start": 0, "end": len(text)}

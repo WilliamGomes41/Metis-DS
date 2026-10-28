@@ -7,8 +7,8 @@ import json
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from src.docling_contract_v1 import DOCLING_VERSION, MODEL_REVISIONS
-from src.docling_render_fonts_v1 import font_inventory
+from src.vorming.docling_contract_v1 import DOCLING_VERSION, MODEL_REVISIONS
+from src.vorming.docling_render_fonts_v1 import font_inventory
 
 
 def main():

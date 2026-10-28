@@ -11,8 +11,8 @@ from copy import deepcopy
 
 import pytest
 
-from src.source_evidence_resolution_v1 import resolve_proposal_evidence
-from src.semantic_passage_v1 import SemanticPassageError
+from src.vorming.source_evidence_resolution_v1 import resolve_proposal_evidence
+from src.vorming.semantic_passage_v1 import SemanticPassageError
 from tests.test_recommendation_context_v3 import prepare
 from tests.test_recommendation_context_v3 import source
 
@@ -75,7 +75,7 @@ def test_bound_condition_heading_survives_transform_admission_and_rebinding():
     _, _, obj, fragments = prepare("Bespreek de voorkeuren", heading=heading, mutate=mutate)
     assert obj["metadata"]["admission"]["gate_result"] == "allowed"
     assert obj["metadata"]["admission"]["condition_span"] == heading
-    from src.source_bound_fields_v3 import validate_object_fields
+    from src.vorming.source_bound_fields_v3 import validate_object_fields
     validate_object_fields(obj, fragments)
 
 
@@ -91,7 +91,7 @@ def test_external_field_without_matching_condition_role_is_rejected(mutation):
     spec, rows, obj, _ = prepare("Bespreek de voorkeuren", heading="Bij een kwetsbare situatie:",
                                 mutate=mutate, allow_empty=True)
     assert obj is None  # still no admission of invalid evidence
-    from src.source_accountability_v1 import evidence_of
+    from src.vorming.source_accountability_v1 import evidence_of
     assert any(evidence_of(o).get("text") == "Bespreek de voorkeuren" for o in rows)
     # Read-only preparation without a snapshot does not create a replay record;
     # the rejection is additionally durable on the workflow path (#516).
@@ -133,5 +133,5 @@ def test_repeated_stamp_binds_normative_core_through_admission(include_stamp):
         fragments=source(f"Bespreek de voorkeuren {stamp} {core} {stamp}"), mutate=mutate)
     assert obj["metadata"]["admission"]["gate_result"] == "allowed"
     assert obj["metadata"]["admission"]["recommendation_evidence_span"] == core
-    from src.source_bound_fields_v3 import validate_object_fields
+    from src.vorming.source_bound_fields_v3 import validate_object_fields
     validate_object_fields(obj, fragments)

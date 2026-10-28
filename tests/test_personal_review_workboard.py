@@ -10,8 +10,8 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
-from src.review_duty_v1 import reviewer_route_for
-from src.review_workboard_v1 import _workboard_page, review_work_item
+from src.review.review_duty_v1 import reviewer_route_for
+from src.review.review_workboard_v1 import _workboard_page, review_work_item
 from tests.personal_review_fixture_support import PASSWORD, bind, prepare, snapshot
 from tests.production_support import restart_production
 

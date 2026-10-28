@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.retrieval.answerability_gate_v1 import evaluate_answerability
-from src.four_eyes_v1 import (
+from src.review.four_eyes_v1 import (
     four_eyes_satisfied,
     is_forbidden_reviewer,
     publish_authorization_contract,
@@ -596,10 +596,10 @@ def test_schema_v12_serving_law_relation_names_and_confirmed_relations() -> None
     assert "confirmed" in rel
     assert "confirmed_relations" in schema["properties"]
     from jsonschema import Draft202012Validator, FormatChecker
-    from src.semantic_transform_generic_v1 import transform
+    from src.vorming.semantic_transform_generic_v1 import transform
 
     html = ROOT / "data/fixtures/source2_html_factory_fixture.html"
-    from src.extract_html_v1 import extract
+    from src.vorming.extract_html_v1 import extract
 
     raw = extract(html, document_id="doc-schema", source_id="src-schema")
     spec = {

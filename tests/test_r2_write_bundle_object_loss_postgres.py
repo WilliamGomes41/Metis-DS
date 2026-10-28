@@ -13,7 +13,7 @@ pre-mutation copy MAG NIET overwrite them (see WilliamGomes41/Metis#33).
 """
 import fcntl
 
-from src.proportionate_review_v1 import normal_risk_batch_queue
+from src.review.proportionate_review_v1 import normal_risk_batch_queue
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
@@ -48,7 +48,7 @@ def test_r2_restore_after_lock_release_overwrites_concurrent_correction_object(w
                                     bindings=a.object_review_bindings(sid))
     assert len(queue) == 2
     obj_a, obj_b = queue
-    from src.proportionate_review_v1 import _batch_type
+    from src.review.proportionate_review_v1 import _batch_type
     type_a, type_b = _batch_type(obj_a), _batch_type(obj_b)
 
     b = _console(tmp_path, workflow_postgres)  # second real instance, same DB + runtime
@@ -73,7 +73,7 @@ def test_r2_restore_after_lock_release_overwrites_concurrent_correction_object(w
     def run_b():
         # B uses production's structured source repair, leaving completed
         # review recovery rather than a legacy revise request for startup.
-        from src.deterministic_review_repair_v1 import REPAIR_SOURCE_UNITS
+        from src.review.deterministic_review_repair_v1 import REPAIR_SOURCE_UNITS
         units = b.source_units(snapshot_id=sid, object_id=obj_b["object_id"])
         selected = next(unit for unit in units if unit["text"] != obj_b["content"]["clean_text"])
         seen["b_revised"] = b.submit_review_resolution(

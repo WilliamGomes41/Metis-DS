@@ -16,10 +16,10 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from src.operations_console_v1 import ConsoleError
-from src.processing_retry_v1 import now
-from src.source_processing_dispatch_v1 import SourceProcessingDispatcher, claim, pending
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-from src.source_bound_fields_v3 import MODE
+from src.vorming.processing_retry_v1 import now
+from src.vorming.source_processing_dispatch_v1 import SourceProcessingDispatcher, claim, pending
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+from src.vorming.source_bound_fields_v3 import MODE
 from tests.production_support import restart_production
 from tests.test_d5_4_review_interaction_evidence import _system
 from tests.test_recommendation_context_v3 import response_for
@@ -53,7 +53,7 @@ def setup_command(tmp_path, production_console, monkeypatch, request_hook=None):
 
 def test_dispatcher_finishes_same_command_after_handover_and_kernel_restart(tmp_path, production_console, monkeypatch):
     console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
-    monkeypatch.setattr('src.source_processing_dispatch_v1.WORKER_SECONDS', 0, raising=False)
+    monkeypatch.setattr('src.vorming.source_processing_dispatch_v1.WORKER_SECONDS', 0, raising=False)
     console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
     handed = console._envelope(sid)['processing_attempts'][-1]
     assert handed['state'] == 'running' and handed['dispatch']['state'] == 'pending'
@@ -61,11 +61,11 @@ def test_dispatcher_finishes_same_command_after_handover_and_kernel_restart(tmp_
     with console.workflow_document_store._connect() as con:
         first = con.execute('SELECT result_hash,payload FROM workflow.formation_task_results').fetchone()
     restarted = restart_production(console); bind(restarted)
-    monkeypatch.setattr('src.source_processing_dispatch_v1.WORKER_SECONDS', 240)
+    monkeypatch.setattr('src.vorming.source_processing_dispatch_v1.WORKER_SECONDS', 240)
     def forbidden(*args, **kwargs):
         raise AssertionError('Worker transfer must reuse source preparation')
     monkeypatch.setattr(restarted, '_extract', forbidden)
-    monkeypatch.setattr('src.source_reconstruction_v1._with_status', forbidden)
+    monkeypatch.setattr('src.vorming.source_reconstruction_v1._with_status', forbidden)
     async def deliver():
         dispatcher = SourceProcessingDispatcher(restarted)
         await dispatcher.scan()
@@ -88,7 +88,7 @@ def test_dispatcher_finishes_same_command_after_handover_and_kernel_restart(tmp_
 
 
 def test_lease_reclaim_fences_previous_checkpoint_failure_and_execution(tmp_path, production_console, monkeypatch):
-    from src.formation_checkpoint_v1 import TaskCheckpointWriter
+    from src.vorming.formation_checkpoint_v1 import TaskCheckpointWriter
     console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
     first = claim(console, snapshot_id=sid, attempt_id=attempt['attempt_id'])
     stale = TaskCheckpointWriter(console, sid, first)
@@ -120,7 +120,7 @@ def test_two_claimers_have_one_owner(tmp_path, production_console, monkeypatch):
     ('deadline','processing_attempt_expired'), ('budget','source_task_budget_exhausted'),
     ('authorization','researcher_role_required'), ('configuration','processing_configuration_changed')])
 def test_discovery_blocks_real_limits_without_new_start_or_provider(tmp_path, production_console, monkeypatch, boundary, code):
-    from src.source_selection_v1 import summary_projection
+    from src.vorming.source_selection_v1 import summary_projection
     console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
     past = (now()-timedelta(seconds=1)).isoformat()
     with console.workflow_document_store._connect() as con:
@@ -162,7 +162,7 @@ def test_actual_claim_rechecks_authorization_and_persists_stop(tmp_path, product
 
 
 def test_budget_not_reset_by_claim_and_next_call_stops_on_real_boundary(tmp_path, production_console, monkeypatch):
-    from src.formation_checkpoint_v1 import TaskCheckpointWriter
+    from src.vorming.formation_checkpoint_v1 import TaskCheckpointWriter
     console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
     claimed = claim(console, snapshot_id=sid, attempt_id=attempt['attempt_id'])
     writer = TaskCheckpointWriter(console, sid, claimed)
@@ -172,7 +172,7 @@ def test_budget_not_reset_by_claim_and_next_call_stops_on_real_boundary(tmp_path
         con.execute("UPDATE workflow.processing_attempts SET payload=jsonb_set(payload,'{dispatch,worker_until}',%s::jsonb) WHERE attempt_id=%s",
             (json.dumps((now()-timedelta(seconds=1)).isoformat()), attempt['attempt_id']))
     writer.committed_this_worker = True
-    from src.worker_handover_v1 import WorkerHandover
+    from src.vorming.worker_handover_v1 import WorkerHandover
     with pytest.raises(WorkerHandover):
         writer.before_task()
     second = claim(console, snapshot_id=sid, attempt_id=attempt['attempt_id'])
@@ -187,7 +187,7 @@ def test_budget_not_reset_by_claim_and_next_call_stops_on_real_boundary(tmp_path
 
 
 def test_rollback_does_not_publish_partial_claim(tmp_path, production_console, monkeypatch):
-    from src.worker_handover_v1 import locked
+    from src.vorming.worker_handover_v1 import locked
     console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
     before = deepcopy(console._envelope(sid)['processing_attempts'][-1])
     with pytest.raises(RuntimeError, match='rollback'):
@@ -297,11 +297,11 @@ def test_shutdown_signal_hands_over_after_commit_without_failing_command(tmp_pat
     from threading import Event
     console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
     stop = Event()
-    original = __import__('src.formation_checkpoint_v1', fromlist=['TaskCheckpointWriter']).TaskCheckpointWriter.commit_task
+    original = __import__('src.vorming.formation_checkpoint_v1', fromlist=['TaskCheckpointWriter']).TaskCheckpointWriter.commit_task
     def committed(writer, **kwargs):
         original(writer, **kwargs)
         stop.set()
-    monkeypatch.setattr('src.formation_checkpoint_v1.TaskCheckpointWriter.commit_task', committed)
+    monkeypatch.setattr('src.vorming.formation_checkpoint_v1.TaskCheckpointWriter.commit_task', committed)
     receipt = console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt, _dispatch_stop=stop)
     assert receipt['snapshot_id'] == sid
     assert len(calls) == 1
@@ -311,7 +311,7 @@ def test_shutdown_signal_hands_over_after_commit_without_failing_command(tmp_pat
 
 
 def test_revocation_during_running_worker_prevents_next_call_and_activation(tmp_path, production_console, monkeypatch):
-    from src.formation_checkpoint_v1 import TaskCheckpointWriter
+    from src.vorming.formation_checkpoint_v1 import TaskCheckpointWriter
     console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
     original = TaskCheckpointWriter.commit_task
     def committed(writer, **kwargs):
@@ -331,7 +331,7 @@ def test_revocation_during_running_worker_prevents_next_call_and_activation(tmp_
 def test_worker_task_allowance_cannot_outlive_lease(tmp_path, production_console, monkeypatch):
     import time
     from datetime import datetime
-    from src.formation_checkpoint_v1 import TaskCheckpointWriter
+    from src.vorming.formation_checkpoint_v1 import TaskCheckpointWriter
     console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
     seen = []
     def inspect_deadline(**kwargs):
@@ -351,7 +351,7 @@ def test_live_worker_renews_lease_during_long_preparation_without_extending_dead
     import time
     from datetime import datetime
     console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
-    monkeypatch.setattr('src.worker_handover_v1.HEARTBEAT_SECONDS', .05)
+    monkeypatch.setattr('src.vorming.worker_handover_v1.HEARTBEAT_SECONDS', .05)
     original = console._fragments_and_spec
     def long_preparation(*args, **kwargs):
         with console.workflow_document_store._connect() as con:
@@ -372,7 +372,7 @@ def test_live_worker_renews_lease_during_long_preparation_without_extending_dead
 
 
 def test_heartbeat_cannot_revive_expired_or_replaced_claim(tmp_path, production_console, monkeypatch):
-    from src.worker_handover_v1 import renew
+    from src.vorming.worker_handover_v1 import renew
     console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
     first = claim(console, snapshot_id=sid, attempt_id=attempt['attempt_id'])
     with console.workflow_document_store._connect() as con:
@@ -393,10 +393,10 @@ def test_handover_does_not_restart_initial_and_recovery_passes(tmp_path, product
         if text == 'Gebruik geen zalf.':
             raise ConsoleError('pre_review_llm_response_invalid')
     console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch, request_hook=rejected)
-    monkeypatch.setattr('src.source_processing_dispatch_v1.WORKER_SECONDS', 0)
+    monkeypatch.setattr('src.vorming.source_processing_dispatch_v1.WORKER_SECONDS', 0)
     console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
     assert calls == ['Gebruik geen zalf.', 'Controleer dagelijks de huid.']
-    monkeypatch.setattr('src.source_processing_dispatch_v1.WORKER_SECONDS', 240)
+    monkeypatch.setattr('src.vorming.source_processing_dispatch_v1.WORKER_SECONDS', 240)
     console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
     assert calls.count('Gebruik geen zalf.') == 2, 'Worker transfer must not renew the one initial + one recovery policy'
     assert calls.count('Controleer dagelijks de huid.') == calls.count('Was dagelijks de handen.') == 1
@@ -412,11 +412,11 @@ def test_late_import_does_not_capture_a_temporary_test_clock():
     import sys
     script = '''
 from datetime import datetime, timezone
-import src.processing_retry_v1 as clock
+import src.vorming.processing_retry_v1 as clock
 actual = clock.now
 clock.now = lambda: datetime(2000, 1, 1, tzinfo=timezone.utc)
-import src.formation_checkpoint_v1 as checkpoints
-import src.worker_handover_v1 as workers
+import src.vorming.formation_checkpoint_v1 as checkpoints
+import src.vorming.worker_handover_v1 as workers
 clock.now = actual
 assert abs((checkpoints.now()-actual()).total_seconds()) < 1
 assert abs((workers.now()-actual()).total_seconds()) < 1
@@ -428,11 +428,11 @@ assert abs((workers.now()-actual()).total_seconds()) < 1
 @pytest.mark.parametrize('path', ['discovery', 'claim', 'heartbeat', 'execution'])
 @pytest.mark.parametrize('progress', [False, True])
 def test_budget_stop_counts_the_same_on_every_worker_path(tmp_path, production_console, monkeypatch, path, progress):
-    from src.processing_retry_v1 import _retry_budget_attempts
-    from src.worker_handover_v1 import renew
+    from src.vorming.processing_retry_v1 import _retry_budget_attempts
+    from src.vorming.worker_handover_v1 import renew
     console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
     if progress:
-        monkeypatch.setattr('src.source_processing_dispatch_v1.WORKER_SECONDS', 0)
+        monkeypatch.setattr('src.vorming.source_processing_dispatch_v1.WORKER_SECONDS', 0)
         console.execute_source_selection(actor_id=actor, snapshot_id=sid, attempt=attempt)
         assert len(calls) == 1
     claimed = None

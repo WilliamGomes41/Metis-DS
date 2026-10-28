@@ -10,7 +10,7 @@ from html.parser import HTMLParser
 from urllib.parse import urlsplit, parse_qs
 
 from src.operations_console_app import _document_list_page
-from src.review_ledger import append_event, read_events
+from src.review.review_ledger import append_event, read_events
 from test_vsa_review_workboard_v1 import _client, _login, _system
 
 

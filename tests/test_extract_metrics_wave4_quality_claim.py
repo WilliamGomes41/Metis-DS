@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from src.extract_metrics_v1 import (
+from src.vorming.extract_metrics_v1 import (
     compute_extract_metrics,
     extract_quality_claim_allowed,
     gold_supports_independent_quality_claim,
@@ -143,13 +143,13 @@ def _row(
 
 
 def _claim_checks(gold, holdout=None, lock=None):
-    from src.extract_metrics_v1 import independent_quality_claim_checks
+    from src.vorming.extract_metrics_v1 import independent_quality_claim_checks
 
     return independent_quality_claim_checks(gold, holdout=holdout, lock=lock)
 
 
 def _overlap(train, holdout):
-    from src.extract_metrics_v1 import train_holdout_source_overlap
+    from src.vorming.extract_metrics_v1 import train_holdout_source_overlap
 
     return train_holdout_source_overlap(train, holdout)
 
@@ -654,7 +654,7 @@ def test_language_variation_admission_still_green() -> None:
 def test_extract_workload_counts_admitted_slow_rows_without_runtime_fragments(object_type):
     """Offline gold workload is a diagnostic count, not a live ReviewDuty."""
     from copy import deepcopy
-    from src.admission_gate_v1 import ordinary_review_queue
+    from src.vorming.admission_gate_v1 import ordinary_review_queue
 
     obj = _obj(TRUE_A, source_id="src-a", object_type=object_type)
     blocked = _obj(TRUE_B, source_id="src-a", selected=False, object_type=object_type)

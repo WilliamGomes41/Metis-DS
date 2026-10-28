@@ -14,9 +14,9 @@ import json
 
 import pytest
 
-from src.recoverable_formation_v1 import pending_rejections
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-from src.semantic_passage_v1 import semantic_source_blocks
+from src.vorming.recoverable_formation_v1 import pending_rejections
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+from src.vorming.semantic_passage_v1 import semantic_source_blocks
 from tests.test_recommendation_context_v3 import response_for, source
 from tests.test_recommendation_coverage_v1 import FIRST, SECOND
 from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401
@@ -145,9 +145,9 @@ def test_reviewed_split_closes_formation_blocker(tmp_path, *, production_console
 @pytest.mark.parametrize("status", ["linked_as_support", "used_as_context"])
 @pytest.mark.parametrize("origin", ["extract", "review"])
 def test_automatic_disposition_cannot_resolve_review_required_failure(tmp_path, status, origin, *, production_console):
-    from src.recoverable_formation_v1 import incomplete
-    from src.passage_register_v1 import passage_register_record
-    from src.source_containers_v1 import source_accountability
+    from src.vorming.recoverable_formation_v1 import incomplete
+    from src.vorming.passage_register_v1 import passage_register_record
+    from src.vorming.source_containers_v1 import source_accountability
     state, sid, _, _, _, _, _, _ = split_system(tmp_path, production_console=production_console)
     history = inject_failure(state, sid)
     objects = deepcopy(state.snapshot_objects(sid))
@@ -172,7 +172,7 @@ def test_automatic_disposition_cannot_resolve_review_required_failure(tmp_path, 
 
 
 def test_explicit_source_exclusions_close_formation_after_restart(tmp_path, *, production_console):
-    from src.source_context_review_v1 import confirm_source_context
+    from src.review.source_context_review_v1 import confirm_source_context
     state, sid, _, reviewer, _, _, make, _ = split_system(tmp_path, production_console=production_console)
     history = inject_failure(state, sid)
     for index, obj in enumerate(candidates(state, sid)):
@@ -223,7 +223,7 @@ def test_stale_or_invalid_context_cannot_close(tmp_path, invalid, *, production_
     # Synthetic malformed read inputs; the append-only writer correctly refuses
     # in-place corruption, so do not bypass it to fabricate durable evidence.
     fragments = state.review_source_fragments(sid)
-    from src.recoverable_formation_v1 import incomplete
+    from src.vorming.recoverable_formation_v1 import incomplete
     assert incomplete(envelope, objects=objects, bindings=bindings[sid], fragments=fragments)
     technical = state.technical_publication_readiness(snapshot_id=sid, envelope=envelope,
         objects=objects, bindings=bindings[sid], fragments=fragments)
@@ -232,7 +232,7 @@ def test_stale_or_invalid_context_cannot_close(tmp_path, invalid, *, production_
 
 @pytest.mark.parametrize("invalid", [None, "reviewer", "review_hash", "review_date"])
 def test_current_human_rejections_close_but_stale_evidence_does_not(tmp_path, invalid, *, production_console):
-    from src.recoverable_formation_v1 import incomplete
+    from src.vorming.recoverable_formation_v1 import incomplete
     state, sid, _, reviewer, _, _, make, _ = split_system(tmp_path, production_console=production_console)
     history = inject_failure(state, sid)
     for obj in candidates(state, sid):
@@ -265,7 +265,7 @@ def test_invalid_failure_location_remains_open(tmp_path, location, *, production
 @pytest.mark.parametrize("field", ["snapshot_id", "source_sha256", "document_id", "source_blocks_hash"])
 def test_new_selections_cannot_recover_stale_replay(tmp_path, field, *, production_console):
     from src.operations_console_v1 import ConsoleError
-    from src.semantic_replay_v1 import stable_json_hash
+    from src.vorming.semantic_replay_v1 import stable_json_hash
     state, sid, author, _, calls, mode, _, _ = split_system(tmp_path, recovery=True, production_console=production_console)
     before = state.snapshot_objects(sid)
     envelope = deepcopy(state._envelope(sid))
@@ -299,7 +299,7 @@ def test_formation_closure_does_not_authorize_other_publication_gates(tmp_path, 
 
 
 def test_status_without_retained_source_fails_closed_without_extraction(tmp_path, monkeypatch, *, production_console):
-    from src.source_preparation_context_v1 import KEY
+    from src.vorming.source_preparation_context_v1 import KEY
     state, sid, _, reviewer, _, _, _, _ = split_system(tmp_path, production_console=production_console)
     inject_failure(state, sid)
     for obj in candidates(state, sid):
@@ -318,8 +318,8 @@ def publication_story(tmp_path, monkeypatch, *, recovery=False, postgres=None, p
     from src.operations_console_app import create_console_app, COOKIE
     state, sid, author, reviewer, calls, mode, make, bind = split_system(tmp_path, recovery=recovery, postgres=postgres, production_console=production_console)
     if recovery == "source_disposition":
-        from src.source_accountability_v1 import is_source_record
-        from src.source_context_review_v1 import confirm_source_context
+        from src.vorming.source_accountability_v1 import is_source_record
+        from src.review.source_context_review_v1 import confirm_source_context
         history = deepcopy(state._envelope(sid)["semantic_replay"]["provider_evidence"])
         assert history["formation_incomplete"]
         remainders = [o for o in state.snapshot_objects(sid) if is_source_record(o)]
@@ -332,8 +332,8 @@ def publication_story(tmp_path, monkeypatch, *, recovery=False, postgres=None, p
                 command_id=f"a03-remainder-{index}", expected_revision=state.objects_revision(sid))
         assert not state.processing_status(sid)["formation_incomplete"]
         assert state._envelope(sid)["semantic_replay"]["provider_evidence"] == history
-        from src.recoverable_formation_v1 import incomplete
-        from src.semantic_replay_v1 import stable_json_hash
+        from src.vorming.recoverable_formation_v1 import incomplete
+        from src.vorming.semantic_replay_v1 import stable_json_hash
         stale = deepcopy(state._envelope(sid))
         identity = stale["semantic_replay"]["identity"]
         identity["components"]["source_blocks_hash"] = "other-input"

@@ -33,7 +33,7 @@ from src.knowledge_relations_v1 import (
     validate_knowledge_relation_set,
 )
 from src.operations_console_v1 import SCHEMA_V13, SCHEMA_V14
-from src.semantic_transform_generic_v1 import transform
+from src.vorming.semantic_transform_generic_v1 import transform
 from src.serving_relations_v1 import CLOSED_RELATION_SET, binding_relations
 
 

@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-import src.view_check as view_check
+import src.settings.view_check as view_check
 from src import care_companion_v1
 from src.operations_console_app import _nav
 from src.operations_console_v1 import ConsoleError

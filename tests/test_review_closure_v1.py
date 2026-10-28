@@ -13,8 +13,8 @@ from tests.semantic_fixture_support import bind_fixture_selections
 import pytest
 from fastapi.testclient import TestClient
 
-from src.closed_review_loop_v1 import ClosedLoopReviewConsole, install_closed_review_routes
-from src.deterministic_review_repair_v1 import (
+from src.review.closed_review_loop_v1 import ClosedLoopReviewConsole, install_closed_review_routes
+from src.review.deterministic_review_repair_v1 import (
     DeterministicRepairReviewConsole,
     REPAIR_MERGE_OBJECTS,
     REPAIR_SOURCE_UNITS,
@@ -22,8 +22,8 @@ from src.deterministic_review_repair_v1 import (
 )
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
-from src.review_closure_v1 import ReviewClosureConsole, install_review_recovery_page
-from src.review_ledger import read_events
+from src.review.review_closure_v1 import ReviewClosureConsole, install_review_recovery_page
+from src.review.review_ledger import read_events
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 

@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.admission_gate_v1 import (
+from src.vorming.admission_gate_v1 import (
     DUTCH_TYPE_NAMES,
     FACTUAL_FINDING_SERVING_TYPE,
     GATE_ALLOWED,
@@ -29,7 +29,7 @@ from src.admission_gate_v1 import (
     ordinary_review_queue,
     serving_type_for_admission_type,
 )
-from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES
+from src.review.beslisboom_path_v1 import CLOSED_BOOM_TYPES
 from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole, is_slow_review_duty, slow_review_duty
@@ -748,8 +748,8 @@ def test_source_text_exact_comes_from_raw_fragment_not_only_clean_text() -> None
     )
     cleaned = "De werkgroep adviseert calcium te geven."
     from tests.semantic_fixture_support import materialised_fixture
-    from src.admission_gate_v1 import candidate_from_object
-    from src.knowledge_path_v1 import content_reviewable
+    from src.vorming.admission_gate_v1 import candidate_from_object
+    from src.review.knowledge_path_v1 import content_reviewable
     from copy import deepcopy
     objects, fragments = materialised_fixture(dropped)
     objects[0]["content"]["clean_text"] = cleaned
@@ -860,7 +860,7 @@ def test_correct_object_can_readmit_a_source_invalid_revision(tmp_path: Path, *,
     stamp_canonical_hashes(blocked)
     install_fixture_history(console, receipt["snapshot_id"], rows)
 
-    from src.deterministic_review_repair_v1 import REPAIR_SOURCE_UNITS
+    from src.review.deterministic_review_repair_v1 import REPAIR_SOURCE_UNITS
     fragment_ids = {ref['raw_object_id'] for ref in blocked['provenance']['source_fragments']}
     units = console.source_units(snapshot_id=receipt['snapshot_id'], object_id=blocked['object_id'])
     selected = [u['unit_id'] for u in units if u['fragment_id'] in fragment_ids]
@@ -871,7 +871,7 @@ def test_correct_object_can_readmit_a_source_invalid_revision(tmp_path: Path, *,
         comment='Herstel de geverifieerde bronselectie.', repair_kind=REPAIR_SOURCE_UNITS, source_unit_ids=selected)
     assert _admission(revised)["gate_result"] == GATE_BLOCKED
     assert "source_bound_fields_stale" not in _admission(revised)["reason_codes"]
-    from src.knowledge_materialisation_v1 import validate_materialised_candidate
+    from src.vorming.knowledge_materialisation_v1 import validate_materialised_candidate
     validate_materialised_candidate(revised, fragments=console.review_source_fragments(receipt["snapshot_id"]))
     assert is_slow_review_duty(revised, bindings=console.object_review_bindings(receipt["snapshot_id"]), fragments=console.review_source_fragments(receipt["snapshot_id"])) is False
 

@@ -326,7 +326,7 @@ def test_server_logger_warnings_reach_the_hub_once(hub, monkeypatch):
 
 
 def test_quality_trend_uses_only_comparable_reports():
-    from src.insight_v1 import quality_projection
+    from src.settings.insight_v1 import quality_projection
 
     def report(as_of, filters, version='v1'):
         return {'as_of': as_of, 'filters': filters, 'definition_version': version, 'open_passages': 1,
@@ -367,7 +367,7 @@ def test_analysis_holds_only_the_newest_events_in_memory(hub, monkeypatch):
         hub.record({'event': f'e{i}', 'ts': f'2026-10-17T10:00:0{i}.000Z'})
     events, truncated = hub_module.recent_events(0)
     assert [e['event'] for e in events] == ['e2', 'e3', 'e4'] and truncated
-    from src.insight_v1 import _telemetry_by_document
+    from src.settings.insight_v1 import _telemetry_by_document
     calls = []
     monkeypatch.setattr(hub_module, 'recent_events', lambda since: calls.append(since) or ([], True))
     assert _telemetry_by_document(5.0) == ({}, True) and calls == [5.0]  # same bound, partiality surfaced

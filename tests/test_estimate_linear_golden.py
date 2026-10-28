@@ -15,8 +15,8 @@ from statistics import median
 
 import pytest
 
-import src.source_selection_v1 as selection
-from src.source_selection_v1 import _duration, comparable_observations, estimate
+import src.vorming.source_selection_v1 as selection
+from src.vorming.source_selection_v1 import _duration, comparable_observations, estimate
 
 
 def legacy_estimate(envelope, documents):
@@ -104,7 +104,7 @@ def test_source_selection_list_reads_attempts_once_per_request(tmp_path, monkeyp
     calls = []
     real = selection.comparable_observations
     monkeypatch.setattr(selection, 'comparable_observations', lambda docs: calls.append(len(docs)) or real(docs))
-    import src.source_selection_ui_v1 as ui
+    import src.vorming.source_selection_ui_v1 as ui
     monkeypatch.setattr(ui, 'comparable_observations', selection.comparable_observations, raising=False)
     client = TestClient(app)
     client.post('/login', data={'username': 'author', 'password': 'strong-test-password'})

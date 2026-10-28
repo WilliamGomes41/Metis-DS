@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from src.extract_metrics_v1 import (
+from src.vorming.extract_metrics_v1 import (
     EXTRACT_QUALITY_METRICS,
     ExtractGoldError,
     compute_extract_metrics,

@@ -8,14 +8,14 @@ in `docs/agents/continuous-development.md`. Do not duplicate those rules here.
 
 | Behavior | Existing owner to inspect | Relevant proof |
 | --- | --- | --- |
-| PDF extraction and accepted source representation | `src/docling_pdf_v1.py::extract`, `src/docling_contract_v1.py::translate` and `stored_fragments`; SDK execution in `src/docling_worker_v1.py` | `tests/test_docling_contract_v1.py` |
+| PDF extraction and accepted source representation | `src/vorming/docling_pdf_v1.py::extract`, `src/vorming/docling_contract_v1.py::translate` and `stored_fragments`; SDK execution in `src/docling_worker_v1.py` | `tests/test_docling_contract_v1.py` |
 | Source reconstruction for subsequent review or repair | `src/operations_console_v1.py::OperationsConsole._read_source_fragments` and `_fragments_and_spec` | `tests/test_docling_contract_v1.py` |
 | Canonical hashes and review snapshot identity | `src/integrity_kernel.py::compute_canonical_object_hash` and `exact_review_snapshot_hash` | `tests/test_architecture_invariants.py` |
-| Candidate eligibility and admission | `src/candidate_eligibility_v1.py::assess_candidate_eligibility`; `src/admission_gate_v1.py::admit_candidate` and `apply_admission_gate` | `tests/test_v230_phase1_admission_gate.py` |
-| Derived review obligations | `src/review_duty_v1.py::review_duty_for` and `review_duty_counts` | `tests/test_v219_review_duty_queue.py` |
+| Candidate eligibility and admission | `src/vorming/candidate_eligibility_v1.py::assess_candidate_eligibility`; `src/vorming/admission_gate_v1.py::admit_candidate` and `apply_admission_gate` | `tests/test_v230_phase1_admission_gate.py` |
+| Derived review obligations | `src/review/review_duty_v1.py::review_duty_for` and `review_duty_counts` | `tests/test_v219_review_duty_queue.py` |
 | Readiness versus authorized publication | `src/publication_readiness_v1.py::PublicationReadinessMixin.publication_readiness` and `consider_publish`; `src/durable_publication_console_v1.py::DurablePublicationConsole._publish_locked` | `tests/test_vsa_code_boundaries_v1.py`, `tests/test_vsa_publish_document_v1.py` |
 | Production serving authority | `src/azure_authoritative_publication_console_v1.py::AzureAuthoritativePublicationConsole._verify_publication_sources`; composition in `src/console_asgi.py` | `tests/test_azure_blob_publication_authority_v1.py`, `tests/test_publication_registry_serving_authority_v1.py` |
-| Settings insight room (tabs over telemetry, quality, documents, checks) | `src/insight_v1.py`; quality measurement owner `src/quality_metrics_app_v1.py::quality_view` | `tests/test_insight_v1.py` |
+| Settings insight room (tabs over telemetry, quality, documents, checks) | `src/settings/insight_v1.py`; quality measurement owner `src/settings/quality_metrics_app_v1.py::quality_view` | `tests/test_insight_v1.py` |
 | Operational telemetry, correlation and diagnostics | `src/telemetry/` (hub, errors, analysis, playbook, page); producers `src/request_diagnostics_v1.py`, `src/console_performance_v1.py`, `src/structured_logging_v1.py` | `tests/test_telemetry_v1.py`, `tests/test_request_diagnostics.py`; naslag `docs/telemetry/README.md` |
 | Durable workflow commits and concurrent object writes | `src/workflows/workflow_transaction_v1.py::workflow_transaction`; `src/workflows/workflow_document_concurrency_v1.py::PostgresConcurrentWorkflowDocumentStore.write_bundle` | `tests/test_workflow_transaction_v1.py`, `tests/test_workflow_postgres_concurrency.py` |
 

@@ -23,9 +23,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.g2_source_store import load_g2_store
-from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV, load_llm_provider_config
-from src.passage_formation_policy_v1 import PassageFormationPolicyError, resolve_passage_formation_strategy
-from src.source_bound_fields_v2 import MODE as DEFAULT_FORMATION_MODE
+from src.vorming.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV, load_llm_provider_config
+from src.vorming.passage_formation_policy_v1 import PassageFormationPolicyError, resolve_passage_formation_strategy
+from src.vorming.source_bound_fields_v2 import MODE as DEFAULT_FORMATION_MODE
 
 FORMATION_MODE_ENV = "METIS_PASSAGE_FORMATION_MODE"
 RETIRED_FORMATION_MODE = "deterministic-v1"
@@ -49,7 +49,7 @@ def settings_map(rows: Any) -> dict[str, str]:
 
 
 def view_check_findings(settings: dict[str, str]) -> list[str]:
-    """Startup refusals of src/view_check.py::install for an enabled view check.
+    """Startup refusals of src/settings/view_check.py::install for an enabled view check.
 
     Restated here because that module needs the console dependencies; the
     browser paths live inside the image and are not checked offline.

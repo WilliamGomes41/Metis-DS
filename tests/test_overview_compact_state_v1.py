@@ -22,10 +22,10 @@ from pathlib import Path
 
 import pytest
 
-import src.knowledge_materialisation_v1 as materialisation
+import src.vorming.knowledge_materialisation_v1 as materialisation
 import src.publication_readiness_v1 as readiness
-import src.recoverable_formation_v1 as formation
-import src.source_preparation_context_v1 as preparation
+import src.vorming.recoverable_formation_v1 as formation
+import src.vorming.source_preparation_context_v1 as preparation
 from tests import test_vsa_publish_readiness_ui_v1 as publish_fixture
 
 pytestmark = [pytest.mark.release_control_opslag]

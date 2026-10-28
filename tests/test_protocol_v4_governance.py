@@ -47,9 +47,9 @@ def test_new_release_records_current_protocol() -> None:
 
 
 def test_documented_formation_roles_match_existing_policy() -> None:
-    from src.candidate_eligibility_v1 import assess_candidate_eligibility
-    from src.passage_formation_policy_v1 import resolve_passage_formation_strategy
-    from src.pre_review_semantic_v1 import _configured_passage_formation_mode
+    from src.vorming.candidate_eligibility_v1 import assess_candidate_eligibility
+    from src.vorming.passage_formation_policy_v1 import resolve_passage_formation_strategy
+    from src.vorming.pre_review_semantic_v1 import _configured_passage_formation_mode
 
     protocol = read("PROTOCOL.md")
     mode = _configured_passage_formation_mode({})
@@ -60,7 +60,7 @@ def test_documented_formation_roles_match_existing_policy() -> None:
         assert resolve_passage_formation_strategy(deployment_mode=explicit_mode).strategy == "semantic"
     assert resolve_passage_formation_strategy(deployment_mode=mode).strategy == "semantic"
     assert "`deterministic-v1` is vervallen" in protocol
-    from src.passage_formation_policy_v1 import PassageFormationPolicyError
+    from src.vorming.passage_formation_policy_v1 import PassageFormationPolicyError
     with pytest.raises(PassageFormationPolicyError, match="passage_formation_mode_invalid"):
         resolve_passage_formation_strategy(deployment_mode="deterministic-v1")
     assert not assess_candidate_eligibility({
@@ -128,7 +128,7 @@ def test_v4_1_snapshot_is_frozen_and_decision_trees_have_one_route() -> None:
     assert "Beslisbomen behouden hun bestaande structurele route" not in protocol
     assert "`decision-tree-source-bound-v1` (enige toegelaten route)" in protocol
     assert "alleen menselijke graafreview bevestigt de interpretatie" in protocol
-    from src.decision_tree_construction_v1 import FORMATION_MODE
+    from src.vorming.decision_tree_construction_v1 import FORMATION_MODE
     assert FORMATION_MODE == "decision-tree-source-bound-v1"
 
 

@@ -10,12 +10,12 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from src.domain_dimensions_v1 import processing_issue_objects
+from src.review.domain_dimensions_v1 import processing_issue_objects
 from src.operations_console_app import (
     _processing_diagnostics_html,
     _render_review_index,
 )
-from src.processing_diagnostics_v1 import (
+from src.vorming.processing_diagnostics_v1 import (
     DEPENDENCY_RESOLUTION,
     SEMANTIC_CONTRACT,
     SOURCE_BINDING,

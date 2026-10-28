@@ -12,7 +12,7 @@ from copy import deepcopy
 from fastapi.testclient import TestClient
 
 from src.console_asgi import build_console_app
-from src.proportionate_review_v1 import install_proportionate_review_routes, normal_risk_batch_queue
+from src.review.proportionate_review_v1 import install_proportionate_review_routes, normal_risk_batch_queue
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 

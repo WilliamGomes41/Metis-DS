@@ -1,9 +1,9 @@
 """Controlled findings on real received sources and the native workflow store."""
 from copy import deepcopy
 
-from src.bounded_model_call_v1 import ModelCallLimits
+from src.vorming.bounded_model_call_v1 import ModelCallLimits
 from src.operations_console_v1 import ConsoleError
-from src.processing_retry_v1 import reserve, finish, now
+from src.vorming.processing_retry_v1 import reserve, finish, now
 
 
 def blocked_source(console, author, reviewer, name, *, pages=False):

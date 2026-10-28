@@ -12,11 +12,11 @@ import json
 import fitz
 import pytest
 
-from src.extract_pdf_v2 import extract
-from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
-from src.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal, SemanticPassageError
-from src.source_layout_v1 import text_view
-from src.source_reconstruction_v1 import reconstruct_source_fragments
+from src.vorming.extract_pdf_v2 import extract
+from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates
+from src.vorming.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal, SemanticPassageError
+from src.vorming.source_layout_v1 import text_view
+from src.vorming.source_reconstruction_v1 import reconstruct_source_fragments
 
 
 def pdf(tmp_path, markers=(20, 25, 30), marker_x=25, text_x=90, intervening_lines=True):
@@ -62,10 +62,10 @@ def test_numbered_table_rows_without_five_prose_lines_remain_content(tmp_path):
 
 
 def test_transform_validates_mapping_and_export_retains_raw_and_view(tmp_path):
-    from src.pre_review_semantic_v1 import semantic_spec_from_fragments
-    from src.semantic_transform_generic_v1 import transform
-    from src.quality_evidence_v1 import record_processing, instant
-    from src.processing_evidence_export_v1 import processing_evidence_tables
+    from src.vorming.pre_review_semantic_v1 import semantic_spec_from_fragments
+    from src.vorming.semantic_transform_generic_v1 import transform
+    from src.settings.quality_evidence_v1 import record_processing, instant
+    from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
     fragments = extract(pdf(tmp_path), document_id="doc", source_id="source")
     def provider(_url, _headers, payload, _timeout):
         block = json.loads(payload["input"][1]["content"])["source_blocks"][0]
@@ -112,7 +112,7 @@ def test_mixed_block_exclusion_is_reversible_and_keeps_negation_and_exception():
     assert block["text"] == "Gebruik geen 5 mg bij de individuele situatie, tenzij de arts anders adviseert."
     assert fragment["raw_text"] == raw
     rebuilt = reconstruct_source_fragments([fragment])[0]
-    from src.source_layout_v1 import mapped_raw_spans
+    from src.vorming.source_layout_v1 import mapped_raw_spans
     mapping = mapped_raw_spans(rebuilt, start=0, end=len(block["text"]))
     assert not any(row["raw_start"] <= start < row["raw_end"] for row in mapping)
     from src.object_taxonomy_v1 import normalize_visible_prose
@@ -173,7 +173,7 @@ def test_document_wide_ambiguous_columns_keep_numbers(tmp_path, options):
 
 
 def test_trimmed_numeric_span_preserves_geometry_and_exact_raw_bounds(tmp_path, monkeypatch):
-    import src.source_layout_v1 as layout
+    import src.vorming.source_layout_v1 as layout
     monkeypatch.setattr(layout, "mark_pdf_layout", lambda rows: None)
     fragments = extract(numbered_document(tmp_path), document_id="doc", source_id="source")
     numeric = [span for row in fragments for span in row["_pdf_spans"] if span["text"].strip().isdigit()]

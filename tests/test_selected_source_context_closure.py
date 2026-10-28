@@ -11,11 +11,11 @@ from copy import deepcopy
 
 import pytest
 
-from src.knowledge_path_v1 import content_reviewable
+from src.review.knowledge_path_v1 import content_reviewable
 from src.publication_readiness_v1 import review_followup_queues, source_passage_closure
-from src.source_accountability_v1 import is_source_record
-from src.source_containers_v1 import source_accountability
-from src.source_context_review_v1 import context_issues
+from src.vorming.source_accountability_v1 import is_source_record
+from src.vorming.source_containers_v1 import source_accountability
+from src.review.source_context_review_v1 import context_issues
 from tests.semantic_fixture_support import bind_fixture_selections
 from tests.test_vsa_publish_document_v1 import MemorySourceStore
 from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: F401

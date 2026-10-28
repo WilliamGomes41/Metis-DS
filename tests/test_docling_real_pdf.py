@@ -21,10 +21,10 @@ from pathlib import Path
 import fitz
 import pytest
 
-from src.docling_contract_v1 import CONTRACT, DoclingError, stored_fragments
-from src.docling_pdf_v1 import extract
-from src.extract_pdf_v2 import extract as legacy
-from src.open_original_v1 import passage_from_pdf_freeze
+from src.vorming.docling_contract_v1 import CONTRACT, DoclingError, stored_fragments
+from src.vorming.docling_pdf_v1 import extract
+from src.vorming.extract_pdf_v2 import extract as legacy
+from src.review.open_original_v1 import passage_from_pdf_freeze
 from tests.test_source_bound_fields_v2 import TEXT, proposal
 
 pytestmark = pytest.mark.skipif(os.environ.get("METIS_DOCLING_REAL_ACCEPTANCE") != "1",
@@ -165,9 +165,9 @@ def test_real_line_numbers_cross_page_text_and_unequal_page_sizes(tmp_path):
 
 
 def chain(root, create_console):
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
     from src.operations_console_v1 import ConsoleError
-    from src.source_bound_fields_v2 import KEY, MODE
+    from src.vorming.source_bound_fields_v2 import KEY, MODE
     source = pdf(root)
     console = create_console()
     env = {"METIS_LLM_API_KEY": "test", "METIS_LLM_MODEL": "controlled",
@@ -195,7 +195,7 @@ def chain(root, create_console):
     # Persist extraction-free history like later processing records. This does
     # not bypass class-change/decision-graph guards or alter reviewed objects.
     from copy import deepcopy
-    from src.quality_evidence_v1 import record_processing
+    from src.settings.quality_evidence_v1 import record_processing
     envelope = deepcopy(console._envelope(sid))
     record_processing(envelope, console.snapshot_objects(sid), fragments=[], replay=None,
                       started_at="retained-history-regression")
@@ -234,11 +234,11 @@ def test_real_pdf_postgres_successful_publication_and_restart(tmp_path, recovery
     Azure Blob immutability or production deployment packaging.
     """
     from tests.test_vsa_publish_readiness_ui_v1 import MemorySourceStore
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-    from src.source_bound_fields_v2 import KEY, MODE
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.vorming.source_bound_fields_v2 import KEY, MODE
     from src.operations_console_v1 import ConsoleError, review_lane
-    from src.review_disposition_v1 import definitive_review_disposition
-    from src.source_bound_fields_v3 import MODE as MODE_V3, VERSION as VERSION_V3
+    from src.review.review_disposition_v1 import definitive_review_disposition
+    from src.vorming.source_bound_fields_v3 import MODE as MODE_V3, VERSION as VERSION_V3
     from tests.test_recommendation_context_v3 import response_for
     monkeypatch.setenv("METIS_PDF_EXTRACTOR", "docling")
     source_store = MemorySourceStore()
@@ -277,7 +277,7 @@ def test_real_pdf_postgres_successful_publication_and_restart(tmp_path, recovery
     console.review_object(actor_id=accounts["first"]["account_id"], snapshot_id=sid,
         object_id=target["object_id"], decision="approve", confirmed_object_type="recommendation",
         recommendation_direction="for" if field_contract == "v3" else "against", recommendation_strength_level="not_stated")
-    from src.four_eyes_v1 import requires_four_eyes
+    from src.review.four_eyes_v1 import requires_four_eyes
     reviewed = next(o for o in console.snapshot_objects(sid) if o["object_id"] == target["object_id"])
     if requires_four_eyes(reviewed):
         console.approve_second_review(actor_id=accounts["second"]["account_id"], snapshot_id=sid,
@@ -312,8 +312,8 @@ def test_acceptance_requires_native_postgres():
 
 @pytest.mark.parametrize("backend", ["local", "postgres"])
 def test_real_converter_timeout_restart_retry_no_partial_activation(tmp_path, monkeypatch, request, backend, *, production_console):
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-    from src.source_bound_fields_v2 import MODE
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.vorming.source_bound_fields_v2 import MODE
     if backend == "postgres":
         from tests.test_review_batch_atomic_postgres import _console
         config = request.getfixturevalue("workflow_postgres")
@@ -365,8 +365,8 @@ def test_real_pdf_postgres_commit_rollback_and_concurrent_retry(tmp_path, workfl
     from threading import Event, Thread
     from tests.test_review_batch_atomic_postgres import _console
     from src.operations_console_v1 import ConsoleError
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-    from src.source_bound_fields_v2 import MODE
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.vorming.source_bound_fields_v2 import MODE
     from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
     def create(root=tmp_path):
         console = _console(root, workflow_postgres)

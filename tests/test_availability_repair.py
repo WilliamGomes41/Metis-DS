@@ -15,8 +15,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.operations_console_v1 import ConsoleError
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-from src.processing_retry_v1 import now
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+from src.vorming.processing_retry_v1 import now
 from tests.test_recommendation_context_v3 import response_for
 from tests.semantic_fixture_support import bind_fixture_selections
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
@@ -207,9 +207,9 @@ def test_restart_expired_reservation_resumes_without_losing_source(backend_state
     restarted=state(tmp_path, production_console=production_console);bind(restarted,provider)
     from datetime import datetime
     future=datetime.fromisoformat(attempt['expires_at'])+timedelta(seconds=1)
-    monkeypatch.setattr('src.processing_retry_v1.now',lambda:future)
-    monkeypatch.setattr('src.source_selection_v1.now',lambda:future)
-    monkeypatch.setattr('src.source_processing_dispatch_v1.now',lambda:future)
+    monkeypatch.setattr('src.vorming.processing_retry_v1.now',lambda:future)
+    monkeypatch.setattr('src.vorming.source_selection_v1.now',lambda:future)
+    monkeypatch.setattr('src.vorming.source_processing_dispatch_v1.now',lambda:future)
     app=production_app(restarted)
     with TestClient(app,base_url='https://testserver') as client:
         login(client)
@@ -265,10 +265,10 @@ def installed_app(console):
     ('/review',{'task':'detail'}),('/review/bronpassage',{})])
 def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(backend_state, tmp_path, monkeypatch, path, params, *, production_console):
     import re
-    import src.knowledge_materialisation_v1 as materialisation
-    import src.review_workboard_v1 as workboard
-    import src.semantic_passage_v1 as semantic
-    from src.source_accountability_v1 import is_source_record
+    import src.vorming.knowledge_materialisation_v1 as materialisation
+    import src.review.review_workboard_v1 as workboard
+    import src.vorming.semantic_passage_v1 as semantic
+    from src.vorming.source_accountability_v1 import is_source_record
     # Preserve the visible timestamp in the equality proof at one fixed instant.
     monkeypatch.setattr(workboard, '_observed_at', lambda: '2026-10-21T12:34:59+00:00')
     console=state(tmp_path, production_console=production_console);author,reviewer=accounts(console)
@@ -365,7 +365,7 @@ def test_installed_layout_receipt_and_automatic_selection(tmp_path, *, productio
 
 
 def test_estimates_require_comparable_complete_observations_and_config(tmp_path):
-    from src.source_selection_v1 import estimate
+    from src.vorming.source_selection_v1 import estimate
     configuration={'mode':'v3','model':'fixture'}
     env={'content_kind':'html','class':'richtlijn','received_source':{'bytes':1000},'processing_configuration':configuration}
     docs=[]
@@ -455,8 +455,8 @@ def test_expired_first_selection_can_complete_with_only_retained_source(tmp_path
     attempt,_=console.reserve_source_selection(actor_id=author,snapshot_id=sid,command_id='expired',expected_revision=console.objects_revision(sid))
     from datetime import datetime
     future=datetime.fromisoformat(attempt['expires_at'])+timedelta(seconds=1)
-    monkeypatch.setattr('src.processing_retry_v1.now',lambda:future)
-    monkeypatch.setattr('src.source_selection_v1.now',lambda:future)
+    monkeypatch.setattr('src.vorming.processing_retry_v1.now',lambda:future)
+    monkeypatch.setattr('src.vorming.source_selection_v1.now',lambda:future)
     def abstain(*args):
         return {'output':[{'content':[{'type':'output_text','text':json.dumps({'objects':[],'relations':[],'abstain_reason':'uncertain'})}]}]}
     console = state(tmp_path, production_console=production_console)

@@ -13,8 +13,8 @@ import signal
 import sys
 import time
 
-from src.docling_contract_v1 import CONTRACT, DOCLING_VERSION, CORE_VERSION, LAYOUT_PRESET, MODEL_REVISIONS, DoclingError
-from src.docling_render_fonts_v1 import verify_fonts
+from src.vorming.docling_contract_v1 import CONTRACT, DOCLING_VERSION, CORE_VERSION, LAYOUT_PRESET, MODEL_REVISIONS, DoclingError
+from src.vorming.docling_render_fonts_v1 import verify_fonts
 
 
 def verified_models(path: Path) -> dict:

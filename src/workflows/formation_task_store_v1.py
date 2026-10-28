@@ -5,7 +5,7 @@ context identity, idempotency and provenance; it never creates candidates.
 """
 from copy import deepcopy
 
-from src.semantic_replay_v1 import stable_json_hash
+from src.vorming.semantic_replay_v1 import stable_json_hash
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError, _json_text
 
 STORAGE_VERSION = 1
@@ -34,8 +34,8 @@ class FormationTaskStore:
             raise WorkflowDocumentStoreError("formation_immutable_record_conflict")
 
     def retain_input(self, con, *, envelope, validator_input, semantic_identity, expected_revision):
-        from src.source_preparation_context_v1 import KEY, stored_extraction
-        from src.pre_review_semantic_v1 import _content_fragments, _evidence_fragments
+        from src.vorming.source_preparation_context_v1 import KEY, stored_extraction
+        from src.vorming.pre_review_semantic_v1 import _content_fragments, _evidence_fragments
         extraction = envelope.get(KEY)
         fragments = stored_extraction(envelope)
         if fragments is None:
@@ -91,8 +91,8 @@ class FormationTaskStore:
         if any(reference.get(k) != payload.get(k) for k in ("snapshot_id","source_hash","source_version")):
             raise WorkflowDocumentStoreError("formation_input_source_mismatch")
         extraction = row["extraction"]
-        from src.source_preparation_context_v1 import KEY, stored_extraction
-        from src.pre_review_semantic_v1 import _content_fragments, _evidence_fragments
+        from src.vorming.source_preparation_context_v1 import KEY, stored_extraction
+        from src.vorming.pre_review_semantic_v1 import _content_fragments, _evidence_fragments
         source = extraction.get("source") or {}
         if (extraction.get("record_hash") != payload["extraction_hash"]
                 or source.get("snapshot_id") != payload["snapshot_id"]
@@ -121,7 +121,7 @@ class FormationTaskStore:
         return result
 
     def load_source_views(self, preparation, reference=None):
-        from src.prepared_source_views_v1 import contract,VERSION,PreparedSource
+        from src.vorming.prepared_source_views_v1 import contract,VERSION,PreparedSource
         extraction=preparation["extraction"]
         extraction_hash=extraction["record_hash"]
         views_id=stable_json_hash({"extraction_hash":extraction_hash,"contract":contract()})
@@ -158,7 +158,7 @@ class FormationTaskStore:
         if con is None:
             with self.documents._connect() as connection:
                 return self.prepare_source_views(input_reference,payload,con=connection)
-        from src.prepared_source_views_v1 import contract
+        from src.vorming.prepared_source_views_v1 import contract
         header=self._source_views_header(con,input_reference)
         if not header or payload.get("fragments_hash")!=header["fragments_hash"] or payload.get("contract")!=contract():
             raise WorkflowDocumentStoreError("source_views_source_mismatch")
@@ -168,7 +168,7 @@ class FormationTaskStore:
                 "payload_hash":stable_json_hash(record),"encoded":_json_text(record)}
 
     def retain_source_views(self,con,input_reference,payload,*,prepared=None):
-        from src.prepared_source_views_v1 import VERSION
+        from src.vorming.prepared_source_views_v1 import VERSION
         prepared=prepared if prepared is not None else self.prepare_source_views(input_reference,payload,con=con)
         header=self._source_views_header(con,input_reference)
         if header!=prepared["header"]:
@@ -196,7 +196,7 @@ class FormationTaskStore:
         if expected_hash and row["plan_hash"] != expected_hash:
             raise WorkflowDocumentStoreError("formation_task_plan_conflict")
         plan = integrity(row["payload"],row["plan_hash"],"formation_task_plan_integrity_failed")
-        from src.recommendation_task_plan_v1 import VERSION
+        from src.vorming.recommendation_task_plan_v1 import VERSION
         if plan.get("version") != VERSION:
             raise WorkflowDocumentStoreError("formation_task_plan_version_unsupported")
         return plan
@@ -393,7 +393,7 @@ class FormationTaskStore:
             plan = self.load_task_plan(reference["context_id"], expected_hash=(plan_reference or {}).get("plan_hash"))
             if plan is not None:
                 diagnostic["task_plan"] = plan
-            from src.bounded_formation_v1 import _merge_task_proposals
+            from src.vorming.bounded_formation_v1 import _merge_task_proposals
             results = self.task_results(reference["context_id"],attempt_id=attempt["attempt_id"],diagnostic=True)
             if results or "resolved_proposal" not in diagnostic:
                 proposal = _merge_task_proposals([row["proposal"] for row in results])
@@ -406,9 +406,9 @@ class FormationTaskStore:
                 diagnostic["provider_evidence"] = {**calls[0], "supplementary_calls": calls[1:],
                     "task_policy":"bounded-formation-v1","tasks":[row["task"] for row in task_evidence]}
                 if plan is not None:
-                    from src.recommendation_task_plan_v1 import report
-                    from src.bounded_formation_v1 import _durable_targets
-                    from src.semantic_passage_v1 import semantic_source_blocks
+                    from src.vorming.recommendation_task_plan_v1 import report
+                    from src.vorming.bounded_formation_v1 import _durable_targets
+                    from src.vorming.semantic_passage_v1 import semantic_source_blocks
                     data = self.resolve_input(reference)
                     blocks = semantic_source_blocks(data["fragments"])
                     proposal = diagnostic["resolved_proposal"]

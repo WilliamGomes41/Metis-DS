@@ -10,9 +10,9 @@ import json
 import pytest
 
 from src.operations_console_v1 import ConsoleError
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-from src.recoverable_formation_v1 import prepare, incomplete
-from src.source_accountability_v1 import evidence_of
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+from src.vorming.recoverable_formation_v1 import prepare, incomplete
+from src.vorming.source_accountability_v1 import evidence_of
 from tests.test_recommendation_context_v3 import response_for, source
 from tests.test_recommendation_coverage_v1 import FIRST, SECOND
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
@@ -114,7 +114,7 @@ def partial_story(tmp_path, make_console=None, *, production_console):
 def test_review_points_to_problems_with_or_without_candidate(tmp_path, *, production_app, production_console):
     from fastapi.testclient import TestClient
     from src.operations_console_app import create_console_app, COOKIE
-    from src.source_accountability_v1 import is_source_record
+    from src.vorming.source_accountability_v1 import is_source_record
     state, sid, *_ = system(tmp_path, broken_first=True, production_console=production_console)
     objects = state.snapshot_objects(sid)
     assert objects and all(is_source_record(o) or o.get('object_type') in {'document', 'heading'} for o in objects)
@@ -159,7 +159,7 @@ def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path, *, produ
     state, sid, actor, reviewer, calls, mode, _, _ = system(tmp_path, production_console=production_console)
     from fastapi.testclient import TestClient
     from src.operations_console_app import create_console_app, COOKIE
-    from src.processing_evidence_export_v1 import processing_evidence_tables
+    from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
     tables, _ = processing_evidence_tables(snapshot_id=sid, revision=state.objects_revision(sid),
         envelope=state._envelope(sid), objects=state.snapshot_objects(sid))
     assert tables['formation_findings'][0]['reason_code'] == 'semantic_evidence_literal_not_found'
@@ -317,7 +317,7 @@ def test_concurrent_resume_cannot_overwrite_active_attempt(tmp_path, *, producti
 def test_invalid_candidate_quarantines_related_candidate_not_independent_one():
     texts = [FIRST, SECOND, 'Bespreek de omstandigheden']
     fragments = [{**source(t)[0], 'fragment_id': str(i), 'fragment_hash': str(i)} for i, t in enumerate(texts)]
-    from src.semantic_passage_v1 import semantic_source_blocks
+    from src.vorming.semantic_passage_v1 import semantic_source_blocks
     blocks = semantic_source_blocks(fragments)
     payload = {'input': [{'role': 'developer', 'content': ''}, {'role': 'user', 'content': json.dumps({'source_blocks': blocks, 'evidence_blocks': blocks})}]}
     objects = [response_for(payload, t)['objects'][0] for t in texts]
@@ -341,7 +341,7 @@ def test_invalid_candidate_quarantines_related_candidate_not_independent_one():
 
 
 def test_source_assessment_diagnostic_span_does_not_close_pending():
-    from src.recoverable_formation_v1 import pending_rejections
+    from src.vorming.recoverable_formation_v1 import pending_rejections
     span = {'block_id': 'b', 'start': 0, 'end': 4}
     evidence = {'formation': {'rejections': [{
         'kind': 'source_assessment',
@@ -357,7 +357,7 @@ def test_source_assessment_diagnostic_span_does_not_close_pending():
 
 
 def test_conflicting_reselection_cannot_replace_primary_or_clear_itself():
-    from src.recoverable_formation_v1 import restrict_supplement, pending_rejections
+    from src.vorming.recoverable_formation_v1 import restrict_supplement, pending_rejections
     primary = {'objects': [{'spans': [{'block_id': 'b', 'start': 0, 'end': 5}], 'context_evidence': []}],
                'relations': [], 'source_assessments': [], 'abstain_reason': None}
     supplement = deepcopy(primary)
@@ -380,7 +380,7 @@ def test_conflicting_reselection_cannot_replace_primary_or_clear_itself():
 
 
 def test_producer_cannot_supply_approval_or_omit_unknown_failures():
-    from src.semantic_passage_v1 import SemanticPassageError
+    from src.vorming.semantic_passage_v1 import SemanticPassageError
     with pytest.raises(SemanticPassageError, match='semantic_proposal_invalid'):
         prepare({'objects': [], 'relations': [], 'approved': True}, blocks=[], evidence_blocks=[], validator_input={})
     assert incomplete({'semantic_replay': {'provider_evidence': {
@@ -391,7 +391,7 @@ def test_producer_cannot_supply_approval_or_omit_unknown_failures():
 def test_manual_source_reset_blocks_resume_and_reextract(tmp_path, *, production_console):
     state, sid, actor, reviewer, calls, mode, make, bind = system(tmp_path, containers=True, production_console=production_console)
     assert state.processing_status(sid)['resume_allowed']
-    from src.source_context_review_v1 import confirm_source_context
+    from src.review.source_context_review_v1 import confirm_source_context
     metadata = next(o for o in state.snapshot_objects(sid) if evidence_of(o).get('text') == 'Versie: 1')
     confirm_source_context(state, actor_id=reviewer, snapshot_id=sid, source_object_id=metadata['object_id'],
         role='reset', target_object_ids=[], reason='Bronbesluit opnieuw beoordelen', command_id='reset-metadata',

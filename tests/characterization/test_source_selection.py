@@ -8,7 +8,7 @@ from .support import console_at, command, ACTOR
 
 @pytest.mark.parametrize('dispatch_state', ['pending', 'claimed'])
 def test_source_overview_running_golden(tmp_path, production_console, golden, dispatch_state):
-    from src.source_selection_ui_v1 import install
+    from src.vorming.source_selection_ui_v1 import install
     console = console_at(tmp_path, production_console=production_console)
     receipt = console.receive_source(**command())
     sid = receipt['snapshot_id']

@@ -23,7 +23,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from src.admission_gate_v1 import (
+from src.vorming.admission_gate_v1 import (
     GATE_ALLOWED,
     GATE_BLOCKED,
     admit_candidate,
@@ -41,7 +41,7 @@ from src.operations_console_v1 import OperationsConsole
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_SOURCE = ROOT / "src/operations_console_app.py"
-GATE_SOURCE = ROOT / "src/admission_gate_v1.py"
+GATE_SOURCE = ROOT / "src/vorming/admission_gate_v1.py"
 DJG = "De dJG wordt in Nederland vaker gebruikt."
 ADVISEERT = (
     "De werkgroep adviseert de verpleegkundige de risicofactoren "

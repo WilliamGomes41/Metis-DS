@@ -9,9 +9,9 @@ from src.integrity_kernel import (
     compute_canonical_object_hash, exact_review_snapshot_hash, load_verified_source_registry,
     schema_errors, stamp_canonical_hashes, validate_source_fragments,
 )
-from src.review_ledger import append_event, verify_ledger
-from src.review_workflow_v3 import _apply_review_state as apply_reviews
-from src.revision_workflow import create_revision
+from src.review.review_ledger import append_event, verify_ledger
+from src.review.review_workflow_v3 import _apply_review_state as apply_reviews
+from src.review.revision_workflow import create_revision
 
 SCHEMA=ROOT/'schemas/knowledge_object.schema.v1.1.json'
 SEM=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl'
@@ -84,7 +84,7 @@ def test_review_ledger_detects_tamper(tmp_path:Path):
 
 def test_pdf_v2_extractor_captures_coordinates_and_full_fragment_hash(tmp_path:Path):
     import fitz
-    from src.extract_pdf_v2 import extract, fragment_payload
+    from src.vorming.extract_pdf_v2 import extract, fragment_payload
     from src.integrity_kernel import stable_hash
     pdf=tmp_path/'x.pdf'; doc=fitz.open(); page=doc.new_page(); page.insert_text((72,72),'Signalering test'); doc.save(pdf); doc.close()
     frags=extract(pdf,document_id='doc1',source_id='source1',pages=[1])
@@ -100,8 +100,8 @@ def test_pdf_v2_extractor_captures_coordinates_and_full_fragment_hash(tmp_path:P
     assert stable_hash(fragment_payload(frags[0]))!=original_hash
 
 def test_verified_source_can_be_bound_into_new_manifest(tmp_path:Path):
-    from src.source_registry import register_source
-    from src.bind_source_manifest import bind
+    from src.ingest.source_registry import register_source
+    from src.ingest.bind_source_manifest import bind
     manifest=json.loads((ROOT/'data/source_manifest.v2.json').read_text())
     sid=manifest['canonical_source']['source_id']; b=tmp_path/'source.pdf'; b.write_bytes(b'official-pdf-binary')
     rec=register_source(sid,b,manifest['canonical_source']['source_url'],manifest['canonical_source']['version'])

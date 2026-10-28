@@ -12,9 +12,9 @@ from copy import deepcopy
 import pytest
 
 from src.console_performance_v1 import performance_scope
-from src.review_policy_v1 import CONTRACT, project_policy
+from src.review.review_policy_v1 import CONTRACT, project_policy
 from src.publish_authorization_v1 import tuple_record
-from src.review_workboard_v1 import review_workboard_items
+from src.review.review_workboard_v1 import review_workboard_items
 from tests.test_console_badge_counts_postgres_v1 import _envelope
 from tests.test_console_navigation_performance import NavigationProbe
 from tests.test_review_workboard_heading_advance_postgres_v1 import workflow_postgres

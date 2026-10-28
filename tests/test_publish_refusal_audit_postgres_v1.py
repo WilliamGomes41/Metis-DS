@@ -17,7 +17,7 @@ import pytest
 import src.publication_refusal_store_v1 as store
 import src.publish_refusal_audit_v1 as audit
 from src.request_diagnostics_v1 import _LOGGER
-from src.review_ledger import read_events, verify_ledger
+from src.review.review_ledger import read_events, verify_ledger
 from tests.test_vsa_publish_document_v1 import (  # noqa: F401 - fixture import
     canonical_store, MemorySourceStore, _ready_console, workflow_postgres,
 )

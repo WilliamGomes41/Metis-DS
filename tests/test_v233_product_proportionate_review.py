@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from src.passage_register_v1 import apply_passage_register, passage_register_of
-from src.proportionate_review_v1 import (
+from src.vorming.passage_register_v1 import apply_passage_register, passage_register_of
+from src.review.proportionate_review_v1 import (
     NORMAL_RISK_BATCH_MAX,
     ProportionateReviewConsole,
     normal_risk_batch_eligible,
@@ -329,7 +329,7 @@ def test_stale_batch_fails_before_any_review_or_source_open(batch_console) -> No
 
 
 def test_source_contains_no_new_store_or_review_tier() -> None:
-    source = (Path(__file__).resolve().parents[1] / "src" / "proportionate_review_v1.py").read_text(encoding="utf-8")
+    source = (Path(__file__).resolve().parents[1] / "src" / "review" / "proportionate_review_v1.py").read_text(encoding="utf-8")
     assert "light/standard/strict" not in source
     assert "use_scope" not in source
     assert "new database" not in source.lower()

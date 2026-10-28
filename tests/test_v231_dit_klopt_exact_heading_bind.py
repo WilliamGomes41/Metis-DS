@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.review_cockpit_v1 import found_under_path, resolve_found_under_parent
+from src.review.review_cockpit_v1 import found_under_path, resolve_found_under_parent
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -137,7 +137,7 @@ def test_first_hit_substring_and_startswith_are_forbidden() -> None:
     ]
     assert _resolve("Prevent", headings) == ""
     assert _resolve("van vallen", headings) == ""
-    source = (ROOT / "src/review_cockpit_v1.py").read_text(encoding="utf-8")
+    source = (ROOT / "src/review/review_cockpit_v1.py").read_text(encoding="utf-8")
     start = source.index("def resolve_found_under_parent")
     end = source.index("\ndef ", start + 1)
     fn = source[start:end]

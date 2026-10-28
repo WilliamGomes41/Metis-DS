@@ -14,7 +14,7 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-import src.source_selection_ui_v1 as ui
+import src.vorming.source_selection_ui_v1 as ui
 from src.operations_console_app import COOKIE
 from tests.test_recoverable_formation_v1 import system
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
@@ -40,7 +40,7 @@ def _legacy_documents(console, document=''):
 def _freeze(monkeypatch):
     counter = iter(range(10 ** 6))
     monkeypatch.setattr(uuid, 'uuid4', lambda: uuid.UUID(int=next(counter)))
-    import src.source_selection_v1 as selection
+    import src.vorming.source_selection_v1 as selection
     from datetime import datetime, timezone
     monkeypatch.setattr(selection, 'now', lambda: datetime(2026, 10, 15, 6, tzinfo=timezone.utc))
 

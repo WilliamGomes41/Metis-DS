@@ -17,7 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.retrieval.answerability_gate_v1 import evaluate_answerability
-from src.beslisboom_path_v1 import (
+from src.review.beslisboom_path_v1 import (
     CLOSED_BOOM_TYPES,
     CLOSED_KLASSEN,
     RICHTLIJN_PATH_TYPES,
@@ -36,7 +36,7 @@ from src.beslisboom_path_v1 import (
     split_or_reject_multi_bullet_outcome,
 )
 from src.integrity_kernel import canonical_object_payload, compute_canonical_object_hash
-from src.four_eyes_v1 import requires_four_eyes
+from src.review.four_eyes_v1 import requires_four_eyes
 from src.object_taxonomy_v1 import (
     CLASS_ORDER,
     CLOSED_OBJECT_TYPES,
@@ -420,7 +420,7 @@ def test_doen_overweeg_niet_doen_geen_actie_and_four_eyes() -> None:
         "object_type": "outcome",
         "content": {"clean_text": "Verwijs naar de valpoli."},
     }
-    from src.beslisboom_path_v1 import outcome_strength_applies, proposed_outcome_strength
+    from src.review.beslisboom_path_v1 import outcome_strength_applies, proposed_outcome_strength
 
     assert outcome_strength_applies(actionable)
     assert proposed_outcome_strength("Adviseer verwijzing naar de valpoli.") == "doen"
@@ -613,7 +613,7 @@ def test_class_axis_richtlijn_recommendation_outranks_boom_outcome() -> None:
         "metadata": {"source_class": "beslisboom", "family": "valrisico"},
         "content": {"topic": ["valrisico", "class:beslisboom"]},
     }
-    from src.beslisboom_path_v1 import preferred_same_family_advice
+    from src.review.beslisboom_path_v1 import preferred_same_family_advice
 
     winner = preferred_same_family_advice([boom, richtlijn], family="valrisico")
     assert winner["object_id"] == "rec-1"
@@ -681,7 +681,7 @@ def test_product_api_does_not_serve_boom_outcomes() -> None:
 
 
 def test_answerability_does_not_support_boom_when_richtlijn_exists() -> None:
-    from src.beslisboom_path_v1 import preferred_same_family_advice
+    from src.review.beslisboom_path_v1 import preferred_same_family_advice
 
     boom = {
         "object_id": "out-1",

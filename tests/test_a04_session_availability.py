@@ -138,7 +138,7 @@ def _scenario(runtime, monkeypatch, boundary, *, block_eventloop=False):
     inference_boundary["call"] = inference
 
     if block_eventloop:
-        from src.source_processing_dispatch_v1 import SourceProcessingDispatcher
+        from src.vorming.source_processing_dispatch_v1 import SourceProcessingDispatcher
         async def synchronous_delivery(dispatcher, sid, attempt):
             dispatcher._execute(sid, attempt)
         monkeypatch.setattr(SourceProcessingDispatcher, "_deliver", synchronous_delivery)

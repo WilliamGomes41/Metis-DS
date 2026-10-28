@@ -3,10 +3,10 @@
 # release-control-evidence: metrics teller noemer score-must-drop
 from fastapi.testclient import TestClient
 
-from src.review_ledger import read_events
+from src.review.review_ledger import read_events
 from src.integrity_kernel import stable_hash
-from src.quality_metrics_app_v1 import capture
-from src.quality_metrics_v1 import build_report
+from src.settings.quality_metrics_app_v1 import capture
+from src.settings.quality_metrics_v1 import build_report
 from test_d5_4_review_interaction_evidence import _system, PASSWORD
 
 

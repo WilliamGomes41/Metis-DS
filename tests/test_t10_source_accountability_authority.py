@@ -11,10 +11,10 @@ from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 import pytest
 
-from src.source_containers_v1 import partition, source_usage
+from src.vorming.source_containers_v1 import partition, source_usage
 from src.publication_readiness_v1 import source_passage_closure, review_followup_queues
-from src.source_accountability_v1 import KEY, record
-from src.review_duty_v1 import review_duty_for
+from src.vorming.source_accountability_v1 import KEY, record
+from src.review.review_duty_v1 import review_duty_for
 from tests.test_source_containers_v1 import context_story
 
 
@@ -90,7 +90,7 @@ def _approve_bindings(target):
 
 
 def test_exact_target_approvals_close_context_and_stale_bindings_reopen():
-    from src.source_containers_v1 import source_accountability, source_closure
+    from src.vorming.source_containers_v1 import source_accountability, source_closure
     rows, fragments = _context_inputs()
     source = _linked(rows)
     target = partition(rows)["knowledge"][0]
@@ -108,7 +108,7 @@ def test_exact_target_approvals_close_context_and_stale_bindings_reopen():
 
 @pytest.mark.parametrize("status", ["rejected", "superseded", "revise"])
 def test_terminal_target_removes_automatic_context_closure(status):
-    from src.source_containers_v1 import source_accountability
+    from src.vorming.source_containers_v1 import source_accountability
     rows, fragments = _context_inputs()
     source = _linked(rows)
     target = partition(rows)["knowledge"][0]
@@ -120,7 +120,7 @@ def test_terminal_target_removes_automatic_context_closure(status):
 
 
 def test_stale_context_binding_is_repair_even_with_old_approval():
-    from src.source_containers_v1 import source_accountability
+    from src.vorming.source_containers_v1 import source_accountability
     rows, fragments = _context_inputs()
     source = _linked(rows)
     target = partition(rows)["knowledge"][0]
@@ -132,9 +132,9 @@ def test_stale_context_binding_is_repair_even_with_old_approval():
 
 
 def test_projection_wrappers_ui_and_t9_duties_share_one_snapshot():
-    from src.source_containers_v1 import source_accountability, source_closure
+    from src.vorming.source_containers_v1 import source_accountability, source_closure
     from src.operations_console_app import _render_review_index
-    from src.review_duty_v1 import review_duties
+    from src.review.review_duty_v1 import review_duties
     rows, fragments = _context_inputs()
     source = _linked(rows)
     source["metadata"][KEY]["binding_hash"] = "bad"
@@ -156,7 +156,7 @@ def test_projection_wrappers_ui_and_t9_duties_share_one_snapshot():
     ("Datum: oktober 2026", "document_information"), ("Inhoud................3", "navigation"),
     ("Versie: 1.2; gebruik geen zalf", "unresolved")])
 def test_closed_metadata_rules_and_legacy_policy(text, role):
-    from src.source_containers_v1 import source_accountability
+    from src.vorming.source_containers_v1 import source_accountability
     rows = context_story()
     source = deepcopy(_linked(rows))
     spans = [{"block_id": "metadata", "start": 0, "end": len(text)}]
@@ -173,8 +173,8 @@ def test_closed_metadata_rules_and_legacy_policy(text, role):
 
 @pytest.mark.parametrize("status", ["used_as_context", "linked_as_support", "excluded_with_reason"])
 def test_explicit_dispositions_remain_evidence_without_knowledge_authority(status):
-    from src.source_containers_v1 import source_accountability
-    from src.passage_register_v1 import passage_register_record
+    from src.vorming.source_containers_v1 import source_accountability
+    from src.vorming.passage_register_v1 import passage_register_record
     source = deepcopy(_linked(context_story()))
     source["metadata"]["passage_register"] = passage_register_record(status=status, source="review",
                                                                     reason_codes=["human_reason"])
@@ -187,10 +187,10 @@ def test_explicit_dispositions_remain_evidence_without_knowledge_authority(statu
 
 def test_confirm_reset_duplicate_conflict_restart_and_projection(tmp_path, *, production_console):
     from tests.test_source_context_review_v1 import _system
-    from src.review_closure_v1 import ReviewClosureConsole
-    from src.source_containers_v1 import source_accountability
+    from src.review.review_closure_v1 import ReviewClosureConsole
+    from src.vorming.source_containers_v1 import source_accountability
     from src.operations_console_v1 import ConsoleError
-    from src.review_ledger import read_events
+    from src.review.review_ledger import read_events
     state, _, reviewer, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     sid = command["snapshot_id"]
     state.confirm_source_context(**command)
@@ -230,7 +230,7 @@ def test_corrupt_source_detail_requests_repair_not_a_human_disposition():
 
 
 def test_export_uses_same_current_target_authority_as_containers():
-    from src.processing_evidence_export_v1 import processing_evidence_tables
+    from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
     rows, fragments = _context_inputs()
     source = _linked(rows)
     target = partition(rows)["knowledge"][0]
@@ -245,7 +245,7 @@ def test_export_uses_same_current_target_authority_as_containers():
 
 @pytest.mark.parametrize("field", ["text", "source_mapping", "source_refs", "role"])
 def test_corrupt_machine_context_is_repair(field):
-    from src.source_containers_v1 import source_accountability
+    from src.vorming.source_containers_v1 import source_accountability
     rows, fragments = _context_inputs()
     source = _linked(rows)
     target = partition(rows)["knowledge"][0]
@@ -257,7 +257,7 @@ def test_corrupt_machine_context_is_repair(field):
 
 @pytest.mark.parametrize("refs", [[None], ["bad"]])
 def test_malformed_source_provenance_is_repair_not_reader_crash(refs):
-    from src.source_containers_v1 import source_accountability
+    from src.vorming.source_containers_v1 import source_accountability
     rows, fragments = _context_inputs()
     source = _linked(rows)
     source["provenance"]["source_fragments"] = refs
@@ -266,7 +266,7 @@ def test_malformed_source_provenance_is_repair_not_reader_crash(refs):
 
 @pytest.mark.parametrize("field", ["source_hash", "document_version"])
 def test_mismatched_admission_binding_has_repair_instead_of_disappearing(field):
-    from src.source_containers_v1 import source_accountability
+    from src.vorming.source_containers_v1 import source_accountability
     rows, fragments = _context_inputs()
     target = partition(rows)["knowledge"][0]
     target["metadata"]["admission"][field] = "wrong"
@@ -277,7 +277,7 @@ def test_mismatched_admission_binding_has_repair_instead_of_disappearing(field):
 
 @pytest.mark.parametrize("raw", ["bad", {"entries": "bad"}])
 def test_malformed_machine_context_target_requires_repair(raw):
-    from src.source_containers_v1 import source_accountability
+    from src.vorming.source_containers_v1 import source_accountability
     rows, fragments = _context_inputs()
     target = partition(rows)["knowledge"][0]
     target["metadata"]["source_bound_context"] = raw
@@ -286,7 +286,7 @@ def test_malformed_machine_context_target_requires_repair(raw):
 
 
 def test_machine_context_target_repair_has_inventory_priority_over_review_duty():
-    from src.source_containers_v1 import source_accountability
+    from src.vorming.source_containers_v1 import source_accountability
     from src.operations_console_app import _render_review_index, _source_context_panel
     rows, fragments = _context_inputs()
     target = partition(rows)["knowledge"][0]
@@ -302,7 +302,7 @@ def test_machine_context_target_repair_has_inventory_priority_over_review_duty()
 @pytest.mark.parametrize("status", ["rejected", "superseded", "revise"])
 def test_legacy_explicit_context_follows_current_target(status, tmp_path, *, production_console):
     from tests.test_source_context_review_v1 import _system
-    from src.source_containers_v1 import source_accountability
+    from src.vorming.source_containers_v1 import source_accountability
     state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     state.confirm_source_context(**command)
     rows = state.snapshot_objects(command["snapshot_id"])
@@ -316,7 +316,7 @@ def test_legacy_explicit_context_follows_current_target(status, tmp_path, *, pro
 def test_admission_blocked_keeps_existing_correction_card(tmp_path, *, production_console):
     from tests.test_t9_review_knowledge_authority import _console
     from src.operations_console_app import _source_context_panel, _source_context_card, _render_review_card
-    from src.source_containers_v1 import source_accountability
+    from src.vorming.source_containers_v1 import source_accountability
     console, reviewer, sid, target = _console(tmp_path, production_console=production_console)
     rows = console.snapshot_objects(sid)
     current = next(o for o in rows if o["object_id"] == target["object_id"])
@@ -337,7 +337,7 @@ def test_admission_blocked_keeps_existing_correction_card(tmp_path, *, productio
 @pytest.mark.parametrize("retained", ["valid", "missing", "corrupt"])
 def test_export_retained_evidence_is_used_without_reextraction(retained):
     from src.integrity_kernel import stable_hash
-    from src.processing_evidence_export_v1 import processing_evidence_tables
+    from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
     rows, fragments = _context_inputs()
     source = _linked(rows)
     target = partition(rows)["knowledge"][0]

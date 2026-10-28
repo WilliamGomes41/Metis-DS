@@ -242,7 +242,7 @@ def validate_parent_relations(objects: Iterable[dict[str, Any]]) -> list[str]:
 
     # When a confirmed child relation is stored as well, it must agree with
     # the canonical parent edge. Proposed relations are deliberately ignored.
-    from src.heading_parent_list_v1 import (
+    from src.vorming.heading_parent_list_v1 import (
         is_heading_object,
         mark_heading_roles,
         parent_proposal_may_bind,

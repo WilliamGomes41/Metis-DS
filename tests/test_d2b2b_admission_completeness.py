@@ -7,7 +7,7 @@
 """
 from __future__ import annotations
 
-from src.admission_gate_v1 import (
+from src.vorming.admission_gate_v1 import (
     GATE_ALLOWED,
     GATE_BLOCKED,
     admit_candidate,

@@ -15,15 +15,15 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from src.document_status_v1 import (
+from src.documents.document_status_v1 import (
     DocumentStatusReadinessMixin,
     derive_document_status,
 )
 from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
 from src.operations_console_v1 import ConsoleError, review_lane
-from src.passage_register_v1 import passage_register_of
-from src.review_disposition_v1 import definitive_review_disposition
+from src.vorming.passage_register_v1 import passage_register_of
+from src.review.review_disposition_v1 import definitive_review_disposition
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDurablePublicationConsole
 
 ROOT = Path(__file__).resolve().parents[1]

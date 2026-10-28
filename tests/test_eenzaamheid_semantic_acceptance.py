@@ -2,7 +2,7 @@
 import csv
 import pytest
 from scripts.verify_eenzaamheid_semantic import SOURCE_HASH, FIELDS, reviewed_reference, compare_reference
-from src.semantic_passage_v1 import SELECTION_ORIGIN_PROPOSAL
+from src.vorming.semantic_passage_v1 import SELECTION_ORIGIN_PROPOSAL
 
 
 def test_reference_is_literal_complete_and_human_attributed(tmp_path):

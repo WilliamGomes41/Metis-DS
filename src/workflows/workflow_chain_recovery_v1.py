@@ -14,7 +14,7 @@ from copy import deepcopy
 from typing import Any, Mapping
 from uuid import UUID
 
-from src.api_access_v1 import (
+from src.settings.api_access_v1 import (
     NULLABLE_COLUMNS as API_ACCESS_NULLABLE_COLUMNS,
     REQUIRED_COLUMNS as API_ACCESS_COLUMNS,
     REQUIRED_KEYS as API_ACCESS_KEYS,
@@ -22,7 +22,7 @@ from src.api_access_v1 import (
     PostgresApiAccessStore,
 )
 from src.integrity_kernel import stable_hash
-from src.topic_identity_v1 import topic_identity, topic_identity_key
+from src.documents.topic_identity_v1 import topic_identity, topic_identity_key
 from src.publication_chain_recovery_guard_v1 import (
     restore_publication_chain as _guarded_restore,
     verify_publication_chain_backup as _guarded_verify,

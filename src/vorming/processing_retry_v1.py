@@ -1,0 +1,253 @@
+"""Retry attempt rules; durability belongs to the existing workflow document."""
+from __future__ import annotations
+
+from src.vorming.processing_document_budget_v1 import leased, document_scoped, budget as document_budget
+
+import re
+import uuid
+from copy import deepcopy
+from datetime import datetime, timedelta, timezone
+
+from src.operations_console_v1 import ConsoleError
+
+KEY = "processing_attempts"
+VERSION = "source-reprocessing-v3"
+
+
+def now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _retry_budget_attempts(attempts):
+    """Attempts that consume the failure/retry cap.
+
+    Only an attempt with proven source-range progress (formation_progress_made
+    is True) is free: a successful resume or a budget stop (incomplete_budget).
+    A budget stop without recorded progress MOET count toward the cap (A3-1 F2);
+    failed, interrupted and no-progress attempts consume the cap.
+    """
+    def free(attempt):
+        if attempt.get("formation_progress_made") is not True:
+            return False
+        return attempt.get("state") == "incomplete_budget" or (
+            attempt.get("kind") == "resume" and attempt.get("state") == "succeeded")
+    return [attempt for attempt in attempts if not free(attempt)]
+
+
+ADMISSION_ENV = "METIS_PROCESSING_ADMISSION"
+
+
+def admission_closed(environ=None) -> bool:
+    """C3: rollback/maintenance switch; only unset, empty or 'open' admits new attempts."""
+    import os
+    value = (environ if environ is not None else os.environ).get(ADMISSION_ENV, "").strip().lower()
+    return value not in {"", "open"}
+
+
+def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, clock: datetime, limits=None, kind="retry") -> tuple[dict, bool]:
+    if not command_id or len(command_id) > 128 or not re.fullmatch(r"[A-Za-z0-9_-]+", command_id):
+        raise ConsoleError("processing_command_id_invalid")
+    from src.vorming.bounded_model_call_v1 import ModelCallLimits
+    limits = limits or ModelCallLimits()
+    # Explicit staged admission for new contexts only; historical attempts are
+    # migrated by the operator, never incidentally by a read or retry.
+    import os
+    if not envelope.get(KEY) and os.environ.get("METIS_FORMATION_TASK_STORAGE") == "v1":
+        envelope["processing_storage"] = "task-v1"
+    attempts = envelope.setdefault(KEY, [])
+    expire_running(envelope, clock)
+    for attempt in attempts:
+        if attempt["command_id"] == command_id:
+            if attempt["actor_id"] != actor_id or attempt["source_hash"] != envelope["sha256"] or attempt.get("source_version", envelope["version"]) != envelope["version"]:
+                raise ConsoleError("processing_command_conflict")
+            return attempt, False
+    # C3 (#639): METIS_PROCESSING_ADMISSION other than unset/empty/'open' MOET refuse new work (fail-closed).
+    if admission_closed():
+        raise ConsoleError("processing_admission_closed")
+    if any(attempt["state"] == "running" for attempt in attempts):
+        raise ConsoleError("processing_attempt_in_progress")
+    grant = envelope.get("processing_recovery") or {}
+    recovery = len(_retry_budget_attempts(attempts)) >= limits.max_attempts
+    if recovery and (grant.get("consumed_by") or grant.get("source_hash") != envelope["sha256"]
+                     or grant.get("source_version") != envelope["version"] or grant.get("revision") != revision):
+        raise ConsoleError("processing_attempt_limit_reached")
+    if attempts and attempts[-1].get("retry_not_before") and datetime.fromisoformat(attempts[-1]["retry_not_before"]) > clock:
+        raise ConsoleError("processing_retry_cooldown")
+    if attempts and attempts[-1].get("error_code") in {"pre_review_llm_input_limit_exceeded", "pre_review_llm_output_limit_exceeded"}:
+        raise ConsoleError("processing_structural_limit")
+    attempt = {"version": VERSION, "attempt_id": "pa_" + uuid.uuid4().hex,
+               "command_id": command_id, "actor_id": actor_id, "source_hash": envelope["sha256"],
+               "expected_revision": revision, "source_version": envelope["version"], "kind":kind,
+               "limits": limits.record(), "retry_of":attempts[-1]["attempt_id"] if attempts else None,
+               "retry_not_before":None, "transport":None, "state": "running", "started_at": clock.isoformat(),
+               "expires_at": (clock + timedelta(seconds=limits.attempt)).isoformat(), "finished_at": None,
+               "error_code": None, "validation_code": None, "processing_reference": uuid.uuid4().hex,
+               "phase": "source_and_validation"}
+    # Read-only: the configuration in force for this reservation. Every attempt keeps
+    # this value, including failed and interrupted ones; legacy attempts have none.
+    from src.vorming.pre_review_semantic_v1 import semantic_contract_version_for_mode
+    configuration = envelope.get("processing_configuration")
+    attempt["reserved_semantic_contract_version"] = semantic_contract_version_for_mode(
+        configuration.get("mode") if isinstance(configuration, dict) else None)
+    if recovery:
+        grant["consumed_by"] = attempt["attempt_id"]
+        grant["consumed_at"] = clock.isoformat()
+        attempt["recovery_authorization_id"] = grant["authorization_id"]
+    from src.vorming.attempt_diagnostics_v1 import checkpoint, deployment_identity
+    checkpoint(attempt, "reserved", {"source_hash": envelope["sha256"], "source_version": envelope["version"],
+               "expected_revision": revision, "actor_id": actor_id, "deployed_commit": deployment_identity(),
+               "processing_reference": attempt["processing_reference"]})
+    if envelope.get("processing_storage") == "task-v1" and kind == "resume" and attempts:
+        previous_context = attempts[-1].get("diagnostic") or {}
+        for key in ("validator_input_ref", "validator_input_hash", "validator_identity", "semantic_identity", "task_plan_ref", "source_views_ref"):
+            if key in previous_context:
+                attempt["diagnostic"][key] = deepcopy(previous_context[key])
+    if envelope.get("processing_storage")=="task-v1" and kind=="retry" and attempts:
+        # Raw source views are independent of the semantic retry contract.
+        previous_views=(attempts[-1].get("diagnostic") or {}).get("source_views_ref")
+        if previous_views is not None:
+            attempt["diagnostic"]["source_views_ref"]=deepcopy(previous_views)
+    from src.request_diagnostics_v1 import current_request_id
+    from src.vorming.processing_trace_v1 import runtime_identity
+    attempt['diagnostic']['origin_request_id'] = current_request_id()
+    attempt['diagnostic']['origin_runtime'] = runtime_identity()
+    attempts.append(attempt)
+    return attempt, True
+
+
+def expire_running(envelope, clock):
+    from src.vorming.attempt_diagnostics_v1 import finish_diagnostic
+    for attempt in envelope.get(KEY, []):
+        if attempt["state"] == "running" and datetime.fromisoformat(attempt["expires_at"]) <= clock:
+            if document_scoped(attempt):
+                document_budget(attempt)
+                finish(envelope, attempt["attempt_id"], state="incomplete_budget", error=ConsoleError("source_task_budget_exhausted"))
+                attempt["stop_reason"] = "budget_exhausted"
+                attempt["dispatch"].update(state="blocked",blocked_reason="source_task_budget_exhausted",
+                    required_action="Het documentbudget is bereikt. Een nieuwe expliciete opdracht of herstelautorisatie is nodig.")
+                continue
+            attempt.update(state="interrupted", finished_at=clock.isoformat(), phase="stopped", error_code="processing_attempt_expired",
+                           stop_reason="error")
+            finish_diagnostic(attempt, ConsoleError("processing_attempt_expired"))
+
+
+def assert_active(envelope: dict, attempt_id: str, clock: datetime) -> dict:
+    attempt = next((a for a in envelope.get(KEY, []) if a["attempt_id"] == attempt_id), None)
+    if attempt is None or attempt["state"] != "running":
+        raise ConsoleError("processing_attempt_not_active")
+    document_budget(attempt)
+    if datetime.fromisoformat(attempt["expires_at"]) <= clock:
+        raise ConsoleError("source_task_budget_exhausted" if document_scoped(attempt) else "processing_attempt_expired")
+    dispatch = attempt.get("dispatch") or {}
+    if leased(attempt):
+        from src.vorming.processing_document_budget_v1 import worker_expired
+        if worker_expired(attempt, clock):
+            raise ConsoleError("processing_worker_deadline_reached")
+        if dispatch.get("state") == "claimed" and datetime.fromisoformat(dispatch["lease_expires_at"]) <= clock:
+            raise ConsoleError("processing_worker_lease_expired")
+        if dispatch.get("budget_expires_at") and datetime.fromisoformat(dispatch["budget_expires_at"]) <= clock:
+            raise ConsoleError("source_task_budget_exhausted")
+    return attempt
+
+
+STOP_REASONS = frozenset({"done", "budget_exhausted", "error"})
+
+
+def _formation_budget_exhausted(provider: dict) -> bool:
+    """Current formation is incomplete AND stopped on the bounded task budget."""
+    if provider.get("formation_incomplete") is not True:
+        return False
+    calls = [provider, *(provider.get("supplementary_calls") or [])]
+    return any(isinstance(c, dict) and c.get("error_code") == "source_task_budget_exhausted" for c in calls)
+
+
+def stop_evidence(envelope: dict, state: str) -> dict:
+    """Recorded stop evidence only; it MAG NIET change state, retry or resume rules."""
+    if state != "succeeded":
+        # The stored replay belongs to an earlier attempt; recording it would be stale.
+        return {"stop_reason": "error", "semantic_contract_version": None}
+    replay = envelope.get("semantic_replay") if isinstance(envelope.get("semantic_replay"), dict) else {}
+    identity = replay.get("identity") if isinstance(replay.get("identity"), dict) else {}
+    components = identity.get("components") if isinstance(identity.get("components"), dict) else {}
+    contract = components.get("semantic_contract_version")
+    provider = replay.get("provider_evidence") if isinstance(replay.get("provider_evidence"), dict) else {}
+    return {"stop_reason": "budget_exhausted" if _formation_budget_exhausted(provider) else "done",
+            "semantic_contract_version": contract if isinstance(contract, str) and contract else None}
+
+
+def formation_budget_exhausted(envelope: dict) -> bool:
+    """Current replay is incomplete AND stopped on the bounded task budget."""
+    return _formation_budget_exhausted((envelope.get("semantic_replay") or {}).get("provider_evidence") or {})
+
+
+def finish(envelope: dict, attempt_id: str, *, state: str, error: Exception | None = None,
+           budget_aware: bool = False) -> dict:
+    attempt = next(a for a in envelope[KEY] if a["attempt_id"] == attempt_id)
+    evidence = stop_evidence(envelope, state)
+    # A3: a budget-exhausted attempt MOET NOOIT 'succeeded' zijn (budget-aware callers).
+    if budget_aware and state == "succeeded" and formation_budget_exhausted(envelope):
+        state = "incomplete_budget"
+    attempt.update(state=state, finished_at=now().isoformat(),
+                   phase="activated" if state == "succeeded" else "budget_stopped" if state == "incomplete_budget" else "stopped",
+                   **evidence)
+    if error is not None:
+        code = getattr(error, "code", "processing_timeout" if isinstance(error, TimeoutError) else "processing_dependency_failed")
+        if not re.fullmatch(r"[a-z][a-z0-9_]{0,95}", str(code)):
+            code = "processing_dependency_failed"
+        attempt["error_code"] = code
+        # Validator subcodes are already bounded by the semantic wrapper. No exception prose.
+        diagnostics = getattr(error, "pre_review_diagnostics", {})
+        validation = str(diagnostics.get("reason_code") or "")
+        reference = str(diagnostics.get("reference") or "")
+        attempt["validation_code"] = validation if re.fullmatch(r"(?:semantic|recommendation|source_bound)_[a-z_]{1,100}", validation) else None
+        attempt["processing_reference"] = reference if re.fullmatch(r"[A-Za-z0-9_-]{1,80}", reference) else attempt.get("processing_reference")
+        transport = getattr(error, "model_call_observation", None)
+        if transport is not None:
+            attach_transport(attempt, transport)
+    from src.vorming.attempt_diagnostics_v1 import finish_diagnostic
+    finish_diagnostic(attempt, error)
+    return deepcopy(attempt)
+
+
+TRANSPORT_FIELDS = {"version", "call_id", "limits", "started_at", "finished_at", "elapsed_seconds", "category",
+                    "external_cancellation", "retry_not_before", "bytes_received", "phase", "http_status",
+                    "error_code", "local_worker_reaped", "transport_pid"}
+
+
+def attach_transport(attempt: dict, observation: dict):
+    # Only observations emitted by the native supervised transport, never response prose.
+    if isinstance(observation, dict) and observation.get("version") == "bounded-model-call-v1":
+        attempt["transport"] = {key: deepcopy(value) for key, value in observation.items() if key in TRANSPORT_FIELDS}
+        attempt["retry_not_before"] = observation.get("retry_not_before")
+
+
+def status(envelope: dict, *, clock: datetime | None = None, retry_supported=True, policy=None) -> dict:
+    clock = clock or now()
+    attempts = envelope.get(KEY) or []
+    latest = attempts[-1] if attempts else {}
+    state = latest.get("state", "not_recorded")
+    reason = latest.get("error_code") or envelope.get("processing_blocker")
+    if state == "running":
+        reason = "processing_attempt_in_progress"
+    if state == "running" and datetime.fromisoformat(latest["expires_at"]) <= clock:
+        state, reason = "expired", "processing_attempt_expired"
+    allowed = bool(envelope.get("publication_eligibility") == "blocked_pending_pre_review"
+                   and state != "running" and retry_supported)
+    max_attempts = policy.max_attempts if policy is not None else (latest.get("limits") or {}).get("max_attempts", 4)
+    retry_at = latest.get("retry_not_before")
+    grant = envelope.get("processing_recovery") or {}
+    recovery_available = bool(grant and not grant.get("consumed_by")
+                              and grant.get("source_hash") == envelope.get("sha256")
+                              and grant.get("source_version") == envelope.get("version"))
+    retry_attempts_used = len(_retry_budget_attempts(attempts))
+    if state != "running" and retry_attempts_used >= max_attempts and not recovery_available:
+        allowed, reason = False, "processing_attempt_limit_reached"
+    elif state != "running" and retry_at and datetime.fromisoformat(retry_at) > clock:
+        allowed, reason = False, "processing_retry_cooldown"
+    elif latest.get("error_code") in {"pre_review_llm_input_limit_exceeded", "pre_review_llm_output_limit_exceeded"}:
+        allowed, reason = False, "processing_structural_limit"
+    return {"state":state, "stored_state":latest.get("state"), "attempt_id":latest.get("attempt_id"),
+            "reason_code":reason, "error_code":latest.get("error_code"), "retry_allowed":allowed, "retry_not_before":retry_at,
+            "recovery_available": recovery_available, "attempts_used":len(attempts),
+            "retry_attempts_used": retry_attempts_used, "max_attempts":max_attempts,
+            "external_cancellation":(latest.get("transport") or {}).get("external_cancellation", "not_requested" if "replayed_call_id" in latest else "not_recorded")}

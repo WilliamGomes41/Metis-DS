@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.publication_readiness_v1 import publication_review_readiness
-from src.review_disposition_v1 import definitive_review_disposition
+from src.review.review_disposition_v1 import definitive_review_disposition
 
 
 def _object(register_status: str, review_status: str = "needs_review") -> dict[str, Any]:

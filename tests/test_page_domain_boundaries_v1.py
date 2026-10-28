@@ -7,10 +7,10 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from src.insight_v1 import _diagnosis_actions_html
-from src.processing_diagnostics_v1 import processing_diagnostics, processing_diagnostic_rows
+from src.settings.insight_v1 import _diagnosis_actions_html
+from src.vorming.processing_diagnostics_v1 import processing_diagnostics, processing_diagnostic_rows
 from src.publish_readiness_ui_v1 import _blocker_view
-from src.review_ledger import read_events
+from src.review.review_ledger import read_events
 from tests.production_support import restart_production
 from tests.test_document_diagnosis_redesign_v1 import _system, _client
 from tests.test_insight_diagnostics_navigation_v1 import Links

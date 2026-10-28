@@ -26,8 +26,8 @@ def console_at(root, *, production_console):
 def select_literal(console, proposed_type="definition"):
     """Offline selection through the real deterministic candidate creator."""
     from src.integrity_kernel import stable_hash
-    from src.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal
-    from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
+    from src.vorming.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal
+    from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates
     original = console._fragments_and_spec
 
     def prepare(*args, **kwargs):

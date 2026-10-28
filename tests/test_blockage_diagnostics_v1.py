@@ -20,8 +20,8 @@ from zipfile import ZipFile
 import pytest
 from fastapi.testclient import TestClient
 
-from src.blockage_diagnostics_v1 import blockage_report, collect_blockage, read_blockage_zip
-from src.processing_evidence_export_v1 import _csv
+from src.vorming.blockage_diagnostics_v1 import blockage_report, collect_blockage, read_blockage_zip
+from src.vorming.processing_evidence_export_v1 import _csv
 @pytest.fixture(params=['first-start', 'restart'], ids=['postgres-first-start', 'postgres-restart'])
 def console(request, tmp_path, production_console):
     first = production_console(root=tmp_path, processing_binder=lambda console: None)
@@ -129,7 +129,7 @@ def test_bounded_report_and_unavailable_current_checks_are_honest():
 
 
 def test_zip_reader_bounds_duplicates_and_invalid_rows(tmp_path, monkeypatch):
-    import src.blockage_diagnostics_v1 as module
+    import src.vorming.blockage_diagnostics_v1 as module
     path = tmp_path/'input.zip'; write_zip(path, incident())
     monkeypatch.setattr(module, 'MAX_UNPACKED_BYTES', 10)
     with pytest.raises(ValueError, match='exceeds_limit'):
@@ -240,7 +240,7 @@ def test_http_access_denial_never_discloses_report(console, *, production_app, p
 
 
 def test_zip_report_matches_recorded_state_and_never_runs_current_checks(console, tmp_path, monkeypatch, *, production_console):
-    from src.processing_evidence_export_v1 import processing_evidence_zip
+    from src.vorming.processing_evidence_export_v1 import processing_evidence_zip
     state, sid, actor, reviewer, calls, mode, make, bind = partial(console, production_console=production_console)
     objects, revision = state.snapshot_objects_and_revision(sid)
     def forbidden(*args, **kwargs):

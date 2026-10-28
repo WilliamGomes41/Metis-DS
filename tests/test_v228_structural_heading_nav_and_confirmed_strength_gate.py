@@ -256,7 +256,7 @@ def test_block_b_can_fail_while_block_a_helpers_are_unused() -> None:
 
 
 def test_block_a_marks_toc_separately_from_body_headings() -> None:
-    from src.heading_parent_list_v1 import heading_role, mark_heading_roles
+    from src.vorming.heading_parent_list_v1 import heading_role, mark_heading_roles
 
     rows = _document_headings()
     marked = mark_heading_roles(rows)
@@ -270,7 +270,7 @@ def test_block_a_marks_toc_separately_from_body_headings() -> None:
 
 
 def test_block_a_parent_choice_list_uses_body_not_toc_and_not_naive_global_sort() -> None:
-    from src.heading_parent_list_v1 import parent_choice_list
+    from src.vorming.heading_parent_list_v1 import parent_choice_list
 
     rows = _document_headings()
     choice = parent_choice_list(rows)
@@ -291,7 +291,7 @@ def test_block_a_parent_choice_list_uses_body_not_toc_and_not_naive_global_sort(
 
 
 def test_block_a_near_duplicates_leave_choice_list_only_freeze_anchors_stay() -> None:
-    from src.heading_parent_list_v1 import freeze_heading_anchors, parent_choice_list
+    from src.vorming.heading_parent_list_v1 import freeze_heading_anchors, parent_choice_list
 
     rows = _document_headings()
     freeze = freeze_heading_anchors(rows)
@@ -307,7 +307,7 @@ def test_block_a_near_duplicates_leave_choice_list_only_freeze_anchors_stay() ->
 
 
 def test_block_a_unnumbered_headings_keep_extract_order_fallback() -> None:
-    from src.heading_parent_list_v1 import parent_choice_list
+    from src.vorming.heading_parent_list_v1 import parent_choice_list
 
     rows = [
         _heading("h-a", "Inleiding", role="body", extract_index=0),
@@ -322,7 +322,7 @@ def test_block_a_unnumbered_headings_keep_extract_order_fallback() -> None:
 
 
 def test_block_a_invalid_nearby_parent_must_not_be_default_or_bind() -> None:
-    from src.heading_parent_list_v1 import (
+    from src.vorming.heading_parent_list_v1 import (
         default_structural_parent,
         is_structurally_valid_parent,
         parent_proposal_may_bind,
@@ -568,7 +568,7 @@ def test_block_a_console_parent_list_is_body_structure_onderzoekers_taal(tmp_pat
 
 
 def test_block_a_toc_crumb_must_not_bind_as_structural_parent() -> None:
-    from src.heading_parent_list_v1 import (
+    from src.vorming.heading_parent_list_v1 import (
         is_structurally_valid_parent,
         parent_proposal_may_bind,
     )
@@ -622,7 +622,7 @@ def test_block_a_confirm_relations_rejects_toc_heading_as_parent(tmp_path: Path,
 
 
 def test_block_a_toc_inference_ends_without_exact_repeated_title() -> None:
-    from src.heading_parent_list_v1 import heading_role, mark_heading_roles, parent_choice_list
+    from src.vorming.heading_parent_list_v1 import heading_role, mark_heading_roles, parent_choice_list
 
     page_suffix_rows = [
         _heading("h-toc-title", "Inhoudsopgave", extract_index=0),

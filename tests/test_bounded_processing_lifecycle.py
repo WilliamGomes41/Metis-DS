@@ -21,9 +21,9 @@ from types import SimpleNamespace
 import pytest
 
 from src.operations_console_v1 import ConsoleError, PRE_REVIEW_BLOCKED
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-from src.processing_retry_v1 import now, reserve, finish, assert_active, status
-from src.bounded_model_call_v1 import ModelCallLimits
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+from src.vorming.processing_retry_v1 import now, reserve, finish, assert_active, status
+from src.vorming.bounded_model_call_v1 import ModelCallLimits
 from tests.model_transport_support import peer
 from tests.test_source_bound_fields_v2 import fragment, proposal, TEXT
 from tests.test_review_batch_atomic_postgres import _console, _client
@@ -35,7 +35,7 @@ def response(payload):
 
 
 def bind(console, monkeypatch, url, *, model='test-model', slow=False):
-    import src.pre_review_semantic_v1 as semantic
+    import src.vorming.pre_review_semantic_v1 as semantic
     monkeypatch.setattr(semantic, 'OPENAI_RESPONSES_URL', url)
     source_fragment=fragment()
     source_fragment['fragment_hash']=hashlib.sha256(TEXT.encode()).hexdigest()
@@ -65,7 +65,7 @@ def setup(root, config):
 
 
 def test_native_stall_reserves_before_call_and_recovers_same_source(workflow_postgres,tmp_path,monkeypatch):
-    import src.pre_review_semantic_v1 as semantic
+    import src.vorming.pre_review_semantic_v1 as semantic
 
     console,actor,reviewer=setup(tmp_path,workflow_postgres)
     outcomes=[]
@@ -119,7 +119,7 @@ def test_native_stall_reserves_before_call_and_recovers_same_source(workflow_pos
         '/review/processing-diagnostics',params={'document':sid}).json()['processing']
     original_hash=envelope['sha256']
     future=now()+timedelta(minutes=1)
-    monkeypatch.setattr('src.processing_retry_v1.now',lambda:future)
+    monkeypatch.setattr('src.vorming.processing_retry_v1.now',lambda:future)
     with peer(body=response) as (url,_):
         bind(console,monkeypatch,url)
         from src.cli import cmd_processing_retry
@@ -141,7 +141,7 @@ def test_response_cannot_activate_after_concurrent_change(workflow_postgres,tmp_
         envelope=deepcopy(second.list_envelopes()[0])
         if change=='expired':
             future=now()+timedelta(hours=1)
-            monkeypatch.setattr('src.processing_retry_v1.now',lambda:future)
+            monkeypatch.setattr('src.vorming.processing_retry_v1.now',lambda:future)
         elif change=='monotonic':
             future=time.monotonic()+120
             monkeypatch.setattr('src.operations_console_v1.time',SimpleNamespace(monotonic=lambda:future))
@@ -180,7 +180,7 @@ def test_reviewer_decision_during_native_reextract_survives_stale_activation(wor
         review_events.extend(deepcopy(second.workflow_review_store.read_events()))
         return response(payload)
     with peer(body=reviewed) as (url,_):
-        monkeypatch.setattr('src.pre_review_semantic_v1.OPENAI_RESPONSES_URL',url)
+        monkeypatch.setattr('src.vorming.pre_review_semantic_v1.OPENAI_RESPONSES_URL',url)
         env['METIS_LLM_MODEL']='test-model-new'  # a distinct proposal; historical evidence remains
         with pytest.raises(ConsoleError):console.reextract_unpublished(actor_id=actor,snapshot_id=sid)
     final=_console(tmp_path,workflow_postgres)
@@ -192,7 +192,7 @@ def test_reviewer_decision_during_native_reextract_survives_stale_activation(wor
 
 
 def test_model_budget_uses_remaining_attempt_time_and_never_calls_after_expiry(tmp_path, monkeypatch, *, production_console):
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
     console=production_console(processing_binder=lambda console: None, root=tmp_path,source_store=tmp_path/'sources',runtime=tmp_path/'runtime')
     console._extract=lambda *args,**kwargs:[fragment()]
     calls=[]
@@ -256,7 +256,7 @@ def test_initial_process_interruption_leaves_durable_recoverable_reservation(wor
     sid=envelope['snapshot_id']
     assert final.processing_status(sid)['state']=='running'
     future=now()+timedelta(hours=1)
-    monkeypatch.setattr('src.processing_retry_v1.now',lambda:future)
+    monkeypatch.setattr('src.vorming.processing_retry_v1.now',lambda:future)
     assert final.processing_status(sid)['state']=='expired'
     assert final.processing_status(sid)['retry_allowed']
     with peer(body=response) as (url,_):

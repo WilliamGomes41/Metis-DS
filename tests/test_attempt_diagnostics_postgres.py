@@ -12,9 +12,9 @@ import os
 import pytest
 
 from src.operations_console_v1 import ConsoleError
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV, SEMANTIC_MODE
-from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
-from src.attempt_diagnostics_v1 import replay_diagnostic
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV, SEMANTIC_MODE
+from src.vorming.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
+from src.vorming.attempt_diagnostics_v1 import replay_diagnostic
 from tests.test_review_batch_atomic_postgres import _console, _client
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 from tests.test_pre_review_semantic_v1 import _response, _full_span_proposal

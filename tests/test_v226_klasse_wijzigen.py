@@ -16,14 +16,14 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.klasse_wijzigen_v1 import (
+from src.documents.klasse_wijzigen_v1 import (
     DOCUMENT_CLASS_CHANGED_EVENT,
     class_change_consequence,
     is_cross_model_class_change,
     review_model_for_klasse,
 )
 from src.operations_console_v1 import ConsoleError, OperationsConsole
-from src.review_ledger import read_events
+from src.review.review_ledger import read_events
 
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -18,7 +18,7 @@ from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationSt
 from src.g2_source_store import G2SourceStoreError, parse_g2_locator
 from src.integrity_kernel import compute_canonical_object_hash, sha256_bytes
 from src.publish_authorization_v1 import still_matches
-from src.four_eyes_v1 import eligible_tuple_reviewers, four_eyes_satisfied, historical_requires_four_eyes
+from src.review.four_eyes_v1 import eligible_tuple_reviewers, four_eyes_satisfied, historical_requires_four_eyes
 
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")

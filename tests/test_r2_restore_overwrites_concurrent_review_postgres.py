@@ -9,7 +9,7 @@ its audit event MOET survive A's restore.
 """
 import fcntl
 
-from src.proportionate_review_v1 import normal_risk_batch_queue
+from src.review.proportionate_review_v1 import normal_risk_batch_queue
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
 
@@ -44,7 +44,7 @@ def test_r2_restore_after_lock_release_overwrites_concurrent_review(workflow_pos
                                     bindings=a.object_review_bindings(sid))
     assert len(queue) == 2
     obj_a, obj_b = queue
-    from src.proportionate_review_v1 import _batch_type
+    from src.review.proportionate_review_v1 import _batch_type
     type_a, type_b = _batch_type(obj_a), _batch_type(obj_b)
 
     b = _console(tmp_path, workflow_postgres)  # second real instance, same DB + runtime

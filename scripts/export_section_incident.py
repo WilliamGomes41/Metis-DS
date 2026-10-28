@@ -65,11 +65,11 @@ def main():
         platform, hashes['platform'] = read(args.platform, events=True)
     result = build_incident(probe, app, platform) if probe is not None else {'schema':'processing-incident-bundle-v1'}
     if args.processing:
-        from src.processing_trace_v1 import processing_incident
+        from src.vorming.processing_trace_v1 import processing_incident
         processing, hashes['processing'] = read(args.processing)
         result['processing'] = processing_incident(processing, app, selected_attempt=args.attempt_id, selected_request=args.request_id)
     if args.evidence:
-        from src.blockage_diagnostics_v1 import read_blockage_zip, blockage_report
+        from src.vorming.blockage_diagnostics_v1 import read_blockage_zip, blockage_report
         tables = read_blockage_zip(args.evidence)
         with Path(args.evidence).open('rb') as source:
             hashes['evidence'] = hashlib.file_digest(source, 'sha256').hexdigest()
@@ -117,7 +117,7 @@ def main():
         report += '\nMissing evidence: ' + ', '.join(item['missing_evidence'])
         report += '\nNext check: ' + item['assessment']['next_check'] + '\n'
     if 'blockage' in result:
-        from src.blockage_diagnostics_v1 import blockage_summary
+        from src.vorming.blockage_diagnostics_v1 import blockage_summary
         report += '\n' + blockage_summary(result['blockage'])
     if 'publication' in result:
         item = result['publication']

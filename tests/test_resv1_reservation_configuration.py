@@ -14,7 +14,7 @@ import threading
 
 import pytest
 
-import src.source_selection_v1 as selection
+import src.vorming.source_selection_v1 as selection
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from tests.test_attempt_diagnostics_postgres import bound, ingest
 
@@ -122,7 +122,7 @@ def test_resume_duplicate_receipt_accepts_incomplete_budget():
 
 def test_reextract_reserved_contract_follows_active_configuration_not_stale_envelope(tmp_path, *, production_console):
     """#630 reconcile: reserve() records the contract of the active configuration."""
-    from src.pre_review_semantic_v1 import semantic_contract_version_for_mode
+    from src.vorming.pre_review_semantic_v1 import semantic_contract_version_for_mode
     from copy import deepcopy
     console, sid, actor = _reextract_ready(tmp_path, production_console=production_console)
     stale = deepcopy(console._envelope(sid))

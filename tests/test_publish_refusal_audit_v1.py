@@ -67,7 +67,7 @@ def test_refusal_emits_one_bounded_audit_event(tmp_path, events, build):
     assert event['snapshot_id'] == sid
     assert event['actor_hmac'] == hmac.new(b'test-audit-key', actor.encode(), hashlib.sha256).hexdigest()
     assert actor not in json.dumps(event) and 'test-audit-key' not in json.dumps(events)
-    from src.review_ledger import read_events
+    from src.review.review_ledger import read_events
     assert [e for e in read_events(console._ledger_path) if e['event_type'] == 'publication_refused'] == []
     [durable] = store.postgres_store(console).records_for(sid)
     assert durable['actor'] == actor and durable['snapshot_id'] == sid
@@ -127,7 +127,7 @@ def test_concurrent_refusals_each_emit_one_event_and_identical_verdicts(tmp_path
 
 
 def test_verdict_identical_when_durable_audit_write_raises(tmp_path, events, monkeypatch, build):
-    import src.review_ledger as ledger
+    import src.review.review_ledger as ledger
     reference, sid_r, actor_r = build(tmp_path / 'ref')
     expected = reference.publish(actor_id=actor_r, snapshot_id=sid_r)
     original = ledger.append_event
@@ -158,7 +158,7 @@ def test_without_hmac_key_actor_is_not_logged(tmp_path, events, monkeypatch, *, 
 # --- #629 F1: separate append-only store, outside the review ledger hash chain ---
 
 def test_refusal_never_enters_the_review_ledger_hash_chain(tmp_path, events, build):
-    from src.review_ledger import read_events, verify_ledger
+    from src.review.review_ledger import read_events, verify_ledger
     console, sid, actor = build(tmp_path)
     before = [(e['event_type'], e['event_hash'], e.get('previous_event_hash')) for e in read_events(console._ledger_path)]
     assert console.publish(actor_id=actor, snapshot_id=sid)['status'] == 'BLOCKED'
@@ -475,7 +475,7 @@ def build(request, production_console):
 
 
 def _file_blocked_base(tmp_path):
-    from src.review_closure_v1 import ReviewClosureConsole
+    from src.review.review_closure_v1 import ReviewClosureConsole
     console, sid, actor, reviewer, *_ = system(tmp_path,
         make_console=lambda: ReviewClosureConsole(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime'),
         production_console=None)  # partial formation: gate MOET refuse

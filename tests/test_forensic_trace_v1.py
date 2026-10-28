@@ -13,7 +13,7 @@ import sys
 from src.forensic_trace_v1 import (
     UNKNOWN, compare_traces, current_reconstruction_identity, evidence_from_stored, independent_source_lineage_acceptance, load_evidence, load_gold, rows_for_export, trace, write_outputs,
 )
-from src.processing_evidence_export_v1 import processing_evidence_tables, processing_evidence_zip
+from src.vorming.processing_evidence_export_v1 import processing_evidence_tables, processing_evidence_zip
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -432,7 +432,7 @@ def test_missing_formation_mode_is_unavailable_not_a_false_mismatch():
 
 
 def _source_case(text, fragment_id):
-    from src.semantic_passage_v1 import semantic_source_blocks
+    from src.vorming.semantic_passage_v1 import semantic_source_blocks
     fragment = {
         "fragment_id": fragment_id, "raw_text": text, "clean_text": text, "source_page": 1,
     }
@@ -908,7 +908,7 @@ def test_formula_apostrophe_roundtrips_exactly(tmp_path):
 
 
 def test_recorded_run_retains_reconstruction_hash_inputs():
-    from src.quality_evidence_v1 import record_processing
+    from src.settings.quality_evidence_v1 import record_processing
 
     fragment = {
         "fragment_id": "frag-section",
@@ -954,8 +954,8 @@ def test_recorded_run_retains_reconstruction_hash_inputs():
 
 
 def test_normalized_whitespace_assessment_maps_back_to_exact_raw_source(tmp_path):
-    from src.semantic_passage_v1 import semantic_source_blocks
-    from src.source_layout_v1 import text_view
+    from src.vorming.semantic_passage_v1 import semantic_source_blocks
+    from src.vorming.source_layout_v1 import text_view
 
     raw = "Achtergrond.\n   Meer context."
     view = text_view(raw, [])

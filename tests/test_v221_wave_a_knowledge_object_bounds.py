@@ -16,9 +16,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.retrieval.answerability_gate_v1 import evaluate_answerability
-from src.context_aware_split_v1 import heading_structure_units
-from src.extract_html_v1 import extract as extract_html
-from src.knowledge_path_v1 import content_reviewable
+from src.vorming.context_aware_split_v1 import heading_structure_units
+from src.vorming.extract_html_v1 import extract as extract_html
+from src.review.knowledge_path_v1 import content_reviewable
 from src.object_taxonomy_v1 import (
     is_advice_weight,
     is_continuation_fragment,

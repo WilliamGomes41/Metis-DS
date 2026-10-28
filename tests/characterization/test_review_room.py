@@ -15,7 +15,7 @@ import pytest
 
 from src.integrity_kernel import compute_canonical_object_hash, stamp_canonical_hashes
 from src.operations_console_v1 import ConsoleError
-from src.proportionate_review_v1 import ProportionateReviewConsole
+from src.review.proportionate_review_v1 import ProportionateReviewConsole
 from src.publish_authorization_v1 import tuple_record
 from tests.semantic_fixture_support import install_fixture_history
 

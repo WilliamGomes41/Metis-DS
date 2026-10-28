@@ -101,7 +101,7 @@ def test_acceptatiecorrectie_pr_does_not_rewrite_protocol_or_add_src() -> None:
     assert not (ROOT / "docs" / "PROTOCOL_V2_32_RELIABILITY_EVIDENCE_BACKLOG_DELTA.md").exists()
     assert not (ROOT / "docs" / "PROTOCOL_V2_32_AUDIT_ACCEPTATIECORRECTIE_DELTA.md").exists()
     src_hits = []
-    for path in (ROOT / "src").glob("*.py"):
+    for path in (ROOT / "src").rglob("*.py"):
         text = path.read_text(encoding="utf-8")
         if "Post-#120 audit acceptatiecorrectie" in text or "ef8771a" in text:
             src_hits.append(path.name)

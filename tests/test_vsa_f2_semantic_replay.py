@@ -13,14 +13,14 @@ from pathlib import Path
 
 import pytest
 
-from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
+from src.vorming.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
 from src.operations_console_v1 import PRE_REVIEW_BLOCKED, ConsoleError, OperationsConsole
-from src.pre_review_semantic_v1 import (
+from src.vorming.pre_review_semantic_v1 import (
     PASSAGE_FORMATION_MODE_ENV,
     SEMANTIC_MODE,
     bind_pre_review_semantic_processing,
 )
-from src.semantic_replay_v1 import (
+from src.vorming.semantic_replay_v1 import (
     EXECUTION_INFERENCE,
     EXECUTION_REPLAY,
     LOOKUP_HIT,

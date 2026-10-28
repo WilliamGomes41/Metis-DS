@@ -644,7 +644,7 @@ class ProductState:
         store = self.canonical_publication_store
         if store is None:
             raise HTTPException(status_code=404, detail={"code": "decision_graph_not_found"})
-        from src.decision_graph_v1 import read_active_graph
+        from src.vorming.decision_graph_v1 import read_active_graph
         try:
             result = read_active_graph(store, self.immutable_source_store, snapshot_id)
         except (ValueError, CanonicalPublicationStoreError) as exc:

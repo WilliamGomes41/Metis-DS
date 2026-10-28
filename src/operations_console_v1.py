@@ -28,15 +28,15 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
-from src.admission_gate_v1 import (
+from src.vorming.admission_gate_v1 import (
     GATE_BLOCKED,
     admission_of,
     apply_admission_gate,
     is_admission_blocked,
 )
-from src.candidate_eligibility_v1 import candidate_eligibility_of
-from src.passage_register_v1 import apply_passage_register, apply_register_from_review
-from src.review_cockpit_v1 import (
+from src.vorming.candidate_eligibility_v1 import candidate_eligibility_of
+from src.vorming.passage_register_v1 import apply_passage_register, apply_register_from_review
+from src.review.review_cockpit_v1 import (
     SUITABILITY_VALUES,
     confirmable_proposed_type,
     found_under_path,
@@ -47,7 +47,7 @@ from src.review_cockpit_v1 import (
     review_passage_record,
     review_passage_requested,
 )
-from src.beslisboom_path_v1 import (
+from src.review.beslisboom_path_v1 import (
     CLOSED_BOOM_TYPES,
     CLOSED_KLASSEN,
     boom_freeze_errors,
@@ -61,18 +61,18 @@ from src.beslisboom_path_v1 import (
     review_path_for_klasse,
     stamp_boom_flags,
 )
-from src.source_preparation_context_v1 import build_formation_context
-from src.extract_html_v1 import extract as extract_html
-from src.extract_pdf_v2 import extract as extract_pdf
-from src.four_eyes_v1 import (
+from src.vorming.source_preparation_context_v1 import build_formation_context
+from src.vorming.extract_html_v1 import extract as extract_html
+from src.vorming.extract_pdf_v2 import extract as extract_pdf
+from src.review.four_eyes_v1 import (
     mark_four_eyes_on_object,
     publish_authorization_contract,
     requires_four_eyes,
 )
-from src.review_duty_v1 import SECOND_REVIEW, exact_current_approver_ids, review_duty_for, reviewer_route_for
+from src.review.review_duty_v1 import SECOND_REVIEW, exact_current_approver_ids, review_duty_for, reviewer_route_for
 from src.g2_source_store import G2SourceStoreError, ImmutableSourceStore, is_g2_locator
 from src.integrity_kernel import compute_canonical_object_hash, schema_errors, sha256_bytes, stamp_canonical_hashes
-from src.klasse_wijzigen_v1 import (
+from src.documents.klasse_wijzigen_v1 import (
     DOCUMENT_CLASS_CHANGED_EVENT,
     is_cross_model_class_change,
     source_identity_fields,
@@ -87,37 +87,37 @@ from src.knowledge_relations_v1 import (
     STRUCTURAL_RELATION_TYPES,
     confirmed_knowledge_relations_of,
 )
-from src.knowledge_relation_review_v1 import (
+from src.review.knowledge_relation_review_v1 import (
     build_confirmed_relation_set,
     has_semantic_relation_review,
     legacy_confirmed_mirror,
     plan_semantic_relation_review,
     relation_review_evidence,
 )
-from src.recommendation_semantics_v1 import (
+from src.vorming.recommendation_semantics_v1 import (
     CONFIRMED_FIELD as CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD,
     LEGACY_CONFIRMED_FIELD as LEGACY_CONFIRMED_RECOMMENDATION_STRENGTH_FIELD,
     confirmed_recommendation_semantics_from_review,
     confirmed_recommendation_semantics_of,
     proposed_recommendation_semantics_of,
 )
-from src.open_original_v1 import OpenOriginalError, open_source_passage, researcher_visible_prose
+from src.review.open_original_v1 import OpenOriginalError, open_source_passage, researcher_visible_prose
 from src.publish_authorization_v1 import record_authorization, invalidate_for_object, still_matches, tuple_record
-from src.review_ledger import append_event, read_events
-from src.review_interaction_v1 import validate_review_interaction_identity
-from src.review_workflow_v3 import _apply_review_state
-from src.revision_workflow import (bump_patch, create_revision, revise_object, current_revisions,
+from src.review.review_ledger import append_event, read_events
+from src.review.review_interaction_v1 import validate_review_interaction_identity
+from src.review.review_workflow_v3 import _apply_review_state
+from src.review.revision_workflow import (bump_patch, create_revision, revise_object, current_revisions,
                                    reprocessed_history, lineage_evidence,
                                    with_current_revision)
-from src.semantic_replay_v1 import SEMANTIC_REPLAY_SPEC_KEY
-from src.quality_evidence_v1 import record_processing, review_evidence, instant as quality_instant
-from src.semantic_transform_generic_v1 import transform as _transform_generic
+from src.vorming.semantic_replay_v1 import SEMANTIC_REPLAY_SPEC_KEY
+from src.settings.quality_evidence_v1 import record_processing, review_evidence, instant as quality_instant
+from src.vorming.semantic_transform_generic_v1 import transform as _transform_generic
 from src.serving_relations_v1 import (
     binding_relations,
     confirm_relation_set,
     is_closed_relation_type,
 )
-from src.topic_identity_v1 import normalize_topic_label, topic_identity_key
+from src.documents.topic_identity_v1 import normalize_topic_label, topic_identity_key
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -144,7 +144,7 @@ def stored_processing_blocked(envelope):
         "expires_at": envelope.get("latest_processing_expires_at")}
     if latest.get("state") in {"failed", "interrupted"}:
         return True
-    from src.processing_retry_v1 import now
+    from src.vorming.processing_retry_v1 import now
     return bool(latest.get("state") == "running" and latest.get("expires_at")
                 and datetime.fromisoformat(latest["expires_at"]) <= now())
 
@@ -239,7 +239,7 @@ def docling_console_error(exc):
 
 def transform_generic(spec, manifest, fragments):
     """Keep materialisation failures in the existing command error channel."""
-    from src.knowledge_materialisation_v1 import MaterialisationError
+    from src.vorming.knowledge_materialisation_v1 import MaterialisationError
     try:
         return _transform_generic(spec, manifest, fragments)
     except MaterialisationError as exc:
@@ -529,7 +529,7 @@ def slow_review_duty(
 ) -> list[dict[str, Any]]:
     """Presented Inhoud cards: recommendation + condition/exception/high-risk."""
     bindings = tuple(bindings or ())
-    from src.prepared_source_views_v1 import preserve_fragments
+    from src.vorming.prepared_source_views_v1 import preserve_fragments
     fragments = preserve_fragments(fragments) if fragments is not None else None
     rows = [obj for obj in objects if is_slow_review_duty(obj, review_path=review_path, bindings=bindings, fragments=fragments)]
     return rows if review_path == "boom" else sorted(rows, key=review_priority_rank)
@@ -618,7 +618,7 @@ def _objects_jsonl_bytes(rows: list[dict[str, Any]]) -> bytes:
 
 
 def default_url_fetcher(url: str) -> tuple[bytes, str, str]:
-    from src.ingest_limits_v1 import fetch_url_limited
+    from src.ingest.ingest_limits_v1 import fetch_url_limited
 
     return fetch_url_limited(url)
 
@@ -936,7 +936,7 @@ class OperationsConsole:
         """H2 2b-2: B10-keuze van de uploader; lezers tellen NOOIT en krijgen geen toegang."""
         if choice is None:
             return None
-        from src.review_configuration_v1 import CONTRACT, CONTRACT_V2, validate_configuration
+        from src.review.review_configuration_v1 import CONTRACT, CONTRACT_V2, validate_configuration
         keys = {"option", "four_eyes_required", "reviewers", "readers"}
         if not isinstance(choice, dict) or set(choice) - {"contract"} != keys \
                 or choice.get("contract", CONTRACT) not in {CONTRACT, CONTRACT_V2}:
@@ -952,7 +952,7 @@ class OperationsConsole:
         return value
 
     def manage_review_participation(self, **command: Any) -> dict[str, Any]:
-        from src.review_participation_v1 import execute
+        from src.review.review_participation_v1 import execute
         return execute(self, **command)
 
     def change_review_policy(self, **command: Any) -> dict[str, Any]:
@@ -961,15 +961,15 @@ class OperationsConsole:
         raise ConsoleError("managed_participation_command_required")
 
     def update_decision_graph(self, **command: Any) -> dict[str, Any]:
-        from src.decision_review_commands_v1 import execute
+        from src.review.decision_review_commands_v1 import execute
         return execute(self, action="graph", **command)
 
     def confirm_decision_graph(self, **command: Any) -> dict[str, Any]:
-        from src.decision_review_commands_v1 import execute
+        from src.review.decision_review_commands_v1 import execute
         return execute(self, action="confirm", **command)
 
     def _validated_review_policy(self, value: dict[str, Any]) -> dict[str, Any]:
-        from src.review_policy_v1 import validate_policy, participants
+        from src.review.review_policy_v1 import validate_policy, participants
         try:
             policy = validate_policy(value)
         except ValueError as exc:
@@ -1029,8 +1029,8 @@ class OperationsConsole:
             ):
                 publish += 1
         if "reviewer" in roles:
-            from src.review_duty_v1 import reviewer_route_counts
-            from src.knowledge_path_v1 import is_structural_projection
+            from src.review.review_duty_v1 import reviewer_route_counts
+            from src.review.knowledge_path_v1 import is_structural_projection
             from src.publication_readiness_v1 import review_followup_queues
             review = 0
             for envelope in envelopes:
@@ -1172,7 +1172,7 @@ class OperationsConsole:
             confirmed = confirm_relation_set(relations)
         except ValueError as exc:
             raise ConsoleError("unknown_relation_type") from exc
-        from src.heading_parent_list_v1 import is_heading_object, parent_proposal_may_bind
+        from src.vorming.heading_parent_list_v1 import is_heading_object, parent_proposal_may_bind
 
         for row in confirmed:
             if row.get("relation_type") not in {"parent", "child"}:
@@ -1293,7 +1293,7 @@ class OperationsConsole:
         snapshot_id = envelope["snapshot_id"]
         if self.snapshot_is_published(snapshot_id):
             raise ConsoleError(published_error)
-        from src.attempt_diagnostics_v1 import comparable_envelope
+        from src.vorming.attempt_diagnostics_v1 import comparable_envelope
         if comparable_envelope(self._envelope(snapshot_id)) != comparable_envelope(envelope) or self.objects_revision(snapshot_id) != revision:
             raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=self.objects_revision(snapshot_id))
 
@@ -1383,7 +1383,7 @@ class OperationsConsole:
         review_configuration = self._chosen_review_configuration(review_choice, actor_id)
         if review_configuration is not None and review_configuration["contract"] != "review-configuration-v1":
             # v2: de kernel leidt de policy af uit de keuze; een meegestuurde policy MOET gelijk zijn.
-            from src.review_configuration_v1 import policy_for_configuration
+            from src.review.review_configuration_v1 import policy_for_configuration
             derived = policy_for_configuration(review_configuration, uploader_id=actor_id)
             if review_policy is not None and review_policy != derived:
                 raise ConsoleError("review_configuration_policy_conflict")
@@ -1407,13 +1407,13 @@ class OperationsConsole:
                     {r for r in reviewers if r != actor_id} != set(review_configuration["reviewers"]):
                 raise ConsoleError("review_configuration_policy_conflict")
             if review_configuration is not None and review_configuration["contract"] != "review-configuration-v1":
-                from src.review_configuration_v1 import eligible_reviewers
+                from src.review.review_configuration_v1 import eligible_reviewers
                 if set(reviewers) != eligible_reviewers(review_configuration, uploader_id=actor_id):
                     # v2: alleen aangewezen personen mogen beoordelen, de uploader alleen als aangewezen.
                     raise ConsoleError("review_configuration_policy_conflict")
         else:
             review_policy = self._validated_review_policy(review_policy)
-            from src.review_policy_v1 import participants, required_reviewers
+            from src.review.review_policy_v1 import participants, required_reviewers
             reviewers = participants(review_policy)
             if named_reviewers and set(named_reviewers) != set(reviewers):
                 raise ConsoleError("review_policy_membership_conflict")
@@ -1422,7 +1422,7 @@ class OperationsConsole:
                 raise ConsoleError("review_configuration_policy_conflict")
             if review_configuration is not None and review_configuration["contract"] == "review-configuration-v1":
                 # H2-1 wint: alleen een eenduidige mapping legt vier ogen vast; needs_choice NOOIT.
-                from src.review_configuration_v1 import from_review_policy
+                from src.review.review_configuration_v1 import from_review_policy
                 mapped = from_review_policy(review_policy, uploader_id=actor_id)
                 if not mapped["needs_choice"] and \
                         mapped["four_eyes_required"] != review_configuration["four_eyes_required"]:
@@ -1432,7 +1432,7 @@ class OperationsConsole:
                 raise ConsoleError("review_configuration_reader_is_reviewer")
         if review_configuration is None and review_policy is None:
             # H2-7 (a): ingest zonder keuze slaat de legacy-default op.
-            from src.review_configuration_v1 import legacy_default, validate_configuration
+            from src.review.review_configuration_v1 import legacy_default, validate_configuration
             review_configuration = legacy_default({"uploader_account_id": actor_id, "named_reviewers": reviewers})
             review_configuration.pop("needs_choice")
             try:
@@ -1602,7 +1602,7 @@ class OperationsConsole:
         initial_eligibility = envelope["publication_eligibility"]
         expected_revision = None
         if self._bounded_semantic_preparation(kind, class_):
-            from src.processing_retry_v1 import reserve, now
+            from src.vorming.processing_retry_v1 import reserve, now
             limits = self._processing_limits()
             attempt_deadline = time.monotonic() + limits.attempt
             with self._store_write_lock():
@@ -1616,7 +1616,7 @@ class OperationsConsole:
                                      if getattr(self, "workflow_document_store", None) is not None else "")
                 envelope["publication_eligibility"] = PRE_REVIEW_BLOCKED
                 envelope["processing_blocker"] = PROCESSING_IN_PROGRESS
-                from src.source_selection_v1 import active_configuration
+                from src.vorming.source_selection_v1 import active_configuration
                 envelope["processing_configuration"] = active_configuration(self)
                 attempt, _ = reserve(envelope, command_id=uuid.uuid4().hex, actor_id=actor_id,
                     revision=expected_revision, clock=now(), limits=limits, kind="ingest")
@@ -1672,7 +1672,7 @@ class OperationsConsole:
             replay_record = spec.pop(SEMANTIC_REPLAY_SPEC_KEY, None)
             if isinstance(replay_record, dict):
                 envelope["semantic_replay"] = deepcopy(replay_record)
-            from src.decision_tree_route_v1 import SPEC_KEY as DECISION_TREE_SPEC_KEY
+            from src.vorming.decision_tree_route_v1 import SPEC_KEY as DECISION_TREE_SPEC_KEY
             decision_tree_record = spec.pop(DECISION_TREE_SPEC_KEY, None)
 
             manifest = {
@@ -1704,10 +1704,10 @@ class OperationsConsole:
                 )
             objects = apply_passage_register(objects)
             if review_policy is not None:
-                from src.review_policy_v1 import project_policy
+                from src.review.review_policy_v1 import project_policy
                 project_policy(objects, review_policy)
             if decision_tree_record is not None:
-                from src.decision_tree_route_v1 import finalize
+                from src.vorming.decision_tree_route_v1 import finalize
                 envelope.update(finalize(decision_tree_record, objects, fragments, digest,
                                          actor=actor_id, with_graph=review_policy is not None))
             if previous:
@@ -1726,7 +1726,7 @@ class OperationsConsole:
                 transaction = self._reprocessing_transaction(snapshot_id) if attempt_id else self._store_write_lock()
                 with transaction:
                     if attempt_id:
-                        from src.processing_retry_v1 import assert_active, finish, attach_transport, now
+                        from src.vorming.processing_retry_v1 import assert_active, finish, attach_transport, now
                         assert_active(self._envelope(snapshot_id), attempt_id, now())
                         if time.monotonic() >= attempt_deadline:
                             raise ConsoleError("processing_attempt_expired")
@@ -1736,7 +1736,7 @@ class OperationsConsole:
                         assert_active(self._envelope(snapshot_id), attempt_id, now())
                         if time.monotonic() >= attempt_deadline:
                             raise ConsoleError("processing_attempt_expired")
-                        from src.attempt_diagnostics_v1 import merge_diagnostics
+                        from src.vorming.attempt_diagnostics_v1 import merge_diagnostics
                         merge_diagnostics(envelope, self._envelope(snapshot_id))
                         finish(envelope, attempt_id, state="succeeded", budget_aware=True)
                         attach_transport(next(a for a in envelope["processing_attempts"] if a["attempt_id"] == attempt_id),
@@ -1760,7 +1760,7 @@ class OperationsConsole:
             return self._receipt(envelope)
 
     def create_review_successor(self, **command: Any) -> dict[str, Any]:
-        from src.decision_successor_v1 import execute
+        from src.review.decision_successor_v1 import execute
         return execute(self, **command)
 
     def _durable_receipt(self, envelope):
@@ -1800,39 +1800,39 @@ class OperationsConsole:
 
     def reserve_source_selection(self, *, actor_id, snapshot_id, command_id, expected_revision):
         """Short durable reservation, shared by HTTP and synchronous workers."""
-        from src.source_selection_v1 import reserve_selection
+        from src.vorming.source_selection_v1 import reserve_selection
         result = reserve_selection(self, actor_id=actor_id, snapshot_id=snapshot_id,
                                    command_id=command_id, expected_revision=expected_revision)
-        from src.processing_trace_v1 import observe
+        from src.vorming.processing_trace_v1 import observe
         observe('processing_reserved' if result[1] else 'processing_command_reused', snapshot_id, result[0])
         return result
 
     def execute_source_selection(self, *, actor_id, snapshot_id, attempt, _dispatch_stop=None):
         from datetime import datetime
-        from src.processing_retry_v1 import now
+        from src.vorming.processing_retry_v1 import now
         if attempt.get("dispatch"):
-            from src.source_processing_dispatch_v1 import claim
+            from src.vorming.source_processing_dispatch_v1 import claim
             attempt = claim(self, snapshot_id=snapshot_id, attempt_id=attempt["attempt_id"],
                             actor_id=actor_id, stop_event=_dispatch_stop)
             if attempt is None:
                 return self._receipt(self._envelope(snapshot_id))
-        from src.processing_document_budget_v1 import document_scoped
+        from src.vorming.processing_document_budget_v1 import document_scoped
         deadline_at = datetime.fromisoformat(attempt["expires_at"])
         if document_scoped(attempt):
             deadline_at = min(deadline_at, datetime.fromisoformat(attempt["dispatch"]["worker_expires_at"]))
         remaining = (deadline_at - now()).total_seconds()
-        from src.worker_handover_v1 import worker_execution
+        from src.vorming.worker_handover_v1 import worker_execution
         with worker_execution(_dispatch_stop, console=self, sid=snapshot_id, attempt=attempt):
             return self._execute_source_attempt(actor_id=actor_id, snapshot_id=snapshot_id,
                                                attempt=attempt, deadline=time.monotonic() + remaining)
 
     def _processing_limits(self):
-        from src.bounded_model_call_v1 import ModelCallLimits
+        from src.vorming.bounded_model_call_v1 import ModelCallLimits
         reader = getattr(self, "_model_call_limits_reader", None)
         return reader() if reader is not None else ModelCallLimits()
 
     def _bounded_semantic_preparation(self, kind, class_):
-        from src.docling_pdf_v1 import enabled
+        from src.vorming.docling_pdf_v1 import enabled
         if kind == "pdf" and enabled():
             return True
         if not getattr(self, "_pre_review_semantic_bound", False):
@@ -1843,16 +1843,16 @@ class OperationsConsole:
     def processing_status(self, snapshot_id: str, *, actor_id: str | None = None,
                           formation_fragments=None) -> dict[str, Any]:
         """Actuele detailcontrole; compacte overzichten gebruiken eigen expliciete invoer."""
-        from src.processing_retry_v1 import status
+        from src.vorming.processing_retry_v1 import status
         if actor_id is not None:
-            from src.source_selection_v1 import authorize
+            from src.vorming.source_selection_v1 import authorize
             authorize(self, actor_id, self._envelope(snapshot_id))
         result = status(self._envelope(snapshot_id), policy=self._processing_limits())
         if (self.snapshot_is_published(snapshot_id)
                 or self._read_current_objects(snapshot_id)
                 or self.object_review_bindings(snapshot_id, objects=self._read_current_objects(snapshot_id)) or self._envelope(snapshot_id).get("review_passes")):
             result["retry_allowed"] = False
-        from src.recoverable_formation_v1 import incomplete
+        from src.vorming.recoverable_formation_v1 import incomplete
         envelope = self._envelope(snapshot_id)
         stored_incomplete = incomplete(envelope)
         if not stored_incomplete:
@@ -1863,7 +1863,7 @@ class OperationsConsole:
         else:
             objects = self._read_current_objects(snapshot_id)
             if formation_fragments is None:
-                from src.source_preparation_context_v1 import stored_extraction
+                from src.vorming.source_preparation_context_v1 import stored_extraction
                 try:
                     formation_fragments = stored_extraction(envelope)
                 except ConsoleError:
@@ -1875,7 +1875,7 @@ class OperationsConsole:
         evidence = (self._envelope(snapshot_id).get("semantic_replay") or {}).get("provider_evidence") or {}
         result["formation_state"] = "pending" if result["formation_incomplete"] else "complete"
         if evidence.get("task_policy"):
-            from src.bounded_formation_v1 import formation_progress as project_formation_progress
+            from src.vorming.bounded_formation_v1 import formation_progress as project_formation_progress
             result["formation_progress"] = deepcopy(
                 evidence.get("formation_progress") or project_formation_progress(evidence)
             )
@@ -1893,7 +1893,7 @@ class OperationsConsole:
                 result["formation_incomplete"] = result["formation_incomplete"] or not activated
                 result["formation_state"] = "pending" if result["formation_incomplete"] else "complete"
                 result["formation_checked"] = bool(envelope.get("semantic_replay")) or not result["formation_incomplete"]
-        from src.source_selection_v1 import resume_contract_current
+        from src.vorming.source_selection_v1 import resume_contract_current
         result["resume_allowed"] = bool(self._can_resume_formation(snapshot_id)
             and resume_contract_current(envelope) and result["state"] != "running"
             and (result["retry_attempts_used"] < result["max_attempts"] or result["recovery_available"])
@@ -1919,9 +1919,9 @@ class OperationsConsole:
         return reads.current_objects[snapshot_id]
 
     def _can_resume_formation(self, snapshot_id):
-        from src.recoverable_formation_v1 import incomplete, VERSION
-        from src.bounded_formation_v1 import VERSION as TASK_VERSION
-        from src.source_context_review_v1 import ROLE_KEY, LINKS_KEY
+        from src.vorming.recoverable_formation_v1 import incomplete, VERSION
+        from src.vorming.bounded_formation_v1 import VERSION as TASK_VERSION
+        from src.review.source_context_review_v1 import ROLE_KEY, LINKS_KEY
         envelope = self._envelope(snapshot_id)
         if envelope.get("processing_storage") == "task-v1" and any(
                 (a.get("diagnostic") or {}).get("validator_input_ref") for a in envelope.get("processing_attempts") or []):
@@ -1947,12 +1947,12 @@ class OperationsConsole:
 
     def resume_formation(self, *, actor_id, snapshot_id, command_id, expected_revision):
         """Resume open producer work; reviewed/published work requires successor."""
-        from src.processing_retry_v1 import reserve, now
+        from src.vorming.processing_retry_v1 import reserve, now
         limits = self._processing_limits()
         deadline = time.monotonic() + limits.attempt
         with self._reprocessing_transaction(snapshot_id):
             envelope = deepcopy(self._envelope(snapshot_id))
-            from src.source_selection_v1 import authorize
+            from src.vorming.source_selection_v1 import authorize
             authorize(self, actor_id, envelope)
             duplicate = next((a for a in envelope.get("processing_attempts", []) if a["command_id"] == command_id), None)
             if duplicate is None:
@@ -1960,7 +1960,7 @@ class OperationsConsole:
                     raise ConsoleError("pre_review_retry_existing_work")
                 if self.objects_revision(snapshot_id) != expected_revision:
                     raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=self.objects_revision(snapshot_id))
-                from src.source_selection_v1 import assert_resume_configuration
+                from src.vorming.source_selection_v1 import assert_resume_configuration
                 envelope["processing_configuration"] = assert_resume_configuration(self, envelope)
             attempt, fresh = reserve(envelope, command_id=command_id, actor_id=actor_id,
                 revision=expected_revision, clock=now(), limits=limits, kind="resume")
@@ -1988,14 +1988,14 @@ class OperationsConsole:
     def _diagnostic_writer(self, snapshot_id, attempt_id):
         if not attempt_id:
             return None
-        from src.formation_checkpoint_v1 import task_checkpoint_writer
+        from src.vorming.formation_checkpoint_v1 import task_checkpoint_writer
         targeted = task_checkpoint_writer(self, snapshot_id, attempt_id)
         if targeted is not None:
             return targeted
         def write(phase, values):
-            from src.processing_retry_v1 import assert_active, now
-            from src.attempt_diagnostics_v1 import checkpoint
-            from src.source_selection_v1 import authorize
+            from src.vorming.processing_retry_v1 import assert_active, now
+            from src.vorming.attempt_diagnostics_v1 import checkpoint
+            from src.vorming.source_selection_v1 import authorize
             with self._reprocessing_transaction(snapshot_id):
                 # Command reads already own detached decoded JSON.
                 current = self._envelope(snapshot_id)
@@ -2006,13 +2006,13 @@ class OperationsConsole:
                     self._commit_prepared_store(envelopes={snapshot_id: current}, snapshot_id=snapshot_id)
                 except Exception as error:
                     raise ConsoleError("processing_diagnostic_write_failed") from error
-            from src.processing_trace_v1 import observe
+            from src.vorming.processing_trace_v1 import observe
             observe('processing_checkpoint', snapshot_id, active, phase=phase)
         return write
 
     def authorize_processing_recovery(self, *, actor_id, snapshot_id, reason):
         """One grant per blocked snapshot; consumption belongs to reservation."""
-        from src.processing_retry_v1 import now, expire_running, status as processing_retry_status
+        from src.vorming.processing_retry_v1 import now, expire_running, status as processing_retry_status
         if not isinstance(reason, str) or not reason.strip() or len(reason) > 1000:
             raise ConsoleError("processing_recovery_reason_required")
         with self._reprocessing_transaction(snapshot_id):
@@ -2057,9 +2057,9 @@ class OperationsConsole:
         unresolved again. Only before any candidate exists, so no formed work
         silently loses or gains source.
         """
-        from src.docling_contract_v1 import PAGES_UNRESOLVED
-        from src.processing_retry_v1 import now
-        from src.source_selection_v1 import authorize
+        from src.vorming.docling_contract_v1 import PAGES_UNRESOLVED
+        from src.vorming.processing_retry_v1 import now
+        from src.vorming.source_selection_v1 import authorize
         if category not in SOURCE_PAGE_ACCOUNTING_CATEGORIES:
             raise ConsoleError("source_page_accounting_category_invalid")
         if not isinstance(note, str) or not 10 <= len(note.strip()) <= 500:
@@ -2093,8 +2093,8 @@ class OperationsConsole:
             return deepcopy(row)
 
     def _record_processing_failure(self, snapshot_id, attempt_id, error, *, claim_token=None):
-        from src.processing_retry_v1 import KEY, finish
-        from src.formation_checkpoint_v1 import record_task_failure
+        from src.vorming.processing_retry_v1 import KEY, finish
+        from src.vorming.formation_checkpoint_v1 import record_task_failure
         handled = record_task_failure(self,snapshot_id,attempt_id,error,claim_token=claim_token)
         if handled:
             return handled
@@ -2110,7 +2110,7 @@ class OperationsConsole:
                                       outcome="blocked", reason=active["error_code"])
                 self._commit_prepared_store(envelopes={snapshot_id:current}, snapshot_id=snapshot_id)
 
-        from src.processing_trace_v1 import observe
+        from src.vorming.processing_trace_v1 import observe
         observe('processing_finished', snapshot_id, active)
 
     @contextmanager
@@ -2118,7 +2118,7 @@ class OperationsConsole:
         try:
             yield
         except Exception as error:
-            from src.worker_handover_v1 import WorkerHandover
+            from src.vorming.worker_handover_v1 import WorkerHandover
             if isinstance(error, WorkerHandover):
                 return
             if attempt_id is not None:
@@ -2127,8 +2127,8 @@ class OperationsConsole:
             raise
 
     def _execute_source_attempt(self, *, actor_id, snapshot_id, attempt, deadline):
-        from src.processing_retry_v1 import assert_active, now
-        from src.source_selection_v1 import authorize
+        from src.vorming.processing_retry_v1 import assert_active, now
+        from src.vorming.source_selection_v1 import authorize
         # Denial precedes the failure recorder: a forged or revoked caller must
         # not claim/fail another actor's accepted attempt.
         with self._reprocessing_transaction(snapshot_id):
@@ -2146,7 +2146,7 @@ class OperationsConsole:
                 raise ConsoleError("processing_command_conflict")
         with self._source_attempt_failure(snapshot_id, attempt["attempt_id"],claim_token=(attempt.get("dispatch") or {}).get("token")):
             if attempt.get("processing_configuration"):
-                from src.source_selection_v1 import configuration
+                from src.vorming.source_selection_v1 import configuration
                 if attempt["processing_configuration"] != configuration(self):
                     raise ConsoleError("processing_configuration_changed")
             return self.reextract_unpublished(actor_id=actor_id, snapshot_id=snapshot_id,
@@ -2156,12 +2156,12 @@ class OperationsConsole:
 
     def retry_pre_review(self, *, actor_id: str, snapshot_id: str, command_id: str) -> dict[str, Any]:
         """Retry an empty blocked source without losing evidence or prior work."""
-        from src.processing_retry_v1 import KEY, reserve, now
+        from src.vorming.processing_retry_v1 import KEY, reserve, now
         limits = self._processing_limits()
         deadline = time.monotonic() + limits.attempt
         with self._reprocessing_transaction(snapshot_id):
             envelope = deepcopy(self._envelope(snapshot_id))
-            from src.source_selection_v1 import authorize
+            from src.vorming.source_selection_v1 import authorize
             authorize(self, actor_id, envelope)
             if self.snapshot_is_published(snapshot_id):
                 raise ConsoleError("published_objects_must_not_be_rewritten")
@@ -2174,7 +2174,7 @@ class OperationsConsole:
                     raise ConsoleError("pre_review_retry_existing_work")
                 # Reservation MOET read the configuration in force now; fail closed if unreadable.
                 try:
-                    from src import source_selection_v1
+                    from src.vorming import source_selection_v1
                     envelope["processing_configuration"] = source_selection_v1.configuration(self)
                 except Exception as error:
                     raise ConsoleError("processing_configuration_unavailable") from error
@@ -2201,7 +2201,7 @@ class OperationsConsole:
         Source hash stays. Published objects MUST NOT be rewritten. MUST NOT hide
         stored fragments in the UI without this extract.
         """
-        from src.source_selection_v1 import authorize
+        from src.vorming.source_selection_v1 import authorize
         with self._reprocessing_transaction(snapshot_id):
             envelope = deepcopy(self._envelope(snapshot_id))
             account = authorize(self, actor_id, envelope)
@@ -2214,7 +2214,7 @@ class OperationsConsole:
             raise ConsoleError("decision_tree_legacy_route_retired")
         _, expected_revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
         if _attempt_id is not None:
-            from src.processing_retry_v1 import assert_active, now
+            from src.vorming.processing_retry_v1 import assert_active, now
             attempt = assert_active(envelope, _attempt_id, now())
             if (envelope.get("processing_storage") == "task-v1"
                     and (attempt.get("dispatch") or {}).get("token") != _claim_token):
@@ -2227,7 +2227,7 @@ class OperationsConsole:
                     or self.snapshot_objects(snapshot_id) or self._bindings.get(snapshot_id)
                     or envelope.get("review_passes"))):
                 raise ConsoleError("pre_review_retry_existing_work")
-        from src.source_context_review_v1 import ROLE_KEY, LINKS_KEY
+        from src.review.source_context_review_v1 import ROLE_KEY, LINKS_KEY
         if (self._bindings.get(snapshot_id) or envelope.get("review_passes") or
                 any(((row.get("governance") or {}).get("validation_status") not in {None, "needs_review"}
                      and not ((row.get("governance") or {}).get("validation_status") == "superseded"
@@ -2240,14 +2240,14 @@ class OperationsConsole:
         if self.snapshot_is_published(snapshot_id):
             raise ConsoleError("published_objects_must_not_be_rewritten")
         if _attempt_id is None and self._bounded_semantic_preparation(envelope["content_kind"], envelope["class"]):
-            from src.processing_retry_v1 import reserve, now
+            from src.vorming.processing_retry_v1 import reserve, now
             limits = self._processing_limits()
             deadline = time.monotonic() + limits.attempt
             with self._reprocessing_transaction(snapshot_id):
                 authorize(self, actor_id, self._envelope(snapshot_id))
                 self._assert_source_work_unchanged(envelope, expected_revision, "published_objects_must_not_be_rewritten")
                 reserved = deepcopy(envelope)
-                from src.source_selection_v1 import active_configuration
+                from src.vorming.source_selection_v1 import active_configuration
                 active = active_configuration(self)
                 # #630 reconcile: reserve() reads the active configuration; the envelope keeps its own.
                 had, previous = "processing_configuration" in reserved, reserved.get("processing_configuration")
@@ -2278,7 +2278,7 @@ class OperationsConsole:
                 attempt=attempt if _attempt_id else None, deadline=_attempt_deadline),
         )
         replay_record = spec.pop(SEMANTIC_REPLAY_SPEC_KEY, None)
-        from src.decision_tree_route_v1 import SPEC_KEY as DECISION_TREE_SPEC_KEY
+        from src.vorming.decision_tree_route_v1 import SPEC_KEY as DECISION_TREE_SPEC_KEY
         decision_tree_record = spec.pop(DECISION_TREE_SPEC_KEY, None)
         manifest = {
             "canonical_source": {
@@ -2310,16 +2310,16 @@ class OperationsConsole:
         objects = apply_passage_register(objects)
         prepared_envelope = deepcopy(envelope)
         if envelope.get("review_policy"):
-            from src.review_policy_v1 import project_policy
+            from src.review.review_policy_v1 import project_policy
             project_policy(objects, envelope["review_policy"])
         if _attempt_id is not None and attempt.get("kind") == "resume":
-            from src.recoverable_formation_v1 import preserve_unchanged
+            from src.vorming.recoverable_formation_v1 import preserve_unchanged
             objects = preserve_unchanged(objects, self.snapshot_objects(snapshot_id))
         if review_path_for_klasse(envelope["class"]) != "boom":
             objects = reprocessed_history(self._load_objects(snapshot_id, remember=False), objects,
                                           snapshot_id=snapshot_id, actor=account["username"])
         if decision_tree_record is not None:
-            from src.decision_tree_route_v1 import finalize
+            from src.vorming.decision_tree_route_v1 import finalize
             prepared_envelope.update(finalize(decision_tree_record, objects, fragments, envelope["sha256"],
                                               actor=actor_id, with_graph=bool(envelope.get("review_policy"))))
         if isinstance(replay_record, dict):
@@ -2351,7 +2351,7 @@ class OperationsConsole:
         with self._reprocessing_transaction(snapshot_id):
             self._reload_store_locked()
             if _attempt_id is not None:
-                from src.processing_retry_v1 import assert_active, now
+                from src.vorming.processing_retry_v1 import assert_active, now
                 active = assert_active(self._envelope(snapshot_id), _attempt_id, now())
                 if (envelope.get("processing_storage") == "task-v1"
                         and (active.get("dispatch") or {}).get("token") != (attempt.get("dispatch") or {}).get("token")):
@@ -2362,24 +2362,24 @@ class OperationsConsole:
                     raise ConsoleError("processing_attempt_expired")
             self._assert_source_work_unchanged(envelope, expected_revision, "published_objects_must_not_be_rewritten")
             if envelope.get("successor_guard"):
-                from src.decision_successor_v1 import assert_parent_current
+                from src.review.decision_successor_v1 import assert_parent_current
                 assert_parent_current(self, envelope)
             self._verified_source_bytes(envelope)
             authorize(self, actor_id, self._envelope(snapshot_id))
             if _attempt_id is not None:
-                from src.source_selection_v1 import configuration
+                from src.vorming.source_selection_v1 import configuration
                 if attempt.get("processing_configuration") and attempt["processing_configuration"] != configuration(self):
                     raise ConsoleError("processing_configuration_changed")
-                from src.processing_retry_v1 import finish, attach_transport
+                from src.vorming.processing_retry_v1 import finish, attach_transport
                 assert_active(self._envelope(snapshot_id), _attempt_id, now())
                 if _attempt_deadline is not None and time.monotonic() >= _attempt_deadline:
                     raise ConsoleError("processing_attempt_expired")
-                from src.attempt_diagnostics_v1 import merge_diagnostics
+                from src.vorming.attempt_diagnostics_v1 import merge_diagnostics
                 merge_diagnostics(prepared_envelope, self._envelope(snapshot_id))
                 finish(prepared_envelope, _attempt_id, state="succeeded", budget_aware=True)
                 stored = next(a for a in prepared_envelope["processing_attempts"] if a["attempt_id"] == _attempt_id)
                 if stored.get("kind") == "resume":
-                    from src.bounded_formation_v1 import formation_progress, pending_source_extent
+                    from src.vorming.bounded_formation_v1 import formation_progress, pending_source_extent
                     before_provider = (envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
                     after_provider = (prepared_envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
                     before_progress = before_provider.get("formation_progress") or formation_progress(before_provider)
@@ -2407,7 +2407,7 @@ class OperationsConsole:
                 expected_revision=expected_revision,
             )
         if _attempt_id is not None:
-            from src.processing_trace_v1 import observe
+            from src.vorming.processing_trace_v1 import observe
             observe('processing_finished', snapshot_id, stored)
         return self._receipt(prepared_envelope)
 
@@ -2555,8 +2555,8 @@ class OperationsConsole:
             return extract_html(path, document_id=document_id, source_id=source_id)
         if kind == "boom":
             return extract_boom_fragments(path.read_bytes(), document_id=document_id, source_id=source_id)
-        from src.docling_pdf_v1 import enabled, extract as extract_docling
-        from src.docling_contract_v1 import DoclingError
+        from src.vorming.docling_pdf_v1 import enabled, extract as extract_docling
+        from src.vorming.docling_contract_v1 import DoclingError
         try:
             # Prose callers assess pages; decision trees keep the strict first-finding rule.
             return (extract_docling(path, document_id=document_id, source_id=source_id, deadline=deadline,
@@ -2567,8 +2567,8 @@ class OperationsConsole:
 
     @diagnostic_phase("source_read")
     def _read_source_fragments(self, envelope, path):
-        from src.source_preparation_context_v1 import stored_extraction
-        from src.docling_contract_v1 import stored_fragments
+        from src.vorming.source_preparation_context_v1 import stored_extraction
+        from src.vorming.docling_contract_v1 import stored_fragments
         retained = stored_extraction(envelope)
         if retained is None:
             retained = stored_fragments(envelope)
@@ -2580,13 +2580,13 @@ class OperationsConsole:
         args = {"document_id": envelope["document_id"], "source_id": envelope["source_id"]}
         if envelope.get("decision_tree_formation"):
             # The recorded route owns its source representation.
-            from src.decision_tree_route_v1 import source_fragments
+            from src.vorming.decision_tree_route_v1 import source_fragments
             return source_fragments(envelope["content_kind"], path, path.read_bytes(), use_docling=False, **args)
         if envelope["content_kind"] == "pdf":
             # Historical compatibility is selected by persisted provenance,
             # never by a failed Docling conversion or the current config.
             if envelope["class"] == "beslisboom":
-                from src.decision_graph_v1 import pdf_fragments
+                from src.vorming.decision_graph_v1 import pdf_fragments
                 return pdf_fragments(path, **args, use_docling=False,
                                      construct_units=bool(envelope.get("decision_unit_contract")))
             return extract_pdf(path, **args)
@@ -2594,7 +2594,7 @@ class OperationsConsole:
 
     def _require_resolved_candidate_source(self, envelope, target):
         """Validate against verified source without changing durable row bytes."""
-        from src.knowledge_path_v1 import source_lineage_resolves
+        from src.review.knowledge_path_v1 import source_lineage_resolves
         try:
             source_path, _ = self._verified_source_bytes(envelope)
             fragments = self._read_source_fragments(envelope, source_path)
@@ -2639,7 +2639,7 @@ class OperationsConsole:
                 diagnostic = context.get("diagnostic_checkpoint")
                 if diagnostic:
                     diagnostic("extraction_started", {})
-                from src.docling_pdf_v1 import enabled, release_conversion_capacity
+                from src.vorming.docling_pdf_v1 import enabled, release_conversion_capacity
                 extraction_args = {"deadline": context.get("attempt_deadline")} if kind == "pdf" and enabled() else {}
                 fragments = self._extract(kind, path, document_id=command["document_id"],
                     source_id=command["source_id"], assess_pages=command["class_"] != "beslisboom",
@@ -2707,8 +2707,8 @@ class OperationsConsole:
 
     def snapshot_containers(self, snapshot_id: str) -> dict[str, Any]:
         """Typed knowledge/source access over the current atomic revision."""
-        from src.source_containers_v1 import partition
-        from src.beslisboom_path_v1 import review_path_for_klasse
+        from src.vorming.source_containers_v1 import partition
+        from src.review.beslisboom_path_v1 import review_path_for_klasse
         return partition(self.snapshot_objects(snapshot_id),
                          review_path=review_path_for_klasse(self._envelope(snapshot_id)["class"]),
                          bindings=self.object_review_bindings(snapshot_id),
@@ -2951,7 +2951,7 @@ class OperationsConsole:
                 decision = mapped
             if decision in {"revise", "reject"} and not str(comment or "").strip():
                 raise ConsoleError("review_comment_required")
-            from src.source_discrepancy_v1 import assert_allowed, normalize
+            from src.review.source_discrepancy_v1 import assert_allowed, normalize
             discrepancy = normalize(source_discrepancy)
             assert_allowed(discrepancy, decision)
             rejecting = decision == "reject"
@@ -2969,14 +2969,14 @@ class OperationsConsole:
             if expected_revision is not None:
                 if current_revision != expected_revision:
                     raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=current_revision)
-            from src.review_policy_v1 import object_policy
+            from src.review.review_policy_v1 import object_policy
             policy = object_policy(target)
             if policy != envelope.get("review_policy"):
                 raise ConsoleError("review_policy_projection_mismatch")
             if policy is not None and decision == "approve" and actor_id != policy["primary"]:
                 raise ConsoleError("primary_review_required")
             quality_before = deepcopy(target)
-            from src.source_context_review_v1 import role_of
+            from src.review.source_context_review_v1 import role_of
             if decision == "approve" and role_of(target):
                 raise ConsoleError("source_context_not_knowledge")
             if not rejecting and type_action == "dit_klopt" and not confirmed_object_type:
@@ -3007,8 +3007,8 @@ class OperationsConsole:
             apply_type = bool(confirmed_object_type)
             review_path = review_path_for_klasse(envelope["class"])
             binding_authority = self.object_review_bindings(snapshot_id)
-            from src.knowledge_path_v1 import content_reviewable, is_structural_projection
-            from src.source_accountability_v1 import is_source_record
+            from src.review.knowledge_path_v1 import content_reviewable, is_structural_projection
+            from src.vorming.source_accountability_v1 import is_source_record
             source_fragments = None
             if review_path != "boom" and content_reviewable(target):
                 source_fragments = self._require_resolved_candidate_source(envelope, target)
@@ -3071,7 +3071,7 @@ class OperationsConsole:
                 if review_path != "boom" and content_reviewable(target):
                     self._require_resolved_candidate_source(envelope, target)
             if decision != "later":
-                from src.source_accountability_v1 import is_source_record
+                from src.vorming.source_accountability_v1 import is_source_record
                 if is_source_record(target) and (decision == "approve" or apply_type):
                     raise ConsoleError("source_context_not_knowledge")
                 if is_admission_blocked(target, review_path=review_path) and (
@@ -3592,11 +3592,11 @@ class OperationsConsole:
             review_path = review_path_for_klasse(envelope["class"])
             source_fragments = None
             if review_path != "boom":
-                from src.knowledge_path_v1 import content_reviewable
+                from src.review.knowledge_path_v1 import content_reviewable
                 if not content_reviewable(target):
                     raise ConsoleError("content_duty_required")
                 source_fragments = self._require_resolved_candidate_source(envelope, target)
-            from src.review_policy_v1 import object_policy, required_reviewers
+            from src.review.review_policy_v1 import object_policy, required_reviewers
             policy = object_policy(target)
             if policy != envelope.get("review_policy"):
                 raise ConsoleError("review_policy_projection_mismatch")
@@ -3690,7 +3690,7 @@ class OperationsConsole:
             return deepcopy(current_target)
 
     def confirm_source_context(self, **command: Any) -> dict[str, Any]:
-        from src.source_context_review_v1 import confirm_source_context
+        from src.review.source_context_review_v1 import confirm_source_context
         return confirm_source_context(self, **command)
 
     def batch_confirm_headings(
@@ -3736,7 +3736,7 @@ class OperationsConsole:
                         and route.get("canonical_task") == "structure"
                     )
                 else:
-                    from src.knowledge_path_v1 import is_structural_projection
+                    from src.review.knowledge_path_v1 import is_structural_projection
                     acceptable = (
                         review_lane(target, review_path=review_path) == "fast"
                         and is_structural_projection(target)
@@ -3831,7 +3831,7 @@ class OperationsConsole:
         revised.pop("confirmed_object_type", None)
         stamp_canonical_hashes(revised)
         envelope = self._envelope(snapshot_id)
-        from src.decision_unit_construction_v1 import KEY as LEGACY_UNIT_KEY, _formed_by_route
+        from src.vorming.decision_unit_construction_v1 import KEY as LEGACY_UNIT_KEY, _formed_by_route
         decision_tree_unit = review_path_for_klasse(envelope["class"]) == "boom" and _formed_by_route(target)
         if (target.get("metadata") or {}).get(LEGACY_UNIT_KEY):
             # Formation logic of the retired route is gone; a new selection needs a successor revision.
@@ -3840,7 +3840,7 @@ class OperationsConsole:
             source_path, _ = self._verified_source_bytes(envelope)
             fragments = self._read_source_fragments(envelope, source_path)
             if materialisation_decision is not None:
-                from src.knowledge_materialisation_v1 import materialise_knowledge_candidates, MaterialisationError
+                from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates, MaterialisationError
                 try:
                     materialised = materialise_knowledge_candidates(
                         [materialisation_decision], document_id=envelope["document_id"], fragments=fragments
@@ -3852,21 +3852,21 @@ class OperationsConsole:
                 revised["content"]["raw_text"] = materialised["clean_text"]
                 semantic = revised.setdefault("metadata", {}).setdefault("semantic_passage", {})
                 semantic.update(materialised["semantic_passage"])
-                from src.semantic_transform_generic_v1 import _fragment_ref
+                from src.vorming.semantic_transform_generic_v1 import _fragment_ref
                 raw_by_id = {row["fragment_id"]: row for row in fragments}
                 revised["provenance"]["source_fragments"] = [
                     deepcopy(_fragment_ref(raw_by_id[fragment_id]))
                     for fragment_id in materialised["source_fragment_ids"]
                 ]
                 stamp_canonical_hashes(revised)
-            from src.knowledge_materialisation_v1 import validate_materialised_candidate
+            from src.vorming.knowledge_materialisation_v1 import validate_materialised_candidate
             semantic = (revised.get("metadata") or {}).get("semantic_passage") or {}
             if semantic.get("selection_origin") == "proposal_selected":
                 try:
                     validate_materialised_candidate(revised, fragments=fragments)
                     if revised["content"].get("raw_text") != revised["content"]["clean_text"]:
                         raise ValueError("materialisation_raw_text_mismatch")
-                    from src.source_bound_fields_v2 import rebind_revision_evidence
+                    from src.vorming.source_bound_fields_v2 import rebind_revision_evidence
                     rebind_revision_evidence(target, revised, fragments=fragments)
                 except (ValueError, KeyError, TypeError) as exc:
                     raise ConsoleError(str(exc)) from exc
@@ -3875,7 +3875,7 @@ class OperationsConsole:
                 for row in current
             ]
             if decision_tree_unit:
-                from src.decision_unit_construction_v1 import apply_gate
+                from src.vorming.decision_unit_construction_v1 import apply_gate
                 gated = apply_gate(peers, source_hash=envelope["sha256"], graph=envelope.get("decision_graph"),
                                    inventory=envelope.get("decision_graph_evidence"))
             else:
@@ -3892,7 +3892,7 @@ class OperationsConsole:
                 raise ConsoleError("correction_admission_missing")
             revised = apply_passage_register([revised])[0]
         else:
-            from src.decision_unit_construction_v1 import apply_gate
+            from src.vorming.decision_unit_construction_v1 import apply_gate
             peers = [revised if row.get("object_id") == object_id else row for row in current]
             apply_gate(peers, source_hash=envelope["sha256"], graph=envelope.get("decision_graph"),
                        inventory=envelope.get("decision_graph_evidence"))
@@ -4022,7 +4022,7 @@ class OperationsConsole:
             raise ConsoleError("source_continuation_not_literal")
 
         # Validate the expanded selection before writing review or revision evidence.
-        from src.knowledge_materialisation_v1 import materialise_knowledge_candidates, MaterialisationError
+        from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates, MaterialisationError
         source_path, _ = self._verified_source_bytes(envelope)
         fragments = self._read_source_fragments(envelope, source_path)
         spans = deepcopy((target.get("metadata") or {}).get("semantic_passage", {}).get("spans") or [])
@@ -4116,7 +4116,7 @@ class OperationsConsole:
             for row in all_bindings
             if row.get("valid") and row.get("decision") == "approve"
         ]
-        from src.knowledge_path_v1 import is_structural_projection
+        from src.review.knowledge_path_v1 import is_structural_projection
         review_path = review_path_for_klasse(envelope["class"])
         approved_ids = {str(row.get("object_id") or "") for row in bindings}
         publishable = [
@@ -4138,9 +4138,9 @@ class OperationsConsole:
         if not uploader:
             # Sherlock-voorwaarde 3: lege of ontbrekende uploader MOET fail-closed.
             blockers.append("uploader_identity_missing")
-        from src.recoverable_formation_v1 import incomplete
+        from src.vorming.recoverable_formation_v1 import incomplete
         if incomplete(envelope) and fragments is None and not context_supplied:
-            from src.source_preparation_context_v1 import stored_extraction
+            from src.vorming.source_preparation_context_v1 import stored_extraction
             try:
                 fragments = stored_extraction(envelope)
             except ConsoleError:
@@ -4148,13 +4148,13 @@ class OperationsConsole:
         if incomplete(envelope, objects=objects, bindings=all_bindings, fragments=fragments):
             blockers.append("source_formation_incomplete")
         independence = bool(others)
-        from src.review_policy_v1 import participants, object_policy, validate_policy
+        from src.review.review_policy_v1 import participants, object_policy, validate_policy
         policy = envelope.get("review_policy")
         if policy is not None:
             try:
-                from src.review_policy_v1 import required_reviewers
+                from src.review.review_policy_v1 import required_reviewers
                 policy = validate_policy(policy)
-                from src.review_policy_v1 import archived_required
+                from src.review.review_policy_v1 import archived_required
                 if archived_required(policy):
                     blockers.append("archived_required_review_unfilled")
                 for reviewer_id in required_reviewers(policy):
@@ -4171,7 +4171,7 @@ class OperationsConsole:
         review_configuration = None
         if policy is None and envelope.get("review_configuration") is not None:
             # 2b-3: de poort leest de opgeslagen B10-configuratie; alleen ``chosen`` wijzigt het gedrag.
-            from src.review_configuration_v1 import effective_configuration
+            from src.review.review_configuration_v1 import effective_configuration
             effective = effective_configuration({**envelope, "uploader_account_id": uploader})
             if effective["needs_choice"]:
                 blockers.append("review_configuration_invalid")
@@ -4179,12 +4179,12 @@ class OperationsConsole:
                 review_configuration = envelope["review_configuration"]
                 # Review #631 A/A2 (Metis optie b): elk publiceerbaar object én elk object met een
                 # open reviewplicht (dezelfde set als de readiness telt) MOET de regel van het contract halen.
-                from src.four_eyes_v1 import eligible_tuple_reviewers
-                from src.review_configuration_v1 import configured_approval
-                from src.review_duty_v1 import review_duties
+                from src.review.four_eyes_v1 import eligible_tuple_reviewers
+                from src.review.review_configuration_v1 import configured_approval
+                from src.review.review_duty_v1 import review_duties
                 duty_fragments = fragments
                 if duty_fragments is None and not context_supplied:
-                    from src.source_preparation_context_v1 import stored_extraction
+                    from src.vorming.source_preparation_context_v1 import stored_extraction
                     try:
                         duty_fragments = stored_extraction(envelope)
                     except ConsoleError:
@@ -4202,16 +4202,16 @@ class OperationsConsole:
                                                                              uploader_id=uploader)},
                                         uploader_id=uploader)[0]
                     for object_id in counted)
-        from src.decision_graph_v1 import publication_issues
+        from src.vorming.decision_graph_v1 import publication_issues
         blockers.extend(publication_issues(envelope, objects))
         if any((o.get("metadata") or {}).get("decision_graph_contract") for o in objects) and "decision_graph" not in envelope:
             blockers.append("decision_graph_missing")
         try:
-            from src.decision_graph_v1 import verify_source_evidence
+            from src.vorming.decision_graph_v1 import verify_source_evidence
             verify_source_evidence(self, envelope, fragments=fragments)
         except (ValueError, OSError):
             blockers.append("decision_graph_source_evidence_mismatch")
-        from src.source_context_review_v1 import context_issues
+        from src.review.source_context_review_v1 import context_issues
         if context_issues(objects):
             blockers.append("source_context_review_incomplete")
         if not independence:

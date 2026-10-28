@@ -328,7 +328,7 @@ def test_dashboard_accounts_for_every_passage_without_hiding_followup_work():
         rows.append(obj)
     rows += [_with_register(_obj(f'c{i}', 'explanation', status='approved'), 'used_as_context') for i in range(6)]
     before = deepcopy(rows)
-    from src.prepared_source_views_v1 import prepare
+    from src.vorming.prepared_source_views_v1 import prepare
     fragments = prepare(source_fragments()).fragments
     dashboard = _render_review_index('snap-430', rows, 'richtlijn', fragments=fragments, bindings=approved_bindings(rows))
     inventory = _render_review_index('snap-430', rows, 'richtlijn', task='inventory', fragments=fragments, bindings=approved_bindings(rows))

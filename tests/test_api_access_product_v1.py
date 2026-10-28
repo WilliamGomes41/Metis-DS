@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from src.api_access_v1 import ApiAccessPrincipal, ApiAccessStoreError
+from src.settings.api_access_v1 import ApiAccessPrincipal, ApiAccessStoreError
 from src.product_api_v1 import ProductPaths, create_product_app
 from src.product_security_v1 import TenantRegistry
 from src.usage_ledger_v1 import UsageLedger

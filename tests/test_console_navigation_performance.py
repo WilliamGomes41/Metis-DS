@@ -16,12 +16,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.document_status_v1 import derive_lifecycle_status
+from src.documents.document_status_v1 import derive_lifecycle_status
 from src.operations_console_v1 import PRE_REVIEW_BLOCKED, ConsoleError
-from src.proportionate_review_v1 import ProportionateReviewConsole
+from src.review.proportionate_review_v1 import ProportionateReviewConsole
 from src.publish_authorization_v1 import still_matches, tuple_record
-from src.review_policy_v1 import CONTRACT, project_policy
-from src.review_workboard_v1 import ReviewWorkInputs, review_work_item, review_workboard_items
+from src.review.review_policy_v1 import CONTRACT, project_policy
+from src.review.review_workboard_v1 import ReviewWorkInputs, review_work_item, review_workboard_items
 from src.workflows.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
 from src.workflows.workflow_review_postgres_v1 import WorkflowReviewStoreError
@@ -226,7 +226,7 @@ def test_workboard_reuses_policy_item_already_calculated(monkeypatch, empty):
                                 review_work_item(probe, account=probe.account, envelope=summary["envelope"]))
     def duplicate(*_args, **_kwargs):
         raise AssertionError("policy work item calculated twice")
-    monkeypatch.setattr("src.review_workboard_v1.review_work_item", duplicate)
+    monkeypatch.setattr("src.review.review_workboard_v1.review_work_item", duplicate)
     assert len(review_workboard_items(probe, account=probe.account, summaries=summaries)) == (0 if empty else 2)
 
 
@@ -250,7 +250,7 @@ def test_batch_objects_keeps_current_versions_and_order():
 
 @pytest.mark.parametrize("documents", [1, 20])
 def test_review_overview_batches_explicit_policy_inputs_and_keeps_fresh_duties(documents):
-    from src.document_status_ui_v1 import _LIFECYCLE_BY_SNAPSHOT
+    from src.documents.document_status_ui_v1 import _LIFECYCLE_BY_SNAPSHOT
     probe = NavigationProbe(count=3, documents=documents)
     lifecycle = {sid: probe.document_lifecycle_status(sid) for sid in probe.envelopes}
     token = _LIFECYCLE_BY_SNAPSHOT.set(lifecycle)

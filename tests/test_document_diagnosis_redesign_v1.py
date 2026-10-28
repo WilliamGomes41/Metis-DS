@@ -16,11 +16,11 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
-from src.extract_coverage_v1 import DUTCH_STATUS_LABELS
+from src.vorming.extract_coverage_v1 import DUTCH_STATUS_LABELS
 from src.integrity_kernel import stamp_canonical_hashes
 from src.operations_console_app import ERROR_COPY
-from src.processing_diagnostics_v1 import processing_diagnostics
-from src.review_ledger import read_events
+from src.vorming.processing_diagnostics_v1 import processing_diagnostics
+from src.review.review_ledger import read_events
 from tests.semantic_fixture_support import bind_fixture_selections, install_fixture_history
 
 PASSWORD = "docdiag-854-secret"
@@ -122,7 +122,7 @@ def test_reviewer_sees_verdict_first_then_steps_actions_findings_and_evidence(sy
     assert len(points) == len(diagnostics["by_family"])
     from tests.test_insight_diagnostics_navigation_v1 import Links
     from urllib.parse import parse_qs, urlsplit
-    from src.processing_diagnostics_v1 import processing_diagnostic_rows
+    from src.vorming.processing_diagnostics_v1 import processing_diagnostic_rows
     links = [parse_qs(urlsplit(url).query) for url in Links(actions).hrefs]
     expected = {row['object_id'] for row in processing_diagnostic_rows(console.snapshot_objects(sid))}
     assert {link['object'][0] for link in links} == expected
@@ -184,7 +184,7 @@ def test_coverage_is_a_five_column_table_without_filter_or_script(system, monkey
 @pytest.mark.parametrize("username", ["reviewer.854", "researcher.854", "uploader.854", "publisher.854"])
 def test_read_budget_one_objects_read_one_ledger_read_and_no_writes(system, monkeypatch, username, *, production_app):
     console, sid = system
-    import src.review_ledger as ledger
+    import src.review.review_ledger as ledger
     client = _client(console, production_app, username)
     before = (deepcopy(console.snapshot_objects(sid)), console.objects_revision(sid),
               deepcopy(console._envelope(sid)), read_events(console._ledger_path))
@@ -277,8 +277,8 @@ def test_recovery_link_keeps_insight_read_only_for_processing_roles(system, monk
 
 def test_preserved_panels_source_pages_view_check_blockage_and_publication_evidence(system, monkeypatch, *, production_app):
     console, sid = system
-    import src.insight_v1 as insight
-    import src.view_check as view_check
+    import src.settings.insight_v1 as insight
+    import src.settings.view_check as view_check
     monkeypatch.setattr(insight, "_source_pages_html", lambda envelope, diagnostic, document: '<p id="pages-854">P</p>')
     monkeypatch.setattr(view_check, "panel", lambda app, state, account, document, attempt: '<section id="vc-854"></section>')
     reviewer = _page(_client(console, production_app, "reviewer.854"), sid)
@@ -330,7 +330,7 @@ def _clear_admission_blocks(console, sid):
 @pytest.mark.parametrize("has_blockers", [True, False])
 def test_completed_processing_verdict_agrees_with_admission_blockers(
         system, monkeypatch, has_blockers, username, *, production_app):
-    from src.knowledge_path_v1 import knowledge_publication_blockers
+    from src.review.knowledge_path_v1 import knowledge_publication_blockers
     console, sid = system
     if not has_blockers:
         _clear_admission_blocks(console, sid)

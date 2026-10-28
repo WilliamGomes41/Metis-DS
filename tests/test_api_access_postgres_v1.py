@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from src.api_access_v1 import PostgresApiAccessStore
+from src.settings.api_access_v1 import PostgresApiAccessStore
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -197,7 +197,7 @@ def test_provisioning_and_audit_roll_back_together_on_audit_failure():
 
     store._audit = fail_audit
 
-    from src.api_access_v1 import ApiAccessStoreError
+    from src.settings.api_access_v1 import ApiAccessStoreError
 
     with pytest.raises(ApiAccessStoreError, match="api_access_provision_failed"):
         store.provision_consumer(

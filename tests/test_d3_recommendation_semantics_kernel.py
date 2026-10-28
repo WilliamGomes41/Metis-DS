@@ -17,7 +17,7 @@ from src.integrity_kernel import (
     stamp_canonical_hashes,
 )
 from src.operations_console_v1 import SCHEMA_V12
-from src.recommendation_semantics_v1 import (
+from src.vorming.recommendation_semantics_v1 import (
     CONFIRMED_FIELD,
     PROPOSED_FIELD,
     confirmed_recommendation_semantics_of,
@@ -25,7 +25,7 @@ from src.recommendation_semantics_v1 import (
     recommendation_semantics_errors,
     validate_recommendation_semantics,
 )
-from src.semantic_transform_generic_v1 import transform
+from src.vorming.semantic_transform_generic_v1 import transform
 
 
 ROOT = Path(__file__).resolve().parents[1]

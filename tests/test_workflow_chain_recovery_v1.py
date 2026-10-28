@@ -24,7 +24,7 @@ from src.canonical_publication_postgres_v1 import (
     PostgresCanonicalPublicationStore,
 )
 from src.integrity_kernel import stable_hash
-from src.topic_identity_v1 import topic_identity
+from src.documents.topic_identity_v1 import topic_identity
 from src.publication_chain_recovery_v1 import PublicationChainRecoveryError
 from src.workflows import workflow_chain_recovery_v1 as recovery
 from src.workflows.workflow_chain_recovery_v1 import (

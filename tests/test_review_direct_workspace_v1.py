@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from src.operations_console_v1 import ConsoleError
-from src.review_workboard_v1 import install_review_workboard
+from src.review.review_workboard_v1 import install_review_workboard
 
 
 class Console:
@@ -159,7 +159,7 @@ def test_waiting_duties_are_not_counted_as_completed_work():
 
 
 def test_task_page_returns_to_selected_document(monkeypatch):
-    from src.review_passage_read_v1 import ReviewDocumentInputs
+    from src.review.review_passage_read_v1 import ReviewDocumentInputs
     captured = []
 
     def read(console, account, snapshot_id):
@@ -168,7 +168,7 @@ def test_task_page_returns_to_selected_document(monkeypatch):
         captured.append(inputs)
         return inputs
 
-    monkeypatch.setattr('src.review_passage_read_v1.read_review_document', read)
+    monkeypatch.setattr('src.review.review_passage_read_v1.read_review_document', read)
     def render(console, account, document, object='', *, task='', counts=None,
                context_target='', context_mode='', context_saved=False, read_inputs=None, queue_page=1, review_revision=''):
         assert document == 'two' and task == 'contextual'
@@ -176,7 +176,7 @@ def test_task_page_returns_to_selected_document(monkeypatch):
         assert captured == [read_inputs] and read_inputs.revision == 'captured-revision'
         assert queue_page == 1 and review_revision == ''
         return '<h1>Passages beoordelen</h1><a class="btn-secondary" href="/review">Ander document kiezen</a>'
-    monkeypatch.setattr('src.review_workboard_v1._render_review_room', render)
+    monkeypatch.setattr('src.review.review_workboard_v1._render_review_room', render)
     console = Console(documents=[('one', document('One')), ('two', document('Two'))])
     response = client(console).get('/review?document=two&task=contextual')
     assert response.status_code == 200
@@ -197,7 +197,7 @@ def test_queue_navigation_does_not_backtrack_over_incomplete_hrefs():
 
         rendered = 'href="/review?' + 'queue_page=' * 50000
         console = Console(documents=[('one', document('One'))])
-        with patch('src.review_workboard_v1._render_review_room', return_value=rendered):
+        with patch('src.review.review_workboard_v1._render_review_room', return_value=rendered):
             response = client(console).get('/review', params={
                 'document': 'one', 'task': 'history', 'q': 'keep', 'page': 2})
         assert response.status_code == 200
@@ -214,7 +214,7 @@ def test_queue_navigation_only_updates_complete_queue_links(monkeypatch):
 
     ordinary = '<a href="/review?document=one">Document</a>'
     queue = '<a href="/review?document=one&amp;queue_page=2">Volgende</a>'
-    monkeypatch.setattr('src.review_workboard_v1._render_review_room',
+    monkeypatch.setattr('src.review.review_workboard_v1._render_review_room',
                         lambda *args, **kwargs: ordinary + queue)
     console = Console(documents=[('one', document('One'))])
     response = client(console).get('/review', params={
@@ -231,7 +231,7 @@ def test_queue_navigation_only_updates_complete_queue_links(monkeypatch):
 def test_historical_heading_task_navigates_without_rendering_or_writing(monkeypatch):
     console = Console(documents=[('two', document('Two'))])
     before = deepcopy(console.documents)
-    monkeypatch.setattr('src.review_workboard_v1._render_review_room',
+    monkeypatch.setattr('src.review.review_workboard_v1._render_review_room',
                         lambda *a, **kw: (_ for _ in ()).throw(AssertionError('old editor rendered')))
     response = client(console).get('/review?document=two&task=headings', follow_redirects=False)
     assert response.status_code == 303
@@ -243,7 +243,7 @@ def test_boom_structure_retains_its_existing_review_workplace(monkeypatch):
     value = document('Boom')
     value['envelope']['class'] = 'beslisboom'
     console = Console(documents=[('tree', value)])
-    monkeypatch.setattr('src.review_workboard_v1._render_review_room', lambda *a, **kw: 'Existing boom structure')
+    monkeypatch.setattr('src.review.review_workboard_v1._render_review_room', lambda *a, **kw: 'Existing boom structure')
     response = client(console).get('/review?document=tree&task=structure')
     assert response.status_code == 200 and response.text == 'Existing boom structure'
 

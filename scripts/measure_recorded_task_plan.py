@@ -3,10 +3,10 @@ import argparse,csv,io,json,re,sys
 from pathlib import Path
 from zipfile import ZipFile
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from src.semantic_passage_v1 import semantic_source_blocks
-from src.bounded_formation_v1 import tasks_for,_durable_targets
-from src.recommendation_task_plan_v1 import build_plan,remaining_tasks
-from src.semantic_replay_v1 import stable_json_hash
+from src.vorming.semantic_passage_v1 import semantic_source_blocks
+from src.vorming.bounded_formation_v1 import tasks_for,_durable_targets
+from src.vorming.recommendation_task_plan_v1 import build_plan,remaining_tasks
+from src.vorming.semantic_replay_v1 import stable_json_hash
 csv.field_size_limit(64000000)
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--evidence-zip',type=Path,required=True)

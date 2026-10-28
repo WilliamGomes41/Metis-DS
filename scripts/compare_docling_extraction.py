@@ -7,8 +7,8 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from src.docling_pdf_v1 import extract as docling
-from src.extract_pdf_v2 import extract as legacy
+from src.vorming.docling_pdf_v1 import extract as docling
+from src.vorming.extract_pdf_v2 import extract as legacy
 
 
 def main():

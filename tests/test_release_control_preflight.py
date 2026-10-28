@@ -446,6 +446,21 @@ def test_diff_filter_includes_deletions() -> None:
         assert letter in preflight.DIFF_FILTER
 
 
+def test_room_packages_keep_flat_src_category_rules() -> None:
+    preflight = _load()
+    cases = {
+        "src/review/review_ledger.py": "opslag",
+        "src/ingest/ingest_limits_v1.py": "beschikbaarheid",
+        "src/vorming/admission_gate_v1.py": "kwaliteit",
+        "src/settings/quality_metrics_v1.py": "metrics",
+        "src/vorming/extract_metrics_v1.py": "metrics",
+    }
+    for path, category in cases.items():
+        item = preflight.classify_paths([path])[category]
+        assert item["status"] == "required", path
+        assert path in item["paths"]
+
+
 def test_deleted_product_paths_still_require_their_category() -> None:
     item = _load().classify_paths(["src/review_ledger.py"])["opslag"]
     assert item["status"] == "required"

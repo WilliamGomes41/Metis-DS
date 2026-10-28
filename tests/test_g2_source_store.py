@@ -12,7 +12,7 @@ from src.g2_source_store import (
     parse_g2_locator,
 )
 from src.integrity_kernel import sha256_file
-from src.register_source_binary import build_record
+from src.ingest.register_source_binary import build_record
 
 
 DIGEST = "a" * 64

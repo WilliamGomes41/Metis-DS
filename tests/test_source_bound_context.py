@@ -6,10 +6,10 @@ from copy import deepcopy
 import json
 import pytest
 from tests.test_source_bound_fields_v2 import fragment, proposal, TEXT
-from src.pre_review_semantic_v1 import semantic_spec_from_fragments
-from src.semantic_transform_generic_v1 import transform
-from src.admission_gate_v1 import apply_admission_gate
-from src.source_bound_fields_v2 import CONTEXT_KEY, validated_context
+from src.vorming.pre_review_semantic_v1 import semantic_spec_from_fragments
+from src.vorming.semantic_transform_generic_v1 import transform
+from src.vorming.admission_gate_v1 import apply_admission_gate
+from src.vorming.source_bound_fields_v2 import CONTEXT_KEY, validated_context
 
 CONDITION = 'Wanneer de oudere thuis woont, geldt de volgende beperking.'
 
@@ -89,13 +89,13 @@ def test_transform_and_admission_reject_forged_or_stale_context(change):
         gated = apply_admission_gate(altered, klasse='richtlijn', fragments=source, document_version='1', source_hash='a'*64)
         invalid = next(r for r in gated if r['object_id']==obj['object_id'])
         assert 'admission' not in invalid['metadata']
-        from src.knowledge_path_v1 import content_reviewable
+        from src.review.knowledge_path_v1 import content_reviewable
         assert not content_reviewable(invalid)
 
 
 @pytest.mark.parametrize('limit', ['input','output','timeout'])
 def test_processing_bounds_fail_explicitly_without_truncation(monkeypatch, limit):
-    from src import pre_review_semantic_v1 as processing
+    from src.vorming import pre_review_semantic_v1 as processing
     from src.operations_console_v1 import ConsoleError
     if limit=='input':
         monkeypatch.setattr(processing,'MAX_INPUT_BYTES',1)

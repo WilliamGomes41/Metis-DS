@@ -3,7 +3,7 @@ from copy import deepcopy
 
 from tests.browser_postgres_support import browser_application
 from tests.test_source_accountability_v1 import system
-from src.source_context_review_v1 import role_of
+from src.review.source_context_review_v1 import role_of
 
 app = browser_application('source-exclusions-browser', processing_binder=lambda console: None)
 state = app.state.operations_kernel

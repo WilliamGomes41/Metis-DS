@@ -1,15 +1,15 @@
 """Offline acceptance of recorded proposal preservation, not new model recall."""
 import json
 from collections import Counter
-from src.pre_review_semantic_v1 import _replay_identity, semantic_spec_from_fragments
-from src.semantic_replay_v1 import validated_inference_record
-from src.semantic_passage_v1 import semantic_source_blocks
-from src.pre_review_semantic_v1 import _candidate_fragments, _evidence_fragments
-from src.semantic_transform_generic_v1 import transform
-from src.admission_gate_v1 import apply_admission_gate
-from src.passage_register_v1 import apply_passage_register
-from src.source_containers_v1 import partition
-from src.bounded_formation_v1 import tasks_for
+from src.vorming.pre_review_semantic_v1 import _replay_identity, semantic_spec_from_fragments
+from src.vorming.semantic_replay_v1 import validated_inference_record
+from src.vorming.semantic_passage_v1 import semantic_source_blocks
+from src.vorming.pre_review_semantic_v1 import _candidate_fragments, _evidence_fragments
+from src.vorming.semantic_transform_generic_v1 import transform
+from src.vorming.admission_gate_v1 import apply_admission_gate
+from src.vorming.passage_register_v1 import apply_passage_register
+from src.vorming.source_containers_v1 import partition
+from src.vorming.bounded_formation_v1 import tasks_for
 import argparse
 parser = argparse.ArgumentParser(description="Offline replay of supplied processing diagnostic; never calls a model or mutates a working revision")
 parser.add_argument("diagnostic")
@@ -25,7 +25,7 @@ ctx['semantic_replay']=validated_inference_record(identity=identity,proposal=x['
 calls = []
 raw_recorded = json.loads(x['provider_evidence']['response']['output_text'])
 if args.bounded:
-    from src.source_evidence_resolution_v1 import resolve_proposal_evidence
+    from src.vorming.source_evidence_resolution_v1 import resolve_proposal_evidence
     resolved_recorded = resolve_proposal_evidence(raw_recorded, blocks=b, evidence_blocks=e, field_contract_v3=True)
     if resolved_recorded['objects'] != x['resolved_proposal']['objects'] or raw_recorded.get('relations'):
         raise ValueError('Bounded fixture replay requires the unchanged accepted object list and no cross-object relations')
@@ -49,7 +49,7 @@ objects=transform(spec,manifest,fragments)
 objects=apply_passage_register(apply_admission_gate(objects,klasse='richtlijn',fragments=fragments,document_version='1.0',source_hash=x['source_hash']))
 p=partition(objects)
 tasks=tasks_for(b,e)
-from src.recommendation_coverage_v1 import assess
+from src.vorming.recommendation_coverage_v1 import assess
 report={'recommendation_signals': dict(Counter(r['status'] for r in assess(b,x['resolved_proposal'])['entries'])), 'source_sha256':x['source_hash'],'method':'recorded proposals routed through bounded tasks' if args.bounded else 'offline reconstruction of recorded proposals',
  'limitation':'No live inference; no clinical completeness claim', 'fixture_calls': len(calls),
  'knowledge_count':len(p['knowledge']),'knowledge_types':dict(Counter(o.get('proposed_object_type') for o in p['knowledge'])),

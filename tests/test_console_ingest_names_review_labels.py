@@ -20,7 +20,7 @@ import pymupdf
 import pytest
 from fastapi.testclient import TestClient
 
-from src.admission_gate_v1 import GATE_BLOCKED
+from src.vorming.admission_gate_v1 import GATE_BLOCKED
 from src.operations_console_app import FILENAME_HINT, _render_review_index
 from src.operations_console_v1 import (
     ConsoleError, normalize_upload_filename, safe_path_under,

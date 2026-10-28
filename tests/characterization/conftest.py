@@ -34,12 +34,12 @@ def offline_clock(monkeypatch):
             monkeypatch.delenv(key, raising=False)
     import src.operations_console_v1 as op
     import src.operations_console_app as ui
-    import src.quality_evidence_v1 as quality
-    import src.processing_retry_v1 as retry
-    import src.source_processing_dispatch_v1 as dispatch
-    import src.source_selection_v1 as selection
-    import src.attempt_diagnostics_v1 as diagnostics
-    import src.processing_trace_v1 as trace
+    import src.settings.quality_evidence_v1 as quality
+    import src.vorming.processing_retry_v1 as retry
+    import src.vorming.source_processing_dispatch_v1 as dispatch
+    import src.vorming.source_selection_v1 as selection
+    import src.vorming.attempt_diagnostics_v1 as diagnostics
+    import src.vorming.processing_trace_v1 as trace
 
     stamp = "2026-10-17T08:00:00+00:00"
     monkeypatch.setattr(op, "utc_now", lambda: stamp)

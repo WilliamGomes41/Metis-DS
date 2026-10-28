@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.operations_console_app import _source_context_panel
-from src.source_context_review_v1 import links_of
+from src.review.source_context_review_v1 import links_of
 from tests.test_source_context_review_v1 import _system
 from tests.test_source_context_review_ui_v1 import Forms, _link_form, _payload
 

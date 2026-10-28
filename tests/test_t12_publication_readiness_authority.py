@@ -11,7 +11,7 @@ from copy import deepcopy
 from pathlib import Path
 
 from src.integrity_kernel import stamp_canonical_hashes
-from src.knowledge_path_v1 import content_reviewable
+from src.review.knowledge_path_v1 import content_reviewable
 from src import publication_readiness_v1 as readiness_module
 from src.publication_readiness_v1 import (
     READINESS_AUTHORITY_UNAVAILABLE,

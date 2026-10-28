@@ -15,14 +15,14 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 
 import pytest
-import src.pre_review_semantic_v1 as semantic_module
+import src.vorming.pre_review_semantic_v1 as semantic_module
 
-from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
+from src.vorming.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
 from src.operations_console_app import _broncontext_html
 from src.operations_console_v1 import PRE_REVIEW_BLOCKED, ConsoleError
-from src.passage_register_v1 import passage_register_of
-from src.review_cockpit_v1 import why_selected
-from src.pre_review_semantic_v1 import (
+from src.vorming.passage_register_v1 import passage_register_of
+from src.review.review_cockpit_v1 import why_selected
+from src.vorming.pre_review_semantic_v1 import (
     OPENAI_RESPONSES_URL,
     PASSAGE_FORMATION_MODE_ENV,
     SEMANTIC_MODE,
@@ -426,7 +426,7 @@ def test_missing_provider_persists_blocked_capture_and_recovers_same_snapshot(tm
 
     env[LLM_API_KEY_ENV] = "product-key"
     env[LLM_MODEL_ENV] = "test-model"
-    from src.source_bound_fields_v2 import MODE
+    from src.vorming.source_bound_fields_v2 import MODE
     env[PASSAGE_FORMATION_MODE_ENV] = MODE
     def unexpected_extraction(*_args, **_kwargs):
         pytest.fail("Recovery must reuse extraction of the same immutable source")

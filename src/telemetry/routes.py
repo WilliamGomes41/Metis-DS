@@ -38,7 +38,7 @@ def _window(request: Request) -> tuple[str, int]:
 
 
 def install_telemetry_routes(app: FastAPI, *, require_account: Callable[[Request], dict]) -> None:
-    """JSON API for the Systeem tab of /inzicht (page: ``src/insight_v1.py``)."""
+    """JSON API for the Systeem tab of /inzicht (page: ``src/settings/insight_v1.py``)."""
     @app.get("/telemetry/api/summary")
     def telemetry_summary(request: Request) -> JSONResponse:
         require_account(request)

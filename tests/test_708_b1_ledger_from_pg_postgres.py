@@ -12,7 +12,7 @@ stale copies instead. Transaction/rollback proofs remain in #678 and #708.
 import psycopg
 import pytest
 
-from src.review_ledger import read_events, verify_ledger
+from src.review.review_ledger import read_events, verify_ledger
 from tests.complete_workflow_support import complete_postgres  # noqa: F401
 from tests.test_708_reprocessing_guard_postgres import _assert_mirrors, _change_all, prepared  # noqa: F401
 from tests.test_pg_console_without_disk_mirrors import MirrorAccess

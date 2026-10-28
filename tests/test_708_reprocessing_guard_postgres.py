@@ -49,7 +49,7 @@ def prepared(request, tmp_path, complete_postgres):
         class_="richtlijn", family="begrippen", named_reviewers=[reviewer["account_id"]],
     )
     sid = receipt["snapshot_id"]
-    from src.proportionate_review_v1 import normal_risk_batch_queue
+    from src.review.proportionate_review_v1 import normal_risk_batch_queue
     objects = normal_risk_batch_queue(console.snapshot_objects(sid), review_path="richtlijn",
         fragments=console.review_source_fragments(sid), bindings=console.object_review_bindings(sid))
     assert objects

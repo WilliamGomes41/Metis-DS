@@ -272,7 +272,7 @@ def test_conflict_does_not_rollback_winner_already_committed_work(tmp_path: Path
 def test_review_form_content_and_revision_are_read_together(tmp_path: Path, monkeypatch, *, production_app, production_console) -> None:
     """Promise 3: a concurrent commit cannot mix new content with an old pin."""
     from concurrent.futures import ThreadPoolExecutor
-    from src.review_passage_read_v1 import PREFIX, resolve_review_revision
+    from src.review.review_passage_read_v1 import PREFIX, resolve_review_revision
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snapshot_id = _ingest(console, accounts)["snapshot_id"]
@@ -329,7 +329,7 @@ def test_review_form_content_and_revision_are_read_together(tmp_path: Path, monk
 
 def test_get_form_revision_is_not_taken_from_threading_local(tmp_path: Path, *, production_app, production_console) -> None:
     """Promise 3: form pin is durable, not TLS / worker reuse."""
-    from src.review_passage_read_v1 import PREFIX, resolve_review_revision
+    from src.review.review_passage_read_v1 import PREFIX, resolve_review_revision
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snapshot_id = _ingest(console, accounts)["snapshot_id"]

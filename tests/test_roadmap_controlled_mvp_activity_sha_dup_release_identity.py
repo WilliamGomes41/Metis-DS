@@ -148,7 +148,7 @@ def test_controlled_mvp_pr_does_not_rewrite_protocol_or_add_src() -> None:
         "Open existing document",
         "No subscriptions found",
     )
-    for path in (ROOT / "src").glob("*.py"):
+    for path in (ROOT / "src").rglob("*.py"):
         text = path.read_text(encoding="utf-8")
         if any(needle in text for needle in needles):
             src_hits.append(path.name)

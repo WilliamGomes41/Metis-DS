@@ -7,8 +7,8 @@ from pathlib import Path
 from fastapi.responses import HTMLResponse, JSONResponse
 from src.operations_console_app import _knowledge_review_html, _decision_paths_html, _page
 PASSWORD="browser-fixture-secret"
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-from src.source_bound_fields_v2 import MODE, FIELDS
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+from src.vorming.source_bound_fields_v2 import MODE, FIELDS
 from tests.context_test_support import bind_detected_context
 from tests.test_decision_graph_structure import structure
 from tests.test_decision_graph_chain import _console as graph_console
