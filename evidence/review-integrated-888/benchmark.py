@@ -303,6 +303,9 @@ def test_native_review_post_baseline(size, tmp_path, production_console, product
     envelope = console.workflow_document_store.get_envelope(sid)
     with console.workflow_document_store._connect() as version_connection:
         postgres_version = version_connection.execute('SHOW server_version').fetchone()['server_version']
+        storage_contract = version_connection.execute(
+            'SELECT processing_storage_version,object_generation FROM workflow.documents WHERE snapshot_id=%s',
+            (sid,)).fetchone()
     captured = []
 
     def emit(_self, payload):
@@ -325,7 +328,8 @@ def test_native_review_post_baseline(size, tmp_path, production_console, product
             'matching_bindings': matching, 'stale_bindings': len(bindings) - matching,
             'extraction_contract': envelope['prepared_source_extraction']['version'],
             'source_fragments': len(stored_extraction(envelope)),
-            'processing_storage_version': envelope.get('processing_storage_version'),
+            'processing_storage_version': storage_contract['processing_storage_version'],
+            'object_generation': storage_contract['object_generation'],
             'relations': 'no additional relation context',
             'formation': 'synthetic incomplete finding' if incomplete else 'complete',
             'provider': 'deterministic fixture selections, production candidate creator'},
