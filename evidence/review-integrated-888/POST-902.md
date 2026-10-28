@@ -1,4 +1,4 @@
-# MET-23 / #902 — initial native POST baseline
+# MET-23 / #902 — native POST baseline and controlled lock probe
 
 Change class: C
 Promise: Reproduce completed Review POST and refusal responses through the real PostgreSQL/ASGI composition, with durable-state controls.
@@ -6,7 +6,7 @@ Proof: Opt-in companion scenario in the existing #888 harness and retained nativ
 Touches lifecycle invariants: no
 Rewrite risk: none
 
-This is an initial increment of #902, not completion of its workload or SQL-isolation requirements. No production code or domain contract changes.
+This is evidence work within #902, not completion of its workload or production SQL-isolation requirements. No production code or domain contract changes.
 
 ## Run
 
@@ -21,6 +21,23 @@ REVIEW_PROOF_OUTPUT=/tmp/review-post-902.json REVIEW_POST_SIZES=20,150 \
 ```
 
 Use a new output path for each run; the harness appends cases. The existing CI characterization job runs size 20 and retains JSON and JUnit in `review-post-902`. Never count PostgreSQL skips, missing artifacts, timeouts or incomplete responses as passes. A failed or interrupted case may have JUnit without JSON; retain that outcome and rerun only with its reason recorded. No latency sample exists for an unfinished request.
+
+The normal suite and existing CI entry now select three separate profiles: `initial`, `history`, and `history_incomplete`. The first is the unchanged initial-state request sequence. The other two seed four successor cycles for each candidate except the focal object and independent conflict control. Each cycle uses the real approval command, then the existing lineage helper and validated store to append a forced synthetic successor. Half the seeded objects receive a final approval. Reports count actual history rows, current objects, matching bindings and stale exact bindings; they assert both binding populations exist. No approval records are manufactured by direct SQL or fake audit events.
+
+The incomplete profile adds an explicitly synthetic retained formation finding, as the existing GET matrix does. It asserts that the full passage response retains its incomplete-formation warning, while running the same POST sequence. It does not claim a genuine provider failure. No additional relation/context fixture is introduced in this increment.
+
+For an opt-in comparison at greater object counts, set one profile explicitly:
+
+```sh
+REVIEW_PROOF_OUTPUT=/tmp/review-post-history.json REVIEW_POST_PROFILE=history \
+  REVIEW_POST_SIZES=20,150 REVIEW_POST_HISTORY_DEPTH=4 \
+  python -m pytest -q -p tests.conftest \
+  evidence/review-integrated-888/benchmark.py -k native_review_post_baseline
+```
+
+The `history` profile holds the document row in a separate native PostgreSQL transaction before its approval POST. A third, independent autocommit connection polls `pg_stat_activity` and `pg_blocking_pids`, with a statement timeout and 15-second observation deadline. It must observe exactly one actual `Lock` waiter executing a document-row locking SELECT, while the POST remains unfinished. The blocker always rolls back before the executor joins. The full POST must then complete with 303 and the existing exact-binding/durable-state assertions. A missing waiter, early completion or failed completion is a test failure. The exported probe contains only the fixed query category and wait event, never backend IDs, SQL, connection information or parameters. The initial profile is the unblocked control. Controlled-lock wall time includes the deliberate wait and must not be used as an ordinary latency/SLO sample.
+
+This distinguishes an observed database lock from inference based on a `db_execute` label. It does not identify the incident's production SQL or rule out its other possible causes. Existing request diagnostics still separate execute/fetch, render and store-lock/transaction phases; they do not attribute every application statement to a query category.
 
 ## Scenario and authority
 
@@ -40,8 +57,8 @@ Reports include individual wall times, status, response size and existing aggreg
 
 ## Remaining MET-23 work
 
-- Populate representative append-order histories, valid and stale exact bindings, relation context and incomplete formation; record their actual counts and contract versions.
-- Separate validation before versus inside a transaction using observed native phases. Add deterministic native fault/lock probes with independent connections and bounded deadlines.
+- Execute and inspect the added history/binding/incomplete profiles, including their measured counts and extraction/storage contracts; increase independent object counts for comparative cost evidence. Add relation/context dependency fixtures separately.
+- Separate validation before versus inside a transaction using observed native phases. Add native write/commit-fault probes and inspect the controlled row-lock probe with independent connections and bounded deadlines.
 - Attribute safe SQL categories and execute/fetch/lock wait separately, without exporting query parameters or incident identifiers. A controlled local lock proves observability only; production SQL cause remains unknown without corresponding live evidence.
 - Build the mutation/invalidation dependency fixture and writer/lock inventory for later work packages. Preserve the distinctions between passage generation, command equality and storage three-way merge, including binding-only and legacy writes.
 - Collect comparable completed runs at the agreed workload sizes. Keep failures and unfinished requests in the run inventory. Do not close #902 from this initial baseline.
