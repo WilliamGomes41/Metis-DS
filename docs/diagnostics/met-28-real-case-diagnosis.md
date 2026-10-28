@@ -153,6 +153,25 @@ resolver is de literal niet als aaneengesloten tekst in het blok aanwezig.
 De afwijzing is in alle gevallen terecht (e): de literal staat niet aaneengesloten in de bron.
 De eerste oorzaak ligt bij het model.
 
+**`relation_endpoint_missing` — 5 uniek (4 pending).** De eindpunten van de relatie zijn vergeleken
+met de spans van alle objecten die het model in dezelfde call voorstelde (opgeslagen
+modeluitvoer). `recoverable_formation_v1.prepare` eist dat beide eindpunten exact
+gelijk zijn aan de selectie van een object.
+
+| Relatie | Bron-eindpunt | Doel-eindpunt |
+| --- | --- | --- |
+| `explains` (pending) | exact object | overlapt een object, niet exact |
+| `applies_if` (historical) | exact object | geen object |
+| `explains` (pending) | geen object | exact object |
+| `explains` (pending) | geen object | geen object |
+| `applies_if` (pending) | overlapt, niet exact | overlapt, niet exact |
+
+In alle 5 gevallen is de eerste oorzaak (d): het model gaf als eindpunt een span die geen
+voorgesteld object is, of een span die wijder of smaller is dan het object. De regel is terecht
+(e): een relatie zonder identificeerbaar eindpunt kan geen afhankelijkheid vastleggen. Het
+gevolg is de call-brede quarantaine (§2.3, B5-b). Kleinste wijziging zonder domeinbesluit is
+een producerinstructie: eindpunten exact gelijk aan `objects[i].spans`.
+
 **`recommendation_strength_evidence_missing` — 2 uniek (historical).** Het model gaf
 `strength_status = unmapped` zonder `strength_evidence`. `unmapped` vereist een
 letterlijke verwijzing (`semantic_passage_v1`). Klasse (d); een latere call heeft beide
@@ -186,7 +205,8 @@ gevallen opgelost.
    - `occurrence` meegeven bij een herhaalde literal;
    - het volledige sterktelabel selecteren (S1);
    - een contextentry meegeven voor `scope_span`/`target_group_span` buiten de kern;
-   - een niet-aaneengesloten literal vervangen door `missing_reason` (2.7, zolang B5-g open is).
+   - een niet-aaneengesloten literal vervangen door `missing_reason` (2.7, zolang B5-g open is);
+   - relatie-eindpunten exact gelijk aan de spans van een voorgesteld object (2.7).
 
 Beide wijzigen vorming of diagnose van werkpakket MET-6 en vragen een eigen GitHub-issue
 na triage. Ze zijn niet in dit dossier uitgevoerd.
