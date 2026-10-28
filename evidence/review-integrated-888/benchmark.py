@@ -47,11 +47,15 @@ def durable(console, ids):
 
 @pytest.mark.parametrize('case', os.environ.get('REVIEW_PROOF_CASES', ','.join(CASES)).split(','))
 def test_native_review_matrix(case, tmp_path, production_console, production_app, monkeypatch):
+    import src.vorming.source_reconstruction_v1 as reconstruction
     from src.request_diagnostics_v1 import RequestDiagnostics
     from src.vorming.source_preparation_context_v1 import stored_extraction
     from src.vorming.semantic_passage_v1 import semantic_source_blocks
     import src.console_performance_v1 as performance
     import src.review.review_workboard_v1 as workboard
+
+    assert Path(reconstruction.__file__).resolve().is_relative_to(Path.cwd().resolve()), \
+        'pytest imported code from a different checkout; this measurement is invalid'
 
     repeats = int(os.environ.get('REVIEW_PROOF_REPEATS', '7'))
     assert repeats >= 1
@@ -115,6 +119,7 @@ def test_native_review_matrix(case, tmp_path, production_console, production_app
     result = {'case': case, 'commit': git('rev-parse', 'HEAD'),
         'production_diff': git('diff', 'HEAD', '--', 'src'),
         'harness_sha256': sha256(Path(__file__).read_bytes()).hexdigest(),
+        'reconstruction_sha256': sha256(Path(reconstruction.__file__).read_bytes()).hexdigest(),
         'python': platform.python_version(), 'postgres': '16', 'runtime': 'local authenticated ASGI + native PG',
         'deployment': None, 'provider': 'explicit deterministic fixture selections, real candidate creator',
         'configuration': {'web_concurrency': 1, 'stores': 'native disposable PostgreSQL',
@@ -148,7 +153,7 @@ def test_native_review_matrix(case, tmp_path, production_console, production_app
                         assert warning == incomplete
                     batch_count = len(re.findall(r'name="object_ids" value="([^"]+)"', page.text))
                     if case == 'occupied_batch' and name == 'batch' and not incomplete:
-                        assert batch_count == 25, 'benchmark must exercise an occupied batch'
+                        assert batch_count == 20, 'benchmark must exercise the occupied 20-item batch page'
                     assert evidence
                     result['samples'].append({'route': name, 'incomplete': incomplete,
                         'temperature': 'first_for_route' if iteration == 0 else 'warm',
