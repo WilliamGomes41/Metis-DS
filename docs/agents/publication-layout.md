@@ -42,6 +42,8 @@ work. Internal Python import locations move; no serialized Python module identit
 is used by the publication JSON/SQL/backup formats. Stored schema, hashes, backup
 format identifiers and source locators are unchanged. Historical evidence and
 protocol records retain their original source paths.
+The shared rollback-test child selects the module layout of its checkout,
+including the pinned pre-package publication, review and settings paths.
 
 Import/packaged-install checks detect missing modules and circular dependencies;
 CLI checks detect broken supported entry points. Existing publication,
