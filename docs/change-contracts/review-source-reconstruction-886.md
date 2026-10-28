@@ -65,3 +65,14 @@ not regress in this repeated run. Five samples do not support a p95 claim.
 The actual production document, current runtime and deployment are unmeasured.
 WP3 and WP4 retain their own acceptance criteria; this result alone does not
 prove the total production delay is solved.
+
+## Rollback-test compatibility discovered during verification
+
+The first complete-suite attempt stopped after 2,283 passes because the D5
+rollback helper imported `src.review.review_ledger` in its intentionally pinned
+pre-room checkout, which still has `src.review_ledger`. The same test failed
+with the same missing module on unmodified main `49e50be`. The helper now uses
+the scenario's explicit `legacy` flag to select the two known old module paths;
+it does not catch import errors or weaken rollback assertions. Both durable and
+Azure-simulated rollback scenarios passed on disposable PostgreSQL after this
+test-only compatibility repair. The interrupted suite is not completion proof.
