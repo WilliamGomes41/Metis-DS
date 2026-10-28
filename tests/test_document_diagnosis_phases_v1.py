@@ -8,8 +8,8 @@ import re
 
 import pytest
 
-from src.insight_v1 import _diagnosis_steps_html
-from src.processing_trace_v1 import PHASES
+from src.settings.insight_v1 import _diagnosis_steps_html
+from src.vorming.processing_trace_v1 import PHASES
 
 
 # Domain expectations from the actual producers: extraction/reconstruction,

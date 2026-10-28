@@ -11,8 +11,8 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
-from src.formation_problems_v1 import _source_excerpt, collect
-from src.source_selection_ui_v1 import _formation_groups, _formation_problem_html, _formation_problems_html
+from src.vorming.formation_problems_v1 import _source_excerpt, collect
+from src.vorming.source_selection_ui_v1 import _formation_groups, _formation_problem_html, _formation_problems_html
 from tests.test_review_formation_problems import received, execute, SECOND
 from tests.test_availability_repair import login
 

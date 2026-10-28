@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from src.semantic_replay_v1 import stable_json_hash
+from src.vorming.semantic_replay_v1 import stable_json_hash
 from src.workflows.formation_task_store_v1 import FormationTaskStore
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
 from tests.test_d5_4_review_interaction_evidence import _system
@@ -26,9 +26,9 @@ def prepared(tmp_path, production_console):
 
 
 def validator_data(envelope):
-    from src.source_preparation_context_v1 import stored_extraction
-    from src.pre_review_semantic_v1 import _content_fragments, _evidence_fragments
-    from src.semantic_passage_v1 import semantic_source_blocks
+    from src.vorming.source_preparation_context_v1 import stored_extraction
+    from src.vorming.pre_review_semantic_v1 import _content_fragments, _evidence_fragments
+    from src.vorming.semantic_passage_v1 import semantic_source_blocks
     fragments = stored_extraction(envelope)
     data = {"fragments": _content_fragments(fragments), "document_id": envelope["document_id"],
             "evidence_fragments": _evidence_fragments(fragments),
@@ -38,9 +38,9 @@ def validator_data(envelope):
 
 
 def checkpoint_context(console,envelope,data):
-    from src.processing_retry_v1 import reserve,now
-    from src.source_selection_v1 import configuration
-    from src.attempt_diagnostics_v1 import validator_identity
+    from src.vorming.processing_retry_v1 import reserve,now
+    from src.vorming.source_selection_v1 import configuration
+    from src.vorming.attempt_diagnostics_v1 import validator_identity
     sid = envelope["snapshot_id"]
     envelope["processing_storage"] = "task-v1"
     attempt,_ = reserve(envelope,command_id="storage-proof",actor_id=envelope["uploader_account_id"],
@@ -109,7 +109,7 @@ def test_task_commit_is_atomic_idempotent_and_attempt_independent(tmp_path, prod
 
 def test_new_checkpoint_does_not_reload_archive_or_take_global_write_lock(tmp_path, production_console, monkeypatch):
     from tests.test_console_read_architecture import _received
-    from src.source_processing_dispatch_v1 import claim
+    from src.vorming.source_processing_dispatch_v1 import claim
     console, users, _, _ = _system(tmp_path, production_console=production_console)
     sid = _received(console, users, title="Task checkpoint isolation")
     monkeypatch.setenv("METIS_FORMATION_TASK_STORAGE", "v1")
@@ -140,8 +140,8 @@ def test_new_checkpoint_does_not_reload_archive_or_take_global_write_lock(tmp_pa
 def test_resume_uses_committed_tasks_without_partial_activation(tmp_path, production_console, monkeypatch,stop):
     import json
     from src.operations_console_v1 import ConsoleError
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-    from src.source_bound_fields_v3 import MODE
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.vorming.source_bound_fields_v3 import MODE
     from tests.test_recommendation_context_v3 import response_for
     from tests.production_support import restart_production
     console, users, _, _ = _system(tmp_path, production_console=production_console)
@@ -164,7 +164,7 @@ def test_resume_uses_committed_tasks_without_partial_activation(tmp_path, produc
         bind_pre_review_semantic_processing(console,environ={"METIS_PASSAGE_FORMATION_MODE":MODE,
             "METIS_LLM_API_KEY":"fixture","METIS_LLM_MODEL":"test"},post_json=provider)
     bind(console)
-    import src.semantic_passage_v1 as semantic
+    import src.vorming.semantic_passage_v1 as semantic
     joint_counts = []
     rejected = []
     project = semantic._project_semantic_selection
@@ -215,8 +215,8 @@ def test_resume_uses_committed_tasks_without_partial_activation(tmp_path, produc
         stored = con.execute("SELECT envelope_payload FROM workflow.documents WHERE snapshot_id=%s",(sid,)).fetchone()["envelope_payload"]
         count = con.execute("SELECT COUNT(*) AS n FROM workflow.formation_task_results").fetchone()["n"]
     assert "processing_attempts" not in stored and count == 3
-    from src.attempt_diagnostics_v1 import resolve_validator_input
-    from src.processing_evidence_export_v1 import processing_evidence_tables
+    from src.vorming.attempt_diagnostics_v1 import resolve_validator_input
+    from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
     task_store = FormationTaskStore(restarted.workflow_document_store)
     tables,_ = processing_evidence_tables(snapshot_id=sid,revision=restarted.objects_revision(sid),envelope=final,
         objects=restarted.snapshot_objects(sid),input_resolver=task_store.resolve_input,diagnostic_reader=task_store.diagnostic)
@@ -261,8 +261,8 @@ def test_process_kill_then_new_process_reuses_committed_work(tmp_path,production
     import subprocess
     import sys
     import time
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-    from src.source_bound_fields_v3 import MODE
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.vorming.source_bound_fields_v3 import MODE
     console,users,_,_ = _system(tmp_path,production_console=production_console)
     actor = users["researcher"]["account_id"]
     sid = console.receive_source(actor_id=actor,filename="crash.html",content_type="text/html",
@@ -340,8 +340,8 @@ def test_checkpoint_cost_is_independent_of_archive_and_task_number(tmp_path,prod
         "processing_storage","processing_attempts","logical_document_id","working_revision_id",
         "working_revision_number","source_snapshot_id","source_version"}}
     other["archive_fixture"] = bulk
-    from src.processing_retry_v1 import reserve,now
-    from src.source_selection_v1 import configuration
+    from src.vorming.processing_retry_v1 import reserve,now
+    from src.vorming.source_selection_v1 import configuration
     legacy = dict(other,snapshot_id="legacy-baseline",processing_attempts=[],processing_configuration=configuration(console))
     legacy.pop("archive_fixture")
     legacy_attempt,_ = reserve(legacy,command_id="legacy-baseline",actor_id=envelope["uploader_account_id"],
@@ -459,11 +459,11 @@ def test_budget_stop_without_new_progress_consumes_retry_budget(tmp_path,product
     import json
     from types import SimpleNamespace
     import time
-    import src.bounded_formation_v1 as bounded
-    from src.bounded_model_call_v1 import ModelCallLimits
+    import src.vorming.bounded_formation_v1 as bounded
+    from src.vorming.bounded_model_call_v1 import ModelCallLimits
     from src.operations_console_v1 import ConsoleError
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-    from src.source_bound_fields_v3 import MODE
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.vorming.source_bound_fields_v3 import MODE
     from tests.test_recommendation_context_v3 import response_for
     console,users,_,_ = _system(tmp_path,production_console=production_console)
     actor = users["researcher"]["account_id"]
@@ -510,7 +510,7 @@ def test_budget_stop_without_new_progress_consumes_retry_budget(tmp_path,product
 
 def test_concurrent_task_commits_keep_one_durable_result(tmp_path,production_console):
     from concurrent.futures import ThreadPoolExecutor
-    from src.formation_checkpoint_v1 import task_checkpoint_writer
+    from src.vorming.formation_checkpoint_v1 import task_checkpoint_writer
     console,envelope,data = prepared(tmp_path,production_console)
     first = checkpoint_context(console,envelope,data)
     first.plan_tasks(1)
@@ -560,7 +560,7 @@ def test_diagnostic_keeps_every_rejected_call_in_recorded_order(tmp_path,product
     assert [call["response"]["output_text"] for call in calls] == [f"recorded-output-{i}" for i in range(3)]
     assert "validator_input" not in diagnostic
     assert writer.store.resolve_input(diagnostic["validator_input_ref"]) == data
-    from src.metis_mcp_queries_v1 import McpQueries
+    from src.settings.metis_mcp_queries_v1 import McpQueries
     before = console._envelope(writer.snapshot_id)
     account = console._account(envelope["uploader_account_id"],current=True)
     result = McpQueries(console,"https://console.example.test").read(account,"get_processing_evidence",
@@ -573,11 +573,11 @@ def test_migrated_partial_work_can_resume_across_more_than_one_new_attempt(tmp_p
     import json
     from types import SimpleNamespace
     import time
-    import src.bounded_formation_v1 as bounded
-    from src.bounded_model_call_v1 import ModelCallLimits
+    import src.vorming.bounded_formation_v1 as bounded
+    from src.vorming.bounded_model_call_v1 import ModelCallLimits
     from src.operations_console_v1 import ConsoleError
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-    from src.source_bound_fields_v3 import MODE
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.vorming.source_bound_fields_v3 import MODE
     from scripts.migrate_processing_attempts import migrate
     from tests.test_recommendation_context_v3 import response_for
     console,users,_,_ = _system(tmp_path,production_console=production_console)
@@ -622,7 +622,7 @@ def test_migrated_partial_work_can_resume_across_more_than_one_new_attempt(tmp_p
 
 def test_task_storage_keeps_non_bounded_v1_retry_available(tmp_path,production_console,monkeypatch):
     from src.operations_console_v1 import ConsoleError
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
     from tests.test_console_read_architecture import _received
     console,users,_,_ = _system(tmp_path,production_console=production_console)
     actor=users['researcher']['account_id']
@@ -643,7 +643,7 @@ def test_task_storage_keeps_non_bounded_v1_retry_available(tmp_path,production_c
     def forbidden(*args,**kwargs):
         raise AssertionError('Retry must reuse compatible committed source views')
     monkeypatch.setattr(restarted,'_extract',forbidden)
-    monkeypatch.setattr('src.source_reconstruction_v1._with_status',forbidden)
+    monkeypatch.setattr('src.vorming.source_reconstruction_v1._with_status',forbidden)
     with pytest.raises(ConsoleError,match='pre_review_llm_response_invalid'):
         restarted.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=second)
     assert restarted._envelope(sid)['processing_attempts'][-1]['diagnostic']['source_views_ref']==console._envelope(sid)['processing_attempts'][-2]['diagnostic']['source_views_ref']

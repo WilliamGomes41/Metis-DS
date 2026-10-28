@@ -16,9 +16,9 @@ Rules (B18):
 import pytest
 from fastapi.testclient import TestClient
 
-from src.bounded_model_call_v1 import ModelCallLimits
+from src.vorming.bounded_model_call_v1 import ModelCallLimits
 from src.operations_console_v1 import ConsoleError, PRE_REVIEW_BLOCKED
-from src.processing_retry_v1 import finish, now, reserve, status
+from src.vorming.processing_retry_v1 import finish, now, reserve, status
 from tests.test_recoverable_formation_v1 import system
 
 BUDGET_REPLAY = {'identity': {'components': {'semantic_contract_version': 'contract-x'}},
@@ -117,7 +117,7 @@ def test_budget_exhausted_resume_with_progress_does_not_consume_retry_budget():
 def changed_contract(tmp_path, monkeypatch, *, production_console):
     state, sid, actor, *_ = system(tmp_path, production_console=production_console)
     assert state.processing_status(sid)['resume_allowed']  # resumable under the stored contract
-    import src.pre_review_semantic_v1 as semantic
+    import src.vorming.pre_review_semantic_v1 as semantic
     monkeypatch.setattr(semantic, 'STRENGTH_BINDING_VERSION', 'recommendation-strength-binding-v999')
     return state, sid, actor
 

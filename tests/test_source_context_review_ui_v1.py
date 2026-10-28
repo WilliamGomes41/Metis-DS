@@ -13,7 +13,7 @@ from html.parser import HTMLParser
 from fastapi.testclient import TestClient
 
 from src.operations_console_app import _source_context_panel
-from src.source_context_review_v1 import links_of, role_of
+from src.review.source_context_review_v1 import links_of, role_of
 from tests.test_source_context_review_v1 import _system
 
 
@@ -197,7 +197,7 @@ def test_context_ui_keeps_full_text_and_explicit_choices(tmp_path, *, production
     source['content']['clean_text'] = 'Letterlijke context. ' * 25 + 'Laatste bronvoorwaarde.'
     # This is a presentation fixture: retain internally valid source evidence.
     # Corrupt evidence is exercised separately and must never offer a disposition.
-    from src.source_accountability_v1 import KEY, record
+    from src.vorming.source_accountability_v1 import KEY, record
     evidence = source["metadata"][KEY]
     spans = [{"block_id": evidence["spans"][0]["block_id"], "start": 0,
               "end": len(source["content"]["clean_text"])}]

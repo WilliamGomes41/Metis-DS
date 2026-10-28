@@ -141,7 +141,7 @@ def test_roadmap_only_pr_does_not_rewrite_protocol_or_add_src_product_code() -> 
     assert root_protocol.count("De geldende normatieve baseline is Protocol v2.32.0") == 1
     assert not (ROOT / "docs" / "PROTOCOL_V2_32_RELIABILITY_EVIDENCE_BACKLOG_DELTA.md").exists()
     src_hits = []
-    for path in (ROOT / "src").glob("*.py"):
+    for path in (ROOT / "src").rglob("*.py"):
         text = path.read_text(encoding="utf-8")
         if "post-v2.31 betrouwbaarheid" in text or "019978b" in text:
             src_hits.append(path.name)

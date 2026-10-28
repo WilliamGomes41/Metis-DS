@@ -25,7 +25,7 @@ pytestmark = [
 
 # release-control-evidence: metrics teller noemer score-must-drop
 
-from src.admission_gate_v1 import (
+from src.vorming.admission_gate_v1 import (
     GATE_ALLOWED,
     GATE_BLOCKED,
     admit_candidate,
@@ -35,9 +35,9 @@ from src.admission_gate_v1 import (
     build_candidate_record,
     ordinary_review_queue,
 )
-from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES
-from src.extract_coverage_v1 import coverage_by_section
-from src.extract_metrics_v1 import (
+from src.review.beslisboom_path_v1 import CLOSED_BOOM_TYPES
+from src.vorming.extract_coverage_v1 import coverage_by_section
+from src.vorming.extract_metrics_v1 import (
     EXTRACT_QUALITY_METRICS,
     compute_extract_metrics,
     extract_quality_claim_allowed,
@@ -45,14 +45,14 @@ from src.extract_metrics_v1 import (
 from src.object_taxonomy_v1 import CLOSED_OBJECT_TYPES, section_role_for_path
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole, is_slow_review_duty
-from src.passage_register_v1 import (
+from src.vorming.passage_register_v1 import (
     PASSAGE_REGISTER_STATUSES,
     SUITABILITY_TO_REGISTER,
     apply_passage_register,
     passage_register_of,
     register_status_from_suitability,
 )
-from src.review_cockpit_v1 import SUITABILITY_VALUES
+from src.review.review_cockpit_v1 import SUITABILITY_VALUES
 from src.evaluation.validate_golden_set import validate, validate_extract_gold
 
 
@@ -329,7 +329,7 @@ def test_context_and_heading_passages_are_registered_not_dropped(tmp_path: Path,
 
 
 def test_register_projection_maps_suitability_without_deferred_review_writes(tmp_path: Path, *, production_console) -> None:
-    from src.passage_register_v1 import apply_register_from_review
+    from src.vorming.passage_register_v1 import apply_register_from_review
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
@@ -376,7 +376,7 @@ def test_register_human_disposition_does_not_create_machine_admission(tmp_path: 
     assert _admission(djg) == {}
     assert passage_register_of(djg).get("status") == "not_yet_assessed"
 
-    from src.passage_register_v1 import apply_register_from_review
+    from src.vorming.passage_register_v1 import apply_register_from_review
     live = apply_register_from_review(djg, suitability='geen_kenniseenheid')
     assert _admission(live) == {}
     assert passage_register_of(live).get("status") == "excluded_with_reason"

@@ -13,11 +13,11 @@ from pathlib import Path
 import jsonschema
 import pytest
 
-from src.source_evidence_resolution_v1 import resolve_proposal_evidence
-from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
-from src.semantic_passage_v1 import SemanticPassageError, semantic_source_blocks, semantic_units_from_proposal
-from src.pre_review_semantic_v1 import _request_payload, semantic_units_before_review
-from src.source_bound_fields_v2 import FIELDS, KEY, MODE
+from src.vorming.source_evidence_resolution_v1 import resolve_proposal_evidence
+from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates
+from src.vorming.semantic_passage_v1 import SemanticPassageError, semantic_source_blocks, semantic_units_from_proposal
+from src.vorming.pre_review_semantic_v1 import _request_payload, semantic_units_before_review
+from src.vorming.source_bound_fields_v2 import FIELDS, KEY, MODE
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures/smetten_offset_failure.json").read_text())
 TEXT = FIXTURE["request_block"]["text"]
@@ -139,8 +139,8 @@ def test_generic_fields_context_relations_and_nulls_share_one_resolver():
 
 
 def test_provider_path_preserves_raw_and_resolved_evidence_and_replays_diagnostics():
-    from src.attempt_diagnostics_v1 import checkpoint, replay_diagnostic, validator_identity
-    from src.semantic_replay_v1 import stable_json_hash
+    from src.vorming.attempt_diagnostics_v1 import checkpoint, replay_diagnostic, validator_identity
+    from src.vorming.semantic_replay_v1 import stable_json_hash
     attempt = {}
     def post(url, headers, payload, timeout):
         b = json.loads(payload["input"][1]["content"])["source_blocks"][0]
@@ -159,7 +159,7 @@ def test_provider_path_preserves_raw_and_resolved_evidence_and_replays_diagnosti
 
 
 def test_provider_resolution_failure_preserves_raw_diagnostic():
-    from src.attempt_diagnostics_v1 import checkpoint, replay_diagnostic
+    from src.vorming.attempt_diagnostics_v1 import checkpoint, replay_diagnostic
     from src.operations_console_v1 import ConsoleError
     attempt = {}
     def post(url, headers, payload, timeout):
@@ -228,8 +228,8 @@ def test_literal_relation_endpoints_reach_existing_relation_attachment():
 
 def test_console_literal_evidence_persists_and_replays_after_restart(tmp_path, *, production_console):
     from src.operations_console_v1 import OperationsConsole
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV
-    from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV
+    from src.vorming.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
     calls = []
     reject = [False]
     def post(url, headers, payload, timeout):

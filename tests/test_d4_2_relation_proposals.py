@@ -15,8 +15,8 @@ import hashlib
 import json
 from pathlib import Path
 
-from src.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, admission_of, apply_admission_gate
-from src.knowledge_relation_proposal_v1 import (
+from src.vorming.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, admission_of, apply_admission_gate
+from src.vorming.knowledge_relation_proposal_v1 import (
     relation_endpoint_compatible,
     relation_proposal_admission_codes,
 )
@@ -25,10 +25,10 @@ from src.knowledge_relations_v1 import (
     build_knowledge_relation,
 )
 from src.operations_console_v1 import OperationsConsole, SCHEMA_V13, SCHEMA_V14
-from src.pre_review_semantic_v1 import _proposal_schema, semantic_spec_from_fragments
-from src.processing_diagnostics_v1 import processing_issue_family
-from src.semantic_passage_v1 import semantic_source_blocks
-from src.semantic_transform_generic_v1 import transform, validate
+from src.vorming.pre_review_semantic_v1 import _proposal_schema, semantic_spec_from_fragments
+from src.vorming.processing_diagnostics_v1 import processing_issue_family
+from src.vorming.semantic_passage_v1 import semantic_source_blocks
+from src.vorming.semantic_transform_generic_v1 import transform, validate
 
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -13,12 +13,12 @@ pytestmark = [
 
 UI_FILES = (
     ROOT / "src" / "operations_console_app.py",
-    ROOT / "src" / "semantic_safety_app_v1.py",
+    ROOT / "src" / "settings" / "semantic_safety_app_v1.py",
     ROOT / "src" / "publish_readiness_ui_v1.py",
-    ROOT / "src" / "closed_review_loop_v1.py",
-    ROOT / "src" / "review_workboard_v1.py",
-    ROOT / "src" / "review_closure_v1.py",
-    ROOT / "src" / "deterministic_review_repair_v1.py",
+    ROOT / "src" / "review" / "closed_review_loop_v1.py",
+    ROOT / "src" / "review" / "review_workboard_v1.py",
+    ROOT / "src" / "review" / "review_closure_v1.py",
+    ROOT / "src" / "review" / "deterministic_review_repair_v1.py",
 )
 
 

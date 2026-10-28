@@ -12,10 +12,10 @@ import json
 
 import pytest
 
-from src.pre_review_semantic_v1 import semantic_spec_from_fragments
-from src.semantic_transform_generic_v1 import transform
-from src.admission_gate_v1 import apply_admission_gate
-from src.recommendation_coverage_v1 import assess, inventory
+from src.vorming.pre_review_semantic_v1 import semantic_spec_from_fragments
+from src.vorming.semantic_transform_generic_v1 import transform
+from src.vorming.admission_gate_v1 import apply_admission_gate
+from src.vorming.recommendation_coverage_v1 import assess, inventory
 from tests.test_recommendation_context_v3 import response_for, source
 
 FIRST = "Bespreek de voorkeuren"
@@ -75,7 +75,7 @@ def test_omitted_recommendation_gets_one_supplement_with_shared_budget_and_both_
     selected = [o for o in rows if (o.get("metadata") or {}).get("source_bound_fields")]
     assert len(selected) == 2
     assert all(o["metadata"]["admission"]["gate_result"] == "allowed" for o in selected)
-    from src.processing_evidence_export_v1 import processing_evidence_tables
+    from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
     tables, _ = processing_evidence_tables(snapshot_id="snap", revision="r", objects=rows,
         envelope={"semantic_replay": spec["_semantic_replay"]})
     assert [r["call_id"] for r in tables["model_calls"]] == ["call-1", "call-2"]
@@ -89,7 +89,7 @@ def test_supplement_abstention_remains_open_in_existing_remainder_no_third_call(
     pending = [o for o in rows if any(r["status"] == "open" for r in
         ((o.get("metadata") or {}).get("recommendation_coverage") or {}).get("entries", []))]
     assert pending and SECOND in pending[0]["content"]["clean_text"]
-    from src.passage_register_v1 import apply_passage_register
+    from src.vorming.passage_register_v1 import apply_passage_register
     assert apply_passage_register(pending)[0]["metadata"]["passage_register"]["status"] == "not_yet_assessed"
 
 
@@ -101,7 +101,7 @@ def test_invalid_supplement_keeps_valid_work_and_explicit_unresolved_source():
     evidence = spec["_semantic_replay"]["provider_evidence"]
     assert evidence["formation_incomplete"]
     assert evidence["pending_rejections"][0]["reason_code"] == "semantic_evidence_literal_not_found"
-    from src.source_accountability_v1 import evidence_of
+    from src.vorming.source_accountability_v1 import evidence_of
     assert any(evidence_of(o).get("text") == SECOND for o in rows)
 
 
@@ -119,9 +119,9 @@ def test_replay_revalidates_merged_proposal_without_another_provider_call():
 
 def console_v3_story(tmp_path, make_console, *, production_app):
     from src.operations_console_v1 import ConsoleError
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV
-    from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
-    from src.source_bound_fields_v3 import MODE
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV
+    from src.vorming.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
+    from src.vorming.source_bound_fields_v3 import MODE
     calls, fail = [], []
     def provider(_url, _headers, payload, _timeout):
         calls.append(payload)

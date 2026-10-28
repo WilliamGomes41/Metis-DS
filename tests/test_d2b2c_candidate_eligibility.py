@@ -8,13 +8,13 @@
 """
 from __future__ import annotations
 
-from src.admission_gate_v1 import (
+from src.vorming.admission_gate_v1 import (
     GATE_BLOCKED,
     admission_of,
     apply_admission_gate,
     is_inhoudelijk_candidate,
 )
-from src.candidate_eligibility_v1 import (
+from src.vorming.candidate_eligibility_v1 import (
     CANDIDATE_ELIGIBILITY_VERSION,
     REASON_EXPLICIT_TYPE,
     REASON_NO_TYPE,
@@ -23,9 +23,9 @@ from src.candidate_eligibility_v1 import (
     REASON_SEMANTIC_PROPOSAL,
     candidate_eligibility_of,
 )
-from src.domain_dimensions_v1 import processing_issue_objects
+from src.review.domain_dimensions_v1 import processing_issue_objects
 from src.integrity_kernel import compute_canonical_object_hash
-from src.passage_register_v1 import apply_passage_register, passage_register_of
+from src.vorming.passage_register_v1 import apply_passage_register, passage_register_of
 
 
 def _passage(
@@ -102,7 +102,7 @@ def test_explicit_deterministic_type_proposal_does_not_enter_admission() -> None
     assert eligibility["reason"] == REASON_EXPLICIT_TYPE
     assert eligibility["source"] == "deterministic"
     assert admission_of(row) == {}
-    from src.knowledge_path_v1 import content_reviewable
+    from src.review.knowledge_path_v1 import content_reviewable
     assert content_reviewable(row) is False
     assert is_inhoudelijk_candidate(row) is False
 

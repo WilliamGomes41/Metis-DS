@@ -8,10 +8,10 @@ import sys,json,tempfile
 from pathlib import Path
 sys.path.insert(0,__import__('os').environ.get('METIS_PROBE_REPO', str(Path(__file__).resolve().parents[2])))
 from fastapi.testclient import TestClient
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 from tests.postgres_support import database, install_schema
 from tests.production_support import production_application
-from src.knowledge_materialisation_v1 import validate_materialised_candidate
+from src.vorming.knowledge_materialisation_v1 import validate_materialised_candidate
 from tests.test_recommendation_context_v3 import response_for
 
 def scenario(expand, supply_selection=False):
@@ -29,7 +29,7 @@ def scenario(expand, supply_selection=False):
   units=s.source_units(snapshot_id=sid,object_id=obj['object_id']);assert len(units)==2
   before_spans=obj['metadata']['semantic_passage']['spans'];before_gate=obj['metadata']['admission']['gate_result']
   from src.operations_console_v1 import OperationsConsole
-  from src.semantic_passage_v1 import semantic_source_blocks
+  from src.vorming.semantic_passage_v1 import semantic_source_blocks
   original=OperationsConsole.correct_object
   def pass_selected_source(console,**kw):
    if supply_selection:

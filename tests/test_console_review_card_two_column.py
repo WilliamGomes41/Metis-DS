@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.open_original_v1 import researcher_visible_prose
+from src.review.open_original_v1 import researcher_visible_prose
 from src.operations_console_app import _esc, _render_review_index
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 

@@ -14,8 +14,8 @@ import pytest
 
 from src.operations_console_app import _render_review_index
 from src.publication_readiness_v1 import review_followup_queues, source_passage_closure
-from src.review_workboard_v1 import review_work_item, _workboard_card
-from src.review_duty_v1 import reviewer_route_counts
+from src.review.review_workboard_v1 import review_work_item, _workboard_card
+from src.review.review_duty_v1 import reviewer_route_counts
 from tests.test_vsa_review_workboard_v1 import (
     _QueueConsole, _account, _envelope, _obj, _system, _client, _login,
 )
@@ -44,7 +44,7 @@ def test_343_to_5_keeps_all_338_missing_admission_passages_reachable():
     contextual = _render_review_index("snap-test", objects, "tekst", task="contextual", bindings=[], fragments=_allowed_source())
     assert "allowed-0" in contextual
     assert "missing-0" not in contextual
-    from src.prepared_source_views_v1 import prepare
+    from src.vorming.prepared_source_views_v1 import prepare
     fragments = prepare(_allowed_source()).fragments
     for task, expected in (("disposition", {f"missing-{i}" for i in range(338)}),
                            ("inventory", {obj['object_id'] for obj in objects})):

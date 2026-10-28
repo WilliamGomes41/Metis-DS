@@ -13,7 +13,7 @@ import pytest
 
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
-from src.review_ledger import unregister_backend, verify_ledger
+from src.review.review_ledger import unregister_backend, verify_ledger
 from tests.complete_workflow_support import complete_console, complete_postgres  # noqa: F401
 from tests.semantic_fixture_support import bind_fixture_selections
 from tests.test_pg_console_without_disk_mirrors import CONSOLES, MirrorAccess

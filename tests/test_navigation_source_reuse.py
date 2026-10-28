@@ -35,14 +35,14 @@ def source_navigation(tmp_path, *, production_console):
 
 
 def test_navigation_reconstructs_each_source_once_per_call(source_navigation, monkeypatch):
-    import src.semantic_passage_v1 as semantic
+    import src.vorming.semantic_passage_v1 as semantic
     probe, fragments = source_navigation
     before = deepcopy((probe.objects, probe.envelopes, probe.bindings, fragments))
     original = semantic._reconstructed_blocks
     calls = []
 
     def counted(rows):
-        from src.prepared_source_views_v1 import preserve_fragments
+        from src.vorming.prepared_source_views_v1 import preserve_fragments
         rows = preserve_fragments(rows)
         if rows:
             calls.append(1)
@@ -57,7 +57,7 @@ def test_navigation_reconstructs_each_source_once_per_call(source_navigation, mo
 
 @pytest.mark.parametrize("change", ["none", "candidate_text", "source_text"])
 def test_complete_work_item_matches_uncached_validation(source_navigation, change):
-    from src.review_workboard_v1 import ReviewWorkInputs, review_work_item
+    from src.review.review_workboard_v1 import ReviewWorkInputs, review_work_item
     probe, fragments = source_navigation
     sid = "synthetic-0"
     if change == "candidate_text":
@@ -76,7 +76,7 @@ def test_complete_work_item_matches_uncached_validation(source_navigation, chang
 
 
 def test_source_changes_nested_scope_and_failure_do_not_reuse_stale_blocks(source_navigation, monkeypatch):
-    import src.knowledge_materialisation_v1 as materialisation
+    import src.vorming.knowledge_materialisation_v1 as materialisation
     probe, fragments = source_navigation
     obj = next(obj for obj in probe.objects["synthetic-0"] if obj.get("metadata", {}).get("semantic_passage", {}).get("spans"))
     spans = obj["metadata"]["semantic_passage"]["spans"]
@@ -111,8 +111,8 @@ def test_source_changes_nested_scope_and_failure_do_not_reuse_stale_blocks(sourc
 
 
 def test_reuse_never_caches_candidate_approval(source_navigation):
-    from src.knowledge_materialisation_v1 import source_reconstruction_scope
-    from src.knowledge_path_v1 import source_lineage_resolves
+    from src.vorming.knowledge_materialisation_v1 import source_reconstruction_scope
+    from src.review.knowledge_path_v1 import source_lineage_resolves
     probe, fragments = source_navigation
     obj = next(obj for obj in probe.objects["synthetic-0"] if obj.get("metadata", {}).get("semantic_passage", {}).get("spans"))
     original = deepcopy(obj)
@@ -125,7 +125,7 @@ def test_reuse_never_caches_candidate_approval(source_navigation):
 
 @pytest.mark.parametrize("original,replacement", [(1, True), (1, 1.0), (-0.0, 0.0)])
 def test_source_scalar_type_changes_do_not_reuse_prior_representation(source_navigation, original, replacement):
-    import src.knowledge_materialisation_v1 as materialisation
+    import src.vorming.knowledge_materialisation_v1 as materialisation
 
     _, fragments = source_navigation
     fragments[0]["source_page"] = original
@@ -141,8 +141,8 @@ def test_source_scalar_type_changes_do_not_reuse_prior_representation(source_nav
 def test_parallel_work_items_have_independent_source_scopes(source_navigation, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier, get_ident
-    import src.knowledge_materialisation_v1 as materialisation
-    from src.knowledge_path_v1 import source_lineage_resolves
+    import src.vorming.knowledge_materialisation_v1 as materialisation
+    from src.review.knowledge_path_v1 import source_lineage_resolves
     probe, fragments = source_navigation
     obj = next(obj for obj in probe.objects["synthetic-0"] if obj.get("metadata", {}).get("semantic_passage", {}).get("spans"))
     original = materialisation._selection_blocks
@@ -169,11 +169,11 @@ def test_parallel_work_items_have_independent_source_scopes(source_navigation, m
 
 
 def test_context_and_source_projection_share_views_without_caching_validation(monkeypatch):
-    import src.knowledge_materialisation_v1 as materialisation
-    import src.semantic_passage_v1 as semantic
-    from src.source_containers_v1 import source_accountability
-    from src.source_accountability_v1 import is_source_record
-    from src.source_context_review_v1 import verify_literal_source
+    import src.vorming.knowledge_materialisation_v1 as materialisation
+    import src.vorming.semantic_passage_v1 as semantic
+    from src.vorming.source_containers_v1 import source_accountability
+    from src.vorming.source_accountability_v1 import is_source_record
+    from src.review.source_context_review_v1 import verify_literal_source
     from tests.test_source_containers_v1 import context_story
     from tests.test_t10_source_accountability_authority import _context_inputs
 
@@ -205,10 +205,10 @@ def test_context_and_source_projection_share_views_without_caching_validation(mo
 
 
 def test_full_source_keeps_headings_and_input_changes_invalidate_both_views(source_navigation, monkeypatch):
-    import src.knowledge_materialisation_v1 as materialisation
-    from src.knowledge_path_v1 import source_lineage_resolves
-    from src.source_bound_fields_v2 import bind_context
-    from src.semantic_passage_v1 import semantic_source_blocks
+    import src.vorming.knowledge_materialisation_v1 as materialisation
+    from src.review.knowledge_path_v1 import source_lineage_resolves
+    from src.vorming.source_bound_fields_v2 import bind_context
+    from src.vorming.semantic_passage_v1 import semantic_source_blocks
 
     probe, fragments = source_navigation
     candidate = next(obj for obj in probe.objects["synthetic-0"]
@@ -245,10 +245,10 @@ def test_full_source_keeps_headings_and_input_changes_invalidate_both_views(sour
 
 
 def test_source_accountability_reads_source_once_with_unchanged_outcome(tmp_path, monkeypatch, *, production_console):
-    import src.knowledge_materialisation_v1 as materialisation
-    import src.source_context_review_v1 as context_review
-    from src.source_accountability_v1 import is_source_record
-    from src.source_containers_v1 import source_accountability
+    import src.vorming.knowledge_materialisation_v1 as materialisation
+    import src.review.source_context_review_v1 as context_review
+    from src.vorming.source_accountability_v1 import is_source_record
+    from src.vorming.source_containers_v1 import source_accountability
     console = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "source",
                                    runtime=tmp_path / "runtime")
     author = console.create_account(username="author", password="fixture-only", roles=("researcher",))

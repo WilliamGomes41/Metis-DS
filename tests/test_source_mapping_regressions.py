@@ -11,9 +11,9 @@ from zipfile import ZipFile
 import fitz
 import pytest
 
-from src.extract_pdf_v2 import extract
-from src.source_reconstruction_v1 import reconstruct_source_fragments
-from src.source_layout_v1 import mapped_raw_spans
+from src.vorming.extract_pdf_v2 import extract
+from src.vorming.source_reconstruction_v1 import reconstruct_source_fragments
+from src.vorming.source_layout_v1 import mapped_raw_spans
 from src.object_taxonomy_v1 import normalize_visible_prose
 
 
@@ -32,7 +32,7 @@ def test_five_line_dose_column_is_not_removed(tmp_path):
     fragments = extract(path, document_id="doc", source_id="source")
     assert not any(row.get("source_text_view", {}).get("exclusions") for row in fragments)
     assert any(row.get("source_layout_findings") for row in fragments)
-    from src.semantic_passage_v1 import semantic_source_blocks
+    from src.vorming.semantic_passage_v1 import semantic_source_blocks
     blocks = semantic_source_blocks(fragments)
     for dose in (20, 25, 30):
         assert str(dose) in " ".join(row["text"] for row in blocks)
@@ -78,9 +78,9 @@ def test_selection_can_include_only_join_boundary_or_exclude_it():
 
 
 def test_join_boundary_is_validated_and_exported():
-    from src.pre_review_semantic_v1 import semantic_spec_from_fragments
-    from src.semantic_transform_generic_v1 import transform
-    from src.processing_evidence_export_v1 import processing_evidence_tables, processing_evidence_zip
+    from src.vorming.pre_review_semantic_v1 import semantic_spec_from_fragments
+    from src.vorming.semantic_transform_generic_v1 import transform
+    from src.vorming.processing_evidence_export_v1 import processing_evidence_tables, processing_evidence_zip
     source = fragments()
     def provider(_url, _headers, payload, _timeout):
         block = json.loads(payload["input"][1]["content"])["source_blocks"][0]
@@ -159,7 +159,7 @@ def test_join_boundary_is_validated_and_exported():
 
 @pytest.mark.parametrize("field_contract_v2", [False, True])
 def test_replay_identity_binds_mapping_version(monkeypatch, field_contract_v2):
-    from src import pre_review_semantic_v1 as semantic
+    from src.vorming import pre_review_semantic_v1 as semantic
     args = dict(document_id="doc", model="test", blocks=[], evidence_blocks=[],
                 source_fragments=fragments(), formation_context={
                     "snapshot_id": "snap", "source_sha256": "a" * 64},

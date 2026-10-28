@@ -17,7 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.integrity_kernel import compute_canonical_object_hash, stamp_canonical_hashes
-from src.knowledge_relation_review_v1 import relation_choice_value
+from src.review.knowledge_relation_review_v1 import relation_choice_value
 from src.knowledge_relations_v1 import (
     CONFIRMED_FIELD,
     PROPOSED_FIELD,
@@ -442,7 +442,7 @@ def test_d43_does_not_make_new_format_relations_serving_authority(tmp_path: Path
 @pytest.mark.parametrize("choice_count", [0, 1, 2])
 def test_semantic_retry_preserves_relation_decisions(tmp_path: Path, choice_count: int, *, production_app, production_console) -> None:
     from html.parser import HTMLParser
-    from src.recommendation_semantics_v1 import PROPOSED_FIELD as SEMANTICS_FIELD
+    from src.vorming.recommendation_semantics_v1 import PROPOSED_FIELD as SEMANTICS_FIELD
     from tests.test_d3_3_human_recommendation_semantics import _proposal
 
     console = _console(tmp_path, production_console=production_console)

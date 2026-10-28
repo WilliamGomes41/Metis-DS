@@ -30,7 +30,7 @@ def test_passage_get_does_not_load_document_object_payloads(review_client, monke
 def test_passage_revision_is_rejected_after_another_object_changes(review_client):
     import re
     from copy import deepcopy
-    from src.review_passage_read_v1 import resolve_review_revision
+    from src.review.review_passage_read_v1 import resolve_review_revision
     from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
     import pytest
 
@@ -51,8 +51,8 @@ def test_passage_revision_is_rejected_after_another_object_changes(review_client
 
 @pytest.mark.parametrize('index', [0, 10, 19])
 def test_isolated_source_window_keeps_exact_candidate_evidence(review_client, index):
-    from src.source_reconstruction_v1 import review_source_window
-    from src.knowledge_materialisation_v1 import validate_materialised_candidate
+    from src.vorming.source_reconstruction_v1 import review_source_window
+    from src.vorming.knowledge_materialisation_v1 import validate_materialised_candidate
     console, _client, sid = review_client
     obj = [o for o in console.snapshot_objects(sid)
            if (o.get('metadata') or {}).get('semantic_passage', {}).get('spans')][index]
@@ -157,8 +157,8 @@ def test_compact_form_uses_the_real_review_command_and_refuses_invalid_context(r
 @pytest.mark.parametrize('review_client', ['large'], indirect=True)
 @pytest.mark.parametrize('many_targets', [False, True])
 def test_linked_context_outside_picker_page_keeps_full_projection(review_client, many_targets):
-    from src.review_passage_read_v1 import read_review_passage
-    from src.source_containers_v1 import source_accountability
+    from src.review.review_passage_read_v1 import read_review_passage
+    from src.vorming.source_containers_v1 import source_accountability
     console, _client, sid = review_client
     candidates = [o for o in console.snapshot_objects(sid)
                   if (o.get('metadata') or {}).get('semantic_passage', {}).get('spans')]
@@ -185,7 +185,7 @@ def test_linked_context_outside_picker_page_keeps_full_projection(review_client,
 
 def test_unknown_snapshot_and_database_failure_remain_distinct(review_client, monkeypatch):
     from src.operations_console_v1 import ConsoleError
-    from src.review_passage_read_v1 import read_review_passage
+    from src.review.review_passage_read_v1 import read_review_passage
     from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
     console, client, sid = review_client
     obj = next(o for o in console.snapshot_objects(sid)
@@ -204,9 +204,9 @@ def test_unknown_snapshot_and_database_failure_remain_distinct(review_client, mo
 @pytest.mark.parametrize('review_client', ['large'], indirect=True)
 def test_dependencies_include_incoming_and_outgoing_relations_beyond_picker(review_client):
     from copy import deepcopy
-    from src.revision_workflow import bump_patch, revise_object
+    from src.review.revision_workflow import bump_patch, revise_object
     from src.knowledge_relations_v1 import build_knowledge_relation
-    from src.review_passage_read_v1 import read_review_passage
+    from src.review.review_passage_read_v1 import read_review_passage
     console, _client, sid = review_client
     rows = deepcopy(console._load_objects(sid))
     candidates = [o for o in rows if (o.get('metadata') or {}).get('semantic_passage', {}).get('spans')]

@@ -12,7 +12,7 @@ import pytest
 
 from src.integrity_kernel import compute_canonical_object_hash
 from src.operations_console_v1 import OperationsConsole, ConsoleError
-from src.review_duty_v1 import exact_current_approver_ids
+from src.review.review_duty_v1 import exact_current_approver_ids
 from tests.test_t9_review_knowledge_authority import _console, _approve
 from tests.test_source_context_review_v1 import _system
 
@@ -85,7 +85,7 @@ def test_stale_review_writes_nothing(tmp_path, *, production_console):
 
 
 def test_forward_cutover_chain_and_old_approval_does_not_carry(tmp_path, *, production_console):
-    from src.revision_workflow import current_revisions, LINEAGE_CONTRACT
+    from src.review.revision_workflow import current_revisions, LINEAGE_CONTRACT
     console, _, reviewer, source, before, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     sid = command["snapshot_id"]
     initial = deepcopy(console.snapshot_objects(sid, include_blocked=True))
@@ -112,14 +112,14 @@ def test_forward_cutover_chain_and_old_approval_does_not_carry(tmp_path, *, prod
     assert approved in rows
     assert all(obj in rows for obj in initial)
     assert current_revisions(rows, snapshot_id=sid) == console.snapshot_objects(sid)
-    from src.review_closure_v1 import ReviewClosureConsole
+    from src.review.review_closure_v1 import ReviewClosureConsole
     restarted = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert restarted.snapshot_objects(sid, include_blocked=True) == rows
 
 
 @pytest.mark.parametrize("corruption", ["missing", "hash", "cycle", "scope", "downgrade", "inplace"])
 def test_strict_history_corruption_is_rejected_without_writes(tmp_path, corruption, *, production_console):
-    from src.revision_workflow import current_revisions, validate_revision_write
+    from src.review.revision_workflow import current_revisions, validate_revision_write
     from src.integrity_kernel import stamp_canonical_hashes
     console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
     _approve(console, reviewer, sid, obj)
@@ -147,7 +147,7 @@ def test_strict_history_corruption_is_rejected_without_writes(tmp_path, corrupti
 
 
 def test_legacy_unknown_is_not_proven_root_and_new_edge_is_exact(tmp_path, *, production_console):
-    from src.revision_workflow import revise_object, current_revisions
+    from src.review.revision_workflow import revise_object, current_revisions
     from src.integrity_kernel import stamp_canonical_hashes
     console, _, sid, original = _console(tmp_path, production_console=production_console)
     legacy = deepcopy(original)
@@ -164,7 +164,7 @@ def test_legacy_unknown_is_not_proven_root_and_new_edge_is_exact(tmp_path, *, pr
 
 
 def test_relation_supersedes_is_not_a_revision_predecessor(tmp_path, *, production_console):
-    from src.revision_workflow import revise_object
+    from src.review.revision_workflow import revise_object
     console, _, sid, original = _console(tmp_path, production_console=production_console)
     desired = deepcopy(original)
     desired["relations"] = [{"relation_type": "supersedes", "target_object_id": "different-object"}]
@@ -178,7 +178,7 @@ from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: E40
 
 
 def test_native_lineage_stale_fork_restart_and_reader_parity(recovery_postgres, tmp_path):
-    from src.revision_workflow import revise_object, current_revisions
+    from src.review.revision_workflow import revise_object, current_revisions
     from tests.test_lifecycle_withdrawal_recovery_v1 import _console as native_console
     from tests.test_publication_chain_recovery_v1 import FakeBlobStore
     from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
@@ -213,7 +213,7 @@ def test_native_lineage_stale_fork_restart_and_reader_parity(recovery_postgres, 
 
 def test_native_deferred_failure_rolls_back_strict_revision_and_review(recovery_postgres, tmp_path):
     import psycopg
-    from src.review_ledger import read_events
+    from src.review.review_ledger import read_events
     from tests.test_lifecycle_withdrawal_recovery_v1 import _console as native_console
     from tests.test_publication_chain_recovery_v1 import FakeBlobStore
     state = native_console(tmp_path, recovery_postgres, FakeBlobStore())
@@ -238,7 +238,7 @@ def test_native_deferred_failure_rolls_back_strict_revision_and_review(recovery_
 
 
 def test_legacy_history_reorder_cannot_restore_old_current_approval(tmp_path, *, production_console):
-    from src.revision_workflow import validate_revision_write
+    from src.review.revision_workflow import validate_revision_write
     from src.integrity_kernel import stamp_canonical_hashes
     console, _, sid, first = _console(tmp_path, production_console=production_console)
     second = deepcopy(first)
@@ -252,7 +252,7 @@ def test_legacy_history_reorder_cannot_restore_old_current_approval(tmp_path, *,
 @pytest.mark.parametrize("backend", ["file", "postgres"])
 def test_locked_storage_rejects_adversarial_history(attack, backend, recovery_postgres, tmp_path, *, production_console):
     from src.integrity_kernel import stamp_canonical_hashes
-    from src.revision_workflow import revise_object
+    from src.review.revision_workflow import revise_object
     from tests.test_lifecycle_withdrawal_recovery_v1 import _console as native_console
     from tests.test_publication_chain_recovery_v1 import FakeBlobStore
     from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
@@ -294,7 +294,7 @@ def test_locked_storage_rejects_adversarial_history(attack, backend, recovery_po
 
 
 def test_revision_rebinds_exact_relation_endpoints_and_preserves_predecessor(tmp_path, *, production_console):
-    from src.revision_workflow import revise_object
+    from src.review.revision_workflow import revise_object
     from src.knowledge_relations_v1 import build_knowledge_relation, validate_knowledge_relation_set
     from src.integrity_kernel import stamp_canonical_hashes
     _, _, sid, candidate = _console(tmp_path, production_console=production_console)
@@ -318,7 +318,7 @@ def test_revision_rebinds_exact_relation_endpoints_and_preserves_predecessor(tmp
 
 
 def test_reprocessing_retirement_and_reappearance_preserve_strict_history(tmp_path, *, production_console):
-    from src.revision_workflow import reprocessed_history, current_revisions
+    from src.review.revision_workflow import reprocessed_history, current_revisions
     _, _, sid, candidate = _console(tmp_path, production_console=production_console)
     retired = reprocessed_history([candidate], [], snapshot_id=sid, actor="researcher")
     assert retired[0] == candidate
@@ -334,7 +334,7 @@ def test_reprocessing_retirement_and_reappearance_preserve_strict_history(tmp_pa
 
 
 def test_successor_object_diff_reports_retired_candidate_as_removed(tmp_path, *, production_console):
-    from src.revision_workflow import reprocessed_history
+    from src.review.revision_workflow import reprocessed_history
     console, _, sid, candidate = _console(tmp_path, production_console=production_console)
     history = reprocessed_history([candidate], [], snapshot_id=sid, actor="researcher")
     before = deepcopy(history)
@@ -351,7 +351,7 @@ def test_successor_object_diff_reports_retired_candidate_as_removed(tmp_path, *,
 
 
 def test_reprocessing_retains_nonknowledge_ancestor_of_promoted_candidate(tmp_path, *, production_console):
-    from src.revision_workflow import revise_object, reprocessed_history, current_revisions, knowledge_revision
+    from src.review.revision_workflow import revise_object, reprocessed_history, current_revisions, knowledge_revision
     from src.integrity_kernel import stamp_canonical_hashes
     _, _, sid, candidate = _console(tmp_path, production_console=production_console)
     structural = deepcopy(candidate)
@@ -367,7 +367,7 @@ def test_reprocessing_retains_nonknowledge_ancestor_of_promoted_candidate(tmp_pa
 
 
 def test_legacy_published_history_remains_readable_but_cannot_gain_successor(tmp_path, *, production_console):
-    from src.revision_workflow import revise_object, validate_revision_write, current_revisions
+    from src.review.revision_workflow import revise_object, validate_revision_write, current_revisions
     _, _, sid, candidate = _console(tmp_path, production_console=production_console)
     published = deepcopy(candidate)
     published["governance"]["publication_status"] = "published"
@@ -432,7 +432,7 @@ def test_source_context_rekeys_proposed_relations_before_readmission(tmp_path, *
     from tests.test_d4_3_human_relation_confirmation import _console as relation_console, _accounts, _plant_proposals, _html, REC, COND, EXPL
     from tests.semantic_fixture_support import install_fixture_history
     from src.integrity_kernel import stamp_canonical_hashes
-    from src.knowledge_relation_proposal_v1 import relation_proposal_admission_codes
+    from src.vorming.knowledge_relation_proposal_v1 import relation_proposal_admission_codes
     from src.knowledge_relations_v1 import validate_knowledge_relation_set
     state = relation_console(tmp_path, production_console=production_console)
     accounts = _accounts(state)
@@ -476,7 +476,7 @@ def test_source_context_rekeys_proposed_relations_before_readmission(tmp_path, *
 def test_scoped_commit_discards_stale_unrelated_published_maps(tmp_path, profile, *, production_console):
     state, reviewer, sid, _ = _console(tmp_path, production_console=production_console)
     if profile == "closure":
-        from src.review_closure_v1 import ReviewClosureConsole
+        from src.review.review_closure_v1 import ReviewClosureConsole
         state = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     # Only envelope/binding state is relevant to this cross-snapshot race.
     unrelated = "snap-unrelated-history"
@@ -495,7 +495,7 @@ def test_scoped_commit_discards_stale_unrelated_published_maps(tmp_path, profile
 
 
 def test_identical_legacy_duplicate_ancestor_is_immutable_when_successor_is_added(tmp_path, *, production_console):
-    from src.revision_workflow import revise_object, validate_revision_write
+    from src.review.revision_workflow import revise_object, validate_revision_write
     _, _, sid, candidate = _console(tmp_path, production_console=production_console)
     rows = [deepcopy(candidate), deepcopy(candidate)]
     successor = revise_object(rows[-1], rows[-1], snapshot_id=sid, actor="reviewer",

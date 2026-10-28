@@ -1,7 +1,7 @@
 """Offline fixtures for the review overview: real formation, synthetic identities, no credentials."""
 from copy import deepcopy
 
-from src.source_accountability_v1 import CONTAINERS_VERSION, VERSION as LEGACY_VERSION
+from src.vorming.source_accountability_v1 import CONTAINERS_VERSION, VERSION as LEGACY_VERSION
 
 from .support import REVIEWER, command, console_at
 
@@ -21,8 +21,8 @@ def select_with_sources(console):
     coverage-remainder builder; only the offline proposal is fixed.
     """
     from src.integrity_kernel import stable_hash
-    from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
-    from src.semantic_passage_v1 import (_coverage_remainders, _reconstructed_blocks,
+    from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates
+    from src.vorming.semantic_passage_v1 import (_coverage_remainders, _reconstructed_blocks,
                                          semantic_source_blocks, semantic_units_from_proposal)
     original = console._fragments_and_spec
 

@@ -88,7 +88,7 @@ def redact(text):
 
 class JsonLogFormatter(logging.Formatter):
     def format(self, record):
-        from src.attempt_diagnostics_v1 import deployment_identity
+        from src.vorming.attempt_diagnostics_v1 import deployment_identity
         try:
             message = record.getMessage()
         except Exception:

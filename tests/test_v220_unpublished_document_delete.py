@@ -15,10 +15,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.admission_gate_v1 import is_inhoudelijk_candidate
-from src.extract_html_v1 import extract as extract_html
-from src.knowledge_path_v1 import content_reviewable
-from src.four_eyes_v1 import requires_four_eyes
+from src.vorming.admission_gate_v1 import is_inhoudelijk_candidate
+from src.vorming.extract_html_v1 import extract as extract_html
+from src.review.knowledge_path_v1 import content_reviewable
+from src.review.four_eyes_v1 import requires_four_eyes
 from src.object_taxonomy_v1 import (
     is_advice_weight,
     is_continuation_fragment,
@@ -29,7 +29,7 @@ from src.object_taxonomy_v1 import (
     published_object_type,
     recommendation_strength_ui_applies,
 )
-from src.open_original_v1 import researcher_visible_prose
+from src.review.open_original_v1 import researcher_visible_prose
 from src.operations_console_v1 import (
     CAPTURED,
     ConsoleError,
@@ -40,7 +40,7 @@ from src.operations_console_v1 import (
     safe_store_filename,
     slow_review_duty,
 )
-from src.review_ledger import read_events
+from src.review.review_ledger import read_events
 
 
 ROOT = Path(__file__).resolve().parents[1]

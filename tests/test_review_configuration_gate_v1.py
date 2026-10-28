@@ -12,8 +12,8 @@ from copy import deepcopy
 
 import pytest
 
-from src.four_eyes_v1 import publish_authorization_contract
-from src.review_configuration_v1 import CONTRACT
+from src.review.four_eyes_v1 import publish_authorization_contract
+from src.review.review_configuration_v1 import CONTRACT
 from test_t4_single_knowledge_path_invariants import _allowed_candidate, _allowed_source, _binding, _stamp_hash
 
 UPLOADER = "uploader-anne"
@@ -197,7 +197,7 @@ def test_uploader_sole_high_risk_object_is_refused_with_dutch_message():
 
 @pytest.mark.parametrize("uploader_id", ["", "   "])
 def test_validate_configuration_refuses_blank_uploader(uploader_id):
-    from src.review_configuration_v1 import validate_configuration
+    from src.review.review_configuration_v1 import validate_configuration
     with pytest.raises(ValueError) as error:
         validate_configuration(_config("one_other", ["rev-a"]), uploader_id=uploader_id)
     assert str(error.value) == "uploader_identity_missing"
@@ -293,7 +293,7 @@ def test_sherlock_chosen_one_approved_one_open_blocks_total_readiness(tmp_path, 
 
 
 def test_chosen_without_loadable_source_text_blocks_with_own_code(tmp_path, monkeypatch, *, production_console):
-    import src.source_preparation_context_v1 as context
+    import src.vorming.source_preparation_context_v1 as context
     from src.operations_console_app import BLOCKER_LABELS
     from src.operations_console_v1 import ConsoleError
     ready, console, accounts, sid, _ = _harness(tmp_path, production_console=production_console)

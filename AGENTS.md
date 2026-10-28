@@ -81,7 +81,7 @@ Run `python scripts/check_architecture_boundaries.py` before opening a PR. CI re
 
 ### Hard invariant: one deterministic candidate creator before human review
 
-Until human review, deterministic materialisation MUST be the sole KnowledgeCandidate creator. Reuse `src/knowledge_materialisation_v1.py::materialise_knowledge_candidates`; no provider, selection, evidence-binding, transformation, Admission, retry, or recovery path may introduce a second candidate creator.
+Until human review, deterministic materialisation MUST be the sole KnowledgeCandidate creator. Reuse `src/vorming/knowledge_materialisation_v1.py::materialise_knowledge_candidates`; no provider, selection, evidence-binding, transformation, Admission, retry, or recovery path may introduce a second candidate creator.
 
 - Providers and selection/evidence-binding code MUST return proposals, validated source references, assessments, or failure findings. They MUST NOT independently assign candidate identity, reconstruct canonical candidate text, or create an alternative candidate/source mapping.
 - Deterministic materialisation alone owns candidate text, candidate identity, and the candidate's source mapping. Transformation and Admission MAY validate, project, enrich non-authoritative metadata, or reject its output; they MUST NOT independently create, rewrite, split, merge, or silently repair a candidate. A necessary selection correction MUST return through the existing selection and deterministic materialisation path.

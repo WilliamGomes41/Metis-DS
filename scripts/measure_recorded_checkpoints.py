@@ -23,13 +23,13 @@ from tests.postgres_support import database,install_schema
 from tests.production_support import production_application
 from tests.semantic_fixture_support import bind_fixture_selections
 from src.console_performance_v1 import performance_scope
-from src.processing_retry_v1 import reserve,now
-from src.source_selection_v1 import configuration
-from src.source_preparation_context_v1 import extraction_record
+from src.vorming.processing_retry_v1 import reserve,now
+from src.vorming.source_selection_v1 import configuration
+from src.vorming.source_preparation_context_v1 import extraction_record
 from src.workflows.formation_task_store_v1 import FormationTaskStore
-from src.attempt_diagnostics_v1 import validator_identity
+from src.vorming.attempt_diagnostics_v1 import validator_identity
 from scripts.migrate_processing_attempts import migrate
-from src.semantic_replay_v1 import stable_json_hash
+from src.vorming.semantic_replay_v1 import stable_json_hash
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)

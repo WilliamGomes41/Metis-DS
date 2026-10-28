@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import pytest
 
-from src.four_eyes_v1 import historical_requires_four_eyes, publish_authorization_contract, requires_four_eyes
+from src.review.four_eyes_v1 import historical_requires_four_eyes, publish_authorization_contract, requires_four_eyes
 from src.operations_console_v1 import ConsoleError
-from src.review_configuration_v1 import (
+from src.review.review_configuration_v1 import (
     CONTRACT, CONTRACT_V2, configured_approval, policy_for_configuration, validate_configuration,
 )
-from src.review_policy_v1 import CONTRACT as POLICY
+from src.review.review_policy_v1 import CONTRACT as POLICY
 from test_t4_single_knowledge_path_invariants import _allowed_candidate, _allowed_source, _binding, _stamp_hash
 
 UPLOADER = "uploader-anne"
@@ -319,8 +319,8 @@ def test_kernel_decision_tree_one_of_two_is_refused_explicitly(kernel, source):
 def _approve_as_exception(console, sid, reviewer):
     """Approve the reviewable passage as an exception (content four eyes); settle the rest."""
     from src.operations_console_v1 import review_lane
-    from src.passage_register_v1 import passage_register_of
-    from src.review_disposition_v1 import definitive_review_disposition
+    from src.vorming.passage_register_v1 import passage_register_of
+    from src.review.review_disposition_v1 import definitive_review_disposition
     target = next(o for o in console.snapshot_objects(sid) if o.get("object_type") == "unclassified")
     console.review_object(actor_id=reviewer, snapshot_id=sid, object_id=target["object_id"],
                           decision="approve", confirmed_object_type="exception")
@@ -365,7 +365,7 @@ def test_kernel_content_four_eyes_without_four_eyes_choice_needs_the_other_perso
 ])
 def test_kernel_content_four_eyes_under_one_reviewer_policy_routes_through_participation(kernel, option,
                                                                                           reviewers, first):
-    from src import review_participation_v1
+    from src.review import review_participation_v1
     console, ids = kernel
     publisher = console.create_account(username="pub", password="fixture-only-pub", roles=("publisher",))
     sid = _ingest(console, ids, _choice(option, [ids[r] for r in reviewers]))["snapshot_id"]

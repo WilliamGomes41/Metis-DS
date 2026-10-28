@@ -4,7 +4,7 @@ import hashlib
 
 import pytest
 
-from src.open_original_v1 import (
+from src.review.open_original_v1 import (
     OpenOriginalError,
     document_visible_prose,
     full_document_segments,
@@ -192,7 +192,7 @@ def test_multiple_json_locators_preserve_disjoint_duplicate_occurrences():
 
 
 def test_extractor_ordinals_locate_same_line_duplicates_and_skip_chrome(tmp_path):
-    from src.extract_html_v1 import extract
+    from src.vorming.extract_html_v1 import extract
 
     source = b'<nav class="site-nav"><p>Repeated</p></nav><p>Repeated</p><p></p><p>Repeated</p><footer><p>Repeated</p></footer>'
     path = tmp_path / "source.html"
@@ -206,7 +206,7 @@ def test_extractor_ordinals_locate_same_line_duplicates_and_skip_chrome(tmp_path
 
 @pytest.mark.parametrize("newline", [b"\n", b"\r\n", b"\r"])
 def test_extracted_multiline_ordinals_map_back_to_original_freeze(tmp_path, newline):
-    from src.extract_html_v1 import extract
+    from src.vorming.extract_html_v1 import extract
 
     source = newline.join([b"<p>First</p>", b"<p>Second</p>", b"<p>Third</p>"])
     path = tmp_path / "source.html"

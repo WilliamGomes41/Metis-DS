@@ -81,7 +81,7 @@ def test_bend_matches_existing_pending_second_review_route(tmp_path, route, inde
     """All four inputs of the abstraction; other console preconditions hold."""
     from test_d5_3a_binding_aware_review_duty import _obj, _binding
     from test_t4_single_knowledge_path_invariants import _allowed_source
-    from src.review_duty_v1 import reviewer_route_for
+    from src.review.review_duty_v1 import reviewer_route_for
 
     if route == "Standalone":
         actual = importlib.util.find_spec("src.second_review_workflow_v3") is not None

@@ -8,10 +8,10 @@
 from copy import deepcopy
 import pytest
 
-from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
-from src.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal, SemanticPassageError
-from src.semantic_transform_generic_v1 import transform
-from src.admission_gate_v1 import admission_of
+from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates
+from src.vorming.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal, SemanticPassageError
+from src.vorming.semantic_transform_generic_v1 import transform
+from src.vorming.admission_gate_v1 import admission_of
 from tests.test_t7_creator_cut import _fragment, _manifest, _gate, _proposal
 
 
@@ -117,13 +117,13 @@ def test_domain_block_keeps_a_materialised_candidate():
     result = _gate(rows, fragments)
     assert admission_of(result[0])["gate_result"] == "blocked"
     assert result[0]["object_id"] == rows[0]["object_id"]
-    from src.knowledge_path_v1 import content_reviewable
+    from src.review.knowledge_path_v1 import content_reviewable
     assert not content_reviewable(result[0])
 
 
 def test_materialisation_failure_preserves_independent_recovery(monkeypatch):
     import json
-    from src import recoverable_formation_v1 as recovery
+    from src.vorming import recoverable_formation_v1 as recovery
     from tests.test_recommendation_context_v3 import response_for, source
     from tests.test_recommendation_coverage_v1 import FIRST, SECOND
     fragments = [{**source(text)[0], "fragment_id": str(i), "fragment_hash": str(i)}
@@ -160,7 +160,7 @@ def test_materialisation_failure_preserves_independent_recovery(monkeypatch):
 
 
 def test_transform_refuses_forged_candidate_before_returning_a_bundle():
-    from src.knowledge_materialisation_v1 import MaterialisationError
+    from src.vorming.knowledge_materialisation_v1 import MaterialisationError
     fragments, decisions = _inputs()
     candidates = materialise_knowledge_candidates(decisions, document_id="doc-t8", fragments=fragments)
     candidates[0]["semantic_passage"].update(formation_mode="semantic-source-bound-v1", model="fixture",
@@ -174,7 +174,7 @@ def test_transform_refuses_forged_candidate_before_returning_a_bundle():
 
 
 def test_failed_preparation_keeps_previous_bundle_across_restart(tmp_path, monkeypatch, *, production_console):
-    from src import knowledge_materialisation_v1 as materialisation
+    from src.vorming import knowledge_materialisation_v1 as materialisation
     from tests.test_recoverable_formation_v1 import system
     state, sid, actor, reviewer, _calls, _mode, make, bind = system(tmp_path, broken=False, production_console=production_console)
     before = deepcopy(state.snapshot_objects(sid))
@@ -200,7 +200,7 @@ def test_failed_preparation_keeps_previous_bundle_across_restart(tmp_path, monke
 
 
 def test_incomplete_raw_mapping_cannot_materialise(monkeypatch):
-    from src import knowledge_materialisation_v1 as materialisation
+    from src.vorming import knowledge_materialisation_v1 as materialisation
     fragments, decisions = _inputs()
     original = materialisation._selection_blocks
     def incomplete(rows):
@@ -224,8 +224,8 @@ def test_empty_selected_text_has_its_original_materialisation_reason():
 
 
 def test_producer_exposes_materialisation_reason_as_controlled_processing_evidence(monkeypatch):
-    from src import semantic_passage_v1 as selection
-    from src.pre_review_semantic_v1 import semantic_spec_from_fragments
+    from src.vorming import semantic_passage_v1 as selection
+    from src.vorming.pre_review_semantic_v1 import semantic_spec_from_fragments
     from src.operations_console_v1 import ConsoleError
     fragments, decisions = _inputs()
     original = selection._project_semantic_selection
@@ -253,7 +253,7 @@ def test_producer_exposes_materialisation_reason_as_controlled_processing_eviden
 def test_revision_materialisation_discards_unselected_additional_refs(tmp_path, *, production_console):
     from tests.test_recoverable_formation_v1 import system
     from tests.test_recommendation_coverage_v1 import FIRST, SECOND
-    from src.knowledge_materialisation_v1 import validate_materialised_candidate
+    from src.vorming.knowledge_materialisation_v1 import validate_materialised_candidate
     state, sid, actor, reviewer, _calls, _mode, _make, _bind = system(tmp_path, broken=False, production_console=production_console)
     rows = state.snapshot_objects(sid)
     first = next(row for row in rows if row["content"]["clean_text"] == FIRST)

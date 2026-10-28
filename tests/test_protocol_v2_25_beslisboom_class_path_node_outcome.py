@@ -422,7 +422,7 @@ def test_v225_out_of_scope_matches_owner_lock() -> None:
 
 def test_v225_no_product_feature_code_in_this_pr() -> None:
     src_hits = []
-    for path in (ROOT / "src").glob("*.py"):
+    for path in (ROOT / "src").rglob("*.py"):
         text = path.read_text(encoding="utf-8")
         if "PROTOCOL_V2_25" in text or "object_type_path_node_outcome" in text:
             src_hits.append(path.name)

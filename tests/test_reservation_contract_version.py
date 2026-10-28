@@ -11,7 +11,7 @@ from datetime import timedelta
 import pytest
 
 from src.operations_console_v1 import ConsoleError, PRE_REVIEW_BLOCKED
-from src.processing_retry_v1 import expire_running, finish, now, reserve
+from src.vorming.processing_retry_v1 import expire_running, finish, now, reserve
 
 
 def _envelope(mode):
@@ -22,7 +22,7 @@ def _envelope(mode):
 
 
 def _expected(v2=False, v3=False):
-    from src.pre_review_semantic_v1 import semantic_contract_version
+    from src.vorming.pre_review_semantic_v1 import semantic_contract_version
     return semantic_contract_version(field_contract_v2=v2, field_contract_v3=v3)
 
 
@@ -88,7 +88,7 @@ def blocked(tmp_path, *, production_console):
 
 
 def test_retry_refreshes_configuration_before_reserving(blocked, monkeypatch):
-    from src.pre_review_semantic_v1 import semantic_contract_version_for_mode, SEMANTIC_MODE
+    from src.vorming.pre_review_semantic_v1 import semantic_contract_version_for_mode, SEMANTIC_MODE
     console, sid, actor = blocked
     try:
         console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id='retry-1')
@@ -101,7 +101,7 @@ def test_retry_refreshes_configuration_before_reserving(blocked, monkeypatch):
 
 
 def test_retry_fails_closed_when_configuration_refresh_fails(blocked, monkeypatch):
-    import src.source_selection_v1 as selection
+    import src.vorming.source_selection_v1 as selection
     console, sid, actor = blocked
     before = list(console._envelope(sid)['processing_attempts'])
 
@@ -114,7 +114,7 @@ def test_retry_fails_closed_when_configuration_refresh_fails(blocked, monkeypatc
 
 
 def test_retry_replaces_stale_stored_configuration(blocked):
-    from src.pre_review_semantic_v1 import semantic_contract_version_for_mode, SEMANTIC_MODE
+    from src.vorming.pre_review_semantic_v1 import semantic_contract_version_for_mode, SEMANTIC_MODE
     console, sid, actor = blocked
     envelope = console._envelope(sid)
     envelope['processing_configuration'] = {'mode': 'stale-mode'}
@@ -132,7 +132,7 @@ def test_retry_replaces_stale_stored_configuration(blocked):
 
 def test_concurrent_retries_all_reserve_the_refreshed_contract(blocked):
     import threading
-    from src.pre_review_semantic_v1 import semantic_contract_version_for_mode, SEMANTIC_MODE
+    from src.vorming.pre_review_semantic_v1 import semantic_contract_version_for_mode, SEMANTIC_MODE
     console, sid, actor = blocked
     barrier = threading.Barrier(4)
 
@@ -157,7 +157,7 @@ def test_retry_fails_with_configuration_changed_after_mid_flight_deploy(blocked,
     # Reservation reads configuration A; a deploy switches to B before execution.
     # The retry attempt MOET pin A and MOET stop with processing_configuration_changed;
     # work under B MAG NIET start.
-    import src.source_selection_v1 as selection
+    import src.vorming.source_selection_v1 as selection
     console, sid, actor = blocked
     real = selection.configuration
     calls = {'n': 0}
@@ -180,7 +180,7 @@ def test_retry_fails_with_configuration_changed_after_mid_flight_deploy(blocked,
 
 def test_duplicate_retry_command_keeps_its_pinned_configuration(blocked, monkeypatch):
     # A repeated command returns the existing attempt; its configuration MAG NIET be overwritten.
-    import src.source_selection_v1 as selection
+    import src.vorming.source_selection_v1 as selection
     console, sid, actor = blocked
     try:
         console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id='retry-dup')
@@ -211,7 +211,7 @@ def test_retry_pin_is_a_copy_not_a_shared_reference(blocked):
 
 def test_retry_without_configuration_fails_closed_without_attempt(blocked, monkeypatch):
     # Legacy/empty configuration: MOET fail closed (processing_configuration_unavailable), NOOIT KeyError.
-    import src.source_selection_v1 as selection
+    import src.vorming.source_selection_v1 as selection
     console, sid, actor = blocked
     before = list(console._envelope(sid)['processing_attempts'])
     monkeypatch.setattr(selection, 'configuration', lambda c: None)

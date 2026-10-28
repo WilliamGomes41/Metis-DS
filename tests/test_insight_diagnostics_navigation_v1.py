@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from fastapi.testclient import TestClient
 
-from src.review_ledger import read_events
+from src.review.review_ledger import read_events
 from tests.test_d5_4_review_interaction_evidence import PASSWORD, _system
 from tests.test_review_context_navigation_asgi_v1 import installed  # noqa: F401
 

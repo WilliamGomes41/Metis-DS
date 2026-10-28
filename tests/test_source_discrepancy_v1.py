@@ -17,12 +17,12 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
-from src.closed_review_loop_v1 import REVIEW_AUDIT_EVIDENCE_EVENT
+from src.review.closed_review_loop_v1 import REVIEW_AUDIT_EVIDENCE_EVENT
 from src.operations_console_v1 import ConsoleError
-from src.quality_metrics_app_v1 import capture
-from src.quality_metrics_v1 import build_report
-from src.review_ledger import read_events
-from src.source_discrepancy_v1 import CATEGORIES, assert_allowed, normalize
+from src.settings.quality_metrics_app_v1 import capture
+from src.settings.quality_metrics_v1 import build_report
+from src.review.review_ledger import read_events
+from src.review.source_discrepancy_v1 import CATEGORIES, assert_allowed, normalize
 from test_d5_4_review_interaction_evidence import PASSWORD, _system
 
 AS_OF = "2026-10-22T00:00:00+00:00"
@@ -105,8 +105,8 @@ def test_reported_discrepancy_blocks_unchanged_approval_and_is_recorded_on_rejec
 
 
 def test_decision_tree_report_is_attributed_to_the_semantic_route() -> None:
-    from src.decision_tree_construction_v1 import FORMATION_MODE
-    from src.source_discrepancy_v1 import formation_of
+    from src.vorming.decision_tree_construction_v1 import FORMATION_MODE
+    from src.review.source_discrepancy_v1 import formation_of
     tree_object = {"metadata": {"semantic_passage": {"formation_mode": FORMATION_MODE, "model": "m",
                                                      "selection_origin": "proposal_selected"}}}
     assert formation_of(tree_object) == {"route": "semantic", "formation_mode": FORMATION_MODE, "model": "m"}
@@ -155,7 +155,7 @@ def test_review_card_offers_the_report_and_keeps_input_when_approval_is_refused(
 
 
 def test_report_travels_through_the_structured_correction(tmp_path, *, production_console) -> None:
-    from src.deterministic_review_repair_v1 import StructuredRepairRequired
+    from src.review.deterministic_review_repair_v1 import StructuredRepairRequired
     console, users, snapshot_id, object_id = _system(tmp_path, production_console=production_console)
     reviewer = users["reviewer_a"]["account_id"]
     with pytest.raises(StructuredRepairRequired) as required:

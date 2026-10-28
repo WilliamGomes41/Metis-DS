@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from src.api_access_v1 import (
+from src.settings.api_access_v1 import (
     ApiAccessConflict,
     ApiAccessError,
     ApiAccessStoreError,

@@ -17,7 +17,7 @@ import sys
 import types
 
 from src.console_performance_v1 import performance_scope
-from src import review_workboard_v1 as current
+from src.review import review_workboard_v1 as current
 from tests.personal_review_fixture_support import bind, prepare, snapshot
 
 BASE = 'efed882c8f2bef850ea2aff47d744214b83131c8'

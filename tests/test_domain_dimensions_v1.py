@@ -8,8 +8,8 @@
 from __future__ import annotations
 from tests.review_authority_fixture_support import materialised_row, source_fragments, approved_bindings
 
-from src.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, blocked_audit_lane
-from src.domain_dimensions_v1 import (
+from src.vorming.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, blocked_audit_lane
+from src.review.domain_dimensions_v1 import (
     knowledge_candidate_dimension,
     knowledge_relations_dimension,
     processing_issue_dimension,
@@ -18,7 +18,7 @@ from src.domain_dimensions_v1 import (
     review_decision_dimension,
     source_structure_dimension,
 )
-from src.proportionate_review_v1 import normal_risk_batch_counts
+from src.review.proportionate_review_v1 import normal_risk_batch_counts
 
 
 def _obj(

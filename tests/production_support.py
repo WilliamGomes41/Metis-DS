@@ -4,7 +4,7 @@ from threading import RLock
 
 import pytest
 
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 
 
 # Only configuration/composition touches process globals. Commands issued by

@@ -177,7 +177,7 @@ def test_v232_leaves_prior_deltas_untouched_except_index_conflict_pointers() -> 
 
 def test_v232_no_product_feature_code_in_this_pr() -> None:
     src_hits = []
-    for path in (ROOT / "src").glob("*.py"):
+    for path in (ROOT / "src").rglob("*.py"):
         text = path.read_text(encoding="utf-8")
         if "PROTOCOL_V2_32" in text or "documenten_ui_room_name" in text:
             src_hits.append(path.name)

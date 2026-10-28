@@ -293,7 +293,7 @@ def test_source_overview_never_loads_full_payloads_or_offers_unchecked_commands(
 
 
 def test_bounded_notices_do_not_claim_complete_when_later_documents_are_unchecked(tmp_path, production_console, production_app, monkeypatch):
-    import src.insight_v1 as insight
+    import src.settings.insight_v1 as insight
     from tests.test_d5_4_review_interaction_evidence import HTML
     console, users, sid, _ = _system(tmp_path, production_console=production_console)
     console.receive_source(actor_id=users['researcher']['account_id'], filename='later.html', data=HTML,
@@ -339,8 +339,8 @@ def test_json_volume_uses_native_decoder_bytes_without_reencoding(tmp_path, prod
 
 def test_dispatch_expiry_scan_respects_bound(tmp_path, production_console):
     from datetime import timedelta
-    from src.processing_retry_v1 import now
-    from src.source_processing_dispatch_v1 import pending
+    from src.vorming.processing_retry_v1 import now
+    from src.vorming.source_processing_dispatch_v1 import pending
     from tests.test_d5_4_review_interaction_evidence import HTML
     console, users, sid, _ = _system(tmp_path, production_console=production_console)
     snapshots = []
@@ -371,7 +371,7 @@ def _received(console, users, title='Unstarted'):
 
 
 def test_slow_telemetry_outside_read_transaction(tmp_path, production_console, production_app, monkeypatch):
-    import src.insight_v1 as insight
+    import src.settings.insight_v1 as insight
     console, users, sid, _ = _system(tmp_path, production_console=production_console)
     original = insight._telemetry_by_document
     def slow(since):
@@ -384,7 +384,7 @@ def test_slow_telemetry_outside_read_transaction(tmp_path, production_console, p
 
 
 def test_telemetry_has_no_open_read_transaction(tmp_path, production_console, production_app, monkeypatch):
-    import src.insight_v1 as insight
+    import src.settings.insight_v1 as insight
     from src.workflows.workflow_transaction_v1 import workflow_transaction_active
     console, users, sid, _ = _system(tmp_path, production_console=production_console)
     observed = []
@@ -469,8 +469,8 @@ def test_source_overview_refreshes_running_document(tmp_path, production_console
 
 def test_pending_finds_task_after_expired_document_in_same_round(tmp_path, production_console):
     from datetime import timedelta
-    from src.processing_retry_v1 import now
-    from src.source_processing_dispatch_v1 import pending
+    from src.vorming.processing_retry_v1 import now
+    from src.vorming.source_processing_dispatch_v1 import pending
     console, users, _, _ = _system(tmp_path, production_console=production_console)
     ids = []
     for index in range(2):
@@ -486,7 +486,7 @@ def test_pending_finds_task_after_expired_document_in_same_round(tmp_path, produ
 
 
 def test_quality_source_and_ledger_io_outside_read_transaction(tmp_path, production_console, monkeypatch):
-    import src.quality_metrics_app_v1 as quality
+    import src.settings.quality_metrics_app_v1 as quality
     from src.workflows.workflow_transaction_v1 import workflow_transaction_active
     console, users, sid, _ = _system(tmp_path, production_console=production_console)
     original = console.review_source_fragments
@@ -510,7 +510,7 @@ def test_quality_source_and_ledger_io_outside_read_transaction(tmp_path, product
 
 
 def test_notices_budget_returns_cursor_without_open_transaction(tmp_path, production_console, production_app, monkeypatch, caplog):
-    import src.insight_v1 as insight
+    import src.settings.insight_v1 as insight
     from src.workflows.workflow_transaction_v1 import workflow_transaction_active
     console, users, sid, _ = _system(tmp_path, production_console=production_console)
     monkeypatch.setattr(insight, 'NOTICE_TIME_BUDGET_SECONDS', 0)
@@ -524,7 +524,7 @@ def test_notices_budget_returns_cursor_without_open_transaction(tmp_path, produc
 
 
 def test_notices_statement_timeout_preserves_previous_batch(tmp_path, production_console, production_app, monkeypatch, caplog):
-    import src.insight_v1 as insight
+    import src.settings.insight_v1 as insight
     from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
     console, users, sid, _ = _system(tmp_path, production_console=production_console)
     store = console.workflow_document_store
@@ -566,7 +566,7 @@ def test_notices_statement_timeout_preserves_previous_batch(tmp_path, production
 @pytest.mark.parametrize('state', ['failed', 'expired'])
 def test_failed_or_expired_latest_attempt_is_a_stored_block(tmp_path, production_console, production_app, state):
     from datetime import timedelta
-    from src.processing_retry_v1 import now
+    from src.vorming.processing_retry_v1 import now
     console, users, _, _ = _system(tmp_path, production_console=production_console)
     sid = _received(console, users)
     console.reserve_source_selection(actor_id=users['researcher']['account_id'], snapshot_id=sid,
@@ -684,14 +684,14 @@ def test_installed_review_and_publish_gets_have_single_explicit_owner(tmp_path, 
     import inspect
     console, users, sid, _ = _system(tmp_path, production_console=production_console)
     app = production_app(console)
-    for path, owner in [('/review', 'src.review_workboard_v1'), ('/publish', 'src.publish_readiness_ui_v1')]:
+    for path, owner in [('/review', 'src.review.review_workboard_v1'), ('/publish', 'src.publish_readiness_ui_v1')]:
         routes = [r for r in app.routes if getattr(r, 'path', '') == path and 'GET' in (getattr(r, 'methods', None) or ())]
         assert len(routes) == 1
         assert inspect.unwrap(routes[0].endpoint).__module__ == owner
 
 
 def test_native_review_targeted_inputs_preserve_full_domain_result(tmp_path, production_console):
-    from src.review_workboard_v1 import review_work_item
+    from src.review.review_workboard_v1 import review_work_item
     console, users, sid, _ = _system(tmp_path, production_console=production_console)
     account = users['reviewer_a']
     full = review_work_item(console, account=account, envelope=console.workflow_document_store.get_envelope(sid))

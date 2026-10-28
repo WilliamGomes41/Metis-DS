@@ -18,8 +18,8 @@ from fastapi.testclient import TestClient
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig, PostgresCanonicalPublicationStore
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
 from src.operations_console_v1 import ConsoleError, review_lane
-from src.passage_register_v1 import passage_register_of
-from src.review_disposition_v1 import definitive_review_disposition
+from src.vorming.passage_register_v1 import passage_register_of
+from src.review.review_disposition_v1 import definitive_review_disposition
 from src.workflows.workflow_documents_cutover_v1 import _PostgresWorkflowDocumentsMixin
 from src.workflows.workflow_remaining_cutover_v1 import (
     PostgresCompleteWorkflowDurablePublicationConsole,

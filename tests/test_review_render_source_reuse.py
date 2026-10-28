@@ -18,7 +18,7 @@ from tests.semantic_fixture_support import bind_fixture_selections
 
 @pytest.fixture
 def review_client(tmp_path, request, monkeypatch, *, production_app, production_console):
-    import src.review_workboard_v1 as workboard
+    import src.review.review_workboard_v1 as workboard
 
     # Compare cached and uncached HTML at the same observation instant, including
     # the visible counter timestamp; CI requests can cross a minute boundary.
@@ -32,7 +32,7 @@ def review_client(tmp_path, request, monkeypatch, *, production_app, production_
     texts = [f"Begrip {i} is een beschrijving van een afzonderlijke waarneming." for i in range(count)]
     retained = getattr(request, "param", None) == "retained"
     if retained:
-        from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+        from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
         from tests.test_recommendation_context_v3 import response_for
         core = "Gebruik geen zalf."
         texts.insert(0, core)
@@ -76,11 +76,11 @@ def review_client(tmp_path, request, monkeypatch, *, production_app, production_
 @pytest.mark.parametrize("task", ["structure", "contextual", "batch", "inventory", "disposition",
                                   "waiting", "history", "second_review", "repair", "object"])
 def test_http_review_render_reuses_source_and_matches_uncached_read(review_client, monkeypatch, task):
-    import src.knowledge_materialisation_v1 as materialisation
-    import src.semantic_passage_v1 as semantic
+    import src.vorming.knowledge_materialisation_v1 as materialisation
+    import src.vorming.semantic_passage_v1 as semantic
     import src.operations_console_app as ui
-    import src.review_workboard_v1 as workboard
-    import src.source_selection_ui_v1 as selection
+    import src.review.review_workboard_v1 as workboard
+    import src.vorming.source_selection_ui_v1 as selection
 
     console, client, sid = review_client
     before = deepcopy(console.snapshot_objects(sid))
@@ -103,7 +103,7 @@ def test_http_review_render_reuses_source_and_matches_uncached_read(review_clien
     calls = []
 
     def counted(rows):
-        from src.prepared_source_views_v1 import preserve_fragments, stored_blocks
+        from src.vorming.prepared_source_views_v1 import preserve_fragments, stored_blocks
         rows = preserve_fragments(rows)
         if rows and stored_blocks(rows) is None:
             calls.append(1)
@@ -153,10 +153,10 @@ def test_http_overview_does_not_serialize_full_source_per_candidate(review_clien
 
 @pytest.mark.parametrize("review_client", ["retained"], indirect=True)
 def test_postgres_overview_reuses_full_source_for_retained_records(review_client, monkeypatch):
-    import src.knowledge_materialisation_v1 as materialisation
-    import src.semantic_passage_v1 as semantic
-    import src.review_workboard_v1 as workboard
-    from src.source_accountability_v1 import is_source_record
+    import src.vorming.knowledge_materialisation_v1 as materialisation
+    import src.vorming.semantic_passage_v1 as semantic
+    import src.review.review_workboard_v1 as workboard
+    from src.vorming.source_accountability_v1 import is_source_record
     from src.workflows.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin
 
     console, client, sid = review_client
@@ -204,7 +204,7 @@ def test_postgres_overview_reuses_full_source_for_retained_records(review_client
 def test_workboard_projects_each_current_duty_once(review_client, monkeypatch):
     """One workboard result must share its duties across counts and routes."""
     from collections import Counter
-    import src.review_duty_v1 as duties
+    import src.review.review_duty_v1 as duties
 
     console, client, sid = review_client
     current = console.snapshot_objects(sid)
@@ -253,7 +253,7 @@ def test_workboard_pages_metadata_before_native_enrichment(review_client, monkey
 
 
 def test_workboard_does_not_read_global_event_history(review_client, monkeypatch):
-    import src.review_workboard_v1 as workboard
+    import src.review.review_workboard_v1 as workboard
     _console, client, _sid = review_client
 
     def forbidden(*args, **kwargs):

@@ -1,7 +1,7 @@
 """Read-only publication observations; canonical storage remains the authority."""
 from datetime import datetime, timezone
 
-from src.processing_trace_v1 import clean_runtime, digest, mapping, runtime_identity, sha, token
+from src.vorming.processing_trace_v1 import clean_runtime, digest, mapping, runtime_identity, sha, token
 from src.section_incident_v1 import timestamp
 from src.integrity_kernel import compute_canonical_object_hash
 

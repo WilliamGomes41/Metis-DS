@@ -90,7 +90,7 @@ def test_agents_requires_one_deterministic_candidate_creator_before_review():
     section = agents.split("### Hard invariant: one deterministic candidate creator before human review", 1)[1].split("\n### ", 1)[0]
     for obligation in (
         "deterministic materialisation MUST be the sole KnowledgeCandidate creator",
-        "src/knowledge_materialisation_v1.py::materialise_knowledge_candidates",
+        "src/vorming/knowledge_materialisation_v1.py::materialise_knowledge_candidates",
         "They MUST NOT independently assign candidate identity",
         "they MUST NOT independently create, rewrite, split, merge, or silently repair a candidate",
         "Rejection MUST preserve source work and recovery findings",

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from src.request_diagnostics_v1 import diagnostic_phase
 
-from src.revision_workflow import current_revisions, validate_revision_write
+from src.review.revision_workflow import current_revisions, validate_revision_write
 
 import hashlib
 import json
@@ -92,7 +92,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             if row is None:
                 raise WorkflowDocumentStoreError('unknown_snapshot')
             envelope = dict(row['review_envelope'])
-            from src.recoverable_formation_v1 import incomplete
+            from src.vorming.recoverable_formation_v1 import incomplete
             # A negative prefilter only: uncertain/open formation still runs
             # the existing complete check, including current source closure.
             envelope['_review_check_formation'] = incomplete({'semantic_replay': row['formation_notice']}) or (
@@ -789,7 +789,7 @@ class _PostgresWorkflowDocumentsMixin:
     @diagnostic_phase("document_list")
     def source_selection_documents(self, *, actor_id: str, document: str = "") -> list[dict[str, Any]]:
         from src.workflows.workflow_transaction_v1 import workflow_read_transaction
-        from src.source_selection_v1 import authorize_account
+        from src.vorming.source_selection_v1 import authorize_account
         actor = self._account(actor_id, current=True)
         if actor.get("retirement"):
             raise ConsoleError("not_authenticated")

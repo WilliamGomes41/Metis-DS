@@ -14,8 +14,8 @@ from copy import deepcopy
 import pytest
 
 from src.operations_console_v1 import ConsoleError
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-from src.source_bound_fields_v3 import MODE
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+from src.vorming.source_bound_fields_v3 import MODE
 from tests.production_support import restart_production
 from tests.test_d5_4_review_interaction_evidence import _system
 from tests.test_recommendation_context_v3 import response_for
@@ -57,7 +57,7 @@ def test_new_worker_reuses_exact_sources_and_tasks_with_extractor_and_reconstruc
     def forbidden(*args,**kwargs):
         raise AssertionError('Compatible source preparation must be read, not extracted or reconstructed')
     monkeypatch.setattr(restarted,'_extract',forbidden)
-    monkeypatch.setattr('src.source_reconstruction_v1._with_status',forbidden)
+    monkeypatch.setattr('src.vorming.source_reconstruction_v1._with_status',forbidden)
     following,_=restarted.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id='resume',
         expected_revision=restarted.objects_revision(sid))
     restarted.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=following)
@@ -94,7 +94,7 @@ def test_invalid_committed_evidence_stops_before_model_work(tmp_path,production_
                 (attempt['diagnostic']['validator_input_ref']['context_id'],))
     restarted=restart_production(console);bind(restarted)
     if damage=='extractor':
-        monkeypatch.setattr('src.source_preparation_context_v1.extractor_contract',lambda kind:'different-extractor')
+        monkeypatch.setattr('src.vorming.source_preparation_context_v1.extractor_contract',lambda kind:'different-extractor')
     following,_=restarted.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id='damage-resume',
         expected_revision=restarted.objects_revision(sid))
     with pytest.raises((ConsoleError,WorkflowDocumentStoreError),match=expected):
@@ -145,9 +145,9 @@ def test_explicit_authorized_reextraction_remains_available(tmp_path,production_
 
 
 def test_immutable_views_match_existing_source_projections_and_mutable_inputs_stay_checked():
-    from src.prepared_source_views_v1 import prepare,stored_blocks
-    from src.semantic_passage_v1 import _reconstructed_blocks
-    from src.pre_review_semantic_v1 import _content_fragments,_candidate_fragments,_evidence_fragments
+    from src.vorming.prepared_source_views_v1 import prepare,stored_blocks
+    from src.vorming.semantic_passage_v1 import _reconstructed_blocks
+    from src.vorming.pre_review_semantic_v1 import _content_fragments,_candidate_fragments,_evidence_fragments
     from src.integrity_kernel import stable_hash
     from tests.test_recommendation_context_v3 import source
     raw=source('Gebruik geen zalf.',heading='Bij een natte huid:')
@@ -163,7 +163,7 @@ def test_immutable_views_match_existing_source_projections_and_mutable_inputs_st
         immutable[0]['raw_text']='changed'
     with pytest.raises(ConsoleError,match='source_views_carrier_immutable'):
         immutable.append({})
-    from src.prepared_source_views_v1 import PreparedSource
+    from src.vorming.prepared_source_views_v1 import PreparedSource
     damaged=json.loads(json.dumps(root.payload))
     damaged['views']['full']['blocks'][0][1]['_raw_source_mapping'][0]['raw_end']=999999
     with pytest.raises(ConsoleError,match='source_views_integrity_failed'):
@@ -177,8 +177,8 @@ def test_immutable_views_match_existing_source_projections_and_mutable_inputs_st
 
 def test_source_view_acceptance_is_atomic_unique_and_claim_fenced(tmp_path,production_console):
     from concurrent.futures import ThreadPoolExecutor
-    from src.prepared_source_views_v1 import prepare
-    from src.source_preparation_context_v1 import stored_extraction
+    from src.vorming.prepared_source_views_v1 import prepare
+    from src.vorming.source_preparation_context_v1 import stored_extraction
     from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
     from tests.test_formation_task_store_postgres import prepared,checkpoint_context
     console,envelope,data=prepared(tmp_path,production_console)

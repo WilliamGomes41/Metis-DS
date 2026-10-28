@@ -6,8 +6,8 @@ They never stamp admission or bypass source resolution.
 import json
 
 from src.object_taxonomy_v1 import propose_object_type
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-from src.recommendation_semantics_v1 import source_literal_strength, source_label_direction
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+from src.vorming.recommendation_semantics_v1 import source_literal_strength, source_label_direction
 
 
 def bind_fixture_selections(console, selections=None, relations=None):
@@ -90,7 +90,7 @@ def _decision_tree_response(data):
     A structured export is answered as a faithful model would: its items and
     explicit branches and bundles, read only from the request payload.
     """
-    from src.decision_tree_proposal_v1 import CONTRACT
+    from src.vorming.decision_tree_proposal_v1 import CONTRACT
     if any((item.get("record") or {}).get("export_id") for item in data["evidence_items"].values()):
         proposal = export_tree_proposal(data)
         return {"status": "completed", "output": [{"type": "message", "content": [
@@ -108,7 +108,7 @@ def _decision_tree_response(data):
 
 def export_tree_proposal(data, *, roles=None):
     """Units, connections and bundles exactly as the export states them."""
-    from src.decision_tree_proposal_v1 import CONTRACT
+    from src.vorming.decision_tree_proposal_v1 import CONTRACT
     items = data["evidence_items"]
     block_of = {fid: block for block in data["source_blocks"] for fid in block["source_fragment_ids"]}
     units, ref_of, containers = [], {}, {}
@@ -173,9 +173,9 @@ def legacy_recommendation_fixture(console, snapshot_id):
 def materialised_fixture(text, *, proposed_type="recommendation", document_id="doc-fixture"):
     """Build one source-valid canonical fixture through selection and its creator."""
     from hashlib import sha256
-    from src.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal
-    from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
-    from src.semantic_transform_generic_v1 import transform
+    from src.vorming.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal
+    from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates
+    from src.vorming.semantic_transform_generic_v1 import transform
     from src.integrity_kernel import stable_hash
     digest = sha256(text.encode()).hexdigest()
     fragments = [{"fragment_id": "fixture-source", "fragment_hash": digest,

@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from src.document_status_v1 import DocumentStatusReadinessMixin
+from src.documents.document_status_v1 import DocumentStatusReadinessMixin
 from src.operations_console_v1 import ConsoleError
 from src.publication_readiness_v1 import PublicationReadinessMixin
 
@@ -72,7 +72,7 @@ class _BoundaryConsole(
 
 
 def test_document_status_has_no_publisher_impersonation_boundary() -> None:
-    source = (ROOT / "src" / "document_status_v1.py").read_text(encoding="utf-8")
+    source = (ROOT / "src" / "documents" / "document_status_v1.py").read_text(encoding="utf-8")
 
     assert "_require_role" not in DocumentStatusReadinessMixin.__dict__
     assert "_READ_ONLY_STATUS_ACTOR" not in source

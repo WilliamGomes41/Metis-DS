@@ -1,6 +1,6 @@
 """Fixtures explicitly realize context via the real kernel command, never flags."""
-from src.admission_gate_v1 import admission_of
-from src.source_context_review_v1 import projection, role_of, links_of
+from src.vorming.admission_gate_v1 import admission_of
+from src.review.source_context_review_v1 import projection, role_of, links_of
 
 
 def bind_detected_context(console, snapshot_id, reviewer_id):

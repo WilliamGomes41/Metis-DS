@@ -14,9 +14,9 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-from src.knowledge_materialisation_v1 import validate_materialised_candidate
-from src.source_bound_fields_v3 import validate_object_fields
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+from src.vorming.knowledge_materialisation_v1 import validate_materialised_candidate
+from src.vorming.source_bound_fields_v3 import validate_object_fields
 from tests.test_recommendation_context_v3 import response_for
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -108,7 +108,7 @@ def repair_setup(request, tmp_path, *, production_console):
 
 def assert_complete(console, sid, oid):
     from src.integrity_kernel import compute_canonical_object_hash
-    from src.source_bound_fields_v2 import validated_context
+    from src.vorming.source_bound_fields_v2 import validated_context
     obj = console._current_object(sid, oid)
     fragments = console.review_source_fragments(sid)
     validate_materialised_candidate(obj, fragments=fragments)
@@ -160,7 +160,7 @@ def test_repeated_text_selects_second_position_without_inheriting_meaning(repair
 
 
 def test_old_approval_is_retained_and_invalidated(repair_setup, *, production_app, production_console):
-    from src.review_ledger import read_events
+    from src.review.review_ledger import read_events
     console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=obj['object_id'],
         decision='approve', confirmed_object_type='recommendation', recommendation_direction='against',
@@ -180,7 +180,7 @@ def test_old_approval_is_retained_and_invalidated(repair_setup, *, production_ap
 def test_overlapping_http_corrections_have_one_winner(repair_setup, *, production_app, production_console):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
-    from src.review_ledger import read_events
+    from src.review.review_ledger import read_events
     console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     units = console.source_units(snapshot_id=sid, object_id=obj['object_id'])
     revision = console.objects_revision(sid)
@@ -204,7 +204,7 @@ def test_overlapping_http_corrections_have_one_winner(repair_setup, *, productio
 
 @pytest.mark.parametrize("kind", ["source", "merge"])
 def test_failed_http_commit_rolls_back_objects_bindings_and_audit(repair_setup, monkeypatch, kind, *, production_app, production_console):
-    from src.review_ledger import read_events
+    from src.review.review_ledger import read_events
     console, sid, obj, reviewer, fresh = repair_setup(secondary="Bespreek de opties." if kind == "merge" else None, production_console=production_console)
     console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid, object_id=obj["object_id"],
         decision="approve", confirmed_object_type="recommendation", recommendation_direction="against",
@@ -256,7 +256,7 @@ def test_failed_http_commit_rolls_back_objects_bindings_and_audit(repair_setup, 
 
 def test_direct_kernel_rejects_partial_materialisation_before_storage(repair_setup, *, production_console):
     from src.operations_console_v1 import OperationsConsole, ConsoleError
-    from src.review_ledger import read_events
+    from src.review.review_ledger import read_events
     console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=obj['object_id'],
                          decision='revise', comment='Correctie nodig.')
@@ -303,8 +303,8 @@ print(json.dumps(assert_complete(console, sid, oid)))
 
 def test_source_identity_rechecked_at_actual_commit(repair_setup, monkeypatch, *, production_console):
     from src.operations_console_v1 import OperationsConsole, ConsoleError
-    from src.source_bound_fields_v2 import rebind_revision_evidence
-    from src.review_ledger import read_events
+    from src.vorming.source_bound_fields_v2 import rebind_revision_evidence
+    from src.review.review_ledger import read_events
     console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     # The supported direct kernel entrance has preparation outside the lock.
     console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=obj['object_id'],
@@ -318,7 +318,7 @@ def test_source_identity_rechecked_at_actual_commit(repair_setup, monkeypatch, *
         if console.immutable_source_store is not None:
             locator = console._envelope(sid)['immutable_storage_locator']
             console.immutable_source_store.blobs[locator] = b'changed source bytes'
-    monkeypatch.setattr('src.source_bound_fields_v2.rebind_revision_evidence', corrupt_source)
+    monkeypatch.setattr('src.vorming.source_bound_fields_v2.rebind_revision_evidence', corrupt_source)
     with pytest.raises(ConsoleError, match='freeze_bytes_missing|immutable_source_recovery_failed'):
         OperationsConsole.correct_object(console, actor_id=reviewer['account_id'], snapshot_id=sid,
             object_id=obj['object_id'], expected_revision=console.objects_revision(sid),
@@ -329,8 +329,8 @@ def test_source_identity_rechecked_at_actual_commit(repair_setup, monkeypatch, *
 
 def test_authorization_revoked_during_preparation_cannot_commit(repair_setup, monkeypatch, *, production_console):
     from src.operations_console_v1 import OperationsConsole, ConsoleError
-    from src.source_bound_fields_v2 import rebind_revision_evidence
-    from src.review_ledger import read_events
+    from src.vorming.source_bound_fields_v2 import rebind_revision_evidence
+    from src.review.review_ledger import read_events
     console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     publisher = console.create_account(username='publisher', password=PASSWORD, roles=('publisher',))
     peer = fresh()  # Start before creating the legacy revise fixture.
@@ -341,7 +341,7 @@ def test_authorization_revoked_during_preparation_cannot_commit(repair_setup, mo
     def revoke(previous, revised, *, fragments):
         rebind_revision_evidence(previous, revised, fragments=fragments)
         peer.assign_roles(actor_id=publisher['account_id'], account_id=reviewer['account_id'], roles=['publisher'])
-    monkeypatch.setattr('src.source_bound_fields_v2.rebind_revision_evidence', revoke)
+    monkeypatch.setattr('src.vorming.source_bound_fields_v2.rebind_revision_evidence', revoke)
     with pytest.raises(ConsoleError, match='correction_role_required'):
         OperationsConsole.correct_object(console, actor_id=reviewer['account_id'], snapshot_id=sid,
             object_id=obj['object_id'], expected_revision=console.objects_revision(sid),
@@ -399,7 +399,7 @@ def test_nonadjacent_units_do_not_silently_include_the_gap(repair_setup, *, prod
 
 def test_older_direct_preparation_cannot_overwrite_a_committed_winner(repair_setup, monkeypatch, *, production_console):
     from src.operations_console_v1 import OperationsConsole, ConsoleError
-    import src.source_bound_fields_v2 as fields
+    import src.vorming.source_bound_fields_v2 as fields
     console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     revision = console.objects_revision(sid)
     selection = {'decision_kind':'semantic_selection', 'selection_origin':'proposal_selected',
@@ -421,7 +421,7 @@ def test_older_direct_preparation_cannot_overwrite_a_committed_winner(repair_set
             object_id=obj['object_id'], patch=patch, materialisation_decision=selection,
             expected_revision=revision)
     assert fresh()._current_object(sid, obj['object_id']) == winner[0]
-    from src.review_ledger import read_events
+    from src.review.review_ledger import read_events
     assert len([event for event in read_events(fresh()._ledger_path)
                 if event['event_type']=='quality_object_corrected']) == 1
 
@@ -463,5 +463,5 @@ def _assert_failed_command_readback(console, fresh, sid, before, events=None):
     else:
         assert after == before
         if events is not None:
-            from src.review_ledger import read_events
+            from src.review.review_ledger import read_events
             assert read_events(restarted._ledger_path) == events

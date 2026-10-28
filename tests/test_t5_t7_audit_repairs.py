@@ -14,11 +14,11 @@ import json
 
 import pytest
 
-from src.four_eyes_v1 import publish_authorization_contract
-from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
-from src.knowledge_path_v1 import content_reviewable, source_lineage_resolves
-from src.recoverable_formation_v1 import preserve_unchanged
-from src.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal
+from src.review.four_eyes_v1 import publish_authorization_contract
+from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates
+from src.review.knowledge_path_v1 import content_reviewable, source_lineage_resolves
+from src.vorming.recoverable_formation_v1 import preserve_unchanged
+from src.vorming.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal
 from test_t7_creator_cut import _fragment, _proposal
 from test_t4_single_knowledge_path_invariants import (
     _allowed_candidate, _allowed_source, _binding, _stamp_hash,

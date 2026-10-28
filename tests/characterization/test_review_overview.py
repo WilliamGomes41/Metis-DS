@@ -18,7 +18,7 @@ CASES = ["guideline_index", "guideline_inventory", "guideline_disposition", "gui
 @pytest.mark.parametrize("case", CASES)
 def test_review_overview_golden(case, tmp_path, monkeypatch, golden, production_console):
     import src.operations_console_app as ui
-    import src.review_workboard_v1 as board
+    import src.review.review_workboard_v1 as board
 
     console, sid, account = (tree_document if case.startswith("tree") else guideline_document)(tmp_path, production_console=production_console)
     before = console._envelopes.copy()
@@ -45,8 +45,8 @@ def test_review_overview_golden(case, tmp_path, monkeypatch, golden, production_
 def test_review_route_table_golden(tmp_path, golden, production_console, production_app):
     """Freeze production routes, including the four scoped view-check endpoints."""
     from src.operations_console_app import create_console_app
-    from src.proportionate_review_v1 import ProportionateReviewConsole, install_proportionate_review_routes
-    from src.review_workboard_v1 import install_review_workboard
+    from src.review.proportionate_review_v1 import ProportionateReviewConsole, install_proportionate_review_routes
+    from src.review.review_workboard_v1 import install_review_workboard
     from .support import console_at
     console = console_at(tmp_path, production_console=production_console)
     app = production_app(console)

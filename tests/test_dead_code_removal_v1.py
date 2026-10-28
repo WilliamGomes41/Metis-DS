@@ -25,17 +25,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 REMOVED = {
     "src.audit_archive_store_v1": ("_archive_coordinates",),
-    "src.extract_metrics_v1": ("_source_count", "_match_gold_row", "_status_ok"),
+    "src.vorming.extract_metrics_v1": ("_source_count", "_match_gold_row", "_status_ok"),
     "src.forensic_trace_v1": ("_objects_for_span", "pending_rejection_keys", "source_lineage_acceptance"),
     "src.knowledge_relations_v1": ("legacy_confirmed_semantic_relations_exist",),
     "src.operations_console_app": ("_relation_checkboxes",),
     "src.operations_console_v1": ("_invalidate_all_bindings",),
     "src.publication_chain_recovery_v1": ("live_publication_chain_integrity",),
-    "src.recommendation_coverage_v1": ("supplementary_blocks",),
-    "src.recommendation_semantics_v1": ("has_source_literal_strength",),
+    "src.vorming.recommendation_coverage_v1": ("supplementary_blocks",),
+    "src.vorming.recommendation_semantics_v1": ("has_source_literal_strength",),
     "src.retrieval.answerability_gate_v1": ("_record_text",),
-    "src.review_duty_v1": ("first_review_open",),
-    "src.review_workboard_v1": ("_pending_count",),
+    "src.review.review_duty_v1": ("first_review_open",),
+    "src.review.review_workboard_v1": ("_pending_count",),
     "src.workflows.workflow_remaining_postgres_v1": ("delete_secret",),
 }
 NAMES = sorted(name for names in REMOVED.values() for name in names)
@@ -94,10 +94,10 @@ def test_unrelated_same_name_elsewhere_is_not_a_reference(tmp_path, monkeypatch)
 
 
 @pytest.mark.parametrize("rel,text", [
-    ("src/caller_v1.py", "from src.extract_metrics_v1 import _status_ok\n"),
-    ("src/caller_v1.py", "import src.extract_metrics_v1 as metrics\nmetrics._status_ok({})\n"),
+    ("src/caller_v1.py", "from src.vorming.extract_metrics_v1 import _status_ok\n"),
+    ("src/caller_v1.py", "import src.vorming.extract_metrics_v1 as metrics\nmetrics._status_ok({})\n"),
     ("tests/test_caller.py", "getattr(importlib.import_module('src.workflows.workflow_remaining_postgres_v1'), 'delete_secret')\n"),
-    ("src/extract_metrics_v1.py", "def _status_ok(row):\n    return True\n"),
+    ("src/vorming/extract_metrics_v1.py", "def _status_ok(row):\n    return True\n"),
 ])
 def test_reference_through_defining_module_is_still_caught(tmp_path, monkeypatch, rel, text):
     _plant(tmp_path, rel, text)

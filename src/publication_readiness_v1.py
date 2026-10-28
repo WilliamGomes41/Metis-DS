@@ -8,14 +8,14 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from src.review_duty_v1 import (
+from src.review.review_duty_v1 import (
     FIRST_REVIEW,
     SECOND_REVIEW,
     review_repair_duties,
     review_duties,
 )
-from src.source_containers_v1 import source_accountability, source_closure
-from src.knowledge_materialisation_v1 import source_reconstruction_scope
+from src.vorming.source_containers_v1 import source_accountability, source_closure
+from src.vorming.knowledge_materialisation_v1 import source_reconstruction_scope
 
 REVIEW_WORK_INCOMPLETE = "review_work_incomplete"
 REVIEW_REPAIR_INCOMPLETE = "review_repair_incomplete"
@@ -171,7 +171,7 @@ class PublicationReadinessMixin:
                 fragments = self.review_source_fragments(snapshot_id)
         else:
             fragments = None
-        from src.beslisboom_path_v1 import review_path_for_klasse
+        from src.review.beslisboom_path_v1 import review_path_for_klasse
         review_path = (
             review_path_for_klasse(str(envelope["class"]))
             if envelope.get("class")

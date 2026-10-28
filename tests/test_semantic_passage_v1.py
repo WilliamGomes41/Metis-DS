@@ -7,11 +7,11 @@
 
 import pytest
 
-from src.knowledge_materialisation_v1 import (
+from src.vorming.knowledge_materialisation_v1 import (
     materialise_knowledge_candidates,
     ordered_source_projection,
 )
-from src.semantic_passage_v1 import (
+from src.vorming.semantic_passage_v1 import (
     SemanticPassageError,
     semantic_source_blocks,
     semantic_units_from_proposal,

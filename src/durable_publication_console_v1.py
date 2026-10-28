@@ -14,12 +14,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
-from src.document_status_v1 import DocumentStatusReadinessMixin
+from src.documents.document_status_v1 import DocumentStatusReadinessMixin
 from src.operations_console_v1 import ConsoleError
 from src.publication_evidence_v1 import observe_publication
 from src.retrieval.retrieval_projection_v2 import build_projection
-from src.review_closure_v1 import ReviewClosureConsole
-from src.review_ledger import append_event
+from src.review.review_closure_v1 import ReviewClosureConsole
+from src.review.review_ledger import append_event
 from src import publish_refusal_audit_v1 as _publish_refusal_audit
 
 
@@ -253,7 +253,7 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
         release_id = f"release-{uuid.uuid4().hex}"; release_version = f"{envelope['version']}-{release_id[-8:]}"
         _candidate_projection, blocked = build_projection([{"knowledge_object":deepcopy(obj),"publication":{"release_id":release_id,"release_version":release_version,"published_at":published_at}} for obj in objects])
         if blocked: return {"status":"BLOCKED","state":envelope["state"],"snapshot_id":snapshot_id,"blockers":["prepublication_projection_failed"],"projection_errors":blocked,"g2":"PASS","cutover":False}
-        from src.decision_graph_v1 import release_graph
+        from src.vorming.decision_graph_v1 import release_graph
         graph_args = {"decision_graph_release": release_graph(envelope, self.snapshot_objects(snapshot_id))} if "decision_graph" in envelope else {}
         observe_publication('publication_submitted', snapshot_id=snapshot_id, envelope=envelope,
                             revision=evidence_revision, release_id=release_id, objects=objects)

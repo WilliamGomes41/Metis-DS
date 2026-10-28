@@ -19,7 +19,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.retrieval.answerability_gate_v1 import evaluate_answerability
-from src.extract_html_v1 import extract as extract_html
+from src.vorming.extract_html_v1 import extract as extract_html
 from src.integrity_kernel import sha256_bytes
 from src.object_taxonomy_v1 import (
     is_advice_weight,
@@ -28,7 +28,7 @@ from src.object_taxonomy_v1 import (
     published_object_type,
     recommendation_strength_ui_applies,
 )
-from src.open_original_v1 import researcher_visible_prose
+from src.review.open_original_v1 import researcher_visible_prose
 from src.operations_console_v1 import (
     ConsoleError,
     OperationsConsole,

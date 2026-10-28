@@ -16,10 +16,10 @@ import sys
 
 import pytest
 
-from src.knowledge_path_v1 import content_reviewable, source_lineage_resolves
+from src.review.knowledge_path_v1 import content_reviewable, source_lineage_resolves
 from src.operations_console_v1 import ConsoleError
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-from src.source_bound_fields_v3 import MODE
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+from src.vorming.source_bound_fields_v3 import MODE
 from tests.test_recommendation_context_v3 import response_for
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
@@ -246,8 +246,8 @@ def test_postgres_v3_evidence_isolation_replay_retry_failure_and_review(workflow
 @pytest.mark.parametrize('fault', ['unknown_block', 'bounds', 'not_selected', 'type', 'ambiguous'])
 def test_exact_relation_validation_still_rejects_invalid_endpoints(fault):
     from tests.test_t7_duplicate_candidate_integrity import selection_fixture
-    from src.semantic_passage_v1 import attach_relation_proposals, SemanticPassageError
-    from src.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
+    from src.vorming.semantic_passage_v1 import attach_relation_proposals, SemanticPassageError
+    from src.vorming.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
     fragments, candidates, coverage = selection_fixture((0, 1))
     units = prefer_authoritative_exact_occurrences(candidates + coverage)
     source = deepcopy(candidates[0]['semantic_passage']['spans'])
@@ -270,8 +270,8 @@ def test_exact_relation_validation_still_rejects_invalid_endpoints(fault):
 
 
 def test_older_occurrence_replay_requires_fresh_inference(tmp_path, *, production_console):
-    from src.semantic_replay_v1 import stable_json_hash
-    from src.source_occurrence_authority_v1 import SOURCE_OCCURRENCE_AUTHORITY_VERSION
+    from src.vorming.semantic_replay_v1 import stable_json_hash
+    from src.vorming.source_occurrence_authority_v1 import SOURCE_OCCURRENCE_AUTHORITY_VERSION
     state, sid, actor, _, calls, _, _, _, make, bind = system(tmp_path, production_console=production_console)
     envelope = deepcopy(state._envelope(sid))
     identity = envelope['semantic_replay']['identity']
@@ -290,8 +290,8 @@ def test_older_occurrence_replay_requires_fresh_inference(tmp_path, *, productio
 
 def test_older_occurrence_checkpoint_cannot_resume_silently(tmp_path, *, production_console):
     from tests.test_recoverable_formation_v1 import system as partial_system
-    from src.semantic_replay_v1 import stable_json_hash
-    from src.source_occurrence_authority_v1 import SOURCE_OCCURRENCE_AUTHORITY_VERSION
+    from src.vorming.semantic_replay_v1 import stable_json_hash
+    from src.vorming.source_occurrence_authority_v1 import SOURCE_OCCURRENCE_AUTHORITY_VERSION
     state, sid, actor, _, calls, _, make, bind = partial_system(tmp_path, production_console=production_console)
     envelope = deepcopy(state._envelope(sid))
     identity = envelope['semantic_replay']['identity']
@@ -346,9 +346,9 @@ def test_postgres_stale_activation_cannot_replace_selected_endpoints(workflow_po
 
 def test_same_block_distinct_offsets_remain_distinct_and_same_span_stays_ambiguous():
     from tests.test_t7_creator_cut import _fragment
-    from src.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal, attach_relation_proposals, SemanticPassageError
-    from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
-    from src.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
+    from src.vorming.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal, attach_relation_proposals, SemanticPassageError
+    from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates
+    from src.vorming.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
     text = 'Oedeem is een ophoping van vocht.'
     fragments = [_fragment('one', text + ' ' + text)]
     block, = semantic_source_blocks(fragments)

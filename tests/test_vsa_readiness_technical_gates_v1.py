@@ -14,7 +14,7 @@ from src.publication_readiness_v1 import (
     REVIEW_DISPOSITION_INCONSISTENT,
     source_passage_closure,
 )
-from src.review_disposition_v1 import definitive_review_disposition
+from src.review.review_disposition_v1 import definitive_review_disposition
 
 
 def _source_object(

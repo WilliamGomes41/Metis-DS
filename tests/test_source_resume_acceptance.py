@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.operations_console_v1 import ConsoleError
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 from tests.test_availability_repair import installed_app, drain
 from tests.test_recoverable_formation_v1 import system
 from tests.test_recommendation_coverage_v1 import FIRST, SECOND

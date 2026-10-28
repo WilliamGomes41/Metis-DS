@@ -17,27 +17,27 @@ from pathlib import Path
 
 import pytest
 
-from src.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, admission_of, apply_admission_gate
+from src.vorming.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, admission_of, apply_admission_gate
 from src.operations_console_v1 import OperationsConsole, SCHEMA_V12, SCHEMA_V13, SCHEMA_V14
-from src.pre_review_semantic_v1 import (
+from src.vorming.pre_review_semantic_v1 import (
     _proposal_schema,
     _replay_identity,
     semantic_spec_from_fragments,
 )
-from src.processing_diagnostics_v1 import processing_issue_family
-from src.recommendation_semantics_v1 import (
+from src.vorming.processing_diagnostics_v1 import processing_issue_family
+from src.vorming.recommendation_semantics_v1 import (
     PROPOSED_FIELD,
     source_literal_strength,
 )
-from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
-from src.semantic_passage_v1 import (
+from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates
+from src.vorming.semantic_passage_v1 import (
     SemanticPassageError,
     semantic_coverage_units,
     semantic_source_blocks,
     semantic_units_from_proposal,
     source_coverage_records,
 )
-from src.semantic_transform_generic_v1 import transform, validate
+from src.vorming.semantic_transform_generic_v1 import transform, validate
 
 
 ROOT = Path(__file__).resolve().parents[1]

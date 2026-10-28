@@ -9,20 +9,20 @@ from __future__ import annotations
 
 import pytest
 
-from src.admission_gate_v1 import (
+from src.vorming.admission_gate_v1 import (
     admission_of,
     apply_admission_gate,
     is_inhoudelijk_candidate,
 )
-from src.candidate_eligibility_v1 import assess_candidate_eligibility
-from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
-from src.knowledge_path_v1 import content_reviewable
-from src.semantic_passage_v1 import (
+from src.vorming.candidate_eligibility_v1 import assess_candidate_eligibility
+from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates
+from src.review.knowledge_path_v1 import content_reviewable
+from src.vorming.semantic_passage_v1 import (
     semantic_source_blocks,
     semantic_units_from_proposal,
     source_coverage_records,
 )
-from src.semantic_transform_generic_v1 import transform
+from src.vorming.semantic_transform_generic_v1 import transform
 
 
 _CANONICAL_OBJECT_KEYS = {

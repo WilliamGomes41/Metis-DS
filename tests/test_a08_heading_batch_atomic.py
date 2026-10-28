@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
-from src.review_ledger import read_events
+from src.review.review_ledger import read_events
 from tests.test_v219_review_duty_queue import _console, _accounts, _ingest
 
 
@@ -515,7 +515,7 @@ def test_native_batch_and_single_review_use_consistent_lock_order(workflow_postg
     # Same host/database, independent disposable mirrors, as in the existing
     # native batch/batch proof. This does not authorize multi-instance hosting.
     from tests.semantic_fixture_support import bind_fixture_selections
-    from src.proportionate_review_v1 import normal_risk_batch_queue, _batch_type
+    from src.review.proportionate_review_v1 import normal_risk_batch_queue, _batch_type
     batch = native(tmp_path, workflow_postgres)
     bind_fixture_selections(batch)
     accounts = _accounts(batch)

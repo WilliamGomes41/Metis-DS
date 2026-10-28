@@ -14,12 +14,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.operations_console_v1 import ConsoleError
-from src.review_ledger import read_events
-from src.source_context_review_v1 import context_issues, projection, EVENT, LINKS_KEY
-from src.processing_diagnostics_v1 import passage_export_rows
+from src.review.review_ledger import read_events
+from src.review.source_context_review_v1 import context_issues, projection, EVENT, LINKS_KEY
+from src.vorming.processing_diagnostics_v1 import passage_export_rows
 from src.publication_readiness_v1 import source_passage_closure
-from src.processing_evidence_export_v1 import processing_evidence_tables
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV, SEMANTIC_MODE
+from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV, SEMANTIC_MODE
 from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: F401
 
 
@@ -157,7 +157,7 @@ def test_native_context_commit_failure_restart_csv_mcp_and_stale_worker(recovery
     import psycopg
     from tests.test_lifecycle_withdrawal_recovery_v1 import _console
     from tests.test_publication_chain_recovery_v1 import FakeBlobStore
-    from src.metis_mcp_queries_v1 import McpQueries
+    from src.settings.metis_mcp_queries_v1 import McpQueries
 
     source_store = FakeBlobStore()
     root = tmp_path / 'native'
@@ -202,7 +202,7 @@ def test_native_context_commit_failure_restart_csv_mcp_and_stale_worker(recovery
 
 
 def _close_context_review(state, reviewer, sid, target_id):
-    from src.review_disposition_v1 import definitive_review_disposition
+    from src.review.review_disposition_v1 import definitive_review_disposition
     from src.operations_console_v1 import review_lane
     state.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=target_id,
                         decision='approve', confirmed_object_type='definition', relation_review_ack=True)
@@ -219,7 +219,7 @@ def test_native_context_publication_successor_withdrawal_and_restart(recovery_po
     from tests.test_lifecycle_withdrawal_recovery_v1 import _console, _api, _documents
     from tests.test_publication_chain_recovery_v1 import FakeBlobStore
     from tests.test_api_access_lifecycle_v1 import _provision
-    from src.api_access_v1 import PostgresApiAccessStore
+    from src.settings.api_access_v1 import PostgresApiAccessStore
     from src.retrieval.retrieval_projection_v2 import build_projection
 
     blobs = FakeBlobStore()

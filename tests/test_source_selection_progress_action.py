@@ -10,7 +10,7 @@ keeps the link: it selects that document and starts polling it.
 """
 from fastapi.testclient import TestClient
 
-import src.source_selection_ui_v1 as ui
+import src.vorming.source_selection_ui_v1 as ui
 from src.operations_console_app import COOKIE
 from tests.test_recoverable_formation_v1 import FIRST, SECOND, system
 
@@ -23,7 +23,7 @@ def test_progress_link_only_for_running_documents_that_are_not_selected(tmp_path
         family='second', named_reviewers=[reviewer])['snapshot_id']
     real = ui.projection
     monkeypatch.setattr(ui, 'projection', lambda *args, **kwargs: {**real(*args, **kwargs), 'state': 'bezig'})
-    import src.source_selection_v1 as selection
+    import src.vorming.source_selection_v1 as selection
     summary = selection.summary_projection
     monkeypatch.setattr(selection, 'summary_projection', lambda *args, **kwargs: {**summary(*args, **kwargs), 'state': 'bezig'})
     client = TestClient(production_app(console))

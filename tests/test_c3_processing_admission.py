@@ -19,7 +19,7 @@ import json
 import pytest
 
 from src.operations_console_v1 import ConsoleError, PRE_REVIEW_BLOCKED
-from src.processing_retry_v1 import now, reserve
+from src.vorming.processing_retry_v1 import now, reserve
 from tests.test_resv1_reservation_configuration import _console
 from tests.test_attempt_diagnostics_postgres import bound, ingest
 from tests.test_workflow_transaction_v1 import workflow_postgres  # noqa: F401

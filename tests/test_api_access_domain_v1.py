@@ -1,6 +1,6 @@
 import pytest
 
-from src.api_access_v1 import (
+from src.settings.api_access_v1 import (
     ApiAccessError,
     effective_document_ids,
     validate_content_scope,

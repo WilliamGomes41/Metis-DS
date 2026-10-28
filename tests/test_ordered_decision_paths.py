@@ -4,7 +4,7 @@
 """
 from copy import deepcopy
 import pytest
-from src.decision_graph_v1 import ordered_paths
+from src.vorming.decision_graph_v1 import ordered_paths
 from tests.test_decision_graph_structure import structure
 
 

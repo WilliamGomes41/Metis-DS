@@ -3,7 +3,7 @@
 This module deliberately contains no LLM executor. It reads only the active
 publication registry and proves its immutable source bytes before exposing input
 to a future compiled-knowledge/wiki build. The future executor must use
-src.llm_provider_v1 rather than introducing another provider key or model.
+src.vorming.llm_provider_v1 rather than introducing another provider key or model.
 """
 from __future__ import annotations
 

@@ -19,8 +19,8 @@ from fastapi.testclient import TestClient
 from src.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
 from src.operations_console_v1 import review_stacks
-from src.proportionate_review_v1 import ProportionateReviewConsole
-from src.review_workboard_v1 import review_work_item
+from src.review.proportionate_review_v1 import ProportionateReviewConsole
+from src.review.review_workboard_v1 import review_work_item
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"

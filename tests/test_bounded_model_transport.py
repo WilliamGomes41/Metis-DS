@@ -13,7 +13,7 @@ import sys
 import time
 from pathlib import Path
 import pytest
-from src.bounded_model_call_v1 import ModelCallLimits, load_limits, post_json
+from src.vorming.bounded_model_call_v1 import ModelCallLimits, load_limits, post_json
 from src.operations_console_v1 import ConsoleError
 from tests.model_transport_support import peer
 
@@ -59,7 +59,7 @@ def test_timely_success_has_complete_response_and_no_background_worker(monkeypat
 def test_parent_process_death_terminates_transport_worker(monkeypatch,tmp_path):
     env={**os.environ,'NO_PROXY':'127.0.0.1'}
     with peer(delay=5) as (url,received):
-        code='from src.bounded_model_call_v1 import *;post_json('+repr(url)+',{}, {},ModelCallLimits(connect=2,idle=30,total=30))'
+        code='from src.vorming.bounded_model_call_v1 import *;post_json('+repr(url)+',{}, {},ModelCallLimits(connect=2,idle=30,total=30))'
         process=subprocess.Popen([sys.executable,'-c',code],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         try:
             assert received.wait(5)

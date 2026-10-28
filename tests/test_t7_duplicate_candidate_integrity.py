@@ -13,12 +13,12 @@ import json
 
 import pytest
 
-from src.knowledge_materialisation_v1 import materialise_knowledge_candidates, validate_materialised_candidate
-from src.knowledge_path_v1 import content_reviewable, source_lineage_resolves
-from src.semantic_passage_v1 import (
+from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates, validate_materialised_candidate
+from src.review.knowledge_path_v1 import content_reviewable, source_lineage_resolves
+from src.vorming.semantic_passage_v1 import (
     semantic_source_blocks, semantic_units_from_proposal, source_coverage_records,
 )
-from src.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
+from src.vorming.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
 from tests.test_t7_creator_cut import _fragment
 
 TEXT = "Oedeem is een ophoping van vocht."
@@ -83,7 +83,7 @@ def test_source_only_duplicates_stay_source_records():
 
 def test_dedup_never_transfers_a_binding_from_the_other_candidate():
     from src.integrity_kernel import stamp_canonical_hashes
-    from src.review_duty_v1 import exact_current_approver_ids
+    from src.review.review_duty_v1 import exact_current_approver_ids
     fragments, candidates, coverage = selection_fixture((0, 1))
     summary_candidate, chosen = prefer_authoritative_exact_occurrences(candidates + coverage)
     assert summary_candidate["object_id"] == candidates[0]["object_id"]
@@ -108,7 +108,7 @@ def test_dedup_never_transfers_a_binding_from_the_other_candidate():
 
 @pytest.mark.parametrize("both", [False, True])
 def test_real_ingest_review_and_restart_keep_selected_identity_and_source(tmp_path, both, *, production_console):
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
     from src.object_taxonomy_v1 import extract_object_type
     def console():
         return production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / "sources",

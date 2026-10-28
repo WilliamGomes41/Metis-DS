@@ -1,7 +1,7 @@
 """Multi-instance optimistic merge for PostgreSQL workflow document objects."""
 from __future__ import annotations
 
-from src.revision_workflow import current_revisions, validate_revision_write
+from src.review.revision_workflow import current_revisions, validate_revision_write
 
 import base64
 import hashlib

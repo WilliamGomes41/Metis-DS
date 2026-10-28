@@ -22,11 +22,11 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from src.document_status_v1 import DOCUMENT_STATUS_LABELS
-from src.four_eyes_v1 import requires_four_eyes
-from src.api_access_v1 import ApiAccessConflict, ApiAccessError, ApiAccessStoreError, PostgresApiAccessStore, VALID_SCOPES
-from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
-from src.heading_parent_list_v1 import (
+from src.documents.document_status_v1 import DOCUMENT_STATUS_LABELS
+from src.review.four_eyes_v1 import requires_four_eyes
+from src.settings.api_access_v1 import ApiAccessConflict, ApiAccessError, ApiAccessStoreError, PostgresApiAccessStore, VALID_SCOPES
+from src.review.beslisboom_path_v1 import CLOSED_BOOM_TYPES, review_path_for_klasse
+from src.vorming.heading_parent_list_v1 import (
     heading_visible_text,
     is_heading_object,
     parent_choice_list,
@@ -41,8 +41,8 @@ from src.object_taxonomy_v1 import (
     recommendation_strength_ui_applies,
     review_priority_rank,
 )
-from src.admission_gate_v1 import admission_of, is_admission_blocked
-from src.recommendation_semantics_v1 import (
+from src.vorming.admission_gate_v1 import admission_of, is_admission_blocked
+from src.vorming.recommendation_semantics_v1 import (
     confirmed_recommendation_semantics_of,
     proposed_recommendation_semantics_of,
 )
@@ -50,17 +50,17 @@ from src.knowledge_relations_v1 import (
     confirmed_knowledge_relations_of,
     proposed_knowledge_relations_of,
 )
-from src.knowledge_materialisation_v1 import source_reconstruction_scope
-from src.knowledge_relation_review_v1 import (
+from src.vorming.knowledge_materialisation_v1 import source_reconstruction_scope
+from src.review.knowledge_relation_review_v1 import (
     has_semantic_relation_review,
     relation_choice_value,
 )
-from src.review_duty_v1 import authoritative_review_type, review_duty_for, review_duty_lane, reviewer_route_for
-from src.review_interaction_v1 import (
+from src.review.review_duty_v1 import authoritative_review_type, review_duty_for, review_duty_lane, reviewer_route_for
+from src.review.review_interaction_v1 import (
     build_review_interaction_evidence,
     new_review_interaction_id,
 )
-from src.review_context_v1 import (
+from src.review.review_context_v1 import (
     AUTHORITY_CONFIRMED,
     DIRECTION_INCOMING,
     DIRECTION_OUTGOING,
@@ -69,18 +69,18 @@ from src.review_context_v1 import (
     RESOLUTION_VERSION_MISMATCH,
     review_context,
 )
-from src.domain_dimensions_v1 import processing_issue_objects
-from src.processing_diagnostics_v1 import (
+from src.review.domain_dimensions_v1 import processing_issue_objects
+from src.vorming.processing_diagnostics_v1 import (
     passage_export_rows,
     passage_export_csv,
     processing_diagnostic_rows,
     processing_diagnostics,
 )
-from src.processing_evidence_export_v1 import processing_evidence_zip
-from src.source_label_hint_v1 import source_label_hint
-from src.source_context_review_v1 import projections as source_context_projections, role_of, links_of
-from src.extract_coverage_v1 import coverage_panel_rows
-from src.review_cockpit_v1 import (
+from src.vorming.processing_evidence_export_v1 import processing_evidence_zip
+from src.vorming.source_label_hint_v1 import source_label_hint
+from src.review.source_context_review_v1 import projections as source_context_projections, role_of, links_of
+from src.vorming.extract_coverage_v1 import coverage_panel_rows
+from src.review.review_cockpit_v1 import (
     SUITABILITY_VALUES,
     broncontext_parts,
     confirmable_proposed_type,
@@ -89,14 +89,14 @@ from src.review_cockpit_v1 import (
     proposed_type_of,
     why_selected,
 )
-from src.ingest_limits_v1 import (
+from src.ingest.ingest_limits_v1 import (
     INGEST_PAYLOAD_TOO_LARGE,
     URL_DESTINATION_NOT_ALLOWED,
     install_ingest_limits,
     read_upload_limited,
 )
-from src.llm_provider_v1 import load_llm_provider_config
-from src.passage_formation_policy_v1 import SEMANTIC_MODE, SEMANTIC_V2_MODE, SEMANTIC_V3_MODE
+from src.vorming.llm_provider_v1 import load_llm_provider_config
+from src.vorming.passage_formation_policy_v1 import SEMANTIC_MODE, SEMANTIC_V2_MODE, SEMANTIC_V3_MODE
 from src.operations_console_v1 import (
     ALLOWED_CLASSES,
     ALLOWED_DELETE_NEXT,
@@ -113,18 +113,18 @@ from src.operations_console_v1 import (
     review_stacks,
     slow_review_duty,
 )
-from src.open_original_v1 import OpenOriginalError, full_document_segments, parse_page_bbox, researcher_visible_prose
-from src.review_disposition_v1 import definitive_review_disposition
+from src.review.open_original_v1 import OpenOriginalError, full_document_segments, parse_page_bbox, researcher_visible_prose
+from src.review.review_disposition_v1 import definitive_review_disposition
 from src.publication_readiness_v1 import review_followup_queues
 from src.product_security_v1 import SlidingWindowRateLimiter
-from src.proportionate_review_v1 import (
+from src.review.proportionate_review_v1 import (
     ProportionateReviewConsole,
     regular_individual_review_queue,
     render_normal_risk_batch_panel,
     review_queue_page as _review_queue_page,
 )
 from src.serving_relations_v1 import CLOSED_RELATION_TYPES, proposed_relations
-from src.metis_dictionary_ui import render as render_metis_dictionary
+from src.settings.metis_dictionary_ui import render as render_metis_dictionary
 
 SERVICE_VERSION = CONSOLE_VERSION
 COOKIE = "console_session"
@@ -1275,7 +1275,7 @@ def _document_list_page(rows: list[dict[str, Any]], *, q: str, page: int, path: 
 
 
 def _document_status(row: dict[str, Any]) -> str:
-    from src.document_status_ui_v1 import current_document_lifecycle_status
+    from src.documents.document_status_ui_v1 import current_document_lifecycle_status
     lifecycle = current_document_lifecycle_status(str(row.get("snapshot_id") or "")) or {}
     return row.get("meaningful_status") or lifecycle.get("presentation_status") or row.get("status") or row.get("state") or ""
 
@@ -1540,12 +1540,12 @@ def _semantic_selection_markup(source_text: str, selection_text: str) -> tuple[s
 
 
 def _source_bound_fields_html(obj: dict[str, Any]) -> str:
-    from src.source_bound_fields_v2 import KEY, FIELDS, bound_values
+    from src.vorming.source_bound_fields_v2 import KEY, FIELDS, bound_values
     record = (obj.get("metadata") or {}).get(KEY)
     if record is None:
         return ""
     if record.get("version") == "source-bound-fields-v3":
-        from src.source_bound_fields_v3 import FIELDS
+        from src.vorming.source_bound_fields_v3 import FIELDS
     labels = {
         "actor_span": "Uitvoerder", "target_group_span": "Doelgroep", "scope_span": "Toepassingsbereik",
         "subject_span": "Onderwerp", "predicate_span": "Gezegde",
@@ -1646,8 +1646,8 @@ def _broncontext_html(
 
 def _source_discrepancy_block(obj: dict[str, Any], draft: dict[str, Any], *, review_path: str) -> str:
     """Optional reviewer report that the knowledge object departs from its source."""
-    from src.knowledge_path_v1 import content_reviewable
-    from src.source_discrepancy_v1 import CATEGORIES
+    from src.review.knowledge_path_v1 import content_reviewable
+    from src.review.source_discrepancy_v1 import CATEGORIES
     if review_path != "boom" and not content_reviewable(obj):
         return ""
     chosen = set(draft.get("source_discrepancy") or ())
@@ -1692,7 +1692,7 @@ def _sanitize_review_draft(draft: dict[str, Any] | None) -> dict[str, Any]:
         sanitized["relation_choice"] = (
             [str(value) for value in choices] if isinstance(choices, list) else []
         )
-    from src.source_discrepancy_v1 import CATEGORIES
+    from src.review.source_discrepancy_v1 import CATEGORIES
     reported = (draft or {}).get("source_discrepancy")
     sanitized["source_discrepancy"] = [str(v) for v in reported if str(v) in CATEGORIES] if isinstance(reported, list) else []
     if sanitized.get("discrepancy_error") not in {"", "source_discrepancy_requires_correction_or_rejection",
@@ -2257,7 +2257,7 @@ def knowledge_open_count(
     """Open ReviewDuties in the contextual and batch lanes; never partition()['knowledge']."""
     if review_path == "boom":
         return None
-    from src.review_duty_v1 import review_duty_counts, reviewer_route_counts
+    from src.review.review_duty_v1 import review_duty_counts, reviewer_route_counts
     if bindings is None:
         counts = review_duty_counts(objects, review_path=review_path, bindings=None, fragments=fragments)
         return int(counts["contextual_review_duties"]) + int(counts["batch_review_duties"])
@@ -2270,7 +2270,7 @@ def knowledge_progress(objects: list[dict[str, Any]], *, review_path: str) -> di
     """Denominator: current content_reviewable objects; superseded is shown apart."""
     if review_path == "boom":
         return None
-    from src.knowledge_path_v1 import content_reviewable
+    from src.review.knowledge_path_v1 import content_reviewable
     counts = {"total": 0, "done": 0, "superseded": 0}
     for obj in objects:
         if not content_reviewable(obj):
@@ -2428,7 +2428,7 @@ def _review_route_objects(
     routes=None,
 ) -> list[dict[str, Any]]:
     if canonical_task == "structure" and review_path != "boom":
-        from src.knowledge_path_v1 import is_structural_projection
+        from src.review.knowledge_path_v1 import is_structural_projection
         rows = [
             obj
             for obj in objects
@@ -2471,7 +2471,7 @@ def _review_route_objects(
 
 
 def _decision_paths_html(console: OperationsConsole, snapshot_id: str, obj: dict[str, Any], objects: list[dict[str, Any]]) -> str:
-    from src.decision_graph_v1 import ordered_paths, publication_issues
+    from src.vorming.decision_graph_v1 import ordered_paths, publication_issues
     envelope = console._envelope(snapshot_id)
     if "decision_graph" not in envelope:
         return ""
@@ -2492,7 +2492,7 @@ def _decision_paths_html(console: OperationsConsole, snapshot_id: str, obj: dict
 
 
 def _knowledge_review_html(obj: dict[str, Any], objects: list[dict[str, Any]]) -> str:
-    from src.review_cockpit_v1 import knowledge_review_projection
+    from src.review.review_cockpit_v1 import knowledge_review_projection
     projected = knowledge_review_projection(obj, objects)
     essential = "".join(
         f'<li data-context-status="{_esc(row["status"])}"><b>{_esc({"condition": "Voorwaarde", "exception": "Uitzondering", "scope": "Toepassingsgebied", "support": "Onderbouwing"}.get(row["role"], _object_type_label(row["role"])))}</b>: '
@@ -2639,7 +2639,7 @@ def _lane_total(
     rejected review decision counts (#672/#700): source records and source-role
     decisions (label/context/excluded) are source handling; superseded is replaced.
     """
-    from src.source_accountability_v1 import is_source_record
+    from src.vorming.source_accountability_v1 import is_source_record
     open_ids = {str(obj.get("object_id") or "") for obj in open_rows}
     finished = 0
     for obj in objects:
@@ -2692,8 +2692,8 @@ def _review_inventory(
     page: int = 1,
 ) -> str:
     """Every current passage remains reachable; no admission or finality writes."""
-    from src.source_containers_v1 import source_accountability, partition
-    from src.review_duty_v1 import review_repair_duties
+    from src.vorming.source_containers_v1 import source_accountability, partition
+    from src.review.review_duty_v1 import review_repair_duties
     projection = source_accountability(objects, review_path=review_path, bindings=bindings, fragments=fragments)
     followups = review_followup_queues(objects, review_path=review_path, projection=projection)
     followup_tasks = {
@@ -2724,7 +2724,7 @@ def _review_inventory(
     source_groups = {}
     containers = partition(objects, projection=projection)
     source_usage = {row["record"]["object_id"]: row["usage"] for row in containers["source"]}
-    from src.source_accountability_v1 import is_source_record, evidence_of
+    from src.vorming.source_accountability_v1 import is_source_record, evidence_of
     selected = []
     for obj in objects:
         if obj.get("object_type") == "document":
@@ -2900,8 +2900,8 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
     """Present existing context decisions; navigation never confirms a relation."""
     if obj.get("object_type") in {"document", "heading", "path"}:
         return ""
-    from src.source_accountability_v1 import is_source_record
-    from src.source_containers_v1 import source_accountability
+    from src.vorming.source_accountability_v1 import is_source_record
+    from src.vorming.source_containers_v1 import source_accountability
     if projection is None:
         projection = source_accountability(objects)
     state = projection.get(str(obj.get("object_id") or ""), {})
@@ -3257,7 +3257,7 @@ def _render_review_card(
         bindings=bindings, fragments=fragments,
     )
     approval_disabled = disabled or (" disabled" if current_duty is None else "")
-    from src.knowledge_path_v1 import is_structural_projection
+    from src.review.knowledge_path_v1 import is_structural_projection
     structural_heading = review_path != "boom" and is_structural_projection(obj)
     heading_owner = (
         f'<p data-heading-owner>Koppen bevestig je op <a href="/source-selection?document={_esc(snapshot_id)}&amp;task=structure">Vorming</a>. '
@@ -3414,7 +3414,7 @@ def _source_context_card(console: OperationsConsole, snapshot_id: str, obj: dict
     """Keep fragment handling separate from approval of independent knowledge."""
     if "data-source-repair" in panel:
         return panel
-    from src.source_accountability_v1 import is_source_record
+    from src.vorming.source_accountability_v1 import is_source_record
     if not (is_source_record(obj) or role_of(obj) or (panel and (context_target or context_mode == "source" or
             (source_label_hint(obj) and context_mode != "review")))):
         return ""
@@ -3480,7 +3480,7 @@ def _review_document_source_inputs(console, snapshot_id, objects, read_inputs):
         return read_inputs.bindings, read_inputs.fragments
     fragments = console.review_source_fragments(snapshot_id)
     if fragments is not None:
-        from src.prepared_source_views_v1 import prepare
+        from src.vorming.prepared_source_views_v1 import prepare
         fragments = prepare(fragments).fragments
     return _review_bindings(console, snapshot_id, objects=objects), fragments
 
@@ -3491,7 +3491,7 @@ def _review_formation_notice(console, snapshot_id, read_inputs, *, document_sour
         return _formation_incomplete_banner(console, snapshot_id)
     if not read_inputs.envelope['_review_check_formation']:
         return ''
-    from src.review_passage_read_v1 import ReviewPassageInputs
+    from src.review.review_passage_read_v1 import ReviewPassageInputs
     if not isinstance(read_inputs, ReviewPassageInputs):
         return _formation_incomplete_banner(console, snapshot_id, formation_fragments=document_source)
     reads = console._document_reads()
@@ -3506,7 +3506,7 @@ def _review_formation_notice(console, snapshot_id, read_inputs, *, document_sour
 
 def _review_detail_projection(console, account, snapshot_id, obj, objects, review_path, read_inputs):
     """Project source context and actor route from the same captured read inputs."""
-    from src.source_containers_v1 import source_accountability
+    from src.vorming.source_containers_v1 import source_accountability
     if read_inputs is not None:
         bindings, fragments = read_inputs.bindings, read_inputs.fragments
     else:
@@ -3832,16 +3832,16 @@ def create_console_app(
                 return await call_next(request)
         return await call_next(request)
 
-    from src.source_selection_ui_v1 import install as install_source_selection
+    from src.vorming.source_selection_ui_v1 import install as install_source_selection
     install_source_selection(app, state, _require, _page, _nav, _esc)
 
-    from src.metis_mcp_v1 import install_mcp
+    from src.settings.metis_mcp_v1 import install_mcp
     install_mcp(app, state, entra, expected_origin, require_account=_require, render_page=_page, nav=_nav)
     from src.telemetry.routes import install_telemetry_routes
     install_telemetry_routes(app, require_account=_require)
-    from src.insight_v1 import install_insight_routes
+    from src.settings.insight_v1 import install_insight_routes
     install_insight_routes(app, state, require_account=_require, render_page=_page, nav=_nav)
-    from src.view_check import install as install_view_checks
+    from src.settings.view_check import install as install_view_checks
     install_view_checks(app, state, _require, _page, _nav)
     from src.care_companion_v1 import install as install_care_companion
     install_care_companion(app, state, _require)
@@ -5020,7 +5020,7 @@ def create_console_app(
         if review_mode == "choice":
             # v2: wie beoordeelt en of vier ogen verplicht is zijn twee keuzes; de kernel
             # leidt de goedkeuringseis af. Bij twee personen MOET vier ogen expliciet gekozen zijn.
-            from src.review_configuration_v1 import CONTRACT_V2, FOUR_EYES_CHOICE_V2
+            from src.review.review_configuration_v1 import CONTRACT_V2, FOUR_EYES_CHOICE_V2
             if review_choice["option"] in FOUR_EYES_CHOICE_V2 and four_eyes not in {"yes", "no"}:
                 raise ConsoleError("review_four_eyes_choice_required")
             review_choice["contract"] = CONTRACT_V2
@@ -5031,7 +5031,7 @@ def create_console_app(
             extras = [i for i in named_reviewers if i != primary]
             if (review_mode == "single" and extras) or (review_mode == "required" and not extras):
                 raise ConsoleError("invalid_review_assignment")
-            from src.review_policy_v1 import CONTRACT
+            from src.review.review_policy_v1 import CONTRACT
             policy = {"contract": CONTRACT, "revision": 1, "primary": primary,
                       "assignments": [{"reviewer_id": i, "participation": review_mode} for i in extras]}
         receipt = await asyncio.to_thread(
@@ -5173,8 +5173,8 @@ def create_console_app(
     def source_recovery_error(account, snapshot_id, draft, error):
         # Presentation only: reuse the current processing-read guard and one form renderer.
         # Publisher-only direct callers keep their original generic error response.
-        from src.source_selection_ui_v1 import source_recovery_controls
-        from src.source_selection_v1 import authorize_account
+        from src.vorming.source_selection_ui_v1 import source_recovery_controls
+        from src.vorming.source_selection_v1 import authorize_account
         envelope = state._envelope(snapshot_id)
         try:
             authorize_account(account, envelope)
@@ -5199,7 +5199,7 @@ def create_console_app(
                 if response is not None:
                     return response
             raise
-        from src.source_selection_v1 import authorize_account
+        from src.vorming.source_selection_v1 import authorize_account
         try:
             authorize_account(account, state._envelope(snapshot_id))
         except ConsoleError:
@@ -5236,7 +5236,7 @@ def create_console_app(
         attempt = next((a for a in envelope.get("processing_attempts", []) if a["attempt_id"] == attempt_id), None)
         if attempt is None:
             raise ConsoleError("processing_attempt_not_active")
-        from src.attempt_diagnostics_v1 import replay_diagnostic
+        from src.vorming.attempt_diagnostics_v1 import replay_diagnostic
         if envelope.get("processing_storage") == "task-v1":
             from src.workflows.formation_task_store_v1 import FormationTaskStore
             store = FormationTaskStore(state.workflow_document_store)
@@ -5634,7 +5634,7 @@ def create_console_app(
             else None
         )
         try:
-            from src.review_passage_read_v1 import resolve_review_revision
+            from src.review.review_passage_read_v1 import resolve_review_revision
             snapshot_revision = resolve_review_revision(state, snapshot_id, snapshot_revision.strip())
             state.review_object(
                 actor_id=account["account_id"],
@@ -5788,7 +5788,7 @@ def create_console_app(
         account = _require(request)
         if source_checked != "1":
             raise ConsoleError("source_context_check_required")
-        from src.source_context_review_v1 import confirm_source_exclusions
+        from src.review.source_context_review_v1 import confirm_source_exclusions
         confirm_source_exclusions(state, actor_id=account["account_id"], snapshot_id=snapshot_id,
             source_object_ids=source_object_ids, reason=reason, command_id=command_id,
             expected_revision=snapshot_revision)
@@ -5807,7 +5807,7 @@ def create_console_app(
         try:
             if source_checked != "1":
                 raise ConsoleError("source_context_check_required")
-            from src.review_passage_read_v1 import resolve_review_revision
+            from src.review.review_passage_read_v1 import resolve_review_revision
             snapshot_revision = resolve_review_revision(state, snapshot_id, snapshot_revision)
             state.confirm_source_context(actor_id=account['account_id'], snapshot_id=snapshot_id,
                 source_object_id=source_object_id, role=role, target_object_ids=target_object_ids,
@@ -5819,7 +5819,7 @@ def create_console_app(
                 raise
             if pair_target and any(row["object_id"] == pair_target and role_of(row) for row in state.snapshot_objects(snapshot_id)):
                 pair_target = ""
-            from src.source_selection_ui_v1 import render_context
+            from src.vorming.source_selection_ui_v1 import render_context
             return HTMLResponse(render_context(state, account, snapshot_id, source_object_id,
                 context_target=pair_target, context_mode="source", review_revision=review_revision,
                 context_draft={"role": role, "reason": reason, "target_object_ids": target_object_ids},
@@ -5838,7 +5838,7 @@ def create_console_app(
         review_revision: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
-        from src.review_passage_read_v1 import resolve_review_revision
+        from src.review.review_passage_read_v1 import resolve_review_revision
         snapshot_revision = resolve_review_revision(state, snapshot_id, snapshot_revision.strip())
         state.accept_source_continuation(
             actor_id=account["account_id"],
@@ -5893,7 +5893,7 @@ def create_console_app(
             if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT:
                 raise
             if review_path_for_klasse(state._envelope(snapshot_id)["class"]) != "boom":
-                from src.source_selection_ui_v1 import render_structure
+                from src.vorming.source_selection_ui_v1 import render_structure
                 return HTMLResponse(render_structure(state, account, snapshot_id, conflict=True), status_code=409)
             return HTMLResponse(
                 _render_review_room(
@@ -5956,7 +5956,7 @@ def create_console_app(
         account = _require(request)
         if not snapshot_revision.strip():
             raise ConsoleError("snapshot_revision_required")
-        from src.review_passage_read_v1 import resolve_review_revision
+        from src.review.review_passage_read_v1 import resolve_review_revision
         snapshot_revision = resolve_review_revision(state, snapshot_id, snapshot_revision.strip())
         current_rows = state.snapshot_objects(snapshot_id)
         focal = next(
@@ -6190,15 +6190,15 @@ def create_console_app(
             "nurse_frontend": False,
         }
 
-    from src.quality_metrics_app_v1 import install_quality_routes
-    from src.insight_v1 import insight_tabs
+    from src.settings.quality_metrics_app_v1 import install_quality_routes
+    from src.settings.insight_v1 import insight_tabs
     install_quality_routes(app, state, _require, _page, tabs=insight_tabs)
-    from src.route_comparison_app_v1 import install_route_comparison_routes
+    from src.settings.route_comparison_app_v1 import install_route_comparison_routes
     install_route_comparison_routes(app, state, _require, _page)
-    from src.decision_review_ui_v1 import install_decision_review_routes
+    from src.review.decision_review_ui_v1 import install_decision_review_routes
     install_decision_review_routes(app, state, _require, _page)
-    from src.review_participation_ui_v1 import install_routes as install_participation_routes
+    from src.review.review_participation_ui_v1 import install_routes as install_participation_routes
     install_participation_routes(app, state, _require, _page)
-    from src.insight_v1 import install_insight_legacy_routes
+    from src.settings.insight_v1 import install_insight_legacy_routes
     install_insight_legacy_routes(app, _require)
     return app

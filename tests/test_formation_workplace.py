@@ -108,8 +108,8 @@ def test_partial_resume_uses_rendered_command_after_restart(tmp_path, production
 
 
 def test_shared_source_inputs_keep_the_same_processing_decision(tmp_path, production_console, monkeypatch):
-    from src.source_preparation_context_v1 import stored_extraction
-    from src import processing_retry_v1
+    from src.vorming.source_preparation_context_v1 import stored_extraction
+    from src.vorming import processing_retry_v1
     console, sid, author, _, _, _, _ = received(tmp_path, production_console, monkeypatch)
     execute(console, sid, author, 'partial')
     instant = processing_retry_v1.now()

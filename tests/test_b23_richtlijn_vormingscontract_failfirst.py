@@ -31,11 +31,11 @@ from pathlib import Path
 
 import pytest
 
-from src.admission_gate_v1 import apply_admission_gate
+from src.vorming.admission_gate_v1 import apply_admission_gate
 from src.operations_console_v1 import ConsoleError
-from src.pre_review_semantic_v1 import semantic_spec_from_fragments
-from src.semantic_transform_generic_v1 import transform
-from src.source_bound_fields_v3 import FIELDS
+from src.vorming.pre_review_semantic_v1 import semantic_spec_from_fragments
+from src.vorming.semantic_transform_generic_v1 import transform
+from src.vorming.source_bound_fields_v3 import FIELDS
 
 MODES = ["semantic-source-bound-v3"]  # deterministic-v1 was removed in Protocol 4.3.0
 XFAIL = pytest.mark.xfail(strict=True, reason="B23 nog niet geïmplementeerd op main (Forge)")

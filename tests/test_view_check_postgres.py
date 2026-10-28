@@ -18,8 +18,8 @@ from fastapi.testclient import TestClient
 import psycopg
 import pytest
 
-from src.view_check import COOKIE, ViewCheckConfig, ViewChecks, context
-from src.view_check_store import ViewCheckConflict, ViewCheckStore
+from src.settings.view_check import COOKIE, ViewCheckConfig, ViewChecks, context
+from src.settings.view_check_store import ViewCheckConflict, ViewCheckStore
 
 
 def store_for(config):
@@ -184,7 +184,7 @@ def test_http_scope_origin_revision_and_revocation_leave_domain_state_unchanged(
 
 @pytest.mark.parametrize('unsupported', ['unknown_attempt', 'decision_graph'])
 def test_panel_does_not_offer_an_unsupported_scenario(unsupported, production_console, production_app, complete_postgres, tmp_path, monkeypatch):
-    from src.view_check import panel
+    from src.settings.view_check import panel
     from tests.test_availability_repair import accounts, bind, provider, login, upload
     state = production_console(processing_binder=bind_fixture_selections)
     _, reviewer = accounts(state)
@@ -231,7 +231,7 @@ def test_worker_activation_rechecks_authority_and_preserves_document(interruptio
     import base64
     import json
     from types import SimpleNamespace
-    from src.view_check import CHECK_IDS
+    from src.settings.view_check import CHECK_IDS
     from tests.test_availability_repair import accounts, bind, provider, login, upload
     state = production_console(processing_binder=bind_fixture_selections)
     author, reviewer = accounts(state)
@@ -277,7 +277,7 @@ def test_worker_activation_rechecks_authority_and_preserves_document(interruptio
         original_put(key, data)
         if interruption == 'upload_revocation':
             revoke()
-    monkeypatch.setattr('src.view_check.subprocess.run', browser)
+    monkeypatch.setattr('src.settings.view_check.subprocess.run', browser)
     monkeypatch.setattr(service.evidence, 'put', put)
     service.execute_one()
     result = service.store.get(row['id'])

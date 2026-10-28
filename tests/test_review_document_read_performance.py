@@ -13,7 +13,7 @@ from tests.test_review_render_source_reuse import review_client  # noqa: F401
 
 @pytest.mark.parametrize('task', ['individual', 'batch', 'inventory'])
 def test_document_tasks_use_compact_inputs_and_prepared_source(review_client, monkeypatch, task):
-    import src.knowledge_materialisation_v1 as materialisation
+    import src.vorming.knowledge_materialisation_v1 as materialisation
 
     console, client, sid = review_client
     before = deepcopy(console.snapshot_objects(sid))
@@ -157,7 +157,7 @@ def test_queue_navigation_keeps_document_return_filters(review_client):
 
 @pytest.mark.parametrize('task', ['individual', 'inventory', 'batch'])
 def test_open_document_keeps_full_formation_warning(tmp_path, production_console, monkeypatch, task):
-    import src.knowledge_materialisation_v1 as materialisation
+    import src.vorming.knowledge_materialisation_v1 as materialisation
     from fastapi.testclient import TestClient
     from tests.test_review_formation_problems import received, execute
     from tests.test_availability_repair import login
@@ -172,7 +172,7 @@ def test_open_document_keeps_full_formation_warning(tmp_path, production_console
     equality = materialisation._SourceNumber.__eq__
 
     def status(*args, **kwargs):
-        from src.prepared_source_views_v1 import SourceFragments
+        from src.vorming.prepared_source_views_v1 import SourceFragments
         assert isinstance(kwargs.get('formation_fragments'), SourceFragments)
         calls.append(1)
         return original(*args, **kwargs)
@@ -193,7 +193,7 @@ def test_open_document_keeps_full_formation_warning(tmp_path, production_console
 
 
 def test_document_capture_keeps_objectset_pin_when_a_writer_commits(review_client, monkeypatch):
-    from src.review_passage_read_v1 import read_review_document
+    from src.review.review_passage_read_v1 import read_review_document
     from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
 
     console, _client, sid = review_client

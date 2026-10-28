@@ -5,18 +5,18 @@ from __future__ import annotations
 
 import pytest
 
-from src.context_aware_split_v1 import heading_structure_units
-from src.passage_formation_policy_v1 import (
+from src.vorming.context_aware_split_v1 import heading_structure_units
+from src.vorming.passage_formation_policy_v1 import (
     REASON_SEMANTIC_FREE_TEXT,
     SEMANTIC_MODE,
     STRATEGY_SEMANTIC,
     PassageFormationPolicyError,
     resolve_passage_formation_strategy,
 )
-from src.source_bound_fields_v2 import MODE as SEMANTIC_V2_MODE
-from src.source_bound_fields_v3 import MODE as SEMANTIC_V3_MODE
-from src.semantic_transform_generic_v1 import transform
-from src.source_occurrence_authority_v1 import (
+from src.vorming.source_bound_fields_v2 import MODE as SEMANTIC_V2_MODE
+from src.vorming.source_bound_fields_v3 import MODE as SEMANTIC_V3_MODE
+from src.vorming.semantic_transform_generic_v1 import transform
+from src.vorming.source_occurrence_authority_v1 import (
     REASON_AUTHORITATIVE_SECTION,
     prefer_authoritative_exact_occurrences,
 )
@@ -298,7 +298,7 @@ def test_equal_primary_authority_prefers_direct_occurrence_over_reconstructed_du
 
 
 def test_admission_paragraph_context_stops_at_heading_boundary() -> None:
-    from src.admission_gate_v1 import candidate_from_object
+    from src.vorming.admission_gate_v1 import candidate_from_object
 
     heading_a = {
         "object_id": "h-a",

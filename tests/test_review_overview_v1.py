@@ -9,10 +9,10 @@
 import re
 from copy import deepcopy
 
-from src.knowledge_path_v1 import content_reviewable
-from src.review_duty_v1 import reviewer_route_counts
-from src.source_accountability_v1 import evidence_of
-from src.source_containers_v1 import partition
+from src.review.knowledge_path_v1 import content_reviewable
+from src.review.review_duty_v1 import reviewer_route_counts
+from src.vorming.source_accountability_v1 import evidence_of
+from src.vorming.source_containers_v1 import partition
 from tests.characterization.overview_support import (LEGACY_TEXT, OPEN_TEXT, guideline_document,
                                                      install_native_summaries, native_summary, tree_document)
 from tests.characterization.support import REVIEWER
@@ -58,7 +58,7 @@ def test_content_task_excludes_source_handling_and_preserves_duty_ground(tmp_pat
 
 def test_workboard_counters_name_the_existing_version_and_observation_time(tmp_path, *, production_console):
     console, sid, account = guideline_document(tmp_path, production_console=production_console)
-    from src.review_workboard_v1 import _workboard_page
+    from src.review.review_workboard_v1 import _workboard_page
     html = _workboard_page(console, account=account, snapshot_id=sid)
     scope = re.search(r'data-count-scope[^>]*>([^<]+)<', html)
     assert scope and "versie 1.0 · peiltijd " in scope.group(1)
@@ -67,7 +67,7 @@ def test_workboard_counters_name_the_existing_version_and_observation_time(tmp_p
 
 def test_knowledge_progress_and_lane_total_exclude_excluded_source_record(tmp_path, *, production_console):
     from src.operations_console_app import _lane_total
-    from src.source_context_review_v1 import confirm_source_exclusions
+    from src.review.source_context_review_v1 import confirm_source_exclusions
     console, sid, account = guideline_document(tmp_path, production_console=production_console)
     rows = console.snapshot_objects(sid)
     confirm_source_exclusions(console, actor_id=REVIEWER, snapshot_id=sid,
@@ -86,7 +86,7 @@ def test_bulk_exclusion_only_for_v1_metadata_and_category_tiles(tmp_path, *, pro
     console, sid, account = guideline_document(tmp_path, production_console=production_console)
     rows = console.snapshot_objects(sid)
     legacy, unresolved = _source_id(rows, LEGACY_TEXT), _source_id(rows, OPEN_TEXT)
-    from src.source_selection_ui_v1 import render_source_accountability
+    from src.vorming.source_selection_ui_v1 import render_source_accountability
     owner = render_source_accountability(console, account, sid)
     form = owner[owner.index('action="/review/source-exclusions"'):owner.index('</form>', owner.index('action="/review/source-exclusions"'))]
     assert f'value="{legacy}"' in form and unresolved not in form
@@ -113,7 +113,7 @@ def test_tree_document_has_no_knowledge_counter_in_room(tmp_path, *, production_
 
 
 def test_tree_document_has_no_knowledge_counter_in_workboard_object_path(tmp_path, *, production_console):
-    from src.review_workboard_v1 import _workboard_page
+    from src.review.review_workboard_v1 import _workboard_page
     console, sid, account = tree_document(tmp_path, production_console=production_console)
     html = _workboard_page(console, account=account, snapshot_id=sid)
     assert 'data-personal-open>3<' in html
@@ -122,7 +122,7 @@ def test_tree_document_has_no_knowledge_counter_in_workboard_object_path(tmp_pat
 
 
 def test_tree_document_has_no_knowledge_counter_on_native_summary_path(tmp_path, monkeypatch, *, production_console):
-    import src.review_workboard_v1 as board
+    import src.review.review_workboard_v1 as board
     console, sid, account = tree_document(tmp_path, production_console=production_console)
     calls = install_native_summaries(monkeypatch, console, sid, native_summary(
         console, sid, heading_total=1, heading_pending=1, individual_total=2, individual_pending=2,
@@ -134,7 +134,7 @@ def test_tree_document_has_no_knowledge_counter_on_native_summary_path(tmp_path,
 
 
 def test_guideline_native_summary_shows_knowledge_counter_without_progress(tmp_path, monkeypatch, *, production_console):
-    import src.review_workboard_v1 as board
+    import src.review.review_workboard_v1 as board
     console, sid, account = guideline_document(tmp_path, production_console=production_console)
     calls = install_native_summaries(monkeypatch, console, sid, native_summary(
         console, sid, heading_total=1, heading_pending=1, normal_passages=1, normal_batches=1,

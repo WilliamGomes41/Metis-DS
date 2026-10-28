@@ -13,12 +13,12 @@ from copy import deepcopy
 import pytest
 
 from src.integrity_kernel import exact_review_snapshot_hash, stamp_canonical_hashes
-from src.knowledge_path_v1 import content_reviewable
+from src.review.knowledge_path_v1 import content_reviewable
 from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
-from src.proportionate_review_v1 import regular_review_queue
-from src.review_duty_v1 import exact_current_approver_ids, reviewer_route_for
-from src.review_workflow_v3 import apply_reviews
-from src.review_ledger import read_events
+from src.review.proportionate_review_v1 import regular_review_queue
+from src.review.review_duty_v1 import exact_current_approver_ids, reviewer_route_for
+from src.review.review_workflow_v3 import apply_reviews
+from src.review.review_ledger import read_events
 from tests.semantic_fixture_support import bind_fixture_selections
 from test_t4_single_knowledge_path_invariants import _allowed_candidate, _allowed_source, _binding
 
@@ -170,7 +170,7 @@ def test_valid_candidate_approval_is_exact_and_reject_never_changes_admission(tm
 
 @pytest.mark.parametrize("mutation", ["text", "bounds", "mapping", "provenance"])
 def test_corrupt_persisted_candidate_has_no_duty_even_with_allowed_gate(tmp_path, mutation, *, production_console):
-    from src.review_duty_v1 import review_duty_for
+    from src.review.review_duty_v1 import review_duty_for
     console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
     bad = deepcopy(obj)
     if mutation == "text":
@@ -187,9 +187,9 @@ def test_corrupt_persisted_candidate_has_no_duty_even_with_allowed_gate(tmp_path
 
 
 def test_content_queue_parity_uses_real_source_and_exact_bindings(tmp_path, *, production_console):
-    from src.review_duty_v1 import review_duty_for
-    from src.proportionate_review_v1 import normal_risk_batch_queue, regular_individual_review_queue
-    from src.build_review_queue_v3 import build
+    from src.review.review_duty_v1 import review_duty_for
+    from src.review.proportionate_review_v1 import normal_risk_batch_queue, regular_individual_review_queue
+    from src.review.build_review_queue_v3 import build
     console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
     objects = console.snapshot_objects(sid)
     fragments = console.review_source_fragments(sid)
@@ -210,8 +210,8 @@ def test_content_queue_parity_uses_real_source_and_exact_bindings(tmp_path, *, p
 
 
 def test_structure_confirmation_is_qa_and_general_content_approve_is_denied(tmp_path, *, production_console):
-    from src.knowledge_path_v1 import is_structural_projection
-    from src.review_duty_v1 import review_duty_for
+    from src.review.knowledge_path_v1 import is_structural_projection
+    from src.review.review_duty_v1 import review_duty_for
     console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
     heading = next(o for o in console.snapshot_objects(sid) if is_structural_projection(o))
     with pytest.raises(ConsoleError, match="structure_confirmation_command_required"):
@@ -320,7 +320,7 @@ def test_duplicate_submit_is_no_transition_and_not_a_second_reviewer(tmp_path, *
 
 
 def test_four_eyes_uses_unique_exact_human_bindings():
-    from src.review_duty_v1 import review_stage, FIRST_REVIEW, SECOND_REVIEW
+    from src.review.review_duty_v1 import review_stage, FIRST_REVIEW, SECOND_REVIEW
     obj = _allowed_candidate()
     obj["risk"] = {"risk_level": "high", "requires_second_review": True}
     stamp_canonical_hashes(obj)
@@ -332,7 +332,7 @@ def test_four_eyes_uses_unique_exact_human_bindings():
 
 
 def test_historical_binding_survives_changed_context_without_approval_carry(tmp_path, *, production_console):
-    from src.review_duty_v1 import review_stage, FIRST_REVIEW
+    from src.review.review_duty_v1 import review_stage, FIRST_REVIEW
     console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
     _approve(console, reviewer, sid, obj, expected_revision=console.objects_revision(sid))
     old = deepcopy(console.object_review_bindings(sid))
@@ -405,8 +405,8 @@ def test_direct_console_approve_cannot_create_authority_for_nonreview_work(tmp_p
     console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
     rows = console._load_objects(sid)
     if kind in {"heading", "coverage"}:
-        from src.knowledge_path_v1 import is_structural_projection
-        from src.source_accountability_v1 import is_source_record
+        from src.review.knowledge_path_v1 import is_structural_projection
+        from src.vorming.source_accountability_v1 import is_source_record
         target = next(o for o in rows if (is_structural_projection(o) if kind == "heading" else is_source_record(o)))
     else:
         target = next(o for o in rows if o["object_id"] == obj["object_id"])
@@ -429,7 +429,7 @@ def test_direct_console_approve_cannot_create_authority_for_nonreview_work(tmp_p
 
 
 def test_actual_four_eyes_commands_require_an_independent_second_human(tmp_path, *, production_console):
-    from src.review_duty_v1 import review_stage, SECOND_REVIEW
+    from src.review.review_duty_v1 import review_stage, SECOND_REVIEW
     console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
     second = console.create_account(username="carla", password="carla-secret", roles=("reviewer",))
     console._envelopes[sid]["named_reviewers"].append(second["account_id"])
@@ -460,7 +460,7 @@ def test_actual_four_eyes_commands_require_an_independent_second_human(tmp_path,
 
 
 def test_forbidden_reviewer_account_alias_does_not_close_four_eyes():
-    from src.review_duty_v1 import review_stage, SECOND_REVIEW
+    from src.review.review_duty_v1 import review_stage, SECOND_REVIEW
     obj = _allowed_candidate()
     obj["risk"] = {"risk_level": "high"}
     stamp_canonical_hashes(obj)
@@ -539,7 +539,7 @@ def test_completed_content_candidate_cannot_be_reopened_by_revise(tmp_path, *, p
 @pytest.mark.parametrize("independent", [False, True])
 def test_second_stage_revise_requires_an_actionable_independent_reviewer(tmp_path, independent, *, production_console):
     """RED for the first approver; GREEN GUARD for the authorized second human."""
-    from src.review_duty_v1 import review_stage, SECOND_REVIEW
+    from src.review.review_duty_v1 import review_stage, SECOND_REVIEW
     console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
     second = console.create_account(username="carla", password="carla-secret", roles=("reviewer",))
     console._envelopes[sid]["named_reviewers"].append(second["account_id"])

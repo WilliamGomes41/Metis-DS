@@ -15,10 +15,10 @@ from threading import Event
 import pytest
 from fastapi.testclient import TestClient
 
-from src.docling_pdf_v1 import reserve_conversion_capacity, release_conversion_capacity, extract
+from src.vorming.docling_pdf_v1 import reserve_conversion_capacity, release_conversion_capacity, extract
 from src.operations_console_v1 import ConsoleError
-from src.processing_retry_v1 import now
-from src.source_processing_dispatch_v1 import SourceProcessingDispatcher, pending, claim
+from src.vorming.processing_retry_v1 import now
+from src.vorming.source_processing_dispatch_v1 import SourceProcessingDispatcher, pending, claim
 from tests.test_availability_repair import accounts, bind, provider, state, installed_app, login, drain
 from tests.test_pre_review_semantic_v1 import _fragment
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
@@ -230,8 +230,8 @@ def test_extractor_consumes_same_descriptor_and_releases_before_scope_exit(tmp_p
             assert not available  # conversion slot remains held through actual worker boundary
         os.write(pass_fds[-1], json.dumps({"result": {"metrics": {}}}).encode())
         return {"worker_reaped": True}
-    monkeypatch.setattr("src.docling_pdf_v1.supervise", conversion)
-    monkeypatch.setattr("src.docling_pdf_v1.translate", lambda *a, **kw: ["translated"])
+    monkeypatch.setattr("src.vorming.docling_pdf_v1.supervise", conversion)
+    monkeypatch.setattr("src.vorming.docling_pdf_v1.translate", lambda *a, **kw: ["translated"])
     with reserve_conversion_capacity() as available:
         assert available
         assert extract(pdf, document_id="document", source_id="source") == ["translated"]
@@ -258,7 +258,7 @@ def test_waiting_keeps_original_expiry_and_retry_budget(console, monkeypatch):
     sid = receive(console, actor, reviewer, "expiry")
     attempt = reserve(console, actor, sid)
     future = datetime.fromisoformat(attempt["expires_at"]) + timedelta(seconds=1)
-    monkeypatch.setattr("src.source_processing_dispatch_v1.now", lambda: future)
+    monkeypatch.setattr("src.vorming.source_processing_dispatch_v1.now", lambda: future)
     assert pending(console) == []
     stored = console._envelope(sid)["processing_attempts"][-1]
     assert stored["expires_at"] == attempt["expires_at"]
@@ -305,7 +305,7 @@ def test_stopped_delivery_logs_only_the_bounded_failure_code(caplog):
             raise error
         dispatcher._execute = failing
         caplog.clear()
-        with caplog.at_level("WARNING", logger="src.source_processing_dispatch_v1"):
+        with caplog.at_level("WARNING", logger="src.vorming.source_processing_dispatch_v1"):
             asyncio.run(dispatcher._deliver("snap-1", attempt))
         messages = [record.getMessage() for record in caplog.records]
         assert f"source_dispatch_attempt_stopped code={expected}" in messages

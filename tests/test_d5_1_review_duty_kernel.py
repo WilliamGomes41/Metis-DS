@@ -7,7 +7,7 @@
 """
 from __future__ import annotations
 
-from src.review_duty_v1 import (
+from src.review.review_duty_v1 import (
     FIRST_REVIEW,
     LANE_BATCH,
     LANE_CONTEXTUAL,
@@ -17,7 +17,7 @@ from src.review_duty_v1 import (
     review_duty_counts,
     review_duty_for,
 )
-from src.review_workboard_v1 import _work_item_from_counts, _workboard_card
+from src.review.review_workboard_v1 import _work_item_from_counts, _workboard_card
 from test_t4_single_knowledge_path_invariants import _allowed_source, _binding
 
 

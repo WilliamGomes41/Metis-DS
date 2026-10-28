@@ -129,7 +129,7 @@ from tests.test_navigation_source_reuse import source_navigation  # noqa: E402,F
 
 
 def test_source_reconstruction_counters_are_reported_without_changing_results(events, source_navigation):
-    import src.knowledge_materialisation_v1 as materialisation
+    import src.vorming.knowledge_materialisation_v1 as materialisation
     probe, fragments = source_navigation
     spans = next(o for o in probe.objects['synthetic-0']
                  if o.get('metadata', {}).get('semantic_passage', {}).get('spans'))['metadata']['semantic_passage']['spans']

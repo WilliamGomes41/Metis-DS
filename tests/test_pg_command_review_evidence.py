@@ -13,8 +13,8 @@ from threading import Thread
 import pytest
 from fastapi.testclient import TestClient
 
-from src.deterministic_review_repair_v1 import REPAIR_SUPPORT_RELATION
-from src.review_ledger import append_event, buffer_events, read_events, verify_ledger
+from src.review.deterministic_review_repair_v1 import REPAIR_SUPPORT_RELATION
+from src.review.review_ledger import append_event, buffer_events, read_events, verify_ledger
 from tests.production_support import restart_production
 
 
@@ -102,7 +102,7 @@ def test_late_support_audit_failure_rolls_back_all_pg_state(production_console, 
 
 
 def test_command_buffer_visibility_is_nested_context_local_and_copy_safe(production_console):
-    from src.review_ledger import read_command_events
+    from src.review.review_ledger import read_command_events
     console = production_console(processing_binder=bind_fixture_selections)
     path = console._ledger_path
     def event(name):

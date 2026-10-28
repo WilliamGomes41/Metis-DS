@@ -17,13 +17,13 @@ from pathlib import Path
 import fitz
 import pytest
 
-from src.decision_tree_construction_v1 import FORMATION_MODE, HUMAN_CONFIRMATION, construct, proposal_inputs
-from src.decision_tree_experiment_v1 import (
+from src.vorming.decision_tree_construction_v1 import FORMATION_MODE, HUMAN_CONFIRMATION, construct, proposal_inputs
+from src.vorming.decision_tree_experiment_v1 import (
     THRESHOLD_KEYS, compare_to_reference, decide, frozen_input, route_output as candidate_arm,
 )
-from src.decision_tree_route_v1 import request_proposal
-from src.decision_tree_proposal_v1 import DecisionTreeProposalError
-from src.knowledge_materialisation_v1 import MaterialisationError, materialise_knowledge_candidates
+from src.vorming.decision_tree_route_v1 import request_proposal
+from src.vorming.decision_tree_proposal_v1 import DecisionTreeProposalError
+from src.vorming.knowledge_materialisation_v1 import MaterialisationError, materialise_knowledge_candidates
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -139,7 +139,7 @@ def test_sole_materialiser_owns_text_identity_and_mapping(tmp_path, monkeypatch)
                                     c["semantic_passage"]["source_mapping"]) for c in direct]
     assert construction == _construct(frozen, deepcopy(proposal))  # deterministic, repeatable
 
-    import src.knowledge_materialisation_v1 as materialiser
+    import src.vorming.knowledge_materialisation_v1 as materialiser
 
     def refuse(*_args, **_kwargs):
         raise MaterialisationError("materialisation_source_mapping_invalid")
@@ -248,7 +248,7 @@ def test_result_bundles_and_page_transitions_are_source_checked(tmp_path):
 
 
 def test_provider_failure_raises_without_any_other_route(tmp_path):
-    from src.bounded_model_call_v1 import ModelCallLimits
+    from src.vorming.bounded_model_call_v1 import ModelCallLimits
     from src.operations_console_v1 import ConsoleError
     frozen = _tree_pdf(tmp_path)
 
@@ -297,7 +297,7 @@ def test_preregistration_is_blocked_until_thresholds_and_references_exist():
 
 
 def test_legacy_inventory_lists_retired_route_work_read_only():
-    from src.decision_tree_experiment_v1 import legacy_route_inventory
+    from src.vorming.decision_tree_experiment_v1 import legacy_route_inventory
     envelopes = [
         {"snapshot_id": "snap-a", "content_kind": "pdf", "class": "beslisboom",
          "decision_unit_contract": "decision-unit-construction-v1",

@@ -156,7 +156,7 @@ def load_accounts(accounts: Path | list[dict[str, Any]] | None) -> dict[str, dic
 
 def _reviewer_errors(account_id: Any, accounts: dict[str, dict[str, Any]]) -> list[str]:
     """D-SEC-2: reviewervelden MOETEN account-ids zijn van een actief, menselijk reviewer-account."""
-    from src.four_eyes_v1 import reviewer_is_agent, is_forbidden_reviewer
+    from src.review.four_eyes_v1 import reviewer_is_agent, is_forbidden_reviewer
     value = str(account_id or "")
     if is_forbidden_reviewer(value):
         return ["forbidden_reviewer_identity"]

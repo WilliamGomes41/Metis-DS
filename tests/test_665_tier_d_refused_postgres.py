@@ -41,7 +41,7 @@ import pytest
 
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig, PostgresCanonicalPublicationStore
 from src.operations_console_v1 import ConsoleError, OperationsConsole
-from src.proportionate_review_v1 import _batch_type, normal_risk_batch_queue
+from src.review.proportionate_review_v1 import _batch_type, normal_risk_batch_queue
 from src.workflows import workflow_documents_cutover_v1 as docs_mod
 from src.workflows import workflow_transaction_v1 as tx_mod
 from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
@@ -436,7 +436,7 @@ def _ledger_truncations(monkeypatch, ledger_path):
 @pytest.mark.parametrize("remirror_fails", [False, True])
 def test_t5_documents_mixin_writes_no_mirror_copy_after_failed_commit(
         workflow_postgres, tmp_path, monkeypatch, remirror_fails):
-    from src.review_ledger import read_events
+    from src.review.review_ledger import read_events
 
     console = _review_tier(tmp_path, workflow_postgres)
     sid, rid, queue = _ingest(console)
@@ -646,7 +646,7 @@ def _copy_event_to_version(config, sid, object_id, version):
 
 def _scenario_review_flow(request, tmp_path, monkeypatch):
     config = request.getfixturevalue("workflow_postgres")
-    from src.klasse_wijzigen_v1 import is_cross_model_class_change
+    from src.documents.klasse_wijzigen_v1 import is_cross_model_class_change
     from src.operations_console_v1 import ALLOWED_CLASSES
 
     console = _review_tier(tmp_path, config)

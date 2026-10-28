@@ -7,11 +7,11 @@ from copy import deepcopy
 
 import pytest
 
-from src.knowledge_path_v1 import content_reviewable
+from src.review.knowledge_path_v1 import content_reviewable
 from src.operations_console_app import _lane_total
-from src.review_workboard_v1 import review_work_item
-from src.source_accountability_v1 import is_source_record
-from src.source_context_review_v1 import confirm_source_exclusions
+from src.review.review_workboard_v1 import review_work_item
+from src.vorming.source_accountability_v1 import is_source_record
+from src.review.source_context_review_v1 import confirm_source_exclusions
 from tests.characterization.overview_support import LEGACY_TEXT, guideline_document
 from tests.characterization.support import REVIEWER
 

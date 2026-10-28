@@ -16,7 +16,7 @@ from io import TextIOWrapper
 from pathlib import Path
 from zipfile import ZipFile
 
-from src.extract_pdf_v2 import extract
+from src.vorming.extract_pdf_v2 import extract
 
 DOCUMENT_ID = "console-smetten-richtlijn-smetten-1-0-62dfd76e"
 

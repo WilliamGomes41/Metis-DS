@@ -12,17 +12,17 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.extract_pdf_v2 import extract
-from src.llm_provider_v1 import load_llm_provider_config
+from src.vorming.extract_pdf_v2 import extract
+from src.vorming.llm_provider_v1 import load_llm_provider_config
 from src.operations_console_v1 import ConsoleError
-from src.pre_review_semantic_v1 import (
+from src.vorming.pre_review_semantic_v1 import (
     _candidate_fragments, _evidence_fragments, _post_json, semantic_spec_from_fragments,
 )
-from src.semantic_passage_v1 import semantic_source_blocks, SELECTION_ORIGIN_PROPOSAL
-from src.semantic_replay_v1 import stable_json_hash
-from src.semantic_transform_generic_v1 import transform
-from src.admission_gate_v1 import apply_admission_gate, admission_of, GATE_ALLOWED
-from src.passage_register_v1 import apply_passage_register
+from src.vorming.semantic_passage_v1 import semantic_source_blocks, SELECTION_ORIGIN_PROPOSAL
+from src.vorming.semantic_replay_v1 import stable_json_hash
+from src.vorming.semantic_transform_generic_v1 import transform
+from src.vorming.admission_gate_v1 import apply_admission_gate, admission_of, GATE_ALLOWED
+from src.vorming.passage_register_v1 import apply_passage_register
 
 SOURCE_HASH = '2185b6502a76b76e942db2352d746a5f1193645091844fd84241dfb94ac51064'
 INPUT_HASH = '5b32b417da3efd05575cdf839375b6f97048a519f6ccfe9dc84e681c2e5213ff'

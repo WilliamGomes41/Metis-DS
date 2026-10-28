@@ -8,11 +8,11 @@
 import json
 from copy import deepcopy
 
-from src.bounded_formation_v1 import tasks_for, execute, formation_progress, pending_source_extent, MAX_CANDIDATE_CHARS
-from src.bounded_model_call_v1 import ModelCallLimits
-from src.semantic_passage_v1 import semantic_source_blocks
+from src.vorming.bounded_formation_v1 import tasks_for, execute, formation_progress, pending_source_extent, MAX_CANDIDATE_CHARS
+from src.vorming.bounded_model_call_v1 import ModelCallLimits
+from src.vorming.semantic_passage_v1 import semantic_source_blocks
 from tests.test_recommendation_context_v3 import source, response_for
-from src.pre_review_semantic_v1 import _semantic_execution_before_review
+from src.vorming.pre_review_semantic_v1 import _semantic_execution_before_review
 
 
 def block(bid, text, path):
@@ -33,7 +33,7 @@ def test_tasks_partition_candidates_and_keep_referenced_table_content_as_context
 
 
 def test_durable_recovery_does_not_search_already_bound_context_again():
-    from src.bounded_formation_v1 import _durable_targets, full_span
+    from src.vorming.bounded_formation_v1 import _durable_targets, full_span
     advice = block('advice','Gebruik geen zalf.',['Advies'])
     context = block('context','Bij een natte plek:',['Advies'])
     proposal = {'objects':[{'spans':[full_span(advice)],'context_evidence':[
@@ -195,7 +195,7 @@ def test_context_only_block_cannot_become_candidate_and_valid_prior_selection_su
 
 
 def test_reconstruction_cache_preserves_mutation_isolation_and_invalidates_changed_input(monkeypatch):
-    from src import source_reconstruction_v1 as reconstruction
+    from src.vorming import source_reconstruction_v1 as reconstruction
     original = reconstruction._with_status
     calls = []
     def observed(*args, **kwargs):
@@ -220,7 +220,7 @@ def test_reconstruction_cache_preserves_mutation_isolation_and_invalidates_chang
 
 
 def test_answered_task_clears_transport_failure_but_does_not_dispose_unknown_source():
-    from src.recoverable_formation_v1 import pending_rejections
+    from src.vorming.recoverable_formation_v1 import pending_rejections
     span = {'block_id': 'b', 'start': 0, 'end': 40}
     evidence = {'task_policy': 'bounded-formation-v1', 'task_id': 't',
         'error_code': 'source_task_budget_exhausted', 'target_spans': [span],
@@ -269,8 +269,8 @@ def test_each_task_records_plan_and_where_its_time_went():
 
 
 def test_task_rejected_in_validation_keeps_its_validation_time(monkeypatch):
-    import src.bounded_formation_v1 as bounded
-    from src.semantic_passage_v1 import SemanticPassageError
+    import src.vorming.bounded_formation_v1 as bounded
+    from src.vorming.semantic_passage_v1 import SemanticPassageError
     fragments = [dict(source('Bronpassage met voldoende klinische tekst voor een eigen taak.')[0],
                       fragment_id='0', fragment_hash='0', section_path=['0'])]
     blocks = semantic_source_blocks(fragments)
@@ -293,7 +293,7 @@ def test_task_rejected_in_validation_keeps_its_validation_time(monkeypatch):
 def test_provider_reports_model_transport_time_apart_from_its_own_validation():
     import pytest
     from src.operations_console_v1 import ConsoleError
-    from src.pre_review_semantic_v1 import _provider_proposal
+    from src.vorming.pre_review_semantic_v1 import _provider_proposal
     blocks = semantic_source_blocks(source('Bronpassage met voldoende klinische tekst.'))
     timing = {}
     with pytest.raises(ConsoleError):
@@ -312,9 +312,9 @@ def test_provider_reports_model_transport_time_apart_from_its_own_validation():
 
 def test_final_rejection_still_persists_the_last_task_write_time(monkeypatch):
     import pytest
-    import src.pre_review_semantic_v1 as semantic
+    import src.vorming.pre_review_semantic_v1 as semantic
     from src.operations_console_v1 import ConsoleError
-    from src.semantic_passage_v1 import SemanticPassageError
+    from src.vorming.semantic_passage_v1 import SemanticPassageError
     text = 'Gebruik geen zalf'
     fragments = [dict(source(text)[0], fragment_id='0', fragment_hash='0', section_path=['Same'])]
     def provider(_url, _headers, payload, _timeout):

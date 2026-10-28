@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from src.decision_graph_v1 import read_active_graph, verify_source_evidence
-from src.decision_unit_construction_v1 import CONTRACT as LEGACY_CONTRACT, KEY as LEGACY_KEY, unit_issues
+from src.vorming.decision_graph_v1 import read_active_graph, verify_source_evidence
+from src.vorming.decision_unit_construction_v1 import CONTRACT as LEGACY_CONTRACT, KEY as LEGACY_KEY, unit_issues
 from src.integrity_kernel import stable_hash, stamp_canonical_hashes
 from src.operations_console_v1 import ConsoleError
 from tests.semantic_fixture_support import install_fixture_history
@@ -165,7 +165,7 @@ def test_retired_route_work_stays_readable_but_is_never_re_formed(tmp_path, monk
     sid = ingest(console, accounts)["snapshot_id"]
     legacy = _legacy_fixture(console, sid)
     # Historical reading reconstructs evidence only: no formation, no materialiser.
-    import src.knowledge_materialisation_v1 as materialiser
+    import src.vorming.knowledge_materialisation_v1 as materialiser
 
     def forbidden(*_args, **_kwargs):
         raise AssertionError("historical read invoked formation")
@@ -191,9 +191,9 @@ def test_retired_route_work_stays_readable_but_is_never_re_formed(tmp_path, monk
 def test_retired_formation_code_is_gone_and_unreachable():
     """Import graph and symbol proof; text search alone cannot cover dynamic calls."""
     import importlib
-    import src.decision_unit_construction_v1 as legacy
-    import src.beslisboom_path_v1 as boom
-    import src.decision_graph_v1 as graph
+    import src.vorming.decision_unit_construction_v1 as legacy
+    import src.review.beslisboom_path_v1 as boom
+    import src.vorming.decision_graph_v1 as graph
     for name in ("construction_spec", "groups", "record", "rebuild_for_revision", "add_layout", "source_lines"):
         assert not hasattr(legacy, name)
     assert not hasattr(boom, "boom_spec_from_fragments")

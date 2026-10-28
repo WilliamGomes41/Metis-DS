@@ -1,7 +1,7 @@
 """Regression tests for one relation contract and coherent hierarchy."""
 from __future__ import annotations
 
-from src.beslisboom_path_v1 import outcome_review_errors
+from src.review.beslisboom_path_v1 import outcome_review_errors
 from src.integrity_kernel import validate_parent_relations
 from src.serving_relations_v1 import binding_relations
 
@@ -114,7 +114,7 @@ def test_numbered_heading_parent_must_be_structurally_valid() -> None:
 
 
 def test_hierarchy_validation_marks_heading_roles_once(monkeypatch) -> None:
-    import src.heading_parent_list_v1 as headings
+    import src.vorming.heading_parent_list_v1 as headings
 
     calls = 0
     original = headings.mark_heading_roles

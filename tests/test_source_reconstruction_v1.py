@@ -12,8 +12,8 @@ from copy import deepcopy
 
 import pytest
 
-from src.knowledge_materialisation_v1 import materialise_knowledge_candidates, selection_source_blocks
-from src.source_reconstruction_v1 import (
+from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates, selection_source_blocks
+from src.vorming.source_reconstruction_v1 import (
     RULE_ADJACENT_GRAMMATICAL_CONTINUATION,
     STATUS_RECONSTRUCTED,
     STATUS_UNRESOLVED,
@@ -82,8 +82,8 @@ def test_reconstructs_adjacent_lowercase_continuation_without_invention() -> Non
 
 
 def test_review_window_never_cuts_a_reconstructed_sentence():
-    from src.source_reconstruction_v1 import review_source_window
-    from src.semantic_passage_v1 import _reconstructed_blocks
+    from src.vorming.source_reconstruction_v1 import review_source_window
+    from src.vorming.semantic_passage_v1 import _reconstructed_blocks
     fragments = [_fragment('before', 'Een afgeronde zin.'), _fragment('f1', FIRST),
                  _fragment('f2', CONTINUATION), _fragment('after', 'Een andere afgeronde zin.')]
     blocks = _reconstructed_blocks(fragments)
@@ -95,8 +95,8 @@ def test_review_window_never_cuts_a_reconstructed_sentence():
 
 
 def test_review_window_preserves_extractor_evidence():
-    from src.docling_contract_v1 import ExtractedFragments
-    from src.source_reconstruction_v1 import review_source_window
+    from src.vorming.docling_contract_v1 import ExtractedFragments
+    from src.vorming.source_reconstruction_v1 import review_source_window
     fragments = ExtractedFragments([_fragment('first', 'Een afgeronde zin.'),
         _fragment('other', 'Een andere afgeronde zin.')], {'set_aside_pages': [3]})
     window = review_source_window(fragments, [{'provenance': {'source_fragments': [

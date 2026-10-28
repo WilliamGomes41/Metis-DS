@@ -12,10 +12,10 @@ import time
 from zipfile import ZipFile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from src.pre_review_semantic_v1 import semantic_spec_from_fragments
-from src.semantic_transform_generic_v1 import transform
-from src.admission_gate_v1 import apply_admission_gate
-from src.source_accountability_v1 import evidence_of
+from src.vorming.pre_review_semantic_v1 import semantic_spec_from_fragments
+from src.vorming.semantic_transform_generic_v1 import transform
+from src.vorming.admission_gate_v1 import apply_admission_gate
+from src.vorming.source_accountability_v1 import evidence_of
 
 
 def replay(path):
@@ -35,7 +35,7 @@ def replay(path):
         return {'id': response['id'], 'status': response['status'], 'output': [
             {'type': 'message', 'content': [{'type': 'output_text', 'text': response['output_text']}]}]}
     started = time.monotonic()
-    from src.attempt_diagnostics_v1 import resolve_validator_input
+    from src.vorming.attempt_diagnostics_v1 import resolve_validator_input
     recorded_inputs = {row['artifact_id']:json.loads(row['validator_input']) for row in inputs}
     data = resolve_validator_input(diagnostic,lambda ref: recorded_inputs[ref['artifact_id']])
     spec = semantic_spec_from_fragments(document_id=data['document_id'], title='Recorded source',

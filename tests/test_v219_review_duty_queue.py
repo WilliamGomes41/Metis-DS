@@ -19,11 +19,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.retrieval.answerability_gate_v1 import evaluate_answerability
-from src.extract_html_v1 import extract as extract_html
-from src.four_eyes_v1 import requires_four_eyes
-from src.admission_gate_v1 import is_inhoudelijk_candidate
+from src.vorming.extract_html_v1 import extract as extract_html
+from src.review.four_eyes_v1 import requires_four_eyes
+from src.vorming.admission_gate_v1 import is_inhoudelijk_candidate
 from src.integrity_kernel import sha256_bytes
-from src.knowledge_path_v1 import content_reviewable
+from src.review.knowledge_path_v1 import content_reviewable
 from src.object_taxonomy_v1 import (
     is_advice_weight,
     is_continuation_fragment,
@@ -34,7 +34,7 @@ from src.object_taxonomy_v1 import (
     published_object_type,
     recommendation_strength_ui_applies,
 )
-from src.open_original_v1 import researcher_visible_prose
+from src.review.open_original_v1 import researcher_visible_prose
 from src.operations_console_v1 import (
     ConsoleError,
     OperationsConsole,
