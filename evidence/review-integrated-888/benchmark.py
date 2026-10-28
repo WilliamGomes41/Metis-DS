@@ -369,10 +369,20 @@ def test_native_review_post_baseline(size, tmp_path, production_console, product
         assert 'synthetic draft retained' in rejected.text
         assert durable(console, [sid]) == before
         if profile == 'history':
-            approved, result['lock_probe'] = post_with_native_row_blocker(
-                console, sid, lambda: request(client, 'approve_with_controlled_lock', 'post', data=data))
-        else:
-            approved = request(client, 'approve', 'post', data=data)
+            # Separate the injected wait from the ordinary focal approval timing.
+            control_id = candidates[1]['object_id']
+            blocked, result['lock_probe'] = post_with_native_row_blocker(
+                console, sid, lambda: request(client, 'control_approve_with_lock', 'post',
+                                             data={**data, 'object_id': control_id}))
+            assert blocked.status_code == 303
+            control = next(o for o in console.snapshot_objects(sid) if o['object_id'] == control_id)
+            assert control['governance']['validation_status'] == 'approved'
+            assert any(b['valid'] and b['object_id'] == control_id for b in console.object_review_bindings(sid))
+            # The independent committed approval invalidates the prior page token.
+            page = request(client, 'passage_after_lock_control', 'get', params=params)
+            assert page.status_code == 200
+            data = form(page)
+        approved = request(client, 'approve', 'post', data=data)
         assert approved.status_code == 303
         approved_state = durable(console, [sid])
         assert approved_state != before
