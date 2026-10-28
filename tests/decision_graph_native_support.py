@@ -1,5 +1,5 @@
 """Native graph scenarios use the shared isolated DB and production composition."""
-from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 from tests.decision_tree_test_support import install_fragment_proposer
 from tests.production_support import production_application
 from tests.test_durable_publication_console_v1 import MemorySourceStore

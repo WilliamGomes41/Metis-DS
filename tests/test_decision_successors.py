@@ -64,7 +64,7 @@ def test_successor_form_uses_kernel_command_and_requires_reason(tmp_path, *, pro
 def test_native_successor_cutover_and_failed_publication_preserve_v1(tmp_path, monkeypatch, *, complete_postgres):
     from tests.decision_graph_native_support import native_state
     from src.vorming.decision_graph_v1 import read_active_graph
-    from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
+    from src.publication.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
     state, store, source = native_state(tmp_path, config=complete_postgres)
     console = state()
     accounts = _accounts(console)

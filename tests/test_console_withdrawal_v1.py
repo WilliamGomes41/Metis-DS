@@ -11,7 +11,7 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
-from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
+from src.publication.canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
 from tests.test_vsa_publish_readiness_ui_v1 import _console_with_document, TEST_PASSWORD
 
 

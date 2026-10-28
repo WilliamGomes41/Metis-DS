@@ -222,7 +222,7 @@ def durable_story(root, monkeypatch, make=None, *, production_console):
 import json, os, sys
 from pathlib import Path
 root = Path(sys.argv[1])
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from tests.production_support import production_application
 console = production_application(root, PostgresCanonicalConfig(dsn=os.environ['METIS_TEST_POSTGRES_DSN']),
                                  processing_binder=lambda console: None).state.operations_kernel

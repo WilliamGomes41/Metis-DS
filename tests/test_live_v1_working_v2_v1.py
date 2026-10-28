@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from src.canonical_publication_postgres_v1 import (
+from src.publication.canonical_publication_postgres_v1 import (
     PostgresCanonicalConfig,
     PostgresCanonicalPublicationStore,
 )

@@ -11,9 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 from src.g2_source_store import AzureBlobSourceStore
-from src.legacy_canonical_recovery_v1 import (
+from src.publication.legacy_canonical_recovery_v1 import (
     prepare_legacy_canonical_candidate,
     recover_legacy_canonical_release,
 )

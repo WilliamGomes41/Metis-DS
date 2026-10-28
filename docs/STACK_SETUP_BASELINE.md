@@ -161,7 +161,7 @@ This inventory is derived from the current repository, especially:
 - `Dockerfile` and `Dockerfile.product-api` — Python/container runtime;
 - `pyproject.toml` and lockfiles — pinned Python stack;
 - `src/operations_console_v1.py` and `src/operations_console_app.py` — G0 local operations console MVP and identity store;
-- `src/canonical_store.py` and `db/schema_v2.sql` — SQLite pilot versus PostgreSQL production reference;
+- `src/publication/canonical_store.py` and `db/schema_v2.sql` — SQLite pilot versus PostgreSQL production reference;
 - `src/product_api_v1.py` and `src/usage_ledger_v1.py` — local file/SQLite runtime state;
 - `src/product_security_v1.py` — in-process rate limiting and APIM/Redis replacement boundary;
 - `src/retrieval/semantic_vector_retrieval_v1.py` and `config/vector_retrieval_v1.json` — active local deterministic character TF-IDF retrieval; no hosted embedding provider or credentials are used;

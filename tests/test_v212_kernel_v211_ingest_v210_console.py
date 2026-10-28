@@ -26,7 +26,7 @@ from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.product_api_v1 import ProductPaths, create_product_app
 from src.product_security_v1 import TenantPolicy, TenantRegistry, hash_api_key
-from src.published_projection_v1 import PublishedProjection, atomic_replace_projection
+from src.publication.published_projection_v1 import PublishedProjection, atomic_replace_projection
 from src.usage_ledger_v1 import UsageLedger
 
 

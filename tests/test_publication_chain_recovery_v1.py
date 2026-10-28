@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from src.integrity_kernel import compute_canonical_object_hash
-from src.publication_chain_recovery_v1 import (
+from src.publication.publication_chain_recovery_v1 import (
     BACKUP_FORMAT,
     DB_TABLES,
     PublicationChainRecoveryError,

@@ -22,7 +22,7 @@ from scripts.product_api_contract import (
     generate_contract,
 )
 from src.settings.api_access_v1 import PostgresApiAccessStore
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.product_api_v1 import ProductPaths, create_product_app
 from src.usage_ledger_v1 import UsageLedger
 

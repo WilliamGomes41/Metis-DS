@@ -34,7 +34,7 @@ from src.operations_console_v1 import PRE_REVIEW_BLOCKED, ConsoleError, Operatio
 from src.review.proportionate_review_v1 import (
     ProportionateReviewConsole,
 )
-from src.publication_readiness_v1 import source_passage_closure, review_followup_queues
+from src.publication.publication_readiness_v1 import source_passage_closure, review_followup_queues
 from src.review.review_duty_v1 import review_work_projection
 from src.review.review_interaction_v1 import _is_decision_event
 from src.review.review_ledger import read_events

@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.operations_console_v1 import SNAPSHOT_OBJECT_WRITE_CONFLICT
 from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError

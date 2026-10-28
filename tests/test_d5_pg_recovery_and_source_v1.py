@@ -157,7 +157,7 @@ import json
 from pathlib import Path
 import sys
 import pytest
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.review.review_ledger import append_event
 from tests.complete_workflow_support import complete_console
 from tests.test_pg_console_without_disk_mirrors import CONSOLES, MirrorAccess

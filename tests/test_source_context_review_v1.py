@@ -17,7 +17,7 @@ from src.operations_console_v1 import ConsoleError
 from src.review.review_ledger import read_events
 from src.review.source_context_review_v1 import context_issues, projection, EVENT, LINKS_KEY
 from src.vorming.processing_diagnostics_v1 import passage_export_rows
-from src.publication_readiness_v1 import source_passage_closure
+from src.publication.publication_readiness_v1 import source_passage_closure
 from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
 from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV, SEMANTIC_MODE
 from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: F401

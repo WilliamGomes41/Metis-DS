@@ -16,7 +16,7 @@ from typing import Any
 
 import pytest
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.workflows.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
 from src.workflows.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths

@@ -115,7 +115,7 @@ from src.operations_console_v1 import (
 )
 from src.review.open_original_v1 import OpenOriginalError, full_document_segments, parse_page_bbox, researcher_visible_prose
 from src.review.review_disposition_v1 import definitive_review_disposition
-from src.publication_readiness_v1 import review_followup_queues
+from src.publication.publication_readiness_v1 import review_followup_queues
 from src.product_security_v1 import SlidingWindowRateLimiter
 from src.review.proportionate_review_v1 import (
     ProportionateReviewConsole,
@@ -3767,7 +3767,7 @@ def _refusal_records(state, snapshot_id, issues=None):
         issues.append(code)
         logger.warning(_json.dumps({'event': 'publication_refusal_export_issue', 'snapshot_id': str(snapshot_id),
                                     'issue': code}, sort_keys=True))
-    from src import publication_refusal_store_v1 as refusal_store
+    from src.publication import publication_refusal_store_v1 as refusal_store
     try:
         pg = refusal_store.postgres_store(state)
         if pg is None:

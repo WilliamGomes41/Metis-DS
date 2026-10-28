@@ -28,7 +28,7 @@ from src.review.deterministic_review_repair_v1 import (
 )
 from src.integrity_kernel import compute_canonical_object_hash
 from src.operations_console_v1 import ConsoleError
-from src.publication_readiness_v1 import PublicationReadinessMixin
+from src.publication.publication_readiness_v1 import PublicationReadinessMixin
 from src.review.review_ledger import append_event
 
 LEGACY_REVISE_REOPENED_EVENT = "legacy_revise_reopened"

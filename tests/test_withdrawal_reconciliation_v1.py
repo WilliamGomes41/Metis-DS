@@ -12,8 +12,8 @@ from typing import Any
 
 import pytest
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
-from src.durable_publication_console_v1 import DurablePublicationConsole
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+from src.publication.durable_publication_console_v1 import DurablePublicationConsole
 
 
 pytestmark = [

@@ -19,7 +19,7 @@ import pytest
 from src.documents.document_status_v1 import derive_lifecycle_status
 from src.operations_console_v1 import PRE_REVIEW_BLOCKED, ConsoleError
 from src.review.proportionate_review_v1 import ProportionateReviewConsole
-from src.publish_authorization_v1 import still_matches, tuple_record
+from src.publication.publish_authorization_v1 import still_matches, tuple_record
 from src.review.review_policy_v1 import CONTRACT, project_policy
 from src.review.review_workboard_v1 import ReviewWorkInputs, review_work_item, review_workboard_items
 from src.workflows.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin

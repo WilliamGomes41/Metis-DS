@@ -21,10 +21,10 @@ import pytest
 from scripts.migrate_workflow_remaining_postgres import _migrate_audits
 from src.audit_archive_store_v1 import AuditArchiveStoreError
 from src.audit_retention_v1 import AuditRetentionService
-from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 from src.operations_console_v1 import ConsoleError
-from src.publication_chain_recovery_v1 import backup_publication_chain, PublicationChainRecoveryError
-from src.publication_chain_recovery_guard_v1 import restore_publication_chain, verify_publication_chain_backup
+from src.publication.publication_chain_recovery_v1 import backup_publication_chain, PublicationChainRecoveryError
+from src.publication.publication_chain_recovery_guard_v1 import restore_publication_chain, verify_publication_chain_backup
 from src.workflows.workflow_chain_recovery_v1 import (
     PostgresWorkflowRecoveryAdapter, backup_workflow_chain, restore_workflow_chain,
     verify_workflow_chain_backup,

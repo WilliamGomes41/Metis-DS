@@ -8,7 +8,7 @@ import psycopg
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 
 
 ROOT = Path(__file__).resolve().parents[1]

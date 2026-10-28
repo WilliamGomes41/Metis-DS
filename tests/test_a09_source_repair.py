@@ -286,7 +286,7 @@ root, sources, runtime, sid, oid, native = sys.argv[1:]
 kwargs = dict(root=Path(root), source_store=Path(sources), runtime=Path(runtime))
 assert native == '1', 'Console restart proofs require PostgreSQL'
 import os
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from tests.production_support import production_application
 config = PostgresCanonicalConfig(dsn=os.environ['METIS_TEST_POSTGRES_DSN'])
 console = production_application(config=config, processing_binder=lambda console:None,

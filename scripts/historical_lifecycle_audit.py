@@ -13,7 +13,7 @@ import sys
 from dataclasses import dataclass
 from typing import Any
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 
 
 @dataclass(frozen=True)

@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / ".python_packages"), str(ROOT)]
 
 from src.azure_postgres_credential_v1 import CachedAzurePostgresCredential
-from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 from src.console_performance_v1 import performance_scope
 from src.operations_console_v1 import SCHEMA_V14
 from src.workflows.workflow_badge_counts_postgres_v1 import (

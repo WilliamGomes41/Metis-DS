@@ -30,7 +30,7 @@ REMOVED = {
     "src.knowledge_relations_v1": ("legacy_confirmed_semantic_relations_exist",),
     "src.operations_console_app": ("_relation_checkboxes",),
     "src.operations_console_v1": ("_invalidate_all_bindings",),
-    "src.publication_chain_recovery_v1": ("live_publication_chain_integrity",),
+    "src.publication.publication_chain_recovery_v1": ("live_publication_chain_integrity",),
     "src.vorming.recommendation_coverage_v1": ("supplementary_blocks",),
     "src.vorming.recommendation_semantics_v1": ("has_source_literal_strength",),
     "src.retrieval.answerability_gate_v1": ("_record_text",),

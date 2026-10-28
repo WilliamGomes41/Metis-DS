@@ -12,8 +12,8 @@ import zipfile
 import pytest
 
 from src.settings.api_access_v1 import PostgresApiAccessStore
-from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
-from src.publication_chain_recovery_v1 import PublicationChainRecoveryError
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+from src.publication.publication_chain_recovery_v1 import PublicationChainRecoveryError
 from src.workflows import workflow_chain_recovery_v1 as recovery
 from tests.test_api_access_lifecycle_v1 import _provision
 from tests.test_api_access_product_v1 import DOC, _client

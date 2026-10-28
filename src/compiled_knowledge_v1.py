@@ -10,7 +10,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
+from src.publication.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
 from src.product_source_authority_v1 import (
     ProductSourceAuthorityError,
     verify_active_publication_sources,

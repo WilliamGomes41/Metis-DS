@@ -58,7 +58,7 @@ class DiskBlobTransport:
 
 def installed(root, cache, backend, patch):
     """Actual ASGI composition; only immutable Blob transport is synthetic."""
-    from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+    from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
     from tests.production_support import production_application
     source = AzureBlobSourceStore(blob_service_client=DiskBlobTransport(root / 'immutable'))
     app = production_application(root, PostgresCanonicalConfig(dsn=os.environ['METIS_TEST_POSTGRES_DSN']),

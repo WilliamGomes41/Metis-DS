@@ -200,7 +200,7 @@ def test_passage_capture_keeps_bindings_stable_when_writer_commits(tmp_path, pro
     from copy import deepcopy
     from src.integrity_kernel import exact_review_snapshot_hash
     from src.operations_console_app import _review_formation_notice
-    from src.publish_authorization_v1 import tuple_record
+    from src.publication.publish_authorization_v1 import tuple_record
     from src.review.review_passage_read_v1 import read_review_passage
     from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
     from tests.test_review_formation_problems import received, execute

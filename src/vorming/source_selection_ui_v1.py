@@ -705,7 +705,7 @@ def install(app, console, require, page, nav, esc):
 
     @app.get('/inzicht/document/publicatiebewijs')
     def publication_evidence_get(request: Request, document: str = ''):
-        from src.publication_evidence_v1 import collect_publication
+        from src.publication.publication_evidence_v1 import collect_publication
         actor = require(request)
         return JSONResponse(collect_publication(console, actor_id=actor['account_id'], snapshot_id=document),
             headers={'Cache-Control':'no-store',

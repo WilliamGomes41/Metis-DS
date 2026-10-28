@@ -16,9 +16,9 @@ from typing import Any, Iterable
 
 from azure.identity import DefaultAzureCredential
 
-from src.azure_authoritative_publication_console_v1 import AzureAuthoritativePublicationConsole
-from src.canonical_publication_postgres_v1 import AZURE_POSTGRES_SCOPE, PostgresCanonicalConfig
-from src.durable_publication_console_v1 import DurablePublicationConsole
+from src.publication.azure_authoritative_publication_console_v1 import AzureAuthoritativePublicationConsole
+from src.publication.canonical_publication_postgres_v1 import AZURE_POSTGRES_SCOPE, PostgresCanonicalConfig
+from src.publication.durable_publication_console_v1 import DurablePublicationConsole
 from src.operations_console_v1 import (
     ALLOWED_ROLES,
     DEFAULT_SESSION_TTL_SECONDS,

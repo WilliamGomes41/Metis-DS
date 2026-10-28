@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 
 from src.console_entra_v1 import EntraConfig, EntraIdentity, FLOW_COOKIE, admitted_claims, install_entra
 from src.operations_console_v1 import ConsoleError, OperationsConsole
-from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
 from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter, check_workflow_integrity
 from tests.test_workflow_chain_recovery_v1 import recovery_postgres, _install_schema  # noqa: F401

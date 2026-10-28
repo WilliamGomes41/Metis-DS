@@ -7,7 +7,7 @@ from src.settings.api_access_v1 import (
     REQUIRED_DEFAULTS,
     REQUIRED_KEYS, PostgresApiAccessStore,
 )
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 
 
 class FakeConnection:

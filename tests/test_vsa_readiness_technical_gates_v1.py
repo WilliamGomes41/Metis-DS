@@ -9,7 +9,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from src.publication_readiness_v1 import (
+from src.publication.publication_readiness_v1 import (
     PublicationReadinessMixin,
     REVIEW_DISPOSITION_INCONSISTENT,
     source_passage_closure,

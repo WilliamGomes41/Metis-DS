@@ -14,7 +14,7 @@ from typing import Any, Callable, Iterable
 
 from azure.identity import DefaultAzureCredential
 
-from src.canonical_publication_postgres_v1 import (
+from src.publication.canonical_publication_postgres_v1 import (
     AZURE_POSTGRES_SCOPE,
     PostgresCanonicalConfig,
 )

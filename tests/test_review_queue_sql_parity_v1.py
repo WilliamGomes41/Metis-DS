@@ -14,7 +14,7 @@ from uuid import uuid4
 
 import pytest
 
-from src.publication_readiness_v1 import review_followup_queues
+from src.publication.publication_readiness_v1 import review_followup_queues
 from src.review.review_duty_v1 import reviewer_route_for, reviewer_route_counts
 from src.workflows.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin
 from tests.test_vsa_review_workboard_v1 import _obj

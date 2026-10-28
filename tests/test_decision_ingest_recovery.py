@@ -16,7 +16,7 @@ def test_timeout_after_source_storage_then_retry_and_restart(tmp_path, monkeypat
         from tests.decision_graph_native_support import native_state
         state, _, source = native_state(tmp_path, config=complete_postgres)
     else:
-        from src.durable_publication_console_v1 import DurablePublicationConsole
+        from src.publication.durable_publication_console_v1 import DurablePublicationConsole
         from tests.test_durable_publication_console_v1 import MemorySourceStore
         source = MemorySourceStore()
         def state():

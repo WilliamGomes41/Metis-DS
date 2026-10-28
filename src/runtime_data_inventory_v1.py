@@ -153,7 +153,7 @@ def inventory_runtime_data(data_root: Path | None = None) -> dict[str, Any]:
 
 
 def _snapshot_bytes(path: Path) -> bytes:
-    from src.publication_refusal_store_v1 import _LOCK
+    from src.publication.publication_refusal_store_v1 import _LOCK
     with _LOCK:
         return path.read_bytes()
 

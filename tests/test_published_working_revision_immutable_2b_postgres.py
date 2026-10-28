@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.workflows.workflow_document_concurrency_v1 import (
     PUBLISHED_WORKING_REVISION_IMMUTABLE,
     PostgresConcurrentWorkflowDocumentStore,

@@ -29,7 +29,7 @@ ROLLBACK = '''@pytest.fixture
 def _isolated_console_postgres(monkeypatch):
     import os
     import psycopg
-    from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+    from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
     from src.workflows.workflow_transaction_v1 import _ACTIVE_CONNECTION
     config = PostgresCanonicalConfig(dsn=os.environ['METIS_TEST_POSTGRES_DSN'])
     with psycopg.connect(config.dsn, row_factory=psycopg.rows.dict_row) as connection:

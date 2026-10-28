@@ -12,7 +12,7 @@ from copy import deepcopy
 import pytest
 
 from src.vorming.source_containers_v1 import partition, source_usage
-from src.publication_readiness_v1 import source_passage_closure, review_followup_queues
+from src.publication.publication_readiness_v1 import source_passage_closure, review_followup_queues
 from src.vorming.source_accountability_v1 import KEY, record
 from src.review.review_duty_v1 import review_duty_for
 from tests.test_source_containers_v1 import context_story

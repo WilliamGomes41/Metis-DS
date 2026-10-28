@@ -28,7 +28,7 @@ import uuid
 
 import pytest
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 from src.integrity_kernel import stamp_canonical_hashes
 from src.operations_console_v1 import ConsoleError
 from src.review.review_duty_v1 import exact_current_approver_ids

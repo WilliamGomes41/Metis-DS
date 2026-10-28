@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from src.publication_chain_recovery_guard_v1 import (
+from src.publication.publication_chain_recovery_guard_v1 import (
     PublicationChainRecoveryError,
     restore_publication_chain,
     verify_publication_chain_backup,
 )
-from src.publication_chain_recovery_v1 import BACKUP_FORMAT, DB_TABLES
-from src.publication_chain_recovery_v1 import backup_publication_chain
+from src.publication.publication_chain_recovery_v1 import BACKUP_FORMAT, DB_TABLES
+from src.publication.publication_chain_recovery_v1 import backup_publication_chain
 from tests.test_publication_chain_recovery_v1 import FakeBlobStore, FakeDatabase, _state
 
 
@@ -90,7 +90,7 @@ class CorruptReadbackBlob(Blob):
 def test_blob_readback_failure_occurs_before_database_restore(tmp_path: Path):
     # The guard store itself is exercised through a minimal valid v1 archive in
     # the main recovery suite; this regression pins the activation invariant.
-    from src.publication_chain_recovery_guard_v1 import _ReadbackBeforeCommitStore
+    from src.publication.publication_chain_recovery_guard_v1 import _ReadbackBeforeCommitStore
     database = Database()
     guarded = _ReadbackBeforeCommitStore(CorruptReadbackBlob())
     digest = hashlib.sha256(b"source").hexdigest()

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.publication_readiness_v1 import (
+from src.publication.publication_readiness_v1 import (
     PublicationReadinessMixin,
     REVIEW_WORK_INCOMPLETE,
     SOURCE_PASSAGE_REVIEW_INCOMPLETE,

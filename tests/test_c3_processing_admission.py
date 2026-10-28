@@ -176,7 +176,7 @@ def test_precheck_reads_through_workflow_store_connection(monkeypatch, capsys):
     import contextlib
     import scripts.processing_rollback_precheck as precheck
     import src.workflows.workflow_documents_postgres_v1 as workflow_store
-    import src.canonical_publication_postgres_v1 as canonical
+    import src.publication.canonical_publication_postgres_v1 as canonical
     used = []
 
     class Rows:
