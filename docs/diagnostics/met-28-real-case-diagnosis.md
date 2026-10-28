@@ -186,9 +186,14 @@ binnen het blok). `source_accountability_v1.validate_assessments` toetst echter 
 bronblokken van de taak, en meldt een onbekend blok onder dezelfde code als ongeldige offsets.
 De meerblok-`spans` in de bevinding zijn de doelbereiken van de taak; `bounded_formation_v1` vult
 die in als een afwijzing geen eigen spans heeft. Het werkelijke bereik staat in `evidence_span`.
-Klasse (d) met een terechte regel (e): een taak verantwoordt alleen haar eigen bron. Het geval is
-later opgelost. Diagnostische kanttekening: de code onderscheidt "blok niet selecteerbaar" niet
-van "offsets ongeldig".
+Klasse: **mismatch in het producercontract**, niet zuiver (d). `SEMANTIC_V3_INSTRUCTION`
+verbiedt alleen een nieuwe *kandidaat* uit `evidence_blocks` en noemt `selectable_ranges` de
+*kandidaat*grens (`pre_review_semantic_v1.py:160–162`). `SOURCE_ACCOUNTABILITY_INSTRUCTION`
+(`:165–173`) en het response-schema beperken bronbeoordelingen niet tot de bronblokken. Dat doet
+alleen `validate_assessments`, achteraf. De regel zelf is terecht (e): een taak verantwoordt
+alleen haar eigen bron. Kleinste wijziging zonder domeinbesluit: de instructie laat beoordelingen
+uitdrukkelijk binnen `selectable_ranges` blijven (§4). Het geval is later opgelost. Diagnostische
+kanttekening: de code onderscheidt "blok niet selecteerbaar" niet van "offsets ongeldig".
 
 **Call-breed `pre_review_llm_proposal_rejected` — 1 call (initiële taak `failed`; recovery `completed`).**
 De call-rij en de opgeslagen provider-evidence bewaren alleen de generieke code, zonder
@@ -231,7 +236,8 @@ validator-input en de blokken uit de request-payload (code functioneel gelijk aa
    - het volledige sterktelabel selecteren (S1);
    - een contextentry meegeven voor `scope_span`/`target_group_span` buiten de kern;
    - een niet-aaneengesloten literal vervangen door `missing_reason` (2.7, zolang B5-g open is);
-   - relatie-eindpunten exact gelijk aan de spans van een voorgesteld object (2.7).
+   - relatie-eindpunten exact gelijk aan de spans van een voorgesteld object (2.7);
+   - bronbeoordelingen alleen binnen `formation_task.selectable_ranges` (2.7; nu staat dat alleen in de validator).
 
 Beide wijzigen vorming of diagnose van werkpakket MET-6 en vragen een eigen GitHub-issue
 na triage. Ze zijn niet in dit dossier uitgevoerd.
