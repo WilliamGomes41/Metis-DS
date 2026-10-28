@@ -40,3 +40,13 @@ def test_native_task_v1_rollback(tmp_path, production_console, production_app, m
         monkeypatch.setenv('REVIEW_PROOF_OUTPUT', str(tmp_path / 'task-v1-rollback.json'))
     namespace['test_native_task_v1_review'](
         tmp_path, production_console, production_app, monkeypatch, False, fault=fault)
+
+
+@pytest.mark.parametrize('dependency', ['role', 'context'])
+def test_native_task_v1_dependencies(tmp_path, production_console, production_app, monkeypatch, dependency):
+    harness = Path(__file__).resolve().parents[1] / 'evidence/review-integrated-888/benchmark.py'
+    namespace = runpy.run_path(str(harness))
+    if not os.environ.get('REVIEW_PROOF_OUTPUT'):
+        monkeypatch.setenv('REVIEW_PROOF_OUTPUT', str(tmp_path / 'task-v1-dependencies.json'))
+    namespace['test_native_task_v1_review'](
+        tmp_path, production_console, production_app, monkeypatch, False, dependency=dependency)

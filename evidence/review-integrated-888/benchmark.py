@@ -259,13 +259,14 @@ def test_native_review_matrix(case, tmp_path, production_console, production_app
 
 
 @pytest.mark.parametrize('incomplete', [False, True])
-def test_native_task_v1_review(tmp_path, production_console, production_app, monkeypatch, incomplete, fault=None):
+def test_native_task_v1_review(tmp_path, production_console, production_app, monkeypatch, incomplete, fault=None, dependency=None):
     """Actual bounded processing activates storage v1 before measured HTTP review."""
     from src.request_diagnostics_v1 import RequestDiagnostics
     import src.console_performance_v1 as performance
     from tests.test_review_formation_problems import received, execute, FIRST
     from src.publication.publish_authorization_v1 import still_matches
     assert fault in {None, 'binding', 'commit'}
+    assert dependency in {None, 'role', 'context'}
 
     console, sid, author, reviewer, calls, mode, _provider = received(
         tmp_path, production_console, monkeypatch)
@@ -298,6 +299,7 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
     monkeypatch.setattr(RequestDiagnostics, 'emit', emit)
     monkeypatch.setattr(performance._LOGGER, 'info', lambda *args, **kwargs: None)
     result = {'case': 'task_v1_review', 'formation_incomplete': incomplete, 'fault_point': fault,
+        'dependency': dependency,
         'commit': git('rev-parse', 'HEAD'), 'harness_sha256': sha256(Path(__file__).read_bytes()).hexdigest(),
         'runtime': 'authenticated ASGI + native disposable PostgreSQL',
         'fixture': 'existing synthetic two-passage bounded-processing provider; production activation',
@@ -338,6 +340,19 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
                           data={**data, 'source_discrepancy': 'context_ontbreekt'})
         assert refused.status_code == 400 and 'synthetic task-v1 draft' in refused.text
         assert durable(console, [sid]) == before
+        if dependency == 'role':
+            # Authority is mutable independently of the document generation.
+            console.workflow_identity_store.update_roles(reviewer, ['researcher'])
+            try:
+                assert storage_state() == initial_storage
+                denied = request(client, 'revoked_reviewer', 'post', data=data)
+                assert denied.status_code == 403
+                assert durable(console, [sid]) == before
+                assert storage_state() == initial_storage
+            finally:
+                console.workflow_identity_store.update_roles(reviewer, ['reviewer'])
+            result['authority_probe'] = {'generation_unchanged': True,
+                'durable_state_unchanged': True, 'http_status': denied.status_code}
         if fault:
             from tests.production_support import restart_production
             expected_sqlstate = 'P9021' if fault == 'binding' else 'P9022'
@@ -398,6 +413,42 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
         fresh = request(client, 'fresh_passage', 'get', params=params)
         assert fresh.status_code == 200
         stale_data = form(fresh)
+        if dependency == 'context':
+            from src.review.source_context_review_v1 import LINKS_KEY, context_issues
+            from src.review.review_passage_read_v1 import read_review_passage
+            source = next(o for o in console.snapshot_objects(sid)
+                          if o.get('proposed_object_type') == 'recommendation'
+                          and o['object_id'] != focal['object_id'])
+            console.confirm_source_context(actor_id=reviewer, snapshot_id=sid,
+                source_object_id=source['object_id'], role='context',
+                target_object_ids=[focal['object_id']], reason='Synthetic linked source context.',
+                command_id='native-context-dependency', expected_revision=console.objects_revision(sid))
+            linked_rows = console.snapshot_objects(sid)
+            linked = next(o for o in linked_rows if o['object_id'] == focal['object_id'])
+            assert linked['governance']['validation_status'] == 'needs_review'
+            assert any(link['source_object_id'] == source['object_id']
+                       for link in linked['metadata'][LINKS_KEY])
+            assert not context_issues(linked_rows)
+            assert not any(b.get('valid') for b in console.object_review_bindings(sid)
+                           if b['object_id'] == focal['object_id'])
+            after_context = durable(console, [sid])
+            context_storage = storage_state()
+            assert context_storage['object_generation'] > result['storage_after_approval']['object_generation']
+            context_stale = request(client, 'context_stale', 'post', data=stale_data)
+            assert context_stale.status_code == 409
+            assert durable(console, [sid]) == after_context
+            assert storage_state() == context_storage
+            package = read_review_passage(console, {'account_id': reviewer, 'roles': ['reviewer']},
+                                          sid, focal['object_id'])
+            assert source['object_id'] in {o['object_id'] for o in package.objects}
+            context_page = request(client, 'context_passage', 'get', params=params)
+            assert context_page.status_code == 200
+            assert 'Context die bij deze passage is vastgelegd' in context_page.text
+            assert durable(console, [sid]) == after_context
+            result['context_probe'] = {'storage_after_context': context_storage,
+                'approval_reopened': True, 'binding_invalidated': True,
+                'dependency_in_read_package': True, 'stale_preserves_winner': True}
+            stale_data = form(context_page)
         append_post_fixture_revision(console, sid, focal['object_id'], reviewer)
         concurrent_state = durable(console, [sid])
         result['storage_after_concurrent_revision'] = storage_state()
