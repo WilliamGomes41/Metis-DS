@@ -45,9 +45,20 @@ def durable(console, ids):
     })
 
 
+def append_post_fixture_revision(console, sid, oid, actor):
+    """Advance the current version; never edit an earlier history occurrence."""
+    from src.review.revision_workflow import current_revisions, revise_object, with_current_revision
+    rows = console._load_objects(sid)
+    previous = next(o for o in current_revisions(rows, snapshot_id=sid) if o['object_id'] == oid)
+    successor = revise_object(previous, deepcopy(previous), snapshot_id=sid,
+        reason='Synthetic history load', actor=actor, force=True)
+    assert successor['object_version'] != previous['object_version']
+    console._save_objects(sid, with_current_revision(rows, successor),
+                          expected_revision=console.objects_revision(sid))
+
+
 def seed_post_history(console, sid, candidates, reviewer, depth):
     """Synthetic load via real approvals and validated append-order revisions."""
-    from src.review.revision_workflow import current_revisions, revise_object, with_current_revision
 
     def approve(oid):
         console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=oid,
@@ -60,13 +71,7 @@ def seed_post_history(console, sid, candidates, reviewer, depth):
         oid = candidate['object_id']
         for _ in range(depth):
             approve(oid)
-            rows = console._load_objects(sid)
-            previous = next(o for o in current_revisions(rows, snapshot_id=sid) if o['object_id'] == oid)
-            successor = revise_object(previous, deepcopy(previous), snapshot_id=sid,
-                reason='Synthetic history load', actor=reviewer['account_id'], force=True)
-            assert successor['object_version'] != previous['object_version']
-            console._save_objects(sid, with_current_revision(rows, successor),
-                                  expected_revision=console.objects_revision(sid))
+            append_post_fixture_revision(console, sid, oid, reviewer['account_id'])
         if number % 2 == 0:
             approve(oid)
 
@@ -402,9 +407,7 @@ def test_native_review_post_baseline(size, tmp_path, production_console, product
         fresh = request(client, 'fresh_passage', 'get', params=params)
         assert fresh.status_code == 200
         stale_data = form(fresh)
-        changed = deepcopy(console._load_objects(sid))
-        next(o for o in changed if o['object_id'] == candidates[1]['object_id'])['review_test_marker'] = 'concurrent'
-        console._save_objects(sid, changed)
+        append_post_fixture_revision(console, sid, candidates[1]['object_id'], reviewer['account_id'])
         concurrent_state = durable(console, [sid])
         stale = request(client, 'concurrent_stale', 'post', data=stale_data)
         assert stale.status_code == 409

@@ -53,6 +53,8 @@ The fixture ingests synthetic HTML using deterministic fixture selections and th
 
 The semantic refusal reaches the real review command and uses its existing rule that a discrepancy precludes approval. It is not a simulated database failure. The concurrent write is deliberate synthetic fixture setup using the existing store path, outside the measured request. These cases do not establish retry behavior for reject, revise, defer, second review or batch.
 
+The concurrency control appends a validated successor to the current append-order version using the same helper as history setup. It preserves every historical occurrence; selecting the first stored row would target an immutable predecessor after the control approval.
+
 Reports include individual wall times, status, response size and existing aggregate diagnostic phases/counters. Phase trees may overlap or truncate; do not sum them or infer missing phases. `db_json_bytes` measures diagnostic JSON volume, not proven wire bytes. Reports contain no cookies, request identifiers, account IDs, SQL text, form values, original uploaded material or incident telemetry. The workload fingerprint is synthetic and reproducible. Neither one observation nor this small fixture supports p95 or production SLO claims.
 
 ## Remaining MET-23 work
