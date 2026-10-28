@@ -115,13 +115,16 @@ Afleiding bij lezen, nooit wegschrijven zonder poging:
 | --- | --- | --- |
 | Alle pogingen hebben dezelfde `processing_configuration.mode` | `derived_legacy` (eenduidig) | Binden met `origin = derived_legacy` bij de eerstvolgende reservering (dat is vastlegging, geen backfill) |
 | Geen poging met configuratie, wel `semantic_replay.identity` met een contractversie | `derived_legacy` uit de replay-identiteit | Idem |
-| Geen enkel routebewijs | `unrecorded` | **Open besluit B2-a:** weigeren (alleen opvolger) of binden aan de standaard met `origin = default` en reden `legacy_unrecorded` |
+| Geen enkel routebewijs | `unrecorded` | Weigeren met `formation_route_unrecorded` (besluit B2-a); alleen een opvolger |
 | Tegenstrijdige modi tussen pogingen | `conflicting` | Weigeren met `formation_route_conflicting`; alleen een opvolger. Zichtbaar in de diagnostiek |
 | Gepubliceerd | n.v.t. | Nooit opnieuw vormen (bestaande regel); alleen lezen |
 
-## 6. Open besluiten (projectlead)
+## 6. Besluiten (projectlead)
 
-| ID | Vraag | Voorstel |
+Besloten door de projectlead op 2026-10-28 ("ga door" op het voorstel hieronder, gemeld in de
+WP-update van MET-13): elk voorstel is overgenomen zoals het hier staat.
+
+| ID | Vraag | Besluit |
 | --- | --- | --- |
 | B1 | Waar staat de route-autoriteit? | Optie A: `envelope.formation_route`, eenmalig, binnen de bestaande transactie |
 | B2-a | Legacy zonder enig routebewijs: weigeren of aan de standaard binden? | Weigeren (veiligst, N7); opvolger als uitweg |
@@ -147,14 +150,14 @@ Lifecycle-velden (`docs/agents/lifecycle-vsa.md`, `validate_change_contract.LIFE
 | Workflow state before/after | ongewijzigd (processing/in_review/...); route is geen workflowstatus |
 | Release state before/after | ongewijzigd |
 | Serving state before/after | ongewijzigd |
-| Expected API result | receipt bevat `formation_route`; fouten `formation_route_mismatch/excluded/conflicting/not_resumable` |
+| Expected API result | receipt bevat `formation_route`; fouten `formation_route_mismatch/excluded/conflicting/unrecorded/not_resumable` |
 | Expected UI result | document toont vastgelegde route; omgeving als "standaard voor nieuwe verwerking" |
 | Failure result | fail closed vóór commit; geen gedeeltelijke binding; geen poging zonder binding |
 | Restart result | binding staat in de durable envelope; herstart leest binding, niet omgeving |
 | Recovery result | resume/herstel gebruiken binding; checkpoint-incompatibiliteit faalt gesloten |
 | Legacy-data result | zie §5; geen backfill |
 | Required black-box scenario | §8, scenario 1–3 op native PostgreSQL en de productiecompositie |
-| Explicit non-goals | geen nieuwe store, geen V3-cutover, geen modelpinning per bron (tenzij B3-b anders), geen migratie van gepubliceerd werk |
+| Explicit non-goals | geen nieuwe store, geen V3-cutover, geen modelpinning per bron (B3-b), geen migratie van gepubliceerd werk |
 
 High-risk-velden (`continuous-development.md`):
 
@@ -181,8 +184,8 @@ High-risk-velden (`continuous-development.md`):
 3. Een dubbele registratie (zelfde `command_id`) maakt geen tweede poging of binding. Een stale writer
    (verouderde revisie) faalt. Een commit-failure laat geen gedeeltelijke binding achter.
 4. Gelijktijdige eerste reserveringen op dezelfde bronversie leveren precies één binding op.
-5. Legacy: eenduidig, ontbrekend en tegenstrijdig bewijs geven respectievelijk binding, het B2-a-
-   gedrag en weigering. Immutable releases en de live voorganger blijven intact.
+5. Legacy: eenduidig, ontbrekend en tegenstrijdig bewijs geven respectievelijk binding,
+   weigering (`formation_route_unrecorded`, B2-a) en weigering (`formation_route_conflicting`). Immutable releases en de live voorganger blijven intact.
 6. Een providerfout leidt niet tot een andere route of een alternatieve kandidaatmaker.
 7. Een deploy tussen reservering en uitvoering blijft gefenst (bestaand). Een nieuwe poging na de deploy
    met dezelfde route, hetzelfde model en docling is toegestaan (B3-c).
@@ -196,5 +199,5 @@ Bewijs op native PostgreSQL en de productiecompositie; mocks gelden niet als her
 - [x] Kloof per norm (§3) en ontwerpvoorstel zonder tweede autoriteit (§4).
 - [x] Legacy-gedrag zonder backfill (§5); route-uitsluiting en checkpoint-incompatibiliteit (§4.4, §4.6).
 - [x] Alle lifecycle- en high-riskvelden voor het uitvoeringsissue (§7); falsificatiescenario's (§8).
-- [ ] Bevoegd besluit over B1, B2-a/b en B3-a/b/c (projectlead). Pas daarna kan het
-      uitvoeringsissue (Class A, high) worden gevormd.
+- [x] Bevoegd besluit over B1, B2-a/b en B3-a/b/c (projectlead, 2026-10-28, §6).
+- [x] Uitvoeringsissue (Class A, rewrite risk high) aangemaakt: #915 (MET-29).
