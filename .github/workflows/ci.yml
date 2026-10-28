@@ -81,6 +81,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: review-post-902
+          overwrite: true
           path: output/review-post-902.*
           if-no-files-found: error
       - name: Characterization mutation review (expected exit code 1)
