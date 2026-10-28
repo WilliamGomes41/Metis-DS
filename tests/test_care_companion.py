@@ -134,6 +134,13 @@ def test_docling_image_pins_ci_playwright_and_guards_the_render_fonts():
     # The browser layer precedes model preparation, which records the font inventory.
     assert dockerfile.index("playwright@") < dockerfile.index("prepare_docling_models.py /opt/docling-models")
     assert "METIS_BROWSER_EXECUTABLE=/opt/metis-browser/chrome-headless-shell" in dockerfile
+    prep = (
+        "src/vorming/__init__.py",
+        "src/vorming/docling_contract_v1.py",
+        "src/vorming/docling_render_fonts_v1.py",
+    )
+    assert all(name in dockerfile for name in prep)
+    assert all((ROOT / name).is_file() for name in prep)
 
 
 def test_deploy_check_opens_the_navigation_rooms_in_a_frame_that_cannot_submit():

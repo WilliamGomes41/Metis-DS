@@ -12,15 +12,15 @@ from unittest.mock import patch
 REPO = Path(os.environ.get('METIS_PROBE_REPO', str(Path(__file__).resolve().parents[1]/'metis-review')))
 sys.path[:0] = [str(REPO), str(REPO/'tests')]
 from fastapi.testclient import TestClient
-from src.review.review_closure_v1 import ReviewClosureConsole
+from src.review_closure_v1 import ReviewClosureConsole
 from src.operations_console_app import create_console_app
-from src.documents.document_status_ui_v1 import install_document_status_ui
+from src.document_status_ui_v1 import install_document_status_ui
 from src.publish_readiness_ui_v1 import install_publish_readiness_ui
-from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 from tests.test_recommendation_context_v3 import response_for
-from src.vorming.source_accountability_v1 import is_source_record
-import src.vorming.semantic_passage_v1 as semantic
-import src.vorming.knowledge_materialisation_v1 as materialisation
+from src.source_accountability_v1 import is_source_record
+import src.semantic_passage_v1 as semantic
+import src.knowledge_materialisation_v1 as materialisation
 
 count = int(sys.argv[1]) if len(sys.argv)>1 else 20
 with tempfile.TemporaryDirectory(prefix='metis-overview-probe-') as folder:

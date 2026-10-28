@@ -23,7 +23,7 @@ from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel, ConfigDict, Field
 
 from .abstain_catalog_v1 import sentence_for
-from .api_access_v1 import ApiAccessPrincipal, ApiAccessStoreError, PostgresApiAccessStore
+from .settings.api_access_v1 import ApiAccessPrincipal, ApiAccessStoreError, PostgresApiAccessStore
 from .retrieval.answerability_gate_v1 import AnswerabilityConfig
 from .canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
 from .g2_source_store import AzureBlobSourceStore

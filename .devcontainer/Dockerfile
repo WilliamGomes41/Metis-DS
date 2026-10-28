@@ -54,7 +54,8 @@ RUN apt-get update \
     && /opt/docling/bin/pip install --no-cache-dir -r /tmp/metis-requirements/requirements-docling.lock \
     && /opt/docling/bin/pip check
 COPY scripts/prepare_docling_models.py /tmp/docling-prep/scripts/
-COPY src/__init__.py src/docling_contract_v1.py src/docling_render_fonts_v1.py /tmp/docling-prep/src/
+COPY src/__init__.py /tmp/docling-prep/src/__init__.py
+COPY src/vorming/__init__.py src/vorming/docling_contract_v1.py src/vorming/docling_render_fonts_v1.py /tmp/docling-prep/src/vorming/
 RUN /opt/docling/bin/python /tmp/docling-prep/scripts/prepare_docling_models.py /opt/docling-models \
     && rm -rf /tmp/docling-prep /root/.cache \
     && mkdir -p /opt/hf-home
