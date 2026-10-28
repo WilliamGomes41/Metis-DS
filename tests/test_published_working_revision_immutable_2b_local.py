@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from src.durable_publication_console_v1 import DurablePublicationConsole
+from src.publication.durable_publication_console_v1 import DurablePublicationConsole
 from src.operations_console_v1 import ConsoleError, _atomic_write
 from src.review.review_closure_v1 import PUBLISHED_WORKING_REVISION_IMMUTABLE
 

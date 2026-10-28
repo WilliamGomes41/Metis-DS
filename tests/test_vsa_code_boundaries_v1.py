@@ -16,7 +16,7 @@ import pytest
 
 from src.documents.document_status_v1 import DocumentStatusReadinessMixin
 from src.operations_console_v1 import ConsoleError
-from src.publication_readiness_v1 import PublicationReadinessMixin
+from src.publication.publication_readiness_v1 import PublicationReadinessMixin
 
 ROOT = Path(__file__).resolve().parents[1]
 

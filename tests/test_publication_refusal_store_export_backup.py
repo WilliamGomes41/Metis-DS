@@ -13,7 +13,7 @@ import csv
 import io
 from zipfile import ZipFile
 
-import src.publication_refusal_store_v1 as store
+import src.publication.publication_refusal_store_v1 as store
 from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
 from src.runtime_data_inventory_v1 import (
     INVENTORY_CATEGORIES, export_runtime_data, inventory_runtime_data, restore_runtime_data,

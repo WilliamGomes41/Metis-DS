@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.publication_readiness_v1 import publication_review_readiness
+from src.publication.publication_readiness_v1 import publication_review_readiness
 from src.review.review_disposition_v1 import definitive_review_disposition
 
 

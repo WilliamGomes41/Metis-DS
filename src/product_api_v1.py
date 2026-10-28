@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .abstain_catalog_v1 import sentence_for
 from .settings.api_access_v1 import ApiAccessPrincipal, ApiAccessStoreError, PostgresApiAccessStore
 from .retrieval.answerability_gate_v1 import AnswerabilityConfig
-from .canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
+from .publication.canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
 from .g2_source_store import AzureBlobSourceStore
 from .retrieval.hybrid_retrieval_v1 import HybridConfig
 from .retrieval.lexical_retrieval_v1 import RetrievalConfig

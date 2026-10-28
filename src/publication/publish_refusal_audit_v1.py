@@ -10,7 +10,7 @@ silently swallowed. The diagnostic carries no exception text, actor or key. Allo
 Logs carry the actor only as a keyed HMAC (key from app setting
 METIS_AUDIT_HMAC_KEY; the key MAG NOOIT be logged; without a key the field is None).
 The durable audit store is the separate append-only refusal store
-(src/publication_refusal_store_v1.py), outside the review ledger hash chain; it
+(src/publication/publication_refusal_store_v1.py), outside the review ledger hash chain; it
 records the actor in clear, as review and publish events do.
 """
 from __future__ import annotations
@@ -130,7 +130,7 @@ def _audit_failed(stage, *, error=None, outcome=None, snapshot_id=None, error_cl
 def _append_durable(console, *, actor_id, snapshot_id, reason_codes, revision):
     # #629 F1: separate append-only store; MAG NIET use the review ledger chain.
     try:
-        from src import publication_refusal_store_v1 as store
+        from src.publication import publication_refusal_store_v1 as store
         try:
             version = str(console._envelope(snapshot_id).get('version') or '')
         except Exception as exc:  # version is optional evidence

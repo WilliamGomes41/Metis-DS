@@ -22,7 +22,9 @@ INFRA_PREFIXES = (
     "src.operations_console_app", "src.console_asgi", "src.service_app",
     "src.product_api_v1", "src.operations_console_v1",
     "src.durable_publication_console_v1", "src.azure_authoritative_publication_console_v1",
-    "src.canonical_publication_postgres_v1", "src.g2_source_store", "src.workflows",
+    "src.canonical_publication_postgres_v1",
+    "src.publication.durable_publication_console_v1", "src.publication.azure_authoritative_publication_console_v1",
+    "src.publication.canonical_publication_postgres_v1", "src.g2_source_store", "src.workflows",
 )
 
 

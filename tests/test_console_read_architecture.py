@@ -684,7 +684,7 @@ def test_installed_review_and_publish_gets_have_single_explicit_owner(tmp_path, 
     import inspect
     console, users, sid, _ = _system(tmp_path, production_console=production_console)
     app = production_app(console)
-    for path, owner in [('/review', 'src.review.review_workboard_v1'), ('/publish', 'src.publish_readiness_ui_v1')]:
+    for path, owner in [('/review', 'src.review.review_workboard_v1'), ('/publish', 'src.publication.publish_readiness_ui_v1')]:
         routes = [r for r in app.routes if getattr(r, 'path', '') == path and 'GET' in (getattr(r, 'methods', None) or ())]
         assert len(routes) == 1
         assert inspect.unwrap(routes[0].endpoint).__module__ == owner

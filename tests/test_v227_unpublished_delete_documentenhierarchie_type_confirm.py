@@ -486,7 +486,7 @@ def test_app_source_does_not_offer_delete_outside_tree() -> None:
     assert "_unpublished_delete_control" not in ingest_post
     review = (APP_SOURCE.parent / "review" / "review_workboard_v1.py").read_text(encoding="utf-8").split("def review_get", 1)[1].split("\n    @app.", 1)[0]
     assert "_unpublished_delete_control" not in review
-    publish = (APP_SOURCE.parent / "publish_readiness_ui_v1.py").read_text(encoding="utf-8").split("def publish_get", 1)[1].split("\n    @app.", 1)[0]
+    publish = (APP_SOURCE.parent / "publication/publish_readiness_ui_v1.py").read_text(encoding="utf-8").split("def publish_get", 1)[1].split("\n    @app.", 1)[0]
     assert "_unpublished_delete_control" not in publish
     accounts = source.split("def accounts_get", 1)[1].split("\n    @app.", 1)[0]
     assert "_unpublished_delete_control" not in accounts

@@ -124,7 +124,7 @@
       "operational_owner": "developer",
       "decision_deadline_gate": "G8",
       "evidence": [
-        "src/canonical_store.py",
+        "src/publication/canonical_store.py",
         "db/schema_v2.sql"
       ]
     },
@@ -294,7 +294,7 @@
       "operational_owner": "TBD",
       "decision_deadline_gate": "G0-Azure-DEV before real shared state",
       "evidence": [
-        "src/canonical_store.py",
+        "src/publication/canonical_store.py",
         "db/schema_v2.sql",
         "docs/history/FULL_TECHNICAL_AUDIT_2026-08-19.md"
       ]

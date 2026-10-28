@@ -40,7 +40,7 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
 
     # Imports stay local to avoid a domain-policy -> HTML dependency direction.
     import src.operations_console_app as console_ui
-    import src.publish_readiness_ui_v1 as publish_ui
+    import src.publication.publish_readiness_ui_v1 as publish_ui
 
     console_ui.STATUS_LABELS.update(DOCUMENT_STATUS_LABELS)
 

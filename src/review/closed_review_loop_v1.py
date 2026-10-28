@@ -21,7 +21,7 @@ from src.vorming.passage_register_v1 import (
     register_status_from_suitability,
 )
 from src.review.proportionate_review_v1 import ProportionateReviewConsole
-from src.publish_authorization_v1 import invalidate_for_object
+from src.publication.publish_authorization_v1 import invalidate_for_object
 from src.review.review_cockpit_v1 import broncontext_parts, map_eindoordeel
 from src.review.source_discrepancy_v1 import normalize as normalize_discrepancy
 from src.review.review_ledger import append_event, read_events, read_command_events
@@ -583,7 +583,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
 
     def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         self._require_role(actor_id, "publisher")
-        from src.publication_readiness_v1 import derive_publication_readiness
+        from src.publication.publication_readiness_v1 import derive_publication_readiness
         return derive_publication_readiness(self, snapshot_id)
 
     def select_for_question(self, *, family: str, asked_class: str) -> list[dict[str, Any]]:

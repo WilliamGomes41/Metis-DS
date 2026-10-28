@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from src.settings.api_access_v1 import PostgresApiAccessStore
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 
 ROOT = Path(__file__).resolve().parents[1]
 

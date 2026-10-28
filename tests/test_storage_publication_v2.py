@@ -7,8 +7,8 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
-from src.canonical_store import import_approved as _import_approved
-from src.canonical_store import (
+from src.publication.canonical_store import import_approved as _import_approved
+from src.publication.canonical_store import (
     create_release,
     emergency_unpublish,
     export_published,
@@ -241,7 +241,7 @@ def test_release_owner_required(tmp_path: Path):
 
 
 def test_withdraw_release_hides_only_objects_still_pointing_to_that_release(tmp_path: Path):
-    from src.canonical_store import withdraw_release
+    from src.publication.canonical_store import withdraw_release
     obj = make_approved()
     db = tmp_path / "store.db"
     inp = tmp_path / "approved.jsonl"; write_jsonl(inp, [obj]); import_approved(db, inp, SCHEMA_PATH, "technical-test")

@@ -13,14 +13,14 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 
-from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
+from src.publication.canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
 from src.documents.document_status_v1 import DocumentStatusReadinessMixin
 from src.operations_console_v1 import ConsoleError
-from src.publication_evidence_v1 import observe_publication
+from src.publication.publication_evidence_v1 import observe_publication
 from src.retrieval.retrieval_projection_v2 import build_projection
 from src.review.review_closure_v1 import ReviewClosureConsole
 from src.review.review_ledger import append_event
-from src import publish_refusal_audit_v1 as _publish_refusal_audit
+from src.publication import publish_refusal_audit_v1 as _publish_refusal_audit
 
 
 _HISTORICAL_RELEASE_STATES = frozenset({"superseded", "withdrawn"})

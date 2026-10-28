@@ -188,13 +188,13 @@ def test_http_recovery_and_export_are_authorized_and_explicit(tmp_path, *, produ
 
 
 def test_recover_review_publish_restart_and_published_projection(tmp_path, complete_postgres, *, production_console):
-    from src.durable_publication_console_v1 import DurablePublicationConsole
+    from src.publication.durable_publication_console_v1 import DurablePublicationConsole
     from src.product_api_v1 import create_product_app
     from src.usage_ledger_v1 import UsageLedger
     from fastapi.testclient import TestClient
     from tests.test_product_api_v1 import paths, registry, headers
     from tests.test_durable_publication_console_v1 import MemorySourceStore
-    from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+    from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
     durable, source_store = PostgresCanonicalPublicationStore(complete_postgres), MemorySourceStore()
     def make():
         return production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime',

@@ -303,7 +303,7 @@ def test_summary_trigger_covers_raw_writes_and_ignores_forged_projection(
     import subprocess
     import sys
     code = '''import hashlib,json,os
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
 store=PostgresWorkflowDocumentRuntimeStore(PostgresCanonicalConfig(dsn=os.environ['METIS_SUMMARY_RESTART_DSN']))
 rows=store.list_source_selection_summaries()

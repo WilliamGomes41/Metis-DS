@@ -57,7 +57,7 @@ from pathlib import Path
 from tests.test_a08_heading_batch_atomic import _state
 from tests.test_v219_review_duty_queue import _console
 root, sid, mode = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 config = PostgresCanonicalConfig(dsn=os.environ["METIS_TEST_POSTGRES_DSN"])
 assert mode == "postgres", mode
 from tests.test_review_batch_atomic_postgres import _console as native

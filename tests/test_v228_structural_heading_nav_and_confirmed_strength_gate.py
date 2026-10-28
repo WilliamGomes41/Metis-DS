@@ -782,7 +782,7 @@ def test_block_a_does_not_open_publish_or_recreate_handoff() -> None:
     source = (ROOT / "src/operations_console_v1.py").read_text(encoding="utf-8")
     assert '"g2": "BLOCKED"' in source
     # Since D6b the publish refusal lives only in the PostgreSQL publication console.
-    durable = (ROOT / "src/durable_publication_console_v1.py").read_text(encoding="utf-8")
+    durable = (ROOT / "src/publication/durable_publication_console_v1.py").read_text(encoding="utf-8")
     assert '"status":"BLOCKED"' in durable and '"g2":considered.get("g2","BLOCKED")' in durable
 
 

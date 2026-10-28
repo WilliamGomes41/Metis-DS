@@ -19,7 +19,7 @@ from src.object_taxonomy_v1 import published_object_type
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.product_api_v1 import ProductPaths, create_product_app
 from src.product_security_v1 import TenantPolicy, TenantRegistry, hash_api_key
-from src.published_projection_v1 import atomic_replace_projection
+from src.publication.published_projection_v1 import atomic_replace_projection
 from src.review.four_eyes_v1 import requires_four_eyes
 from src.serving_relations_v1 import binding_relations
 from src.usage_ledger_v1 import UsageLedger

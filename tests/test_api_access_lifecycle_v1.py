@@ -15,7 +15,7 @@ from src.settings.api_access_v1 import (
     ApiAccessStoreError,
     PostgresApiAccessStore,
 )
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 
 ROOT = Path(__file__).resolve().parents[1]
 

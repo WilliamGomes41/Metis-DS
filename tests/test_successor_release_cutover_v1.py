@@ -17,12 +17,12 @@ from pathlib import Path
 
 import pytest
 
-from src.canonical_publication_postgres_v1 import (
+from src.publication.canonical_publication_postgres_v1 import (
     CanonicalPublicationStoreError,
     PostgresCanonicalConfig,
     PostgresCanonicalPublicationStore,
 )
-from src.durable_publication_console_v1 import DurablePublicationConsole
+from src.publication.durable_publication_console_v1 import DurablePublicationConsole
 from src.integrity_kernel import stamp_canonical_hashes
 
 ROOT = Path(__file__).resolve().parents[1]

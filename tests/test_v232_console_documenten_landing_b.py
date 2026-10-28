@@ -284,7 +284,7 @@ def test_app_source_still_wires_delete_only_on_tree() -> None:
     source = APP_SOURCE.read_text(encoding="utf-8")
     ingest_get = source.split("def ingest_get", 1)[1].split("\n    @app.", 1)[0]
     review = (APP_SOURCE.parent / "review" / "review_workboard_v1.py").read_text(encoding="utf-8").split("def review_get", 1)[1].split("\n    @app.", 1)[0]
-    publish = (APP_SOURCE.parent / "publish_readiness_ui_v1.py").read_text(encoding="utf-8").split("def publish_get", 1)[1].split("\n    @app.", 1)[0]
+    publish = (APP_SOURCE.parent / "publication/publish_readiness_ui_v1.py").read_text(encoding="utf-8").split("def publish_get", 1)[1].split("\n    @app.", 1)[0]
     accounts = source.split("def accounts_get", 1)[1].split("\n    @app.", 1)[0]
     tree = source.split("def tree(", 1)[1].split("\n    @app.", 1)[0]
     assert "_unpublished_delete_control" not in ingest_get

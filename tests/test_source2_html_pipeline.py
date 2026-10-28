@@ -8,7 +8,7 @@ import pytest
 
 from src.vorming.extract_html_v1 import extract, validate as validate_raw
 from src.vorming.semantic_transform_generic_v1 import transform, validate as validate_objects
-from src.prepublication_gate_v3 import evaluate as prepublish
+from src.publication.prepublication_gate_v3 import evaluate as prepublish
 
 ROOT = Path(__file__).resolve().parents[1]
 

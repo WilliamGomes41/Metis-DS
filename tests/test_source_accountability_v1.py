@@ -16,7 +16,7 @@ import pytest
 
 from src.operations_console_v1 import ConsoleError
 from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing, semantic_spec_from_fragments
-from src.publication_readiness_v1 import source_passage_closure
+from src.publication.publication_readiness_v1 import source_passage_closure
 from src.review.review_duty_v1 import review_duty_for
 from src.vorming.source_accountability_v1 import KEY, evidence_of, validate_assessments
 from src.vorming.source_bound_fields_v2 import FIELDS

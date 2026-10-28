@@ -136,7 +136,7 @@ def test_start_script_reuses_configured_server_without_owning_it(complete_postgr
 
 @pytest.mark.parametrize("kind", ["fake", "foreign-database"])
 def test_factory_refuses_a_fake_or_different_canonical_authority(production_console, kind):
-    from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig, PostgresCanonicalPublicationStore
+    from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig, PostgresCanonicalPublicationStore
     store = object() if kind == "fake" else PostgresCanonicalPublicationStore(
         PostgresCanonicalConfig(dsn="postgresql://postgres@127.0.0.1:1/foreign_database"))
     with pytest.raises(ValueError, match="Canonical store must be the production PostgreSQL store for this test database"):

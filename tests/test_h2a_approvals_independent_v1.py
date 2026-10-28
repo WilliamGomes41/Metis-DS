@@ -89,7 +89,7 @@ def test_delete_control_follows_the_same_rule():
 # --- D-SEC-1 ---------------------------------------------------------------------
 
 def _binding(**overrides):
-    from src.publish_authorization_v1 import tuple_record
+    from src.publication.publish_authorization_v1 import tuple_record
     values = dict(object_id="o-1", object_version="1.0", canonical_object_hash="h" * 64,
                   confirmed_object_type="recommendation", reviewer="reviewer.bert",
                   reviewer_id="acct-bert", decision="approve")
@@ -101,7 +101,7 @@ HUMAN = {"account_id": "acct-bert", "username": "reviewer.bert", "display_name":
 
 
 def test_record_authorization_accepts_verified_human_reviewer():
-    from src.publish_authorization_v1 import record_authorization
+    from src.publication.publish_authorization_v1 import record_authorization
     rows = record_authorization([], _binding(), account=HUMAN)
     assert rows[0]["valid"] is True
 
@@ -115,7 +115,7 @@ def test_record_authorization_accepts_verified_human_reviewer():
     (HUMAN, {"reviewer": "metis"}),
 ])
 def test_record_authorization_refuses_unverified_or_agent_identity(account, binding):
-    from src.publish_authorization_v1 import ApproverIdentityError, record_authorization
+    from src.publication.publish_authorization_v1 import ApproverIdentityError, record_authorization
     with pytest.raises(ApproverIdentityError):
         record_authorization([], _binding(**binding), account=account)
 
@@ -123,7 +123,7 @@ def test_record_authorization_refuses_unverified_or_agent_identity(account, bind
 # --- D-SEC-2: herstelroute (RT1/RT2) -------------------------------------------------
 
 def _recovery(tmp_path, *, approvers, uploader="uploader-1", high_risk=False):
-    from src.legacy_canonical_recovery_v1 import prepare_legacy_canonical_candidate
+    from src.publication.legacy_canonical_recovery_v1 import prepare_legacy_canonical_candidate
     path, documents, reviews, blobs, _manifest = recovery_fixture._fixture(tmp_path)
     documents.envelope["uploader_account_id"] = uploader
     obj = documents.objects[0]
@@ -143,21 +143,21 @@ def _recovery(tmp_path, *, approvers, uploader="uploader-1", high_risk=False):
 
 
 def test_recovery_refuses_release_whose_only_approver_is_an_agent(tmp_path):
-    from src.legacy_canonical_recovery_v1 import LegacyCanonicalRecoveryError
+    from src.publication.legacy_canonical_recovery_v1 import LegacyCanonicalRecoveryError
     prepare = _recovery(tmp_path, approvers=[("Grok Bot", "grok bot")])
     with pytest.raises(LegacyCanonicalRecoveryError, match="legacy_release_object_authorization_missing"):
         prepare()
 
 
 def test_recovery_refuses_release_approved_only_by_uploader(tmp_path):
-    from src.legacy_canonical_recovery_v1 import LegacyCanonicalRecoveryError
+    from src.publication.legacy_canonical_recovery_v1 import LegacyCanonicalRecoveryError
     prepare = _recovery(tmp_path, approvers=[("Uploader", "uploader-1")])
     with pytest.raises(LegacyCanonicalRecoveryError, match="legacy_release_object_authorization_missing"):
         prepare()
 
 
 def test_recovery_refuses_high_risk_without_four_eyes(tmp_path):
-    from src.legacy_canonical_recovery_v1 import LegacyCanonicalRecoveryError
+    from src.publication.legacy_canonical_recovery_v1 import LegacyCanonicalRecoveryError
     prepare = _recovery(tmp_path, approvers=[("Reviewer", "reviewer-1"), ("Grok Bot", "grok bot")], high_risk=True)
     with pytest.raises(LegacyCanonicalRecoveryError, match="legacy_release_object_four_eyes_missing"):
         prepare()
@@ -165,8 +165,8 @@ def test_recovery_refuses_high_risk_without_four_eyes(tmp_path):
 
 def test_recovery_refuses_stale_human_approval(tmp_path):
     """Opslag stale: een goedkeuring op een oudere objecthash telt NOOIT."""
-    from src.legacy_canonical_recovery_v1 import LegacyCanonicalRecoveryError
-    from src.legacy_canonical_recovery_v1 import prepare_legacy_canonical_candidate
+    from src.publication.legacy_canonical_recovery_v1 import LegacyCanonicalRecoveryError
+    from src.publication.legacy_canonical_recovery_v1 import prepare_legacy_canonical_candidate
     path, documents, reviews, blobs, _manifest = recovery_fixture._fixture(tmp_path)
     documents.envelope["uploader_account_id"] = "uploader-1"
     template = reviews.read_bindings()[reviews.snapshot_id][0]
@@ -181,7 +181,7 @@ def test_recovery_accepts_independent_human_approval(tmp_path):
 
 
 def test_recovery_refuses_missing_uploader_identity(tmp_path):
-    from src.legacy_canonical_recovery_v1 import LegacyCanonicalRecoveryError
+    from src.publication.legacy_canonical_recovery_v1 import LegacyCanonicalRecoveryError
     prepare = _recovery(tmp_path, approvers=[("Reviewer", "reviewer-1")], uploader="")
     with pytest.raises(LegacyCanonicalRecoveryError, match="legacy_release_uploader_missing"):
         prepare()
@@ -189,26 +189,28 @@ def test_recovery_refuses_missing_uploader_identity(tmp_path):
 
 # --- D-SEC-2: CLI ------------------------------------------------------------------
 
-def _cli(args, env_mode):
+def _cli(args, env_mode, module="src.publication.canonical_store"):
     import os
     env = {k: v for k, v in os.environ.items() if k != "METIS_RUNTIME_MODE"}
     if env_mode:
         env["METIS_RUNTIME_MODE"] = env_mode
-    return subprocess.run([sys.executable, "-m", "src.canonical_store", *args], cwd=ROOT, env=env,
+    return subprocess.run([sys.executable, "-m", module, *args], cwd=ROOT, env=env,
                           capture_output=True, text=True)
 
 
+@pytest.mark.parametrize("module", ["src.canonical_store", "src.publication.canonical_store"])
 @pytest.mark.parametrize("mode", [None, "production", "azure"])
-def test_cli_fails_closed_outside_pilot_or_dev(tmp_path, mode):
-    result = _cli(["init", "--db", str(tmp_path / "s.db")], mode)
+def test_cli_fails_closed_outside_pilot_or_dev(tmp_path, mode, module):
+    result = _cli(["init", "--db", str(tmp_path / "s.db")], mode, module)
     assert result.returncode == 2
     assert "canonical_store_cli_disabled_outside_pilot" in result.stdout + result.stderr
     assert not (tmp_path / "s.db").exists()
 
 
+@pytest.mark.parametrize("module", ["src.canonical_store", "src.publication.canonical_store"])
 @pytest.mark.parametrize("mode", ["pilot", "dev"])
-def test_cli_runs_in_pilot_or_dev(tmp_path, mode):
-    assert _cli(["init", "--db", str(tmp_path / "s.db")], mode).returncode == 0
+def test_cli_runs_in_pilot_or_dev(tmp_path, mode, module):
+    assert _cli(["init", "--db", str(tmp_path / "s.db")], mode, module).returncode == 0
 
 
 def _accounts_file(tmp_path, rows):
@@ -218,7 +220,7 @@ def _accounts_file(tmp_path, rows):
 
 
 def _import(tmp_path, obj, accounts):
-    from src.canonical_store import import_approved
+    from src.publication.canonical_store import import_approved
     inp = tmp_path / "in.jsonl"
     cli_fixture.write_jsonl(inp, [obj])
     return import_approved(tmp_path / "s.db", inp, cli_fixture.SCHEMA_PATH, "technical-test",

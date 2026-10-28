@@ -57,6 +57,9 @@ def test_sdk_cannot_bypass_worker(repository, code):
     "from .operations_console_app import create_console_app",
     "from . import workflows",
     "from src import canonical_publication_postgres_v1",
+    "from src.publication import canonical_publication_postgres_v1",
+    "from src.publication.durable_publication_console_v1 import DurablePublicationConsole",
+    "from src.publication.azure_authoritative_publication_console_v1 import AzureAuthoritativePublicationConsole",
     "import importlib\nimportlib.import_module('.operations_console_app', package='src')",
     "from importlib import import_module\nimport_module('httpx')",
 ])

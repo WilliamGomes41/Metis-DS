@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from src.integrity_kernel import compute_canonical_object_hash, stamp_canonical_hashes
 from src.operations_console_app import create_console_app, normalize_review_task
 from src.operations_console_v1 import ConsoleError, OperationsConsole
-from src.publish_authorization_v1 import tuple_record
+from src.publication.publish_authorization_v1 import tuple_record
 from src.review.review_duty_v1 import exact_current_approver_ids
 from src.review.review_ledger import read_events
 from src.review.review_workboard_v1 import _work_item_from_counts, install_review_workboard

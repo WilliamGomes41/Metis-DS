@@ -17,11 +17,11 @@ from pathlib import Path
 import pytest
 
 from src.integrity_kernel import compute_canonical_object_hash
-from src.canonical_publication_postgres_v1 import (
+from src.publication.canonical_publication_postgres_v1 import (
     PostgresCanonicalConfig,
     PostgresCanonicalPublicationStore,
 )
-from src.legacy_canonical_recovery_v1 import (
+from src.publication.legacy_canonical_recovery_v1 import (
     LegacyCanonicalRecoveryError,
     prepare_legacy_canonical_candidate,
     recover_legacy_canonical_release,

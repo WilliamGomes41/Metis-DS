@@ -15,12 +15,12 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from src.durable_publication_console_v1 import DurablePublicationConsole
+from src.publication.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
 from src.operations_console_v1 import review_lane
 from src.vorming.passage_register_v1 import passage_register_of
-from src.publication_readiness_v1 import source_passage_closure
-from src.publish_readiness_ui_v1 import publish_readiness_view
+from src.publication.publication_readiness_v1 import source_passage_closure
+from src.publication.publish_readiness_ui_v1 import publish_readiness_view
 from src.review.review_disposition_v1 import definitive_review_disposition
 
 ROOT = Path(__file__).resolve().parents[1]

@@ -23,7 +23,7 @@ from src.vorming.pre_review_semantic_v1 import (
     bind_pre_review_semantic_processing,
 )
 from src.review.proportionate_review_v1 import ProportionateReviewConsole, normal_risk_batch_queue
-from src.publication_readiness_v1 import SOURCE_PASSAGE_REVIEW_INCOMPLETE, source_passage_closure
+from src.publication.publication_readiness_v1 import SOURCE_PASSAGE_REVIEW_INCOMPLETE, source_passage_closure
 from src.review.review_closure_v1 import ReviewClosureConsole
 from src.review.review_cockpit_v1 import confirmable_proposed_type
 from src.review.review_workboard_v1 import review_work_item

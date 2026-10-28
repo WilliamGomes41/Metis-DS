@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from src.console_entra_v1 import EntraIdentity
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
-from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 from src.workflows.account_retirement_v1 import retire_account
 from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter
 from src.workflows.workflow_identity_postgres_v1 import PostgresWorkflowIdentityStore
