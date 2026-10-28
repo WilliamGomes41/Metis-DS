@@ -195,6 +195,57 @@ def test_incomplete_passage_does_not_reuse_changed_extraction(tmp_path, producti
     assert store.get_envelope(sid) == before
 
 
+def test_passage_capture_keeps_bindings_stable_when_writer_commits(tmp_path, production_console, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from copy import deepcopy
+    from src.integrity_kernel import exact_review_snapshot_hash
+    from src.operations_console_app import _review_formation_notice
+    from src.publish_authorization_v1 import tuple_record
+    from src.review.review_passage_read_v1 import read_review_passage
+    from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+    from tests.test_review_formation_problems import received, execute
+
+    console, sid, author, reviewer, _, _, _ = received(tmp_path, production_console, monkeypatch)
+    execute(console, sid, author, 'passage-binding-capture')
+    store = console.workflow_document_store
+    other = PostgresWorkflowReviewStore(store.config)
+    objects = console.snapshot_objects(sid)
+    obj = next(o for o in objects if (o.get('metadata') or {}).get('semantic_passage', {}).get('spans'))
+    before = deepcopy(objects), deepcopy(store.get_envelope(sid)), console.workflow_review_store.read_events()
+    existing = other.read_bindings([sid]).get(sid, [])
+    # The tuple is deliberately stale for the captured candidate and cannot
+    # become an approval merely because a concurrent writer commits it.
+    binding = tuple_record(object_id=obj['object_id'], object_version=obj['object_version'],
+        canonical_object_hash=exact_review_snapshot_hash(obj), confirmed_object_type='definition',
+        reviewer='reviewer', reviewer_id=reviewer, decision='approve')
+    binding['test_after_capture'] = True
+    original = store.review_document_input
+    writes = []
+
+    def capture(snapshot_id):
+        result = original(snapshot_id)
+        if not writes:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                pool.submit(other.replace_snapshot_bindings, snapshot_id, [*existing, binding]).result(timeout=10)
+            writes.append(1)
+        return result
+
+    monkeypatch.setattr(store, 'review_document_input', capture)
+    actor = {'account_id': reviewer, 'roles': ['reviewer']}
+    with console.document_read_operation():
+        inputs = read_review_passage(console, actor, sid, obj['object_id'])
+        assert not any(row.get('test_after_capture') for row in inputs.bindings)
+        assert 'data-formation-incomplete' in _review_formation_notice(console, sid, inputs)
+    with console.document_read_operation():
+        fresh = read_review_passage(console, actor, sid, obj['object_id'])
+    found = [row for row in fresh.bindings if row.get('test_after_capture')]
+    assert len(found) == 1 and found[0]['valid'] is False
+    assert writes == [1]
+    assert (console.snapshot_objects(sid), store.get_envelope(sid),
+            console.workflow_review_store.read_events()) == before
+    assert len(other.read_bindings([sid])[sid]) == len(existing) + 1
+
+
 @pytest.mark.parametrize('review_client', [300], indirect=True)
 def test_prepared_source_comparisons_do_not_grow_with_candidates(review_client, monkeypatch):
     import src.vorming.knowledge_materialisation_v1 as materialisation

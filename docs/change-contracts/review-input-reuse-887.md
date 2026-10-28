@@ -33,6 +33,12 @@ payload and source indexes. No prepared value crosses a request boundary or
 replaces PostgreSQL, Blob, replay or review authority. Code revert needs no
 data migration. Tests exercise a changed full extraction and changed captured
 source identity, as well as missing source bytes, missing/corrupt extraction and corrupt replay.
+An independent PostgreSQL writer commits a deliberately stale binding during
+passage capture: the existing repeatable-read snapshot keeps it out of the
+current passage; the next read sees it as invalid. Objects, envelope and review
+events remain unchanged by the GET. In a throwaway checkout, changing the read
+transaction to READ COMMITTED made that concurrent-binding test fail. Existing
+object-capture and stale-command tests remain in place.
 
 ## Reproduction and evidence limits
 
