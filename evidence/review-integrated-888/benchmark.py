@@ -360,19 +360,37 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
             for i in range(size - 2)]]
         source_html = ('<html><body>' + ''.join(f'<h1>Advies {i}</h1><p>{s}</p>'
                        for i, s in enumerate(texts)) + '</body></html>').encode()
-    console, sid, author, reviewer, calls, mode, _provider = received(
-        tmp_path, production_console, monkeypatch, source_html=source_html)
-    mode['broken'] = incomplete
-    execute(console, sid, author, 'native-task-review-proof')
-    assert calls, 'the real bounded processing route must run'
-    assert console.processing_status(sid)['formation_incomplete'] == incomplete
-    focal = next(o for o in console.snapshot_objects(sid)
-                 if o.get('proposed_object_type') == 'recommendation'
-                 and o['content']['clean_text'] == FIRST)
-    candidates = [o for o in console.snapshot_objects(sid) if o.get('proposed_object_type') == 'recommendation']
-    assert len(candidates) == size - int(incomplete)
-    if history_depth:
-        seed_post_history(console, sid, candidates, {'account_id': reviewer}, history_depth)
+    import faulthandler
+    setup_file = Path(os.environ['REVIEW_PROOF_OUTPUT']).with_suffix('.setup.json')
+    def setup_stage(stage):
+        setup_file.parent.mkdir(parents=True, exist_ok=True)
+        setup_file.write_text(json.dumps([{'case': 'setup_progress', 'size': size, 'stage': stage}]))
+    setup_stage('receipt')
+    stack_file = setup_file.with_suffix('.stacks.txt').open('w') if size > 2 else None
+    if stack_file:
+        faulthandler.dump_traceback_later(45, file=stack_file)
+    try:
+        console, sid, author, reviewer, calls, mode, _provider = received(
+            tmp_path, production_console, monkeypatch, source_html=source_html)
+        mode['broken'] = incomplete
+        setup_stage('activation')
+        execute(console, sid, author, 'native-task-review-proof')
+        setup_stage('history')
+        assert calls, 'the real bounded processing route must run'
+        assert console.processing_status(sid)['formation_incomplete'] == incomplete
+        focal = next(o for o in console.snapshot_objects(sid)
+                     if o.get('proposed_object_type') == 'recommendation'
+                     and o['content']['clean_text'] == FIRST)
+        candidates = [o for o in console.snapshot_objects(sid) if o.get('proposed_object_type') == 'recommendation']
+        assert len(candidates) == size - int(incomplete)
+        if history_depth:
+            seed_post_history(console, sid, candidates, {'account_id': reviewer}, history_depth)
+
+    finally:
+        if stack_file:
+            faulthandler.cancel_dump_traceback_later()
+            stack_file.close()
+    setup_stage('measurement')
 
     def storage_state():
         with console.workflow_document_store._connect() as con:
