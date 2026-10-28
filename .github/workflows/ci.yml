@@ -75,7 +75,15 @@ jobs:
           REVIEW_PROOF_OUTPUT: output/review-post-902.json
         run: |
           bash scripts/test_postgres.sh > /dev/null
-          python -m pytest -q tests/test_review_post_baseline_postgres.py --junitxml=output/review-post-902.xml
+          python -m pytest -x -q tests/test_review_post_baseline_postgres.py \
+            tests/test_t11_knowledge_revision_lineage.py::test_unchanged_review_retry_keeps_revision_and_legacy_history \
+            tests/test_d5_4_review_interaction_evidence.py::test_second_review_uses_same_evidence_store_without_changing_object_tuple \
+            tests/test_deterministic_review_repair_v1.py::test_source_unit_resolution_creates_new_proposal_and_no_revise_remains \
+            tests/test_a08_heading_batch_atomic.py::test_success_duplicates_repeat_and_stale \
+            tests/test_a08_heading_batch_atomic.py::test_native_batch_and_single_review_use_consistent_lock_order \
+            tests/test_source_context_review_v1.py::test_native_context_and_publication_serialize_before_authority_read \
+            tests/test_workflow_postgres_concurrency.py::test_different_object_concurrent_edits_both_survive \
+            --junitxml=output/review-post-902.xml
       - name: Upload MET-23 native POST evidence
         if: always()
         uses: actions/upload-artifact@v4

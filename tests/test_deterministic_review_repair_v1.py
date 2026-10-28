@@ -120,11 +120,12 @@ def test_source_unit_resolution_creates_new_proposal_and_no_revise_remains(tmp_p
     own_units = [row["unit_id"] for row in units if row["fragment_id"] in own_fragment_ids]
     assert own_units
 
+    input_revision = console.objects_revision(sid)
     repaired = console.submit_review_resolution(
         actor_id=reviewer["account_id"],
         snapshot_id=sid,
         object_id=obj["object_id"],
-        expected_revision=console.objects_revision(sid),
+        expected_revision=input_revision,
         suitability="mist_context",
         comment="Gebruik de volledige bronzin.",
         repair_kind=REPAIR_SOURCE_UNITS,
@@ -149,6 +150,19 @@ def test_source_unit_resolution_creates_new_proposal_and_no_revise_remains(tmp_p
         and (event.get("details") or {}).get("decision") == "repair_source_units"
         for event in events
     )
+    # WP5 oracle: a resolved repair has no universal command-ID deduplication.
+    # Replaying its original precondition must conflict without another repair.
+    from copy import deepcopy
+    before_retry = deepcopy(console._load_objects(sid, remember=False))
+    before_bindings = deepcopy(console.object_review_bindings(sid))
+    with pytest.raises(ConsoleError, match='snapshot_object_write_conflict'):
+        console.submit_review_resolution(actor_id=reviewer['account_id'], snapshot_id=sid,
+            object_id=obj['object_id'], expected_revision=input_revision,
+            suitability='mist_context', comment='Gebruik de volledige bronzin.',
+            repair_kind=REPAIR_SOURCE_UNITS, source_unit_ids=own_units)
+    assert console._load_objects(sid, remember=False) == before_retry
+    assert console.object_review_bindings(sid) == before_bindings
+    assert read_events(console._ledger_path) == events
 
 
 def test_unknown_source_unit_rolls_back_review_and_repair(tmp_path, *, production_app, production_console):
