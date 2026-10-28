@@ -250,8 +250,8 @@ Nieuw: P2-cascadereikwijdte (#909), testgat 2.6 (#910), bewijs per geval (#911);
 | --- | --- | --- |
 | B5-a | Mag een `exception`-contextentry `exception_span` dragen (V3)? | OPEN — vereist bronreferentie (#530) |
 | B5-b | Beperken we de quarantaine bij een relatiefout tot oplosbare eindpunten? | OPEN — voorstel MET-6 |
-| E1 | Echte export per foutcode op één snapshot (bron-SHA, spans, voorstel) | ONTBREEKT |
-| E2 | Gevallen van 2.4/2.5/2.6 in echte evidence | ONTBREEKT |
+| E1 | Echte export per foutcode op één snapshot (bron-SHA, spans, voorstel) | GELEVERD — `met-28-real-case-diagnosis.md` (#911) |
+| E2 | Gevallen van 2.4/2.5/2.6 in echte evidence | 2.4 en 2.5 gevonden; 2.6 komt in die snapshot niet voor (#911) |
 | E3 | Azure-SHA en route van het v12-incident | UNKNOWN |
 | E4 | Baseline reads/writes/runtime per snapshot | NOT TESTED |
 
@@ -273,6 +273,6 @@ Nieuw: P2-cascadereikwijdte (#909), testgat 2.6 (#910), bewijs per geval (#911);
 - [x] #530/#515/#837/#848 onderscheiden van nieuw werk (§7).
 - [x] Routevastlegging versus omgevingsconfiguratie onderzocht (§6).
 - [x] Materiële besluiten en ontbrekende bronnen apart zichtbaar (§8); vervolgissues geclassificeerd (§9).
-- [ ] Oorzaak **per echt geval** bewezen — open tot E1 beschikbaar is.
+- [x] Oorzaak **per echt geval** vastgesteld op één snapshot — `met-28-real-case-diagnosis.md` (#911), met nieuwe open besluiten B5-c t/m B5-f.
 
 Geen runtime- of productieacceptatie geclaimd.
