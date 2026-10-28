@@ -19,6 +19,22 @@ The current native matrix passes all six cases; another three control cases pass
 | Synthetic incomplete | batch | 14073.9 | 312.8 | 0.022 |
 | Synthetic incomplete | passage | 26989.7 | 410.5 | 0.015 |
 
+### Passage phase and volume example
+
+Inclusive phases overlap and must not be added. The remainder is only the existing conservative lower bound.
+
+| Metric | Complete before | Complete current | Incomplete before | Incomplete current |
+|---|---:|---:|---:|---:|
+| Total wall median (ms) | 13594.36 | 333.83 | 26989.70 | 410.51 |
+| Unattributed lower bound (ms) | 35.96 | 35.42 | 38.31 | 37.57 |
+| source_prepare inclusive median (ms) | 13490.43 | 229.82 | 13610.51 | 240.05 |
+| processing_status inclusive median (ms) | 0.00 | 0.00 | 13388.69 | 15.45 |
+| db_execute inclusive median (ms) | 25.68 | 26.18 | 46.67 | 46.59 |
+| db_fetch inclusive median (ms) | 5.94 | 5.93 | 21.92 | 21.31 |
+| db_queries | 13 | 13 | 18 | 18 |
+| db_json_bytes | 1052137 | 1052137 | 3668980 | 3668981 |
+| html_bytes | 108324 | 108324 | 108824 | 108824 |
+
 **Control budget remains open.** The current first round has 15 raw control misses. Across both rounds, four of 30 control comparisons remain above 15%:
 
 | Case | Route | Incomplete | Before ms | Current ms | Ratio |
@@ -30,7 +46,7 @@ The current native matrix passes all six cases; another three control cases pass
 
 These are approximately 9–13 ms differences on short requests. Query counts are unchanged; reconstruction remains about 0.07–0.09 ms, while connections, SQL and other phases vary. This is insufficient to attribute a product regression or certify the no-regression budget. No threshold is relaxed and no extra production optimization is inferred from this evidence. A controlled runtime check remains necessary.
 
-Current numerical evidence is in `current-*.json.gz` and `current-source-after.json`; earlier measurements below remain historical evidence for their own commits. The suite on the old basis was intentionally interrupted at 5,123 passes after main advanced; it is not a complete-suite pass. Final integrated suite evidence is pending.
+Current numerical evidence is in `current-*.json.gz` and `current-source-after.json`; earlier measurements below remain historical evidence for their own commits. The suite on the old basis was intentionally interrupted at 5,123 passes after main advanced; it is not a complete-suite pass. Full suite on `1e79b2b`: **6,156 passed, 39 skipped, 3 expected failures and 24 subtests passed** in 874.27 s. The relevant JUnit subset has 159 passes, one required-Chromium browser skip and no PostgreSQL skips. Local skips remain unproven locally. Incoming source/DB are covered separately by upstream CI 40665600822 and real Docling acceptance 40665600838 on a04823c; those are not current PR CI results. See `verification.json`. Afterwards only verification/documentation results were added.
 
 ## Earlier completed comparison on main 36c8041
 
@@ -82,4 +98,4 @@ Current deployment identity, representative production source and authorized log
 
 ## Repository verification
 
-Pending the final repository checks and full suite. No completion claim for those checks yet.
+Full suite on `1e79b2b`: **6,156 passed, 39 skipped, 3 expected failures and 24 subtests passed** in 874.27 s. The relevant JUnit subset has 159 passes, one required-Chromium browser skip and no PostgreSQL skips. Local skips remain unproven locally. Incoming source/DB are covered separately by upstream CI 40665600822 and real Docling acceptance 40665600838 on a04823c; those are not current PR CI results. See `verification.json`. Afterwards only verification/documentation results were added.
