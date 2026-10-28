@@ -1,0 +1,55 @@
+{
+  "suite_commit": "1e79b2b6acc4bde815378698193d3071ee3f8f2c",
+  "production_base": "e2d2302e930bbf0d10afe5dd6faad6d689648770",
+  "command": "python -m pytest -q -n 6 -rs --junitxml=<private workspace file>",
+  "exit_code": 0,
+  "passed": 6156,
+  "skipped": 39,
+  "xfailed": 3,
+  "subtests_passed": 24,
+  "duration_seconds": 874.27,
+  "critical_junit_cases": {
+    "passed": 159,
+    "skipped_browser": 1,
+    "skipped_postgres": 0,
+    "failed": 0
+  },
+  "local_skip_reasons": {
+    "Optional Bend toolchain is not installed": 4,
+    "Chromium browser verification is opt-in": 12,
+    "Browser proof runs in the required GitHub acceptance job": 1,
+    "Required browser acceptance job supplies Chromium": 2,
+    "Real Docling/models acceptance environment required; not proven by unit tests": 12,
+    "Bend is optional outside its dedicated CI job": 7,
+    "Configure Playwright and Chromium for the authenticated browser proof": 1
+  },
+  "checks": {
+    "repository_preflight": "PASS",
+    "release_preflight": "PASS",
+    "compileall": "PASS",
+    "architecture_boundaries": "PASS",
+    "architecture_invariant_tests": "6 passed",
+    "report_tests": "5 passed"
+  },
+  "incoming_code_ci": {
+    "commit": "a04823c775970a0cbdbd4f13ac60db909dfe223d",
+    "ci_run": 40665600822,
+    "docling_run": 40665600838,
+    "all_five_workflows": "success",
+    "scope": "Upstream source/DB match integrated base. Not a local Docling pass or PR CI result."
+  },
+  "performance": {
+    "large_route_budget": "10 of 10 pass",
+    "current_initial_control_misses": 15,
+    "current_two_round_control_misses": 4,
+    "control_requirement": "OPEN",
+    "production_requirement": "OPEN"
+  },
+  "interrupted_old_base_suite": {
+    "commit": "0ba5c435efb0507d0dd78c1595bb11b5f9f42ba2",
+    "passed_before_interrupt": 5123,
+    "completion_evidence": false,
+    "reason": "main advanced with publication layout"
+  },
+  "post_suite_changes": "Verification/documentation results only; production and test code remain unchanged."
+}
