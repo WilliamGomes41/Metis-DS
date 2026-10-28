@@ -238,6 +238,80 @@ def _join(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
+class _LongContinuation:
+    """Accumulate an already joined, long block without copying its prefix.
+
+    The ordinary predicates remain authoritative for short/ambiguous blocks.
+    Beyond 512 normalized characters, a non-boundary cannot later become a
+    short structural heading, timestamp, chrome label or strength stamp by
+    appending a space and another fragment. A number-only boundary cannot be
+    created by appending to a non-number boundary. A locator heading would
+    already have been a boundary. The one remaining possibility is an exact
+    match to the original heading; track that match incrementally.
+    """
+
+    def __init__(self, block: dict[str, Any]):
+        self.block = block
+        text = _fragment_text(block)
+        self.parts = [text]
+        self.length = len(text)
+        self.last_text = text
+        self.ids = _source_fragment_ids(block)
+        self.seen = set(self.ids)
+        self.heading = normalize_visible_prose(str(block.get("heading") or ""))
+        self.heading_prefix = bool(self.heading) and self.heading.startswith(text)
+        self.heading_boundary = self.heading_prefix and len(self.heading) == self.length
+
+    def may_join(self, current: dict[str, Any]) -> bool:
+        text = _fragment_text(current)
+        if not text or self.heading_boundary or _is_boundary(current):
+            return False
+        if has_terminal_sentence_boundary(self.last_text):
+            return False
+        return _same_section(self.block, current) and is_continuation_fragment(text)
+
+    def append(self, current: dict[str, Any]) -> None:
+        text = _fragment_text(current)
+        offset = self.length + 1
+        piece = " " + text
+        if self.heading_prefix:
+            self.heading_prefix = self.heading[self.length:self.length + len(piece)] == piece
+        self.length += len(piece)
+        self.heading_boundary = self.heading_prefix and len(self.heading) == self.length
+        self.parts.append(text)
+        self.last_text = text
+
+        right_ids = _source_fragment_ids(current)
+        self.block[_SOURCE_SPANS].extend(
+            {**span, "start": int(span["start"]) + offset, "end": int(span["end"]) + offset}
+            for span in current.get(_SOURCE_SPANS) or []
+        )
+        self.block["_raw_source_mapping"].append(
+            {"kind": "join_separator", "text": " ", "start": offset - 1, "end": offset,
+             "left_fragment_id": self.ids[-1], "right_fragment_id": right_ids[0]}
+        )
+        self.block["_raw_source_mapping"].extend(
+            {**span, "start": span["start"] + offset, "end": span["end"] + offset}
+            for span in current.get("_raw_source_mapping") or []
+        )
+        for fragment_id in right_ids:
+            if fragment_id not in self.seen:
+                self.ids.append(fragment_id)
+                self.seen.add(fragment_id)
+
+    def finish(self) -> dict[str, Any]:
+        text = " ".join(self.parts)
+        self.block["clean_text"] = self.block["raw_text"] = text
+        self.block["source_fragment_ids"] = self.ids
+        self.block["source_reconstruction"] = {
+            "version": RECONSTRUCTION_VERSION,
+            "status": STATUS_RECONSTRUCTED,
+            "rule": RULE_ADJACENT_GRAMMATICAL_CONTINUATION,
+            "source_fragment_ids": self.ids,
+        }
+        return self.block
+
+
 def reconstruct_source_fragments(
     fragments: Iterable[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -265,6 +339,7 @@ def reconstruct_source_fragments(
             return deepcopy(cache[key])
     reconstructed: list[dict[str, Any]] = []
     pending: dict[str, Any] | None = None
+    long_pending: _LongContinuation | None = None
 
     for raw_fragment in fragments:
         current = _with_status(raw_fragment, STATUS_UNCHANGED)
@@ -273,13 +348,23 @@ def reconstruct_source_fragments(
         if pending is None:
             pending = current
             continue
+        if long_pending is not None:
+            if long_pending.may_join(current):
+                long_pending.append(current)
+                continue
+            pending = long_pending.finish()
+            long_pending = None
         if _may_join(pending, current):
             pending = _join(pending, current)
+            if len(pending["clean_text"]) > 512 and not _is_boundary(pending):
+                long_pending = _LongContinuation(pending)
             continue
         reconstructed.append(_mark_unresolved_if_open(pending))
         pending = current
 
     if pending is not None:
+        if long_pending is not None:
+            pending = long_pending.finish()
         reconstructed.append(_mark_unresolved_if_open(pending))
     if cache is not None and key is not None:
         if len(cache) >= 8:

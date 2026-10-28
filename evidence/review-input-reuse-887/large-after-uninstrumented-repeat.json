@@ -1,0 +1,31 @@
+{
+  "candidate_count": 301,
+  "comparison_instrumentation": false,
+  "samples": [
+    {
+      "seconds": 0.6248294460019679,
+      "comparisons": null,
+      "bytes": 31928
+    },
+    {
+      "seconds": 0.6502792479986965,
+      "comparisons": null,
+      "bytes": 31928
+    },
+    {
+      "seconds": 0.5878935210021154,
+      "comparisons": null,
+      "bytes": 31928
+    },
+    {
+      "seconds": 0.7498341149985208,
+      "comparisons": null,
+      "bytes": 31928
+    },
+    {
+      "seconds": 0.6003551539979526,
+      "comparisons": null,
+      "bytes": 31928
+    }
+  ]
+}

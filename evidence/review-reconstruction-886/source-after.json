@@ -1,0 +1,52 @@
+{
+  "commit": "49e50be279925b7e87d4ffa551609b998cac5869",
+  "working_tree_dirty": true,
+  "python": "3.12.14",
+  "scope": "synthetic source preparation only; no HTTP, PostgreSQL or production data",
+  "results": [
+    {
+      "continued": false,
+      "fragments": 150,
+      "blocks": 150,
+      "samples_seconds": [
+        0.1530721090020961,
+        0.059497726997506106,
+        0.07800290500017582
+      ],
+      "median_seconds": 0.07800290500017582
+    },
+    {
+      "continued": false,
+      "fragments": 600,
+      "blocks": 600,
+      "samples_seconds": [
+        0.32472691599832615,
+        0.2333370280030067,
+        0.20825525899999775
+      ],
+      "median_seconds": 0.2333370280030067
+    },
+    {
+      "continued": true,
+      "fragments": 150,
+      "blocks": 1,
+      "samples_seconds": [
+        0.04428749400176457,
+        0.040346510999370366,
+        0.04067707200010773
+      ],
+      "median_seconds": 0.04067707200010773
+    },
+    {
+      "continued": true,
+      "fragments": 600,
+      "blocks": 1,
+      "samples_seconds": [
+        0.15985866200207965,
+        0.15631619899795623,
+        0.1797841760017036
+      ],
+      "median_seconds": 0.15985866200207965
+    }
+  ]
+}

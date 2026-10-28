@@ -2,7 +2,6 @@
 import base64
 import hashlib
 import io
-from importlib.util import find_spec
 import json
 import os
 from pathlib import Path
@@ -10,20 +9,19 @@ import sys
 import uuid
 
 from fastapi.testclient import TestClient
-if find_spec("src.publication") is not None:
-    from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
-else:
-    from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.product_api_v1 import create_product_app
-if find_spec("src.review") is not None:
-    from src.review.review_ledger import read_events
-else:
-    from src.review_ledger import read_events
 from src.usage_ledger_v1 import UsageLedger
-if find_spec("src.settings") is not None:
-    from src.settings import quality_evidence_v1
-else:
+# The rollback process intentionally imports from a pinned checkout predating
+# the room packages. Select its known module paths from the explicit scenario,
+# so a missing dependency inside either version still fails normally.
+if json.loads(Path(sys.argv[1]).read_text())['legacy']:
+    from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+    from src.review_ledger import read_events
     from src import quality_evidence_v1
+else:
+    from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+    from src.review.review_ledger import read_events
+    from src.settings import quality_evidence_v1
 from src.workflows.workflow_badge_counts_postgres_v1 import (
     FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole as Azure,
     FastBadgePostgresCompleteWorkflowDurablePublicationConsole as Durable,
