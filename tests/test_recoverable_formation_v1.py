@@ -3,6 +3,8 @@
 # release-control-evidence: scope/belofte
 # release-control-evidence: opslag concurrent stale recovery version-compat
 # release-control-evidence: beschikbaarheid toegang kwaliteit metrics slop releasebewijs
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from copy import deepcopy
 import json
@@ -377,6 +379,35 @@ def test_conflicting_reselection_cannot_replace_primary_or_clear_itself():
     evidence = {'formation': {'rejections': rejected}, 'supplementary_calls': []}
     assert pending_rejections(evidence, primary)[0]['requires_review']
     assert primary['objects'][0]['context_evidence'] == []
+
+
+def test_object_outside_task_target_is_rejected_and_stays_pending():
+    # #910: a task may not create candidates beyond its own target ranges.
+    from src.vorming.recoverable_formation_v1 import restrict_supplement, pending_rejections
+    def obj(block_id, start, end):
+        return {'spans': [{'block_id': block_id, 'start': start, 'end': end}], 'context_evidence': []}
+    outside, crossing, inside, dependent = obj('x', 0, 5), obj('t', 5, 15), obj('t', 0, 4), obj('t', 4, 5)
+    supplement = {'objects': [outside, crossing, inside, dependent],
+        'relations': [{'source_spans': dependent['spans'], 'target_spans': outside['spans'],
+                       'evidence_spans': dependent['spans'], 'relation_type': 'applies_if'}],
+        'source_assessments': [], 'abstain_reason': None}
+    primary = {'objects': [], 'relations': [], 'source_assessments': [], 'abstain_reason': None}
+    retained, rejected = restrict_supplement(supplement, primary=primary,
+        targets=[{'span': {'block_id': 't', 'start': 0, 'end': 10}}])
+    assert retained['objects'] == [inside] and not retained['relations']
+    assert retained['abstain_reason'] is None
+    by_spans = {json.dumps(r['spans']): r for r in rejected}
+    assert len(by_spans) == len(rejected) == 3
+    for rejected_obj in (outside, crossing):
+        row = by_spans[json.dumps(rejected_obj['spans'])]
+        assert row['reason_code'] == 'semantic_supplement_outside_target'
+        assert row['kind'] == 'object' and not row['requires_review']
+    assert by_spans[json.dumps(dependent['spans'])]['reason_code'] == 'semantic_dependency_rejected'
+    # Rejection never closes source work: every rejected range remains pending.
+    evidence = {'formation': {'rejections': rejected}, 'supplementary_calls': []}
+    pending = pending_rejections(evidence, retained)
+    assert sorted(json.dumps(r['spans']) for r in pending) == sorted(by_spans)
+    assert supplement['objects'] == [outside, crossing, inside, dependent]
 
 
 def test_producer_cannot_supply_approval_or_omit_unknown_failures():
