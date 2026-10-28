@@ -5,6 +5,7 @@ old human-disposition policy. New records may account for narrowly recognized
 document information and validated, current target context.
 """
 import re
+from src.request_diagnostics_v1 import diagnostic_phase
 
 from src.vorming.source_accountability_v1 import evidence_of, is_source_record, CONTAINERS_VERSION
 from src.vorming.source_bound_fields_v2 import context_matches_target, CONTEXT_KEY
@@ -39,6 +40,7 @@ def _covers(ref, spans):
     return cursor >= ref["end"]
 
 
+@diagnostic_phase('source_accountability')
 def source_accountability(objects, *, review_path="richtlijn", bindings=None, fragments=None):
     """One read-only source role/closure/action projection for a current bundle.
 

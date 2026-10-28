@@ -7,6 +7,7 @@ from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLI
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
 from src.workflows.workflow_review_postgres_v1 import WorkflowReviewStoreError
 from src.workflows.workflow_transaction_v1 import workflow_read_transaction
+from src.request_diagnostics_v1 import diagnostic_phase
 
 PREFIX = 'review-generation-v1:'
 
@@ -28,6 +29,7 @@ class ReviewPassageInputs(ReviewDocumentInputs):
     choice_query: str = ''
 
 
+@diagnostic_phase('review_capture')
 def read_review_document(console, account, snapshot_id):
     """Capture exact document inputs, excluding unused processing archives.
 
@@ -59,7 +61,8 @@ def read_review_document(console, account, snapshot_id):
     except WorkflowReviewStoreError as exc:
         raise ConsoleError('workflow_review_unavailable') from exc
     objects = current_revisions(rows, snapshot_id=snapshot_id)
-    revision = store.revision_for_rows(rows)
+    with diagnostic_phase('review_revision'):
+        revision = store.revision_for_rows(rows)
     reads = console._document_reads()
     if reads is not None:
         reads.envelopes[snapshot_id] = envelope

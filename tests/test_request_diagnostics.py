@@ -63,6 +63,7 @@ def test_blocked_request_is_visible_before_response_and_redacted(events):
     finished=next(r for r in events if r['event']=='request_finished')
     assert finished['status']==200 and finished['outcome']=='completed'
     assert finished['phases']['document_list']['calls']==1
+    assert finished['unattributed_lower_bound_ms'] >= 0
     assert 'private' not in json.dumps(events)
     assert _CURRENT.get() is None
 
@@ -146,6 +147,22 @@ def test_actual_authenticated_routes_report_owner_phases(review_client,events):
         # Selected detail reads own one document; a list warmup is unnecessary.
         assert finished['phases']['document_load']['calls']>=1
     assert before==json.dumps(console.snapshot_objects(sid),sort_keys=True)
+    assert sid not in json.dumps(events)
+
+
+def test_review_document_reports_preparation_and_capture_without_mutation(review_client, events):
+    console, client, sid = review_client
+    before = json.dumps(console.snapshot_objects(sid), sort_keys=True)
+    response = client.get('/review', params={'document': sid, 'task': 'inventory'})
+    assert response.status_code == 200
+    finished = [r for r in events if r['event'] == 'request_finished' and r['route'] == '/review'][-1]
+    phases = finished['phases']
+    for phase in ('review_capture', 'review_revision', 'source_prepare', 'source_build_blocks'):
+        assert phases[phase]['calls'] >= 1
+    tree = finished['phase_tree']
+    assert tree['review_capture/source_prepare']['calls'] >= 1
+    assert tree['review_capture']['inclusive_ms'] >= tree['review_capture/source_prepare']['inclusive_ms']
+    assert before == json.dumps(console.snapshot_objects(sid), sort_keys=True)
     assert sid not in json.dumps(events)
 
 
