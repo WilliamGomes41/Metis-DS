@@ -3,6 +3,8 @@
 # release-control-evidence: scope/belofte
 # release-control-evidence: opslag concurrent stale recovery version-compat
 # release-control-evidence: beschikbaarheid toegang kwaliteit metrics slop releasebewijs
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from copy import deepcopy
 import json
