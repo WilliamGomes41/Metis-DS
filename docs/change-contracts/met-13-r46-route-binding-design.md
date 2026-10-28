@@ -73,18 +73,23 @@ het is iets anders dan de route. Het ontwerp scheidt die twee.
 
 ## 4. Ontwerp (voorstel)
 
-**Route ≠ uitvoeringsconfiguratie.** De *route* is de contractversie (`semantic-source-bound-v1/v2/v3`,
-`decision-tree-source-bound-v1`). Die is documenttoestand en verandert alleen via een opvolger.
+**Route ≠ uitvoeringsconfiguratie.** De *route-identiteit* is de contractversie (`semantic-source-bound-v1/v2/v3`,
+`decision-tree-source-bound-v1`) plus de policyversie (`PASSAGE_FORMATION_POLICY_VERSION`), niet de
+modusnaam. Die is documenttoestand en verandert alleen via een opvolger (nieuwe werkrevisie, N2).
 `model`, `docling` en `deployment` blijven uitvoeringsconfiguratie per poging, met de bestaande
 fences.
 
-1. **Eén binding per bronversie (B1, optie A — aanbevolen).** Een nieuw veld
+1. **Eén binding per werkrevisie (B1, optie A).** In deze code is de envelop (`snapshot_id`) de
+   werkrevisie: een opvolger is een nieuwe envelop, eventueel over dezelfde bronbytes. Een nieuw veld
    `envelope["formation_route"] = {route, source_kind, policy_version, actor_id, reason, command_id,
    bound_at, origin}`. Het wordt **eenmalig** geschreven door de eerste reservering, binnen de
    bestaande transactie- en CAS-grens. Daarna is het onveranderlijk; er komt geen nieuwe store.
-   `origin ∈ {selected, default, derived_legacy}`.
-2. **Elke poging verwijst ernaar.** `attempt.processing_configuration.mode` moet gelijk zijn aan
-   `formation_route.route`; een verschil geeft `formation_route_mismatch` (fail closed, vóór commit).
+   `origin ∈ {selected, default, confirmed_legacy}`. Er bestaat geen automatisch geschreven
+   `derived_legacy`-binding (B2-b, lifecycle-vsa §4).
+2. **Elke poging verwijst ernaar.** Iedere poging draagt een kopie van de binding (route,
+   policyversie, actor, reden) als auditbewijs (N1: vastlegging op bronversie én poging).
+   `attempt.processing_configuration.mode` moet gelijk zijn aan `formation_route.route`; een
+   verschil geeft `formation_route_mismatch` (fail closed, vóór commit).
 3. **Bron van de route bij de eerste binding.** Expliciete selectie door de actor (met reden), of de
    omgevingsstandaard met `origin = default`. Retry, resume, herstel en workerwissel lezen **alleen**
    `formation_route`, nooit de omgeving. Daarmee vervallen de omgevingsreads op `:1620`, `:2178`
@@ -93,14 +98,23 @@ fences.
    omgevingsmodus. Een V2-bron is dan hervatbaar zolang V2 niet is uitgesloten en een
    durable-taakroute bestaat. Als V2 geen bounded-taakopslag heeft, blijft resume voor V2 gesloten
    met een eigen code (`formation_route_not_resumable`). Daarvoor is geen omgevingswissel nodig.
-5. **Opvolger.** Een opvolger is een nieuwe bronversie en kiest bij de eerste reservering een eigen
-   route. De voorganger blijft ongewijzigd (lifecycle-vsa §6–7). De opvolger legt
-   `reason = successor_of:<snapshot_id>` vast.
-6. **Uitsluiting (B3).** De omgeving krijgt naast de standaard een uitsluitingslijst. Is een
+5. **Opvolger.** Een routewissel vereist een nieuwe **werkrevisie** (N2; lifecycle-vsa §5–6), geen
+   nieuwe bronversie. Dat kan over dezelfde bronbytes via `decision_successor_v1` (nieuwe
+   policyrevisie, verplichte `revision_reason`) of bij een nieuwe bronversie via ingest (lifecycle-vsa §7). De
+   opvolger kiest bij de eerste reservering expliciet een eigen route met actor en reden; de
+   voorganger blijft ongewijzigd.
+6. **Uitsluiting (B3-a).** De toegelaten routes per bronsoort komen uit de strategietabel (§5.4,
+   N4); een nieuwe route vereist een protocolwijziging (§15). De omgeving mag alleen beperken: een
+   standaardroute en een uitsluitingslijst binnen die toegelaten set. Een standaard buiten de set
+   faalt gesloten. Is een
    vastgelegde route uitgesloten, dan faalt een nieuwe poging met `formation_route_excluded`. Dat is
    zichtbaar in de blokkade-diagnostiek en de UI, er is geen terugval, en een expliciete opvolger
    is de enige weg.
-7. **Weergave.** UI en MCP tonen de vastgelegde route per document. De omgevingsmodus wordt
+7. **Uitvoerbaarheid na een deploy (B3-c).** Een nieuwe poging onder een nieuwe deploy mag alleen
+   als de vastgelegde contract- en policyversie nog uitvoerbaar zijn. Anders faalt zij met
+   `formation_route_not_executable`: zichtbaar, zonder terugval; alleen een opvolger. Een lopende
+   poging blijft gefenst op `deployment` (bestaand gedrag).
+8. **Weergave.** UI en MCP tonen de vastgelegde route per document. De omgevingsmodus wordt
    gelabeld als "standaard voor nieuwe verwerking".
 
 **Optie B (afgewezen voorstel):** de route afleiden uit de eerste poging, zonder nieuw veld.
@@ -109,11 +123,15 @@ inconsistent zijn, en elke reader moet afleiden, met risico op verschillende afl
 
 ## 5. Legacy (B2) — geen backfill
 
-Afleiding bij lezen, nooit wegschrijven zonder poging:
+Afleiding bij lezen, nooit automatisch wegschrijven (B2-b). Een afgeleide route is uitsluitend
+leesbewijs, gelabeld als "afgeleid". Doorwerken op dezelfde werkrevisie vereist dat een actor de
+afgeleide route expliciet bevestigt met een reden; dat legt `origin = confirmed_legacy` vast.
+Dat mag alleen als de afleiding eenduidig is en de contractversie nog toegelaten en uitvoerbaar is.
+Herstel en reconciliatie binden nooit (lifecycle-vsa §4, §13).
 
 | Bewijs in de envelope | Afgeleide status | Gedrag bij nieuwe poging |
 | --- | --- | --- |
-| Alle pogingen hebben dezelfde `processing_configuration.mode` | `derived_legacy` (eenduidig) | Binden met `origin = derived_legacy` bij de eerstvolgende reservering (dat is vastlegging, geen backfill) |
+| Alle pogingen hebben dezelfde `processing_configuration.mode` | `derived_legacy` (eenduidig) | Zonder bevestiging weigeren met `formation_route_unconfirmed`; na expliciete bevestiging door een actor (met reden) binden met `origin = confirmed_legacy`; een andere route alleen via een opvolger |
 | Geen poging met configuratie, wel `semantic_replay.identity` met een contractversie | `derived_legacy` uit de replay-identiteit | Idem |
 | Geen enkel routebewijs | `unrecorded` | Weigeren met `formation_route_unrecorded` (besluit B2-a); alleen een opvolger |
 | Tegenstrijdige modi tussen pogingen | `conflicting` | Weigeren met `formation_route_conflicting`; alleen een opvolger. Zichtbaar in de diagnostiek |
@@ -121,17 +139,19 @@ Afleiding bij lezen, nooit wegschrijven zonder poging:
 
 ## 6. Besluiten (projectlead)
 
-Besloten door de projectlead op 2026-10-28 ("ga door" op het voorstel hieronder, gemeld in de
-WP-update van MET-13): elk voorstel is overgenomen zoals het hier staat.
+Besloten door de projectlead op 2026-10-28 ("ga door" op het oorspronkelijke voorstel). Na
+toetsing aan de invarianten (PROTOCOL §5.4, lifecycle-vsa §4–7, §13) heeft de projectlead
+dezelfde dag het herziene B2-b en de voorwaarde bij B3-c bevestigd ("ja"). Beide stonden in de
+WP-updates van MET-13.
 
 | ID | Vraag | Besluit |
 | --- | --- | --- |
 | B1 | Waar staat de route-autoriteit? | Optie A: `envelope.formation_route`, eenmalig, binnen de bestaande transactie |
 | B2-a | Legacy zonder enig routebewijs: weigeren of aan de standaard binden? | Weigeren (veiligst, N7); opvolger als uitweg |
-| B2-b | Is `derived_legacy` uit `semantic_replay.identity` voldoende bewijs? | Ja, mits de contractversie eenduidig één toegelaten route aanwijst |
-| B3-a | Vorm van de uitsluiting: lijst in de omgeving of in beheerconfiguratie? | Omgevingsvariabele naast de standaard (geen tweede autoriteit, alleen beperkend) |
-| B3-b | Hoort het **model** bij de route (pinnen per bronversie) of bij de uitvoering (per poging, met fence)? | Bij de uitvoering; het model in `semantic_replay.identity` blijft de grens voor exacte replay |
-| B3-c | Mag een retry onder een nieuwe deploy doorgaan als route, model en docling gelijk zijn? | Ja voor een *nieuwe* poging; een lopende poging blijft gefenst op `deployment` (bestaand gedrag) |
+| B2-b | Is `derived_legacy` uit `semantic_replay.identity` voldoende bewijs? | Alleen als leesbewijs. Doorwerken op dezelfde werkrevisie vereist expliciete bevestiging door een actor met reden (`confirmed_legacy`), alleen bij eenduidige afleiding en een toegelaten, uitvoerbare contractversie. Nooit automatisch binden (N1; lifecycle-vsa §4) |
+| B3-a | Vorm van de uitsluiting: lijst in de omgeving of in beheerconfiguratie? | Omgevingsvariabele naast de standaard; alleen beperkend binnen de toegelaten set per bronsoort uit de strategietabel (N3, N4) |
+| B3-b | Hoort het **model** bij de route (pinnen per bronversie) of bij de uitvoering (per poging, met fence)? | Bij de uitvoering (PROTOCOL: modelkeuze is deployment-owned); per poging vastgelegd; het model in `semantic_replay.identity` blijft de grens voor exacte replay. Verandert de contractversie mee, dan is het een routewissel |
+| B3-c | Mag een retry onder een nieuwe deploy doorgaan als route, model en docling gelijk zijn? | Ja voor een *nieuwe* poging, mits de vastgelegde contract- en policyversie nog uitvoerbaar zijn; anders `formation_route_not_executable`, zonder terugval. Een lopende poging blijft gefenst op `deployment` (bestaand gedrag) |
 
 ## 7. Implementatiecontract (voor het latere uitvoeringsissue)
 
@@ -139,18 +159,18 @@ Lifecycle-velden (`docs/agents/lifecycle-vsa.md`, `validate_change_contract.LIFE
 
 | Veld | Invulling |
 | --- | --- |
-| Lifecycle entity | SourceSnapshot (route-binding); verwerkingspoging |
-| Lifecycle transition | eerste reservering: `unbound → bound(route)`; daarna alleen leesbaar; route-wissel = nieuwe SourceSnapshot (opvolger) |
+| Lifecycle entity | WorkingRevision (route-binding op de envelop, met de SourceSnapshot als bron); verwerkingspoging |
+| Lifecycle transition | eerste reservering: `unbound → bound(route)`; daarna alleen leesbaar; route-wissel = nieuwe WorkingRevision (opvolger), eventueel over dezelfde SourceSnapshot-bytes |
 | Initial durable state | envelope zonder `formation_route` (nieuw of legacy) |
-| Trigger | ingest, eerste bronselectie, retry/resume/herstel van een bronversie zonder binding |
+| Trigger | ingest, eerste bronselectie, retry/resume van een werkrevisie zonder binding (legacy: alleen na expliciete bevestiging; herstel bindt nooit) |
 | Authorization | bestaande `authorize` (bronselectie) en ingestrechten; geen nieuwe rol |
-| Validation | route ∈ toegelaten routes voor bronsoort; niet uitgesloten; poging-`mode` == binding |
+| Validation | route ∈ toegelaten routes voor bronsoort (strategietabel); niet uitgesloten; contract- en policyversie uitvoerbaar; poging-`mode` == binding; legacy alleen na expliciete bevestiging |
 | Mutable entities | poging (nieuw), envelope-veld `formation_route` (alleen bij eerste binding) |
 | Immutable entities | bestaande `formation_route`, gepubliceerde releases, eerdere pogingen |
 | Workflow state before/after | ongewijzigd (processing/in_review/...); route is geen workflowstatus |
 | Release state before/after | ongewijzigd |
 | Serving state before/after | ongewijzigd |
-| Expected API result | receipt bevat `formation_route`; fouten `formation_route_mismatch/excluded/conflicting/unrecorded/not_resumable` |
+| Expected API result | receipt bevat `formation_route`; fouten `formation_route_mismatch/excluded/conflicting/unrecorded/unconfirmed/not_executable/not_resumable` |
 | Expected UI result | document toont vastgelegde route; omgeving als "standaard voor nieuwe verwerking" |
 | Failure result | fail closed vóór commit; geen gedeeltelijke binding; geen poging zonder binding |
 | Restart result | binding staat in de durable envelope; herstart leest binding, niet omgeving |
@@ -188,7 +208,12 @@ High-risk-velden (`continuous-development.md`):
    weigering (`formation_route_unrecorded`, B2-a) en weigering (`formation_route_conflicting`). Immutable releases en de live voorganger blijven intact.
 6. Een providerfout leidt niet tot een andere route of een alternatieve kandidaatmaker.
 7. Een deploy tussen reservering en uitvoering blijft gefenst (bestaand). Een nieuwe poging na de deploy
-   met dezelfde route, hetzelfde model en docling is toegestaan (B3-c).
+   met dezelfde route, hetzelfde model en docling is toegestaan (B3-c). Is de vastgelegde
+   contractversie na de deploy niet meer uitvoerbaar, dan volgt `formation_route_not_executable`
+   zonder terugval.
+9. Legacy met eenduidige afleiding: zonder bevestiging `formation_route_unconfirmed`; herstel,
+   herstart en reconciliatie leggen nooit zelf een binding vast; na bevestiging door een actor
+   met reden volgt precies één `confirmed_legacy`-binding.
 8. Een beslisboom kan geen prozaroute binden en omgekeerd (N4).
 
 Bewijs op native PostgreSQL en de productiecompositie; mocks gelden niet als herstelbewijs.
