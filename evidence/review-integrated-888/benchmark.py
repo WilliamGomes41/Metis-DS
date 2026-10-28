@@ -45,6 +45,81 @@ def durable(console, ids):
     })
 
 
+def append_post_fixture_revision(console, sid, oid, actor):
+    """Advance the current version; never edit an earlier history occurrence."""
+    from src.review.revision_workflow import current_revisions, revise_object, with_current_revision
+    rows = console._load_objects(sid)
+    previous = next(o for o in current_revisions(rows, snapshot_id=sid) if o['object_id'] == oid)
+    successor = revise_object(previous, deepcopy(previous), snapshot_id=sid,
+        reason='Synthetic history load', actor=actor, force=True)
+    assert successor['object_version'] != previous['object_version']
+    console._save_objects(sid, with_current_revision(rows, successor),
+                          expected_revision=console.objects_revision(sid))
+
+
+def seed_post_history(console, sid, candidates, reviewer, depth):
+    """Synthetic load via real approvals and validated append-order revisions."""
+
+    def approve(oid):
+        console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=oid,
+            decision='approve', confirmed_object_type='definition', suitability='ja',
+            documentpositie_action='dit_klopt', type_action='dit_klopt',
+            relation_review_ack=True, expected_revision=console.objects_revision(sid))
+
+    # Keep focal and conflict-control objects untouched. Seed independent objects.
+    for number, candidate in enumerate(candidates[2:]):
+        oid = candidate['object_id']
+        for _ in range(depth):
+            approve(oid)
+            append_post_fixture_revision(console, sid, oid, reviewer['account_id'])
+        if number % 2 == 0:
+            approve(oid)
+
+
+def post_with_native_row_blocker(console, sid, send):
+    """Hold a real row lock, observe its waiter, release in every failure path."""
+    from time import sleep
+
+    store = console.workflow_document_store
+    with store._connect() as blocker, store._connect() as observer:
+        observer.autocommit = True
+        observer.execute("SET statement_timeout = '2s'")
+        assert blocker.execute(
+            'SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE', (sid,)).fetchone()
+        blocker_pid = blocker.info.backend_pid
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(send)
+            observed = None
+            try:
+                deadline = perf_counter() + 15
+                while perf_counter() < deadline:
+                    rows = observer.execute(
+                        "SELECT wait_event_type,wait_event,"
+                        "CASE WHEN query ILIKE 'SELECT%%FROM workflow.documents%%FOR UPDATE%%' "
+                        "THEN 'document_row_lock' ELSE 'other_statement' END AS category "
+                        "FROM pg_stat_activity WHERE datname=current_database() "
+                        "AND %s=ANY(pg_blocking_pids(pid))", (blocker_pid,)).fetchall()
+                    if rows:
+                        assert len(rows) == 1
+                        observed = dict(rows[0])
+                        break
+                    assert not future.done(), 'POST completed without reaching the controlled row lock'
+                    sleep(0.01)
+                assert observed is not None, 'native POST lock wait was not observed before deadline'
+                assert observed['wait_event_type'] == 'Lock'
+                assert observed['category'] == 'document_row_lock'
+                assert not future.done()
+            finally:
+                blocker.rollback()
+            response = future.result(timeout=60)
+    # No backend IDs, SQL text, database identity or parameters leave the probe.
+    return response, {'controlled': True, 'boundary': 'workflow_document_row',
+                      'wait_event_type': observed['wait_event_type'],
+                      'wait_event': observed['wait_event'], 'query_category': observed['category'],
+                      'waiter_observed': True, 'completed_after_release': True,
+                      'production_cause_proven': False}
+
+
 @pytest.mark.parametrize('case', os.environ.get('REVIEW_PROOF_CASES', ','.join(CASES)).split(','))
 def test_native_review_matrix(case, tmp_path, production_console, production_app, monkeypatch):
     import src.vorming.source_reconstruction_v1 as reconstruction
@@ -205,6 +280,37 @@ def test_native_review_post_baseline(size, tmp_path, production_console, product
     assert len(candidates) == size
     assert not console.processing_status(sid)['formation_incomplete']
     focal = candidates[0]
+    profile = os.environ.get('REVIEW_POST_PROFILE', 'initial')
+    assert profile in {'initial', 'history', 'history_incomplete'}
+    depth = int(os.environ.get('REVIEW_POST_HISTORY_DEPTH', '4')) if profile != 'initial' else 0
+    if profile != 'initial':
+        assert size >= 4 and depth >= 2
+        seed_post_history(console, sid, candidates, reviewer, depth)
+    incomplete = profile == 'history_incomplete'
+    if incomplete:
+        # Explicit synthetic retained finding, not a genuine failed provider run.
+        envelope = console.workflow_document_store.get_envelope(sid)
+        replay = envelope['semantic_replay']['provider_evidence']
+        replay['formation_incomplete'] = True
+        replay['pending_rejections'] = [{'kind': 'formation', 'reason_code': 'synthetic_open', 'spans': []}]
+        console.workflow_document_store.write_bundle(envelope=envelope)
+        assert console.processing_status(sid)['formation_incomplete']
+    from src.publication.publish_authorization_v1 import still_matches
+    from src.review.revision_workflow import current_revisions
+    from src.vorming.source_preparation_context_v1 import stored_extraction
+    rows = console.workflow_document_store.list_document_objects(sid)
+    current = {o['object_id']: o for o in current_revisions(rows, snapshot_id=sid)}
+    bindings = console.workflow_review_store.read_bindings([sid]).get(sid, [])
+    matching = sum(still_matches(b, current[b['object_id']]) for b in bindings)
+    if depth:
+        assert len(rows) > len(current)
+        assert 0 < matching < len(bindings), 'fixture needs matching and stale exact bindings'
+    envelope = console.workflow_document_store.get_envelope(sid)
+    with console.workflow_document_store._connect() as version_connection:
+        postgres_version = version_connection.execute('SHOW server_version').fetchone()['server_version']
+        storage_contract = version_connection.execute(
+            'SELECT processing_storage_version,object_generation FROM workflow.documents WHERE snapshot_id=%s',
+            (sid,)).fetchone()
     captured = []
 
     def emit(_self, payload):
@@ -216,16 +322,24 @@ def test_native_review_post_baseline(size, tmp_path, production_console, product
 
     monkeypatch.setattr(RequestDiagnostics, 'emit', emit)
     monkeypatch.setattr(performance._LOGGER, 'info', lambda *args, **kwargs: None)
-    result = {'case': 'post_baseline', 'commit': git('rev-parse', 'HEAD'),
+    result = {'case': 'post_baseline', 'profile': profile, 'commit': git('rev-parse', 'HEAD'),
         'harness_sha256': sha256(Path(__file__).read_bytes()).hexdigest(),
         'production_diff': git('diff', 'HEAD', '--', 'src'),
-        'python': platform.python_version(), 'runtime': 'authenticated ASGI + native disposable PostgreSQL',
+        'python': platform.python_version(), 'postgres': postgres_version,
+        'runtime': 'authenticated ASGI + native disposable PostgreSQL',
         'fixture': {'source_sha256': sha256(source).hexdigest(), 'source_bytes': len(source),
-            'candidates': size, 'history': 'initial revisions', 'bindings': 'initially empty',
-            'relations': 'no additional relation context', 'formation': 'complete',
+            'candidates': size, 'history_depth': depth, 'history_rows': len(rows),
+            'current_objects': len(current), 'bindings': len(bindings),
+            'matching_bindings': matching, 'stale_bindings': len(bindings) - matching,
+            'extraction_contract': envelope['prepared_source_extraction']['version'],
+            'source_fragments': len(stored_extraction(envelope)),
+            'processing_storage_version': storage_contract['processing_storage_version'],
+            'object_generation': storage_contract['object_generation'],
+            'relations': 'no additional relation context',
+            'formation': 'synthetic incomplete finding' if incomplete else 'complete',
             'provider': 'deterministic fixture selections, production candidate creator'},
-        'samples': [], 'limitations': ['synthetic initial-state baseline, not incident replay',
-            'no heavy history, stale bindings, relation closure or SQL wait attribution yet',
+        'samples': [], 'limitations': ['synthetic fixture, not incident replay',
+            'no relation closure fixture or production SQL attribution yet',
             'one observation per action; no percentile or production SLO claim']}
 
     def request(client, name, method, **kwargs):
@@ -254,6 +368,7 @@ def test_native_review_post_baseline(size, tmp_path, production_console, product
         before = durable(console, [sid])
         page = request(client, 'passage', 'get', params=params)
         assert page.status_code == 200
+        assert ('data-formation-incomplete' in page.text) == incomplete
         data = form(page)
         assert durable(console, [sid]) == before
         # Real semantic refusal inside review_object, not an injected exception.
@@ -262,6 +377,20 @@ def test_native_review_post_baseline(size, tmp_path, production_console, product
         assert rejected.status_code == 400
         assert 'synthetic draft retained' in rejected.text
         assert durable(console, [sid]) == before
+        if profile == 'history':
+            # Separate the injected wait from the ordinary focal approval timing.
+            control_id = candidates[1]['object_id']
+            blocked, result['lock_probe'] = post_with_native_row_blocker(
+                console, sid, lambda: request(client, 'control_approve_with_lock', 'post',
+                                             data={**data, 'object_id': control_id}))
+            assert blocked.status_code == 303
+            control = next(o for o in console.snapshot_objects(sid) if o['object_id'] == control_id)
+            assert control['governance']['validation_status'] == 'approved'
+            assert any(b['valid'] and b['object_id'] == control_id for b in console.object_review_bindings(sid))
+            # The independent committed approval invalidates the prior page token.
+            page = request(client, 'passage_after_lock_control', 'get', params=params)
+            assert page.status_code == 200
+            data = form(page)
         approved = request(client, 'approve', 'post', data=data)
         assert approved.status_code == 303
         approved_state = durable(console, [sid])
@@ -278,9 +407,7 @@ def test_native_review_post_baseline(size, tmp_path, production_console, product
         fresh = request(client, 'fresh_passage', 'get', params=params)
         assert fresh.status_code == 200
         stale_data = form(fresh)
-        changed = deepcopy(console._load_objects(sid))
-        next(o for o in changed if o['object_id'] == candidates[1]['object_id'])['review_test_marker'] = 'concurrent'
-        console._save_objects(sid, changed)
+        append_post_fixture_revision(console, sid, candidates[1]['object_id'], reviewer['account_id'])
         concurrent_state = durable(console, [sid])
         stale = request(client, 'concurrent_stale', 'post', data=stale_data)
         assert stale.status_code == 409
