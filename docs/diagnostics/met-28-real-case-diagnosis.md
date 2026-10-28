@@ -48,6 +48,7 @@ Dezelfde plek wordt bij een volgende call of de resume opnieuw afgewezen;
 | `recommendation_strength_evidence_missing` | 3 | 2 | 0 |
 | `recommendation_strength_evidence_not_applicable` | 2 | 1 | 0 |
 | `source_assessment_bounds_invalid` | 1 | 1 | 0 |
+| Call-breed `pre_review_llm_proposal_rejected` (onderliggend: `relation_target_ambiguous`, zie 2.7) | 1 call | 1 | 0 |
 | `semantic_supplement_outside_target` | 0 | 0 | 0 |
 
 Anders dan in het v12-incident wordt het open werk hier niet door het budget verklaard:
@@ -181,6 +182,20 @@ gevallen opgelost.
 `structure` over meerdere blokken, met een bewijsverwijzing naar een blok buiten die spans.
 `source_accountability_v1.validate_assessments` weigert dat terecht. Klasse (d), later opgelost.
 
+**Call-breed `pre_review_llm_proposal_rejected` — 1 call (initiële taak `failed`; recovery `completed`).**
+De call-rij en de opgeslagen provider-evidence bewaren alleen de generieke code, zonder
+`formation`-record. Daarom is de onderliggende code vastgesteld met een offline replay van de
+opgeslagen modeluitvoer door `recoverable_formation_v1.prepare`, met de opgeslagen
+validator-input en de blokken uit de request-payload (code functioneel gelijk aan de call-commit,
+§0). Drie in productie gevalideerde calls slaagden als positieve controle in dezelfde replay.
+
+- **Uitkomst:** `relation_target_ambiguous` (`semantic_passage_v1.attach_relation_proposals`).
+- **Oorzaak:** het model stelde 4 objecten voor, waarvan er 2 (`recommendation` en `explanation`) exact dezelfde selectie hebben. De check faalt dan, ook zonder relaties in het voorstel, omdat een relatiedoel niet eenduidig te maken is.
+- **Waarom de hele call:** de fout draagt geen `candidate_index`, dus `prepare` (regel 88–90) kan hem niet aan één object toewijzen. De twee andere objecten gaan daardoor ook verloren.
+- **Klasse:** (d) modelvoorstel als eerste oorzaak; de weigering van een dubbele selectie is terecht (e). Dat de hele call sneuvelt, is dezelfde versterking als bij B5-b.
+- **Herstel:** de recovery-taak voor hetzelfde bronbereik is afgerond.
+- **Diagnostisch gat:** de onderliggende code wordt niet bewaard; zie §4.
+
 ### 2.8 Besluiten uit MET-5
 
 | Besluit | Bewijs in deze snapshot |
@@ -200,7 +215,9 @@ gevallen opgelost.
 
 ## 4. Zonder besluit uit te voeren (producer en diagnostiek)
 
-1. Het diagnostisch defect uit §2.2: de juiste V3-veldnaam in `source_bound_field_outside_candidate`.
+1. Twee diagnostische defecten:
+   - §2.2: de juiste V3-veldnaam in `source_bound_field_outside_candidate`;
+   - §2.7: bij een call-brede afwijzing de onderliggende code bewaren (nu alleen `pre_review_llm_proposal_rejected`).
 2. Producerinstructies, binnen de bestaande providerroute en zonder domeinwijziging:
    - `occurrence` meegeven bij een herhaalde literal;
    - het volledige sterktelabel selecteren (S1);
