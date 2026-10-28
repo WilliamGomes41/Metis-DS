@@ -368,7 +368,7 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
     setup_stage('receipt')
     stack_file = setup_file.with_suffix('.stacks.txt').open('w') if size > 2 else None
     if stack_file:
-        faulthandler.dump_traceback_later(45, file=stack_file)
+        faulthandler.dump_traceback_later(45, file=stack_file, exit=True)
     try:
         console, sid, author, reviewer, calls, mode, _provider = received(
             tmp_path, production_console, monkeypatch, source_html=source_html)
