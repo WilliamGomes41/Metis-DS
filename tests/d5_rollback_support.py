@@ -11,9 +11,16 @@ import uuid
 from fastapi.testclient import TestClient
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.product_api_v1 import create_product_app
-from src.review.review_ledger import read_events
 from src.usage_ledger_v1 import UsageLedger
-from src.settings import quality_evidence_v1
+# The rollback process intentionally imports from a pinned checkout predating
+# the room packages. Select its known module paths from the explicit scenario,
+# so a missing dependency inside either version still fails normally.
+if json.loads(Path(sys.argv[1]).read_text())['legacy']:
+    from src.review_ledger import read_events
+    from src import quality_evidence_v1
+else:
+    from src.review.review_ledger import read_events
+    from src.settings import quality_evidence_v1
 from src.workflows.workflow_badge_counts_postgres_v1 import (
     FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole as Azure,
     FastBadgePostgresCompleteWorkflowDurablePublicationConsole as Durable,
