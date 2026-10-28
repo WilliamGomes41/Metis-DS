@@ -76,3 +76,40 @@ It uses short, closed paragraphs and an empty batch fixture; it does not cover
 incomplete formation, multiple visible documents, a real production source, or
 statistically support a p95. It ran while other tests were active, so the results
 are exploratory and are not a controlled regression threshold.
+
+## CI follow-up and lessons for later pushes
+
+The first PR run, 40614363772 on e108727, failed `change-contract` because
+the PR description omitted all five required contract fields. The fields were
+present in this document and issue #885, but CI reads the pull request event's
+body instead. The local repository and release preflights did not test that body.
+The same validator reproduced the five errors locally; adding the five fields
+to the PR description made the same command pass.
+
+The CI preflight and suite depend on the contract gate. They were skipped;
+aggregate jobs then failed on absent suite XML files. Those missing artifacts do
+not prove that the skipped tests failed. The separate Docling acceptance workflow
+passed, as did architecture boundaries, Bend, workflow topology and source
+processing. A prior interrupted local parallel run reported an unidentified
+failure; a later complete run passed. Its original failure cannot be diagnosed
+from the available output.
+
+For the next push:
+
+* Validate the exact proposed PR body with `python scripts/validate_change_contract.py
+  --text-file <path-to-pr-body>` before creating or updating the PR. Include the
+  five explicit fields, not only a link to the issue or contract file.
+* Compare preflight commands with the actual CI job list: a passing repository
+  preflight or local pytest does not include the change-contract event check.
+* Diagnose the earliest failed gate and downstream dependency states before
+  interpreting absent artifacts as separate test failures. Inspect both Python
+  matrix jobs and real acceptance independently.
+* Capture full parallel test logs with test names, including on interruption;
+  retain the first error before rerunning so a later green result does not erase
+  evidence of a potential intermittent failure.
+* When retrying an event-driven workflow, verify the run uses the corrected PR
+  body and exact commit. An old pull-request event payload can retain old metadata;
+  a new synchronized PR event is required for a definitive check of updated text.
+
+This records the observed incident and its limits; it does not establish that a
+new push, the complete CI matrix, or current production Review is successful.
