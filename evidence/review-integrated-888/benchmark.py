@@ -181,3 +181,112 @@ def test_native_review_matrix(case, tmp_path, production_console, production_app
     previous = json.loads(output.read_text()) if output.exists() else []
     previous.append(result)
     output.write_text(json.dumps(previous, indent=2) + '\n')
+
+
+@pytest.mark.parametrize('size', [int(v) for v in os.environ.get('REVIEW_POST_SIZES', '20').split(',')])
+def test_native_review_post_baseline(size, tmp_path, production_console, production_app, monkeypatch):
+    """MET-23: full response and durable outcomes, without replacing the kernel."""
+    from src.request_diagnostics_v1 import RequestDiagnostics
+    import src.console_performance_v1 as performance
+
+    assert size >= 2
+    console = production_console(root=tmp_path, processing_binder=lambda _: None)
+    author = console.create_account(username='author', password='fixture-only', roles=('researcher',))
+    reviewer = console.create_account(username='reviewer', password='fixture-only', roles=('reviewer',))
+    texts = [f'begrip {i:04d} is een beschrijving van een afzonderlijke waarneming.' for i in range(size)]
+    source = ('<html><body><h1>Bronindeling</h1>' + ''.join(f'<p>{s}</p>' for s in texts) + '</body></html>').encode()
+    bind_fixture_selections(console, [(s, 'definition') for s in texts])
+    sid = console.ingest(actor_id=author['account_id'], filename='post-fixture.html',
+        content_type='text/html', data=source, ingest_kind='new', title='Synthetic POST baseline',
+        version='1.0', date='2026-10-28', live_url='', class_='richtlijn', family='fixture',
+        named_reviewers=[reviewer['account_id']])['snapshot_id']
+    candidates = [o for o in console.snapshot_objects(sid)
+                  if (o.get('metadata') or {}).get('semantic_passage', {}).get('spans')]
+    assert len(candidates) == size
+    assert not console.processing_status(sid)['formation_incomplete']
+    focal = candidates[0]
+    captured = []
+
+    def emit(_self, payload):
+        if payload.get('event') == 'request_finished' and payload.get('route') == '/review':
+            # Deliberately exclude request IDs, SQL, error details and form values.
+            captured.append({key: payload[key] for key in ('elapsed_ms', 'status', 'outcome',
+                'phases', 'phase_tree', 'counters', 'db', 'unattributed_lower_bound_ms',
+                'phase_tree_truncated') if key in payload})
+
+    monkeypatch.setattr(RequestDiagnostics, 'emit', emit)
+    monkeypatch.setattr(performance._LOGGER, 'info', lambda *args, **kwargs: None)
+    result = {'case': 'post_baseline', 'commit': git('rev-parse', 'HEAD'),
+        'harness_sha256': sha256(Path(__file__).read_bytes()).hexdigest(),
+        'production_diff': git('diff', 'HEAD', '--', 'src'),
+        'python': platform.python_version(), 'runtime': 'authenticated ASGI + native disposable PostgreSQL',
+        'fixture': {'source_sha256': sha256(source).hexdigest(), 'source_bytes': len(source),
+            'candidates': size, 'history': 'initial revisions', 'bindings': 'initially empty',
+            'relations': 'no additional relation context', 'formation': 'complete',
+            'provider': 'deterministic fixture selections, production candidate creator'},
+        'samples': [], 'limitations': ['synthetic initial-state baseline, not incident replay',
+            'no heavy history, stale bindings, relation closure or SQL wait attribution yet',
+            'one observation per action; no percentile or production SLO claim']}
+
+    def request(client, name, method, **kwargs):
+        captured.clear()
+        start = perf_counter()
+        response = getattr(client, method)('/review', follow_redirects=False, **kwargs)
+        wall_ms = (perf_counter() - start) * 1000
+        assert len(captured) == 1, 'each completed HTTP request needs its own diagnostic record'
+        result['samples'].append({'action': name, 'wall_ms': wall_ms,
+            'http_status': response.status_code, 'response_bytes': len(response.content),
+            'diagnostics': captured.pop()})
+        return response
+
+    def form(page):
+        match = re.search(r'name="snapshot_revision" value="([^"]+)"', page.text)
+        assert match, 'actual rendered form must supply the revision'
+        return {'snapshot_id': sid, 'object_id': focal['object_id'], 'snapshot_revision': match.group(1),
+            'suitability': 'ja', 'documentpositie_action': 'dit_klopt', 'type_action': 'dit_klopt',
+            'confirmed_object_type': 'definition', 'eindoordeel': 'goedkeuren', 'decision': 'approve',
+            'relation_review_ack': '1', 'comment': 'synthetic draft retained'}
+
+    with TestClient(production_app(console), base_url='https://testserver') as client:
+        assert client.post('/login', data={'username': 'reviewer', 'password': 'fixture-only'},
+                           follow_redirects=False).status_code == 303
+        params = {'document': sid, 'object': focal['object_id']}
+        before = durable(console, [sid])
+        page = request(client, 'passage', 'get', params=params)
+        assert page.status_code == 200
+        data = form(page)
+        assert durable(console, [sid]) == before
+        # Real semantic refusal inside review_object, not an injected exception.
+        rejected = request(client, 'semantic_refusal', 'post',
+                           data={**data, 'source_discrepancy': 'context_ontbreekt'})
+        assert rejected.status_code == 400
+        assert 'synthetic draft retained' in rejected.text
+        assert durable(console, [sid]) == before
+        approved = request(client, 'approve', 'post', data=data)
+        assert approved.status_code == 303
+        approved_state = durable(console, [sid])
+        assert approved_state != before
+        current = next(o for o in console.snapshot_objects(sid) if o['object_id'] == focal['object_id'])
+        assert current['governance']['validation_status'] == 'approved'
+        assert any(b['valid'] and b['object_id'] == focal['object_id']
+                   for b in console.object_review_bindings(sid))
+        # Replaying the old form is a stale request, not a universal idempotency key.
+        retry = request(client, 'old_form_retry', 'post', data=data)
+        assert retry.status_code == 409
+        assert durable(console, [sid]) == approved_state
+        # Also exercise a separately rendered form invalidated by another object write.
+        fresh = request(client, 'fresh_passage', 'get', params=params)
+        assert fresh.status_code == 200
+        stale_data = form(fresh)
+        changed = deepcopy(console._load_objects(sid))
+        next(o for o in changed if o['object_id'] == candidates[1]['object_id'])['review_test_marker'] = 'concurrent'
+        console._save_objects(sid, changed)
+        concurrent_state = durable(console, [sid])
+        stale = request(client, 'concurrent_stale', 'post', data=stale_data)
+        assert stale.status_code == 409
+        assert durable(console, [sid]) == concurrent_state
+    output = Path(os.environ['REVIEW_PROOF_OUTPUT'])
+    output.parent.mkdir(parents=True, exist_ok=True)
+    previous = json.loads(output.read_text()) if output.exists() else []
+    previous.append(result)
+    output.write_text(json.dumps(previous, indent=2) + '\n')

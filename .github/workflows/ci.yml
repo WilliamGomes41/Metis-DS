@@ -69,6 +69,21 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -r requirements-dev.lock
       - run: pip install --no-deps --no-build-isolation -e .
+      - name: MET-23 native Review POST baseline
+        timeout-minutes: 10
+        env:
+          REVIEW_PROOF_OUTPUT: output/review-post-902.json
+        run: |
+          bash scripts/test_postgres.sh > /dev/null
+          python -m pytest -q tests/test_review_post_baseline_postgres.py --junitxml=output/review-post-902.xml
+      - name: Upload MET-23 native POST evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-post-902
+          overwrite: true
+          path: output/review-post-902.*
+          if-no-files-found: error
       - name: Characterization mutation review (expected exit code 1)
         run: |
           set +e
