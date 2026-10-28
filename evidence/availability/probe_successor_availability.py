@@ -4,9 +4,9 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 sys.path.insert(0,__import__('os').environ.get('METIS_PROBE_REPO', str(Path(__file__).resolve().parents[1]/'metis-review')))
 from fastapi.testclient import TestClient
-from src.review_closure_v1 import ReviewClosureConsole
+from src.review.review_closure_v1 import ReviewClosureConsole
 from src.operations_console_app import create_console_app
-from src.review_policy_v1 import CONTRACT
+from src.review.review_policy_v1 import CONTRACT
 from tests.semantic_fixture_support import bind_fixture_selections
 
 def scenario(successor):
