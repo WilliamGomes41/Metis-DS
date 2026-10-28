@@ -7,12 +7,15 @@
 from pathlib import Path
 import os
 import runpy
+import pytest
 
 
-def test_native_post_baseline(tmp_path, production_console, production_app, monkeypatch):
+@pytest.mark.parametrize('profile', ['initial', 'history', 'history_incomplete'])
+def test_native_post_baseline(tmp_path, production_console, production_app, monkeypatch, profile):
     # Keep one scenario owner: the opt-in multi-size harness also serves CI.
     harness = Path(__file__).resolve().parents[1] / 'evidence/review-integrated-888/benchmark.py'
     namespace = runpy.run_path(str(harness))
+    monkeypatch.setenv('REVIEW_POST_PROFILE', profile)
     if not os.environ.get('REVIEW_PROOF_OUTPUT'):
         monkeypatch.setenv('REVIEW_PROOF_OUTPUT', str(tmp_path / 'post-baseline.json'))
     namespace['test_native_review_post_baseline'](
