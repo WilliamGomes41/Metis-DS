@@ -178,9 +178,17 @@ een producerinstructie: eindpunten exact gelijk aan `objects[i].spans`.
 letterlijke verwijzing (`semantic_passage_v1`). Klasse (d); een latere call heeft beide
 gevallen opgelost.
 
-**`source_assessment_bounds_invalid` — 1 uniek (historical).** Een bronbeoordeling met rol
-`structure` over meerdere blokken, met een bewijsverwijzing naar een blok buiten die spans.
-`source_accountability_v1.validate_assessments` weigert dat terecht. Klasse (d), later opgelost.
+**`source_assessment_bounds_invalid` — 1 uniek (historical).** Het model gaf een
+bronbeoordeling (rol `structure`) over een volledig blok van 40 tekens. Dat blok stond in de taak
+alleen als **context-only** blok (`evidence_blocks`), niet tussen de 9 selecteerbare
+`source_blocks`. De literal-resolutie kent context-blokken wel en geeft geldige offsets (0–40,
+binnen het blok). `source_accountability_v1.validate_assessments` toetst echter alleen tegen de
+bronblokken van de taak, en meldt een onbekend blok onder dezelfde code als ongeldige offsets.
+De meerblok-`spans` in de bevinding zijn de doelbereiken van de taak; `bounded_formation_v1` vult
+die in als een afwijzing geen eigen spans heeft. Het werkelijke bereik staat in `evidence_span`.
+Klasse (d) met een terechte regel (e): een taak verantwoordt alleen haar eigen bron. Het geval is
+later opgelost. Diagnostische kanttekening: de code onderscheidt "blok niet selecteerbaar" niet
+van "offsets ongeldig".
 
 **Call-breed `pre_review_llm_proposal_rejected` — 1 call (initiële taak `failed`; recovery `completed`).**
 De call-rij en de opgeslagen provider-evidence bewaren alleen de generieke code, zonder
