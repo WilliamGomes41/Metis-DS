@@ -20,3 +20,13 @@ def test_native_post_baseline(tmp_path, production_console, production_app, monk
         monkeypatch.setenv('REVIEW_PROOF_OUTPUT', str(tmp_path / 'post-baseline.json'))
     namespace['test_native_review_post_baseline'](
         20, tmp_path, production_console, production_app, monkeypatch)
+
+
+@pytest.mark.parametrize('incomplete', [False, True])
+def test_native_task_v1_post(tmp_path, production_console, production_app, monkeypatch, incomplete):
+    harness = Path(__file__).resolve().parents[1] / 'evidence/review-integrated-888/benchmark.py'
+    namespace = runpy.run_path(str(harness))
+    if not os.environ.get('REVIEW_PROOF_OUTPUT'):
+        monkeypatch.setenv('REVIEW_PROOF_OUTPUT', str(tmp_path / 'task-v1-post.json'))
+    namespace['test_native_task_v1_review'](
+        tmp_path, production_console, production_app, monkeypatch, incomplete)

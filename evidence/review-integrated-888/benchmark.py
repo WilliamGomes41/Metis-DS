@@ -258,6 +258,115 @@ def test_native_review_matrix(case, tmp_path, production_console, production_app
     output.write_text(json.dumps(previous, indent=2) + '\n')
 
 
+@pytest.mark.parametrize('incomplete', [False, True])
+def test_native_task_v1_review(tmp_path, production_console, production_app, monkeypatch, incomplete):
+    """Actual bounded processing activates storage v1 before measured HTTP review."""
+    from src.request_diagnostics_v1 import RequestDiagnostics
+    import src.console_performance_v1 as performance
+    from tests.test_review_formation_problems import received, execute, FIRST
+    from src.publication.publish_authorization_v1 import still_matches
+
+    console, sid, author, reviewer, calls, mode, _provider = received(
+        tmp_path, production_console, monkeypatch)
+    mode['broken'] = incomplete
+    execute(console, sid, author, 'native-task-review-proof')
+    assert calls, 'the real bounded processing route must run'
+    assert console.processing_status(sid)['formation_incomplete'] == incomplete
+    focal = next(o for o in console.snapshot_objects(sid)
+                 if o.get('proposed_object_type') == 'recommendation'
+                 and o['content']['clean_text'] == FIRST)
+
+    def storage_state():
+        with console.workflow_document_store._connect() as con:
+            return dict(con.execute(
+                "SELECT processing_storage_version,object_generation,current_setting('server_version') AS postgres_version "
+                'FROM workflow.documents WHERE snapshot_id=%s',
+                (sid,)).fetchone())
+
+    initial_storage = storage_state()
+    assert initial_storage['processing_storage_version'] == 1
+    assert initial_storage['object_generation'] >= 0
+    captured = []
+
+    def emit(_self, payload):
+        if payload.get('event') == 'request_finished' and payload.get('route') == '/review':
+            captured.append({key: payload[key] for key in ('elapsed_ms', 'status', 'outcome',
+                'phases', 'phase_tree', 'counters', 'db', 'unattributed_lower_bound_ms',
+                'phase_tree_truncated') if key in payload})
+
+    monkeypatch.setattr(RequestDiagnostics, 'emit', emit)
+    monkeypatch.setattr(performance._LOGGER, 'info', lambda *args, **kwargs: None)
+    result = {'case': 'task_v1_review', 'formation_incomplete': incomplete,
+        'commit': git('rev-parse', 'HEAD'), 'harness_sha256': sha256(Path(__file__).read_bytes()).hexdigest(),
+        'runtime': 'authenticated ASGI + native disposable PostgreSQL',
+        'fixture': 'existing synthetic two-passage bounded-processing provider; production activation',
+        'storage_before': initial_storage, 'samples': [],
+        'limitations': ['small task-v1 compatibility proof, not a scaling or production latency claim',
+                        'provider transport is deterministic; stores and activation are native']}
+
+    def request(client, name, method, **kwargs):
+        captured.clear()
+        start = perf_counter()
+        response = getattr(client, method)('/review', follow_redirects=False, **kwargs)
+        assert len(captured) == 1
+        result['samples'].append({'action': name, 'http_status': response.status_code,
+            'wall_ms': (perf_counter() - start) * 1000, 'response_bytes': len(response.content),
+            'diagnostics': captured.pop()})
+        return response
+
+    def form(page):
+        match = re.search(r'name="snapshot_revision" value="([^"]+)"', page.text)
+        assert match and match.group(1).startswith('review-generation-v1:')
+        return {'snapshot_id': sid, 'object_id': focal['object_id'], 'snapshot_revision': match.group(1),
+            'suitability': 'ja', 'documentpositie_action': 'dit_klopt', 'type_action': 'dit_klopt',
+            'confirmed_object_type': 'recommendation', 'eindoordeel': 'goedkeuren', 'decision': 'approve',
+            'recommendation_direction': 'against', 'recommendation_strength_level': 'not_stated',
+            'relation_review_ack': '1', 'comment': 'synthetic task-v1 draft'}
+
+    with TestClient(production_app(console), base_url='https://testserver') as client:
+        assert client.post('/login', data={'username': 'reviewer', 'password': 'fixture-only'},
+                           follow_redirects=False).status_code == 303
+        params = {'document': sid, 'object': focal['object_id']}
+        before = durable(console, [sid])
+        page = request(client, 'passage', 'get', params=params)
+        assert page.status_code == 200
+        assert ('data-formation-incomplete' in page.text) == incomplete
+        data = form(page)
+        assert durable(console, [sid]) == before
+        refused = request(client, 'semantic_refusal', 'post',
+                          data={**data, 'source_discrepancy': 'context_ontbreekt'})
+        assert refused.status_code == 400 and 'synthetic task-v1 draft' in refused.text
+        assert durable(console, [sid]) == before
+        approved = request(client, 'approve', 'post', data=data)
+        assert approved.status_code == 303
+        winner = durable(console, [sid])
+        current = next(o for o in console.snapshot_objects(sid) if o['object_id'] == focal['object_id'])
+        assert current['governance']['validation_status'] == 'approved'
+        assert any(b['object_id'] == focal['object_id'] and still_matches(b, current)
+                   for b in console.object_review_bindings(sid))
+        result['storage_after_approval'] = storage_state()
+        assert result['storage_after_approval']['processing_storage_version'] == 1
+        assert result['storage_after_approval']['object_generation'] > initial_storage['object_generation']
+        retry = request(client, 'old_form_retry', 'post', data=data)
+        assert retry.status_code == 409 and durable(console, [sid]) == winner
+        fresh = request(client, 'fresh_passage', 'get', params=params)
+        assert fresh.status_code == 200
+        stale_data = form(fresh)
+        append_post_fixture_revision(console, sid, focal['object_id'], reviewer)
+        concurrent_state = durable(console, [sid])
+        result['storage_after_concurrent_revision'] = storage_state()
+        assert result['storage_after_concurrent_revision']['processing_storage_version'] == 1
+        assert result['storage_after_concurrent_revision']['object_generation'] > result['storage_after_approval']['object_generation']
+        stale = request(client, 'concurrent_stale', 'post', data=stale_data)
+        assert stale.status_code == 409 and durable(console, [sid]) == concurrent_state
+        assert console.processing_status(sid)['formation_incomplete'] == incomplete
+    output = Path(os.environ['REVIEW_PROOF_OUTPUT'])
+    output.parent.mkdir(parents=True, exist_ok=True)
+    previous = json.loads(output.read_text()) if output.exists() else []
+    previous.append(result)
+    output.write_text(json.dumps(previous, indent=2) + '\n')
+
+
 @pytest.mark.parametrize('size', [int(v) for v in os.environ.get('REVIEW_POST_SIZES', '20').split(',')])
 def test_native_review_post_baseline(size, tmp_path, production_console, production_app, monkeypatch):
     """MET-23: full response and durable outcomes, without replacing the kernel."""
