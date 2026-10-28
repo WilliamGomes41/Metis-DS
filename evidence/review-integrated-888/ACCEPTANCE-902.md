@@ -23,7 +23,7 @@ horen bij #699/#680. Dat is geen impliciete toestemming om productie te benadere
 | Afwijzing vóór versus in transactie | Ontbrekende rejectcomment:400 zonder store_transaction; source-discrepancy:400 met echte store_transaction en behouden concept. |
 | SQL execute/fetch/JSON en bronwerk | Bestaande diagnostiek plus transparante native cursorobserver met vaste categorieën, execute-/fetchtijden, opgehaalde rijen en geraakte writerijen; geen SQL/parameters exporteren. |
 | Lock versus uitvoering isoleren | Onafhankelijke documentrijblocker met observer en vrijgave; context/single-review over onafhankelijke runtimepaden met native wait-for-grafiek en SQLSTATE. |
-| Zware historie/bindings en schalen | Legacy 20 met vier historiecycli; task-v1 32/128 met twee cycli, geldige/stale bindings en identieke focale passage. Werkelijke tellerwaarden zijn leidend; geen exportreplay claimen. |
+| Zware historie/bindings en schalen | Legacy 20 met vier historiecycli; task-v1 32/128 met twee cycli op dezelfde twee onafhankelijke kandidaten, geldige/stale bindings en identieke focale passage. Werkelijke tellerwaarden zijn leidend; geen exportreplay claimen. |
 | Relationele/contextafhankelijkheden | Context na approval; oude→nieuwe doelpassage; volledige context-/publicatierace-referentietest. Writer-/invalidatiesets in WRITERS-902.md. |
 | Fout / rollback / herstel | Echte binding-INSERT-fout P9021 en deferred COMMIT-fout P9022; opgeslagen toestand/generatie gelijk; verse productiecompositie en originele retry. |
 | Geen verstopte missers | JUnit failures/errors/skips en request-/testinventaris behouden; een gestart maar onafgerond geval heeft geen succesvolle latency. Ontbrekende JUnit betekent geen afgeronde run. |
@@ -74,6 +74,18 @@ en de conflict-/retrygevallen blijven losse waarnemingen. Geen p95 uit deze aant
 De transparante observatie heeft eigen meetoverhead; trek die niet denkbeeldig af
 en gebruik dezelfde observer bij de latere vergelijking.
 
+De task-v1-schaalgevallen houden twee historiekandidaten vast (naast de twee
+ongemuteerde focale/controlpassages). Beide groottes gebruiken dezelfde twee
+cycli van echte approvals en gevalideerde opvolgrevisies; één kandidaat krijgt
+een actuele approval. Zo groeit het onafhankelijke bron-/objectvolume zonder
+tegelijk het aantal voorbereidingscommands te verhogen. `history_candidates`,
+`stored_versions`, `bindings` en `matching_bindings` leggen de werkelijke input vast.
+Een tussenproef met acht historiekandidaten is na148s tijdens setup afgebroken
+en telt niet als geslaagde uitvoering. De eerdere fixture voerde voor iedere extra kandidaat opnieuw volledige writes uit
+en bereikte de CI-grens al tijdens setup. De diagnostische stack lokaliseerde
+dit in bundelwrites; een lokale native reproductie zag actieve database-uitvoering
+zonder PostgreSQL-blockers. Dit bewijst geen oorzaak van het live incident.
+
 Vóór productie-optimalisatie vastgelegde engineeringdoelen voor WP6: totale
 303/400/409-POST elk ≤3000ms; hold van exclusieve storelock ≤250ms; storetransaction
 ≤500ms. Het betreft inclusive duur per span (lockhold omvat ander werk), geen som
@@ -94,8 +106,9 @@ of netwerkwerk en toont vrijgave gevolgd door303. De context/single-probe observ
 de twee echte PostgreSQL-blocking edges; bij een te invalideren bestaande binding en de omgekeerde lockvolgorde
 wordt SQLSTATE40P01 plus één duurzame winnaar vereist. Een geslaagde diagnostische
 test betekent hier dat de fout aangetoond is, niet dat de writer deadlockvrij is.
-De veiligheidsassertie `assert not result['observed_cycle']` op deze native
-resultaatregel met `has_prior_binding=True` is de rode no-deadlock-baseline voor WP6.
+De huidige karakteriseringsassertie vereist juist `observed_cycle=True` en40P01
+bij `has_prior_binding=True`. WP6 moet deze proef na de lockordefix omkeren naar
+een veiligheidsassertie zonder cyclus; die no-deadlockassertie bestaat nu nog niet.
 De negatieve controle zonder bindings heeft geen bindingdelta/authorizationlock:
 context commit, de gelijktijdige approval conflicteert op revisie. Dat is geen
 deadlock en moet als bestaand correct conflictgedrag behouden blijven.

@@ -73,7 +73,8 @@ def safe_sql_categories(monkeypatch):
         start = perf_counter()
         try:
             result = execute(cursor, query, *args, **kwargs)
-            if name.endswith('_write'):
+            operation = query.lstrip().split(None, 1)[0].lower() if isinstance(query, str) and query.strip() else ''
+            if operation in {'insert', 'update', 'delete'}:
                 stats['affected_write_rows'] += max(cursor.rowcount, 0)
             return result
         except BaseException:
@@ -360,36 +361,29 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
             for i in range(size - 2)]]
         source_html = ('<html><body>' + ''.join(f'<h1>Advies {i}</h1><p>{s}</p>'
                        for i, s in enumerate(texts)) + '</body></html>').encode()
-    import faulthandler
     setup_file = Path(os.environ['REVIEW_PROOF_OUTPUT']).with_suffix('.setup.json')
     def setup_stage(stage):
         setup_file.parent.mkdir(parents=True, exist_ok=True)
         setup_file.write_text(json.dumps([{'case': 'setup_progress', 'size': size, 'stage': stage}]))
     setup_stage('receipt')
-    stack_file = setup_file.with_suffix('.stacks.txt').open('w') if size > 2 else None
-    if stack_file:
-        faulthandler.dump_traceback_later(45, file=stack_file, exit=True)
-    try:
-        console, sid, author, reviewer, calls, mode, _provider = received(
-            tmp_path, production_console, monkeypatch, source_html=source_html)
-        mode['broken'] = incomplete
-        setup_stage('activation')
-        execute(console, sid, author, 'native-task-review-proof')
-        setup_stage('history')
-        assert calls, 'the real bounded processing route must run'
-        assert console.processing_status(sid)['formation_incomplete'] == incomplete
-        focal = next(o for o in console.snapshot_objects(sid)
-                     if o.get('proposed_object_type') == 'recommendation'
-                     and o['content']['clean_text'] == FIRST)
-        candidates = [o for o in console.snapshot_objects(sid) if o.get('proposed_object_type') == 'recommendation']
-        assert len(candidates) == size - int(incomplete)
-        if history_depth:
-            seed_post_history(console, sid, candidates, {'account_id': reviewer}, history_depth)
-
-    finally:
-        if stack_file:
-            faulthandler.cancel_dump_traceback_later()
-            stack_file.close()
+    console, sid, author, reviewer, calls, mode, _provider = received(
+        tmp_path, production_console, monkeypatch, source_html=source_html)
+    mode['broken'] = incomplete
+    setup_stage('activation')
+    execute(console, sid, author, 'native-task-review-proof')
+    setup_stage('history')
+    assert calls, 'the real bounded processing route must run'
+    assert console.processing_status(sid)['formation_incomplete'] == incomplete
+    focal = next(o for o in console.snapshot_objects(sid)
+                 if o.get('proposed_object_type') == 'recommendation'
+                 and o['content']['clean_text'] == FIRST)
+    candidates = [o for o in console.snapshot_objects(sid) if o.get('proposed_object_type') == 'recommendation']
+    assert len(candidates) == size - int(incomplete)
+    # Hold the review-history workload fixed while independent source/object
+    # volume grows. The first two candidates remain the HTTP focal/control pair.
+    history_candidates = candidates[:4] if size > 2 else candidates
+    if history_depth:
+        seed_post_history(console, sid, history_candidates, {'account_id': reviewer}, history_depth)
     setup_stage('measurement')
 
     def storage_state():
@@ -435,6 +429,7 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
         'actor_role': 'reviewer', 'document_class': env['class'],
         'prepared_view_contract': prepared_contract(), 'field_contract': 'source-bound-fields-v3'}
     result['workload'] = {'candidates': len(candidates), 'history_depth': history_depth,
+        'history_candidates': len(history_candidates[2:]) if history_depth else 0,
         'current_objects': len(current), 'stored_versions': len(rows), 'bindings': len(bindings),
         'matching_bindings': sum(still_matches(b, current[b['object_id']]) for b in bindings),
         'source_fragments': len(stored_extraction(env)),
@@ -558,6 +553,9 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
             # Retry the same form after fault removal; rollback must preserve its precondition.
         approved = request(client, 'approve', 'post', data=data)
         assert approved.status_code == 303
+        # The observer must count real audit INSERTs even though their safe
+        # category is review_audit rather than a name ending in _write.
+        assert result['samples'][-1]['sql_categories']['review_audit']['affected_write_rows'] > 0
         winner = durable(console, [sid])
         current = next(o for o in console.snapshot_objects(sid) if o['object_id'] == focal['object_id'])
         assert current['governance']['validation_status'] == 'approved'
