@@ -38,6 +38,7 @@ PostgreSQL):
 | Retry van een lege geblokkeerde bron | `operations_console_v1.py:2178` | **huidige omgeving** (bewust: "configuration in force now") |
 | Hervatten | `operations_console_v1.py:1964` | `assert_resume_configuration` |
 | Opvolger (`decision_successor_v1`) | via `ingest` + `reserve_source_selection` | **huidige omgeving** |
+| Directe herextractie (`reextract_unpublished`) | `operations_console_v1.py:2250–2263` (bounded: alleen op de poging, envelop ongewijzigd) en het synchrone pad (`:2266` → `_fragments_and_spec`) | **huidige omgeving** (`active_configuration`) |
 
 **Readers en fences** (alle fail-closed bij een verschil met de huidige omgeving):
 `source_preparation_context_v1.build_formation_context` (`:113–118`, ook `_unpinned`),
@@ -45,7 +46,9 @@ PostgreSQL):
 `operations_console_v1` (`:2148–2151`) en `source_processing_dispatch_v1` (docling). Ook
 `processing_trace_v1` (hash), `blockage_diagnostics_v1` en `decision_tree_experiment_v1` lezen het.
 De UI (`operations_console_app._passage_formation_status_html`) en MCP (`metis_mcp_queries_v1:71`)
-tonen de **omgevingsmodus**, niet de route van het document.
+tonen de **omgevingsmodus**, niet de route van het document. De uitvoering zelf kiest de strategie
+opnieuw uit de omgeving: `pre_review_semantic_v1.py:1150` (`active_passage_formation_mode()`). Dat
+valt nu alleen samen met de gepinde poging dankzij de fence.
 
 **Hervatten.** `assert_resume_configuration` (`source_selection_v1.py:48–68`) eist dat de huidige
 omgeving V3 is, dat het model en het contract van de opgeslagen replay-identiteit overeenkomen, en
@@ -54,7 +57,9 @@ dat de vorige `mode/model/docling` gelijk zijn. Anders volgt
 
 **Bronsoort.** `class == beslisboom` gaat altijd naar `decision_tree_route_v1`, ongeacht de modus
 (`pre_review_semantic_v1.py:1150–1160`). Toegelaten modi staan in
-`passage_formation_policy_v1._ALLOWED_MODES`.
+`passage_formation_policy_v1._ALLOWED_MODES`. Voor een beslisboom bevat
+`processing_configuration.mode` toch de prozamodus van de omgeving: de feitelijk uitgevoerde
+route (`decision-tree-source-bound-v1`) staat nergens als route vastgelegd.
 
 ## 3. Kloof per eis
 
@@ -89,11 +94,18 @@ fences.
 2. **Elke poging verwijst ernaar.** Iedere poging draagt een kopie van de binding (route,
    policyversie, actor, reden) als auditbewijs (N1: vastlegging op bronversie én poging).
    `attempt.processing_configuration.mode` moet gelijk zijn aan `formation_route.route`; een
-   verschil geeft `formation_route_mismatch` (fail closed, vóór commit).
+   verschil geeft `formation_route_mismatch` (fail closed, vóór commit). De vergelijking gaat over
+   de **effectieve route** van de poging, niet over de ruwe modus:
+   `effective_route(source_kind, mode)` geeft voor een beslisboom `decision-tree-source-bound-v1`
+   (enige toegelaten route, strategie C) en voor proza de contractversie van de modus. Die wordt als
+   `attempt.formation_route` vastgelegd, los van `processing_configuration.mode` (de
+   omgevingsstandaard). De uitvoering (`pre_review_semantic_v1.py:1150`) leest de route uit de
+   binding en de poging, niet uit `active_passage_formation_mode()`.
 3. **Bron van de route bij de eerste binding.** Expliciete selectie door de actor (met reden), of de
-   omgevingsstandaard met `origin = default`. Retry, resume, herstel en workerwissel lezen **alleen**
-   `formation_route`, nooit de omgeving. Daarmee vervallen de omgevingsreads op `:1620`, `:2178`
-   en `:102` voor bestaande bronversies.
+   omgevingsstandaard met `origin = default`. Voor een beslisboom is dat altijd de enige toegelaten
+   route, ongeacht de prozamodus. Retry, resume, herextractie, herstel en workerwissel lezen **alleen**
+   `formation_route`, nooit de omgeving. Daarmee vervallen de omgevingsreads op `:1620`, `:2178`,
+   `:2251` (herextractie) en `source_selection_v1.py:102` voor bestaande werkrevisies.
 4. **Resume.** `assert_resume_configuration` vergelijkt met `formation_route` in plaats van met de
    omgevingsmodus. Een V2-bron is dan hervatbaar zolang V2 niet is uitgesloten en een
    durable-taakroute bestaat. Als V2 geen bounded-taakopslag heeft, blijft resume voor V2 gesloten
@@ -184,20 +196,20 @@ High-risk-velden (`continuous-development.md`):
 | Veld | Invulling |
 | --- | --- |
 | Rewrite target | routebepaling van nieuwe pogingen (omgeving → binding) |
-| Why local patching is insufficient | vijf writers lezen de omgeving onafhankelijk; zonder één binding blijft er een stille wissel mogelijk |
+| Why local patching is insufficient | zes writers (incl. directe herextractie) en de uitvoering lezen de omgeving onafhankelijk; zonder één binding blijft er een stille wissel mogelijk |
 | Current authority/writer/reader map | §2 |
 | Supported runtime topologies | console + PostgreSQL workflow-store; workers via dispatch/handover; Azure-productiecompositie (`console_asgi`) |
 | Persisted-state impact | één additief envelope-veld; pogingen ongewijzigd van vorm |
 | Compatibility/migration plan | expand: readers accepteren envelopes met én zonder binding (legacy-afleiding §5); geen migratie-run |
 | Rollback/recovery plan | softwareterugzetting: de oude code negeert het extra veld en leest de omgeving (vorig gedrag); geen data-rollback nodig |
-| Cutover trigger | alle vijf writers gebruiken de binding; tests §8 groen op native PostgreSQL |
-| Cleanup/decommission criteria | omgevingsreads op `:1620`, `:2178`, `:102` alleen nog voor de eerste binding; `assert_resume_configuration` vergelijkt met de binding |
+| Cutover trigger | alle zes writers en de uitvoering (`pre_review_semantic_v1.py:1150`) gebruiken de binding; tests §8 groen op native PostgreSQL |
+| Cleanup/decommission criteria | omgevingsreads op `:1620`, `:2178`, `:2251`, `source_selection_v1.py:102` en `pre_review_semantic_v1.py:1150` alleen nog voor de eerste binding; `assert_resume_configuration` vergelijkt met de binding |
 | Failure blast radius | alleen nieuwe pogingen; lopende pogingen houden bestaande fences; geen effect op review/publicatie/serving |
 | Adversarial proof matrix | §8 plus: alternatieve ingang (MCP/CLI/ASGI) bereikt dezelfde writer; gelijktijdige eerste binding; deploy tussen reservering en uitvoering |
 
 ## 8. Falsificatiescenario's (vooraf vastgelegd)
 
-1. Ingest onder V2 → omgeving wordt V3 → retry, workerwissel en herstart blijven V2. Is V2
+1. Ingest onder V2 → omgeving wordt V3 → retry, directe herextractie, workerwissel en herstart blijven V2. Is V2
    uitgesloten, dan faalt een nieuwe poging met `formation_route_excluded`, zonder vervanging.
 2. Een opvolger kiest V3; de voorganger (V2, eventueel gepubliceerd) blijft ongewijzigd en blijft
    serveren.
@@ -214,7 +226,9 @@ High-risk-velden (`continuous-development.md`):
 9. Legacy met eenduidige afleiding: zonder bevestiging `formation_route_unconfirmed`; herstel,
    herstart en reconciliatie leggen nooit zelf een binding vast; na bevestiging door een actor
    met reden volgt precies één `confirmed_legacy`-binding.
-8. Een beslisboom kan geen prozaroute binden en omgekeerd (N4).
+8. Een beslisboom kan geen prozaroute binden en omgekeerd (N4). Een beslisboom die onder een
+   prozastandaard (V2/V3) wordt verwerkt, bindt `decision-tree-source-bound-v1` en slaagt; een
+   wissel van de prozamodus raakt een gebonden beslisboom niet.
 
 Bewijs op native PostgreSQL en de productiecompositie; mocks gelden niet als herstelbewijs.
 
