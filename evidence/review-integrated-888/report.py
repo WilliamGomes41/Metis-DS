@@ -1,12 +1,14 @@
 """Compare matched samples without manufacturing tail-percentile confidence."""
 import argparse
+import gzip
 import json
 from pathlib import Path
 from statistics import median
 
 
 def load(path):
-    cases = json.loads(Path(path).read_text())
+    path = Path(path)
+    cases = json.loads(gzip.decompress(path.read_bytes()) if path.suffix == '.gz' else path.read_bytes())
     assert len({r['case'] for r in cases}) == len(cases), 'duplicate cases'
     return {row['case']: row for row in cases}
 
@@ -34,6 +36,7 @@ def compare(before, after):
             assert b[key] == a[key], f'{case}: unmatched {key}'
         assert not b['production_diff'] and not a['production_diff'], 'uncommitted production changes'
         assert b['commit'] != a['commit'], 'identical code references'
+        assert b['reconstruction_sha256'] != a['reconstruction_sha256'], 'identical reconstruction code'
         assert b['repeats'] >= 5, 'at least five warm samples required'
         for incomplete in (False, True):
             for route in ('overview', 'individual', 'inventory', 'batch', 'passage'):
@@ -61,12 +64,31 @@ def main():
     parser.add_argument('--after', required=True)
     parser.add_argument('--output', required=True)
     parser.add_argument('--assert-budget', action='store_true')
+    parser.add_argument('--before-repeat')
+    parser.add_argument('--after-repeat')
     args = parser.parse_args()
     before, after = load(args.before), load(args.after)
     results = compare(before, after)
     failures = [r for r in results if r['within_budget_before_noise_adjustment'] is False]
+    repeated = []
+    if args.before_repeat or args.after_repeat:
+        assert args.before_repeat and args.after_repeat, 'both repeat files are required'
+        br, ar = load(args.before_repeat), load(args.after_repeat)
+        assert br.keys() == ar.keys(), 'repeat cases differ'
+        def combine(first, second):
+            out = {}
+            for case, row in second.items():
+                old = first[case]
+                for key in ('commit', 'harness_sha256', 'documents', 'configuration', 'reconstruction_sha256'):
+                    assert old[key] == row[key], f'{case}: repeated run changed {key}'
+                out[case] = {**old, 'samples': old['samples'] + row['samples'],
+                             'repeats': old['repeats'] + row['repeats']}
+            return out
+        repeated = compare(combine(before, br), combine(after, ar))
     Path(args.output).write_text(json.dumps({'results': results,
         'budget_misses_before_noise_adjustment': len(failures),
+        'controls_two_rounds': repeated,
+        'controls_two_rounds_budget_misses': sum(r['within_budget_before_noise_adjustment'] is False for r in repeated),
         'p95': None, 'p95_reason': 'seven warm observations cannot establish a stable tail; no p95 claim',
         'notes': ['Phase columns are inclusive and overlap; do not add them.',
                   'Remainder is a conservative lower bound, not an exact gap.',
