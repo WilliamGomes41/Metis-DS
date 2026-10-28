@@ -101,11 +101,11 @@ Telling per bevinding, naar de primaire afwijzing in dezelfde call en status:
 | Object: `semantic_evidence_literal_not_found` | 6 |
 | **Relatie: `relation_endpoint_missing`** | 6 |
 | Object: strength-codes, al dan niet gecombineerd | 14 |
-| Geen primaire afwijzing in dezelfde call en status | 4 |
+| Object: `semantic_evidence_literal_ambiguous` in dezelfde call, maar met andere status (transitief, zie hieronder) | 4 |
 
 - Alle gevallen met een herkenbare oorzaak zijn een cascade (f).
 - De 6 na `relation_endpoint_missing` bevestigen **in productiebewijs** de call-brede quarantaine uit MET-5, proef P2 (`recoverable_formation_v1.py:115`). Die is relevant voor besluit B5-b (#909).
-- De 4 zonder primaire afwijzing zijn UNKNOWN: de primaire fout staat waarschijnlijk in een andere status of een eerdere call, maar de koppeling ontbreekt (`finding_call_link_ambiguous_or_missing`).
+- De laatste 4 bevindingen (2 uniek, één call) zijn herleid via de opgeslagen modeluitvoer. Object 2 is afgewezen als `semantic_evidence_literal_ambiguous` (pending); relatie `explains` 2→0 neemt object 0 mee, en relatie `explains` 1→0 daarna object 1. Dat is een **transitieve cascade (f)**. De cascaderijen staan op historical omdat een latere call hun spans heeft gevalideerd; de primaire afwijzing staat nog op pending. Daardoor viel het verband weg bij groepering per status.
 
 ### 2.4 `recommendation_strength_literal_mismatch` — 15 uniek, 9 unieke bronplekken
 
