@@ -80,6 +80,11 @@ cycli van echte approvals en gevalideerde opvolgrevisies; één kandidaat krijgt
 een actuele approval. Zo groeit het onafhankelijke bron-/objectvolume zonder
 tegelijk het aantal voorbereidingscommands te verhogen. `history_candidates`,
 `stored_versions`, `bindings` en `matching_bindings` leggen de werkelijke input vast.
+Alle schaalpassages staan onder één gedeelde kop; het aantal kopafhankelijkheden
+groeit niet mee. Kop-/contextmutaties worden afzonderlijk getoetst. De eerdere
+128-fixture met een eigen kop per kandidaat bleef ook met twee historiekandidaten
+tijdens setup volledige writes uitvoeren op257 actuele objecten en een envelope
+van circa1MB; die lokale tussenrun is onderbroken en telt niet als full-pass.
 Een tussenproef met acht historiekandidaten is na148s tijdens setup afgebroken
 en telt niet als geslaagde uitvoering. De eerdere fixture voerde voor iedere extra kandidaat opnieuw volledige writes uit
 en bereikte de CI-grens al tijdens setup. De diagnostische stack lokaliseerde

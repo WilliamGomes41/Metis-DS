@@ -359,8 +359,10 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
         texts = [FIRST, SECOND, *[f'Gebruik geen middel {i:04d} bij deze synthetische situatie; '
             'bespreek de beschreven waarneming en leg de gemaakte keuze vast volgens deze afzonderlijke passage.'
             for i in range(size - 2)]]
-        source_html = ('<html><body>' + ''.join(f'<h1>Advies {i}</h1><p>{s}</p>'
-                       for i, s in enumerate(texts)) + '</body></html>').encode()
+        # Scale independent passages under one shared heading. Context/heading
+        # mutations have dedicated probes; do not also scale that dependency set.
+        source_html = ('<html><body><h1>Adviezen</h1>' + ''.join(f'<p>{s}</p>'
+                       for s in texts) + '</body></html>').encode()
     setup_file = Path(os.environ['REVIEW_PROOF_OUTPUT']).with_suffix('.setup.json')
     def setup_stage(stage):
         setup_file.parent.mkdir(parents=True, exist_ok=True)
