@@ -205,7 +205,7 @@ validator-input en de blokken uit de request-payload (code functioneel gelijk aa
 - **Uitkomst:** `relation_target_ambiguous` (`semantic_passage_v1.attach_relation_proposals`).
 - **Oorzaak:** het model stelde 4 objecten voor, waarvan er 2 (`recommendation` en `explanation`) exact dezelfde selectie hebben. De check faalt dan, ook zonder relaties in het voorstel, omdat een relatiedoel niet eenduidig te maken is.
 - **Waarom de hele call:** de fout draagt geen `candidate_index`, dus `prepare` (regel 88–90) kan hem niet aan één object toewijzen. De twee andere objecten gaan daardoor ook verloren.
-- **Klasse:** (d) modelvoorstel als eerste oorzaak; de weigering van een dubbele selectie is terecht (e). Dat de hele call sneuvelt, is dezelfde versterking als bij B5-b.
+- **Klasse:** **mismatch in het producercontract**. Instructie en schema verbieden twee objecten met identieke selectie nergens; alleen `attach_relation_proposals` weigert dat. De weigering zelf is terecht (e), want het relatiedoel moet eenduidig zijn. Dat de hele call sneuvelt, is dezelfde versterking als bij B5-b.
 - **Herstel:** de recovery-taak voor hetzelfde bronbereik is afgerond.
 - **Diagnostisch gat:** de onderliggende code wordt niet bewaard; zie §4.
 
@@ -237,7 +237,10 @@ validator-input en de blokken uit de request-payload (code functioneel gelijk aa
    - een contextentry meegeven voor `scope_span`/`target_group_span` buiten de kern;
    - een niet-aaneengesloten literal vervangen door `missing_reason` (2.7, zolang B5-g open is);
    - relatie-eindpunten exact gelijk aan de spans van een voorgesteld object (2.7);
-   - bronbeoordelingen alleen binnen `formation_task.selectable_ranges` (2.7; nu staat dat alleen in de validator).
+   - bronbeoordelingen alleen binnen `formation_task.selectable_ranges` (2.7; nu staat dat alleen in de validator);
+   - geen twee objecten met identieke selectie (2.7; nu staat dat alleen in de validator).
+
+   Gecontroleerd tegen de instructie in `pre_review_semantic_v1`: de regels voor `occurrence`, relatie-eindpunten ("exact selected spans") en velden binnen de kern staan er al expliciet in. Daar blijft (d) de classificatie.
 
 Beide wijzigen vorming of diagnose van werkpakket MET-6 en vragen een eigen GitHub-issue
 na triage. Ze zijn niet in dit dossier uitgevoerd.
