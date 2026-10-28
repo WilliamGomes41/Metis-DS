@@ -118,7 +118,9 @@ herkent in het gekozen bewijs geen sterkte, niet een andere sterkte.
 | S2: werkwoordelijke formulering (`sterk afgeraden` 3×, `sterk aanbevolen` 1×, `sterk geadviseerd` 1×) | 5 | `recommendation_semantics_v1` herkent alleen labels (`sterke aanbeveling/advies`, `aanbeveling: sterk`, `Sterk – voor/tegen`). Werkwoordsvormen bestaan niet in het vocabulaire | **(g) onbeslist, besluit B5-c**: is werkwoordelijke sterkte in de bron een expliciete sterkte? A07 bindt bewust alleen aan herkende labels |
 
 `afgeraden` impliceert bovendien de richting "tegen"; een besluit moet richting en sterkte samen
-regelen. Eigenaar: MET-7 (richtlijnsterkte, #530), na besluit.
+regelen. Eigenaar: MET-7 (richtlijnsterkte, #530), na besluit. De huidige grens is vastgelegd in
+`tests/test_source_strength_labels.py::test_verbal_strength_phrasing_is_not_a_label_until_decided`;
+die test verandert alleen samen met een vastgelegd besluit B5-c.
 
 ### 2.5 `recommendation_strength_evidence_not_applicable` — 1 uniek (historisch)
 
