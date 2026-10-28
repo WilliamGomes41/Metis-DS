@@ -19,7 +19,7 @@ FIRST = 'Gebruik geen zalf.'
 SECOND = 'Controleer dagelijks de huid.'
 
 
-def received(tmp_path, production_console, monkeypatch):
+def received(tmp_path, production_console, monkeypatch, *, source_html=None):
     monkeypatch.setenv('METIS_FORMATION_TASK_STORAGE', 'v1')
     console = production_console(root=tmp_path, processing_binder=lambda console: None)
     author, reviewer = accounts(console)
@@ -42,7 +42,7 @@ def received(tmp_path, production_console, monkeypatch):
             {'type': 'output_text', 'text': json.dumps(proposal)}]}]}
     bind(console, provider)
     sid = console.receive_source(actor_id=author, filename='smetten-pattern.html',
-        data=f'<html><body><h1>Advies A</h1><p>{FIRST}</p><h1>Advies B</h1><p>{SECOND}</p></body></html>'.encode(),
+        data=source_html or f'<html><body><h1>Advies A</h1><p>{FIRST}</p><h1>Advies B</h1><p>{SECOND}</p></body></html>'.encode(),
         content_type='text/html', ingest_kind='new', title='Smetten patroon',
         version='1', date='2026-10-25', live_url='', class_='richtlijn', family='fixture',
         named_reviewers=[reviewer])['snapshot_id']

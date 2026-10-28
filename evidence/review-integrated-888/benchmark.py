@@ -20,6 +20,69 @@ import pytest
 from tests.semantic_fixture_support import bind_fixture_selections
 
 
+def safe_sql_categories(monkeypatch):
+    """Transparent native driver observation; retain only fixed categories/counts."""
+    import psycopg
+    active, categories, owners = [False], {}, {}
+    execute = psycopg.Cursor.execute
+    def category(query):
+        sql = query.lower() if isinstance(query, str) else ''
+        operation = sql.lstrip().split(' ', 1)[0]
+        write = operation in {'insert', 'update', 'delete'}
+        if 'workflow.publish_authorizations' in sql:
+            return 'binding_write' if write else 'binding_read'
+        if 'workflow.document_objects' in sql:
+            return 'object_write' if write else 'object_read'
+        if 'workflow.documents' in sql:
+            return 'document_lock' if 'for update' in sql else 'document_write' if write else 'document_read'
+        if 'workflow.review_events' in sql:
+            return 'review_audit'
+        if 'workflow.accounts' in sql or 'workflow.sessions' in sql:
+            return 'identity'
+        if 'pg_advisory' in sql:
+            return 'advisory_lock'
+        if 'workflow.formation_' in sql or 'workflow.processing_' in sql:
+            return 'formation'
+        if 'publication_releases' in sql or 'audit_events' in sql:
+            return 'publication'
+        return 'other'
+    def entry(name):
+        return categories.setdefault(name, {'execute_count': 0, 'execute_ms': 0,
+            'fetch_count': 0, 'fetch_ms': 0, 'fetched_rows': 0, 'errors': 0})
+    def observed_execute(cursor, query, *args, **kwargs):
+        if not active[0]:
+            return execute(cursor, query, *args, **kwargs)
+        name = category(query)
+        owners[id(cursor)] = name
+        stats = entry(name)
+        stats['execute_count'] += 1
+        start = perf_counter()
+        try:
+            return execute(cursor, query, *args, **kwargs)
+        except BaseException:
+            stats['errors'] += 1
+            raise
+        finally:
+            stats['execute_ms'] += (perf_counter() - start) * 1000
+    monkeypatch.setattr(psycopg.Cursor, 'execute', observed_execute)
+    for method in ('fetchone', 'fetchmany', 'fetchall'):
+        original = getattr(psycopg.Cursor, method)
+        def observed_fetch(cursor, *args, _original=original, _method=method, **kwargs):
+            if not active[0]:
+                return _original(cursor, *args, **kwargs)
+            stats = entry(owners.get(id(cursor), 'other'))
+            stats['fetch_count'] += 1
+            start = perf_counter()
+            try:
+                rows = _original(cursor, *args, **kwargs)
+                stats['fetched_rows'] += int(rows is not None) if _method == 'fetchone' else len(rows)
+                return rows
+            finally:
+                stats['fetch_ms'] += (perf_counter() - start) * 1000
+        monkeypatch.setattr(psycopg.Cursor, method, observed_fetch)
+    return active, categories, owners
+
+
 CASES = {
     'small': (20, False, 1),
     'continued150': (150, True, 1),
@@ -61,8 +124,12 @@ def seed_post_history(console, sid, candidates, reviewer, depth):
     """Synthetic load via real approvals and validated append-order revisions."""
 
     def approve(oid):
+        candidate = next(o for o in candidates if o['object_id'] == oid)
+        kind = candidate.get('proposed_object_type') or 'definition'
         console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=oid,
-            decision='approve', confirmed_object_type='definition', suitability='ja',
+            decision='approve', confirmed_object_type=kind, suitability='ja',
+            recommendation_direction=('against' if 'geen' in candidate['content']['clean_text'] else 'for') if kind == 'recommendation' else None,
+            recommendation_strength_level='not_stated' if kind == 'recommendation' else None,
             documentpositie_action='dit_klopt', type_action='dit_klopt',
             relation_review_ack=True, expected_revision=console.objects_revision(sid))
 
@@ -259,7 +326,7 @@ def test_native_review_matrix(case, tmp_path, production_console, production_app
 
 
 @pytest.mark.parametrize('incomplete', [False, True])
-def test_native_task_v1_review(tmp_path, production_console, production_app, monkeypatch, incomplete, fault=None, dependency=None):
+def test_native_task_v1_review(tmp_path, production_console, production_app, monkeypatch, incomplete, fault=None, dependency=None, size=2, history_depth=0):
     """Actual bounded processing activates storage v1 before measured HTTP review."""
     from src.request_diagnostics_v1 import RequestDiagnostics
     import src.console_performance_v1 as performance
@@ -268,8 +335,16 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
     assert fault in {None, 'binding', 'commit'}
     assert dependency in {None, 'role', 'context'}
 
+    source_html = None
+    if size > 2:
+        from tests.test_review_formation_problems import SECOND
+        texts = [FIRST, SECOND, *[f'Gebruik geen middel {i:04d} bij deze synthetische situatie; '
+            'bespreek de beschreven waarneming en leg de gemaakte keuze vast volgens deze afzonderlijke passage.'
+            for i in range(size - 2)]]
+        source_html = ('<html><body>' + ''.join(f'<h1>Advies {i}</h1><p>{s}</p>'
+                       for i, s in enumerate(texts)) + '</body></html>').encode()
     console, sid, author, reviewer, calls, mode, _provider = received(
-        tmp_path, production_console, monkeypatch)
+        tmp_path, production_console, monkeypatch, source_html=source_html)
     mode['broken'] = incomplete
     execute(console, sid, author, 'native-task-review-proof')
     assert calls, 'the real bounded processing route must run'
@@ -277,6 +352,10 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
     focal = next(o for o in console.snapshot_objects(sid)
                  if o.get('proposed_object_type') == 'recommendation'
                  and o['content']['clean_text'] == FIRST)
+    candidates = [o for o in console.snapshot_objects(sid) if o.get('proposed_object_type') == 'recommendation']
+    assert len(candidates) == size - int(incomplete)
+    if history_depth:
+        seed_post_history(console, sid, candidates, {'account_id': reviewer}, history_depth)
 
     def storage_state():
         with console.workflow_document_store._connect() as con:
@@ -289,6 +368,7 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
     assert initial_storage['processing_storage_version'] == 1
     assert initial_storage['object_generation'] >= 0
     captured = []
+    sql_active, sql_categories, sql_owners = safe_sql_categories(monkeypatch)
 
     def emit(_self, payload):
         if payload.get('event') == 'request_finished' and payload.get('route') == '/review':
@@ -306,15 +386,32 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
         'storage_before': initial_storage, 'samples': [],
         'limitations': ['small task-v1 compatibility proof, not a scaling or production latency claim',
                         'provider transport is deterministic; stores and activation are native']}
+    rows = console.workflow_document_store.list_document_objects(sid)
+    current = {o['object_id']: o for o in console.snapshot_objects(sid)}
+    bindings = console.workflow_review_store.read_bindings([sid]).get(sid, [])
+    env = console.workflow_document_store.get_envelope(sid)
+    from src.vorming.source_preparation_context_v1 import stored_extraction
+    result['workload'] = {'candidates': len(candidates), 'history_depth': history_depth,
+        'current_objects': len(current), 'stored_versions': len(rows), 'bindings': len(bindings),
+        'matching_bindings': sum(still_matches(b, current[b['object_id']]) for b in bindings),
+        'source_fragments': len(stored_extraction(env)),
+        'source_bytes': len(source_html) if source_html else None,
+        'source_sha256': env['sha256'], 'extraction_contract': env['prepared_source_extraction']['version']}
 
     def request(client, name, method, **kwargs):
         captured.clear()
+        sql_categories.clear()
+        sql_owners.clear()
+        sql_active[0] = True
         start = perf_counter()
-        response = getattr(client, method)('/review', follow_redirects=False, **kwargs)
+        try:
+            response = getattr(client, method)('/review', follow_redirects=False, **kwargs)
+        finally:
+            sql_active[0] = False
         assert len(captured) == 1
         result['samples'].append({'action': name, 'http_status': response.status_code,
             'wall_ms': (perf_counter() - start) * 1000, 'response_bytes': len(response.content),
-            'diagnostics': captured.pop()})
+            'diagnostics': captured.pop(), 'sql_categories': deepcopy(sql_categories)})
         return response
 
     def form(page):
@@ -340,6 +437,14 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
                           data={**data, 'source_discrepancy': 'context_ontbreekt'})
         assert refused.status_code == 400 and 'synthetic task-v1 draft' in refused.text
         assert durable(console, [sid]) == before
+        if size > 2:
+            for repeat in range(2):
+                warmed = request(client, f'warm_passage_{repeat}', 'get', params=params)
+                assert warmed.status_code == 200
+                rejected = request(client, f'warm_semantic_refusal_{repeat}', 'post',
+                    data={**data, 'source_discrepancy': 'context_ontbreekt'})
+                assert rejected.status_code == 400
+                assert durable(console, [sid]) == before
         if dependency == 'role':
             # Authority is mutable independently of the document generation.
             console.workflow_identity_store.update_roles(reviewer, ['researcher'])
@@ -457,6 +562,12 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
         stale = request(client, 'concurrent_stale', 'post', data=stale_data)
         assert stale.status_code == 409 and durable(console, [sid]) == concurrent_state
         assert console.processing_status(sid)['formation_incomplete'] == incomplete
+    result['engineering_budgets'] = {'post_ms': 3000, 'store_lock_hold_ms': 250,
+        'store_transaction_ms': 500, 'role': 'WP6 target, not a WP5 baseline pass condition or production SLO'}
+    result['baseline_budget_violations'] = [s['action'] for s in result['samples']
+        if s['http_status'] in {303, 400, 409} and (s['wall_ms'] > 3000
+        or s['diagnostics'].get('phases', {}).get('store_lock_hold', 0) > 250
+        or s['diagnostics'].get('phases', {}).get('store_transaction', 0) > 500)]
     output = Path(os.environ['REVIEW_PROOF_OUTPUT'])
     output.parent.mkdir(parents=True, exist_ok=True)
     previous = json.loads(output.read_text()) if output.exists() else []
