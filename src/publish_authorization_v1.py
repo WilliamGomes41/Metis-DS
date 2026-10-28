@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from src.object_taxonomy_v1 import is_closed_confirmed_type
-from src.beslisboom_path_v1 import is_closed_boom_type
+from src.review.beslisboom_path_v1 import is_closed_boom_type
 
 
 def tuple_record(
@@ -80,7 +80,7 @@ def verify_approver_identity(binding: dict[str, Any], account: dict[str, Any] | 
     De binding MOET exact naar dat account wijzen (``reviewer_id`` en
     ``reviewer``). Een agent of verboden identiteit telt NOOIT.
     """
-    from src.four_eyes_v1 import reviewer_is_agent
+    from src.review.four_eyes_v1 import reviewer_is_agent
     if not isinstance(account, dict) or not account.get("account_id"):
         raise ApproverIdentityError("approver_account_unknown")
     if reviewer_is_agent(account) or reviewer_is_agent(binding):

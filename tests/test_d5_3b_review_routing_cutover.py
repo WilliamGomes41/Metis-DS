@@ -19,9 +19,9 @@ from src.integrity_kernel import compute_canonical_object_hash, stamp_canonical_
 from src.operations_console_app import create_console_app, normalize_review_task
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.publish_authorization_v1 import tuple_record
-from src.review_duty_v1 import exact_current_approver_ids
-from src.review_ledger import read_events
-from src.review_workboard_v1 import _work_item_from_counts, install_review_workboard
+from src.review.review_duty_v1 import exact_current_approver_ids
+from src.review.review_ledger import read_events
+from src.review.review_workboard_v1 import _work_item_from_counts, install_review_workboard
 
 
 PASSWORD = "d53b-secret"
@@ -90,7 +90,7 @@ def _console(tmp_path: Path, *, production_console) -> tuple[OperationsConsole, 
     admission = metadata.setdefault("admission", {})
     admission["gate_result"] = "allowed"
     text = str((target.get("content") or {}).get("clean_text") or "")
-    from src.semantic_passage_v1 import semantic_source_blocks
+    from src.vorming.semantic_passage_v1 import semantic_source_blocks
     envelope = console._envelope(snapshot_id)
     source_path, _ = console._verified_source_bytes(envelope)
     fragments = console._read_source_fragments(envelope, source_path)

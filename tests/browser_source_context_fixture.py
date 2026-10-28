@@ -1,6 +1,6 @@
 """Deterministic source-context browser fixture; never a production endpoint."""
 from tests.semantic_fixture_support import bind_fixture_selections
-from src.source_context_review_v1 import links_of, role_of
+from src.review.source_context_review_v1 import links_of, role_of
 from tests.test_source_context_review_v1 import _system
 from tests.browser_postgres_support import browser_application
 

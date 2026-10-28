@@ -10,11 +10,11 @@ from pathlib import Path
 import sys
 from zipfile import ZipFile
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from src.prepared_source_views_v1 import prepare,PreparedSource
-from src.pre_review_semantic_v1 import _candidate_fragments
-from src.semantic_passage_v1 import semantic_source_blocks
-from src.semantic_replay_v1 import stable_json_hash
-import src.source_reconstruction_v1 as reconstruction
+from src.vorming.prepared_source_views_v1 import prepare,PreparedSource
+from src.vorming.pre_review_semantic_v1 import _candidate_fragments
+from src.vorming.semantic_passage_v1 import semantic_source_blocks
+from src.vorming.semantic_replay_v1 import stable_json_hash
+import src.vorming.source_reconstruction_v1 as reconstruction
 
 
 def main():

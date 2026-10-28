@@ -8,11 +8,11 @@ import json
 
 import pytest
 
-from src.passage_register_v1 import apply_passage_register
+from src.vorming.passage_register_v1 import apply_passage_register
 from src.publication_readiness_v1 import source_passage_closure, review_followup_queues
-from src.source_accountability_v1 import evidence_of, KEY, record
-from src.source_containers_v1 import partition, metadata_reason
-from src.source_bound_fields_v3 import additional_context_codes
+from src.vorming.source_accountability_v1 import evidence_of, KEY, record
+from src.vorming.source_containers_v1 import partition, metadata_reason
+from src.vorming.source_bound_fields_v3 import additional_context_codes
 from tests.test_recommendation_context_v3 import prepare, source
 
 
@@ -22,7 +22,7 @@ def context_story():
     fragments = source(core)
     fragments.append({**source(context)[0], 'fragment_id': 'context', 'fragment_hash': 'context-hash'})
     def mutate(proposal):
-        from src.semantic_passage_v1 import semantic_source_blocks
+        from src.vorming.semantic_passage_v1 import semantic_source_blocks
         block = semantic_source_blocks(fragments)[1]
         proposal['objects'][0]['context_evidence'] = [{'role': 'scope', 'span': {
             'block_id': block['block_id'], 'literal': 'Bij volwassenen.', 'occurrence': 0}, 'unresolved_reason': None}]
@@ -89,10 +89,10 @@ def test_scope_case_and_terminal_colon_do_not_require_duplicate_context():
 
 
 def test_kernel_ui_export_and_manual_reset_survive_restart(tmp_path, make_console=None, *, production_console):
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-    from src.review_closure_v1 import ReviewClosureConsole
-    from src.source_context_review_v1 import confirm_source_context
-    from src.processing_evidence_export_v1 import processing_evidence_tables
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.review.review_closure_v1 import ReviewClosureConsole
+    from src.review.source_context_review_v1 import confirm_source_context
+    from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
     from src.operations_console_app import _render_review_index
     from tests.test_recommendation_context_v3 import response_for
     def make():

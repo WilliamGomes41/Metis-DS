@@ -9,10 +9,10 @@ from tests.semantic_fixture_support import bind_fixture_selections
 
 from fastapi.testclient import TestClient
 
-from src.closed_review_loop_v1 import ClosedLoopReviewConsole
-from src.proportionate_review_v1 import normal_risk_batch_queue
-from src.review_cockpit_v1 import broncontext_parts, confirmable_proposed_type
-from src.review_ledger import read_events
+from src.review.closed_review_loop_v1 import ClosedLoopReviewConsole
+from src.review.proportionate_review_v1 import normal_risk_batch_queue
+from src.review.review_cockpit_v1 import broncontext_parts, confirmable_proposed_type
+from src.review.review_ledger import read_events
 
 
 def test_legacy_free_text_repair_post_is_not_routed_and_writes_nothing(tmp_path, *, production_app, production_console):

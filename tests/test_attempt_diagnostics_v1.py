@@ -12,12 +12,12 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from src.attempt_diagnostics_v1 import classification, replay_diagnostic, comparable_envelope
+from src.vorming.attempt_diagnostics_v1 import classification, replay_diagnostic, comparable_envelope
 from src.operations_console_v1 import ConsoleError, OperationsConsole
-from src.processing_retry_v1 import reserve, finish, now, status
-from src.pre_review_semantic_v1 import semantic_spec_from_fragments
-from src.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal, SemanticPassageError
-from src.processing_evidence_export_v1 import processing_evidence_tables
+from src.vorming.processing_retry_v1 import reserve, finish, now, status
+from src.vorming.pre_review_semantic_v1 import semantic_spec_from_fragments
+from src.vorming.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal, SemanticPassageError
+from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
 from tests.test_pre_review_semantic_v1 import _fragment, _response
 
 
@@ -33,7 +33,7 @@ def recorded_failure(code="strength"):
     if code == "unknown":
         proposal["objects"][0]["spans"] = [{**span, "block_id": "missing"}]
     attempt = {"state": "running", "diagnostic": {"version": "attempt-diagnostics-v1", "checkpoints": []}}
-    from src.attempt_diagnostics_v1 import checkpoint
+    from src.vorming.attempt_diagnostics_v1 import checkpoint
     def capture(phase, values):
         checkpoint(attempt, phase, values)
     with pytest.raises(ConsoleError):
@@ -156,7 +156,7 @@ def test_production_adapter_recovery_http_and_concurrent_consumption(tmp_path, m
 
 
 def test_diagnostic_evidence_is_bounded_and_missing_data_is_explicit(monkeypatch):
-    import src.attempt_diagnostics_v1 as diagnostics
+    import src.vorming.attempt_diagnostics_v1 as diagnostics
     monkeypatch.setattr(diagnostics, "MAX_DIAGNOSTIC_BYTES", 1000)
     attempt = {}
     diagnostics.checkpoint(attempt, "request", {"provider_evidence": {"request": "x"*2000}})
@@ -166,7 +166,7 @@ def test_diagnostic_evidence_is_bounded_and_missing_data_is_explicit(monkeypatch
 
 
 def test_v2_field_failure_identifies_the_field_without_changing_validation():
-    from src.source_bound_fields_v2 import FIELDS, bind_fields
+    from src.vorming.source_bound_fields_v2 import FIELDS, bind_fields
     raw = {f: {"span": None, "missing_reason": "not_stated"} for f in FIELDS}
     raw["recommended_action"] = {"span": {"block_id": "b", "start": -1, "end": 2}, "missing_reason": None}
     with pytest.raises(ValueError, match="source_bound_field_bounds_invalid") as caught:
@@ -177,7 +177,7 @@ def test_v2_field_failure_identifies_the_field_without_changing_validation():
 
 
 def test_malformed_json_output_survives_before_parsing():
-    from src.attempt_diagnostics_v1 import checkpoint
+    from src.vorming.attempt_diagnostics_v1 import checkpoint
     attempt = {}
     with pytest.raises(ConsoleError, match="pre_review_llm_response_invalid"):
         semantic_spec_from_fragments(document_id="d", title="t", family="f", class_="richtlijn",
@@ -221,7 +221,7 @@ def test_failed_diagnostic_write_stops_before_provider(tmp_path, monkeypatch, *,
 
 @pytest.mark.parametrize("case,reason", [("abstain", "pre_review_llm_abstained"), ("context", "source_bound_context_required")])
 def test_pure_proposal_gate_reproduces_abstention_and_missing_context(case, reason):
-    from src.attempt_diagnostics_v1 import checkpoint
+    from src.vorming.attempt_diagnostics_v1 import checkpoint
     attempt = {}
     proposal = {"objects": [], "abstain_reason": "uncertain"} if case == "abstain" else {"objects": [{}], "abstain_reason": None}
     with pytest.raises(ConsoleError):

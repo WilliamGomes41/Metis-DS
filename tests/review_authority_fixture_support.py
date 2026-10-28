@@ -10,9 +10,9 @@ _SOURCES = {}
 
 def materialised_row(row):
     from src.integrity_kernel import stamp_canonical_hashes
-    from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
-    from src.semantic_passage_v1 import semantic_source_blocks
-    from src.semantic_transform_generic_v1 import _fragment_ref
+    from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates
+    from src.vorming.semantic_passage_v1 import semantic_source_blocks
+    from src.vorming.semantic_transform_generic_v1 import _fragment_ref
     from test_t4_single_knowledge_path_invariants import _allowed_candidate
 
     row = deepcopy(row)

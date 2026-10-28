@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 
 from src.integrity_kernel import stamp_canonical_hashes
 from src.operations_console_v1 import OperationsConsole
-from src.processing_diagnostics_v1 import (
+from src.vorming.processing_diagnostics_v1 import (
     processing_diagnostic_rows,
     processing_diagnostics,
 )
@@ -348,7 +348,7 @@ def test_source_label_guidance_http_and_export_preserve_review_state(tmp_path, *
 
 
 def test_label_shape_is_only_a_hint_and_not_a_short_text_filter():
-    from src.source_label_hint_v1 import source_label_hint
+    from src.vorming.source_label_hint_v1 import source_label_hint
     for text in ('DOEN', ' NIET\nDOEN ', 'Niveau 3', 'niveau 4'):
         obj = {'content': {'clean_text': text}}
         before = deepcopy(obj)
@@ -359,7 +359,7 @@ def test_label_shape_is_only_a_hint_and_not_a_short_text_filter():
 
 
 def test_csv_preserves_quotes_newlines_unicode_and_neutralizes_formulas():
-    from src.processing_diagnostics_v1 import passage_export_csv
+    from src.vorming.processing_diagnostics_v1 import passage_export_csv
     texts = ['Zeg "nee",\nook bij ouderen: één.', '=HYPERLINK("bad")', '  +SUM(1,2)', '@SUM(1)', '\tformula']
     exported = list(csv.DictReader(io.StringIO(passage_export_csv([
         {"candidate_text": text} for text in texts
@@ -370,7 +370,7 @@ def test_csv_preserves_quotes_newlines_unicode_and_neutralizes_formulas():
 
 def test_processing_evidence_download_preserves_recorded_and_missing_evidence(tmp_path, monkeypatch, *, production_app, production_console):
     from zipfile import ZipFile
-    from src.processing_evidence_export_v1 import SCHEMAS
+    from src.vorming.processing_evidence_export_v1 import SCHEMAS
 
     console, _, _, _, snapshot_id = _system(tmp_path, production_console=production_console)
     envelope = console._envelope(snapshot_id)
@@ -439,7 +439,7 @@ def test_processing_evidence_download_preserves_recorded_and_missing_evidence(tm
 
 def test_processing_evidence_empty_history_has_headers_and_honest_availability():
     from zipfile import ZipFile
-    from src.processing_evidence_export_v1 import processing_evidence_tables, processing_evidence_zip
+    from src.vorming.processing_evidence_export_v1 import processing_evidence_tables, processing_evidence_zip
     kwargs = dict(snapshot_id="snapshot", revision="rev", envelope={}, objects=[])
     tables, manifest = processing_evidence_tables(**kwargs)
     assert all(not values for values in tables.values())
@@ -453,7 +453,7 @@ def test_processing_evidence_empty_history_has_headers_and_honest_availability()
 def test_long_revision_is_stored_once_and_resolvable_for_every_dataset():
     from zipfile import ZipFile
     from hashlib import sha256
-    from src.processing_evidence_export_v1 import processing_evidence_zip, processing_evidence_tables, VERSION
+    from src.vorming.processing_evidence_export_v1 import processing_evidence_zip, processing_evidence_tables, VERSION
     revision = 'm2.' + 'A' * 51000
     envelope = {'quality_processing_runs': [{'run_id': 'run-1', 'candidates': [
         {'object_id': f'object-{i}', 'object_version': '1.0'} for i in range(300)]}]}

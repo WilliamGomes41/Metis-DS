@@ -19,7 +19,7 @@ import fitz
 import pytest
 from fastapi.testclient import TestClient
 
-from src.open_original_v1 import document_visible_prose, parse_page_bbox
+from src.review.open_original_v1 import document_visible_prose, parse_page_bbox
 
 HTML = b'''<!doctype html><html><body><h1>Complete guideline</h1>
 <p>Context before the selected recommendation.</p>

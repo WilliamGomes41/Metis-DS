@@ -264,12 +264,12 @@ def test_cli_import_compares_creator_and_reviewer_on_account_id(tmp_path):
 # --- D-SEC-3: publicatiepoort in het contract (RT3) ---------------------------------
 
 def test_contract_owns_the_only_locator_exception():
-    from src.four_eyes_v1 import CONSOLE_VERIFIED_BLOCKERS
+    from src.review.four_eyes_v1 import CONSOLE_VERIFIED_BLOCKERS
     assert CONSOLE_VERIFIED_BLOCKERS == frozenset({"blocked_pending_immutable_locator"})
 
 
 def test_contract_reports_authorization_blockers_without_locator():
-    from src.four_eyes_v1 import publish_authorization_contract
+    from src.review.four_eyes_v1 import publish_authorization_contract
     contract = publish_authorization_contract(obj={"object_id": "o-1", "object_type": "recommendation"},
                                               bindings=[], uploader_id="u", immutable_locator=None)
     assert "blocked_pending_immutable_locator" not in contract["authorization_blockers"]
@@ -279,7 +279,7 @@ def test_contract_reports_authorization_blockers_without_locator():
 
 def test_extra_contract_blocker_with_valid_locator_blocks_publication(tmp_path, monkeypatch, *, production_console):
     from tests import test_vsa_publish_readiness_ui_v1 as ready
-    import src.four_eyes_v1 as four_eyes
+    import src.review.four_eyes_v1 as four_eyes
     import src.operations_console_v1 as kernel
     console, accounts, receipt, _source = ready._console_with_document(tmp_path, production_console=production_console)
     ready._complete_review(console, accounts, receipt)

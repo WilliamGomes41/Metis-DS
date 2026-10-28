@@ -12,12 +12,12 @@ from copy import deepcopy
 
 import pytest
 
-from src.source_bound_fields_v2 import FIELDS, KEY, MODE
-from src.pre_review_semantic_v1 import semantic_spec_from_fragments
-from src.semantic_transform_generic_v1 import transform
-from src.admission_gate_v1 import apply_admission_gate
+from src.vorming.source_bound_fields_v2 import FIELDS, KEY, MODE
+from src.vorming.pre_review_semantic_v1 import semantic_spec_from_fragments
+from src.vorming.semantic_transform_generic_v1 import transform
+from src.vorming.admission_gate_v1 import apply_admission_gate
 from src.operations_console_app import _source_bound_fields_html
-from src.processing_evidence_export_v1 import processing_evidence_tables
+from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
 
 TEXT = "Screening van ouderen is niet zinvol."
 
@@ -113,7 +113,7 @@ def test_correction_cannot_reuse_stale_or_missing_v2_evidence(change):
     result=apply_admission_gate(changed, klasse='richtlijn', fragments=[fragment()], document_version='1', source_hash='a'*64)
     if change == 'text':
         assert 'admission' not in result[1]['metadata']
-        from src.knowledge_path_v1 import content_reviewable
+        from src.review.knowledge_path_v1 import content_reviewable
         assert not content_reviewable(result[1])
     else:
         assert result[1]['metadata']['admission']['gate_result']=='blocked'
@@ -122,8 +122,8 @@ def test_correction_cannot_reuse_stale_or_missing_v2_evidence(change):
 
 def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path, *, production_app, production_console):
     from src.operations_console_v1 import OperationsConsole
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV
-    from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV
+    from src.vorming.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
     calls=[]
     response_status = ['completed']
     def post(url, headers, payload, timeout):
@@ -202,7 +202,7 @@ def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path,
     assert restarted._envelope(sid)["processing_attempts"][-1]["error_code"] == "pre_review_llm_response_not_completed"
     response_status[0] = 'completed'
     # Changing only the contract mode cannot replay v2 as v1.
-    from src.pre_review_semantic_v1 import SEMANTIC_MODE
+    from src.vorming.pre_review_semantic_v1 import SEMANTIC_MODE
     env[PASSAGE_FORMATION_MODE_ENV]=SEMANTIC_MODE
     with pytest.raises(ValueError, match='semantic_object_contains_untrusted_fields'):
         restarted.reextract_unpublished(actor_id=author['account_id'], snapshot_id=sid)
@@ -211,7 +211,7 @@ def test_console_opt_in_persists_evidence_replays_and_survives_restart(tmp_path,
 
 
 def test_v2_admission_never_calls_legacy_enricher(monkeypatch):
-    import src.admission_gate_v1 as gate
+    import src.vorming.admission_gate_v1 as gate
     def forbidden(*args):
         raise AssertionError('v2 called legacy enrichment')
     monkeypatch.setattr(gate, '_enrich_from_text', forbidden)
@@ -220,7 +220,7 @@ def test_v2_admission_never_calls_legacy_enricher(monkeypatch):
 
 @pytest.mark.parametrize('corruption', ['text', 'bounds'])
 def test_transform_rechecks_source_instead_of_trusting_derived_metadata(corruption):
-    from src.semantic_replay_v1 import stable_json_hash
+    from src.vorming.semantic_replay_v1 import stable_json_hash
     spec, _, _ = prepare()
     changed=deepcopy(spec)
     item=changed['objects'][1]

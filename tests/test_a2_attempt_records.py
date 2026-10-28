@@ -17,8 +17,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from src.operations_console_v1 import ConsoleError
-from src.processing_retry_v1 import expire_running, finish, reserve
-from src.processing_trace_v1 import clean_trace, processing_trace, project_attempt
+from src.vorming.processing_retry_v1 import expire_running, finish, reserve
+from src.vorming.processing_trace_v1 import clean_trace, processing_trace, project_attempt
 
 CONTRACT = 'source-accountability-v2/bounded-formation-v1/recoverable-formation-v1/x'
 CLOCK = datetime(2026, 10, 15, tzinfo=timezone.utc)

@@ -66,11 +66,19 @@ def test_contract_cannot_depend_on_infrastructure(repository, code):
     assert errors and all("contract-without-infrastructure" in error for error in errors)
 
 
+def test_room_package_contract_cannot_relative_import_infrastructure(repository):
+    """A protected module inside a room still cannot reach the console via '..'."""
+    nested = next(path for path in PROTECTED_MODULES if path.startswith("src/vorming/"))
+    (repository / nested).write_text("from ..operations_console_app import create_console_app\n")
+    errors = check_boundaries(repository)
+    assert errors and all("contract-without-infrastructure" in error for error in errors)
+
+
 def test_worker_and_composition_root_keep_legitimate_dependencies(repository):
     (repository / SDK_OWNER).write_text("from docling.document_converter import DocumentConverter")
     (repository / "src/console_asgi.py").write_text("import fastapi\nimport psycopg")
     (repository / PROTECTED_MODULES[0]).write_text(
-        "from src.docling_contract_v1 import DoclingError\nimport docling_unrelated")
+        "from src.vorming.docling_contract_v1 import DoclingError\nimport docling_unrelated")
     assert check_boundaries(repository) == []
 
 

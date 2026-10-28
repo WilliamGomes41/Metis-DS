@@ -11,10 +11,10 @@ import time
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from tests.postgres_support import database,install_schema
 from tests.production_support import production_application
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-from src.source_bound_fields_v3 import MODE
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+from src.vorming.source_bound_fields_v3 import MODE
 from tests.test_recommendation_context_v3 import response_for
-import src.semantic_passage_v1 as semantic
+import src.vorming.semantic_passage_v1 as semantic
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)

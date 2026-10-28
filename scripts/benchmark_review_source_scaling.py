@@ -9,8 +9,8 @@ import tempfile
 from pathlib import Path
 from time import perf_counter
 
-from src.extract_html_v1 import extract
-from src.prepared_source_views_v1 import prepare
+from src.vorming.extract_html_v1 import extract
+from src.vorming.prepared_source_views_v1 import prepare
 
 
 def main():

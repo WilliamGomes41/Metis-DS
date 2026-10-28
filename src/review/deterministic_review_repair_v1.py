@@ -1,0 +1,1162 @@
+"""Deterministic Review repair between human feedback and re-review.
+
+A reviewer never writes canonical replacement text here. A revise decision is
+only committed together with one executable repair specification, and the
+result is a new ``needs_review`` proposal (or a repaired relation graph).
+Source text is rebuilt from the verified frozen source through the existing
+extractors. No LLM and no second workflow store are introduced.
+"""
+from __future__ import annotations
+
+import html
+import re
+from contextlib import contextmanager
+from contextvars import ContextVar
+from copy import deepcopy
+from typing import Any, Iterator
+from urllib.parse import urlencode
+
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+
+from src.review.closed_review_loop_v1 import ClosedLoopReviewConsole
+from src.integrity_kernel import schema_errors, stable_hash, stamp_canonical_hashes
+from src.operations_console_v1 import ConsoleError, OperationsConsole, SNAPSHOT_OBJECT_WRITE_CONFLICT
+from src.vorming.admission_gate_v1 import is_admission_blocked
+from src.review.source_discrepancy_v1 import normalize as normalize_discrepancy
+from src.review.beslisboom_path_v1 import review_path_for_klasse
+from src.vorming.passage_register_v1 import passage_register_of
+from src.publish_authorization_v1 import invalidate_for_object
+from src.review.review_cockpit_v1 import map_eindoordeel
+from src.serving_relations_v1 import binding_relations
+
+
+REPAIR_SOURCE_UNITS = "source_units"
+REPAIR_MERGE_OBJECTS = "merge_objects"
+REPAIR_SUPPORT_RELATION = "support_relation"
+REPAIR_CLASSIFICATION = "classification"
+_REPAIR_KINDS = frozenset(
+    {
+        REPAIR_SOURCE_UNITS,
+        REPAIR_MERGE_OBJECTS,
+        REPAIR_SUPPORT_RELATION,
+        REPAIR_CLASSIFICATION,
+    }
+)
+_ALLOW_REVISE_WRITE: ContextVar[bool] = ContextVar(
+    "metis_allow_revise_write", default=False
+)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=(?:[\"'“”‘’(\[])?[A-ZÀ-ÖØ-Þ0-9])")
+
+
+def _norm(value: str) -> str:
+    return " ".join(str(value or "").split())
+
+
+def _esc(value: Any) -> str:
+    return html.escape(str(value or ""), quote=True)
+
+
+def _hidden(name: str, value: Any) -> str:
+    return f'<input type="hidden" name="{_esc(name)}" value="{_esc(value)}">'
+
+
+class StructuredRepairRequired(ConsoleError):
+    """Internal control-flow signal: no review state has been written yet."""
+
+    def __init__(self, submission: dict[str, Any]) -> None:
+        self.submission = deepcopy(submission)
+        super().__init__("structured_repair_required")
+
+
+@contextmanager
+def _allow_revise_write() -> Iterator[None]:
+    token = _ALLOW_REVISE_WRITE.set(True)
+    try:
+        yield
+    finally:
+        _ALLOW_REVISE_WRITE.reset(token)
+
+
+class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
+    """Closed-loop console where revise cannot remain as abandoned normal work."""
+
+    def _preflight_structured_repair(self, submission: dict[str, Any]) -> None:
+        actor_id = str(submission.get("actor_id") or "")
+        snapshot_id = str(submission.get("snapshot_id") or "")
+        object_id = str(submission.get("object_id") or "")
+        expected_revision = str(submission.get("expected_revision") or "")
+        reviewer = self._require_role(actor_id, "reviewer")
+        envelope = self._envelope(snapshot_id)
+        if actor_id not in (envelope.get("named_reviewers") or []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        if not object_id or self._current_object(snapshot_id, object_id) is None:
+            raise ConsoleError("unknown_object")
+        if not str(submission.get("comment") or "").strip():
+            raise ConsoleError("review_comment_required")
+        if expected_revision and self.objects_revision(snapshot_id) != expected_revision:
+            raise ConsoleError(
+                SNAPSHOT_OBJECT_WRITE_CONFLICT,
+                current_revision=self.objects_revision(snapshot_id),
+            )
+        _ = reviewer
+
+    def review_object(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        if args or _ALLOW_REVISE_WRITE.get():
+            return super().review_object(*args, **kwargs)
+        decision = map_eindoordeel(
+            str(kwargs.get("eindoordeel") or ""),
+            str(kwargs.get("decision") or ""),
+        )
+        suitability = str(kwargs.get("suitability") or "").strip()
+        if decision != "revise" or not suitability:
+            return super().review_object(**kwargs)
+        submission = {
+            "actor_id": str(kwargs.get("actor_id") or ""),
+            "snapshot_id": str(kwargs.get("snapshot_id") or ""),
+            "object_id": str(kwargs.get("object_id") or ""),
+            "expected_revision": str(kwargs.get("expected_revision") or ""),
+            "comment": str(kwargs.get("comment") or "").strip(),
+            "proposed_correction": str(kwargs.get("proposed_correction") or "").strip(),
+            "confirmed_object_type": str(kwargs.get("confirmed_object_type") or ""),
+            "recommendation_strength": str(kwargs.get("recommendation_strength") or ""),
+            "suitability": suitability,
+            "eindoordeel": str(kwargs.get("eindoordeel") or "goedkeuren_na_correctie"),
+            "documentpositie_action": str(kwargs.get("documentpositie_action") or ""),
+            "found_under": str(kwargs.get("found_under") or ""),
+            "parent_choice": str(kwargs.get("parent_choice") or ""),
+            "type_action": str(kwargs.get("type_action") or ""),
+            "source_discrepancy": normalize_discrepancy(kwargs.get("source_discrepancy")),
+        }
+        self._preflight_structured_repair(submission)
+        raise StructuredRepairRequired(submission)
+
+    def accept_source_continuation(self, **kwargs: Any) -> dict[str, Any]:
+        snapshot_id = str(kwargs.get("snapshot_id") or "")
+        expected_revision = str(kwargs.get("expected_revision") or "")
+        with self._atomic_snapshot_mutation(snapshot_id):
+            if expected_revision and self.objects_revision(snapshot_id) != expected_revision:
+                raise ConsoleError(
+                    SNAPSHOT_OBJECT_WRITE_CONFLICT,
+                    current_revision=self.objects_revision(snapshot_id),
+                )
+            with _allow_revise_write():
+                return super().accept_source_continuation(**kwargs)
+
+    @staticmethod
+    def _verified_catalog_fragment(
+        ref: dict[str, Any], catalog_by_id: dict[str, dict[str, Any]]
+    ) -> dict[str, Any]:
+        row = catalog_by_id.get(str(ref.get("raw_object_id") or ""))
+        if row is None:
+            raise ConsoleError("repair_source_fragment_missing")
+        expected_hash = str(ref.get("raw_content_hash") or "")
+        if ((expected_hash and row.get("fragment_hash") != expected_hash)
+                or ref.get("source_locator") != row["source_locator"]
+                or ref.get("page") != row["source_page"]
+                or ref.get("bbox") != row["bbox"]):
+            raise ConsoleError("repair_source_fragment_changed")
+        return row
+
+    def source_fragment_catalog(
+        self, *, snapshot_id: str, object_id: str
+    ) -> list[dict[str, Any]]:
+        """Read the accepted fragment representation from the verified source."""
+        envelope = self._envelope(snapshot_id)
+        self._require_open_original(snapshot_id, object_id)
+        freeze_path, _ = self._verified_source_bytes(envelope)
+        fragments = self._read_source_fragments(envelope, freeze_path)
+        catalog: list[dict[str, Any]] = []
+        for index, fragment in enumerate(fragments):
+            fragment_id = str(fragment.get("fragment_id") or "")
+            text = _norm(
+                str(fragment.get("clean_text") or fragment.get("raw_text") or "")
+            )
+            locator = deepcopy(fragment.get("source_locator") or {})
+            if not fragment_id or not text or not locator.get("locator_value"):
+                continue
+            heading = _norm(str(fragment.get("heading") or ""))
+            catalog.append(
+                {
+                    "fragment_id": fragment_id,
+                    "fragment_hash": str(fragment.get("fragment_hash") or ""),
+                    "text": text,
+                    "section_path": [
+                        str(item) for item in (fragment.get("section_path") or [])
+                    ],
+                    "heading": heading,
+                    "is_heading": bool(heading and heading == text),
+                    "sequence": int(fragment.get("sequence") or index + 1),
+                    "source_page": fragment.get("source_page"),
+                    "bbox": deepcopy(fragment.get("bbox")),
+                    "source_locator": locator,
+                    "catalog_index": index,
+                }
+            )
+        by_id = {row["fragment_id"]: row for row in catalog}
+        current = self._current_object(snapshot_id, object_id)
+        for ref in (current.get("provenance") or {}).get("source_fragments") or []:
+            self._verified_catalog_fragment(ref, by_id)
+        semantic = (current.get("metadata") or {}).get("semantic_passage") or {}
+        if semantic.get("selection_origin") == "proposal_selected":
+            from src.vorming.knowledge_materialisation_v1 import resolve_source_selection
+            from src.vorming.semantic_passage_v1 import LEGACY_SEMANTIC_PASSAGE_VERSION
+            try:
+                mapping = resolve_source_selection(semantic.get("spans"), fragments=fragments)["source_mapping"]
+                if semantic.get("version") == LEGACY_SEMANTIC_PASSAGE_VERSION:
+                    mapping = [row for row in mapping if row.get("kind") != "join_separator"]
+                if semantic.get("source_mapping") != mapping:
+                    raise ValueError("materialisation_source_mapping_invalid")
+            except (ValueError, KeyError, TypeError) as exc:
+                raise ConsoleError(str(exc)) from exc
+        return catalog
+
+    def source_units(
+        self, *, snapshot_id: str, object_id: str
+    ) -> list[dict[str, Any]]:
+        """Closed, deterministic selectable spans derived from frozen fragments."""
+        semantic = (self._current_object(snapshot_id, object_id).get("metadata") or {}).get("semantic_passage") or {}
+        if semantic.get("selection_origin") == "proposal_selected":
+            from src.vorming.knowledge_materialisation_v1 import _read_source_blocks
+            from src.vorming.semantic_transform_generic_v1 import _fragment_ref
+            fragments = self.review_source_fragments(snapshot_id)
+            envelope = self._envelope(snapshot_id)
+            if fragments is None and envelope.get("decision_tree_formation"):
+                # Decision-tree units are corrected through the same materialiser view.
+                source_path, _ = self._verified_source_bytes(envelope)
+                fragments = self._read_source_fragments(envelope, source_path)
+            # Verify the existing object's references before offering new ranges.
+            self.source_fragment_catalog(snapshot_id=snapshot_id, object_id=object_id)
+            raw = {row["fragment_id"]: row for row in fragments}
+            units = []
+            for public, source in _read_source_blocks(fragments).values():
+                text = public["text"]
+                boundaries = [0, *[match.end() for match in _SENTENCE_SPLIT_RE.finditer(text)], len(text)]
+                for index, (lo, hi) in enumerate(zip(boundaries, boundaries[1:])):
+                    end = hi
+                    while end > lo and text[end - 1].isspace():
+                        end -= 1
+                    if end <= lo:
+                        continue
+                    ref = _fragment_ref(raw[public["source_fragment_ids"][0]])
+                    units.append({"unit_id": f"{public['block_id']}::s{index + 1}",
+                        "block_id": public["block_id"], "start": lo, "end": end,
+                        "fragment_id": ref["raw_object_id"], "fragment_hash": ref["raw_content_hash"],
+                        "text": text[lo:end], "section_path": public["section_path"],
+                        "sequence": public["position"], "catalog_index": public["position"],
+                        "unit_index": index, "source_page": ref["page"], "bbox": ref["bbox"],
+                        "source_locator": ref["source_locator"]})
+            return units
+        units: list[dict[str, Any]] = []
+        for fragment in self.source_fragment_catalog(
+            snapshot_id=snapshot_id, object_id=object_id
+        ):
+            if fragment["is_heading"]:
+                continue
+            text = str(fragment["text"])
+            sentences = [part.strip() for part in _SENTENCE_SPLIT_RE.split(text) if part.strip()]
+            if len(sentences) <= 1:
+                sentences = [text]
+            for unit_index, sentence in enumerate(sentences):
+                units.append(
+                    {
+                        "unit_id": f"{fragment['fragment_id']}::s{unit_index + 1}",
+                        "fragment_id": fragment["fragment_id"],
+                        "fragment_hash": fragment["fragment_hash"],
+                        "text": sentence,
+                        "section_path": deepcopy(fragment["section_path"]),
+                        "sequence": fragment["sequence"],
+                        "catalog_index": fragment["catalog_index"],
+                        "unit_index": unit_index,
+                        "source_page": fragment["source_page"],
+                        "bbox": deepcopy(fragment["bbox"]),
+                        "source_locator": deepcopy(fragment["source_locator"]),
+                    }
+                )
+        return units
+
+    @staticmethod
+    def _fragment_ref(unit: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "raw_object_id": unit["fragment_id"],
+            "page": unit.get("source_page"),
+            "raw_content_hash": unit.get("fragment_hash"),
+            "bbox": deepcopy(unit.get("bbox")),
+            "coordinate_status": (
+                "available" if unit.get("bbox") is not None else "not_applicable"
+            ),
+            "source_locator": deepcopy(unit["source_locator"]),
+        }
+
+    def _selected_source_material(
+        self,
+        *,
+        snapshot_id: str,
+        object_id: str,
+        unit_ids: list[str],
+        units: list[dict[str, Any]],
+    ) -> tuple[str, list[dict[str, Any]], list[str]]:
+        chosen_ids = list(dict.fromkeys(str(item).strip() for item in unit_ids if str(item).strip()))
+        if not chosen_ids:
+            raise ConsoleError("repair_source_units_required")
+        by_id = {row["unit_id"]: row for row in units}
+        if any(unit_id not in by_id for unit_id in chosen_ids):
+            raise ConsoleError("repair_source_unit_unknown")
+        chosen = [by_id[unit_id] for unit_id in chosen_ids]
+        chosen.sort(key=lambda row: (row["catalog_index"], row["unit_index"]))
+
+        content_positions = {
+            fragment_id: index
+            for index, fragment_id in enumerate(
+                dict.fromkeys(row["fragment_id"] for row in units)
+            )
+        }
+        fragment_ids = list(dict.fromkeys(row["fragment_id"] for row in chosen))
+        positions = sorted(content_positions[fragment_id] for fragment_id in fragment_ids)
+        if positions and positions != list(range(positions[0], positions[-1] + 1)):
+            raise ConsoleError("repair_source_units_must_be_contiguous")
+        for fragment_id in fragment_ids:
+            indexes = sorted(
+                row["unit_index"] for row in chosen if row["fragment_id"] == fragment_id
+            )
+            if indexes != list(range(indexes[0], indexes[-1] + 1)):
+                raise ConsoleError("repair_source_units_must_be_contiguous")
+
+        text = _norm(" ".join(str(row["text"]) for row in chosen))
+        if not text:
+            raise ConsoleError("repair_source_units_required")
+        refs_by_id: dict[str, dict[str, Any]] = {}
+        for row in chosen:
+            refs_by_id.setdefault(row["fragment_id"], self._fragment_ref(row))
+        return text, list(refs_by_id.values()), [row["unit_id"] for row in chosen]
+
+    def _verified_finalized_source_refs(self, snapshot_id, obj, source_refs):
+        from src.vorming.decision_unit_construction_v1 import KEY, finalized_source_refs
+        fragments = None
+        if (obj.get("metadata") or {}).get(KEY):
+            from src.vorming.decision_graph_v1 import pdf_fragments
+            envelope = self._envelope(snapshot_id)
+            source_path, _ = self._verified_source_bytes(envelope)
+            fragments = self._read_source_fragments(envelope, source_path)
+        try:
+            return finalized_source_refs(obj, source_refs, fragments)
+        except ValueError as exc:
+            raise ConsoleError(str(exc)) from exc
+
+    def _source_repair_provenance_patch(self, repair_spec: dict[str, Any]) -> dict[str, Any]:
+        """Compatibility repairs bind the final provenance to their repair spec."""
+        return {"revision_patch_hash": stable_hash(repair_spec)}
+
+    def _finalize_source_provenance(
+        self,
+        *,
+        snapshot_id: str,
+        object_id: str,
+        source_refs: list[dict[str, Any]],
+        repair_spec: dict[str, Any],
+    ) -> dict[str, Any]:
+        revision = self.objects_revision(snapshot_id)
+        rows = deepcopy(self._load_objects(snapshot_id, remember=False))
+        live = self._current_object(snapshot_id, object_id)
+        version = str(live.get("object_version") or "")
+        updated: dict[str, Any] | None = None
+        for index in range(len(rows) - 1, -1, -1):
+            row = rows[index]
+            if row.get("object_id") != object_id or str(row.get("object_version") or "") != version:
+                continue
+            row = deepcopy(row)
+            provenance = row.setdefault("provenance", {})
+            provenance["source_fragments"] = self._verified_finalized_source_refs(snapshot_id, row, source_refs)
+            provenance.update(self._source_repair_provenance_patch(repair_spec))
+            stamp_canonical_hashes(row)
+            errors = schema_errors(row, self.schema_path)
+            if errors:
+                raise ConsoleError("revision_schema_invalid", " | ".join(errors))
+            rows[index] = row
+            updated = row
+            break
+        if updated is None:
+            raise ConsoleError("unknown_object")
+        return self._commit_knowledge_change(snapshot_id, live, updated,
+            reason="deterministic/source-bound repair", actor="repair-command")
+
+    def _source_repair(
+        self,
+        *,
+        actor_id: str,
+        snapshot_id: str,
+        object_id: str,
+        comment: str,
+        unit_ids: list[str],
+        units: list[dict[str, Any]],
+        source_discrepancy: list[str] | None = None,
+    ) -> dict[str, Any]:
+        reviewed = self._current_object(snapshot_id, object_id)
+        text, source_refs, normalized_ids = self._selected_source_material(
+            snapshot_id=snapshot_id,
+            object_id=object_id,
+            unit_ids=unit_ids,
+            units=units,
+        )
+        repair_spec = {
+            "repair_kind": REPAIR_SOURCE_UNITS,
+            "source_unit_ids": normalized_ids,
+            "source_fragment_ids": [ref["raw_object_id"] for ref in source_refs],
+            "text": text,
+        }
+        decision = None
+        if units and "block_id" in units[0]:
+            chosen = {row["unit_id"]: row for row in units}
+            spans = []
+            for unit_id in normalized_ids:
+                row = chosen[unit_id]
+                if spans and spans[-1]["block_id"] == row["block_id"]:
+                    spans[-1]["end"] = row["end"]
+                else:
+                    spans.append({key: row[key] for key in ("block_id", "start", "end")})
+            decision = {"decision_kind": "semantic_selection", "selection_origin": "proposal_selected",
+                        "spans": spans, "source_text": text}
+        revised = OperationsConsole.correct_object(
+            self,
+            actor_id=actor_id,
+            snapshot_id=snapshot_id,
+            object_id=object_id,
+            patch={
+                "reason": comment,
+                "operations": [
+                    {"op": "set", "path": "content.clean_text", "value": text},
+                    {"op": "set", "path": "content.raw_text", "value": text},
+                ],
+            },
+            additional_source_fragments=source_refs,
+            rereview_scope="object",
+            materialisation_decision=decision,
+            source_repair_spec=repair_spec,
+        )
+        self._append_discrepancy_evidence(
+            actor_id=actor_id,
+            snapshot_id=snapshot_id,
+            reviewed=reviewed,
+            original_suitability="source_units",
+            comment=comment,
+            source_discrepancy=source_discrepancy,
+        )
+        self._append_audit_evidence(
+            actor_id=actor_id,
+            snapshot_id=snapshot_id,
+            target=revised,
+            decision="repair_source_units",
+            original_suitability="source_units",
+            final_disposition="needs_review",
+            comment=comment,
+            proposed_correction="",
+        )
+        return revised
+
+    def _append_discrepancy_evidence(
+        self,
+        *,
+        actor_id: str,
+        snapshot_id: str,
+        reviewed: dict[str, Any],
+        original_suitability: str,
+        comment: str,
+        source_discrepancy: list[str] | None,
+    ) -> None:
+        """Bind a reported discrepancy to the version the reviewer saw, not the repair."""
+        if not source_discrepancy:
+            return
+        self._append_audit_evidence(
+            actor_id=actor_id,
+            snapshot_id=snapshot_id,
+            target=reviewed,
+            decision="revise",
+            original_suitability=original_suitability,
+            final_disposition="repair_required",
+            prior_passage_status=str(passage_register_of(reviewed).get("status") or ""),
+            comment=comment,
+            proposed_correction="",
+            source_discrepancy=source_discrepancy,
+        )
+
+    def _verified_object_source_position(
+        self,
+        obj: dict[str, Any],
+        catalog_by_id: dict[str, dict[str, Any]],
+    ) -> int:
+        positions: list[int] = []
+        source_texts: list[str] = []
+        for ref in (obj.get("provenance") or {}).get("source_fragments") or []:
+            row = self._verified_catalog_fragment(ref, catalog_by_id)
+            positions.append(int(row["catalog_index"]))
+            source_texts.append(str(row["text"]))
+        if not positions:
+            raise ConsoleError("repair_source_fragment_missing")
+        object_text = _norm(str((obj.get("content") or {}).get("clean_text") or ""))
+        if object_text and object_text not in _norm(" ".join(source_texts)):
+            raise ConsoleError("merge_target_not_source_bound")
+        return min(positions)
+
+    def _supersede_merge_targets(
+        self,
+        *,
+        snapshot_id: str,
+        target_ids: list[str],
+        superseded_by: str,
+    ) -> None:
+        if not target_ids:
+            return
+        revision = self.objects_revision(snapshot_id)
+        current = {row["object_id"]: row for row in self.snapshot_objects(snapshot_id)}
+        versions = {
+            object_id: str(current[object_id].get("object_version") or "")
+            for object_id in target_ids
+            if object_id in current
+        }
+        rows = deepcopy(self._load_objects(snapshot_id, remember=False))
+        for index, row in enumerate(rows):
+            object_id = str(row.get("object_id") or "")
+            if object_id not in versions or str(row.get("object_version") or "") != versions[object_id]:
+                continue
+            updated = deepcopy(row)
+            governance = updated.setdefault("governance", {})
+            governance["validation_status"] = "superseded"
+            governance["publication_status"] = "unpublished"
+            governance["superseded_by"] = superseded_by
+            stamp_canonical_hashes(updated)
+            errors = schema_errors(updated, self.schema_path)
+            if errors:
+                raise ConsoleError("revision_schema_invalid", " | ".join(errors))
+            rows[index] = updated
+        bindings = deepcopy(self._bindings)
+        for object_id in target_ids:
+            bindings[snapshot_id] = invalidate_for_object(
+                bindings.get(snapshot_id, []), object_id
+            )
+        self._commit_prepared_store(
+            objects=(snapshot_id, rows),
+            bindings=bindings,
+            expected_revision=revision,
+        )
+
+    def _merge_repair(
+        self,
+        *,
+        actor_id: str,
+        snapshot_id: str,
+        object_id: str,
+        comment: str,
+        merge_object_ids: list[str],
+        catalog: list[dict[str, Any]],
+        source_discrepancy: list[str] | None = None,
+    ) -> dict[str, Any]:
+        target_ids = list(
+            dict.fromkeys(
+                str(item).strip()
+                for item in merge_object_ids
+                if str(item).strip() and str(item).strip() != object_id
+            )
+        )
+        if not target_ids:
+            raise ConsoleError("merge_target_required")
+        current = {row["object_id"]: row for row in self.snapshot_objects(snapshot_id)}
+        primary = current.get(object_id)
+        if primary is None:
+            raise ConsoleError("unknown_object")
+        selected = [primary]
+        for target_id in target_ids:
+            target = current.get(target_id)
+            if target is None or target.get("object_type") in {"document", "heading"}:
+                raise ConsoleError("merge_target_not_repairable")
+            governance = target.get("governance") or {}
+            if governance.get("validation_status") in {"approved", "rejected", "superseded"}:
+                raise ConsoleError("merge_target_not_repairable")
+            if governance.get("publication_status") == "published":
+                raise ConsoleError("merge_target_not_repairable")
+            if binding_relations(target):
+                raise ConsoleError("merge_target_has_confirmed_relations")
+            selected.append(target)
+        sections = {
+            tuple((row.get("structure") or {}).get("section_path") or []) for row in selected
+        }
+        if len(sections) != 1:
+            raise ConsoleError("merge_target_mixed_section")
+
+        catalog_by_id = {row["fragment_id"]: row for row in catalog}
+        selected.sort(
+            key=lambda row: self._verified_object_source_position(row, catalog_by_id)
+        )
+        if ((primary.get("metadata") or {}).get("semantic_passage") or {}).get("selection_origin") == "proposal_selected":
+            from src.vorming.knowledge_materialisation_v1 import validate_materialised_candidate, _read_source_blocks
+            fragments = self.review_source_fragments(snapshot_id)
+            blocks = _read_source_blocks(fragments)
+            for row in selected:
+                try:
+                    validate_materialised_candidate(row, fragments=fragments)
+                except ValueError as exc:
+                    raise ConsoleError(str(exc)) from exc
+            selected.sort(key=lambda row: (
+                blocks[row["metadata"]["semantic_passage"]["spans"][0]["block_id"]][0]["position"],
+                row["metadata"]["semantic_passage"]["spans"][0]["start"]))
+        merged_text = _norm(
+            " ".join(
+                str((row.get("content") or {}).get("clean_text") or "")
+                for row in selected
+            )
+        )
+        refs_by_id: dict[str, dict[str, Any]] = {}
+        for row in selected:
+            for ref in (row.get("provenance") or {}).get("source_fragments") or []:
+                raw_id = str(ref.get("raw_object_id") or "")
+                source = catalog_by_id.get(raw_id)
+                if source is None:
+                    raise ConsoleError("repair_source_fragment_missing")
+                refs_by_id.setdefault(
+                    raw_id,
+                    {
+                        "raw_object_id": raw_id,
+                        "page": source.get("source_page"),
+                        "raw_content_hash": source.get("fragment_hash"),
+                        "bbox": deepcopy(source.get("bbox")),
+                        "coordinate_status": (
+                            "available" if source.get("bbox") is not None else "not_applicable"
+                        ),
+                        "source_locator": deepcopy(source["source_locator"]),
+                    },
+                )
+        source_refs = list(refs_by_id.values())
+        sequence_values = [
+            int((row.get("structure") or {}).get("sequence") or 0)
+            for row in selected
+            if (row.get("structure") or {}).get("sequence") is not None
+        ]
+        operations: list[dict[str, Any]] = [
+            {"op": "set", "path": "content.clean_text", "value": merged_text},
+            {"op": "set", "path": "content.raw_text", "value": merged_text},
+        ]
+        if sequence_values:
+            operations.append(
+                {"op": "set", "path": "structure.sequence", "value": min(sequence_values)}
+            )
+        decision = None
+        if ((primary.get("metadata") or {}).get("semantic_passage") or {}).get("selection_origin") == "proposal_selected":
+            spans = []
+            for row in selected:
+                spans.extend(deepcopy(row["metadata"]["semantic_passage"]["spans"]))
+            decision = {"decision_kind": "semantic_selection", "selection_origin": "proposal_selected",
+                        "spans": spans, "source_text": merged_text}
+        repaired = OperationsConsole.correct_object(
+            self,
+            actor_id=actor_id,
+            snapshot_id=snapshot_id,
+            object_id=object_id,
+            patch={"reason": comment, "operations": operations},
+            additional_source_fragments=source_refs,
+            rereview_scope="object",
+            materialisation_decision=decision,
+            source_repair_spec={"repair_kind": REPAIR_MERGE_OBJECTS,
+                                "merge_object_ids": target_ids, "merged_text": merged_text},
+        )
+        self._supersede_merge_targets(
+            snapshot_id=snapshot_id,
+            target_ids=target_ids,
+            superseded_by=object_id,
+        )
+        self._append_discrepancy_evidence(
+            actor_id=actor_id,
+            snapshot_id=snapshot_id,
+            reviewed=primary,
+            original_suitability="samenvoegen",
+            comment=comment,
+            source_discrepancy=source_discrepancy,
+        )
+        self._append_audit_evidence(
+            actor_id=actor_id,
+            snapshot_id=snapshot_id,
+            target=repaired,
+            decision="repair_merge_objects",
+            original_suitability="samenvoegen",
+            final_disposition="needs_review",
+            comment=comment,
+            proposed_correction="",
+        )
+        return self._current_object(snapshot_id, object_id)
+
+    def _classification_repair(
+        self,
+        *,
+        actor_id: str,
+        snapshot_id: str,
+        object_id: str,
+        submission: dict[str, Any],
+    ) -> dict[str, Any]:
+        type_change = (
+            submission.get("type_action") == "type_wijzigen"
+            and bool(submission.get("confirmed_object_type"))
+        )
+        position_change = (
+            submission.get("documentpositie_action") == "andere_kop"
+            and bool(submission.get("parent_choice"))
+        )
+        if not (type_change or position_change or submission.get("recommendation_strength")):
+            raise ConsoleError("classification_repair_requires_change")
+        self._reopen_for_review(snapshot_id, {object_id})
+        repaired = self._clear_pending_review_metadata(
+            snapshot_id=snapshot_id, object_id=object_id
+        )
+        self._append_audit_evidence(
+            actor_id=actor_id,
+            snapshot_id=snapshot_id,
+            target=repaired,
+            decision="repair_classification",
+            original_suitability=str(submission.get("suitability") or ""),
+            final_disposition="needs_review",
+            comment=str(submission.get("comment") or ""),
+            proposed_correction="",
+        )
+        return repaired
+
+    def submit_review_resolution(
+        self,
+        *,
+        actor_id: str,
+        snapshot_id: str,
+        object_id: str,
+        expected_revision: str,
+        suitability: str,
+        comment: str,
+        repair_kind: str,
+        source_unit_ids: list[str] | None = None,
+        merge_object_ids: list[str] | None = None,
+        claim_object_id: str = "",
+        proposed_correction: str = "",
+        confirmed_object_type: str = "",
+        recommendation_strength: str = "",
+        documentpositie_action: str = "",
+        found_under: str = "",
+        parent_choice: str = "",
+        type_action: str = "",
+        source_discrepancy: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Atomically commit human revise + deterministic repair + re-review state."""
+        if repair_kind not in _REPAIR_KINDS:
+            raise ConsoleError("unknown_repair_kind")
+        submission = {
+            "actor_id": actor_id,
+            "snapshot_id": snapshot_id,
+            "object_id": object_id,
+            "expected_revision": expected_revision,
+            "comment": comment.strip(),
+            "proposed_correction": proposed_correction.strip(),
+            "confirmed_object_type": confirmed_object_type.strip(),
+            "recommendation_strength": recommendation_strength.strip(),
+            "suitability": suitability.strip(),
+            "eindoordeel": "goedkeuren_na_correctie",
+            "documentpositie_action": documentpositie_action.strip(),
+            "found_under": found_under.strip(),
+            "parent_choice": parent_choice.strip(),
+            "type_action": type_action.strip(),
+            "source_discrepancy": normalize_discrepancy(source_discrepancy),
+        }
+        self._preflight_structured_repair(submission)
+        expected_kind = self.repair_kind_for_submission(submission)
+        if repair_kind != expected_kind:
+            raise ConsoleError("repair_kind_mismatch")
+        source_envelope = deepcopy(self._envelope(snapshot_id))
+
+        source_units: list[dict[str, Any]] = []
+        catalog: list[dict[str, Any]] = []
+        if repair_kind == REPAIR_SOURCE_UNITS:
+            source_units = self.source_units(snapshot_id=snapshot_id, object_id=object_id)
+        elif repair_kind == REPAIR_MERGE_OBJECTS:
+            catalog = self.source_fragment_catalog(
+                snapshot_id=snapshot_id, object_id=object_id
+            )
+
+        transaction = (self._reprocessing_transaction(snapshot_id)
+                       if getattr(self, "workflow_document_store", None) is not None
+                       else self._store_write_lock())
+        with transaction, self._atomic_snapshot_mutation(snapshot_id):
+            self._preflight_structured_repair(submission)
+            if repair_kind in {REPAIR_SOURCE_UNITS, REPAIR_MERGE_OBJECTS}:
+                self._assert_source_work_unchanged(
+                    source_envelope, expected_revision, "published_working_revision_immutable"
+                )
+            if self.objects_revision(snapshot_id) != expected_revision:
+                raise ConsoleError(
+                    SNAPSHOT_OBJECT_WRITE_CONFLICT,
+                    current_revision=self.objects_revision(snapshot_id),
+                )
+            # A repair request is not type confirmation. In particular a blocked
+            # proposal must reach source repair without passing the approval gate.
+            # Source/merge is one correction command, not a preliminary review
+            # decision plus successive partially prepared revisions.
+            if repair_kind not in {REPAIR_SOURCE_UNITS, REPAIR_MERGE_OBJECTS}:
+                blocked = is_admission_blocked(
+                    self._current_object(snapshot_id, object_id),
+                    review_path=review_path_for_klasse(self._envelope(snapshot_id)["class"]))
+                with _allow_revise_write():
+                    super().review_object(
+                        actor_id=actor_id,
+                        snapshot_id=snapshot_id,
+                        object_id=object_id,
+                        decision="revise",
+                        comment=comment.strip(),
+                        proposed_correction=proposed_correction.strip(),
+                        confirmed_object_type=None if blocked else (confirmed_object_type.strip() or None),
+                        recommendation_strength=recommendation_strength.strip() or None,
+                        suitability=suitability.strip(),
+                        eindoordeel="goedkeuren_na_correctie",
+                        documentpositie_action=documentpositie_action.strip() or None,
+                        found_under=found_under.strip() or None,
+                        parent_choice=parent_choice.strip() or None,
+                        type_action=None if blocked else (type_action.strip() or None),
+                        expected_revision=expected_revision,
+                        source_discrepancy=submission["source_discrepancy"],
+                    )
+            if repair_kind == REPAIR_SOURCE_UNITS:
+                repaired = self._source_repair(
+                    actor_id=actor_id,
+                    snapshot_id=snapshot_id,
+                    object_id=object_id,
+                    comment=comment.strip(),
+                    unit_ids=list(source_unit_ids or []),
+                    units=source_units,
+                    source_discrepancy=submission["source_discrepancy"],
+                )
+            elif repair_kind == REPAIR_MERGE_OBJECTS:
+                repaired = self._merge_repair(
+                    actor_id=actor_id,
+                    snapshot_id=snapshot_id,
+                    object_id=object_id,
+                    comment=comment.strip(),
+                    merge_object_ids=list(merge_object_ids or []),
+                    catalog=catalog,
+                    source_discrepancy=submission["source_discrepancy"],
+                )
+            elif repair_kind == REPAIR_SUPPORT_RELATION:
+                if not claim_object_id.strip():
+                    raise ConsoleError("support_target_required")
+                self.resolve_support_relation(
+                    actor_id=actor_id,
+                    snapshot_id=snapshot_id,
+                    support_object_id=object_id,
+                    claim_object_id=claim_object_id.strip(),
+                    expected_revision=self.objects_revision(snapshot_id),
+                )
+                repaired = self._current_object(snapshot_id, object_id)
+            else:
+                repaired = self._classification_repair(
+                    actor_id=actor_id,
+                    snapshot_id=snapshot_id,
+                    object_id=object_id,
+                    submission=submission,
+                )
+
+            final_status = str((repaired.get("governance") or {}).get("validation_status") or "")
+            if final_status == "revise":
+                raise ConsoleError("repair_did_not_close_revise")
+            if final_status != "needs_review":
+                raise ConsoleError("repair_must_reopen_review")
+            return deepcopy(repaired)
+
+    @staticmethod
+    def repair_kind_for_submission(submission: dict[str, Any]) -> str:
+        suitability = str(submission.get("suitability") or "")
+        if suitability == "samenvoegen":
+            return REPAIR_MERGE_OBJECTS
+        if suitability == "alleen_onderbouwing":
+            return REPAIR_SUPPORT_RELATION
+        if suitability == "ja" and (
+            submission.get("type_action") == "type_wijzigen"
+            or submission.get("documentpositie_action") == "andere_kop"
+            or bool(submission.get("recommendation_strength"))
+        ):
+            return REPAIR_CLASSIFICATION
+        return REPAIR_SOURCE_UNITS
+
+
+def render_repair(console, request: Request, submission: dict[str, Any], *, repair_kind="", error="", saved=False) -> str:
+    """One Vorming presentation of the complete existing atomic repair command."""
+    from src import operations_console_app as ui
+    from src.review.review_passage_read_v1 import read_review_passage
+    account = console.session_account(request.cookies.get("console_session"))
+    submission = dict(submission)
+    sid, oid = str(submission["snapshot_id"]), str(submission["object_id"])
+    kind = repair_kind or console.repair_kind_for_submission(submission)
+    if kind not in _REPAIR_KINDS:
+        raise ConsoleError("unknown_repair_kind")
+    if kind == REPAIR_CLASSIFICATION:
+        inputs = read_review_passage(console, account, sid, oid)
+        envelope, objects, revision = inputs.envelope, inputs.objects, inputs.revision
+    else:
+        envelope = console._envelope(sid)
+        if "reviewer" not in account.get("roles", []) or account["account_id"] not in envelope.get("named_reviewers", []):
+            raise ConsoleError("reviewer_not_named_on_snapshot")
+        objects, revision = console.snapshot_objects_and_revision(sid)
+    focal = next((row for row in objects if row["object_id"] == oid), None)
+    if focal is None:
+        raise ConsoleError("unknown_object")
+    if not submission.get("expected_revision"):
+        submission["expected_revision"] = revision
+    submission.setdefault("suitability", {REPAIR_SOURCE_UNITS: "mist_context", REPAIR_MERGE_OBJECTS: "samenvoegen",
+        REPAIR_SUPPORT_RELATION: "alleen_onderbouwing", REPAIR_CLASSIFICATION: "ja"}[kind])
+    overview = "/source-selection?" + urlencode({"document": sid})
+    review = "/review?" + urlencode({"document": sid, "object": oid, **({"review_revision": submission["review_revision"]} if submission.get("review_revision") else {})})
+    notice = ('<p class="banner ok" role="status">Het nieuwe voorstel is opgeslagen. Beoordeel de huidige versie opnieuw in Review.</p>' if saved else '')
+    lead = ('Je ziet de huidige opgeslagen passage. Een volgende correctie maakt opnieuw een voorstel voor beoordeling.'
+            if saved else 'Er is nog niets gewijzigd. Bevestigen maakt een nieuw voorstel voor beoordeling.')
+    body = ('<h1>Vorming</h1><h2>Correctie specificeren</h2>' + notice +
+        '<p><a href="' + _esc(overview) + '">Voortgang en vormingsproblemen</a> · '
+        '<a href="' + _esc(review) + '">Deze passage beoordelen in Review</a></p>'
+        '<p class="lead">' + lead + '</p>'
+        '<p><b>Huidige passage:</b> ' + _esc((focal.get("content") or {}).get("clean_text")) + '</p>')
+    body += ui._broncontext_html(focal, sid, oid, inputs.source_available if kind == REPAIR_CLASSIFICATION else True)
+    body += '<nav aria-label="Soort correctie">' + ' · '.join(
+        '<a href="' + _esc('/source-selection?' + urlencode(dict(document=sid, object=oid, task='repair', repair_kind=k, **({'review_revision': submission['review_revision']} if submission.get('review_revision') else {})))) + '">' + label + '</a>'
+        for k, label in [(REPAIR_SOURCE_UNITS, 'Bronpassage kiezen'), (REPAIR_MERGE_OBJECTS, 'Passages samenvoegen'),
+                         (REPAIR_SUPPORT_RELATION, 'Onderbouwing verbinden'), (REPAIR_CLASSIFICATION, 'Type of plaats corrigeren')]) + '</nav>'
+    if error:
+        body += '<p class="banner warn" role="alert">Niet opgeslagen: ' + _esc(ui.ERROR_COPY.get(error, error)) + '. Bij een gewijzigd document: herlaad de correctie en controleer je keuzes opnieuw.</p>'
+    def chrome(body):
+        return ui._page(ui._nav(account, 'selection') + '<section class="room" data-formation-repair>' + body + '</section>')
+    from src.vorming.source_accountability_v1 import is_source_record
+    hint = ui.source_label_hint(focal)
+    if is_source_record(focal) or ui.role_of(focal) or hint:
+        if hint:
+            body += '<p data-source-label-hint>' + _esc(hint['label']) + '</p>'
+        return chrome(body + '<p>Controleer het brongebruik op de bijbehorende werkplek: <a href="' + _esc('/source-selection?' + urlencode(dict(document=sid, object=oid))) + '">Brongebruik bepalen of bronbewijs herstellen in Vorming</a>.</p>')
+    if console.snapshot_is_published(sid):
+        return chrome(body + '<p>Deze gepubliceerde werkversie is alleen te lezen.</p>')
+    if kind == REPAIR_CLASSIFICATION and not inputs.source_available:
+        return chrome(body + '<p>De oorspronkelijke bron is niet beschikbaar voor correctie.</p>')
+    if kind == REPAIR_CLASSIFICATION and is_admission_blocked(focal, review_path=review_path_for_klasse(envelope['class'])):
+        return chrome(body + '<p>Herstel eerst de bronpassage. Type- of plaatscorrectie maakt een geblokkeerd voorstel niet reviewbaar.</p>')
+    def common_fields(submission: dict[str, Any], repair_kind: str) -> str:
+        values = {
+            "snapshot_id": submission.get("snapshot_id"),
+            "object_id": submission.get("object_id"),
+            "snapshot_revision": submission.get("expected_revision"),
+            "suitability": submission.get("suitability"),
+            "repair_kind": repair_kind,
+        }
+        if submission.get("review_revision"):
+            values["review_revision"] = submission["review_revision"]
+        if repair_kind != REPAIR_CLASSIFICATION:
+            values.update({name: submission.get(name) for name in (
+                "confirmed_object_type", "recommendation_strength", "documentpositie_action",
+                "found_under", "parent_choice", "type_action")})
+        return "".join(_hidden(name, value) for name, value in values.items()) + "".join(
+            _hidden("source_discrepancy", code) for code in submission.get("source_discrepancy") or [])
+
+    def source_units_form(submission: dict[str, Any]) -> str:
+        snapshot_id = str(submission["snapshot_id"])
+        object_id = str(submission["object_id"])
+        current = focal
+        current_text = str((current.get("content") or {}).get("clean_text") or "")
+        units = console.source_units(snapshot_id=snapshot_id, object_id=object_id)
+        options: list[str] = []
+        for unit in units:
+            path = " › ".join(unit.get("section_path") or [])
+            label = f"{path + ' — ' if path else ''}{unit['text']}"
+            options.append(
+                f'<option value="{_esc(unit["unit_id"])}" {"selected" if unit["unit_id"] in submission.get("source_unit_ids", []) else ""}>{_esc(label)}</option>'
+            )
+        if not options:
+            raise ConsoleError("repair_source_units_required")
+        return (
+            "<h2>Kies de exacte bronpassage voor het nieuwe voorstel</h2>"
+            f"<p><strong>Huidig kennisobject:</strong> {_esc(current_text)}</p>"
+            "<p>Selecteer aaneengesloten bronzinnen.</p>"
+            '<label>Bronzinnen<select name="source_unit_ids" multiple size="14" required>'
+            + "".join(options)
+            + "</select></label>"
+        )
+
+    def merge_form(submission: dict[str, Any]) -> str:
+        snapshot_id = str(submission["snapshot_id"])
+        object_id = str(submission["object_id"])
+        current = focal
+        section = tuple((current.get("structure") or {}).get("section_path") or [])
+        options: list[str] = []
+        for row in objects:
+            row_id = str(row.get("object_id") or "")
+            if not row_id or row_id == object_id or row.get("object_type") in {"document", "heading"}:
+                continue
+            if tuple((row.get("structure") or {}).get("section_path") or []) != section:
+                continue
+            governance = row.get("governance") or {}
+            if governance.get("validation_status") in {"approved", "rejected", "superseded"}:
+                continue
+            if governance.get("publication_status") == "published" or binding_relations(row):
+                continue
+            text = str((row.get("content") or {}).get("clean_text") or row_id)
+            options.append(
+                '<label class="check">'
+                f'<input type="checkbox" name="merge_object_ids" value="{_esc(row_id)}" {"checked" if row_id in submission.get("merge_object_ids", []) else ""}> '
+                f'{_esc(text)}</label>'
+            )
+        if not options:
+            raise ConsoleError("merge_target_required")
+        return (
+            "<h2>Kies de passage(s) die bij dit kennisobject horen</h2>"
+            "<p>Deze passages worden vervangen door één nieuw voorstel voor beoordeling.</p>"
+            + "".join(options)
+        )
+
+    def support_form(submission: dict[str, Any]) -> str:
+        snapshot_id = str(submission["snapshot_id"])
+        object_id = str(submission["object_id"])
+        options: list[str] = []
+        for row in objects:
+            row_id = str(row.get("object_id") or "")
+            if not row_id or row_id == object_id or row.get("object_type") == "document":
+                continue
+            if (row.get("governance") or {}).get("validation_status") in {"rejected", "superseded"}:
+                continue
+            text = str((row.get("content") or {}).get("clean_text") or row_id)
+            options.append(
+                f'<option value="{_esc(row_id)}" {"selected" if row_id == submission.get("claim_object_id") else ""}>{_esc(text)}</option>'
+            )
+        if not options:
+            raise ConsoleError("support_target_required")
+        return (
+            "<h2>Kies welk kennisobject door deze passage wordt onderbouwd</h2>"
+            '<label>Ondersteund kennisobject<select name="claim_object_id" required>'
+            + "".join(options)
+            + "</select></label>"
+        )
+
+    if kind == REPAIR_SOURCE_UNITS:
+        action = source_units_form(submission)
+    elif kind == REPAIR_MERGE_OBJECTS:
+        action = merge_form(submission)
+    elif kind == REPAIR_SUPPORT_RELATION:
+        action = support_form(submission)
+    else:
+        chosen_type = str(submission.get('confirmed_object_type') or focal.get('confirmed_object_type') or ui.confirmable_proposed_type(focal))
+        selected_parent = str(submission.get('parent_choice') or focal.get('parent_object_id') or '')
+        action = ('<fieldset><legend>Type corrigeren</legend>'
+            '<label><input type="radio" name="type_action" value="dit_klopt" ' + ('checked' if submission.get('type_action', 'dit_klopt') == 'dit_klopt' else '') + '>Huidig type behouden</label>'
+            '<label><input type="radio" name="type_action" value="type_wijzigen" ' + ('checked' if submission.get('type_action') == 'type_wijzigen' else '') + '>Type wijzigen</label></fieldset>'
+            '<fieldset><legend>Plaats corrigeren</legend>'
+            '<label><input type="radio" name="documentpositie_action" value="dit_klopt" ' + ('checked' if submission.get('documentpositie_action', 'dit_klopt') == 'dit_klopt' else '') + '>Huidige plaats behouden</label>'
+            '<label><input type="radio" name="documentpositie_action" value="andere_kop" ' + ('checked' if submission.get('documentpositie_action') == 'andere_kop' else '') + '>Andere kop kiezen</label></fieldset>'
+            '<input type="hidden" name="found_under" value="' + _esc(ui.found_under_path(focal)) + '">'
+            '<input type="hidden" name="confirmed_object_type" data-retained-type value="' + _esc(chosen_type) + '">'
+            '<label>Type<select name="confirmed_object_type">' + ui._type_options(chosen_type,
+                review_path=review_path_for_klasse(envelope['class']), proposed=ui.confirmable_proposed_type(focal)) + '</select></label>'
+            + '<input type="hidden" name="parent_choice" data-retained-parent value="' + _esc(selected_parent) + '">'
+            + ui._heading_chooser(focal, objects, sid, selected_parent))
+        # This chooser belongs to Vorming; its old Review-only toggle is gone.
+        action = action.replace('data-heading-chooser hidden', 'data-heading-chooser')
+        if review_path_for_klasse(envelope['class']) == 'boom':
+            action += '<label>Sterkte<select name="recommendation_strength">' + ui._strength_options(
+                submission.get('recommendation_strength') or focal.get('confirmed_recommendation_strength') or '') + '</select></label>'
+        action += '<p>Kies een werkelijk ander type, een andere kop of sterkte. Zonder wijziging kan deze correctie niet worden opgeslagen.</p>'
+    body += ('<form method="post" action="/review/resolve" data-repair-type="' + _esc(submission.get('confirmed_object_type') or focal.get('confirmed_object_type') or ui.confirmable_proposed_type(focal)) + '">' + common_fields(submission, kind) + action +
+        '<label>Reden (verplicht)<textarea name="comment" required>' + _esc(submission.get('comment')) + '</textarea></label>'
+        '<label>Correctieopmerking (geen vervangende brontekst)<textarea name="proposed_correction">' + _esc(submission.get('proposed_correction')) + '</textarea></label>'
+        '<button class="btn-primary" type="submit">Maak nieuw voorstel en zet opnieuw in Review</button></form>')
+    body += """<script>
+    const repair = document.querySelector('form[action="/review/resolve"]');
+    if (repair) {
+      const type = repair.querySelector('select[name="confirmed_object_type"]');
+      const retained = repair.querySelector('[data-retained-parent]');
+      const chooser = repair.querySelector('[data-heading-chooser]');
+      const updateRepair = () => {
+        if (type) {
+          const changing = Boolean(repair.querySelector('[name="type_action"][value="type_wijzigen"]:checked'));
+          type.disabled = !changing;
+          repair.querySelector('[data-retained-type]').disabled = changing;
+          if (!changing) type.value = repair.dataset.repairType;
+        }
+        if (retained && chooser) {
+          const changing = Boolean(repair.querySelector('[name="documentpositie_action"][value="andere_kop"]:checked'));
+          retained.disabled = changing;
+          chooser.hidden = !changing;
+          chooser.querySelectorAll('[name="parent_choice"]').forEach(field => field.disabled = !changing);
+        }
+      };
+      repair.querySelectorAll('[name="type_action"], [name="documentpositie_action"]').forEach(field => field.addEventListener('change', updateRepair));
+      updateRepair();
+    }
+    document.querySelectorAll('[data-heading-search]').forEach(input => {
+      input.addEventListener('input', () => input.closest('[data-heading-chooser]').querySelectorAll('[data-parent-choice-list] li').forEach(item => {
+        item.hidden = !item.textContent.toLowerCase().includes(input.value.trim().toLowerCase());
+      }));
+    });</script>"""
+    return chrome(body)
+
+
+def install_deterministic_review_repair_routes(app: FastAPI, console: DeterministicRepairReviewConsole) -> None:
+    """Keep the existing exception and POST callers over one Vorming renderer."""
+    def account_for(request):
+        return console.session_account(request.cookies.get("console_session"))
+
+    async def structured_repair_handler(request: Request, exc: StructuredRepairRequired) -> HTMLResponse:
+        account = account_for(request)
+        if str(exc.submission.get('actor_id') or '') != str(account['account_id']):
+            raise ConsoleError('correction_role_required')
+        return HTMLResponse(render_repair(console, request, exc.submission))
+
+    app.add_exception_handler(StructuredRepairRequired, structured_repair_handler)
+
+    @app.post("/review/resolve")
+    def resolve_review(
+        request: Request,
+        snapshot_id: str = Form(...),
+        object_id: str = Form(...),
+        snapshot_revision: str = Form(...),
+        suitability: str = Form(...),
+        comment: str = Form(...),
+        repair_kind: str = Form(...),
+        source_unit_ids: list[str] = Form(default=[]),
+        merge_object_ids: list[str] = Form(default=[]),
+        claim_object_id: str = Form(""),
+        proposed_correction: str = Form(""),
+        confirmed_object_type: str = Form(""),
+        recommendation_strength: str = Form(""),
+        documentpositie_action: str = Form(""),
+        found_under: str = Form(""),
+        parent_choice: str = Form(""),
+        type_action: str = Form(""),
+        source_discrepancy: list[str] = Form(default=[]),
+        review_revision: str = Form(""),
+    ) -> RedirectResponse:
+        account = account_for(request)
+        submission = dict(review_revision=review_revision, snapshot_id=snapshot_id, object_id=object_id, expected_revision=snapshot_revision,
+            suitability=suitability, comment=comment, repair_kind=repair_kind, source_unit_ids=list(source_unit_ids or []),
+            merge_object_ids=list(merge_object_ids or []), claim_object_id=claim_object_id, proposed_correction=proposed_correction,
+            confirmed_object_type=confirmed_object_type, recommendation_strength=recommendation_strength,
+            documentpositie_action=documentpositie_action, found_under=found_under, parent_choice=parent_choice,
+            type_action=type_action, source_discrepancy=list(source_discrepancy or []))
+        try:
+            from src.review.review_passage_read_v1 import resolve_review_revision
+            revision = resolve_review_revision(console, snapshot_id, snapshot_revision.strip())
+            console.submit_review_resolution(
+                actor_id=account["account_id"],
+                snapshot_id=snapshot_id,
+                object_id=object_id,
+                expected_revision=revision,
+                suitability=suitability,
+                comment=comment,
+                repair_kind=repair_kind,
+                source_unit_ids=list(source_unit_ids or []),
+                merge_object_ids=list(merge_object_ids or []),
+                claim_object_id=claim_object_id,
+                proposed_correction=proposed_correction,
+                confirmed_object_type=confirmed_object_type,
+                recommendation_strength=recommendation_strength,
+                documentpositie_action=documentpositie_action,
+                found_under=found_under,
+                parent_choice=parent_choice,
+                type_action=type_action,
+                source_discrepancy=list(source_discrepancy or []),
+            )
+        except ConsoleError as exc:
+            if exc.code in {'reviewer_role_required', 'reviewer_not_named_on_snapshot', 'published_working_revision_immutable', 'correction_role_required'}:
+                raise
+            return HTMLResponse(render_repair(console, request, submission, repair_kind=repair_kind, error=exc.code), status_code=400)
+        return RedirectResponse('/source-selection?' + urlencode(dict(document=snapshot_id, object=object_id,
+            task='repair', repair_saved='yes', **({'review_revision': review_revision} if review_revision else {}))), status_code=303)

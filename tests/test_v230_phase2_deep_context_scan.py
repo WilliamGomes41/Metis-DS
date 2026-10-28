@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.admission_gate_v1 import (
+from src.vorming.admission_gate_v1 import (
     GATE_ALLOWED,
     GATE_BLOCKED,
     admit_candidate,
@@ -29,8 +29,8 @@ from src.admission_gate_v1 import (
     build_candidate_record,
     ordinary_review_queue,
 )
-from src.beslisboom_path_v1 import CLOSED_BOOM_TYPES
-from src.context_scan_v1 import (
+from src.review.beslisboom_path_v1 import CLOSED_BOOM_TYPES
+from src.vorming.context_scan_v1 import (
     CHECKED_CONTEXT_SIGNALS,
     scan_deep_context,
 )
@@ -617,8 +617,8 @@ def test_source_text_exact_stays_freeze_fragment() -> None:
     dropped = "De werkgroep adviseert calcium te geven tenzij er hypercalciëmie bestaat."
     cleaned = "De werkgroep adviseert calcium te geven."
     from tests.semantic_fixture_support import materialised_fixture
-    from src.admission_gate_v1 import candidate_from_object
-    from src.knowledge_path_v1 import content_reviewable
+    from src.vorming.admission_gate_v1 import candidate_from_object
+    from src.review.knowledge_path_v1 import content_reviewable
     from copy import deepcopy
     objects, fragments = materialised_fixture(dropped)
     objects[0]["content"]["clean_text"] = cleaned

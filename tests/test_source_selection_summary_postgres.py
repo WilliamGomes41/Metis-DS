@@ -85,7 +85,7 @@ def test_source_pages_stay_available_during_real_large_checkpoints(
     from threading import Event
     from tests.test_console_read_architecture import _received
     from tests.production_support import restart_production
-    from src.source_processing_dispatch_v1 import claim
+    from src.vorming.source_processing_dispatch_v1 import claim
     from src.request_diagnostics_v1 import current_request_id
 
     console, users, _, _ = _system(tmp_path, production_console=production_console)
@@ -269,7 +269,7 @@ def test_summary_trigger_covers_raw_writes_and_ignores_forged_projection(
     tmp_path, production_console
 ):
     from psycopg.types.json import Jsonb
-    from src.source_selection_v1 import comparable_observations
+    from src.vorming.source_selection_v1 import comparable_observations
     console, users, sid, _ = _system(tmp_path, production_console=production_console)
     store = console.workflow_document_store
     envelope = store.get_envelope(sid)

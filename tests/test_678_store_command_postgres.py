@@ -22,8 +22,8 @@ from copy import deepcopy
 import pytest
 
 from src.operations_console_v1 import ConsoleError
-from src.proportionate_review_v1 import _batch_type
-from src.review_ledger import append_event
+from src.review.proportionate_review_v1 import _batch_type
+from src.review.review_ledger import append_event
 from src.workflows import workflow_documents_cutover_v1 as documents_cutover
 from src.workflows import workflow_review_cutover_v1 as rc
 from src.workflows.workflow_transaction_v1 import workflow_transaction_active
@@ -167,7 +167,7 @@ def test_u3_reprocessing_rollback_leaves_no_uncommitted_envelope_mirror(workflow
 
 def test_u4_correct_object_original_error_survives_failing_recovery(workflow_postgres, tmp_path, monkeypatch):
     console, rid, sid, (_obj_a, obj_b) = _setup(tmp_path, workflow_postgres)
-    from src.deterministic_review_repair_v1 import REPAIR_SOURCE_UNITS
+    from src.review.deterministic_review_repair_v1 import REPAIR_SOURCE_UNITS
     units = console.source_units(snapshot_id=sid, object_id=obj_b["object_id"])
     before = _state(console, sid)
     flag = threading.Event()

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pymupdf
 
-from src.extract_pdf_v2 import (
+from src.vorming.extract_pdf_v2 import (
     PARSER_VERSION,
     _update_heading_stack,
     extract,

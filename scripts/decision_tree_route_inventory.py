@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.decision_tree_experiment_v1 import legacy_route_inventory  # noqa: E402
+from src.vorming.decision_tree_experiment_v1 import legacy_route_inventory  # noqa: E402
 
 
 def main(argv: list[str]) -> int:

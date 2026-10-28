@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, admission_of, blocked_audit_lane, ordinary_review_queue
+from src.vorming.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, admission_of, blocked_audit_lane, ordinary_review_queue
 from src.integrity_kernel import compute_canonical_object_hash
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole, is_slow_review_duty
@@ -547,7 +547,7 @@ def test_later_beoordelen_preserves_pending_state_without_writes(tmp_path: Path,
     console, accounts, receipt, adviseert, _html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     before = console.snapshot_objects(receipt["snapshot_id"], include_blocked=True)
     client = _client(console, production_app=production_app)
-    from src.review_ledger import read_events
+    from src.review.review_ledger import read_events
     before_events = read_events(console._ledger_path)
     before_bindings = console.object_review_bindings(receipt["snapshot_id"])
     posted = client.post(
@@ -803,7 +803,7 @@ def test_review_and_correction_do_not_change_sibling_canonical_hash(tmp_path: Pa
 
 
 def test_merge_heading_parent_relations_keeps_semantic_edges() -> None:
-    from src.review_cockpit_v1 import merge_heading_parent_relations
+    from src.review.review_cockpit_v1 import merge_heading_parent_relations
 
     merged = merge_heading_parent_relations(
         [
@@ -975,7 +975,7 @@ def test_dit_klopt_reveals_sterkte_before_one_save(tmp_path: Path, *, production
 
 
 def test_phase3_does_not_mutate_passage_register_or_add_gold_metrics() -> None:
-    cockpit = (ROOT / "src/review_cockpit_v1.py").read_text(encoding="utf-8")
+    cockpit = (ROOT / "src/review/review_cockpit_v1.py").read_text(encoding="utf-8")
     app = (ROOT / "src/operations_console_app.py").read_text(encoding="utf-8")
     for blob in (cockpit, app):
         assert "selected_as_candidate" not in blob

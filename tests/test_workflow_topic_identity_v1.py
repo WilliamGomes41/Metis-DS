@@ -19,7 +19,7 @@ import pytest
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.publication_chain_recovery_v1 import PublicationChainRecoveryError
 from src.workflows.workflow_chain_recovery_v1 import _upgrade_workflow_state
-from src.topic_identity_v1 import topic_id_for_key, topic_identity_key
+from src.documents.topic_identity_v1 import topic_id_for_key, topic_identity_key
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
 from src.workflows.workflow_documents_postgres_v1 import (
     PostgresWorkflowDocumentStore,

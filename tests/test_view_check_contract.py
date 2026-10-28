@@ -12,7 +12,7 @@ import subprocess
 import pytest
 from starlette.datastructures import QueryParams
 
-from src.view_check import CHECK_IDS, allowed_request, validate_checks
+from src.settings.view_check import CHECK_IDS, allowed_request, validate_checks
 
 
 @pytest.mark.parametrize('method,path,query', [
@@ -92,7 +92,7 @@ console.log(JSON.stringify(results));'''
 
 
 def test_compact_diagnosis_discards_private_headers_urls_and_unknown_references():
-    from src.view_check import validate_diagnosis
+    from src.settings.view_check import validate_diagnosis
     raw = {'step':'review_inventory', 'expected':'visible_inventory_with_stored_text',
            'observed':'difference', 'elapsed_ms':120,
            'requests':[{'route':'/review', 'state':'completed', 'status':200,

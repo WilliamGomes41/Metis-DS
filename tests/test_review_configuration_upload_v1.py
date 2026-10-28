@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError, OperationsConsole
-from src.review_configuration_v1 import CONTRACT, effective_configuration
+from src.review.review_configuration_v1 import CONTRACT, effective_configuration
 
 HTML = b"<html><body><h1>Bron</h1><p>Bespreek als verpleegkundige de sociale contacten.</p></body></html>"
 
@@ -101,7 +101,7 @@ def test_kernel_legacy_named_reviewers_disagreeing_with_choice_is_refused(system
 
 def test_kernel_review_policy_disagreeing_with_choice_is_refused(system):
     console, _, ids = system
-    from src.review_policy_v1 import CONTRACT as POLICY
+    from src.review.review_policy_v1 import CONTRACT as POLICY
     policy = {"contract": POLICY, "revision": 1, "primary": ids["first"], "assignments": []}
     with pytest.raises(ConsoleError) as error:
         _kernel(console, ids, "Policy", named_reviewers=[], review_policy=policy,
@@ -113,7 +113,7 @@ def test_kernel_review_policy_disagreeing_with_choice_is_refused(system):
 
 def test_kernel_review_policy_agreeing_with_choice_stores_chosen(system):
     console, _, ids = system
-    from src.review_policy_v1 import CONTRACT as POLICY
+    from src.review.review_policy_v1 import CONTRACT as POLICY
     policy = {"contract": POLICY, "revision": 1, "primary": ids["first"], "assignments": []}
     sid = _kernel(console, ids, "Policy eens", named_reviewers=[], review_policy=policy,
                   review_choice={"option": "one_other", "four_eyes_required": False,
@@ -123,7 +123,7 @@ def test_kernel_review_policy_agreeing_with_choice_stores_chosen(system):
 
 def test_kernel_review_policy_without_choice_stores_no_configuration(system):
     console, _, ids = system
-    from src.review_policy_v1 import CONTRACT as POLICY
+    from src.review.review_policy_v1 import CONTRACT as POLICY
     policy = {"contract": POLICY, "revision": 1, "primary": ids["first"], "assignments": []}
     sid = _kernel(console, ids, "Policy zonder keuze", named_reviewers=[], review_policy=policy)
     assert "review_configuration" not in console._envelope(sid)
@@ -256,8 +256,8 @@ def test_http_form_two_people_need_an_explicit_four_eyes_answer(system, option, 
 
 
 def test_form_choice_for_one_reviewer_keeps_content_four_eyes():
-    from src.four_eyes_v1 import requires_four_eyes
-    from src.review_policy_v1 import CONTRACT as POLICY
+    from src.review.four_eyes_v1 import requires_four_eyes
+    from src.review.review_policy_v1 import CONTRACT as POLICY
     single = {"contract": POLICY, "revision": 1, "primary": "a", "assignments": []}
     # A one-reviewer policy no longer switches off content-bound four eyes.
     assert requires_four_eyes({"confirmed_object_type": "exception", "metadata": {"review_policy": single}}) is True
@@ -317,7 +317,7 @@ def test_http_non_legacy_mode_disagreeing_with_choice_is_refused(system, *, prod
 def test_review_overview_shows_configuration_and_source(system):
     console, _, ids = system
     _kernel(console, ids, "Zichtbaar")
-    from src.review_participation_ui_v1 import roster
+    from src.review.review_participation_ui_v1 import roster
     html = roster(console, console.list_envelopes()[0])
     assert "Reviewkeuze: één andere reviewer" in html
     assert "bron: standaard voor bestaande regels (legacy_default)" in html
@@ -325,8 +325,8 @@ def test_review_overview_shows_configuration_and_source(system):
 
 def test_kernel_review_policy_without_choice_marks_policy_mapping_visibly(system):
     console, _, ids = system
-    from src.review_policy_v1 import CONTRACT as POLICY
-    from src.review_participation_ui_v1 import roster
+    from src.review.review_policy_v1 import CONTRACT as POLICY
+    from src.review.review_participation_ui_v1 import roster
     policy = {"contract": POLICY, "revision": 1, "primary": ids["first"], "assignments": []}
     receipt = console.receive_source(actor_id=ids["uploader"], ingest_kind="new", title="Markering", version="1.0",
                                      date="2026-10-15", live_url="", class_="richtlijn", family="Configuratie",
@@ -348,7 +348,7 @@ def test_chosen_and_legacy_default_carry_no_policy_mapping_marker(system):
 
 def test_reader_who_is_optional_policy_participant_is_refused(system):
     console, _, ids = system
-    from src.review_policy_v1 import CONTRACT as POLICY
+    from src.review.review_policy_v1 import CONTRACT as POLICY
     policy = {"contract": POLICY, "revision": 1, "primary": ids["first"],
               "assignments": [{"reviewer_id": ids["reader"], "participation": "optional"}]}
     with pytest.raises(ConsoleError) as error:
@@ -416,7 +416,7 @@ def test_legacy_document_with_two_reviewers_stays_valid(system):
 @pytest.mark.parametrize(("uploader_required", "four_eyes"), [(True, False), (False, True)])
 def test_policy_four_eyes_must_match_choice(system, uploader_required, four_eyes):
     console, _, ids = system
-    from src.review_policy_v1 import CONTRACT as POLICY
+    from src.review.review_policy_v1 import CONTRACT as POLICY
     if uploader_required:
         policy = {"contract": POLICY, "revision": 1, "primary": ids["uploader"],
                   "assignments": [{"reviewer_id": ids["first"], "participation": "required"}]}
@@ -432,7 +432,7 @@ def test_policy_four_eyes_must_match_choice(system, uploader_required, four_eyes
 
 def test_policy_uploader_required_plus_one_other_accepts_four_eyes(system):
     console, _, ids = system
-    from src.review_policy_v1 import CONTRACT as POLICY
+    from src.review.review_policy_v1 import CONTRACT as POLICY
     policy = {"contract": POLICY, "revision": 1, "primary": ids["uploader"],
               "assignments": [{"reviewer_id": ids["first"], "participation": "required"}]}
     sid = _kernel(console, ids, "Vier ogen eens", named_reviewers=[], review_policy=policy,
@@ -453,7 +453,7 @@ def test_legacy_default_runs_validation_before_any_write(system, monkeypatch):
 
 
 def _uploader_plus_two(ids):
-    from src.review_policy_v1 import CONTRACT as POLICY
+    from src.review.review_policy_v1 import CONTRACT as POLICY
     return {"contract": POLICY, "revision": 1, "primary": ids["uploader"],
             "assignments": [{"reviewer_id": ids["first"], "participation": "required"},
                             {"reviewer_id": ids["second"], "participation": "required"}]}
@@ -484,7 +484,7 @@ def _uploader_sole(console, ids):
 def test_uploader_sole_overview_shows_uploader_as_reviewer(system):
     # 2b3-2: met uploader_sole en lege named_reviewers MOET het overzicht de uploader tonen.
     console, _, ids = system
-    from src.review_participation_ui_v1 import participation_choices, roster
+    from src.review.review_participation_ui_v1 import participation_choices, roster
     envelope = console._envelope(_uploader_sole(console, ids))
     html = roster(console, envelope)
     assert "Toegewezen: Onderzoeker" in html

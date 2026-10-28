@@ -18,7 +18,7 @@ from src.compiled_knowledge_v1 import (
     compiled_knowledge_inputs,
 )
 from src.g2_source_store import build_g2_locator
-from src.llm_provider_v1 import (
+from src.vorming.llm_provider_v1 import (
     LLM_API_KEY_ENV,
     LLM_MODEL_ENV,
     load_llm_provider_config,
@@ -46,10 +46,10 @@ def test_active_llm_runtime_has_no_capability_specific_provider_keys_or_models()
     active = "\n".join(
         (ROOT / path).read_text(encoding="utf-8")
         for path in (
-            "src/llm_provider_v1.py",
-            "src/semantic_safety_app_v1.py",
-            "src/audit_semantic_safety_v1.py",
-            "src/pre_review_semantic_v1.py",
+            "src/vorming/llm_provider_v1.py",
+            "src/settings/semantic_safety_app_v1.py",
+            "src/settings/audit_semantic_safety_v1.py",
+            "src/vorming/pre_review_semantic_v1.py",
             "src/console_asgi.py",
             "src/workflows/workflow_remaining_cutover_v1.py",
             "src/compiled_knowledge_v1.py",

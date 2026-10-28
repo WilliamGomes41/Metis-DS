@@ -12,9 +12,9 @@ import json
 from copy import deepcopy
 from pathlib import Path
 
-from src.bounded_formation_v1 import execute, full_span
-from src.bounded_model_call_v1 import ModelCallLimits
-from src.semantic_passage_v1 import semantic_source_blocks
+from src.vorming.bounded_formation_v1 import execute, full_span
+from src.vorming.bounded_model_call_v1 import ModelCallLimits
+from src.vorming.semantic_passage_v1 import semantic_source_blocks
 from tests.test_recommendation_context_v3 import source
 
 REFERENCE = json.loads((Path(__file__).parent/'fixtures/smetten-reference.json').read_text())
@@ -45,8 +45,8 @@ def test_smetten_recommendation_at_source_task_43_is_planned_first_without_losin
 
 
 def test_inventory_is_not_heading_only_or_automatic_table_admission_and_keeps_context():
-    from src.bounded_formation_v1 import tasks_for
-    from src.recommendation_task_plan_v1 import build_plan, remaining_tasks
+    from src.vorming.bounded_formation_v1 import tasks_for
+    from src.vorming.recommendation_task_plan_v1 import build_plan, remaining_tasks
     texts = [('Een beschrijving van de werkwijze.',['Achtergrond']),
              ('Bij een natte huid:',['Behandeling']),
              ('Overweeg maatregelen uit Tabel 1.',['Behandeling']),
@@ -69,8 +69,8 @@ def test_inventory_is_not_heading_only_or_automatic_table_admission_and_keeps_co
 
 
 def test_pinned_plan_recovers_partial_task_with_old_selection_as_context():
-    from src.bounded_formation_v1 import tasks_for
-    from src.recommendation_task_plan_v1 import build_plan, remaining_tasks
+    from src.vorming.bounded_formation_v1 import tasks_for
+    from src.vorming.recommendation_task_plan_v1 import build_plan, remaining_tasks
     blocks,_ = inputs([('Gebruik geen zalf.',['Advies']),('Controleer de huid.',['Advies'])])
     plan = build_plan(tasks_for(blocks,blocks),blocks,blocks)
     pending = [{'span':full_span(blocks[1])}]
@@ -83,9 +83,9 @@ def test_pinned_plan_recovers_partial_task_with_old_selection_as_context():
 def test_plan_commit_is_atomic_first_writer_wins_and_ref_detects_loss(tmp_path, production_console):
     import pytest
     from concurrent.futures import ThreadPoolExecutor
-    from src.bounded_formation_v1 import tasks_for
-    from src.recommendation_task_plan_v1 import build_plan
-    from src.semantic_replay_v1 import stable_json_hash
+    from src.vorming.bounded_formation_v1 import tasks_for
+    from src.vorming.recommendation_task_plan_v1 import build_plan
+    from src.vorming.semantic_replay_v1 import stable_json_hash
     from src.workflows.formation_task_store_v1 import WorkflowDocumentStoreError
     from tests.test_formation_task_store_postgres import prepared, checkpoint_context
     console,envelope,data = prepared(tmp_path,production_console)
@@ -120,8 +120,8 @@ def test_plan_commit_is_atomic_first_writer_wins_and_ref_detects_loss(tmp_path, 
 def test_native_resume_keeps_pinned_order_and_completed_work_when_local_grouping_changes(tmp_path,production_console,monkeypatch):
     import pytest
     from src.operations_console_v1 import ConsoleError
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-    from src.source_bound_fields_v3 import MODE
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.vorming.source_bound_fields_v3 import MODE
     from src.workflows.formation_task_store_v1 import FormationTaskStore
     from tests.production_support import restart_production
     from tests.test_d5_4_review_interaction_evidence import _system
@@ -165,7 +165,7 @@ def test_native_resume_keeps_pinned_order_and_completed_work_when_local_grouping
     bind(restarted)
     def forbidden(*args,**kwargs):
         raise AssertionError('Resume must read the durable plan instead of regrouping')
-    monkeypatch.setattr('src.bounded_formation_v1.tasks_for',forbidden)
+    monkeypatch.setattr('src.vorming.bounded_formation_v1.tasks_for',forbidden)
     following,_ = restarted.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id='resume',
         expected_revision=restarted.objects_revision(sid))
     restarted.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=following)
@@ -177,7 +177,7 @@ def test_native_resume_keeps_pinned_order_and_completed_work_when_local_grouping
     assert diagnostic['task_plan'] == original
     assert diagnostic['provider_evidence']['task_plan_summary']['possible_recommendation_count'] == 1
     assert diagnostic['provider_evidence']['task_plan_summary']['selected_recommendation_count'] == 2  # own attempt only
-    from src.processing_evidence_export_v1 import processing_evidence_tables
+    from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
     tables,_ = processing_evidence_tables(snapshot_id=sid,revision=restarted.objects_revision(sid),
         objects=restarted.snapshot_objects(sid),envelope=final,
         diagnostic_reader=FormationTaskStore(restarted.workflow_document_store).diagnostic,
@@ -190,9 +190,9 @@ def test_native_resume_keeps_pinned_order_and_completed_work_when_local_grouping
 def test_corrupt_plan_and_stale_writer_cannot_start_or_replace_planning(tmp_path,production_console):
     import pytest
     from src.operations_console_v1 import ConsoleError
-    from src.bounded_formation_v1 import tasks_for
-    from src.recommendation_task_plan_v1 import build_plan,remaining_tasks
-    from src.semantic_replay_v1 import stable_json_hash
+    from src.vorming.bounded_formation_v1 import tasks_for
+    from src.vorming.recommendation_task_plan_v1 import build_plan,remaining_tasks
+    from src.vorming.semantic_replay_v1 import stable_json_hash
     from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError,_json_text
     from tests.test_formation_task_store_postgres import prepared,checkpoint_context
     console,envelope,data = prepared(tmp_path,production_console)
@@ -228,8 +228,8 @@ def test_corrupt_plan_and_stale_writer_cannot_start_or_replace_planning(tmp_path
 
 
 def test_all_19_independent_smetten_reference_items_remain_possible_not_automatically_selected():
-    from src.bounded_formation_v1 import tasks_for
-    from src.recommendation_task_plan_v1 import build_plan,report
+    from src.vorming.bounded_formation_v1 import tasks_for
+    from src.vorming.recommendation_task_plan_v1 import build_plan,report
     known = [rec['text'] for module in REFERENCE['modules'] for rec in module['recs']]
     assert len(known) == 19
     blocks,_ = inputs([(f'{index}. {text}',['Aanbevelingen']) for index,text in enumerate(known,1)])

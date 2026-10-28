@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse
 
 from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
 from src.durable_publication_console_v1 import DurablePublicationConsole
-from src.document_status_v1 import derive_document_status
+from src.documents.document_status_v1 import derive_document_status
 
 from src.operations_console_app import (
     BLOCKER_LABELS,

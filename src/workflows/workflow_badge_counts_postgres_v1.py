@@ -11,10 +11,10 @@ from contextvars import ContextVar
 from typing import Any
 
 from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
-from src.document_status_v1 import derive_lifecycle_status
+from src.documents.document_status_v1 import derive_lifecycle_status
 from src.console_performance_v1 import measure_badges
 from src.publish_authorization_v1 import still_matches
-from src.four_eyes_v1 import HIGH_RISK_FIELDS
+from src.review.four_eyes_v1 import HIGH_RISK_FIELDS
 from src.operations_console_v1 import CAPTURED, PRE_REVIEW_BLOCKED, ConsoleError
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
 from src.workflows.workflow_documents_cutover_v1 import _DOCUMENT_CARD_COLUMNS, _document_cards_from_rows
@@ -435,8 +435,8 @@ class _PostgresBadgeCountsMixin:
         current durable state independently. No publication gate is evaluated
         merely to display the review overview's lifecycle label.
         """
-        from src.document_status_ui_v1 import current_document_lifecycle_status
-        from src.review_workboard_v1 import ReviewWorkInputs, review_work_item
+        from src.documents.document_status_ui_v1 import current_document_lifecycle_status
+        from src.review.review_workboard_v1 import ReviewWorkInputs, review_work_item
 
         # SQL aggregates remain presentation inputs. Content-duty authority is
         # recomputed from the same domain projection for every assigned document.
@@ -491,7 +491,7 @@ class _PostgresBadgeCountsMixin:
         full publication readiness and source verification remain on their
         existing authoritative command/detail paths.
         """
-        from src.review_workboard_v1 import ReviewWorkInputs, review_work_item, review_workboard_items
+        from src.review.review_workboard_v1 import ReviewWorkInputs, review_work_item, review_workboard_items
         try:
             summaries = self.review_workboard_summaries(account["account_id"], navigation_only=True)
             releases = self._canonical_list_release_rows(list(summaries))

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api_access_v1 import PostgresApiAccessStore
+from src.settings.api_access_v1 import PostgresApiAccessStore
 from tests.test_api_access_lifecycle_v1 import _provision
 
 

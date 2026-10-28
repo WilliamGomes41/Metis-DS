@@ -16,7 +16,7 @@ RUN python -m venv /opt/docling \
 # View check (#807): the same pinned Playwright as CI with its headless Chromium,
 # installed at build time; runtime never downloads. npm is removed afterwards.
 # Chromium's font packages are skipped: the Docling render-font inventory
-# (src/docling_render_fonts_v1.py) MUST stay identical, so the build fails if
+# (src/vorming/docling_render_fonts_v1.py) MUST stay identical, so the build fails if
 # any file under its font roots changes.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
 RUN fonts() { find /usr/share/fonts /usr/local/share/fonts /usr/share/texmf/fonts /usr/X11R6/lib/X11/fonts \
@@ -39,7 +39,8 @@ RUN fonts() { find /usr/share/fonts /usr/local/share/fonts /usr/share/texmf/font
 ENV METIS_PLAYWRIGHT_MODULE=/opt/metis-browser/node_modules/playwright \
     METIS_BROWSER_EXECUTABLE=/opt/metis-browser/chrome-headless-shell
 COPY scripts/prepare_docling_models.py /app/scripts/
-COPY src/__init__.py src/docling_contract_v1.py src/docling_render_fonts_v1.py /app/src/
+COPY src/__init__.py /app/src/__init__.py
+COPY src/vorming/__init__.py src/vorming/docling_contract_v1.py src/vorming/docling_render_fonts_v1.py /app/src/vorming/
 RUN /opt/docling/bin/python scripts/prepare_docling_models.py /opt/docling-models
 COPY src /app/src
 COPY scripts /app/scripts

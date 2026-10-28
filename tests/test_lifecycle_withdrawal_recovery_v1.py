@@ -19,7 +19,7 @@ import shutil
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api_access_v1 import PostgresApiAccessStore
+from src.settings.api_access_v1 import PostgresApiAccessStore
 from src.audit_retention_v1 import AuditRetentionService
 from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
 from tests.production_support import application_for
@@ -97,8 +97,8 @@ def _ingest(console, accounts, title, version, prior=None):
 def _complete_review_http(console, accounts, receipt):
     """Human actions traverse rendered forms and installed HTTP command routes."""
     import re
-    from src.passage_register_v1 import passage_register_of
-    from src.review_disposition_v1 import definitive_review_disposition
+    from src.vorming.passage_register_v1 import passage_register_of
+    from src.review.review_disposition_v1 import definitive_review_disposition
     from src.operations_console_v1 import review_lane
     sid = receipt["snapshot_id"]
     reviewer = _client(console, accounts["reviewer"]["username"])

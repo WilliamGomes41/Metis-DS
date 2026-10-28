@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.retrieval.answerability_gate_v1 import evaluate_answerability
-from src.four_eyes_v1 import requires_four_eyes
+from src.review.four_eyes_v1 import requires_four_eyes
 from src.integrity_kernel import compute_canonical_object_hash
 from src.object_taxonomy_v1 import is_advice_weight, published_object_type
 from src.object_taxonomy_v1 import looks_like_structural_heading
@@ -620,7 +620,7 @@ def test_human_can_reclassify_heading_that_is_advice_to_slow(tmp_path: Path, *, 
         f"/review?document={receipt['snapshot_id']}&task=individual"
     ).text
     assert heading["object_id"] not in html
-    from src.knowledge_path_v1 import content_reviewable
+    from src.review.knowledge_path_v1 import content_reviewable
     assert content_reviewable(refreshed) is False
     fast = re.search(r'class="review-lane-fast".*?</section>', html, flags=re.S)
     if fast:

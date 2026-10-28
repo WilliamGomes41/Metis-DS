@@ -7,7 +7,7 @@ from copy import deepcopy
 import fitz
 import pytest
 
-from src.decision_graph_v1 import graph_issues
+from src.vorming.decision_graph_v1 import graph_issues
 from tests.test_decision_graph_chain import _console, _accounts, _ingest_boom, policy
 
 

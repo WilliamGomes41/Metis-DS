@@ -119,9 +119,9 @@ async def _login(client: httpx.AsyncClient, username: str, password: str) -> Non
 
 
 def test_ingest_limits_module_maps_to_beschikbaarheid() -> None:
-    item = _load_preflight().classify_paths(["src/ingest_limits_v1.py"])["beschikbaarheid"]
+    item = _load_preflight().classify_paths(["src/ingest/ingest_limits_v1.py"])["beschikbaarheid"]
     assert item["status"] == "required"
-    assert "src/ingest_limits_v1.py" in item["paths"]
+    assert "src/ingest/ingest_limits_v1.py" in item["paths"]
 
 
 def test_ingest_work_does_not_block_event_loop(tmp_path: Path, *, production_app, production_console) -> None:

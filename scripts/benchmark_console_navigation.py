@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from src.review_workboard_v1 import review_work_item
+from src.review.review_workboard_v1 import review_work_item
 from tests.test_console_navigation_performance import NavigationProbe
 
 

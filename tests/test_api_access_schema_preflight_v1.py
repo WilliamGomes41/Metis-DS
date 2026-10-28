@@ -2,7 +2,7 @@ import copy
 
 import pytest
 
-from src.api_access_v1 import (
+from src.settings.api_access_v1 import (
     ApiAccessStoreError, NULLABLE_COLUMNS, REQUIRED_CHECKS, REQUIRED_COLUMNS,
     REQUIRED_DEFAULTS,
     REQUIRED_KEYS, PostgresApiAccessStore,

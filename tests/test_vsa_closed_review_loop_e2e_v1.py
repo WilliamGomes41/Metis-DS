@@ -14,19 +14,19 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
+from src.vorming.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
 from src.operations_console_v1 import CAPTURED
-from src.passage_register_v1 import passage_register_of
-from src.pre_review_semantic_v1 import (
+from src.vorming.passage_register_v1 import passage_register_of
+from src.vorming.pre_review_semantic_v1 import (
     PASSAGE_FORMATION_MODE_ENV,
     SEMANTIC_MODE,
     bind_pre_review_semantic_processing,
 )
-from src.proportionate_review_v1 import ProportionateReviewConsole, normal_risk_batch_queue
+from src.review.proportionate_review_v1 import ProportionateReviewConsole, normal_risk_batch_queue
 from src.publication_readiness_v1 import SOURCE_PASSAGE_REVIEW_INCOMPLETE, source_passage_closure
-from src.review_closure_v1 import ReviewClosureConsole
-from src.review_cockpit_v1 import confirmable_proposed_type
-from src.review_workboard_v1 import review_work_item
+from src.review.review_closure_v1 import ReviewClosureConsole
+from src.review.review_cockpit_v1 import confirmable_proposed_type
+from src.review.review_workboard_v1 import review_work_item
 
 
 class _QueueConsole(ProportionateReviewConsole):

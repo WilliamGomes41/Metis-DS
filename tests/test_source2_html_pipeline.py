@@ -6,8 +6,8 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 import pytest
 
-from src.extract_html_v1 import extract, validate as validate_raw
-from src.semantic_transform_generic_v1 import transform, validate as validate_objects
+from src.vorming.extract_html_v1 import extract, validate as validate_raw
+from src.vorming.semantic_transform_generic_v1 import transform, validate as validate_objects
 from src.prepublication_gate_v3 import evaluate as prepublish
 
 ROOT = Path(__file__).resolve().parents[1]

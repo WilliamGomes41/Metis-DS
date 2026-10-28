@@ -87,7 +87,7 @@ def test_http_source_selection_has_bounded_document_reads(postgres_selection, mo
 @pytest.mark.parametrize('review_client', [None, 'retained'], indirect=True)
 def test_http_output_matches_unscoped_read_and_next_request_is_fresh(postgres_selection, monkeypatch):
     from uuid import UUID
-    import src.source_selection_ui_v1 as ui
+    import src.vorming.source_selection_ui_v1 as ui
     console, client, sid, durable, calls = postgres_selection
     durable['envelope']['semantic_replay']['provider_evidence']['diagnostic_fixture'] = []
     _persist(console, durable)
@@ -124,7 +124,7 @@ def test_http_output_matches_unscoped_read_and_next_request_is_fresh(postgres_se
 def test_overlapping_http_reads_are_isolated_and_exceptions_clear_scope(postgres_selection, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Event
-    import src.source_selection_ui_v1 as ui
+    import src.vorming.source_selection_ui_v1 as ui
     from src.operations_console_v1 import ConsoleError
     console, client, sid, durable, calls = postgres_selection
     durable['envelope']['semantic_replay']['provider_evidence']['diagnostic_fixture'] = []

@@ -8,10 +8,10 @@
 """
 from copy import deepcopy
 import pytest
-from src.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal, SemanticPassageError
+from src.vorming.semantic_passage_v1 import semantic_source_blocks, semantic_units_from_proposal, SemanticPassageError
 from tests.test_recommendation_context_v3 import prepare, source
 from tests.test_d3_2_recommendation_semantics_proposal import _fragment
-from src.source_bound_fields_v3 import FIELDS
+from src.vorming.source_bound_fields_v3 import FIELDS
 
 CORE = 'Gebruik geen zalf.'
 
@@ -132,7 +132,7 @@ def test_explicit_trailing_stamp_cannot_hide_another_strength(separator, version
 @pytest.mark.parametrize('version', ['v2', 'v3'])
 @pytest.mark.parametrize('label_after_selection', [False, True])
 def test_standalone_stamp_binds_only_after_complete_multiblock_selection(version, label_after_selection):
-    from src.pre_review_semantic_v1 import _candidate_fragments
+    from src.vorming.pre_review_semantic_v1 import _candidate_fragments
     fragments, _, proposal = case()
     core = fragments[-1]
     tail = _fragment('tail', 'Bij deze patiënten.', section_path=['Aanbevelingen'])
@@ -166,13 +166,13 @@ def test_compact_conflict_is_quarantined_by_real_formation(separator):
             strength_evidence={**obj['spans'][0], 'literal': 'Sterk – tegen'})
     _, rows, obj, _ = prepare(CORE, fragments=source(text), mutate=explicit, allow_empty=True)
     assert obj is None
-    from src.source_accountability_v1 import evidence_of
+    from src.vorming.source_accountability_v1 import evidence_of
     assert any(CORE in (evidence_of(row).get('text') or '') for row in rows)
 
 
 def test_complete_selection_boundary_is_rechecked_without_rewriting_candidate():
-    from src.semantic_transform_generic_v1 import transform
-    from src.admission_gate_v1 import apply_admission_gate
+    from src.vorming.semantic_transform_generic_v1 import transform
+    from src.vorming.admission_gate_v1 import apply_admission_gate
     tail = 'Bij deze patiënten.'
     label = 'Sterk – tegen'
     fragments = [_fragment('core', CORE, section_path=['Aanbevelingen']),
@@ -199,7 +199,7 @@ def test_complete_selection_boundary_is_rechecked_without_rewriting_candidate():
     assert (spec, rows) == original
     _, rejected_rows, rejected, _ = prepare(CORE, fragments=changed, mutate=explicit, allow_empty=True)
     assert rejected is None
-    from src.source_accountability_v1 import evidence_of
+    from src.vorming.source_accountability_v1 import evidence_of
     assert any(CORE in (evidence_of(row).get('text') or '') for row in rejected_rows)
 
 
@@ -216,8 +216,8 @@ def test_heading_after_b_and_closed_heading_do_not_bind():
 
 @pytest.mark.parametrize('ancillary_metadata', [False, True])
 def test_new_binding_is_rechecked_at_transform_and_admission(ancillary_metadata):
-    from src.semantic_transform_generic_v1 import transform
-    from src.admission_gate_v1 import apply_admission_gate
+    from src.vorming.semantic_transform_generic_v1 import transform
+    from src.vorming.admission_gate_v1 import apply_admission_gate
     fragments = source(CORE + ' Sterk – tegen')
     spec, rows, obj, _ = prepare(CORE + ' Sterk – tegen', stamp='Sterk – tegen', fragments=fragments)
     manifest = {'canonical_source': obj['source']}
@@ -240,9 +240,9 @@ def test_new_binding_is_rechecked_at_transform_and_admission(ancillary_metadata)
 def test_console_persists_independence_quarantine_and_failed_replacement(tmp_path, *, production_console):
     import json
     from src.operations_console_v1 import ConsoleError
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV
-    from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
-    from src.source_bound_fields_v3 import MODE
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing, PASSAGE_FORMATION_MODE_ENV
+    from src.vorming.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
+    from src.vorming.source_bound_fields_v3 import MODE
     from tests.test_recommendation_context_v3 import response_for
     mode = ['valid']
     calls = []
@@ -286,13 +286,13 @@ def test_console_persists_independence_quarantine_and_failed_replacement(tmp_pat
     mode[0] = 'borrowed'; env[LLM_MODEL_ENV] = 'a07-borrowed'
     c.reextract_unpublished(actor_id=author['account_id'], snapshot_id=sid)
     quarantined = c.snapshot_objects(sid, include_blocked=True)
-    from src.revision_workflow import current_revisions
+    from src.review.revision_workflow import current_revisions
     current = current_revisions(quarantined, snapshot_id=sid)
     assert not any((o.get('metadata') or {}).get('admission', {}).get('gate_result') == 'allowed' and CORE in (o.get('content') or {}).get('clean_text', '') and (o.get('governance') or {}).get('validation_status') != 'superseded' for o in current)
-    from src.source_accountability_v1 import evidence_of
+    from src.vorming.source_accountability_v1 import evidence_of
     assert any(CORE in (evidence_of(o).get('text') or '') for o in quarantined)
     assert 'recommendation_strength_evidence_not_applicable' in json.dumps(c._envelope(sid))
-    from src.processing_evidence_export_v1 import processing_evidence_tables
+    from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
     tables, _ = processing_evidence_tables(snapshot_id=sid, revision='test',
         envelope=c._envelope(sid), objects=quarantined)
     findings = [r['finding']['strength_applicability'] for r in tables['formation_findings']
@@ -396,8 +396,8 @@ def test_consistent_stamp_sequence_remains_usable_without_binding_prose(labels):
 
 @pytest.mark.parametrize('version', [None, '', 'recommendation-semantics-evidence-v999'])
 def test_unknown_evidence_version_cannot_skip_transform_or_admission(version):
-    from src.semantic_transform_generic_v1 import transform
-    from src.admission_gate_v1 import apply_admission_gate
+    from src.vorming.semantic_transform_generic_v1 import transform
+    from src.vorming.admission_gate_v1 import apply_admission_gate
     spec, rows, obj, fragments = prepare(CORE + ' Sterk – tegen', stamp='Sterk – tegen')
     target = next(o for o in spec['objects'] if o.get('proposed_recommendation_semantics'))
     target['proposed_recommendation_semantics']['strength'] = 'weak'
@@ -416,8 +416,8 @@ def test_unknown_evidence_version_cannot_skip_transform_or_admission(version):
 
 @pytest.mark.parametrize('ancillary_metadata', [False, True])
 def test_historical_v1_evidence_is_preserved_at_transform_and_admission(ancillary_metadata):
-    from src.semantic_transform_generic_v1 import transform
-    from src.admission_gate_v1 import apply_admission_gate
+    from src.vorming.semantic_transform_generic_v1 import transform
+    from src.vorming.admission_gate_v1 import apply_admission_gate
     spec, _, obj, fragments = prepare(CORE + ' Sterk – tegen', stamp='Sterk – tegen')
     target = next(o for o in spec['objects'] if o.get('proposed_recommendation_semantics'))
     target['recommendation_semantics_evidence']['version'] = 'recommendation-semantics-evidence-v1'
@@ -479,7 +479,7 @@ def test_non_applicable_label_is_not_uncertainty():
 
 
 def test_ambiguous_strength_literal_is_recorded_as_uncertain():
-    from src.source_evidence_resolution_v1 import resolve_proposal_evidence
+    from src.vorming.source_evidence_resolution_v1 import resolve_proposal_evidence
     fragments, candidates, p = case(own='Sterk – tegen; Sterk – tegen')
     block = semantic_source_blocks(candidates)[-1]
     p['objects'][0]['recommendation_semantics'].update(strength='strong', strength_status='explicit',
@@ -491,8 +491,8 @@ def test_ambiguous_strength_literal_is_recorded_as_uncertain():
 
 @pytest.mark.parametrize('ancillary_metadata', [False, True])
 def test_whole_heading_scope_at_real_materialisation_transform_and_admission(ancillary_metadata):
-    from src.semantic_transform_generic_v1 import transform
-    from src.admission_gate_v1 import apply_admission_gate
+    from src.vorming.semantic_transform_generic_v1 import transform
+    from src.vorming.admission_gate_v1 import apply_admission_gate
     fragments, _, _ = case(heading='Sterke aanbeveling')
     tail = _fragment('tail', 'Bespreek alternatieven.', section_path=['Aanbevelingen'])
     fragments.append(tail)
@@ -549,7 +549,7 @@ def test_combined_selection_cannot_borrow_label_before_own_core(version):
 
 @pytest.mark.parametrize('change', ['strength', 'evidence_version'])
 def test_admission_rejects_semantics_different_from_validated_revision(change):
-    from src.admission_gate_v1 import admit_candidate
+    from src.vorming.admission_gate_v1 import admit_candidate
     _, rows, obj, fragments = prepare('Gebruik geen zalf. Sterk – tegen', stamp='Sterk – tegen')
     candidate = deepcopy(obj['metadata']['admission'])
     if change == 'strength':
@@ -563,7 +563,7 @@ def test_admission_rejects_semantics_different_from_validated_revision(change):
 
 
 def test_canonical_evidence_cannot_be_shadowed_by_legacy_root_field():
-    from src.admission_gate_v1 import apply_admission_gate
+    from src.vorming.admission_gate_v1 import apply_admission_gate
     _, rows, obj, fragments = prepare('Gebruik geen zalf. Sterk – tegen', stamp='Sterk – tegen')
     obj['proposed_recommendation_semantics']['strength'] = 'weak'
     obj['recommendation_semantics_evidence'] = {'version': 'recommendation-semantics-evidence-v1'}
@@ -576,7 +576,7 @@ def test_canonical_evidence_cannot_be_shadowed_by_legacy_root_field():
 def test_real_v2_provider_cannot_borrow_from_combined_selection():
     import json
     from tests.test_recommendation_context_v3 import response_for
-    from src.pre_review_semantic_v1 import semantic_spec_from_fragments
+    from src.vorming.pre_review_semantic_v1 import semantic_spec_from_fragments
     core = 'Voor verpleegkundigen: Gebruik geen zalf.'
     text = 'Vermijd behandeling A. Sterk – tegen ' + core
     fragments = source(text)

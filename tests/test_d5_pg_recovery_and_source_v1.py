@@ -15,7 +15,7 @@ import json
 import pytest
 
 from src.operations_console_v1 import ConsoleError
-from src.review_ledger import unregister_backend, verify_ledger
+from src.review.review_ledger import unregister_backend, verify_ledger
 from src.workflows.workflow_chain_recovery_v1 import backup_workflow_chain, restore_workflow_chain
 from tests.complete_workflow_support import complete_console, complete_postgres  # noqa: F401
 from tests.semantic_fixture_support import bind_fixture_selections
@@ -158,7 +158,7 @@ from pathlib import Path
 import sys
 import pytest
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
-from src.review_ledger import append_event
+from src.review.review_ledger import append_event
 from tests.complete_workflow_support import complete_console
 from tests.test_pg_console_without_disk_mirrors import CONSOLES, MirrorAccess
 root, sid, kind = Path(sys.argv[1]), sys.argv[2], sys.argv[3]

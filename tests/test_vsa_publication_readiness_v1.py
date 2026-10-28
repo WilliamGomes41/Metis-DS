@@ -14,8 +14,8 @@ from src.publication_readiness_v1 import (
     REVIEW_WORK_INCOMPLETE,
     publication_review_readiness,
 )
-from src.review_closure_v1 import ReviewClosureConsole
-from src.review_duty_v1 import FIRST_REVIEW, SECOND_REVIEW
+from src.review.review_closure_v1 import ReviewClosureConsole
+from src.review.review_duty_v1 import FIRST_REVIEW, SECOND_REVIEW
 
 
 def _duty(object_id: str, stage: str = FIRST_REVIEW) -> dict[str, str]:

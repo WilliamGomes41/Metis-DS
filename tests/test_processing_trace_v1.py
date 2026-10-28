@@ -10,7 +10,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from src.source_processing_dispatch_v1 import SourceProcessingDispatcher
+from src.vorming.source_processing_dispatch_v1 import SourceProcessingDispatcher
 from tests.test_source_dispatch_hardening import console, receive
 from tests.test_availability_repair import accounts, bind, provider, login
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
@@ -51,7 +51,7 @@ def test_http_origin_survives_restart_duplicate_and_read_only_export(console, tm
         assert console._envelope(sid) == before
     restarted = restart(console)
     assert restarted._envelope(sid)['processing_attempts'] == [attempt]
-    from src.processing_trace_v1 import processing_trace
+    from src.vorming.processing_trace_v1 import processing_trace
     assert processing_trace(restarted._envelope(sid))['attempts'][0]['origin_request_id'] == request_id
 
 
@@ -62,7 +62,7 @@ def restart(console):
 
 def test_checkpoint_restart_and_retry_reuses_exact_extraction(console, monkeypatch):
     from src.operations_console_v1 import ConsoleError
-    from src.processing_trace_v1 import processing_trace
+    from src.vorming.processing_trace_v1 import processing_trace
     actor, reviewer = accounts(console)
     sid = receive(console, actor, reviewer, 'reuse')
     def fail(*args):
@@ -145,8 +145,8 @@ def test_failed_checkpoint_rolls_back_without_success_observation(console, monke
 def test_two_runtimes_claim_once_and_trace_hides_claim_token(console):
     from concurrent.futures import ThreadPoolExecutor
     from threading import Barrier
-    from src.source_processing_dispatch_v1 import claim
-    from src.processing_trace_v1 import processing_trace
+    from src.vorming.source_processing_dispatch_v1 import claim
+    from src.vorming.processing_trace_v1 import processing_trace
     actor, reviewer = accounts(console)
     sid = receive(console, actor, reviewer, 'claims')
     attempt, _ = console.reserve_source_selection(actor_id=actor, snapshot_id=sid,
@@ -208,8 +208,8 @@ def _crash_worker(root, config, actor, sid, attempt, reached):
 def test_process_death_preserves_origin_and_checkpoint_then_authorized_retry(console, monkeypatch, *, production_app):
     import multiprocessing
     from datetime import timedelta
-    from src.processing_retry_v1 import expire_running, now
-    from src.processing_trace_v1 import processing_trace, processing_incident
+    from src.vorming.processing_retry_v1 import expire_running, now
+    from src.vorming.processing_trace_v1 import processing_trace, processing_incident
     actor, reviewer = accounts(console)
     sid = receive(console, actor, reviewer, 'crash')
     bind(console, provider)
@@ -263,9 +263,9 @@ def test_process_death_preserves_origin_and_checkpoint_then_authorized_retry(con
 
 def test_expired_diagnostic_read_is_nonmutating_and_late_writer_remains_fenced(console):
     from datetime import timedelta
-    from src.processing_retry_v1 import now
+    from src.vorming.processing_retry_v1 import now
     from src.operations_console_v1 import ConsoleError
-    from src.processing_trace_v1 import processing_trace, processing_incident
+    from src.vorming.processing_trace_v1 import processing_trace, processing_incident
     actor, reviewer = accounts(console)
     sid = receive(console, actor, reviewer, 'expired')
     attempt, _ = console.reserve_source_selection(actor_id=actor, snapshot_id=sid,
@@ -293,7 +293,7 @@ def recorded_attempt():
 
 
 def test_offline_projection_is_bounded_redacted_and_never_guesses_latest_attempt():
-    from src.processing_trace_v1 import processing_trace, processing_incident
+    from src.vorming.processing_trace_v1 import processing_trace, processing_incident
     attempt = recorded_attempt()
     attempt['diagnostic']['checkpoints'] *= 150
     envelope = {'snapshot_id':'snap-'+'d'*16+'-'+'e'*8, 'sha256':'b'*64,
@@ -317,7 +317,7 @@ def test_offline_projection_is_bounded_redacted_and_never_guesses_latest_attempt
 
 
 def test_matching_operational_observations_are_not_durable_commit_proof(monkeypatch):
-    from src.processing_trace_v1 import processing_trace, processing_incident, observe
+    from src.vorming.processing_trace_v1 import processing_trace, processing_incident, observe
     from src.request_diagnostics_v1 import _LOGGER
     attempt = recorded_attempt()
     trace = processing_trace({'snapshot_id':'snap-'+'d'*16+'-'+'e'*8,
@@ -341,7 +341,7 @@ def test_matching_operational_observations_are_not_durable_commit_proof(monkeypa
 def test_processing_only_cli_exports_redacted_trace_without_browser(tmp_path):
     import subprocess
     import sys
-    from src.processing_trace_v1 import processing_trace
+    from src.vorming.processing_trace_v1 import processing_trace
     trace = processing_trace({'processing_attempts':[recorded_attempt()]})
     trace['secret'] = 'private-content'
     source = tmp_path / 'processing.json'; source.write_text(json.dumps(trace))
@@ -359,7 +359,7 @@ def test_processing_only_cli_exports_redacted_trace_without_browser(tmp_path):
 def test_semantic_resume_trace_keeps_completed_candidate_and_targets_only_open_work(console, monkeypatch, *, production_app, production_console):
     from tests.test_recoverable_formation_v1 import system
     from tests.test_recommendation_coverage_v1 import FIRST, SECOND
-    from src.processing_trace_v1 import processing_trace
+    from src.vorming.processing_trace_v1 import processing_trace
     state, sid, actor, reviewer, calls, mode, make, bind_semantics = system(
         console.root, make_console=lambda: restart(console), production_console=production_console)
     before = state.snapshot_objects(sid)
@@ -430,7 +430,7 @@ def test_background_phases_do_not_reopen_finished_http_evidence(console, monkeyp
 
 
 def test_trace_exports_checkpoint_size_and_task_timings_without_text():
-    from src.processing_trace_v1 import processing_trace
+    from src.vorming.processing_trace_v1 import processing_trace
     attempt = recorded_attempt()
     attempt['diagnostic']['checkpoints'][0]['bytes'] = 52_000
     attempt['diagnostic']['formation_timings'] = [
@@ -449,7 +449,7 @@ def test_trace_exports_checkpoint_size_and_task_timings_without_text():
 
 
 def test_checkpoint_records_the_size_it_asked_to_persist():
-    from src.attempt_diagnostics_v1 import checkpoint
+    from src.vorming.attempt_diagnostics_v1 import checkpoint
     attempt = {}
     checkpoint(attempt, 'model_request', {'current_task': {'task_id': 'x'}})
     checkpoint(attempt, 'proposal_received', {'provider_evidence': {'tasks': ['y'] * 1000}})
@@ -458,7 +458,7 @@ def test_checkpoint_records_the_size_it_asked_to_persist():
 
 
 def test_cleaned_trace_keeps_planned_tasks_and_timings():
-    from src.processing_trace_v1 import processing_trace, clean_trace
+    from src.vorming.processing_trace_v1 import processing_trace, clean_trace
     attempt = recorded_attempt()
     attempt['diagnostic']['formation_timings'] = [{'task_id': 'f'*64, 'phase': 'initial', 'status': 'completed',
                                                    'index': 1, 'planned': 130, 'provider_seconds': 61.5}]

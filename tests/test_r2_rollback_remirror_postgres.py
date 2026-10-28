@@ -20,7 +20,7 @@ from contextlib import contextmanager
 
 import pytest
 
-from src.proportionate_review_v1 import _batch_type, normal_risk_batch_queue
+from src.review.proportionate_review_v1 import _batch_type, normal_risk_batch_queue
 from src.workflows import workflow_documents_cutover_v1 as documents_cutover
 from src.workflows import workflow_review_cutover_v1 as rc
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
@@ -74,7 +74,7 @@ def _state(console, sid):
 
 
 def _ledger_state_bytes(console):
-    from src.review_ledger import read_events
+    from src.review.review_ledger import read_events
     return _serialise(read_events(console._ledger_path))
 
 

@@ -33,13 +33,13 @@ from src.knowledge_relations_v1 import (
     confirmed_semantic_relations_for_serving,
     knowledge_relation_errors,
 )
-from src.recommendation_semantics_v1 import (
+from src.vorming.recommendation_semantics_v1 import (
     CONFIRMED_FIELD as CONFIRMED_RECOMMENDATION_SEMANTICS_FIELD,
     confirmed_recommendation_semantics_of,
     recommendation_semantics_errors,
 )
 from src.serving_relations_v1 import HISTORICAL_NON_SERVING_TYPES
-from src.source_context_review_v1 import links_of, literal_identity, role_of, CONTRACT
+from src.review.source_context_review_v1 import links_of, literal_identity, role_of, CONTRACT
 
 SEARCHABLE_TYPES = {
     "definition",
@@ -112,7 +112,7 @@ def publication_errors(envelope: dict[str, Any]) -> list[str]:
         errors.append("content_hash_missing")
     if not obj.get("object_version"):
         errors.append("object_version_missing")
-    from src.decision_graph_v1 import CONTRACT as GRAPH_CONTRACT
+    from src.vorming.decision_graph_v1 import CONTRACT as GRAPH_CONTRACT
     graph_object = (obj.get("metadata") or {}).get("decision_graph_contract") == GRAPH_CONTRACT
     if obj.get("object_type") not in SEARCHABLE_TYPES | NON_SEARCHABLE_TYPES and not graph_object:
         errors.append("unknown_object_type")
@@ -224,7 +224,7 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             # Decision content is served through the complete release graph,
             # never as a detached prose recommendation.
             continue
-        from src.source_accountability_v1 import is_source_record
+        from src.vorming.source_accountability_v1 import is_source_record
         if role_of(obj) or is_source_record(obj):
             blocked.append({"object_id": obj["object_id"], "errors": ["source_context_not_knowledge"]})
             continue
@@ -302,7 +302,7 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
         # Source-bound context is part of the exact reviewed canonical object,
         # just like reviewer-linked context. It must travel with its anchor to
         # the Product API; a source record is never published separately.
-        from src.source_bound_fields_v2 import CONTEXT_KEY, CONTEXT_ROLES, context_matches_target
+        from src.vorming.source_bound_fields_v2 import CONTEXT_KEY, CONTEXT_ROLES, context_matches_target
         bound_record = (obj.get("metadata") or {}).get(CONTEXT_KEY)
         bound_context = bound_record.get("entries", []) if isinstance(bound_record, dict) else []
         if CONTEXT_KEY in (obj.get("metadata") or {}) and (

@@ -8,8 +8,8 @@
 """
 from fastapi.testclient import TestClient
 
-from src.quality_metrics_app_v1 import capture
-from src.quality_metrics_v1 import build_report
+from src.settings.quality_metrics_app_v1 import capture
+from src.settings.quality_metrics_v1 import build_report
 from src.request_diagnostics_v1 import doc_ref
 from tests.test_d5_4_review_interaction_evidence import PASSWORD, _system
 
@@ -78,7 +78,7 @@ def test_settings_hub_channels_inzicht_beheer_and_uitleg(tmp_path, *, production
 def test_quality_projection_keeps_teller_noemer_and_shows_a_score_drop():
     """metrics: the chart projection passes the measured teller (direct) and noemer
     (first decisions) unchanged, and a later lower score MUST show as a drop."""
-    from src.insight_v1 import quality_projection
+    from src.settings.insight_v1 import quality_projection
 
     def report(as_of, direct, first):
         rate = direct / first if first else None
@@ -99,7 +99,7 @@ def test_quality_projection_keeps_teller_noemer_and_shows_a_score_drop():
 
 
 def test_documents_are_paged_and_searched_over_the_whole_authorized_list():
-    from src.insight_v1 import _documents_page as documents_page
+    from src.settings.insight_v1 import _documents_page as documents_page
 
     class Inputs:
         state = None

@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 from src.integrity_kernel import compute_canonical_object_hash
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
-from src.proportionate_review_v1 import (
+from src.review.proportionate_review_v1 import (
     ProportionateReviewConsole,
     install_proportionate_review_routes,
     normal_risk_batch_queue,
@@ -120,7 +120,7 @@ def test_real_human_reclassification_cannot_be_batch_overwritten(review_system):
 
 
 def test_real_get_pins_text_and_revision_together_and_preserves_conflict_selection(review_system, monkeypatch):
-    import src.review_passage_read_v1 as reads
+    import src.review.review_passage_read_v1 as reads
 
     console, client, sid, actor, ids = review_system
     original_read = reads.read_review_document
@@ -158,7 +158,7 @@ def test_real_get_pins_text_and_revision_together_and_preserves_conflict_selecti
     assert response.status_code == 409
     assert "data-stale-write-conflict" in response.text
     # A valid revision still invalidates the form and its old review binding.
-    from src.admission_gate_v1 import admission_of
+    from src.vorming.admission_gate_v1 import admission_of
     corrected = next(o for o in console.snapshot_objects(sid) if o['object_id'] == ids[0])
     assert admission_of(corrected)["gate_result"] in {"allowed", "blocked"}
     assert new_text in client.get('/review', params={'document':sid, 'object':ids[0]}).text
@@ -223,8 +223,8 @@ def test_http_batch_requires_the_displayed_revision(review_system):
 
 def test_two_thousand_objects_need_one_selection_and_confirmation_per_twenty(review_system, monkeypatch):
     from dataclasses import replace
-    import src.review_passage_read_v1 as reads
-    from src.proportionate_review_v1 import render_normal_risk_batch_panel
+    import src.review.review_passage_read_v1 as reads
+    from src.review.proportionate_review_v1 import render_normal_risk_batch_panel
 
     console, client, sid, actor, ids = review_system
     template = next(obj for obj in console.snapshot_objects(sid) if obj["object_id"] == ids[0])

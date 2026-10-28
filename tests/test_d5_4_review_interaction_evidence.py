@@ -17,12 +17,12 @@ import pytest
 from src.integrity_kernel import stable_hash, stamp_canonical_hashes
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.publish_authorization_v1 import tuple_record
-from src.review_interaction_v1 import (
+from src.review.review_interaction_v1 import (
     build_review_interaction_evidence,
     review_burden_projection,
     validate_review_interaction_identity,
 )
-from src.review_ledger import read_events
+from src.review.review_ledger import read_events
 
 
 PASSWORD = "d54-secret"

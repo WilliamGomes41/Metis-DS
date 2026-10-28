@@ -178,7 +178,7 @@ def _open_review_form(
 
 
 def test_review_form_get_embeds_snapshot_revision(tmp_path: Path, *, production_app, production_console) -> None:
-    from src.review_passage_read_v1 import PREFIX, resolve_review_revision
+    from src.review.review_passage_read_v1 import PREFIX, resolve_review_revision
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
@@ -410,7 +410,7 @@ def test_batch_confirm_carries_and_compares_form_revision(tmp_path: Path, *, pro
 
 def test_form_content_and_revision_are_co_read_not_separate_gets(tmp_path: Path, monkeypatch, *, production_app, production_console) -> None:
     """A commit after SQL capture must not change the captured form's pin."""
-    import src.review_passage_read_v1 as reads
+    import src.review.review_passage_read_v1 as reads
     from src.operations_console_v1 import ConsoleError
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)

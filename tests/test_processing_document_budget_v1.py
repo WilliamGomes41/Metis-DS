@@ -15,8 +15,8 @@ from datetime import timedelta
 import pytest
 
 from src.operations_console_v1 import ConsoleError
-from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
-from src.source_bound_fields_v3 import MODE
+from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+from src.vorming.source_bound_fields_v3 import MODE
 from tests.production_support import restart_production
 from tests.test_d5_4_review_interaction_evidence import _system
 from tests.test_recommendation_context_v3 import response_for
@@ -39,14 +39,14 @@ def document(tmp_path, production_console, monkeypatch, *, total=3, seconds=70, 
         ingest_kind='new',title='Documentbudget',version='1',date='2026-10-25',live_url='',class_='richtlijn',family='budget',
         named_reviewers=[users['reviewer_a']['account_id']])['snapshot_id']
     elapsed, calls = [0], []
-    from src import processing_retry_v1 as retry
+    from src.vorming import processing_retry_v1 as retry
     clock_start = retry.now()
     if virtual_clock:
         monkeypatch.setattr(retry, 'now', lambda: clock_start+timedelta(seconds=elapsed[0]))
-        monkeypatch.setattr('src.source_processing_dispatch_v1.now', retry.now)
-        monkeypatch.setattr('src.source_selection_v1.now', retry.now)
+        monkeypatch.setattr('src.vorming.source_processing_dispatch_v1.now', retry.now)
+        monkeypatch.setattr('src.vorming.source_selection_v1.now', retry.now)
         proxy = ClockProxy(time, elapsed)
-        for name in ('src.operations_console_v1.time','src.pre_review_semantic_v1.time','src.bounded_formation_v1.time'):
+        for name in ('src.operations_console_v1.time','src.vorming.pre_review_semantic_v1.time','src.vorming.bounded_formation_v1.time'):
             monkeypatch.setattr(name, proxy)
     monkeypatch.setenv('METIS_FORMATION_TASK_STORAGE','v1')
     monkeypatch.setenv('METIS_DOCUMENT_PROCESSING_BUDGET',feature)
@@ -106,7 +106,7 @@ def test_130_tasks_70_seconds_one_start_and_one_activation_across_workers(tmp_pa
             def forbidden(*args, **kwargs):
                 raise AssertionError('Existing source preparation must survive the worker restart')
             monkeypatch.setattr(console, '_extract', forbidden)
-            monkeypatch.setattr('src.source_reconstruction_v1._with_status', forbidden)
+            monkeypatch.setattr('src.vorming.source_reconstruction_v1._with_status', forbidden)
     else:
         pytest.fail('Document did not complete within its bounded number of workers')
     final = console._envelope(sid)
@@ -122,11 +122,11 @@ def test_130_tasks_70_seconds_one_start_and_one_activation_across_workers(tmp_pa
 @pytest.mark.parametrize('progress', [False, True])
 @pytest.mark.parametrize('path', ['discovery','execution'])
 def test_four_hour_boundary_stops_with_consistent_progress_accounting(tmp_path, production_console, monkeypatch, progress, path):
-    from src.source_processing_dispatch_v1 import pending, claim
-    from src.processing_retry_v1 import _retry_budget_attempts
+    from src.vorming.source_processing_dispatch_v1 import pending, claim
+    from src.vorming.processing_retry_v1 import _retry_budget_attempts
     console, actor, sid, attempt, calls, bind, elapsed = document(tmp_path,production_console,monkeypatch)
     if progress:
-        monkeypatch.setattr('src.source_processing_dispatch_v1.WORKER_SECONDS',0)
+        monkeypatch.setattr('src.vorming.source_processing_dispatch_v1.WORKER_SECONDS',0)
         console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=attempt)
     claimed = claim(console,snapshot_id=sid,attempt_id=attempt['attempt_id']) if path == 'execution' else None
     elapsed[0] = 14401
@@ -164,11 +164,11 @@ def test_worker_hard_limit_requeues_same_document_without_renewing_authorization
 
 def test_call_reservations_survive_lost_worker_and_concurrent_last_slot(tmp_path, production_console, monkeypatch):
     from concurrent.futures import ThreadPoolExecutor
-    from src.source_processing_dispatch_v1 import claim,pending
-    from src.formation_checkpoint_v1 import TaskCheckpointWriter
-    from src.processing_retry_v1 import now
+    from src.vorming.source_processing_dispatch_v1 import claim,pending
+    from src.vorming.formation_checkpoint_v1 import TaskCheckpointWriter
+    from src.vorming.processing_retry_v1 import now
     console, actor, sid, attempt, calls, bind, elapsed = document(tmp_path,production_console,monkeypatch)
-    monkeypatch.setattr('src.source_processing_dispatch_v1.WORKER_SECONDS',0)
+    monkeypatch.setattr('src.vorming.source_processing_dispatch_v1.WORKER_SECONDS',0)
     console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=attempt)
     claimed = claim(console,snapshot_id=sid,attempt_id=attempt['attempt_id'])
     writer = TaskCheckpointWriter(console,sid,claimed)
@@ -223,10 +223,10 @@ def test_invalid_document_budget_rejected_before_model_work(tmp_path, production
 
 def test_disabling_new_admission_does_not_change_an_accepted_budget(tmp_path, production_console, monkeypatch):
     console, actor, sid, attempt, calls, bind, elapsed = document(tmp_path,production_console,monkeypatch)
-    monkeypatch.setattr('src.source_processing_dispatch_v1.WORKER_SECONDS',0)
+    monkeypatch.setattr('src.vorming.source_processing_dispatch_v1.WORKER_SECONDS',0)
     console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=attempt)
     monkeypatch.setenv('METIS_DOCUMENT_PROCESSING_BUDGET','off')
-    monkeypatch.setattr('src.source_processing_dispatch_v1.WORKER_SECONDS',240)
+    monkeypatch.setattr('src.vorming.source_processing_dispatch_v1.WORKER_SECONDS',240)
     console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=attempt)
     assert len(calls) == 3 and console._envelope(sid)['processing_attempts'][0]['state'] == 'succeeded'
     assert console._envelope(sid)['processing_attempts'][0]['expires_at'] == attempt['expires_at']
@@ -241,8 +241,8 @@ def test_legacy_start_keeps_900_and_1800_seconds(tmp_path, production_console, m
 
 
 def test_all_results_can_activate_without_new_call_when_call_quota_is_zero(tmp_path, production_console, monkeypatch):
-    from src.formation_checkpoint_v1 import TaskCheckpointWriter
-    from src.worker_handover_v1 import WorkerHandover
+    from src.vorming.formation_checkpoint_v1 import TaskCheckpointWriter
+    from src.vorming.worker_handover_v1 import WorkerHandover
     console, actor, sid, attempt, calls, bind, elapsed = document(tmp_path,production_console,monkeypatch)
     original = TaskCheckpointWriter.final_validation
     transferred = []
@@ -270,7 +270,7 @@ def test_all_results_can_activate_without_new_call_when_call_quota_is_zero(tmp_p
 @pytest.mark.parametrize('guard,code',[('authorization','researcher_role_required'),('configuration','processing_configuration_changed')])
 def test_new_worker_rechecks_authority_and_configuration(tmp_path, production_console, monkeypatch, guard, code):
     console, actor, sid, attempt, calls, bind, elapsed = document(tmp_path,production_console,monkeypatch)
-    monkeypatch.setattr('src.source_processing_dispatch_v1.WORKER_SECONDS',0)
+    monkeypatch.setattr('src.vorming.source_processing_dispatch_v1.WORKER_SECONDS',0)
     console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=attempt)
     with console.workflow_document_store._connect() as con:
         if guard == 'authorization':
@@ -314,8 +314,8 @@ def test_process_death_does_not_refund_an_uncertain_call_or_need_a_new_start(tmp
     import subprocess
     import sys
     from pathlib import Path
-    from src.source_processing_dispatch_v1 import pending
-    from src.processing_retry_v1 import now
+    from src.vorming.source_processing_dispatch_v1 import pending
+    from src.vorming.processing_retry_v1 import now
     console, actor, sid, attempt, calls, bind, elapsed = document(tmp_path,production_console,monkeypatch,virtual_clock=False)
     marker = tmp_path/'committed-document-task'
     command = [sys.executable,'-m','tests.formation_process_probe',str(console.root),console.workflow_document_store.config.dsn,
@@ -354,7 +354,7 @@ def test_process_death_does_not_refund_an_uncertain_call_or_need_a_new_start(tmp
 
 def test_document_worker_never_gets_more_than_thirty_minutes(tmp_path, production_console, monkeypatch):
     from datetime import datetime
-    from src.source_processing_dispatch_v1 import claim
+    from src.vorming.source_processing_dispatch_v1 import claim
     console, actor, sid, attempt, calls, bind, elapsed = document(tmp_path,production_console,monkeypatch,worker_limit=3600)
     claimed = claim(console,snapshot_id=sid,attempt_id=attempt['attempt_id'])
     dispatch = claimed['dispatch']

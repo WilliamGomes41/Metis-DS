@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.operations_console_v1 import ConsoleError
-from src.processing_retry_v1 import now
+from src.vorming.processing_retry_v1 import now
 from tests.test_availability_repair import accounts, bind, provider, installed_app, login, drain, state
 from tests.test_review_batch_atomic_postgres import _console
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
@@ -64,7 +64,7 @@ def test_restart_recovers_pending_sql_command_after_http_wake_failure_without_fi
     calls = []
     first = production_console(root=tmp_path / "first", processing_binder=bind_fixture_selections, azure=True, immutable_source_store=blob)
     author, _, sid = received(first)
-    from src.source_processing_dispatch_v1 import SourceProcessingDispatcher
+    from src.vorming.source_processing_dispatch_v1 import SourceProcessingDispatcher
     app = installed_app(first)
     with monkeypatch.context() as patch, TestClient(app, base_url="https://console.example.test", headers={"Origin": "https://console.example.test"}, raise_server_exceptions=False) as client:
         login(client)
@@ -239,13 +239,13 @@ def test_changed_strategy_fails_before_provider_and_preserves_receipt(tmp_path, 
 
 
 def test_expired_pending_command_is_interrupted_not_automatically_retried(tmp_path, monkeypatch, *, production_console):
-    from src.source_processing_dispatch_v1 import pending
+    from src.vorming.source_processing_dispatch_v1 import pending
     console = state(tmp_path, production_console=production_console)
     calls = []
     author, _, sid = received(console, calls)
     attempt, _ = reserve(console, author, sid)
     future = datetime.fromisoformat(attempt["expires_at"]) + timedelta(seconds=1)
-    monkeypatch.setattr("src.source_processing_dispatch_v1.now", lambda: future)
+    monkeypatch.setattr("src.vorming.source_processing_dispatch_v1.now", lambda: future)
     assert pending(console) == []
     assert console._envelope(sid)["processing_attempts"][-1]["state"] == "interrupted"
     assert console._envelope(sid)["processing_attempts"][-1]["command_id"] == "start"

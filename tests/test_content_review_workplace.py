@@ -27,7 +27,7 @@ def test_one_mixed_workplace_actor_routes_exact_commands_and_restart(tmp_path, m
     a = login(console, production_app, actors['a'])
     b = login(console, production_app, actors['b'])
     before = deepcopy(snapshot(console, docs))
-    import src.review_passage_read_v1 as reads
+    import src.review.review_passage_read_v1 as reads
     original = reads.read_review_document
     import src.operations_console_app as ui
     route_owner = ui.reviewer_route_for

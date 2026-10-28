@@ -16,9 +16,9 @@ from copy import deepcopy
 
 import pytest
 
-import src.source_selection_v1 as selection
+import src.vorming.source_selection_v1 as selection
 from src.operations_console_v1 import ConsoleError
-from src.source_preparation_context_v1 import build_formation_context
+from src.vorming.source_preparation_context_v1 import build_formation_context
 from tests.test_resv1_reservation_configuration import _reextract_ready
 
 

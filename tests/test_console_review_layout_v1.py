@@ -44,7 +44,7 @@ def test_passage_reads_as_text_and_choices_have_44px_targets() -> None:
 
 def test_trajectory_and_overview_use_room_layout(production_console, production_app) -> None:
     from fastapi.testclient import TestClient
-    from src.review_participation_ui_v1 import filters
+    from src.review.review_participation_ui_v1 import filters
     console = production_console()
     assert filters(console, work="all", theme="").startswith('<form method="get" action="/review" class="review-filters">')
     console.create_account("rob", "rob-secret-pass", roles=("reviewer",), display_name="Rob")

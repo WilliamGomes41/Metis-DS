@@ -15,7 +15,7 @@ import pytest
 
 from fastapi.testclient import TestClient
 
-from src.semantic_safety_app_v1 import install_semantic_safety_routes
+from src.settings.semantic_safety_app_v1 import install_semantic_safety_routes
 from src.telemetry.hub import HUB
 
 BASELINE = "79b35616725da3a1f42a938c2f5a874ca16cfad0"

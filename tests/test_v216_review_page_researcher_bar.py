@@ -16,9 +16,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.retrieval.answerability_gate_v1 import evaluate_answerability
-from src.admission_gate_v1 import is_inhoudelijk_candidate
+from src.vorming.admission_gate_v1 import is_inhoudelijk_candidate
 from src.integrity_kernel import sha256_bytes
-from src.knowledge_path_v1 import content_reviewable
+from src.review.knowledge_path_v1 import content_reviewable
 from src.object_taxonomy_v1 import (
     extract_object_type,
     is_advice_weight,
@@ -264,7 +264,7 @@ def test_beoordeel_is_the_single_door_openen_and_reviewen_are_gone(tmp_path: Pat
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
     html = _client(console, production_app=production_app).get("/review").text
-    from src.review_workboard_v1 import review_work_item
+    from src.review.review_workboard_v1 import review_work_item
     item = review_work_item(console, account=accounts['reviewer'], envelope=console._envelope(receipt['snapshot_id']))
     assert f'data-workboard-document="{receipt["snapshot_id"]}"' in html
     assert html.count('data-personal-review-action') == bool(item['actionable_review_duties'])

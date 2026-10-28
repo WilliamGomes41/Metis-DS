@@ -23,7 +23,7 @@ from src.operations_console_v1 import (
     ConsoleError,
     OperationsConsole,
 )
-from src.recommendation_semantics_v1 import (
+from src.vorming.recommendation_semantics_v1 import (
     CONFIRMED_FIELD,
     PROPOSED_FIELD,
     confirmed_recommendation_semantics_from_review,
@@ -597,7 +597,7 @@ def test_strength_error_does_not_hide_a_stale_review(tmp_path: Path, *, producti
 
 def test_strength_retry_preserves_selected_parent(tmp_path: Path, *, production_app, production_console) -> None:
     from html.parser import HTMLParser
-    from src.heading_parent_list_v1 import parent_choice_list
+    from src.vorming.heading_parent_list_v1 import parent_choice_list
 
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)

@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from src.decision_tree_route_v1 import EXPORT_PROMPT, PROPOSER_PROMPT, prepare, request_input
-from src.knowledge_materialisation_v1 import (
+from src.vorming.decision_tree_route_v1 import EXPORT_PROMPT, PROPOSER_PROMPT, prepare, request_input
+from src.vorming.knowledge_materialisation_v1 import (
     MaterialisationError,
     materialise_knowledge_candidates,
     selection_source_blocks,
@@ -236,9 +236,9 @@ def test_failing_or_missing_model_never_falls_back_for_exports() -> None:
 
 
 def test_export_request_names_export_ids_while_pdf_request_and_recorded_evidence_stay_unchanged() -> None:
-    from src.beslisboom_path_v1 import extract_boom_fragments
-    from src.decision_bundles_v1 import split_bundles
-    from src.decision_graph_v1 import source_evidence
+    from src.review.beslisboom_path_v1 import extract_boom_fragments
+    from src.vorming.decision_bundles_v1 import split_bundles
+    from src.vorming.decision_graph_v1 import source_evidence
     data = _data()
     fragments = split_bundles(extract_boom_fragments(data, document_id="doc", source_id="src"))
     inventory = source_evidence(None, data, "boom", fragments, "a" * 64)
@@ -264,7 +264,7 @@ def test_no_deterministic_formation_route_or_its_configuration_remains() -> None
     # Only the materialiser assigns knowledge-candidate identity.
     creators = [str(path.relative_to(ROOT)) for path in (ROOT / "src").rglob("*.py")
                 if re.search(r'-sem-\{', path.read_text(encoding="utf-8"))]
-    assert creators == ["src/knowledge_materialisation_v1.py"]
+    assert creators == ["src/vorming/knowledge_materialisation_v1.py"]
 
 
 def _accounts(console):

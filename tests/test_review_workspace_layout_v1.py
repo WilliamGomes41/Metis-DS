@@ -7,7 +7,7 @@ import pytest
 
 from src.console_navigation_simplify_v1 import simplify_console_html
 from src.operations_console_v1 import ConsoleError
-from src.review_workboard_v1 import _workboard_card, _workboard_page
+from src.review.review_workboard_v1 import _workboard_card, _workboard_page
 from tests.test_review_workboard_queue_links_v1 import _item
 
 

@@ -25,9 +25,9 @@ from fastapi.testclient import TestClient
 from src.g2_source_store import AzureBlobSourceStore
 from src.integrity_kernel import stable_hash, stamp_canonical_hashes
 from src.operations_console_v1 import ConsoleError
-from src.review_ledger import read_events
-from src.review_policy_v1 import CONTRACT as REVIEW_POLICY_CONTRACT
-from src.source_preparation_context_v1 import KEY
+from src.review.review_ledger import read_events
+from src.review.review_policy_v1 import CONTRACT as REVIEW_POLICY_CONTRACT
+from src.vorming.source_preparation_context_v1 import KEY
 from tests.semantic_fixture_support import bind_fixture_selections, install_fixture_history
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
@@ -101,7 +101,7 @@ def seed(root, backend, route, patch):
             from tests.decision_tree_test_support import pdf_data
             data = pdf_data()
         if route.startswith("docling"):
-            from src.docling_contract_v1 import translate
+            from src.vorming.docling_contract_v1 import translate
             from src.integrity_kernel import sha256_file
             from tests.test_docling_contract_v1 import result
             def accepted_extraction(kind, path, *, document_id, source_id, **kwargs):
@@ -182,7 +182,7 @@ def forbid_formation(console, patch, retained):
         raise AssertionError("A10 reader invoked formation/model work")
     patch.setattr(console, "_fragments_and_spec", forbidden)
     patch.setattr(console, "_source_processing_strategy", forbidden)
-    import src.knowledge_materialisation_v1 as materialisation
+    import src.vorming.knowledge_materialisation_v1 as materialisation
     patch.setattr(materialisation, "materialise_knowledge_candidates", forbidden)
     if retained:
         patch.setattr(console, "_extract", forbidden)

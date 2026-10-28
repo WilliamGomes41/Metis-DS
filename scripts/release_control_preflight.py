@@ -179,6 +179,12 @@ def _path_matches(path: str, patterns: Sequence[str]) -> bool:
             return True
         if norm.endswith("/" + pattern):
             return True
+        # Room packages are one directory under src/. A flat src/<file> rule
+        # still applies to src/<room>/<file>. Patterns that already name a
+        # subdirectory stay exact.
+        if pattern.startswith("src/") and pattern.count("/") == 1:
+            if fnmatch(norm, "src/*/" + pattern[len("src/"):]):
+                return True
     return False
 
 

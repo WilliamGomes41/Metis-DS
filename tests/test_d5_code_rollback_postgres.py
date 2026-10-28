@@ -24,7 +24,7 @@ from tests.test_d5_pg_recovery_and_source_v1 import _scenario
 from tests.test_pg_console_without_disk_mirrors import CONSOLES, MIRROR_NAMES, ROOT, _normalise
 from tests.test_vsa_publish_readiness_ui_v1 import HTML_FIXTURE
 from tests.test_workflow_chain_recovery_v1 import _install_schema
-from src.review_ledger import unregister_backend
+from src.review.review_ledger import unregister_backend
 
 ROLLBACK = '629d63c5f2ba8781f7b2c1307e8011c6476b63e2'
 

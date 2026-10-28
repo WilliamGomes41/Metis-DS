@@ -8,7 +8,7 @@ from copy import deepcopy
 import fitz
 import pytest
 
-from src.decision_graph_v1 import graph_issues, verify_source_evidence
+from src.vorming.decision_graph_v1 import graph_issues, verify_source_evidence
 from src.operations_console_v1 import ConsoleError
 from tests.test_decision_graph_chain import _console, _accounts, _ingest_boom, policy, command
 
@@ -63,7 +63,7 @@ def test_pdf_bundle_needs_each_member_review_and_preserves_source(tmp_path, back
     next(n for n in detached["nodes"] if n["object_id"] == members[0]["object_id"])["mode"] = "terminal"
     assert "decision_graph_bundle_context_missing" in graph_issues(detached, console.snapshot_objects(sid), env["decision_graph_evidence"])
     if backend == "postgres":
-        from src.decision_graph_v1 import read_active_graph
+        from src.vorming.decision_graph_v1 import read_active_graph
         result = console.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=sid)
         assert result["status"] == "PASS", result
         release = read_active_graph(store, source, sid)

@@ -95,7 +95,40 @@ def _imported_names(path: Path) -> set[str]:
                 names.add(module.split(".")[-1])
             if root == "src" and module.startswith("src."):
                 names.add(module.split(".", 1)[1].split(".")[0])
+            if module.startswith("src."):
+                for alias in node.names:
+                    if alias.name != "*":
+                        names.add(f"{module}.{alias.name}")
     return names
+
+
+def _module_file(raw: str) -> Path | None:
+    """Resolve an imported name to a source file, including room packages."""
+    if raw.startswith("src."):
+        parts = raw.split(".")[1:]
+        while parts:
+            candidate = SRC.joinpath(*parts).with_suffix(".py")
+            if candidate.is_file():
+                return candidate
+            parts.pop()
+        return None
+    leaf = raw.split(".")[-1] + ".py"
+    direct = SRC / leaf
+    if direct.is_file():
+        return direct
+    matches = _source_leaves().get(leaf, ())
+    return matches[0] if len(matches) == 1 else None
+
+
+def _source_leaves() -> dict[str, tuple[Path, ...]]:
+    cached = getattr(_source_leaves, "index", None)
+    if cached is None:
+        index: dict[str, list[Path]] = {}
+        for path in SRC.rglob("*.py"):
+            index.setdefault(path.name, []).append(path)
+        cached = {name: tuple(paths) for name, paths in index.items()}
+        _source_leaves.index = cached  # type: ignore[attr-defined]
+    return cached
 
 
 def _walk_console_import_graph() -> tuple[set[str], set[Path]]:
@@ -110,9 +143,8 @@ def _walk_console_import_graph() -> tuple[set[str], set[Path]]:
         imported = _imported_names(path)
         names.update(imported)
         for raw in imported:
-            candidate = raw.split(".")[-1]
-            local = SRC / f"{candidate}.py"
-            if local.is_file() and local not in seen_files:
+            local = _module_file(raw)
+            if local is not None and local not in seen_files:
                 queue.append(local)
     return names, seen_files
 
@@ -181,7 +213,9 @@ def test_v224_console_import_graph_excludes_forbidden_and_retrieval() -> None:
 
 
 def test_v224_shared_kernel_modules_must_not_import_sklearn_stack() -> None:
-    for path in sorted(SRC.glob("*.py")):
+    for path in sorted(SRC.rglob("*.py")):
+        if {"retrieval", "evaluation"}.intersection(path.relative_to(SRC).parts):
+            continue
         if path.name in RETRIEVAL_RUNTIME_MODULES:
             continue
         imported = _imported_names(path)

@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.operations_console_v1 import ConsoleError
-from src.source_processing_dispatch_v1 import claim, SourceProcessingDispatcher
+from src.vorming.source_processing_dispatch_v1 import claim, SourceProcessingDispatcher
 from tests.test_availability_repair import accounts, bind, provider, installed_app, login
 from tests.test_source_dispatch_hardening import receive
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
@@ -112,8 +112,8 @@ def test_all_denied_entry_points_preserve_source_attempts_and_budget(console, mo
 
 @pytest.mark.parametrize("change", ["none", "roles", "retirement"])
 def test_separate_publisher_recovery_requires_current_authority(console, change):
-    from src.bounded_model_call_v1 import ModelCallLimits
-    from src.processing_retry_v1 import reserve, finish, now
+    from src.vorming.bounded_model_call_v1 import ModelCallLimits
+    from src.vorming.processing_retry_v1 import reserve, finish, now
     author, reviewer = accounts(console)
     publisher = console.create_account(username="recovery-publisher", password="fixture-only",
         roles=("publisher", "reviewer"))["account_id"]

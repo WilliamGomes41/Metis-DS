@@ -94,7 +94,7 @@ def identity() -> dict[str, Any]:
     pid = os.getpid()
     cached = _IDENTITY.get(pid)
     if cached is None:
-        from src.attempt_diagnostics_v1 import deployment_identity
+        from src.vorming.attempt_diagnostics_v1 import deployment_identity
         commit = os.getenv("METIS_BUILD_COMMIT") or deployment_identity() or "unknown"
         cached = _IDENTITY[pid] = {"commit": str(commit)[:64], "pid": pid, "runtime_id": _RUNTIME_ID,
                                    "instance": os.getenv("WEBSITE_INSTANCE_ID", "local")[:128]}

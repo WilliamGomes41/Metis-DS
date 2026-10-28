@@ -12,11 +12,11 @@ from copy import deepcopy
 
 import pytest
 
-from src.pre_review_semantic_v1 import semantic_spec_from_fragments
-from src.semantic_transform_generic_v1 import transform
-from src.admission_gate_v1 import apply_admission_gate
-from src.source_bound_fields_v3 import FIELDS, VERSION, MODE
-from src.semantic_replay_v1 import stable_json_hash
+from src.vorming.pre_review_semantic_v1 import semantic_spec_from_fragments
+from src.vorming.semantic_transform_generic_v1 import transform
+from src.vorming.admission_gate_v1 import apply_admission_gate
+from src.vorming.source_bound_fields_v3 import FIELDS, VERSION, MODE
+from src.vorming.semantic_replay_v1 import stable_json_hash
 
 
 def source(text, heading=None):
@@ -123,7 +123,7 @@ def test_external_scope_is_bound_revalidated_and_visible_in_review_export():
     from src.operations_console_app import _knowledge_review_html, _source_bound_fields_html
     assert heading in _knowledge_review_html(obj, rows)
     assert heading in _source_bound_fields_html(obj)
-    from src.processing_evidence_export_v1 import processing_evidence_tables
+    from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
     tables, _ = processing_evidence_tables(snapshot_id="snap", revision="r", envelope={}, objects=rows)
     field = next(r for r in tables["proposal_fields"] if r["object_id"] == obj["object_id"] and r["field"] == "scope_span")
     assert field["value"] == heading and field["producer_status"] == "source_bound_proposal"

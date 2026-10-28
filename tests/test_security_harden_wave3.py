@@ -115,13 +115,13 @@ def _accounts(console: OperationsConsole) -> dict[str, dict]:
 
 
 def _assert_url_destination_allowed(url: str) -> None:
-    from src.ingest_limits_v1 import assert_url_destination_allowed
+    from src.ingest.ingest_limits_v1 import assert_url_destination_allowed
 
     assert_url_destination_allowed(url)
 
 
 def _ingest_redirect_handler():
-    from src.ingest_limits_v1 import IngestRedirectHandler
+    from src.ingest.ingest_limits_v1 import IngestRedirectHandler
 
     return IngestRedirectHandler()
 
@@ -179,7 +179,7 @@ def _install_alternating_dns(
     import os
     for name in ("NO_PROXY", "no_proxy"):
         monkeypatch.setenv(name, ",".join(filter(None, [os.environ.get(name, ""), *answers])))
-    from src.ingest_limits_v1 import _ip_is_blocked
+    from src.ingest.ingest_limits_v1 import _ip_is_blocked
 
     remaining = {key.lower(): list(value) for key, value in answers.items()}
     real_cc = socket.create_connection
@@ -276,7 +276,7 @@ def test_url_ingest_rejects_loopback_before_download(tmp_path: Path, *, producti
 def test_url_fetch_still_respects_wave2_max_bytes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from src.ingest_limits_v1 import limited_url_fetcher
+    from src.ingest.ingest_limits_v1 import limited_url_fetcher
 
     monkeypatch.setenv(ENV_INGEST_MAX_BYTES, "32")
 
@@ -287,7 +287,7 @@ def test_url_fetch_still_respects_wave2_max_bytes(
     with pytest.raises(ConsoleError) as caught:
         wrapped("https://example.test/huge.pdf")
     assert caught.value.code == INGEST_PAYLOAD_TOO_LARGE
-    source = (ROOT / "src" / "ingest_limits_v1.py").read_text(encoding="utf-8")
+    source = (ROOT / "src" / "ingest" / "ingest_limits_v1.py").read_text(encoding="utf-8")
     assert "assert_url_destination_allowed" in source
     assert "pin_url_destination" in source
     assert "enforce_ingest_payload_size" in source

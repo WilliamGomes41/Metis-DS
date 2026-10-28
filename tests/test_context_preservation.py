@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from fastapi.testclient import TestClient
 from src.operations_console_v1 import ConsoleError
-from src.source_preparation_context_v1 import KEY, stored_extraction, build_formation_context
+from src.vorming.source_preparation_context_v1 import KEY, stored_extraction, build_formation_context
 from tests.test_recoverable_formation_v1 import system
 from tests.test_recommendation_coverage_v1 import FIRST
 from tests.test_availability_repair import accounts, state, bind, provider, installed_app, login, start, drain, upload
@@ -198,7 +198,7 @@ def test_explicit_reextraction_is_fresh_and_legacy_native_read_still_extracts(tm
 
 def test_docling_adapter_keeps_complete_record_and_isolated_return_values():
     from tests.test_docling_contract_v1 import rows
-    from src.source_preparation_context_v1 import extraction_record
+    from src.vorming.source_preparation_context_v1 import extraction_record
     fragments = rows()
     envelope = {'snapshot_id': 'snap', 'source_id': 'src', 'document_id': 'doc',
                 'sha256': 'a' * 64, 'version': '1', 'content_kind': 'pdf'}

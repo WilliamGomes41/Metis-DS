@@ -15,7 +15,7 @@ from uuid import uuid4
 import pytest
 
 from src.publication_readiness_v1 import review_followup_queues
-from src.review_duty_v1 import reviewer_route_for, reviewer_route_counts
+from src.review.review_duty_v1 import reviewer_route_for, reviewer_route_counts
 from src.workflows.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin
 from tests.test_vsa_review_workboard_v1 import _obj
 
@@ -69,7 +69,7 @@ def summary_database():
                 for sid in ids}
 
     from test_t4_single_knowledge_path_invariants import _allowed_source
-    from src.document_status_v1 import derive_lifecycle_status
+    from src.documents.document_status_v1 import derive_lifecycle_status
     subject.workflow_document_store = SimpleNamespace(_connect=connect, list_current_objects_batch=objects_batch)
     subject.workflow_review_store = SimpleNamespace(read_bindings=bindings_batch)
     subject.canonical_publication_store = None

@@ -16,7 +16,7 @@ from src.operations_console_app import (
     _knowledge_relation_review_block,
     _review_context_block,
 )
-from src.review_context_v1 import (
+from src.review.review_context_v1 import (
     AUTHORITY_CONFIRMED,
     AUTHORITY_PROPOSED,
     DIRECTION_INCOMING,

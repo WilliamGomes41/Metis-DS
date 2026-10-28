@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from src.operations_console_v1 import ConsoleError
 from src.integrity_kernel import canonical_object_payload
-from src.review_policy_v1 import object_policy, participants, missing_reviewers
+from src.review.review_policy_v1 import object_policy, participants, missing_reviewers
 from tests.test_decision_graph_chain import _console, _accounts, ingest, finish, command
 
 
@@ -367,7 +367,7 @@ def test_participant_page_has_no_submit_when_no_candidate_available(tmp_path, *,
 @pytest.mark.parametrize('flag', ['retirement', 'blocked', 'disabled'])
 def test_participation_unavailable_flag_guard(flag):
     from types import SimpleNamespace
-    from src.review_participation_v1 import _reviewer
+    from src.review.review_participation_v1 import _reviewer
     account = {'account_id': 'fixture-reviewer', 'roles': ['reviewer'], flag: True}
     subject = SimpleNamespace(_require_role=lambda actor_id, role: account)
     with pytest.raises(ConsoleError, match='reviewer_unavailable'):

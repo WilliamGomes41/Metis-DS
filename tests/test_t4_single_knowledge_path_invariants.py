@@ -13,16 +13,16 @@ from copy import deepcopy
 
 import pytest
 
-from src.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED
-from src.build_review_queue_v3 import build as build_review_queue
-from src.candidate_eligibility_v1 import assess_candidate_eligibility
-from src.four_eyes_v1 import publish_authorization_contract
+from src.vorming.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED
+from src.review.build_review_queue_v3 import build as build_review_queue
+from src.vorming.candidate_eligibility_v1 import assess_candidate_eligibility
+from src.review.four_eyes_v1 import publish_authorization_contract
 from src.integrity_kernel import exact_review_snapshot_hash
 from src.operations_console_v1 import ConsoleError
-from src.review_duty_v1 import review_duty_counts, review_duty_for, review_stage
-from src.semantic_passage_v1 import SELECTION_ORIGIN_COVERAGE, SELECTION_ORIGIN_PROPOSAL
-from src.source_accountability_v1 import KEY as SOURCE_KEY
-from src.source_containers_v1 import partition
+from src.review.review_duty_v1 import review_duty_counts, review_duty_for, review_stage
+from src.vorming.semantic_passage_v1 import SELECTION_ORIGIN_COVERAGE, SELECTION_ORIGIN_PROPOSAL
+from src.vorming.source_accountability_v1 import KEY as SOURCE_KEY
+from src.vorming.source_containers_v1 import partition
 
 REVIEW_PATH = "richtlijn"
 EXACT_SPANS = (
@@ -177,14 +177,14 @@ def _allowed_source() -> list[dict]:
 
 
 def _allowed_spans() -> list[dict]:
-    from src.semantic_passage_v1 import semantic_source_blocks
+    from src.vorming.semantic_passage_v1 import semantic_source_blocks
     block = semantic_source_blocks(_allowed_source())[0]
     return [{"block_id": block["block_id"], "start": 0, "end": len(block["text"])}]
 
 
 def _allowed_candidate() -> dict:
-    from src.knowledge_materialisation_v1 import materialise_knowledge_candidates
-    from src.semantic_transform_generic_v1 import _fragment_ref
+    from src.vorming.knowledge_materialisation_v1 import materialise_knowledge_candidates
+    from src.vorming.semantic_transform_generic_v1 import _fragment_ref
     fragments = _allowed_source()
     [candidate] = materialise_knowledge_candidates(
         [{"decision_kind": "semantic_selection", "selection_origin": SELECTION_ORIGIN_PROPOSAL,
@@ -221,7 +221,7 @@ def _no_duty_definition() -> dict:
 
 
 def _observed_lifecycle(obj: dict) -> str:
-    from src.knowledge_path_v1 import candidate_lifecycle
+    from src.review.knowledge_path_v1 import candidate_lifecycle
     return candidate_lifecycle(obj)
 
 
@@ -345,7 +345,7 @@ def test_structural_binding_stays_history_and_does_not_authorize_publication():
 
 
 def test_matching_review_hash_keeps_existing_content_review_valid():
-    from src.review_duty_v1 import exact_current_approver_ids
+    from src.review.review_duty_v1 import exact_current_approver_ids
 
     obj = _allowed_candidate()
     binding = _binding(obj)
@@ -400,7 +400,7 @@ def test_side_index_classification_does_not_rewrite_bytes_or_bindings():
 
 def test_changed_spans_do_not_inherit_review_authority():
     """A later explicit revises command belongs to T11. Silence is not that command."""
-    from src.review_duty_v1 import exact_current_approver_ids
+    from src.review.review_duty_v1 import exact_current_approver_ids
 
     current = _allowed_candidate()
     binding = _binding(current)
@@ -563,7 +563,7 @@ def test_matching_approval_keeps_knowledge_publication_authority():
 
 
 def test_malformed_persisted_spans_are_not_exact_review_or_publication():
-    from src.knowledge_path_v1 import content_reviewable, spans_are_exact
+    from src.review.knowledge_path_v1 import content_reviewable, spans_are_exact
 
     exact = list(EXACT_SPANS)
     assert spans_are_exact(exact) is True

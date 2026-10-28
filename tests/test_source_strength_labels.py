@@ -11,9 +11,9 @@ import json
 import pytest
 
 from src.operations_console_v1 import ConsoleError
-from src.pre_review_semantic_v1 import _candidate_fragments, _evidence_fragments, semantic_spec_from_fragments
-from src.recommendation_semantics_v1 import is_source_strength_label, source_label_direction, source_literal_strength
-from src.source_bound_fields_v2 import FIELDS
+from src.vorming.pre_review_semantic_v1 import _candidate_fragments, _evidence_fragments, semantic_spec_from_fragments
+from src.vorming.recommendation_semantics_v1 import is_source_strength_label, source_label_direction, source_literal_strength
+from src.vorming.source_bound_fields_v2 import FIELDS
 
 
 @pytest.mark.parametrize("word,strength", [("Sterk", "strong"), ("Zwak", "weak")])

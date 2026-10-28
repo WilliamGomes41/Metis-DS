@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from src.source_selection_ui_v1 import _estimate, _size
+from src.vorming.source_selection_ui_v1 import _estimate, _size
 
 pytestmark = [
     pytest.mark.release_control_scope_belofte,

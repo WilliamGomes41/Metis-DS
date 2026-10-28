@@ -434,7 +434,7 @@ def test_reject_and_correction_create_new_object_version_not_silent_mutation(tmp
     assert json.dumps(original, sort_keys=True) == original_json
 
     other = next(obj for obj in console.snapshot_objects(receipt["snapshot_id"]) if obj["object_id"] != original["object_id"] and obj["object_type"] not in {"document", "heading"} and obj.get("proposed_object_type") != "heading")
-    from src.deterministic_review_repair_v1 import REPAIR_SOURCE_UNITS
+    from src.review.deterministic_review_repair_v1 import REPAIR_SOURCE_UNITS
     units = console.source_units(snapshot_id=receipt['snapshot_id'], object_id=other['object_id'])
     own_fragments = {ref['raw_object_id'] for ref in other['provenance']['source_fragments']}
     selected = [u['unit_id'] for u in units if u['fragment_id'] in own_fragments]

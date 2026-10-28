@@ -22,7 +22,7 @@ from src.integrity_kernel import stamp_canonical_hashes
 from src.operations_console_v1 import OperationsConsole
 from src.product_api_v1 import ProductPaths, create_product_app
 from src.product_security_v1 import TenantPolicy, TenantRegistry, hash_api_key
-from src.recommendation_semantics_v1 import CONFIRMED_FIELD, PROPOSED_FIELD
+from src.vorming.recommendation_semantics_v1 import CONFIRMED_FIELD, PROPOSED_FIELD
 from src.retrieval.retrieval_projection_v2 import build_projection
 from src.usage_ledger_v1 import UsageLedger
 

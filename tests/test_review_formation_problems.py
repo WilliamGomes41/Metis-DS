@@ -75,7 +75,7 @@ def test_durable_independent_valid_proposal_reaches_review(tmp_path, production_
 
 
 def test_whitespace_ranges_are_not_model_work():
-    from src.bounded_formation_v1 import _durable_targets
+    from src.vorming.bounded_formation_v1 import _durable_targets
     block = {'block_id': 'b', 'text': '  Advies. \n\t '}
     proposal = {'objects': [{'spans': [{'block_id': 'b', 'start': 2, 'end': 9}]}], 'source_assessments': []}
     assert _durable_targets([block], proposal) == []
@@ -84,7 +84,7 @@ def test_whitespace_ranges_are_not_model_work():
 
 
 def test_problems_restart_targeted_recovery_and_duplicate(tmp_path, production_console, monkeypatch):
-    from src.formation_problems_v1 import collect
+    from src.vorming.formation_problems_v1 import collect
     console, sid, author, reviewer, calls, mode, provider = received(tmp_path, production_console, monkeypatch)
     execute(console, sid, author, 'initial')
     before = console.snapshot_objects(sid)
@@ -125,7 +125,7 @@ def test_problems_restart_targeted_recovery_and_duplicate(tmp_path, production_c
 
 
 def test_review_does_not_hide_remaining_problems_or_allow_reextract(tmp_path, production_console, monkeypatch):
-    from src.formation_problems_v1 import collect
+    from src.vorming.formation_problems_v1 import collect
     console, sid, author, reviewer, calls, mode, provider = received(tmp_path, production_console, monkeypatch)
     execute(console, sid, author, 'initial')
     first = next(o for o in console.snapshot_objects(sid) if o.get('proposed_object_type') == 'recommendation')
@@ -165,7 +165,7 @@ def test_unauthorized_problem_read_is_denied(tmp_path, production_console, monke
 
 
 def test_necessary_missing_context_stays_in_repair(tmp_path, production_console, monkeypatch):
-    from src.formation_problems_v1 import collect
+    from src.vorming.formation_problems_v1 import collect
     console, sid, author, reviewer, calls, mode, provider = received(tmp_path, production_console, monkeypatch)
     mode.update(broken=False, missing_context=True)
     execute(console, sid, author, 'context')
@@ -184,8 +184,8 @@ def test_necessary_missing_context_stays_in_repair(tmp_path, production_console,
 
 
 def test_exact_human_source_disposition_closes_only_its_problem(tmp_path, production_console, monkeypatch):
-    from src.formation_problems_v1 import collect
-    from src.source_accountability_v1 import is_source_record
+    from src.vorming.formation_problems_v1 import collect
+    from src.vorming.source_accountability_v1 import is_source_record
     console, sid, author, reviewer, calls, mode, provider = received(tmp_path, production_console, monkeypatch)
     execute(console, sid, author, 'initial')
     source = next(o for o in console.snapshot_objects(sid) if is_source_record(o) and o['content']['clean_text'] == SECOND)
@@ -206,7 +206,7 @@ def test_exact_human_source_disposition_closes_only_its_problem(tmp_path, produc
 
 
 def test_old_whitespace_failure_closes_only_for_verified_empty_source():
-    from src.recoverable_formation_v1 import pending_rejections
+    from src.vorming.recoverable_formation_v1 import pending_rejections
     ref = {'block_id': 'b', 'start': 0, 'end': 3}
     evidence = {'error_code': 'source_task_budget_exhausted', 'target_spans': [ref]}
     proposal = {'objects': [], 'source_assessments': []}
@@ -246,7 +246,7 @@ def test_real_browser_navigation_and_raad_read_only(tmp_path, production_console
     import time
     from uuid import uuid4
     import uvicorn
-    from src.view_check import context
+    from src.settings.view_check import context
     from tests.test_view_check_postgres import configure
     module = os.environ['METIS_PLAYWRIGHT_MODULE']
     browser = os.environ['METIS_BROWSER_EXECUTABLE']

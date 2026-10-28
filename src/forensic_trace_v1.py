@@ -362,10 +362,10 @@ def _safe_source_fragments(fragments: list[dict[str, Any]]) -> list[dict[str, An
 
 def current_reconstruction_identity(fragments: list[dict[str, Any]]) -> dict[str, str]:
     """Identity of a map derived by the code that is running now. Not historical evidence."""
-    from src.pre_review_semantic_v1 import _candidate_fragments, _evidence_fragments
-    from src.semantic_passage_v1 import semantic_source_blocks
-    from src.semantic_replay_v1 import stable_json_hash
-    from src.source_reconstruction_v1 import RECONSTRUCTION_VERSION
+    from src.vorming.pre_review_semantic_v1 import _candidate_fragments, _evidence_fragments
+    from src.vorming.semantic_passage_v1 import semantic_source_blocks
+    from src.vorming.semantic_replay_v1 import stable_json_hash
+    from src.vorming.source_reconstruction_v1 import RECONSTRUCTION_VERSION
     safe = _safe_source_fragments(fragments)
     semantic_input = {
         "source_blocks": semantic_source_blocks(_candidate_fragments(safe)),
@@ -413,7 +413,7 @@ def project_source_blocks(fragments: list[dict[str, Any]], recorded_version: Any
 
 def recorded_source_block_rows(fragments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Derive a block map with the current reconstructor. Not historical evidence until verified."""
-    from src.semantic_passage_v1 import _reconstructed_blocks
+    from src.vorming.semantic_passage_v1 import _reconstructed_blocks
     rows = []
     for public, source in _reconstructed_blocks(_safe_source_fragments(fragments)):
         version = (source.get("source_reconstruction") or {}).get("version")
@@ -770,7 +770,7 @@ def classified_rejections(
     if not isinstance(pending, list):
         if isinstance(provider, Mapping) and isinstance(proposal, dict):
             try:
-                from src.recoverable_formation_v1 import pending_rejections
+                from src.vorming.recoverable_formation_v1 import pending_rejections
                 pending = pending_rejections(provider, proposal)
             except (KeyError, TypeError, AttributeError, ValueError):
                 pending = None
@@ -812,7 +812,7 @@ def open_call_failures(provider: Mapping[str, Any], proposal: Any) -> list[dict[
     if not isinstance(pending, list):
         if isinstance(provider, Mapping):
             try:
-                from src.recoverable_formation_v1 import pending_rejections
+                from src.vorming.recoverable_formation_v1 import pending_rejections
                 safe_proposal = proposal if isinstance(proposal, dict) else {"objects": [], "source_assessments": []}
                 pending = pending_rejections(provider, safe_proposal)
             except (KeyError, TypeError, AttributeError, ValueError):

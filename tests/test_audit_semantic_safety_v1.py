@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.audit_semantic_safety_v1 import (
+from src.settings.audit_semantic_safety_v1 import (
     REQUIRED_RISK_CATEGORIES,
     load_frozen_safety_suite,
     run_frozen_semantic_safety_suite,

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from test_t4_single_knowledge_path_invariants import _allowed_source
 
-from src.review_duty_v1 import (
+from src.review.review_duty_v1 import (
     FIRST_REVIEW,
     SECOND_REVIEW,
     exact_current_approver_ids,

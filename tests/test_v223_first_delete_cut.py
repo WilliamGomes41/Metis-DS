@@ -53,12 +53,12 @@ SPRINT = ROOT / "scripts/run_integrity_sprint.sh"
 
 def test_obsolete_zero_caller_modules_are_gone() -> None:
     for name in DELETED:
-        assert not (ROOT / "src" / name).exists(), name
+        assert not any((ROOT / "src").rglob(name)), name
 
 
 def test_v223_keep_list_and_live_ingest_remain() -> None:
     for name in KEPT:
-        assert (ROOT / "src" / name).is_file(), name
+        assert any((ROOT / "src").rglob(name)), name
 
 
 def test_v223_integrity_sprint_uses_committed_fixtures_not_v21() -> None:

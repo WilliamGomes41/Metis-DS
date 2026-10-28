@@ -17,10 +17,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.integrity_kernel import stable_hash
-from src.quality_evidence_v1 import record_processing, review_evidence, route_of
-from src.quality_metrics_v1 import build_report
-from src.quality_metrics_store_v1 import QualityReportStore, QualityStoreError
-from src.quality_metrics_app_v1 import capture
+from src.settings.quality_evidence_v1 import record_processing, review_evidence, route_of
+from src.settings.quality_metrics_v1 import build_report
+from src.settings.quality_metrics_store_v1 import QualityReportStore, QualityStoreError
+from src.settings.quality_metrics_app_v1 import capture
 from test_d5_4_review_interaction_evidence import _system, PASSWORD
 
 NOW = '2026-09-27T12:00:00+00:00'
@@ -125,8 +125,8 @@ def test_settings_and_capture_do_not_expand_document_access(tmp_path, *, product
 
 
 def test_real_review_carries_evidence_atomically_and_reading_does_not_change_authority(tmp_path, *, production_console):
-    from src.review_interaction_v1 import build_review_interaction_evidence
-    from src.review_ledger import read_events
+    from src.review.review_interaction_v1 import build_review_interaction_evidence
+    from src.review.review_ledger import read_events
     console, users, sid, oid = _system(tmp_path, production_console=production_console)
     objects = console.snapshot_objects(sid)
     focal = next(o for o in objects if o['object_id'] == oid)

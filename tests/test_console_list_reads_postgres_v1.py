@@ -17,7 +17,7 @@ import pytest
 
 from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.operations_console_v1 import PRE_REVIEW_BLOCKED
-from src.proportionate_review_v1 import ProportionateReviewConsole
+from src.review.proportionate_review_v1 import ProportionateReviewConsole
 from src.workflows.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin
 from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocumentRuntimeStore
 from src.workflows.workflow_postgres_migration_v1 import apply_migrations, migration_digest, migration_paths
@@ -497,7 +497,7 @@ def test_review_workboard_summary_uses_exact_authorizations_for_four_eyes() -> N
 @pytest.mark.parametrize("document_count", [1, 10])
 def test_explicit_policy_review_uses_bounded_postgres_reads(document_count):
     from src.console_performance_v1 import performance_scope
-    from src.review_policy_v1 import CONTRACT, project_policy
+    from src.review.review_policy_v1 import CONTRACT, project_policy
     from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 
     config = PostgresCanonicalConfig(dsn=_dsn())

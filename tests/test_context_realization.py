@@ -5,8 +5,8 @@
 from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 import pytest
-from src.admission_gate_v1 import admit_candidate, apply_admission_gate
-from src.source_context_review_v1 import context_realization, context_issues
+from src.vorming.admission_gate_v1 import admit_candidate, apply_admission_gate
+from src.review.source_context_review_v1 import context_realization, context_issues
 from tests.test_v230_phase2_deep_context_scan import _complete_adviseert_candidate
 
 EXCEPTION = 'Tenzij er hypercalciëmie bestaat.'
@@ -51,7 +51,7 @@ def test_existing_binding_is_verified_not_inferred_from_proposal(tmp_path, *, pr
     fragments = state._extract(env['content_kind'], path, document_id=env['document_id'], source_id=env['source_id'])
     candidate = {'candidate_id': target['object_id'], 'candidate_text': target['content']['clean_text'],
                  'source_hash': env['sha256'], 'document_version':env['version'], 'context_scan': {}}
-    with patch('src.context_scan_v1.required_context', return_value=[{'role':'scope','origin':'proposal','text':source['content']['clean_text']}]):
+    with patch('src.vorming.context_scan_v1.required_context', return_value=[{'role':'scope','origin':'proposal','text':source['content']['clean_text']}]):
         result = context_realization(candidate, obj=target, objects=rows, fragments=fragments)
         assert not result['unresolved']
         assert result['realized'][0]['realization'] == 'source_context_binding'
@@ -68,7 +68,7 @@ def test_existing_binding_is_verified_not_inferred_from_proposal(tmp_path, *, pr
 def test_direct_reextract_cannot_destroy_review_or_context(tmp_path, *, production_console):
     from tests.test_source_context_review_v1 import _system
     from src.operations_console_v1 import ConsoleError
-    from src.review_ledger import read_events
+    from src.review.review_ledger import read_events
     state, researcher, _, _, _, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     state.confirm_source_context(**command)
     before = deepcopy(state._load_objects(command['snapshot_id'], remember=False))
@@ -81,7 +81,7 @@ def test_direct_reextract_cannot_destroy_review_or_context(tmp_path, *, producti
 
 def test_partial_audit_failure_rolls_back_object_bindings_and_all_new_events(tmp_path, monkeypatch, *, production_console):
     from tests.test_source_context_review_v1 import _system
-    from src.review_ledger import read_events, append_event
+    from src.review.review_ledger import read_events, append_event
     state, _, _, source, target, command = _system(tmp_path, console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     sid = command['snapshot_id']
     rows = deepcopy(state._load_objects(sid, remember=False))
@@ -104,8 +104,8 @@ def test_partial_audit_failure_rolls_back_object_bindings_and_all_new_events(tmp
 def test_real_neighbor_bindings_resolve_only_after_both_source_contexts(tmp_path, *, production_console):
     from tests.test_source_context_review_v1 import _bind_semantic_fixture
     from src.operations_console_v1 import OperationsConsole, ConsoleError
-    from src.admission_gate_v1 import admission_of
-    from src.review_ledger import read_events
+    from src.vorming.admission_gate_v1 import admission_of
+    from src.review.review_ledger import read_events
     state = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime')
     researcher = state.create_account(username='researcher',password='test-only-secret',roles=('researcher',))
     reviewer = state.create_account(username='reviewer',password='test-only-secret',roles=('reviewer',))

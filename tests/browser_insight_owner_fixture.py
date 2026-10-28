@@ -6,8 +6,8 @@ from tests.browser_postgres_support import browser_application
 from tests.semantic_fixture_support import bind_fixture_selections
 from tests.test_document_diagnosis_redesign_v1 import _system, PASSWORD
 from tests.production_support import restart_production
-from src.processing_diagnostics_v1 import processing_diagnostic_rows
-from src.review_ledger import read_events
+from src.vorming.processing_diagnostics_v1 import processing_diagnostic_rows
+from src.review.review_ledger import read_events
 
 app = browser_application('insight-owner', processing_binder=bind_fixture_selections)
 state = app.state.operations_kernel

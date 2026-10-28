@@ -271,7 +271,7 @@ def test_reject_stale_conflict_leaves_no_durable_event_or_authorization(
     concurrent_target = next(
         row for row in concurrent if row["object_id"] == target["object_id"]
     )
-    from src.revision_workflow import revise_object
+    from src.review.revision_workflow import revise_object
     previous = deepcopy(concurrent_target)
     concurrent_target.setdefault("metadata", {})["concurrent_marker"] = "winner"
     successor = revise_object(previous, concurrent_target, snapshot_id=snapshot_id,
@@ -465,7 +465,7 @@ def test_approve_stale_conflict_leaves_no_durable_event_or_authorization(
         if row["object_id"] == target["object_id"]
         and row["object_version"] == current_target["object_version"]
     )
-    from src.revision_workflow import revise_object
+    from src.review.revision_workflow import revise_object
     previous = deepcopy(concurrent_target)
     concurrent_target.setdefault("metadata", {})["concurrent_marker"] = "winner"
     successor = revise_object(previous, concurrent_target, snapshot_id=snapshot_id,

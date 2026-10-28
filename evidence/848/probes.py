@@ -71,7 +71,7 @@ def test_every_current_problem_remains_reachable_beyond_report_limits(tmp_path, 
         live_url='',class_='richtlijn',family='fixture',named_reviewers=[reviewer])['snapshot_id']
     with pytest.raises(ConsoleError,match='source_formation_incomplete'):
         execute(console,sid,author,'many-findings')
-    from src.formation_problems_v1 import collect
+    from src.vorming.formation_problems_v1 import collect
     report=collect(console,actor_id=author,snapshot_id=sid)
     literal=[r for r in report['problems'] if r['code']=='semantic_evidence_literal_not_found']
     assert len(literal)==270

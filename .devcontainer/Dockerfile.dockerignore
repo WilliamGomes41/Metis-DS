@@ -12,5 +12,6 @@
 !requirements-docling.lock
 !scripts/prepare_docling_models.py
 !src/__init__.py
-!src/docling_contract_v1.py
-!src/docling_render_fonts_v1.py
+!src/vorming/__init__.py
+!src/vorming/docling_contract_v1.py
+!src/vorming/docling_render_fonts_v1.py

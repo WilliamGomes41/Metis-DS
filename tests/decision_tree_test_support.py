@@ -8,13 +8,13 @@ default: an unbound proposer fails closed.
 """
 from __future__ import annotations
 
-from src.decision_tree_construction_v1 import proposal_inputs
-from src.decision_tree_proposal_v1 import CONTRACT
+from src.vorming.decision_tree_construction_v1 import proposal_inputs
+from src.vorming.decision_tree_proposal_v1 import CONTRACT
 
 
 def fragment_proposal(frozen):
     if frozen.get("kind") == "boom":
-        from src.decision_tree_route_v1 import request_input
+        from src.vorming.decision_tree_route_v1 import request_input
         from tests.semantic_fixture_support import export_tree_proposal
         return export_tree_proposal(request_input(frozen)[1]), "test-proposer"
     blocks = proposal_inputs(frozen["fragments"])

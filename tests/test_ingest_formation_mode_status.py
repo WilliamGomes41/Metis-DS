@@ -12,8 +12,8 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from src.operations_console_v1 import OperationsConsole
-from src.passage_formation_policy_v1 import SEMANTIC_MODE
-from src.pre_review_semantic_v1 import (
+from src.vorming.passage_formation_policy_v1 import SEMANTIC_MODE
+from src.vorming.pre_review_semantic_v1 import (
     PASSAGE_FORMATION_MODE_ENV,
     bind_pre_review_semantic_processing,
 )
@@ -59,7 +59,7 @@ def test_management_shows_default_source_bound_v2_runtime_mode_read_only(tmp_pat
         "Nieuwe en opnieuw verwerkte passages worden momenteel brongebonden "
         "semantisch gevormd. Review blijft verplicht."
     ) in html
-    from src.source_bound_fields_v2 import MODE
+    from src.vorming.source_bound_fields_v2 import MODE
     assert console._passage_formation_mode_reader() == MODE
     assert 'name="passage_formation_mode"' not in html
     assert "Wijzig modus" not in html

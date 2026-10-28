@@ -15,15 +15,15 @@ import sys
 
 import pytest
 
-from src.docling_contract_v1 import CONTRACT, DoclingError, stored_fragments, top_left_box, translate
-from src.docling_pdf_v1 import extract, supervise
+from src.vorming.docling_contract_v1 import CONTRACT, DoclingError, stored_fragments, top_left_box, translate
+from src.vorming.docling_pdf_v1 import extract, supervise
 from src.integrity_kernel import schema_errors, stable_hash
-from src.quality_evidence_v1 import record_processing
+from src.settings.quality_evidence_v1 import record_processing
 
 
 def test_render_font_build_identity_rejects_missing_changed_or_added_fonts(tmp_path, monkeypatch):
     import hashlib
-    from src import docling_render_fonts_v1 as fonts
+    from src.vorming import docling_render_fonts_v1 as fonts
     monkeypatch.setattr(fonts, "FONT_ROOTS", (tmp_path,))
     standard = tmp_path / "standard.otf"
     standard.write_bytes(b"controlled font file")
@@ -45,7 +45,7 @@ def test_render_font_build_identity_rejects_missing_changed_or_added_fonts(tmp_p
 
 
 def test_rss_uses_own_child_in_the_mounted_pid_namespace(monkeypatch):
-    from src import docling_pdf_v1 as adapter
+    from src.vorming import docling_pdf_v1 as adapter
     statuses = {
         "/proc/self/status": {"Pid": "100", "NSpid": "100 5"},
         # Host PID 6 is an unrelated process, not the namespace-local child 6.
@@ -141,7 +141,7 @@ def test_mapping_hash_offsets_origin_and_atomic_evidence():
     assert restored == fragments
     from io import BytesIO
     from zipfile import ZipFile
-    from src.processing_evidence_export_v1 import processing_evidence_zip
+    from src.vorming.processing_evidence_export_v1 import processing_evidence_zip
     with ZipFile(BytesIO(processing_evidence_zip(snapshot_id="snap", revision="r", envelope=envelope, objects=[]))) as archive:
         retained = json.loads(archive.read("extractions/000000.json"))
         assert retained["document"] == fragments.extraction_record["document"]
@@ -387,7 +387,7 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
     from fastapi.testclient import TestClient
     from src.operations_console_v1 import OperationsConsole
     from src.operations_console_app import create_console_app
-    import src.docling_pdf_v1 as adapter
+    import src.vorming.docling_pdf_v1 as adapter
     payload = result()
     payload["document"]["pages"]["2"] = {"size": {"width": 600, "height": 800}}
     if all_text_missing:
@@ -440,7 +440,7 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
             page = client.get("/settings/technical/processing", params={"document": sid}).text
             assert "Pagina’s zonder verwerkbare brontekst: 2" in page
     # A long document's complete list is kept, never silently cut short.
-    from src.attempt_diagnostics_v1 import finish_diagnostic
+    from src.vorming.attempt_diagnostics_v1 import finish_diagnostic
     from src.operations_console_v1 import ConsoleError
     error = ConsoleError("docling_page_text_unverified")
     error.unverified_pages = list(range(1, 1001))
@@ -450,9 +450,9 @@ def test_unverified_page_failure_is_durable_and_visible_without_partial_activati
 
 
 def test_decision_tree_pdf_route_keeps_unverified_page_numbers_on_the_semantic_binding(tmp_path, monkeypatch, *, production_console):
-    import src.decision_graph_v1 as decision_graph
+    import src.vorming.decision_graph_v1 as decision_graph
     from src.operations_console_v1 import OperationsConsole, ConsoleError
-    from src.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
     def unverified(*args, **kwargs):
         error = DoclingError("docling_page_text_unverified")
         error.pages = [3]
@@ -540,7 +540,7 @@ def test_only_a_page_the_pdf_proves_empty_is_accepted_without_accounting():
 
 def test_a_page_with_only_an_inline_image_is_not_proven_empty(tmp_path):
     import fitz
-    from src.docling_pdf_v1 import page_fact
+    from src.vorming.docling_pdf_v1 import page_fact
     with fitz.open() as document:
         document.new_page()
         stream = document.get_new_xref()
@@ -664,7 +664,7 @@ def test_unresolved_page_blocks_formation_until_accounted_then_is_left_out(tmp_p
     import hashlib
     import fitz
     from fastapi.testclient import TestClient
-    import src.docling_pdf_v1 as adapter
+    import src.vorming.docling_pdf_v1 as adapter
     from src.operations_console_v1 import ConsoleError
     payload = result()
     advice = "Beoordeel bij elke zorgvrager dagelijks de huidplooien op roodheid, vocht en schilfering."
@@ -739,10 +739,10 @@ def test_unresolved_page_blocks_formation_until_accounted_then_is_left_out(tmp_p
     assert "extraction_checkpoint" in [row["phase"] for row in retried["diagnostic"]["checkpoints"]]
     assert "page_findings" not in retried["diagnostic"]
     # The retained extraction that formation used leaves page 2 out on the recorded accounting.
-    from src.source_preparation_context_v1 import stored_extraction
+    from src.vorming.source_preparation_context_v1 import stored_extraction
     extracted = stored_extraction(create()._envelope(sid))
     assert {f["source_page"] for f in extracted} == {1}
     assert [row["basis"] for row in extracted.extraction_record["set_aside_pages"]] == ["recorded_accounting"]
     # The diagnosis names the page the checkpointed extraction left out.
-    from src.docling_contract_v1 import set_aside_pages
+    from src.vorming.docling_contract_v1 import set_aside_pages
     assert [row["page"] for row in set_aside_pages(create()._envelope(sid))] == [2]

@@ -16,11 +16,11 @@ from threading import Barrier
 import pytest
 from fastapi.testclient import TestClient
 
-from src.document_status_ui_v1 import install_document_status_ui
-from src.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
+from src.documents.document_status_ui_v1 import install_document_status_ui
+from src.vorming.llm_provider_v1 import LLM_API_KEY_ENV, LLM_MODEL_ENV
 from tests.production_support import application_for as create_console_app
 from src.operations_console_v1 import ConsoleError, PRE_REVIEW_BLOCKED
-from src.pre_review_semantic_v1 import (
+from src.vorming.pre_review_semantic_v1 import (
     PASSAGE_FORMATION_MODE_ENV, SEMANTIC_MODE, _PROCESSING_REFERENCE,
     bind_pre_review_semantic_processing,
     semantic_spec_from_fragments,

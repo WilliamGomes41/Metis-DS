@@ -22,7 +22,7 @@ UP = "acct-uploader"
 
 
 def _model():
-    import src.review_configuration_v1 as model
+    import src.review.review_configuration_v1 as model
     return model
 
 
@@ -189,5 +189,5 @@ def test_only_ingest_and_publish_gate_read_the_configuration():
     """
     users = sorted(str(path.relative_to(ROOT)) for path in (ROOT / "src").rglob("*.py")
                    if "review_configuration_v1" in path.read_text(encoding="utf-8"))
-    assert (ROOT / "src/review_configuration_v1.py").exists()
-    assert users == ["src/four_eyes_v1.py", "src/operations_console_app.py", "src/operations_console_v1.py"]
+    assert (ROOT / "src/review/review_configuration_v1.py").exists()
+    assert users == ["src/operations_console_app.py", "src/operations_console_v1.py", "src/review/four_eyes_v1.py"]

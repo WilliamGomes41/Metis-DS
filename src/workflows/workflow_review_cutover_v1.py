@@ -10,7 +10,7 @@ from typing import Any, Iterator
 
 from src.operations_console_v1 import ConsoleError
 from src.request_diagnostics_v1 import diagnostic_phase
-from src.review_ledger import buffer_events, register_backend
+from src.review.review_ledger import buffer_events, register_backend
 from src.workflows.workflow_documents_cutover_v1 import (
     PostgresWorkflowAzureAuthoritativePublicationConsole,
     PostgresWorkflowDurablePublicationConsole,

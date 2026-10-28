@@ -64,7 +64,7 @@ def guidance_for_group(group: dict[str, Any] | None) -> dict[str, Any] | None:
         title, explanation = CODE_ADVICE[code]
         category = "afgehandeld" if group.get("handled") else "fout"
     elif code:
-        from src.attempt_diagnostics_v1 import classification
+        from src.vorming.attempt_diagnostics_v1 import classification
         category, action = classification(code)
         title = f"Foutcode {code}"
         explanation = f"Categorie: {category}. Aanbevolen eerste stap: {action.replace('_', ' ')}."

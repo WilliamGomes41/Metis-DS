@@ -13,8 +13,8 @@ import sys
 import pytest
 
 from src.operations_console_v1 import ConsoleError, PRE_REVIEW_BLOCKED
-from src.processing_retry_v1 import KEY, now
-from src.processing_evidence_export_v1 import processing_evidence_tables
+from src.vorming.processing_retry_v1 import KEY, now
+from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
 from tests.test_review_batch_atomic_postgres import _console as _raw_console, _client
 from tests.semantic_fixture_support import bind_fixture_selections
 
@@ -247,7 +247,7 @@ def test_expired_worker_cannot_overwrite_recovered_success(workflow_postgres, tm
     initial = console._envelope(sid).get(KEY) or []
     second = _console(tmp_path, workflow_postgres)
     original = console._fragments_and_spec
-    import src.processing_retry_v1 as retry
+    import src.vorming.processing_retry_v1 as retry
     def superseded(*args, **kwargs):
         result = original(*args, **kwargs)
         future = now() + timedelta(hours=1)
@@ -275,7 +275,7 @@ def test_interruption_expiry_recovery_and_failed_activation_are_non_destructive(
         console.retry_pre_review(actor_id=actor, snapshot_id=sid, command_id="crashed")
     restarted = _console(tmp_path, workflow_postgres)
     assert restarted._envelope(sid)[KEY][-1]["state"] == "running"
-    import src.processing_retry_v1 as retry
+    import src.vorming.processing_retry_v1 as retry
     future = now() + timedelta(hours=1)
     monkeypatch.setattr(retry, "now", lambda: future)
     with pytest.raises(ConsoleError, match="processing_attempt_expired"):

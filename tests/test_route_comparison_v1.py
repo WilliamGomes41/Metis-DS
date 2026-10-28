@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from src.route_comparison_v1 import (
+from src.settings.route_comparison_v1 import (
     ComparisonError, ComparisonStore, analyze, assess, blind_view, cancel,
     claim_arm, close, fail_arm, finish_arm, digest,
 )

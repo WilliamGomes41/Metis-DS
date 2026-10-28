@@ -12,7 +12,7 @@ from tests.review_authority_fixture_support import materialised_row, source_frag
 
 from copy import deepcopy
 
-from src.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, ordinary_review_queue
+from src.vorming.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, ordinary_review_queue
 from src.object_taxonomy_v1 import (
     REVIEW_PRIORITY_FOCUS,
     REVIEW_PRIORITY_REGULAR,
@@ -21,12 +21,12 @@ from src.object_taxonomy_v1 import (
 )
 from src.operations_console_app import _render_review_index
 from src.operations_console_v1 import slow_review_duty
-from src.proportionate_review_v1 import (
+from src.review.proportionate_review_v1 import (
     normal_risk_batch_queue,
     regular_individual_review_queue,
     regular_review_queue,
 )
-from src.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
+from src.vorming.source_occurrence_authority_v1 import prefer_authoritative_exact_occurrences
 
 
 def _obj(

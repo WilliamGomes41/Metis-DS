@@ -46,8 +46,8 @@ class DocumentOverviewInputs:
             self.published.update(self.state.published_snapshot_ids(present))
 
     def status_and_diagnostics(self, envelope):
-        from src.processing_retry_v1 import status
-        from src.processing_diagnostics_v1 import processing_diagnostics
+        from src.vorming.processing_retry_v1 import status
+        from src.vorming.processing_diagnostics_v1 import processing_diagnostics
         sid = envelope['snapshot_id']
         # Capture is explicit and complete before leaving the SQL boundary.
         inputs = self.diagnostics[sid]

@@ -3,10 +3,10 @@ from copy import deepcopy
 
 import pytest
 
-from src.four_eyes_v1 import requires_four_eyes
+from src.review.four_eyes_v1 import requires_four_eyes
 from src.operations_console_v1 import ConsoleError
-from src.review_policy_v1 import CONTRACT, validate_policy
-from src.review_duty_v1 import review_stage
+from src.review.review_policy_v1 import CONTRACT, validate_policy
+from src.review.review_duty_v1 import review_stage
 from tests.test_v225_beslisboom_path import _accounts, _console, _ingest_boom, _confirm_applies_if, _boom_freeze_bytes
 
 

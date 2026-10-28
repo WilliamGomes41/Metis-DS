@@ -56,7 +56,7 @@ def test_complete_existing_repair_runs_only_on_formation(tmp_path, monkeypatch, 
     assert 'action="/review/resolve"' not in review.text
     assert 'Passage herstellen in Vorming' in review.text
     if kind == 'classification':
-        import src.review_passage_read_v1 as reader
+        import src.review.review_passage_read_v1 as reader
         original_read = reader.read_review_passage
         reads = []
         with monkeypatch.context() as patch:
@@ -190,7 +190,7 @@ def test_graph_editor_and_confirmation_have_distinct_owners(tmp_path, *, product
 
 def test_source_record_keeps_its_existing_source_context_owner(tmp_path, *, production_app, production_console):
     from tests.test_source_context_review_v1 import _system as context_system
-    from src.source_accountability_v1 import is_source_record
+    from src.vorming.source_accountability_v1 import is_source_record
     state, _, _, source, _, command = context_system(tmp_path,
         console=production_console(root=tmp_path, processing_binder=bind_fixture_selections))
     assert is_source_record(source)

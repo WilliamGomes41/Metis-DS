@@ -122,13 +122,13 @@ def _require_production_console_class(request, monkeypatch):
 @pytest.fixture(autouse=True)
 def _explicit_binding_replaces_fixture_model(monkeypatch):
     """Consoles made with the fixture model may be bound explicitly by a test afterwards."""
-    import src.pre_review_semantic_v1 as semantic
+    import src.vorming.pre_review_semantic_v1 as semantic
     from tests.semantic_fixture_support import rebinding
     original = getattr(semantic.bind_pre_review_semantic_processing, "__wrapped__",
                        semantic.bind_pre_review_semantic_processing)
     for module in list(sys.modules.values()):
         name = getattr(module, "__name__", "") or ""
-        if (name == "src.pre_review_semantic_v1" or name.startswith("tests.") or name.startswith("test_")) \
+        if (name == "src.vorming.pre_review_semantic_v1" or name.startswith("tests.") or name.startswith("test_")) \
                 and getattr(module, "bind_pre_review_semantic_processing", None) is original:
             monkeypatch.setattr(module, "bind_pre_review_semantic_processing", rebinding(original))
 

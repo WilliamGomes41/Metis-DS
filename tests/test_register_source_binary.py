@@ -6,7 +6,7 @@ import pytest
 
 from src.g2_source_store import build_g2_locator
 from src.integrity_kernel import sha256_file
-from src.register_source_binary import build_record, update_registry
+from src.ingest.register_source_binary import build_record, update_registry
 
 
 def _record(path: Path, source_id: str = "source-1"):

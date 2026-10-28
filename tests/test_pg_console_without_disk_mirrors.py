@@ -31,9 +31,9 @@ import pytest
 from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 from src.integrity_kernel import stamp_canonical_hashes
 from src.operations_console_v1 import ConsoleError
-from src.review_duty_v1 import exact_current_approver_ids
-from src.review_ledger import unregister_backend
-from src import quality_evidence_v1
+from src.review.review_duty_v1 import exact_current_approver_ids
+from src.review.review_ledger import unregister_backend
+from src.settings import quality_evidence_v1
 from src.workflows.workflow_badge_counts_postgres_v1 import (
     FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole,
     FastBadgePostgresCompleteWorkflowDurablePublicationConsole,

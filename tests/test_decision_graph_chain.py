@@ -6,7 +6,7 @@ import uuid
 import fitz
 import pytest
 
-from src.decision_graph_v1 import CONTRACT
+from src.vorming.decision_graph_v1 import CONTRACT
 from src.operations_console_v1 import ConsoleError
 from tests.test_explicit_review_policy import policy
 from tests.test_v225_beslisboom_path import _accounts, _console, _ingest_boom
@@ -107,7 +107,7 @@ def test_pdf_requires_passage_and_graph_review_after_restart(tmp_path, participa
 
 def test_policy_change_is_versioned_and_replay_safe(tmp_path, *, production_console):
     from tests.test_review_participation_management import change
-    from src.review_policy_v1 import object_policy
+    from src.review.review_policy_v1 import object_policy
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     sid = ingest(console, accounts)["snapshot_id"]
@@ -169,7 +169,7 @@ def finish(console, accounts, sid):
 
 
 def test_durable_release_keeps_graph_out_of_prose_and_restarts(tmp_path, *, production_console):
-    from src.decision_graph_v1 import read_active_graph
+    from src.vorming.decision_graph_v1 import read_active_graph
     from tests.test_durable_publication_console_v1 import MemorySourceStore
 
     source = MemorySourceStore()
@@ -262,7 +262,7 @@ def test_ingest_command_deduplicates_and_rejects_changed_payload(tmp_path, *, pr
 def test_native_postgres_graph_publication_restart_and_withdrawal(tmp_path, *, complete_postgres):
     from datetime import datetime, timedelta
     from tests.decision_graph_native_support import native_state
-    from src.decision_graph_v1 import read_active_graph
+    from src.vorming.decision_graph_v1 import read_active_graph
     state, store, source = native_state(tmp_path, config=complete_postgres)
     console = state()
     suffix = uuid.uuid4().hex[:10]

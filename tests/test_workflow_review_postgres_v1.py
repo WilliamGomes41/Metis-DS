@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from src.operations_console_v1 import OperationsConsole
-from src.review_ledger import (
+from src.review.review_ledger import (
     append_event,
     buffer_events,
     read_events,

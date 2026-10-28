@@ -14,7 +14,7 @@ import io
 from zipfile import ZipFile
 
 import src.publication_refusal_store_v1 as store
-from src.processing_evidence_export_v1 import processing_evidence_tables
+from src.vorming.processing_evidence_export_v1 import processing_evidence_tables
 from src.runtime_data_inventory_v1 import (
     INVENTORY_CATEGORIES, export_runtime_data, inventory_runtime_data, restore_runtime_data,
 )
@@ -125,7 +125,7 @@ def test_manifest_text_describes_the_current_store():
 # --- Lex advice / Metis GO (2026-10-16): actor identifiers MAG NIET be exported ---
 
 def test_actor_columns_are_not_in_the_export_schemas():
-    from src.processing_evidence_export_v1 import SCHEMAS
+    from src.vorming.processing_evidence_export_v1 import SCHEMAS
     for name in ('publication_refusals', 'processing_attempts', 'processing_recovery'):
         assert not {'actor', 'actor_id'} & set(SCHEMAS[name]), name
 
@@ -146,7 +146,7 @@ def test_no_plain_account_id_appears_anywhere_in_the_export(tmp_path):
 
 def test_export_schema_is_v15_without_actor_columns():
     # Metis 2026-10-16: removing actor/actor_id is a schema change; closes OPENVRAAG-EXP-1.
-    from src.processing_evidence_export_v1 import PROJECTOR_VERSION, SCHEMAS, VERSION
+    from src.vorming.processing_evidence_export_v1 import PROJECTOR_VERSION, SCHEMAS, VERSION
     assert VERSION == PROJECTOR_VERSION == 'processing-evidence-export-v16'
     assert not any({'actor', 'actor_id'} & set(fields) for fields in SCHEMAS.values())
 
