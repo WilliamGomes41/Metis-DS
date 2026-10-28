@@ -34,7 +34,7 @@ dev = ["pytest==9.0.2", "coverage>=7.0", "httpx==0.28.1", "PyYAML==6.0.3"]
 vvn-data-service = "src.cli:main"
 
 [tool.setuptools]
-packages = ["src", "src.retrieval", "src.evaluation", "src.workflows", "src.telemetry", "src.ingest", "src.vorming", "src.review", "src.documents", "src.settings"]
+packages = ["src", "src.publication", "src.retrieval", "src.evaluation", "src.workflows", "src.telemetry", "src.ingest", "src.vorming", "src.review", "src.documents", "src.settings"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

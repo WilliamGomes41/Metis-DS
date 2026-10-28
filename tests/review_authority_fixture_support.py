@@ -52,7 +52,7 @@ def source_fragments():
 
 def approved_bindings(objects, reviewer="reviewer-1"):
     from src.integrity_kernel import exact_review_snapshot_hash
-    from src.publish_authorization_v1 import tuple_record
+    from src.publication.publish_authorization_v1 import tuple_record
     return [tuple_record(object_id=o["object_id"], object_version=o["object_version"],
             canonical_object_hash=exact_review_snapshot_hash(o),
             confirmed_object_type=o.get("confirmed_object_type"),

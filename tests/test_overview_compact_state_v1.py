@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 import src.vorming.knowledge_materialisation_v1 as materialisation
-import src.publication_readiness_v1 as readiness
+import src.publication.publication_readiness_v1 as readiness
 import src.vorming.recoverable_formation_v1 as formation
 import src.vorming.source_preparation_context_v1 as preparation
 from tests import test_vsa_publish_readiness_ui_v1 as publish_fixture

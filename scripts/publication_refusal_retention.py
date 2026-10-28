@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src import publication_refusal_store_v1 as store  # noqa: E402
+from src.publication import publication_refusal_store_v1 as store  # noqa: E402
 
 
 def _workflow_store():

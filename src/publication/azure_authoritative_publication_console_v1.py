@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
-from src.durable_publication_console_v1 import DurablePublicationConsole
+from src.publication.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
+from src.publication.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import G2SourceStoreError, is_g2_locator
 from src.integrity_kernel import sha256_bytes
 from src.operations_console_v1 import ConsoleError

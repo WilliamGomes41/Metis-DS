@@ -39,7 +39,7 @@ from pathlib import Path
 
 import pytest
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig, PostgresCanonicalPublicationStore
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig, PostgresCanonicalPublicationStore
 from src.operations_console_v1 import ConsoleError, OperationsConsole
 from src.review.proportionate_review_v1 import _batch_type, normal_risk_batch_queue
 from src.workflows import workflow_documents_cutover_v1 as docs_mod

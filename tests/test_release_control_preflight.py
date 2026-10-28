@@ -114,7 +114,7 @@ def test_opslag_persistence_paths_require_concurrent_stale_checks() -> None:
     for path in (
         "src/operations_console_v1.py",
         "src/review_ledger.py",
-        "src/canonical_store.py",
+        "src/publication/canonical_store.py",
         "src/g2_source_store.py",
     ):
         item = preflight.classify_paths([path])["opslag"]
@@ -174,7 +174,7 @@ def test_kwaliteit_gate_paths_are_required() -> None:
     preflight = _load()
     for path in (
         "src/admission_gate_v1.py",
-        "src/prepublication_gate_v3.py",
+        "src/publication/prepublication_gate_v3.py",
         "src/retrieval/answerability_gate_v1.py",
         "src/integrity_kernel.py",
     ):
@@ -277,7 +277,7 @@ def test_historical_markers_do_not_satisfy_unrelated_product_change(tmp_path: Pa
         encoding="utf-8",
     )
     result = preflight.evaluate_release_control(
-        paths=["src/canonical_store.py"],
+        paths=["src/publication/canonical_store.py"],
         tests_root=tests_root,
     )
     assert result["status"] == "BLOCKED"

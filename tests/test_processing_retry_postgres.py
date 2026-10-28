@@ -122,7 +122,7 @@ def test_concurrent_duplicate_and_other_command_cannot_start_second_attempt(work
 from pathlib import Path
 import sys
 from tests.test_review_batch_atomic_postgres import _console
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.operations_console_v1 import ConsoleError
 console = _console(Path(sys.argv[1]), PostgresCanonicalConfig(dsn=sys.argv[2]))
 try:

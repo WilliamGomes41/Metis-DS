@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.durable_publication_console_v1 import DurablePublicationConsole
+from src.publication.durable_publication_console_v1 import DurablePublicationConsole
 from src.operations_console_app import create_console_app
 from src.operations_console_v1 import ConsoleError
 from src.workflows.workflow_identity_postgres_v1 import (

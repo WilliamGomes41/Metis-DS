@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig, PostgresCanonicalPublicationStore
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig, PostgresCanonicalPublicationStore
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
 from src.operations_console_v1 import ConsoleError, review_lane
 from src.vorming.passage_register_v1 import passage_register_of
@@ -80,7 +80,7 @@ class MemorySourceStore:
 
 def canonical_store(config):
     """Observe persist calls on the actual PostgreSQL canonical adapter."""
-    from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+    from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
     store = PostgresCanonicalPublicationStore(config)
     store.persist_calls = 0
     persist = store.persist_published_release

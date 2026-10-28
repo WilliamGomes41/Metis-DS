@@ -10,7 +10,7 @@ from copy import deepcopy
 from typing import Any, Iterable
 
 from src.integrity_kernel import stable_hash, stamp_canonical_hashes, schema_errors
-from src.publish_authorization_v1 import invalidate_for_object
+from src.publication.publish_authorization_v1 import invalidate_for_object
 from src.review.review_ledger import append_event, read_events
 
 ROLE_KEY = "source_role_review"

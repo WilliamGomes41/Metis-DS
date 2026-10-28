@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.operations_console_v1 import PRE_REVIEW_BLOCKED
 from src.review.proportionate_review_v1 import ProportionateReviewConsole
 from src.workflows.workflow_badge_counts_postgres_v1 import _PostgresBadgeCountsMixin

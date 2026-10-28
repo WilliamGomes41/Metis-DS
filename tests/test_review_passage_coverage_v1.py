@@ -13,7 +13,7 @@ import re
 import pytest
 
 from src.operations_console_app import _render_review_index
-from src.publication_readiness_v1 import review_followup_queues, source_passage_closure
+from src.publication.publication_readiness_v1 import review_followup_queues, source_passage_closure
 from src.review.review_workboard_v1 import review_work_item, _workboard_card
 from src.review.review_duty_v1 import reviewer_route_counts
 from tests.test_vsa_review_workboard_v1 import (

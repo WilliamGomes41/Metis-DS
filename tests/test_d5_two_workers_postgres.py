@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
 from src.review.review_ledger import unregister_backend, verify_ledger
 from tests.complete_workflow_support import complete_console, complete_postgres  # noqa: F401

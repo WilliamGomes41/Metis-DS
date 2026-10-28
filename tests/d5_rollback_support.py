@@ -9,7 +9,7 @@ import sys
 import uuid
 
 from fastapi.testclient import TestClient
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.product_api_v1 import create_product_app
 from src.review.review_ledger import read_events
 from src.usage_ledger_v1 import UsageLedger

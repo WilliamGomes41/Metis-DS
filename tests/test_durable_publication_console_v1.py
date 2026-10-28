@@ -16,12 +16,12 @@ from typing import Any, Callable
 
 import pytest
 
-from src.canonical_publication_postgres_v1 import (
+from src.publication.canonical_publication_postgres_v1 import (
     CanonicalPublicationStoreError,
     expected_release_item_set,
     registry_update_required,
 )
-from src.durable_publication_console_v1 import DurablePublicationConsole
+from src.publication.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
 from src.operations_console_v1 import review_lane
 from src.vorming.passage_register_v1 import passage_register_of

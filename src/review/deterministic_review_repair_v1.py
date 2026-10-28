@@ -26,7 +26,7 @@ from src.vorming.admission_gate_v1 import is_admission_blocked
 from src.review.source_discrepancy_v1 import normalize as normalize_discrepancy
 from src.review.beslisboom_path_v1 import review_path_for_klasse
 from src.vorming.passage_register_v1 import passage_register_of
-from src.publish_authorization_v1 import invalidate_for_object
+from src.publication.publish_authorization_v1 import invalidate_for_object
 from src.review.review_cockpit_v1 import map_eindoordeel
 from src.serving_relations_v1 import binding_relations
 

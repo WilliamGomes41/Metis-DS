@@ -15,7 +15,7 @@ from typing import Any, Mapping
 
 from azure.identity import DefaultAzureCredential
 
-from src.canonical_publication_postgres_v1 import AZURE_POSTGRES_SCOPE, PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import AZURE_POSTGRES_SCOPE, PostgresCanonicalConfig
 from src.documents.topic_identity_v1 import topic_identity
 
 REQUIRED_WORKFLOW_DOCUMENT_TABLES = frozenset(

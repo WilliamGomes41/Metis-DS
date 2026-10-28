@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from src.durable_publication_console_v1 import DurablePublicationConsole
+from src.publication.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
 from src.operations_console_v1 import review_stacks
 from src.review.proportionate_review_v1 import ProportionateReviewConsole

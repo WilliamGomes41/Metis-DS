@@ -12,8 +12,8 @@ from pathlib import Path
 
 from src.integrity_kernel import stamp_canonical_hashes
 from src.review.knowledge_path_v1 import content_reviewable
-from src import publication_readiness_v1 as readiness_module
-from src.publication_readiness_v1 import (
+from src.publication import publication_readiness_v1 as readiness_module
+from src.publication.publication_readiness_v1 import (
     READINESS_AUTHORITY_UNAVAILABLE,
     REVIEW_REPAIR_INCOMPLETE,
     REVIEW_WORK_INCOMPLETE,
@@ -59,7 +59,7 @@ def _console(tmp_path, *, production_console):
 
 
 # RED: merged T11 still exposes the action-oriented readiness bypass.\ndef test_readiness_has_no_internal_publisher_capability() -> None:
-    source = (ROOT / "src" / "publication_readiness_v1.py").read_text(encoding="utf-8")
+    source = (ROOT / "src" / "publication/publication_readiness_v1.py").read_text(encoding="utf-8")
 
     assert "_READINESS_EVALUATION_CAPABILITY" not in source
     assert "code.startswith(" not in source

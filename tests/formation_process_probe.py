@@ -4,7 +4,7 @@ from pathlib import Path
 import signal
 import sys
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 from src.vorming.source_bound_fields_v3 import MODE
 from tests.production_support import production_application

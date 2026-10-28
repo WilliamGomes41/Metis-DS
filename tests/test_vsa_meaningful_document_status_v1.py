@@ -19,7 +19,7 @@ from src.documents.document_status_v1 import (
     DocumentStatusReadinessMixin,
     derive_document_status,
 )
-from src.durable_publication_console_v1 import DurablePublicationConsole
+from src.publication.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
 from src.operations_console_v1 import ConsoleError, review_lane
 from src.vorming.passage_register_v1 import passage_register_of

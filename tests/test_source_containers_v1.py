@@ -9,7 +9,7 @@ import json
 import pytest
 
 from src.vorming.passage_register_v1 import apply_passage_register
-from src.publication_readiness_v1 import source_passage_closure, review_followup_queues
+from src.publication.publication_readiness_v1 import source_passage_closure, review_followup_queues
 from src.vorming.source_accountability_v1 import evidence_of, KEY, record
 from src.vorming.source_containers_v1 import partition, metadata_reason
 from src.vorming.source_bound_fields_v3 import additional_context_codes

@@ -10,10 +10,10 @@ import json
 from contextvars import ContextVar
 from typing import Any
 
-from src.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
+from src.publication.canonical_publication_postgres_v1 import CanonicalPublicationStoreError
 from src.documents.document_status_v1 import derive_lifecycle_status
 from src.console_performance_v1 import measure_badges
-from src.publish_authorization_v1 import still_matches
+from src.publication.publish_authorization_v1 import still_matches
 from src.review.four_eyes_v1 import HIGH_RISK_FIELDS
 from src.operations_console_v1 import CAPTURED, PRE_REVIEW_BLOCKED, ConsoleError
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError

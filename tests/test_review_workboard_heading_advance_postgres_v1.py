@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalConfig
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalConfig
 from src.operations_console_v1 import review_lane
 from src.review.review_workboard_v1 import review_workboard_items
 

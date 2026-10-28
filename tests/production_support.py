@@ -47,7 +47,7 @@ def production_application(root, config, *, azure=False,
         if source_store is not None:
             patch.setenv("CONSOLE_SOURCE_STORE", str(source_store))
         if canonical_publication_store is not None:
-            from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+            from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
             if (type(canonical_publication_store) is not PostgresCanonicalPublicationStore
                     or canonical_publication_store.config != config):
                 raise ValueError("Canonical store must be the production PostgreSQL store for this test database")

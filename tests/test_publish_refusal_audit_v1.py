@@ -13,8 +13,8 @@ from copy import deepcopy
 
 import pytest
 
-import src.publish_refusal_audit_v1 as audit
-import src.publication_refusal_store_v1 as store
+import src.publication.publish_refusal_audit_v1 as audit
+import src.publication.publication_refusal_store_v1 as store
 from src.request_diagnostics_v1 import _LOGGER
 from tests.test_durable_publication_console_v1 import MemoryCanonicalStore, _ready_console
 from tests.test_recoverable_formation_v1 import system

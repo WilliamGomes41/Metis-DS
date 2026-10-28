@@ -102,7 +102,7 @@ from src.vorming.recommendation_semantics_v1 import (
     proposed_recommendation_semantics_of,
 )
 from src.review.open_original_v1 import OpenOriginalError, open_source_passage, researcher_visible_prose
-from src.publish_authorization_v1 import record_authorization, invalidate_for_object, still_matches, tuple_record
+from src.publication.publish_authorization_v1 import record_authorization, invalidate_for_object, still_matches, tuple_record
 from src.review.review_ledger import append_event, read_events
 from src.review.review_interaction_v1 import validate_review_interaction_identity
 from src.review.review_workflow_v3 import _apply_review_state
@@ -679,7 +679,7 @@ def unpublished_delete_permitted(account: dict[str, Any] | None, envelope: dict[
 
 def _recorded_authorization(bindings, binding, account):
     """D-SEC-1: elke goedkeuring loopt via de identiteitscontrole van het contract."""
-    from src.publish_authorization_v1 import ApproverIdentityError
+    from src.publication.publish_authorization_v1 import ApproverIdentityError
     try:
         return record_authorization(bindings, binding, account=account)
     except ApproverIdentityError as exc:
@@ -1031,7 +1031,7 @@ class OperationsConsole:
         if "reviewer" in roles:
             from src.review.review_duty_v1 import reviewer_route_counts
             from src.review.knowledge_path_v1 import is_structural_projection
-            from src.publication_readiness_v1 import review_followup_queues
+            from src.publication.publication_readiness_v1 import review_followup_queues
             review = 0
             for envelope in envelopes:
                 sid = envelope["snapshot_id"]
@@ -4299,7 +4299,7 @@ class OperationsConsole:
     def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
         """Authorize the publisher action boundary, then run total readiness."""
         self._require_role(actor_id, "publisher")
-        from src.publication_readiness_v1 import derive_publication_readiness
+        from src.publication.publication_readiness_v1 import derive_publication_readiness
         return derive_publication_readiness(self, snapshot_id)
 
     def publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:

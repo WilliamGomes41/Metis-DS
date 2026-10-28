@@ -19,7 +19,7 @@ from src.operations_console_v1 import ConsoleError, PRE_REVIEW_BLOCKED
 from tests.test_v226_klasse_wijzigen import _accounts, _ingest_richtlijn
 from tests.test_vsa_publish_document_v1 import MemorySourceStore
 from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: F401
-from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 
 
 def _system(tmp_path, *, production_console):

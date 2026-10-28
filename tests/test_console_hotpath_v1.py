@@ -23,7 +23,7 @@ from fastapi.testclient import TestClient
 from httpx import ASGITransport
 
 from src.azure_postgres_credential_v1 import CachedAzurePostgresCredential
-from src.canonical_publication_postgres_v1 import (
+from src.publication.canonical_publication_postgres_v1 import (
     PostgresCanonicalConfig,
     PostgresCanonicalPublicationStore,
 )

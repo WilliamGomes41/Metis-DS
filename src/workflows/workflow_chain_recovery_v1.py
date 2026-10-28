@@ -23,11 +23,11 @@ from src.settings.api_access_v1 import (
 )
 from src.integrity_kernel import stable_hash
 from src.documents.topic_identity_v1 import topic_identity, topic_identity_key
-from src.publication_chain_recovery_guard_v1 import (
+from src.publication.publication_chain_recovery_guard_v1 import (
     restore_publication_chain as _guarded_restore,
     verify_publication_chain_backup as _guarded_verify,
 )
-from src.publication_chain_recovery_v1 import (
+from src.publication.publication_chain_recovery_v1 import (
     BACKUP_FORMAT,
     DB_TABLES,
     PublicationChainRecoveryError,
@@ -611,7 +611,7 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
             raise PublicationChainRecoveryError("workflow_database_restore_preflight_failed") from exc
 
     def restore_state(self, state: Mapping[str, Any]) -> None:
-        from src.publication_chain_recovery_v1 import _validate_database_backup_shape, _table_rows
+        from src.publication.publication_chain_recovery_v1 import _validate_database_backup_shape, _table_rows
 
         state = _upgrade_workflow_state(state)
         _validate_database_backup_shape(state)

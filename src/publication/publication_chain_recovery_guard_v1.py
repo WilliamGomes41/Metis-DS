@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from src.integrity_kernel import sha256_bytes
-from src.publication_chain_recovery_v1 import (
+from src.publication.publication_chain_recovery_v1 import (
     PublicationChainRecoveryError,
     _blob_entries_from_state,
     restore_publication_chain as _restore_v1,

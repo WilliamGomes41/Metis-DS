@@ -47,7 +47,7 @@ def test_content_task_excludes_source_handling_and_preserves_duty_ground(tmp_pat
     assert 'data-review-layer' not in html
     assert routes["actionable_contextual_duties"] + routes["actionable_batch_duties"] == 1
     assert legacy_rest['object_id'] not in html
-    from src.publication_readiness_v1 import review_followup_queues
+    from src.publication.publication_readiness_v1 import review_followup_queues
     open_source = len(review_followup_queues(rows, review_path="richtlijn", bindings=console.object_review_bindings(sid),
                                              fragments=console.review_source_fragments(sid))["disposition"])
     # The deterministic rest row is source handling too, so the label is not "bronpassages".

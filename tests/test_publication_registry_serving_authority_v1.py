@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
 
 ROOT = Path(__file__).resolve().parents[1]
 

@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 import pytest
-from src.publication_evidence_v1 import collect_publication, publication_report
+from src.publication.publication_evidence_v1 import collect_publication, publication_report
 from src.operations_console_v1 import ConsoleError
 from tests.test_durable_publication_console_v1 import MemoryCanonicalStore, _ready_console
 
@@ -131,7 +131,7 @@ def test_http_export_and_product_readback_after_new_instances(tmp_path, *, produ
     from src.product_api_v1 import create_product_app
     from tests.test_product_api_v1 import registry, paths, headers
     from tests.test_durable_publication_console_v1 import TEST_PASSWORD
-    from src.durable_publication_console_v1 import DurablePublicationConsole
+    from src.publication.durable_publication_console_v1 import DurablePublicationConsole
     console, accounts, receipt = _ready_console(tmp_path, production_console=production_console)
     authority = console.canonical_publication_store
     sid = receipt['snapshot_id']
@@ -182,7 +182,7 @@ def test_invalid_publication_is_refused_without_release(tmp_path, *, production_
 
 def test_registry_query_is_bounded_parameterized_and_read_only():
     from contextlib import contextmanager
-    from src.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore, PostgresCanonicalConfig
+    from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore, PostgresCanonicalConfig
     calls = []
     class Connection:
         def execute(self, query, parameters):
@@ -219,7 +219,7 @@ def test_actual_publication_boundaries_correlate_without_rerunning_readiness(tmp
     from fastapi.testclient import TestClient
     from src.operations_console_app import create_console_app
     from src.request_diagnostics_v1 import RequestDiagnostics, _LOGGER
-    from src.publication_evidence_v1 import publication_route_from_events
+    from src.publication.publication_evidence_v1 import publication_route_from_events
     from tests.test_durable_publication_console_v1 import TEST_PASSWORD
     console, accounts, receipt = _ready_console(tmp_path, production_console=production_console)
     authority = console.canonical_publication_store

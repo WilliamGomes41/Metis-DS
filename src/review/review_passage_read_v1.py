@@ -69,7 +69,7 @@ def read_review_document(console, account, snapshot_id):
         reads.objects[snapshot_id] = (rows, revision)
         reads.current_objects[snapshot_id] = objects
         reads.bindings[snapshot_id] = bindings
-    from src.publish_authorization_v1 import still_matches
+    from src.publication.publish_authorization_v1 import still_matches
     by_id = {obj['object_id']: obj for obj in objects}
     bindings = [{**row, 'valid': bool(by_id.get(row.get('object_id')))
                  and still_matches(row, by_id[row['object_id']])} for row in bindings]
@@ -170,7 +170,7 @@ def read_review_passage(console, account, snapshot_id, object_id, *, context_tar
     reads = console._document_reads()
     if reads is not None:
         reads.envelopes[snapshot_id] = envelope
-    from src.publish_authorization_v1 import still_matches
+    from src.publication.publish_authorization_v1 import still_matches
     by_id = {obj['object_id']: obj for obj in objects}
     bindings = [{**row, 'valid': bool(by_id.get(row.get('object_id')))
                  and still_matches(row, by_id[row['object_id']])} for row in bindings]

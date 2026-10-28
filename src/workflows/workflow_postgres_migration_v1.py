@@ -7,7 +7,7 @@ from typing import Any, Iterable
 
 from azure.identity import DefaultAzureCredential
 
-from src.canonical_publication_postgres_v1 import AZURE_POSTGRES_SCOPE
+from src.publication.canonical_publication_postgres_v1 import AZURE_POSTGRES_SCOPE
 
 
 MIGRATION_NAMES = (

@@ -80,7 +80,7 @@ def main():
             result['processing_context_match'] = all(trace.get(key) and trace.get(key) == context.get(key)
                                                      for key in ('snapshot_id', 'source_hash'))
     if args.publication:
-        from src.publication_evidence_v1 import publication_report
+        from src.publication.publication_evidence_v1 import publication_report
         publication, hashes['publication'] = read(args.publication)
         after = None
         if args.publication_after_restart:
@@ -89,7 +89,7 @@ def main():
         if args.publication_route:
             route, hashes['publication_route'] = read(args.publication_route)
         if args.application:
-            from src.publication_evidence_v1 import publication_route_from_events
+            from src.publication.publication_evidence_v1 import publication_route_from_events
             boundary = publication_route_from_events(publication, app, request_id=args.request_id)
             route = {**(route or {}), **boundary}
         if route is not None and probe is not None:
