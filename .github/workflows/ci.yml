@@ -73,10 +73,9 @@ jobs:
         timeout-minutes: 10
         env:
           REVIEW_PROOF_OUTPUT: output/review-post-902.json
-          REVIEW_POST_SIZES: '20'
         run: |
           bash scripts/test_postgres.sh > /dev/null
-          python -m pytest -q -p tests.conftest evidence/review-integrated-888/benchmark.py -k native_review_post_baseline --junitxml=output/review-post-902.xml
+          python -m pytest -q tests/test_review_post_baseline_postgres.py --junitxml=output/review-post-902.xml
       - name: Upload MET-23 native POST evidence
         if: always()
         uses: actions/upload-artifact@v4
