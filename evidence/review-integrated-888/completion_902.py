@@ -107,10 +107,12 @@ def decision_retry(tmp_path, production_console, production_app, monkeypatch, de
         data.update(decision=decision, eindoordeel={'reject': 'afwijzen',
             'revise': 'goedkeuren_na_correctie', 'later': 'later_beoordelen'}[decision])
         before = durable(console, [sid])
+        before_generation = console.workflow_document_store.review_document_input(sid)[1]
         first = client.post('/review', data=data, follow_redirects=False)
         expected = 200 if decision == 'revise' else 303
         assert first.status_code == expected
         winner = durable(console, [sid])
+        after_generation = console.workflow_document_store.review_document_input(sid)[1]
         if decision in {'later', 'revise'}:
             assert winner == before
             if decision == 'revise':
@@ -121,11 +123,14 @@ def decision_retry(tmp_path, production_console, production_app, monkeypatch, de
             assert not any(b['valid'] for b in console.object_review_bindings(sid)
                            if b['object_id'] == focal['object_id'])
         retry = client.post('/review', data=data, follow_redirects=False)
-        assert retry.status_code == (409 if decision == 'reject' else expected)
+        # Strict passage precondition includes the store's document generation,
+        # even when a 'later' bundle preserved the semantic domain state.
+        assert retry.status_code == (expected if decision == 'revise' else 409)
         assert durable(console, [sid]) == winner
     record('decision_retry', decision=decision, first_status=first.status_code,
            retry_status=retry.status_code, retry_preserves_state=True,
            first_preserves_state=winner == before,
+           generation_changed=after_generation != before_generation,
            boundary='HTTP structured revise is a prewrite specification step; later is this payload only')
 
 

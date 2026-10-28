@@ -78,6 +78,7 @@ jobs:
           python -m pytest -q tests/test_review_post_baseline_postgres.py \
             tests/test_t11_knowledge_revision_lineage.py::test_unchanged_review_retry_keeps_revision_and_legacy_history \
             tests/test_d5_4_review_interaction_evidence.py::test_second_review_uses_same_evidence_store_without_changing_object_tuple \
+            tests/test_deterministic_review_repair_v1.py::test_source_unit_resolution_creates_new_proposal_and_no_revise_remains \
             tests/test_a08_heading_batch_atomic.py::test_success_duplicates_repeat_and_stale \
             tests/test_a08_heading_batch_atomic.py::test_native_batch_and_single_review_use_consistent_lock_order \
             tests/test_source_context_review_v1.py::test_native_context_and_publication_serialize_before_authority_read \

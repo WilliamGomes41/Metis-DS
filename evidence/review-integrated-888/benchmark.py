@@ -20,6 +20,20 @@ import pytest
 from tests.semantic_fixture_support import bind_fixture_selections
 
 
+def request_progress(label, action, *, index=None, status=None):
+    """Retain started requests too, including if a worker is later interrupted."""
+    path = Path(os.environ['REVIEW_PROOF_OUTPUT']).with_suffix('.progress.json')
+    rows = json.loads(path.read_text()) if path.exists() else []
+    if index is None:
+        index = len(rows)
+        rows.append({'case': 'request_progress', 'workload': label, 'action': action, 'state': 'started'})
+    else:
+        rows[index].update(state='finished', http_status=status)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(rows, indent=2) + '\n')
+    return index
+
+
 def safe_sql_categories(monkeypatch):
     """Transparent native driver observation; retain only fixed categories/counts."""
     import psycopg
@@ -48,7 +62,7 @@ def safe_sql_categories(monkeypatch):
         return 'other'
     def entry(name):
         return categories.setdefault(name, {'execute_count': 0, 'execute_ms': 0,
-            'fetch_count': 0, 'fetch_ms': 0, 'fetched_rows': 0, 'errors': 0})
+            'fetch_count': 0, 'fetch_ms': 0, 'fetched_rows': 0, 'affected_write_rows': 0, 'errors': 0})
     def observed_execute(cursor, query, *args, **kwargs):
         if not active[0]:
             return execute(cursor, query, *args, **kwargs)
@@ -58,7 +72,10 @@ def safe_sql_categories(monkeypatch):
         stats['execute_count'] += 1
         start = perf_counter()
         try:
-            return execute(cursor, query, *args, **kwargs)
+            result = execute(cursor, query, *args, **kwargs)
+            if name.endswith('_write'):
+                stats['affected_write_rows'] += max(cursor.rowcount, 0)
+            return result
         except BaseException:
             stats['errors'] += 1
             raise
@@ -367,6 +384,9 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
     initial_storage = storage_state()
     assert initial_storage['processing_storage_version'] == 1
     assert initial_storage['object_generation'] >= 0
+    if size > 2:
+        from tests.production_support import restart_production
+        console = restart_production(console)
     captured = []
     sql_active, sql_categories, sql_owners = safe_sql_categories(monkeypatch)
 
@@ -381,10 +401,11 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
     result = {'case': 'task_v1_review', 'formation_incomplete': incomplete, 'fault_point': fault,
         'dependency': dependency,
         'commit': git('rev-parse', 'HEAD'), 'harness_sha256': sha256(Path(__file__).read_bytes()).hexdigest(),
+        'python': platform.python_version(),
         'runtime': 'authenticated ASGI + native disposable PostgreSQL',
-        'fixture': 'existing synthetic two-passage bounded-processing provider; production activation',
+        'fixture': f'synthetic {size}-passage bounded-processing provider; production activation',
         'storage_before': initial_storage, 'samples': [],
-        'limitations': ['small task-v1 compatibility proof, not a scaling or production latency claim',
+        'limitations': ['synthetic task-v1 proof, not a production latency or incident replay claim',
                         'provider transport is deterministic; stores and activation are native']}
     rows = console.workflow_document_store.list_document_objects(sid)
     current = {o['object_id']: o for o in console.snapshot_objects(sid)}
@@ -397,11 +418,14 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
         'source_fragments': len(stored_extraction(env)),
         'source_bytes': len(source_html) if source_html else None,
         'source_sha256': env['sha256'], 'extraction_contract': env['prepared_source_extraction']['version']}
+    result['temperature'] = ('fresh production composition for first HTTP, then two repeated GET/400 pairs; '
+        'OS and PostgreSQL caches are not flushed') if size > 2 else 'compatibility fixture'
 
     def request(client, name, method, **kwargs):
         captured.clear()
         sql_categories.clear()
         sql_owners.clear()
+        progress = request_progress(f'task-v1/{size}/{incomplete}/{fault}/{dependency}', name)
         sql_active[0] = True
         start = perf_counter()
         try:
@@ -412,6 +436,7 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
         result['samples'].append({'action': name, 'http_status': response.status_code,
             'wall_ms': (perf_counter() - start) * 1000, 'response_bytes': len(response.content),
             'diagnostics': captured.pop(), 'sql_categories': deepcopy(sql_categories)})
+        request_progress('', '', index=progress, status=response.status_code)
         return response
 
     def form(page):
@@ -433,9 +458,15 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
         assert ('data-formation-incomplete' in page.text) == incomplete
         data = form(page)
         assert durable(console, [sid]) == before
+        early = request(client, 'pretransaction_refusal', 'post',
+            data={**data, 'decision': 'reject', 'eindoordeel': 'afwijzen', 'comment': ''})
+        assert early.status_code == 400
+        assert 'store_transaction' not in result['samples'][-1]['diagnostics'].get('phases', {})
+        assert durable(console, [sid]) == before
         refused = request(client, 'semantic_refusal', 'post',
                           data={**data, 'source_discrepancy': 'context_ontbreekt'})
         assert refused.status_code == 400 and 'synthetic task-v1 draft' in refused.text
+        assert result['samples'][-1]['diagnostics']['phases']['store_transaction']['inclusive_ms'] > 0
         assert durable(console, [sid]) == before
         if size > 2:
             for repeat in range(2):
@@ -566,8 +597,8 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
         'store_transaction_ms': 500, 'role': 'WP6 target, not a WP5 baseline pass condition or production SLO'}
     result['baseline_budget_violations'] = [s['action'] for s in result['samples']
         if s['http_status'] in {303, 400, 409} and (s['wall_ms'] > 3000
-        or s['diagnostics'].get('phases', {}).get('store_lock_hold', 0) > 250
-        or s['diagnostics'].get('phases', {}).get('store_transaction', 0) > 500)]
+        or s['diagnostics'].get('phases', {}).get('store_lock_hold', {}).get('inclusive_ms', 0) > 250
+        or s['diagnostics'].get('phases', {}).get('store_transaction', {}).get('inclusive_ms', 0) > 500)]
     output = Path(os.environ['REVIEW_PROOF_OUTPUT'])
     output.parent.mkdir(parents=True, exist_ok=True)
     previous = json.loads(output.read_text()) if output.exists() else []
@@ -661,6 +692,7 @@ def test_native_review_post_baseline(size, tmp_path, production_console, product
 
     def request(client, name, method, **kwargs):
         captured.clear()
+        progress = request_progress(f'legacy/{size}/{profile}', name)
         start = perf_counter()
         response = getattr(client, method)('/review', follow_redirects=False, **kwargs)
         wall_ms = (perf_counter() - start) * 1000
@@ -668,6 +700,7 @@ def test_native_review_post_baseline(size, tmp_path, production_console, product
         result['samples'].append({'action': name, 'wall_ms': wall_ms,
             'http_status': response.status_code, 'response_bytes': len(response.content),
             'diagnostics': captured.pop()})
+        request_progress('', '', index=progress, status=response.status_code)
         return response
 
     def form(page):
