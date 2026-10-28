@@ -125,7 +125,7 @@ die test verandert alleen samen met een vastgelegd besluit B5-c.
 ### 2.5 `recommendation_strength_evidence_not_applicable` — 1 uniek (historisch)
 
 Het label `sterke aanbeveling` (positie 13–31) ligt binnen de kandidaat (0–192), maar vóór
-de aanbevelingskern (45–192), in een inleiding van dezelfde zin ("er wordt een … geformuleerd om …").
+de aanbevelingskern (45–192): in een inleidend zinsdeel van dezelfde zin, met de kern direct erna.
 `_applicable_strength_ranges` accepteert alleen de kern, direct volgende stempels en
 omsluitende koppen (A07). Een inleidend label valt daar bewust buiten. Klasse **(g) onbeslist**,
 hetzelfde patroon als S1 in 2.4; het hoort bij besluit B5-c. Een latere call heeft het geval
@@ -135,7 +135,34 @@ opgelost (historical).
 
 Komt in deze snapshot niet voor. De gedragstest is #910 (in main).
 
-### 2.7 Besluiten uit MET-5
+### 2.7 Overige codes in deze snapshot
+
+Deze codes vallen buiten de zes MET-5-codes, maar staan in het overzicht en worden daarom
+ook geclassificeerd.
+
+**`semantic_evidence_literal_not_found` — 14 uniek (9 pending).** Volgens de
+resolver is de literal niet als aaneengesloten tekst in het blok aanwezig.
+
+| Situatie | Uniek | Klasse |
+| --- | --- | --- |
+| `predicate_span`: alle woorden staan in volgorde in de bron, maar het model liet 2–4 woorden ertussen weg (9×), of 17 woorden (2×) | 11 | (d) modelvoorstel. De 2–4-woordgevallen passen bij een gescheiden Nederlands werkwoordscluster, waarbij onderwerp of object tussen de werkwoorden staat. Eén span kan zo'n predicaat niet letterlijk aanwijzen: **open besluit B5-g** |
+| Lange span (`support_span`, 94 woorden) met 18 woorden weggelaten | 1 | (d): het model verkortte de bron |
+| Woorden niet in volgorde in het blok (`factual_claim_span`, 39 woorden) | 1 | (d): niet-letterlijke reconstructie |
+| Alleen hoofdletters verschillen (`type_evidence_spans`, 1 woord) | 1 | (d): de resolver vergelijkt terecht exact |
+
+De afwijzing is in alle gevallen terecht (e): de literal staat niet aaneengesloten in de bron.
+De eerste oorzaak ligt bij het model.
+
+**`recommendation_strength_evidence_missing` — 2 uniek (historical).** Het model gaf
+`strength_status = unmapped` zonder `strength_evidence`. `unmapped` vereist een
+letterlijke verwijzing (`semantic_passage_v1`). Klasse (d); een latere call heeft beide
+gevallen opgelost.
+
+**`source_assessment_bounds_invalid` — 1 uniek (historical).** Een bronbeoordeling met rol
+`structure` over meerdere blokken, met een bewijsverwijzing naar een blok buiten die spans.
+`source_accountability_v1.validate_assessments` weigert dat terecht. Klasse (d), later opgelost.
+
+### 2.8 Besluiten uit MET-5
 
 | Besluit | Bewijs in deze snapshot |
 | --- | --- |
@@ -150,6 +177,7 @@ Komt in deze snapshot niet voor. De gedragstest is #910 (in main).
 | B5-d | Mag een `list_introduction`-context een `scope_span` dragen? | 4 unieke gevallen | `CONTEXT_FIELDS["scope_span"]` aanvullen. Eigenaar MET-6 |
 | B5-e | Mag `occurrence = null` voor een **kernveld** binnen de kandidaatspans worden opgelost? | 30 unieke kernveldgevallen (47 incl. contextvelden) | Resolver scopen voor kernvelden, positief en negatief getest. Eigenaar MET-6 |
 | B5-f | Horen doelvelden (`supported_object`, `condition_target`) binnen de kandidaat, of via een relatie? | 22 unieke gevallen | Eerst een producerinstructie, geen domeinwijziging. Eigenaar MET-6 |
+| B5-g | Mag een predicaat dat in de bron gescheiden staat (Nederlands werkwoordscluster) uit meerdere letterlijke spans bestaan? | 9 unieke gevallen met 2–4 weggelaten woorden (2.7) | Versiegebonden veldcontract, zoals `type_evidence_spans` al een lijst is. Zonder besluit blijft het een producerinstructie (`missing_reason` in plaats van een niet-aaneengesloten literal). Eigenaar MET-6 |
 
 ## 4. Zonder besluit uit te voeren (producer en diagnostiek)
 
@@ -157,14 +185,15 @@ Komt in deze snapshot niet voor. De gedragstest is #910 (in main).
 2. Producerinstructies, binnen de bestaande providerroute en zonder domeinwijziging:
    - `occurrence` meegeven bij een herhaalde literal;
    - het volledige sterktelabel selecteren (S1);
-   - een contextentry meegeven voor `scope_span`/`target_group_span` buiten de kern.
+   - een contextentry meegeven voor `scope_span`/`target_group_span` buiten de kern;
+   - een niet-aaneengesloten literal vervangen door `missing_reason` (2.7, zolang B5-g open is).
 
 Beide wijzigen vorming of diagnose van werkpakket MET-6 en vragen een eigen GitHub-issue
 na triage. Ze zijn niet in dit dossier uitgevoerd.
 
 ## 5. Gereed (#911)
 
-- [x] Elke foutcode heeft een echt geval of een expliciete "komt niet voor" (2.6).
-- [x] B5-a en B5-b hebben een bevestigend of ontkrachtend bronvoorbeeld, of blijven expliciet open (2.7).
+- [x] Elke foutcode in deze snapshot heeft een oorzaakklasse (2.1–2.5 en 2.7), en de zesde MET-5-code staat expliciet als "komt niet voor" (2.6).
+- [x] B5-a en B5-b hebben een bevestigend of ontkrachtend bronvoorbeeld, of blijven expliciet open (2.8).
 - [x] Geen private brontekst of ruwe provideruitvoer in GitHub.
 - [x] Geen runtime- of productieacceptatie geclaimd. Reads/writes en runtime per I/O-pad zijn NOT TESTED (de export bevat ze niet); dat hoort bij MET-10.

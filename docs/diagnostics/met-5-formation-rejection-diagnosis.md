@@ -273,6 +273,6 @@ Nieuw: P2-cascadereikwijdte (#909), testgat 2.6 (#910), bewijs per geval (#911);
 - [x] #530/#515/#837/#848 onderscheiden van nieuw werk (§7).
 - [x] Routevastlegging versus omgevingsconfiguratie onderzocht (§6).
 - [x] Materiële besluiten en ontbrekende bronnen apart zichtbaar (§8); vervolgissues geclassificeerd (§9).
-- [x] Oorzaak **per echt geval** vastgesteld op één snapshot — `met-28-real-case-diagnosis.md` (#911), met nieuwe open besluiten B5-c t/m B5-f.
+- [x] Oorzaak **per echt geval** vastgesteld op één snapshot — `met-28-real-case-diagnosis.md` (#911), met nieuwe open besluiten B5-c t/m B5-g.
 
 Geen runtime- of productieacceptatie geclaimd.
