@@ -31,16 +31,22 @@ bestaande validators met bestaande testhelpers en worden in §4 reproduceerbaar 
 
 ```
 bronbytes → extractie (docling_pdf_v1 / extract_html_v1) → semantic_source_blocks
- → bounded_formation_v1.tasks_for (sectiegebonden taken, ≤12 000 tekens / 48 blokken)
- → provider (pre_review_semantic_v1) → source_evidence_resolution_v1.resolve_proposal_evidence
- → [V3] recoverable_formation_v1.prepare  |  [V2] hele voorstel valideren
+ ├─ [V3] bounded_formation_v1.execute (pre_review_semantic_v1.py:845–856)
+ │    → tasks_for (sectiegebonden taken, ≤12 000 tekens / 48 blokken)
+ │    → per taak: _provider_proposal → resolve_proposal_evidence
+ │      → recoverable_formation_v1.prepare → restrict_supplement (taakgrens)
+ │    → TaskResults/checkpoint
+ └─ [V2] één _provider_proposal-call voor alle blokken (pre_review_semantic_v1.py:888–900)
+      → resolve_proposal_evidence → hele voorstel valideren
  → semantic_passage_v1.semantic_units_from_proposal (incl. strength/direction)
  → knowledge_materialisation_v1.materialise_knowledge_candidates (enige kandidaatmaker)
- → bounded_formation_v1: restrict_supplement (taakgrens) → TaskResults/checkpoint
  → candidate_eligibility_v1 / admission_gate_v1 → WorkingRevision → Review → publicatie
 ```
 
-Materieel verschil per route (aangetoond in `pre_review_semantic_v1.py:723–735`):
+V2 wordt dus niet in sectietaken gesplitst en niet per taak gecheckpoint; taakbudget en
+`restrict_supplement` bestaan alleen op de V3-route.
+
+Materieel verschil per route (aangetoond in `pre_review_semantic_v1.py:723–735` en `:845–900`):
 
 - **V3** (`field_contract_v3`): `recoverable_formation_v1.prepare` isoleert afwijzingen per
   object/relatie/bronbeoordeling. De zes foutcodes verschijnen als *per-object findings*
@@ -131,13 +137,13 @@ Legenda oorzaakklasse: (a) kandidaatgrens, (b) contextbinding, (c) ambigue bronl
 | Trigger | In **iedere** fase van `bounded_formation_v1` (niet alleen recovery, `bounded_formation_v1.py:360`): een objectspan of bronbeoordeling ligt niet volledig binnen de `target_spans` van de taak |
 | Incident v12 | Geen geval → ontbrekend bewijs |
 | Oorzaak | (e) terecht: een taak mag geen werk van een andere taak overschrijven; (a) mogelijk wanneer een sectie >12 000 tekens/48 blokken over taken wordt gesplitst en een betekeniseenheid de taakgrens kruist; (d) model selecteert buiten de opgegeven bereiken |
-| Testdekking | Bronbeoordeling buiten doel: gedekt (`test_conflicting_reselection_cannot_replace_primary_or_clear_itself`). **Object** buiten doel: geen gerichte test gevonden |
-| Kleinste wijziging | Eerst testgat dichten (negatieve test object buiten doel). Taakgrenssplitsing alleen herzien bij bewezen kruisende betekeniseenheid |
-| Eigenaar | MET-6 (testgat); MET-10 (taakplanning/herstel) |
+| Testdekking | Bronbeoordeling buiten doel: gedekt (`test_conflicting_reselection_cannot_replace_primary_or_clear_itself`). **Object** buiten doel: op 69b4f6b geen gerichte test; toegevoegd onder #910 (`test_object_outside_task_target_is_rejected_and_stays_pending`, met tegenproef) |
+| Kleinste wijziging | Testgat gedicht (#910). Taakgrenssplitsing alleen herzien bij bewezen kruisende betekeniseenheid |
+| Eigenaar | MET-10 (taakplanning/herstel) |
 
 ### 2.7 Overige codes in het incident (context, geen scope van MET-5)
 
-`semantic_evidence_literal_not_found` (5×, calls 3/68), `source_assessment_bounds_invalid` (4×, call-13),
+`semantic_evidence_literal_not_found` (4×: 2× call-3, 2× call-68), `source_assessment_bounds_invalid` (4×, call-13),
 `semantic_span_hidden_gap` (1×, call-75). Admissionbevindingen (84 regels) zijn een andere laag
 (kandidaat, niet voorstel): o.a. `type_contract_incomplete`, `supported_object_missing`,
 `no_independent_claim` (elk 16×), `incomplete_sentence` (9×).
@@ -147,14 +153,22 @@ Legenda oorzaakklasse: (a) kandidaatgrens, (b) contextbinding, (c) ambigue bronl
 | Meting (fixture) | Waarde |
 | --- | --- |
 | Geplande taken / terminal / pending / not started | 67 / 22 / 45 / 39 |
-| Modelcalls: `source_task_budget_exhausted` | **83 van 116** |
-| Modelcalls: validated / partial | 24 / 9 |
+| Rijen in `model_calls` | 116 |
+| — echte providercalls: validated / partial | 24 / 9 (33) |
+| — budgetrecords voor niet-gestarte taken (`source_task_budget_exhausted`, zonder `call_id`/response) | 83 |
 | Producerbevindingen pending / historical | 13 / 4 |
 | Pogingen | 2, beide `succeeded`, geen checkpoints |
 
-**Conclusie (afgeleid, niet bewezen per bron):** in dit incident is het uitgeputte taakbudget
-de eerste blokkerende oorzaak van open werk (45 pending taken), niet de veldafwijzingen
-(13 pending bevindingen). De zes foutcodes verklaren een minderheid van het openstaande werk.
+De 83 budgetrijen zijn **geen modelcalls**. Bij uitgeput budget maakt
+`bounded_formation_v1.execute` (`:308–331`) per resterende, niet-gestarte taak een synthetisch
+`pending_call`-record, vóór iedere providerinvocatie. Over twee pogingen en meerdere fasen
+zijn dat er meer dan de 39 nu niet-gestarte taken; een 1-op-1-koppeling is uit de fixture
+niet af te leiden.
+
+**Conclusie (afgeleid, niet bewezen per bron):** het openstaande werk bestaat in dit incident
+grotendeels uit taken die na budgetuitputting niet zijn gestart (39 not started van 45 pending).
+Daartegenover staan 13 openstaande producerbevindingen uit 33 echte providercalls. Of de
+budgetuitputting zelf de eerste oorzaak is, en wat het budget opmaakte, is **niet vastgesteld**.
 `blockage_report` classificeert de oorzaak terecht als `not_established`. Herstel van
 budgetgebonden werk valt onder MET-10 (#836/#839/#840).
 
@@ -183,7 +197,8 @@ Uitgevoerd in een scratchmap, zonder productcode te wijzigen.
 **P3 — strength mismatch.** Codepad gelezen: `observed_value = source_literal_strength(text)`;
 `None` betekent geen of tegenstrijdige cue, niet een andere sterkte.
 
-**P4 — dominante blokkade.** Tellingen uit §3 op de fixture.
+**P4 — samenstelling openstaand werk.** Tellingen uit §3 op de fixture; budgetrecords en
+echte providercalls apart geteld.
 
 ## 5. Authority-map K1–K12 (bestaan geverifieerd op `69b4f6b`)
 
@@ -247,7 +262,7 @@ Nieuw: P2-cascadereikwijdte (#909), testgat 2.6 (#910), bewijs per geval (#911);
    relatie-evidencefout wijst alleen de eindpunten af; onbekende eindpunten blijven call-breed.
    Proof: P2 als regressietest, positief en negatief. Pas na besluit B5-b.
 2. **#910 — MET-6 — negatieve test voor een object buiten de taakgrens** (`semantic_supplement_outside_target`).
-   Class C, alleen een test.
+   Class C, alleen een test. **Uitgevoerd in deze PR** (#908).
 3. **#911 — MET-5 vervolg — echte evidence-export per foutcode** (E1/E2) op één snapshot, om de
    oorzaakklasse per geval te bewijzen; `observed_value is None` apart tellen voor 2.4.
 
