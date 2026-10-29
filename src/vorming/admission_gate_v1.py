@@ -233,6 +233,21 @@ def is_inhoudelijk_candidate(obj: dict[str, Any]) -> bool:
     return spans_are_exact(semantic.get("spans"))
 
 
+def _apply_bound_fields(row: dict[str, Any], object_revision: dict[str, Any] | None,
+                        context_objects: list[dict[str, Any]]) -> list[str]:
+    """Bind source fields; a v3 via_relation target comes from a validated relation (B5-f).
+
+    Only a peer relation that names this exact object revision and passes the
+    relation admission checks counts; a stale or ambiguous one leaves the field
+    empty, so ``*_target_missing`` keeps blocking.
+    """
+    from src.vorming.source_bound_fields_v3 import incoming_relation_targets, keep_relation_targets
+    codes = apply_bound_fields(row)
+    if not codes:
+        keep_relation_targets(row, incoming_relation_targets(object_revision, context_objects))
+    return codes
+
+
 def build_candidate_record(**fields: Any) -> dict[str, Any]:
     record: dict[str, Any] = {}
     for name in REQUIRED_CANDIDATE_FIELDS:
@@ -625,7 +640,8 @@ def admit_candidate(
     ]
     row = build_candidate_record(**{k: v for k, v in candidate.items() if k != "skip_context_scan"})
     v2 = FIELD_EVIDENCE_KEY in row
-    codes: list[str] = apply_bound_fields(row) if v2 else []
+    context_objects = list(context_objects)
+    codes: list[str] = _apply_bound_fields(row, object_revision, context_objects) if v2 else []
     from src.vorming.source_bound_fields_v3 import VERSION as V3_VERSION, MODE as V3_MODE
     v3 = isinstance(row.get(FIELD_EVIDENCE_KEY), dict) and row[FIELD_EVIDENCE_KEY].get("version") == V3_VERSION
     if row.get("field_formation_mode") == V3_MODE and not v3:
