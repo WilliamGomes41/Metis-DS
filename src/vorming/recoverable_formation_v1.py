@@ -97,6 +97,18 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
         else:
             break
 
+    def endpoint_owners(raw):
+        """Objects named by both relation endpoints, or None when either is unknown."""
+        try:
+            ends = [resolve(raw[key]) for key in ("source_spans", "target_spans")]
+        except (SemanticPassageError, AttributeError, KeyError, TypeError):
+            return None
+        # Each endpoint names exactly one proposed object, and they differ.
+        owners = [[i for i, spans in selections.items() if spans == end] for end in ends]
+        if any(len(found) != 1 for found in owners) or owners[0] == owners[1]:
+            return None
+        return {owners[0][0], owners[1][0]}
+
     relations = []
     bad = set(range(len(proposal["objects"]))) - set(objects)
     for index, raw in enumerate(proposal.get("relations", [])):
@@ -110,9 +122,12 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
         except (SemanticPassageError, AttributeError) as error:
             if not isinstance(error, SemanticPassageError):
                 error = SemanticPassageError("knowledge_relation_invalid")
-            # Unknown endpoints cannot establish independence. Quarantine this
-            # call, while an already validated earlier call remains available.
-            bad.update(objects)
+            # B5-b (#909): when both endpoints still resolve exactly to proposed
+            # objects, only those endpoints (and, below, their dependants) are
+            # quarantined. Unknown endpoints cannot establish independence:
+            # quarantine this call, while an earlier validated call remains.
+            endpoints = endpoint_owners(raw)
+            bad.update(objects if endpoints is None else endpoints)
             reject("relation", index, error)
 
     while True:

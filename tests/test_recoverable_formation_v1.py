@@ -342,6 +342,80 @@ def test_invalid_candidate_quarantines_related_candidate_not_independent_one():
     assert rejected_by_reason['semantic_dependency_rejected']['proposed_object_type'] == objects[1]['proposed_object_type']
 
 
+def _relation_case(texts):
+    fragments = [{**source(t)[0], 'fragment_id': str(i), 'fragment_hash': str(i)} for i, t in enumerate(texts)]
+    from src.vorming.semantic_passage_v1 import semantic_source_blocks
+    blocks = semantic_source_blocks(fragments)
+    payload = {'input': [{'role': 'developer', 'content': ''}, {'role': 'user', 'content': json.dumps({'source_blocks': blocks, 'evidence_blocks': blocks})}]}
+    objects = [response_for(payload, t)['objects'][0] for t in texts]
+    data = {'fragments': fragments, 'evidence_fragments': fragments, 'document_id': 'doc',
+            'allowed_candidate_block_ids': {b['block_id'] for b in blocks}, 'field_contract_v3': True}
+
+    def run(relations):
+        proposal = {'objects': deepcopy(objects), 'relations': relations, 'source_assessments': [], 'abstain_reason': None}
+        result, evidence = prepare(proposal, blocks=blocks, evidence_blocks=blocks, validator_input=data)
+        kept = [o['spans'][0]['block_id'] for o in result['objects']]
+        return kept, evidence['rejections']
+    return objects, blocks, run
+
+
+def _relation(source_obj, target_obj, *, evidence=None, target=None):
+    return {'source_spans': deepcopy(source_obj['spans']), 'relation_type': 'applies_if',
+            'target_spans': deepcopy(target if target is not None else target_obj['spans']),
+            'evidence_spans': deepcopy(evidence if evidence is not None else source_obj['spans'])}
+
+
+def _invented(spans):
+    return [{**span, 'literal': 'invented'} for span in spans]
+
+
+def test_relation_evidence_failure_quarantines_only_its_endpoints():
+    # #909 / B5-b: exact endpoints, failing relation evidence. The relation and both endpoints
+    # stay rejected; an object without a recorded dependency is retained.
+    objects, blocks, run = _relation_case([FIRST, SECOND, 'Bespreek de omstandigheden'])
+    assert run([_relation(objects[1], objects[0])])[0] == [b['block_id'] for b in blocks]
+    kept, rejections = run([_relation(objects[1], objects[0], evidence=_invented(objects[1]['spans']))])
+    assert kept == [blocks[2]['block_id']]
+    by_kind = {(r['kind'], r['index']): r['reason_code'] for r in rejections}
+    assert by_kind == {('relation', 0): 'semantic_evidence_literal_not_found',
+                       ('object', 0): 'semantic_dependency_rejected',
+                       ('object', 1): 'semantic_dependency_rejected'}
+
+
+def test_unknown_relation_endpoint_still_quarantines_the_whole_call():
+    # #909 / B5-b: an unknown endpoint cannot establish independence.
+    objects, _, run = _relation_case([FIRST, SECOND, 'Bespreek de omstandigheden'])
+    for relation in (_relation(objects[1], objects[0], target=_invented(objects[0]['spans'])),
+                     _relation(objects[1], objects[0], target=[]),
+                     _relation(objects[1], objects[1], evidence=_invented(objects[1]['spans']))):
+        kept, rejections = run([relation])
+        assert kept == []
+        assert sorted(r['index'] for r in rejections if r['kind'] == 'object') == [0, 1, 2]
+        assert all(r['reason_code'] == 'semantic_dependency_rejected' for r in rejections if r['kind'] == 'object')
+
+
+def test_ambiguous_relation_endpoint_still_quarantines_the_whole_call():
+    # #909 / B5-b: an endpoint shared by two candidates does not name one owner.
+    objects, blocks, run = _relation_case([FIRST, SECOND, 'Bespreek de omstandigheden'])
+    duplicate = deepcopy(objects[1])  # same selection, rejected on its own field evidence
+    duplicate['field_evidence']['recommended_action']['span']['literal'] = 'invented'
+    objects.append(duplicate)
+    for relation in (_relation(objects[1], objects[0], evidence=_invented(objects[1]['spans'])),
+                     _relation(objects[1], objects[1], evidence=_invented(objects[1]['spans']))):
+        kept, _ = run([relation])
+        assert kept == []
+
+
+def test_relation_evidence_failure_follows_transitive_dependants():
+    # #909 / B5-b: obj2 depends on obj1 through a valid relation, so it follows obj1;
+    # obj3 has no recorded dependency and is retained.
+    objects, blocks, run = _relation_case([FIRST, SECOND, 'Bespreek de omstandigheden', 'Controleer de afspraken'])
+    kept, rejections = run([_relation(objects[1], objects[0], evidence=_invented(objects[1]['spans'])),
+                            _relation(objects[2], objects[1])])
+    assert kept == [blocks[3]['block_id']]
+    assert sorted(r['index'] for r in rejections if r['kind'] == 'object') == [0, 1, 2]
+
+
 def test_source_assessment_diagnostic_span_does_not_close_pending():
     from src.vorming.recoverable_formation_v1 import pending_rejections
     span = {'block_id': 'b', 'start': 0, 'end': 4}
