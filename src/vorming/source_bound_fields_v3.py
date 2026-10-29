@@ -72,7 +72,15 @@ def bind_fields(raw, *, selected, candidate_text, proposed_type, context=()):
         legacy = {f: {"span": None, "missing_reason": "not_applicable"} for f in V2_FIELDS}
         legacy[legacy_field] = entry
         corpus = normalize_visible_prose(" ".join(s["text"] for s in owners))
-        bound = bind_v2(legacy, selected=owners, candidate_text=corpus, proposed_type=proposed_type)
+        try:
+            bound = bind_v2(legacy, selected=owners, candidate_text=corpus, proposed_type=proposed_type)
+        except ValueError as error:
+            # The v2 validator only knows its legacy name; report the v3 field
+            # (actor_span, target_group_span, scope_span) so diagnostics are exact.
+            finding = getattr(error, "finding", None)
+            if isinstance(finding, dict) and finding.get("field") == legacy_field != field:
+                finding["field"] = field
+            raise
         if legacy_field in bound["values"]:
             values[field] = bound["values"][legacy_field]
     payload = {"version": VERSION, "candidate_text": candidate_text,
