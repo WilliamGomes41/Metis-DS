@@ -13,7 +13,7 @@ from src.vorming.semantic_passage_v1 import SemanticPassageError
 from src.vorming.recommendation_semantics_v1 import adjacent_source_strength_span
 
 VERSION = "source-evidence-resolution-v1"
-V3_VERSION = "source-evidence-resolution-v1/v3-adjacent-strength-v2/candidate-scoped-core-v1"
+V3_VERSION = "source-evidence-resolution-v1/v3-adjacent-strength-v2/owner-scoped-fields-v2"
 
 
 def resolve_proposal_evidence(proposal, *, blocks, evidence_blocks, field_contract_v3=False):
@@ -22,7 +22,7 @@ def resolve_proposal_evidence(proposal, *, blocks, evidence_blocks, field_contra
     Occurrence is zero-based, counting exact (including overlapping) matches.
     A null/absent occurrence requires uniqueness, except for v3 directional
     strength stamps exactly adjacent to a uniquely selected recommendation and
-    v3 core fields that occur exactly once inside their own candidate (B5-e).
+    v3 fields that occur exactly once inside the owners bind_fields admits (B5-e).
     Offsets alongside a literal are non-authoritative hints.
     """
     texts = {}
@@ -74,27 +74,36 @@ def resolve_proposal_evidence(proposal, *, blocks, evidence_blocks, field_contra
         return None
 
     def candidate_scoped(path, ref, text):
-        # B5-e: a v3 core field must lie inside its own candidate (bind_fields),
-        # so only a match there is admissible. Exactly one such match resolves;
-        # zero or several stay ambiguous. Context fields may lie outside the
-        # candidate and keep whole-block uniqueness.
+        # B5-e: a v3 field may only bind inside the owners bind_fields admits:
+        # a core field inside its own candidate; a context field inside its
+        # candidate or an explicitly supplied, resolved context entry with an
+        # admissible role. Exactly one admissible match resolves; zero or
+        # several stay ambiguous. Never picks the first or nearest match.
         from src.vorming.source_bound_fields_v3 import CONTEXT_FIELDS
         shape = re.fullmatch(r"objects\.(\d+)\.field_evidence\.(\w+)\.span(?:\.\d+)?", path)
-        if not field_contract_v3 or not shape or shape.group(2) in CONTEXT_FIELDS:
+        if not field_contract_v3 or not shape:
             return None
-        index = int(shape.group(1))
+        index, field = int(shape.group(1)), shape.group(2)
         obj = proposal["objects"][index]
         if not isinstance(obj, dict) or not isinstance(obj.get("spans"), list):
             return None
+        refs = [(span, f"objects.{index}.spans.{n}") for n, span in enumerate(obj["spans"])]
+        if field in CONTEXT_FIELDS:
+            context = obj.get("context_evidence", [])
+            if not isinstance(context, list):
+                return None
+            refs += [(row["span"], f"objects.{index}.context_evidence.{n}.span") for n, row in enumerate(context)
+                     if isinstance(row, dict) and row.get("role") in CONTEXT_FIELDS[field]
+                     and row.get("span") and not row.get("unresolved_reason")]
         try:
-            candidates = [resolve(span, f"objects.{index}.spans.{n}") for n, span in enumerate(obj["spans"])]
+            owners = [resolve(span, owner_path) for span, owner_path in refs]
         except SemanticPassageError:
             return None
         literal, matches, start = ref["literal"], [], 0
         while (match := text.find(literal, start)) >= 0:
             if any(isinstance(c, dict) and c.get("block_id") == ref["block_id"]
                    and type(c.get("start")) is int and type(c.get("end")) is int
-                   and c["start"] <= match and match + len(literal) <= c["end"] for c in candidates):
+                   and c["start"] <= match and match + len(literal) <= c["end"] for c in owners):
                 matches.append(match)
             start = match + 1
         return matches[0] if len(matches) == 1 else None
