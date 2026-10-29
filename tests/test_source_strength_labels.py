@@ -41,9 +41,9 @@ def test_non_recommendation_labels_are_not_normalized(text):
 @pytest.mark.parametrize("text", [
     "wordt sterk afgeraden", "sterk aanbevolen", "wordt sterk geadviseerd", "sterke",
 ])
-def test_verbal_strength_phrasing_is_not_a_label_until_decided(text):
-    # #911 (B5-c): verbal source phrasing is outside the A07 vocabulary. Change
-    # this only together with a recorded domain decision, never to unblock a run.
+def test_verbal_strength_phrasing_is_never_a_label(text):
+    # B5-c (decided): verbal strength counts only inside a v3 recommendation
+    # core (tests/test_v3_verbal_strength_b5c.py), never as a label or stamp.
     assert source_literal_strength(text) is None
     assert source_label_direction(text) is None
     assert not is_source_strength_label(text)

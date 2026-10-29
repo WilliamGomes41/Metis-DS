@@ -31,6 +31,13 @@ SOURCE_DIRECTIONAL_LABEL_RE = re.compile(
     r"\b(?P<strength>sterk|zwak)\s*[-–—:]\s*(?P<direction>voor|tegen)\b",
     re.I,
 )
+# B5-c: closed list of verbal strength in a v3 recommendation core. Strong only;
+# weak is never inferred from a verb. A negation earlier in the same sentence
+# excludes the cue (fail closed).
+SOURCE_VERBAL_STRENGTH_RE = re.compile(
+    r"\bsterk\s+(?P<verb>aanbevolen|geadviseerd|afgeraden|ontraden)\b", re.I)
+_VERBAL_DIRECTIONS = {"aanbevolen": "for", "geadviseerd": "for", "afgeraden": "against", "ontraden": "against"}
+_NEGATION_RE = re.compile(r"\b(?:niet|geen|nooit)\b", re.I)
 
 PROPOSED_FIELD = "proposed_recommendation_semantics"
 CONFIRMED_FIELD = "confirmed_recommendation_semantics"
@@ -223,6 +230,41 @@ def source_label_direction(text: str) -> str | None:
     if len(directions) != 1:
         return None
     return "for" if directions == {"voor"} else "against"
+
+
+def source_verbal_strength_cues(text: str, start: int = 0, end: int | None = None):
+    """B5-c verbal cues inside text[start:end], negation read from the whole sentence."""
+    blob = str(text or "")
+    # Scan the whole text so word boundaries past the range still apply; a
+    # semicolon does not end the sentence for the negation check.
+    for match in SOURCE_VERBAL_STRENGTH_RE.finditer(blob):
+        if (start <= match.start() and match.end() <= (len(blob) if end is None else end)
+                and not _NEGATION_RE.search(re.split(r"[.!?\n]", blob[:match.start()])[-1])):
+            yield match
+
+
+def verbal_cue_direction(match) -> str:
+    return _VERBAL_DIRECTIONS[match["verb"].casefold()]
+
+
+def preceding_source_strength_span(text: str, start: int) -> tuple[int, int] | None:
+    """B5-c lead-in label: directly before the core, only colon/spaces between.
+
+    Without a colon, a label after other text may be the trailing stamp of
+    that text; it stays unbound (fail closed).
+    """
+    end = start
+    while end > 0 and text[end - 1] in " \t:\u00a0":
+        end -= 1
+    if end == start:
+        return None
+    for pattern in (SOURCE_DIRECTIONAL_LABEL_RE, SOURCE_LITERAL_STRONG_RE, SOURCE_LITERAL_WEAK_RE):
+        for match in pattern.finditer(text, 0, end):
+            if match.end() == end:
+                if ":" not in text[end:start] and text[:match.start()].strip():
+                    return None
+                return match.span()
+    return None
 
 
 def _review_direction_evidence(obj: dict[str, Any]) -> str:
