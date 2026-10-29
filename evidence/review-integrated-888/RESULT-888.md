@@ -123,6 +123,29 @@ repository/CI checks are recorded with the final PR and verification artifact.
 The source is not changed by this evidence PR. No old assertion, source oracle,
 timeout, required SQL budget or difficult fixture is removed.
 
+The additional selected checks passed: 180 existing source/card/command/rollback
+checks and 24 final report checks, with no PostgreSQL-skips. The initial
+report-only validation failure and the corrected report JUnit are both retained.
+The correction distinguishes WP5's stale refusal before the mutation transaction
+from WP8's mandatory transaction-phase evidence; it does not invent a zero lock
+duration for an unmeasured command. Tests reject both missing and partially
+recorded WP8 conflict phases and recognize only the pinned WP5 baseline.
+
+The required full local run is **INCOMPLETE / NOT GREEN**. The initial serial
+pilot was deliberately stopped after 531 passes to use the official four-shard
+CI partitioner. On that partitioner, one shard completed: 1668 passed, one
+failure, 14 existing skips, zero PostgreSQL-skips. Its failure is a native
+PostgreSQL ConnectionTimeout at the restart/export verification, after the
+rollback comparison had passed. Three other local processes ended without final
+JUnit or selection manifests, so they cannot establish complete execution.
+Their logs preserve three additional failed cases: insight with 40000 evidence
+records, canonical status outside the transaction and an expiry race.
+Three targeted unchanged reruns (insight, audit rollback and expiry) passed;
+that does not explain or erase the original failures. No product code, timeout,
+test assertion or budget was changed to obtain those reruns. The incomplete
+logs, completed shard and targeted JUnit are retained under `local-*`. Final
+isolated GitHub CI is required; it is not inferred from the local subsets.
+
 Next: profile the document/object/fact SQL executed under the native command
 lock, then reproduce and isolate the eight small-control misses before proposing
 a bounded fix at the existing owner. A new persistent identity, authority,

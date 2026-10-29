@@ -35,5 +35,35 @@
   "initial_report_failure": "The old WP5 stale forms are rejected before the mutation transaction; final validator distinguishes this pinned baseline from mandatory WP8 transaction evidence. Initial failed JUnit is retained; all other 180 selected checks passed unchanged.",
   "project_acceptance": "NOT READY",
   "production_actions": false,
-  "full_suite": "Final full suite and CI are recorded in PR metadata, not inferred from the targeted runs."
+  "full_suite": "Final full suite and CI are recorded in PR metadata, not inferred from the targeted runs.",
+  "local_full_suite": {
+    "commit": "5b8c6df0e2161faf5db7c1726269cae9b014509a",
+    "status": "INCOMPLETE / NOT GREEN",
+    "partitioner": "official scripts/measure_test_suite.py, four shards on one local server",
+    "completed_shard": {
+      "index": 1,
+      "passed": 1668,
+      "failures": 1,
+      "skipped": 14,
+      "postgres_skips": []
+    },
+    "missing_final_shards": [
+      0,
+      2,
+      3
+    ],
+    "observed_failed_cases": [
+      "late_support_audit_rollback_local",
+      "insight_40000",
+      "canonical_status_outside_transaction",
+      "expiry_race"
+    ],
+    "completed_shard_failure_cause": "PostgreSQL ConnectionTimeout during restart/export verification, after the rollback comparison passed",
+    "targeted_unchanged_rerun": {
+      "passed": 3,
+      "failures": 0,
+      "skips": 0
+    },
+    "limit": "Three processes ended without final JUnit; no complete local-suite claim. No assertions/timeouts/budgets changed."
+  }
 }
