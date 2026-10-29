@@ -113,3 +113,31 @@ latere samples, dus deze gedeelde runner bewijst geen latencyverdeling/SLO.
 Azure betekent de ondersteunde compositie met fixture bronstore en echte
 HTTPS Origin, geen live Azure-netwerkmeting. Transfercijfers tellen alleen
 source_read-records; bronbyteverificatie en overige responsekosten staan apart.
+
+
+## CI-regressie en laatste verificatie
+
+De eerste volledige CI vond de bestaande publicatie-querygrens rood (9 >5).
+De fix combineert pin/root in één bounded lookup en bewaart ook afwezigheid
+alleen in dezelfde bestaande readsnapshot met volledige identiteitskey. Een
+marker zonder root blijft een integriteitsfout. Onafhankelijke herinspectie
+vond geen context-/bevoegdheidsprobleem; de oorspronkelijke grens blijft5.
+Daarna33 native bron/HTTP/publicatietests groen,0 skips,83.52s; zes
+architectuurinvarianten groen,2.59s; alle preflights en compileall groen.
+
+[CI POST-evidence op99f7524](https://github.com/WilliamGomes41/Metis-DS/actions/runs/40835083836/artifacts/12880014005)
+bevat28 uitgevoerde tests zonder failures/errors/skips. Alle acht gemeten
+task-v1-scenario’s hebben nul overschrijdingen van de bestaande3000ms POST-,
+250ms lock- en500ms transactiebudgetten. Bij32/128 passages: goedkeuring
+111.7/195.4ms HTTP en67.1/113.8ms lock. De
+[WP6-basis](https://github.com/WilliamGomes41/Metis-DS/actions/runs/40825550232/artifacts/12876144560)
+gebruikt dezelfde harnesshash/configuratie en heeft ook nul overschrijdingen.
+Afzonderlijke CI-runners bewijzen geen causale verbetering.
+
+Een aanvullende gelijktijdige lokale vergelijking van beide versies was rood
+op lockbudgetten onder suitebelasting; deze samples tellen niet als groen.
+Een bestaande korte transport-connecttest faalde in de lokale suite en in één
+gerichte herhaling; de volgende ongewijzigde herhaling slaagde. De vervangen
+lokale suite is onderbroken na de gevonden CI-queryregressie, niet als volledig
+groen geregistreerd. De PR vermeldt de finale volledige CI-matrix en artifacts;
+geen testgrens, fixture of controle is verruimd of verwijderd.

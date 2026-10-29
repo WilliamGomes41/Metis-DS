@@ -193,11 +193,17 @@ class ReviewSourceRecords:
                 return None
             reference = envelope.get('_review_source_ref')
             if reference is None:
-                reference = con.execute('SELECT review_source_ref FROM workflow.documents WHERE snapshot_id=%s',
-                                        (envelope['snapshot_id'],)).fetchone()
-                reference = reference['review_source_ref'] if reference else None
-            row = con.execute('SELECT extraction_hash,header,header_hash,sealed FROM workflow.source_read_roots '
-                              'WHERE views_id=%s', (views_id,)).fetchone()
+                # One bounded lookup captures both the optional pin and root.
+                # A missing root must still expose an existing pin and fail closed.
+                row = con.execute('SELECT r.extraction_hash,r.header,r.header_hash,r.sealed,d.review_source_ref '
+                    'FROM workflow.documents d LEFT JOIN workflow.source_read_roots r ON r.views_id=%s '
+                    'WHERE d.snapshot_id=%s', (views_id, envelope['snapshot_id'])).fetchone()
+                reference = row.pop('review_source_ref') if row else None
+                if row is not None and row['extraction_hash'] is None:
+                    row = None
+            else:
+                row = con.execute('SELECT extraction_hash,header,header_hash,sealed FROM workflow.source_read_roots '
+                                  'WHERE views_id=%s', (views_id,)).fetchone()
             if row is None:
                 if reference:
                     fail('source_read_root_missing')

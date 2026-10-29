@@ -2679,7 +2679,8 @@ class OperationsConsole:
             result = FormationTaskStore(store).read_review_source(envelope, objects=objects)
         except WorkflowDocumentStoreError as error:
             raise ConsoleError(str(error)) from error
-        if reads is not None and result is not None:
+        if reads is not None:
+            # Absence belongs to this same captured read snapshot too.
             reads.sources[key] = result
         return result
 
