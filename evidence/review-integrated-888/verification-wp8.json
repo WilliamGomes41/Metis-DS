@@ -65,5 +65,7 @@
       "skips": 0
     },
     "limit": "Three processes ended without final JUnit; no complete local-suite claim. No assertions/timeouts/budgets changed."
-  }
+  },
+  "ci_base": "f007084f00cbe35e0e350a573638479943e0111b",
+  "main_integration": "PR927 contiguous-predicate producer description and semantic contract; original measured commits retained."
 }

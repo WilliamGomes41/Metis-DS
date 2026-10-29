@@ -9,8 +9,9 @@ Rewrite risk: none
 The WP1–WP8 continuation measures merged production tip
 `e2e261d09b4e24427eed57aa3a72c95bc5dcde3b`, including the already merged WP6–WP8
 storage/source/card implementation. This continuation changes only opt-in
-evidence and report integrity checks; production source and schema remain equal
-to that tip. Its protocol, preserved budget misses, native inputs and remaining
+evidence and report integrity checks; it introduces no production-source/schema
+changes relative to its PR base. Later main integration is recorded in the result
+without relabeling older numerical measurements. Its protocol, preserved budget misses, native inputs and remaining
 acceptance conditions are in `evidence/review-integrated-888/ACCEPTANCE-888.md`
 and `RESULT-888.md`. The historical WP4 account below is retained unchanged.
 

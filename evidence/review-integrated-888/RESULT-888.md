@@ -5,7 +5,7 @@ works in the executed native scenarios, but the fixed lock and small-control
 budgets are not fully met. Production runtime evidence is also absent. No
 budget, domain rule or existing test assertion was relaxed.
 
-The production tree is exactly merged main
+The production tree under numerical measurement is exactly merged main
 `e2e261d09b4e24427eed57aa3a72c95bc5dcde3b`. The additional opt-in measurements ran
 on evidence commit `0137ad233220c14b551c46af3abcfb95701a9a1a`; `src/` and `db/`
 are unchanged. WP5 baseline: `7adb588d957e9f5461f338349e11535654ea2d10`.
@@ -14,6 +14,13 @@ Each result retains Python, actual PostgreSQL version, actual checkout and
 measurement hashes. All runs used the pinned Python environment and the same
 isolated native PostgreSQL16.15 server sequentially, without competing heavy
 test runs. Provider transport and HTML inputs are explicitly synthetic.
+
+Before opening the evidence PR, main advanced to
+`f007084f00cbe35e0e350a573638479943e0111b` (PR #927, the contiguous-predicate
+producer description and semantic contract marker). That main was integrated;
+the evidence PR introduces no production-source/schema changes relative to its
+base. Its new tests and final CI verify the integration. The numerical samples
+retain their original measured commits; they are not a remeasurement of PR #927.
 
 ## Matched WP5 → WP8 measurement
 
