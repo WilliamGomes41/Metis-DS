@@ -56,6 +56,11 @@ def evidence_schema(span):
         "Entire normative core, including negation and qualifiers, excluding list number and strength stamp. "
         "Do not abbreviate it or omit any clinical words. Necessary lists may be exact context references."
     )
+    # B5-g: one contiguous literal; a split Dutch verb cluster includes the words between.
+    schema["properties"]["predicate_span"]["description"] += (
+        " Select one contiguous literal span. If the verb is split (e.g. 'wordt ... gecontroleerd'), "
+        "the span runs from the first to the last verb part and includes the words between; never omit words."
+    )
     schema["properties"]["condition_span"]["description"] = (
         "Literal condition in the core or an explicitly supplied condition-role context entry. "
         "An external condition must also be present in context_evidence; proximity alone is insufficient."
