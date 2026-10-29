@@ -72,6 +72,35 @@ def _document_cards_from_rows(rows):
 class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
     """Runtime operations added on top of the migration-only document store."""
 
+    def review_command_quality_input(self, snapshot_id: str, object_ids: list[str]) -> list[dict[str, Any]]:
+        """Existing review-evidence context, without other runs or candidates.
+
+        review_evidence uses the latest run and the first matching candidate.
+        Keep that order and its original fingerprint/origin; source fragments
+        and processing history are not command inputs.
+        """
+        try:
+            with self._connect() as con:
+                row = con.execute("""
+                    WITH latest AS (
+                      SELECT envelope_payload->'quality_processing_runs'->-1 AS run
+                      FROM workflow.documents WHERE snapshot_id=%s
+                    ) SELECT CASE WHEN run IS NULL OR run='null'::jsonb THEN '[]'::jsonb
+                      ELSE jsonb_build_array(jsonb_build_object('run_id',run->'run_id',
+                        'candidates',COALESCE((SELECT jsonb_agg(candidate ORDER BY ordinal)
+                          FROM jsonb_array_elements(COALESCE(NULLIF(run->'candidates','null'::jsonb),
+                            '[]'::jsonb)) WITH ORDINALITY AS candidates(candidate,ordinal)
+                          WHERE candidate->>'object_id'=ANY(%s)), '[]'::jsonb))) END AS runs
+                    FROM latest
+                    """, (snapshot_id, object_ids)).fetchone()
+            if row is None:
+                raise WorkflowDocumentStoreError('unknown_snapshot')
+            return row['runs']
+        except WorkflowDocumentStoreError:
+            raise
+        except Exception as exc:
+            raise WorkflowDocumentStoreError('workflow_document_read_failed') from exc
+
     def review_document_input(self, snapshot_id: str, *, command: bool = False) -> tuple[dict[str, Any], str]:
         """Source/authorization inputs without replay and historical attempts."""
         try:

@@ -74,7 +74,15 @@ def test_code_rollback_rebuilds_copies_and_preserves_pg_and_product_api(complete
             result = subprocess.run([sys.executable, str(ROOT / 'tests/d5_rollback_support.py'), str(payload), str(output)],
                                     cwd=code, env=env, capture_output=True, text=True, timeout=90)
             assert result.returncode == 0, result.stderr[-5000:]
-            outcomes.append(_normalise(json.loads(output.read_text()), root))
+            outcome = _normalise(json.loads(output.read_text()), root)
+            for row in outcome['state']['workflow_tables']['document_objects']:
+                # WP6 updates retained rows; the pinned full-set writer deletes
+                # and reinserts them, resetting this physical write counter.
+                # Object versions/hashes, all audit evidence and every other
+                # durable field remain in the exact comparison below.
+                assert type(row['revision']) is int and row['revision'] >= 1
+                row.pop('revision')
+            outcomes.append(outcome)
         assert outcomes[0] == outcomes[1]
         assert not guard.rows
     finally:

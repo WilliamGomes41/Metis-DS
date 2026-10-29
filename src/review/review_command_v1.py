@@ -158,6 +158,7 @@ def execute_review_command(console, submitted, invoke):
                                 raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=actual)
                         histories = capture_histories(console, sid, oid, command)
                         object_ids = sorted({row['object_id'] for row in histories})
+                        current['quality_processing_runs'] = documents.review_command_quality_input(sid, object_ids)
                         bindings = reviews.read_bindings([sid], object_ids=object_ids).get(sid, [])
                         inputs = ReviewCommandInputs(console, sid, current, histories, bindings,
                             fragments, frozen, source_path, oid, interaction_id, precondition, source_failure)
