@@ -70,6 +70,7 @@ def test_new_worker_reuses_exact_sources_and_tasks_with_extractor_and_reconstruc
     assert final['processing_attempts'][-1]['state']=='succeeded'
     assert final['prepared_source_extraction']==before['prepared_source_extraction']
     assert final['processing_attempts'][-1]['diagnostic']['source_views_ref']==before['processing_attempts'][-1]['diagnostic']['source_views_ref']
+    assert final['processing_attempts'][-1]['diagnostic']['review_source_ref']==before['processing_attempts'][-1]['diagnostic']['review_source_ref']
 
 
 @pytest.mark.parametrize('damage,expected',[

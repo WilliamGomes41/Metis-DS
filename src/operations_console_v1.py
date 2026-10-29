@@ -1266,7 +1266,7 @@ class OperationsConsole:
         return safe_path_under(self.source_store, digest, filename)
 
     @diagnostic_phase("source_verify")
-    def _verified_source_bytes(self, envelope: dict[str, Any]) -> tuple[Path, bytes]:
+    def _verified_source_bytes(self, envelope: dict[str, Any], *, cache_recovery: bool = True) -> tuple[Path, bytes]:
         """Rebuild the configured cache from the existing immutable authority."""
         command = active_review_command(self)
         if command is not None:
@@ -1293,7 +1293,8 @@ class OperationsConsole:
                 raise ConsoleError("immutable_source_recovery_failed") from exc
             if sha256_bytes(freeze_bytes) != expected_digest:
                 raise ConsoleError("immutable_source_recovery_failed")
-            _atomic_write_bytes(freeze_path, freeze_bytes)
+            if cache_recovery:
+                _atomic_write_bytes(freeze_path, freeze_bytes)
         if freeze_bytes is None:
             raise ConsoleError("freeze_bytes_missing")
         return freeze_path, freeze_bytes
@@ -1875,7 +1876,9 @@ class OperationsConsole:
             if formation_fragments is None:
                 from src.vorming.source_preparation_context_v1 import stored_extraction
                 try:
-                    formation_fragments = stored_extraction(envelope)
+                    formation_fragments = self._prepared_review_source(envelope)
+                    if formation_fragments is None:
+                        formation_fragments = stored_extraction(envelope)
                 except ConsoleError:
                     formation_fragments = None
             result["formation_incomplete"] = incomplete(envelope, objects=objects,
@@ -2588,6 +2591,11 @@ class OperationsConsole:
             if command.inputs.fragments is None:
                 raise ConsoleError(command.inputs.source_failure or 'source_lineage_unavailable')
             return command.inputs.fragments
+        if getattr(self, 'workflow_document_store', None) is not None:
+            retained = self._prepared_review_source(envelope)
+            if retained is not None:
+                return retained
+            envelope = self._legacy_review_source_envelope(envelope)
         from src.vorming.source_preparation_context_v1 import stored_extraction
         from src.vorming.docling_contract_v1 import stored_fragments
         retained = stored_extraction(envelope)
@@ -2629,12 +2637,106 @@ class OperationsConsole:
             raise ConsoleError("source_lineage_incomplete")
         return fragments
 
-    def review_source_fragments(self, snapshot_id, *, envelope=None):
+    def _legacy_review_source_envelope(self, envelope):
+        record = envelope.get('prepared_source_extraction')
+        if record and 'fragments' not in record:
+            # Explicit old-layout reader, bound to the same captured extraction.
+            from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+            try:
+                extraction = self.workflow_document_store.review_source_extraction(
+                    envelope['snapshot_id'], record.get('record_hash'))
+            except WorkflowDocumentStoreError as error:
+                raise ConsoleError(str(error)) from error
+            if {k:v for k,v in extraction.items() if k not in {'fragments','docling_record'}} != record:
+                raise ConsoleError('source_extraction_identity_mismatch')
+            return {**envelope, 'prepared_source_extraction': extraction}
+        return envelope
+
+    def _prepared_review_source(self, envelope, *, objects=None):
+        from src.integrity_kernel import stable_hash
+        store = getattr(self, 'workflow_document_store', None)
+        if store is None:
+            return None
+        record = envelope.get('prepared_source_extraction')
+        if record is None:
+            if envelope.get('_review_source_ref') is not None:
+                raise ConsoleError('source_extraction_integrity_failed')
+            return None
+        if not isinstance(record, dict):
+            raise ConsoleError('source_extraction_integrity_failed')
+        from src.workflows.formation_task_store_v1 import FormationTaskStore
+        from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+        from src.workflows.review_source_records_v1 import references
+        from src.vorming.prepared_source_views_v1 import contract
+        blocks, raw = references(objects)
+        extraction = envelope.get('prepared_source_extraction') or {}
+        key = (tuple(envelope.get(k) for k in ('snapshot_id','source_id','document_id','sha256','version','content_kind')),
+               stable_hash({k:extraction.get(k) for k in ('version','source','record_hash','fragments_hash','extractor_contract')}),
+               stable_hash(envelope.get('_review_source_ref')), tuple(sorted(contract().items())),
+               None if objects is None else (tuple(sorted(blocks)), tuple(sorted(raw))))
+        reads = self._document_reads()
+        if reads is not None and key in reads.sources:
+            return reads.sources[key]
+        try:
+            result = FormationTaskStore(store).read_review_source(envelope, objects=objects)
+        except WorkflowDocumentStoreError as error:
+            raise ConsoleError(str(error)) from error
+        if reads is not None:
+            # Absence belongs to this same captured read snapshot too.
+            reads.sources[key] = result
+        return result
+
+    def prepare_review_source_views(self, *, actor_id, snapshot_id, expected_revision):
+        """Explicit preparation for existing sources; never called by GET/startup.
+
+        Source validation, reconstruction and immutable artifact publication are
+        outside the protected document transaction. The current kernel checks
+        source/revision/authorization again before pinning the derived reference.
+        """
+        from src.vorming.source_selection_v1 import authorize
+        from src.vorming.source_preparation_context_v1 import KEY, stored_extraction, extractor_contract
+        from src.vorming.prepared_source_views_v1 import prepare
+        from src.workflows.formation_task_store_v1 import FormationTaskStore
+        from src.workflows.workflow_documents_postgres_v1 import _json_text
+        envelope = deepcopy(self._envelope(snapshot_id))
+        authorize(self, actor_id, envelope)
+        self._require_mutable_working_revision(snapshot_id)
+        if not expected_revision or self.objects_revision(snapshot_id) != expected_revision:
+            raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+        self._verified_source_bytes(envelope)
+        fragments = stored_extraction(envelope, required_contract=extractor_contract(envelope['content_kind']))
+        if fragments is None:
+            raise ConsoleError('source_preparation_checkpoint_required')
+        store = FormationTaskStore(self.workflow_document_store)
+        extraction = envelope[KEY]
+        with store.documents._connect() as con:
+            store._immutable(con, 'prepared_extraction_versions', 'record_hash', extraction['record_hash'],
+                             ['snapshot_id'], [snapshot_id], extraction)
+        artifact = store.prepare_review_source({'snapshot_id': snapshot_id,
+            'extraction_hash': extraction['record_hash']}, prepare(fragments).payload)
+        reference = store.publish_review_source(artifact)
+        with self._reprocessing_transaction(snapshot_id):
+            self._assert_source_work_unchanged(envelope, expected_revision, 'published_objects_must_not_be_rewritten')
+            authorize(self, actor_id, self._envelope(snapshot_id))
+            self._require_mutable_working_revision(snapshot_id)
+            with store.documents._connect() as con:
+                pinned = con.execute("UPDATE workflow.documents SET review_source_ref=%s::jsonb,review_read_envelope=NULL WHERE snapshot_id=%s "
+                    "AND envelope_payload#>>'{prepared_source_extraction,record_hash}'=%s",
+                    (_json_text(reference),snapshot_id,reference['extraction_hash']))
+                if pinned.rowcount != 1:
+                    raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+        return reference
+
+    def review_source_fragments(self, snapshot_id, *, envelope=None, objects=None):
         """Call-local authoritative extraction for content-duty readers."""
         envelope = envelope if envelope is not None else self._envelope(snapshot_id)
         if review_path_for_klasse(envelope["class"]) == "boom":
             return None
         try:
+            prepared = self._prepared_review_source(envelope, objects=objects)
+            if prepared is not None:
+                self._verified_source_bytes(envelope, cache_recovery=False)
+                return prepared
             source_path, _ = self._verified_source_bytes(envelope)
             return self._read_source_fragments(envelope, source_path)
         except (ConsoleError, ValueError, OSError, KeyError):
