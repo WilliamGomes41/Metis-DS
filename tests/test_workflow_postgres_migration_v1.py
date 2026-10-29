@@ -62,7 +62,7 @@ class Rows:
 def test_plan_digest_binds_exact_ordered_migration_bytes() -> None:
     paths = migration_paths(ROOT)
     assert tuple(path.name for path in paths) == MIGRATION_NAMES
-    assert MIGRATION_NAMES[-11:] == (
+    assert MIGRATION_NAMES[-12:] == (
         "008_workflow_lifecycle_identity.sql",
         "009_console_hotpath_indexes.sql",
         "011_workflow_audit_retention.sql",
@@ -73,6 +73,7 @@ def test_plan_digest_binds_exact_ordered_migration_bytes() -> None:
         "016_workflow_topic_identity.sql",
         "018_publication_refusal_audit.sql",
         "019_view_checks.sql",
+        "024_review_dependency_lookup.sql",
         "025_review_interaction_identity_lookup.sql",
     )
     digest = migration_digest(paths)
@@ -98,6 +99,26 @@ def test_apply_requires_exact_digest_and_verifies_all_required_shape() -> None:
     assert ("topics", "identity_key") in REQUIRED_COLUMNS
     assert "topics" in REQUIRED_TABLES
     assert result["verification"]["row_counts"] == {name: 0 for name in sorted(REQUIRED_TABLES)}
+
+
+def test_controlled_plan_installs_review_indexes_and_can_be_reapplied(complete_postgres):
+    import psycopg
+    from psycopg.rows import dict_row
+
+    paths = migration_paths(ROOT)
+    with psycopg.connect(complete_postgres.dsn, row_factory=dict_row) as connection:
+        connection.execute('DROP INDEX workflow.workflow_document_objects_dependencies')
+        connection.execute('DROP INDEX workflow.workflow_review_events_document_history')
+        connection.execute('DROP INDEX workflow.workflow_review_events_interaction_identity')
+        connection.commit()
+        for _ in range(2):
+            assert apply_migrations(connection, paths=paths,
+                expected_digest=migration_digest(paths))['status'] == 'PASS'
+        indexes = {row['indexname']: row['indexdef'] for row in connection.execute(
+            "SELECT indexname,indexdef FROM pg_indexes WHERE schemaname='workflow'")}
+        assert 'USING gin (payload jsonb_path_ops)' in indexes['workflow_document_objects_dependencies']
+        assert "snapshot_id" in indexes['workflow_review_events_document_history']
+        assert "interaction_id" in indexes['workflow_review_events_interaction_identity']
 
 
 def test_apply_refuses_unconfirmed_or_changed_migration_bytes() -> None:

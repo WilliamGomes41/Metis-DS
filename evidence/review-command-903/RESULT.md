@@ -4,6 +4,28 @@ Change class: B. Rewrite risk: high. Touches lifecycle invariants: no.
 Issue: #903. Productiecode: `982c0458bc0c5fa6df461b75cac1fa1a2a3001ff`.
 Ontwerp: [ownership en migratie](../../docs/architecture/review-command-903.md).
 
+## Aanvulling: beveiligingscheck en gecontroleerde indexinstallatie
+
+De vijf eerder genoemde testworkflows waren groen, maar de afzonderlijke
+CodeQL-check meldde XSS op de foutrespons. De eerdere eindmelding omvatte die
+check ten onrechte niet. Een parserproef met textarea-sluit-tags, een img-onerror
+en attribuutinjectie toont dat de oorspronkelijke escape-helper deze invoer
+inert houdt. De response gebruikt nu rechtstreeks `html.escape(..., quote=True)`
+zodat de sanitizer ook aan deze modulegrens expliciet is; geen alertsuppressie.
+Een geïsoleerde mutatie zonder comment-escaping wordt door de regressietest
+ontdekt. Native 400/409-proeven behouden dezelfde kwaadaardige tekst exact.
+
+De reviewbevinding over migratie024 is wel een concrete installatiefout:
+de gecontroleerde runner registreerde025 zonder de dependency-/eventindexen
+uit024. Het plan bevat nu024 vóór025. De aangepaste plantest faalt vóór die
+reparatie. Een native proef verwijdert alleen de drie afgeleide indexen in een
+eigen testdatabase en past het gecontroleerde plan tweemaal succesvol toe;
+alle drie indexen worden gecontroleerd. Geen productieapply of datamigratie.
+
+Gerichte eindcontrole:11 tests groen (migratierunner inclusief native herhaling,
+HTML-parser, begrensde32/128-POST en stale herstel), geen skips. Nieuwe CodeQL-
+en volledige CI-uitkomsten moeten op de nieuwe PR-head worden gecontroleerd.
+
 ## Werking en grenzen
 
 De bestaande Review-MRO beslist; PostgreSQL blijft de duurzame authority.

@@ -78,7 +78,7 @@ def test_native_compact_post_is_bounded_and_preserves_independent_rows(
     focal = next(obj for obj in candidates if obj["content"]["clean_text"] == FIRST)
     second = next(obj for obj in candidates if obj["content"]["clean_text"] == SECOND)
     independent = candidates[-1]
-    draft = '<b>native draft & "choice"</b>'
+    draft = '</textarea><img src=x onerror="alert(1)"><b>native draft & "choice"</b>'
     with TestClient(production_app(console), base_url="https://testserver") as client:
         assert client.post("/login", data={"username": "reviewer", "password": "fixture-only"},
                            follow_redirects=False).status_code == 303
