@@ -133,6 +133,14 @@ Blast radius: kaartpresentatie, geen review-/publicatiebevoegdheid of bronmutati
 
 ## Bewijsplan
 
+De eerste CI-run van PR #923 stopte bij het machineleesbare wijzigingscontract:
+de PR-beschrijving miste losse `Proof`, `Touches lifecycle invariants` en
+`Rewrite risk`-velden. Daardoor werden de suite-shards overgeslagen en faalden
+de verzameljobs wegens ontbrekend testbewijs. De beschrijving is gecorrigeerd
+en met `python scripts/validate_change_contract.py --text-file <PR-body>`
+daadwerkelijk rood/groen gecontroleerd. Deze check vereist de PR-tekst;
+repository_preflight alleen bewijst het PR-contract niet.
+
 Native HTTP-pariteit met de bestaande volledige oracle voor verschillende
 reviewers, eerste/tweede review, wachten/eigen klaar, herstel/disposition, partial
 formation en boom/graph. Tegenvoorbeelden: binding-only legacywriter zonder
