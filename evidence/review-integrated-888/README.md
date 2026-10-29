@@ -1,5 +1,11 @@
 # Integrated Review evidence — #888
 
+The WP1–WP8 continuation after merged PR #925 is documented in
+[ACCEPTANCE-888.md](ACCEPTANCE-888.md) and [RESULT-888.md](RESULT-888.md).
+Its native inputs, JUnit and comparisons are retained here separately from the
+historical WP4 evidence below. The latest acceptance verdict remains NOT READY:
+lockhold and small-control budget misses and production evidence remain open.
+
 Change class: B
 Promise: Assess the integrated Review repair against the predeclared budgets and existing read/domain rules.
 Proof: Matched authenticated PostgreSQL/ASGI workload, phase evidence, source oracle and existing negative/concurrency tests.

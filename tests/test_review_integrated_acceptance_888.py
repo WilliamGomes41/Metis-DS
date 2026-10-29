@@ -1,6 +1,9 @@
 """Reject misleading integrated acceptance reports using retained native inputs.
 
-# release-control-evidence: scope/belofte metrics slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: metrics
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from copy import deepcopy
 import gzip
@@ -21,7 +24,7 @@ def inputs():
 
 
 @pytest.mark.parametrize('damage', ['source', 'history', 'harness', 'driver', 'configuration',
-                                   'request', 'status', 'phase', 'duplicate'])
+                                   'request', 'status', 'body', 'phase', 'retry_phase', 'retry_no_phases', 'duplicate'])
 def test_integrated_comparison_refuses_unmatched_or_incomplete_native_evidence(damage):
     before, after = inputs()
     after = deepcopy(after)
@@ -40,9 +43,14 @@ def test_integrated_comparison_refuses_unmatched_or_incomplete_native_evidence(d
         row['samples'].pop()
     elif damage == 'status':
         row['samples'][0]['http_status'] = 500
-    elif damage == 'phase':
-        approve = next(s for s in row['samples'] if s['action'] == 'approve')
+    elif damage == 'body':
+        row['samples'][0]['response_bytes'] = 0
+    elif damage in {'phase', 'retry_phase', 'retry_no_phases'}:
+        action = 'approve' if damage == 'phase' else 'old_form_retry'
+        approve = next(s for s in row['samples'] if s['action'] == action)
         del approve['diagnostics']['phases']['store_lock_hold']
+        if damage == 'retry_no_phases':
+            del approve['diagnostics']['phases']['store_transaction']
     else:
         after.append(deepcopy(row))
     with pytest.raises(AssertionError):
@@ -77,3 +85,14 @@ def test_native_reports_preserve_scope_and_do_not_claim_production_acceptance():
     assert result['p95'] is None and cutover['p95'] is None
     assert not result['production_acceptance'] and not cutover['production_acceptance']
     assert result['after_budget_misses'] == sum(len(r['after_budget_misses']) for r in result['results'])
+
+
+def test_wp5_pretransaction_conflict_does_not_accept_a_partially_measured_transaction():
+    before, after = inputs()
+    result = REPORT['compare'](before, after)
+    assert all(r['before_pretransaction_conflicts'] == ['old_form_retry', 'concurrent_stale'] for r in result['results'])
+    before = deepcopy(before)
+    stale = next(s for s in before[0]['samples'] if s['action'] == 'old_form_retry')
+    stale['diagnostics']['phases']['store_lock_hold'] = {'inclusive_ms': 1}
+    with pytest.raises(AssertionError):
+        REPORT['compare'](before, after)

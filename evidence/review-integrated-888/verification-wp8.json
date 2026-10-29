@@ -1,0 +1,39 @@
+{
+  "production_base": "e2e261d09b4e24427eed57aa3a72c95bc5dcde3b",
+  "measurement_commit": "0137ad233220c14b551c46af3abcfb95701a9a1a",
+  "python": "3.12.14",
+  "postgres": "16.15",
+  "production_diff": false,
+  "reference_matrix": {
+    "passed": 28,
+    "skips": 0
+  },
+  "matched_scale": {
+    "passed": 6,
+    "completed_requests": 318,
+    "cutover_budget_misses": 1
+  },
+  "original_control_rounds": {
+    "passed": 12,
+    "initial_budget_misses": 2,
+    "combined_budget_misses": 8
+  },
+  "current_large_matrix": {
+    "passed": 3,
+    "completed_authorized_gets": 252
+  },
+  "other_selected_checks": {
+    "passed": 180,
+    "failures": 0,
+    "skips": 0
+  },
+  "report_checks_final": {
+    "passed": 24,
+    "failures": 0,
+    "skips": 0
+  },
+  "initial_report_failure": "The old WP5 stale forms are rejected before the mutation transaction; final validator distinguishes this pinned baseline from mandatory WP8 transaction evidence. Initial failed JUnit is retained; all other 180 selected checks passed unchanged.",
+  "project_acceptance": "NOT READY",
+  "production_actions": false,
+  "full_suite": "Final full suite and CI are recorded in PR metadata, not inferred from the targeted runs."
+}

@@ -41,6 +41,47 @@ The integrated implementation under test starts at merged main
 merged tip. Every final measurement records its actual checkout and harness.
 The exact configuration is retained separately for legacy and compact readers.
 
+## Reproduction
+
+Start `scripts/test_postgres.sh` with the pinned project Python and retain the
+test DSN privately in `METIS_TEST_POSTGRES_DSN`. Each run uses a fresh output
+path. Run sequentially, without other CPU/database-heavy checks:
+
+```sh
+REVIEW_PROOF_OUTPUT=/tmp/wp8-legacy.json REVIEW_PROOF_CARD_MODE=legacy \
+  python -m pytest -x -q -p tests.conftest \
+  evidence/review-integrated-888/integrated_benchmark.py \
+  --junitxml=/tmp/wp8-legacy.xml
+REVIEW_PROOF_OUTPUT=/tmp/wp8-compact.json REVIEW_PROOF_CARD_MODE=compact \
+  python -m pytest -x -q -p tests.conftest \
+  evidence/review-integrated-888/integrated_benchmark.py \
+  --junitxml=/tmp/wp8-compact.xml
+```
+
+Copy only `benchmark.py` and `integrated_benchmark.py` into an isolated checkout
+of the pinned WP5 baseline and run the identical legacy invocation there. Do
+not replace production code or its schema. Retain the copy as an evidence-only
+working-tree difference. The wrapper and benchmark hashes must match the
+integrated run; the report rejects changed manifests or missing requests.
+
+```sh
+python evidence/review-integrated-888/integrated_report.py \
+  --before /tmp/wp5-matched.json --before-junit /tmp/wp5-matched.xml \
+  --after /tmp/wp8-legacy.json --after-junit /tmp/wp8-legacy.xml \
+  --output /tmp/wp5-wp8-comparison.json --assert-budget
+python evidence/review-integrated-888/integrated_report.py \
+  --before /tmp/wp8-legacy.json --before-junit /tmp/wp8-legacy.xml \
+  --after /tmp/wp8-compact.json --after-junit /tmp/wp8-compact.xml \
+  --output /tmp/reader-cutover-comparison.json --cutover --assert-budget
+```
+
+The reference invocation remains the exact native characterization selection
+in `.github/workflows/ci.yml` under `MET-23 native Review POST baseline`.
+Its 28-case output is retained separately from the additional 53-request scale
+scenarios. A failed budget report remains red even when every functional
+testcase passed. Retain JUnit and the request/test progress inventories; never
+count interrupted or skipped cases as completed native evidence.
+
 Current deployment identity, representative original production workload and
 authorized logged-in live evidence belong to #695/#699/#680. This task does not
 deploy, prepare production data, activate a reader or initiate production load.
