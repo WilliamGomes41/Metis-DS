@@ -150,15 +150,21 @@ def test_actual_authenticated_routes_report_owner_phases(review_client,events):
     assert sid not in json.dumps(events)
 
 
-def test_review_document_reports_preparation_and_capture_without_mutation(review_client, events):
+@pytest.mark.parametrize('review_client', [None, 'raw'], indirect=True)
+def test_review_document_reports_preparation_and_capture_without_mutation(review_client, events, request):
     console, client, sid = review_client
     before = json.dumps(console.snapshot_objects(sid), sort_keys=True)
     response = client.get('/review', params={'document': sid, 'task': 'inventory'})
     assert response.status_code == 200
     finished = [r for r in events if r['event'] == 'request_finished' and r['route'] == '/review'][-1]
     phases = finished['phases']
-    for phase in ('review_capture', 'review_revision', 'source_prepare', 'source_build_blocks'):
+    for phase in ('review_capture', 'review_revision', 'source_prepare'):
         assert phases[phase]['calls'] >= 1
+    if request.node.callspec.params['review_client'] == 'raw':
+        assert phases['source_build_blocks']['calls'] >= 1
+    else:
+        assert phases['source_views_read_records']['calls'] >= 1
+        assert 'source_build_blocks' not in phases
     tree = finished['phase_tree']
     assert tree['review_capture/source_prepare']['calls'] >= 1
     assert tree['review_capture']['inclusive_ms'] >= tree['review_capture/source_prepare']['inclusive_ms']

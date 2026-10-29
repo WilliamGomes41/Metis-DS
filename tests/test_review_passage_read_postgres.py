@@ -343,6 +343,7 @@ def test_passage_revision_is_rejected_after_another_object_changes(review_client
 
 
 @pytest.mark.parametrize('index', [0, 10, 19])
+@pytest.mark.parametrize('review_client', [None, 'raw'], indirect=True)
 def test_isolated_source_window_keeps_exact_candidate_evidence(review_client, index):
     from src.vorming.source_reconstruction_v1 import review_source_window
     from src.vorming.knowledge_materialisation_v1 import validate_materialised_candidate
@@ -350,7 +351,11 @@ def test_isolated_source_window_keeps_exact_candidate_evidence(review_client, in
     obj = [o for o in console.snapshot_objects(sid)
            if (o.get('metadata') or {}).get('semantic_passage', {}).get('spans')][index]
     fragments = console.review_source_fragments(sid)
-    window = review_source_window(fragments, [obj])
+    # Indexed source windows are selected by the existing store owner; raw
+    # legacy sources use the independently closed-block selector. A full
+    # immutable carrier deliberately retains its originally requested scope.
+    selected = console.review_source_fragments(sid, objects=[obj])
+    window = review_source_window(selected, [obj])
     assert len(window) == 1
     assert validate_materialised_candidate(obj, fragments=window) == validate_materialised_candidate(obj, fragments=fragments)
 

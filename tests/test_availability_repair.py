@@ -322,7 +322,9 @@ def test_a02_installed_reads_bounded_equal_and_next_request_sees_changes(backend
         # A changed representation is rebuilt on the next request, never held
         # in an application-wide validation/authority cache.
         fragments=console.review_source_fragments(sid)
-        fragments=deepcopy(fragments)
+        # Mutate a detached raw representation, never the native immutable
+        # carrier now prepared during ingestion. Keep the same stale-input test.
+        fragments=[deepcopy(dict(row)) for row in fragments]
         changed_fragment = fragments[-1]
         if query.get('object') == candidate['object_id']:
             # A passage read deliberately excludes unrelated source rows. Race

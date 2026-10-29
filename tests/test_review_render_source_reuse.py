@@ -30,7 +30,8 @@ def review_client(tmp_path, request, monkeypatch, *, production_app, production_
     size = getattr(request, 'param', None)
     count = size if type(size) is int else 60 if size in ('large', 'batch-large') else 20
     texts = [f"Begrip {i} is een beschrijving van een afzonderlijke waarneming." for i in range(count)]
-    retained = getattr(request, "param", None) == "retained"
+    raw_layout = size in ('raw', 'retained-raw')
+    retained = size in ('retained', 'retained-raw')
     if retained:
         from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
         from tests.test_recommendation_context_v3 import response_for
@@ -59,6 +60,18 @@ def review_client(tmp_path, request, monkeypatch, *, production_app, production_
         ingest_kind="new", title="Review render proof", version="1.0", date="2026-10-08",
         live_url="", class_="richtlijn", family="fixture", named_reviewers=[reviewer["account_id"]],
     )["snapshot_id"]
+    if raw_layout:
+        # Keep the original raw/legacy reconstruction scenario alongside the
+        # native ingestion path, which now prepares immutable indexed views.
+        with console.workflow_document_store._connect() as con:
+            reference = con.execute('SELECT review_source_ref FROM workflow.documents WHERE snapshot_id=%s',
+                                    (sid,)).fetchone()['review_source_ref']
+            assert reference and reference['views_id']
+            con.execute('UPDATE workflow.documents SET review_source_ref=NULL WHERE snapshot_id=%s', (sid,))
+            # This fixture owns its isolated database and only this document.
+            # Immutable rows cannot be deleted individually; use the existing
+            # explicit legacy-layout fixture operation.
+            con.execute('TRUNCATE workflow.source_read_roots CASCADE')
     # PostgreSQL supplies this light list projection. Keep its storage I/O out
     # of this source-rendering regression; retain the actual middleware/routes.
     console.list_document_lifecycle_statuses = lambda: {sid: {
@@ -75,7 +88,8 @@ def review_client(tmp_path, request, monkeypatch, *, production_app, production_
 
 @pytest.mark.parametrize("task", ["structure", "contextual", "batch", "inventory", "disposition",
                                   "waiting", "history", "second_review", "repair", "object"])
-def test_http_review_render_reuses_source_and_matches_uncached_read(review_client, monkeypatch, task):
+@pytest.mark.parametrize('review_client', [None, 'raw'], indirect=True)
+def test_http_review_render_reuses_source_and_matches_uncached_read(review_client, monkeypatch, task, request):
     import src.vorming.knowledge_materialisation_v1 as materialisation
     import src.vorming.semantic_passage_v1 as semantic
     import src.operations_console_app as ui
@@ -115,7 +129,8 @@ def test_http_review_render_reuses_source_and_matches_uncached_read(review_clien
     # reconstruction. Content tasks retain their exact per-request reuse bound.
     if task == 'structure':
         assert 'action="/review/headings/batch-confirm"' in expected.text
-    for expected_calls in ((0, 0) if task in {'structure', 'history'} else (1, 2)):
+    prepared = request.node.callspec.params['review_client'] is None
+    for expected_calls in ((0, 0) if prepared or task in {'structure', 'history'} else (1, 2)):
         response = client.get("/review", params=params)
         assert response.status_code == 200
         assert response.text == expected.text
@@ -151,8 +166,8 @@ def test_http_overview_does_not_serialize_full_source_per_candidate(review_clien
     assert console._envelope(sid) == envelope_before
 
 
-@pytest.mark.parametrize("review_client", ["retained"], indirect=True)
-def test_postgres_overview_reuses_full_source_for_retained_records(review_client, monkeypatch):
+@pytest.mark.parametrize("review_client", ["retained", "retained-raw"], indirect=True)
+def test_postgres_overview_reuses_full_source_for_retained_records(review_client, monkeypatch, request):
     import src.vorming.knowledge_materialisation_v1 as materialisation
     import src.vorming.semantic_passage_v1 as semantic
     import src.review.review_workboard_v1 as workboard
@@ -196,7 +211,10 @@ def test_postgres_overview_reuses_full_source_for_retained_records(review_client
         assert response.text == expected.text
         # Full source and filtered candidate source are distinct views; neither
         # may be rebuilt for every retained source record.
-        assert 1 <= len(calls) <= 2
+        if request.node.callspec.params['review_client'] == 'retained-raw':
+            assert 1 <= len(calls) <= 2
+        else:
+            assert len(calls) == 0
         assert len(batch_reads) == request_number
     assert console.snapshot_objects(sid) == before
 

@@ -241,6 +241,8 @@ class ReviewWorkInputs:
     bindings: list[dict[str, Any]]
     lifecycle_status: dict[str, str]
     published: bool
+    sources: Any = None
+    graph_inventory: Any = None
 
 
 @source_reconstruction_scope(reuse_existing=True)
@@ -272,8 +274,9 @@ def review_work_item(
         except AttributeError:
             bindings = None
 
-    fragments = console.review_source_fragments(snapshot_id, envelope=envelope)
-    if fragments is not None:
+    fragments = (inputs.sources if inputs is not None and inputs.sources is not None
+                 else console.review_source_fragments(snapshot_id, envelope=envelope))
+    if fragments is not None and not (inputs is not None and inputs.sources is not None):
         from src.vorming.prepared_source_views_v1 import prepare
         fragments = prepare(fragments).fragments
 
@@ -365,7 +368,9 @@ def review_work_item(
     )
     if "decision_graph" in envelope and not published:
         from src.vorming.decision_graph_v1 import publication_issues, review_target
-        graph_issues = publication_issues(envelope, objects)
+        inventory = inputs.graph_inventory if inputs is not None else None
+        graph_issues = (publication_issues(envelope, objects, inventory=inventory)
+                        if inventory is not None else publication_issues(envelope, objects))
         target = review_target(envelope["decision_graph"], objects, envelope["review_policy"])
         actor_confirmed = any(r["reviewer_id"] == account_id and r.get("target") == target
                               for r in envelope.get("decision_graph_reviews", []))
@@ -495,6 +500,8 @@ def review_workboard_items(
 
 def _personal_review_view(item: dict[str, Any]) -> dict[str, Any]:
     """Disposable landing presentation; existing duties/routes remain authority."""
+    if 'unavailable' in item:
+        return dict(state='unavailable', opened=None, first=None, second=None, href='', graph=False)
     closed = item['lifecycle_status']['workflow_status'] == 'closed'
     opened = 0 if closed else int(item.get('actionable_review_duties') or 0)
     second = 0 if closed else int(item.get('actionable_second_review_duties') or 0)
@@ -528,6 +535,13 @@ def _personal_review_view(item: dict[str, Any]) -> dict[str, Any]:
 def _workboard_card(item: dict[str, Any], *, started: bool = False,
                     observed_at: str = '', q: str = '', page: int = 1) -> str:
     """One visible personal action over one existing actor-specific work item."""
+    if 'unavailable' in item:
+        envelope = item['envelope']
+        return ('<article class="doc-card" data-workboard-document="' + _esc(item['snapshot_id']) +
+                '" data-personal-state="unavailable"><h2>' + _esc(envelope.get('title') or 'Document') +
+                '</h2><p>De actuele kaartgegevens zijn niet beschikbaar. Het aantal open beoordelingen is onbekend.</p>'
+                '<p><a href="/review?' + _esc(urlencode({'document':item['snapshot_id'],'task':'history'})) +
+                '">Beoordelingen inzien</a></p></article>')
     envelope, lifecycle = item['envelope'], item['lifecycle_status']
     view = _personal_review_view(item)
     sid = str(item['snapshot_id'])
@@ -550,10 +564,13 @@ def _workboard_card(item: dict[str, Any], *, started: bool = False,
     evidence_href = '/inzicht/document?' + urlencode({'document': sid})
     evidence = f'<p><a href="{_esc(evidence_href)}">Verklaring en bewijs in Inzicht</a></p>'
     scope = console_ui.count_scope_label(envelope.get('version'), observed_at=observed_at or _observed_at())
+    source_notice = ('<p class="muted" data-card-source-check>Gebaseerd op de geverifieerde extractie. '
+                     'De oorspronkelijke bron wordt bij openen en beoordelen gecontroleerd.</p>'
+                     if envelope.get('_compact_review_card') else '')
     return ('<article class="doc-card" data-workboard-document="' + _esc(sid) +
             '" data-personal-state="' + view['state'] + '" data-workflow-status="' + _esc(lifecycle['workflow_status']) + '">'
             '<h2>' + _esc(str(envelope.get('title') or 'Document')) + '</h2>'
-            '<p class="muted" data-count-scope>' + _esc(scope) + '</p>' + summary + action + evidence + '</article>')
+            '<p class="muted" data-count-scope>' + _esc(scope) + '</p>' + summary + action + source_notice + evidence + '</article>')
 
 
 @diagnostic_phase("review_render")
@@ -589,6 +606,7 @@ def _workboard_page(console: OperationsConsole, *, account: dict[str, Any],
         enrich(account['account_id'], selected)
         items = review_workboard_items(console, account=account, summaries=selected)
     by_id = {item['snapshot_id']: item for item in items}
+    visible = [row for row in visible if row['snapshot_id'] in by_id]
     ledger_path = getattr(console, '_ledger_path', None)
     store = getattr(console, 'workflow_review_store', None)
     reader = getattr(store, 'read_review_participation_events', None)
@@ -607,7 +625,7 @@ def _workboard_page(console: OperationsConsole, *, account: dict[str, Any],
                actor in {account['account_id'], account.get('username')})
         if own and not is_forbidden_reviewer(actor):
             started.add(str(details.get('snapshot_id') or ''))
-    groups = {'review': [], 'waiting': [], 'complete': []}
+    groups = {'review': [], 'waiting': [], 'complete': [], 'unavailable': []}
     observed = _observed_at()
     for envelope in visible:
         sid = str(envelope['snapshot_id'])
@@ -615,10 +633,10 @@ def _workboard_page(console: OperationsConsole, *, account: dict[str, Any],
         state = _personal_review_view(item)['state']
         groups[state].append(_workboard_card(item, started=sid in started, observed_at=observed, q=q, page=page))
     body = ''
-    if not groups['review']:
+    if not groups['review'] and not groups['unavailable']:
         body += '<p class="review-empty" data-personal-empty>Op deze pagina heb je geen uitvoerbare beoordelingen.</p>'
     for state, title in [('review', 'Jouw open beoordelingen'), ('waiting', 'Wachten op anderen'),
-                         ('complete', 'Geen open werk voor jou')]:
+                         ('complete', 'Geen open werk voor jou'), ('unavailable', 'Kaartgegevens niet beschikbaar')]:
         if groups[state]:
             body += '<section data-personal-group="' + state + '"><h2>' + title + '</h2><div class="doc-list">' + ''.join(groups[state]) + '</div></section>'
     if not visible:

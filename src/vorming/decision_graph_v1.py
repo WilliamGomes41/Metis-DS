@@ -258,9 +258,10 @@ def graph_issues(graph: Any, objects: list[dict[str, Any]], inventory: dict[str,
         if not any(evidence[i]["kind"] in {"graphic", "export_edge"} for i in ids):
             issues.append("decision_graph_graphic_evidence_missing")
         if edge["kind"] == "answer":
-            if not isinstance(edge["label"], str) or not edge["label"] or not any(
-                edge["label"] == evidence[i].get("text") for i in ids
-            ):
+            from src.review.review_card_facts_v1 import ReviewGraphInventory
+            literal = (inventory.label_matches(ids, edge['label']) if isinstance(inventory, ReviewGraphInventory)
+                       and isinstance(edge['label'], str) else any(edge['label'] == evidence[i].get('text') for i in ids))
+            if not isinstance(edge["label"], str) or not edge["label"] or not literal:
                 issues.append("decision_graph_label_not_literal")
         elif edge["kind"] != "continue" or edge["label"] != "":
             issues.append("decision_graph_edge_kind_invalid")
@@ -333,11 +334,11 @@ def verify_source_evidence(
         raise ValueError("decision_graph_source_evidence_mismatch")
 
 
-def publication_issues(envelope: dict[str, Any], objects: list[dict[str, Any]]) -> list[str]:
+def publication_issues(envelope: dict[str, Any], objects: list[dict[str, Any]], *, inventory=None) -> list[str]:
     if "decision_graph" not in envelope:
         return []
     graph = envelope["decision_graph"]
-    issues = graph_issues(graph, objects, envelope["decision_graph_evidence"])
+    issues = graph_issues(graph, objects, envelope["decision_graph_evidence"] if inventory is None else inventory)
     if issues:
         return issues
     from src.review.review_policy_v1 import required_reviewers, archived_required

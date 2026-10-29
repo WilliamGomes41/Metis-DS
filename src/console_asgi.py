@@ -198,6 +198,15 @@ def build_app() -> object:
         workflow_review_store=workflow_review_store,
         workflow_remaining_store=workflow_remaining_store,
     )
+    card_mode = os.environ.get('CONSOLE_REVIEW_CARD_READS', 'legacy')
+    if card_mode not in {'legacy', 'compact'}:
+        raise ValueError('review_card_read_mode_invalid')
+    console.review_card_read_mode = card_mode
+    if card_mode == 'compact':
+        from src.workflows.review_card_inputs_postgres_v1 import available
+        with workflow_document_store._connect() as con:
+            if not available(con):
+                raise ValueError('review_card_schema_unprepared')
 
     bind_pre_review_semantic_processing(console)
 

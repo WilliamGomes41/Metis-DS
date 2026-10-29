@@ -97,6 +97,19 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
             return await document_status_calculation(request, call_next)
 
     async def document_status_calculation(request: Request, call_next):
+        if (getattr(console, 'review_card_read_mode', 'legacy') == 'compact'
+                and request.url.path == '/review' and not request.query_params.get('document')
+                and request.query_params.get('work', 'mine') == 'mine'):
+            account = getattr(request.state, 'view_check_account', None)
+            if account is None:
+                try:
+                    account = await asyncio.to_thread(console.session_account, request.cookies.get(console_ui.COOKIE))
+                except ConsoleError:
+                    return await call_next(request)
+            if 'reviewer' in account.get('roles', []):
+                # Only the personal workboard captures its visible documents.
+                # All-trajectories/publisher views retain the batched context.
+                return await call_next(request)
         if request.url.path not in _STATUS_PATHS:
             return await call_next(request)
 

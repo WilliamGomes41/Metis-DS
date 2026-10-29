@@ -40,6 +40,38 @@ def _covers(ref, spans):
     return cursor >= ref["end"]
 
 
+def bound_context_valid(obj, *, fragments=None):
+    """Intrinsic context evidence, shared by full validation and card preparation."""
+    from src.review.review_card_facts_v1 import ReviewFactSources
+    if isinstance(fragments, ReviewFactSources):
+        return fragments.proof_for(obj)['bound_context']
+    from src.review.knowledge_path_v1 import spans_are_exact
+    from src.vorming.source_bound_fields_v2 import validated_context, CONTEXT_ROLES, CONTEXT_REASONS
+    raw = (obj.get('metadata') or {}).get(CONTEXT_KEY)
+    if raw is None:
+        return True
+    if not isinstance(raw, dict):
+        return False
+    try:
+        valid = context_matches_target(obj)
+        entries = raw.get('entries')
+        valid = valid and all(isinstance(entry, dict)
+            and set(entry) == {'role', 'span', 'unresolved_reason', 'text', 'source_mapping', 'source_refs'}
+            and entry['role'] in CONTEXT_ROLES
+            and entry['unresolved_reason'] in (None, *CONTEXT_REASONS)
+            and isinstance(entry['text'], str)
+            and isinstance(entry['source_mapping'], list)
+            and isinstance(entry['source_refs'], list)
+            and (spans_are_exact([entry['span']]) or
+                 (entry['span'] is None and entry['unresolved_reason'] is not None))
+            for entry in entries or [])
+        if valid and fragments is not None:
+            validated_context(obj, fragments, (obj.get('source') or {}).get('source_checksum'))
+        return valid
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
 @diagnostic_phase('source_accountability')
 def source_accountability(objects, *, review_path="richtlijn", bindings=None, fragments=None):
     """One read-only source role/closure/action projection for a current bundle.
@@ -52,11 +84,10 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
     from src.operations_console_v1 import review_lane
     from src.review.review_duty_v1 import review_duty_for, review_stage, exact_current_approver_ids
     from src.review.source_context_review_v1 import context_issues, role_of, links_of, verify_literal_source
-    from src.vorming.source_bound_fields_v2 import validated_context, CONTEXT_ROLES, CONTEXT_REASONS
 
     objects = list(objects)
     bindings = tuple(bindings or ())
-    from src.vorming.prepared_source_views_v1 import preserve_fragments
+    from src.review.review_card_facts_v1 import preserve_review_sources as preserve_fragments, ReviewFactSources
     fragments = preserve_fragments(fragments) if fragments is not None else None
     conflicts = context_issues(objects)
     targets = []
@@ -90,23 +121,7 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
         if not isinstance(raw, dict):
             conflicts.setdefault(str(target.get("object_id") or ""), []).append("source_bound_context_invalid")
             continue
-        try:
-            valid = context_matches_target(target)
-            entries = raw.get("entries")
-            valid = valid and all(isinstance(entry, dict)
-                and set(entry) == {"role", "span", "unresolved_reason", "text", "source_mapping", "source_refs"}
-                and entry["role"] in CONTEXT_ROLES
-                and entry["unresolved_reason"] in (None, *CONTEXT_REASONS)
-                and isinstance(entry["text"], str)
-                and isinstance(entry["source_mapping"], list)
-                and isinstance(entry["source_refs"], list)
-                and (spans_are_exact([entry["span"]]) or
-                     (entry["span"] is None and entry["unresolved_reason"] is not None))
-                for entry in entries or [])
-            if valid and fragments is not None:
-                validated_context(target, fragments, (target.get("source") or {}).get("source_checksum"))
-        except (KeyError, TypeError, ValueError):
-            valid = False
+        valid = bound_context_valid(target, fragments=fragments)
         if not valid:
             conflicts.setdefault(str(target.get("object_id") or ""), []).append("source_bound_context_invalid")
         state = target_state(target) if valid else "invalid"
@@ -143,7 +158,7 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
             try:
                 # This projection never mutates fragments: read the full-source
                 # view once instead of comparing the whole input per record.
-                if source_blocks is None:
+                if source_blocks is None and not isinstance(fragments, ReviewFactSources):
                     source_blocks = _read_source_blocks(fragments, include_headings=True)
                 invalid_source = not verify_literal_source(obj, fragments, (obj.get("source") or {}).get("source_checksum"),
                                                            source_blocks=source_blocks)
@@ -214,7 +229,10 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
                           and max(span["start"], s["start"]) < min(span["end"], s["end"]) for s in spans)]
         row["target_ids"] = sorted({target["object_id"] for target, _, _ in linked})
         manual = role or (obj.get("metadata", {}).get("passage_register") or {}).get("source") == "review"
-        machine_reason = metadata_reason(evidence["text"]) if not manual else None
+        if isinstance(fragments, ReviewFactSources):
+            machine_reason = fragments.proof_for(obj)['metadata_reason'] if not manual else None
+        else:
+            machine_reason = metadata_reason(evidence["text"]) if not manual else None
         if machine_reason:
             finish("navigation" if machine_reason == "navigation" else "document_information",
                    "accounted", "none", machine_reason, "document_information")

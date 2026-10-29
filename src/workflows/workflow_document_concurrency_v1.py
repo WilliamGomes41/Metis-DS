@@ -292,6 +292,8 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                             "UPDATE workflow.documents SET revision=revision+%s,updated_at=CURRENT_TIMESTAMP "
                             "WHERE snapshot_id=%s", (commit_count, snapshot_id),
                         )
+                    from src.workflows.review_card_inputs_postgres_v1 import maintain
+                    maintain(self, con, snapshot_id, after_objects)
         except WorkflowDocumentStoreError:
             raise
         except Exception as exc:
@@ -496,6 +498,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         envelope: Mapping[str, Any],
         objects: list[dict[str, Any]] | None = None,
         expected_revision: str | None = None,
+        review_card_preparation=None,
     ) -> str:
         snapshot_id = str(envelope.get("snapshot_id") or "")
         if not snapshot_id:
@@ -549,6 +552,8 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                         from src.workflows.formation_task_store_v1 import FormationTaskStore
                         FormationTaskStore.assert_activation(con,envelope)
                     self._write_envelope_locked(con, envelope)
+                    from src.workflows.review_card_inputs_postgres_v1 import publish_preparation
+                    publish_preparation(self, con, snapshot_id, review_card_preparation)
                     next_objects = current_objects
                     if objects is not None:
                         current_revisions(objects, snapshot_id=snapshot_id)
@@ -565,6 +570,8 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                                 "VALUES(%s,%s,%s,%s::jsonb,%s)",
                                 (snapshot_id, obj["object_id"], obj["object_version"], _json_text(obj), position),
                             )
+                        from src.workflows.review_card_inputs_postgres_v1 import maintain
+                        maintain(self, con, snapshot_id, next_objects, complete=True, preparation=review_card_preparation)
             return self._revision_token(next_objects)
         except WorkflowDocumentStoreError:
             raise

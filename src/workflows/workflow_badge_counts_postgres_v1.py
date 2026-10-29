@@ -24,6 +24,14 @@ from src.workflows.workflow_remaining_cutover_v1 import (
     PostgresCompleteWorkflowDurablePublicationConsole,
 )
 
+_LIST_FINAL_REVIEW_STATUSES = ('approved', 'rejected', 'superseded')
+
+
+def _list_review_open(obj):
+    governance = obj.get('governance')
+    status = governance.get('validation_status') if isinstance(governance, dict) else None
+    return obj.get('object_type') != 'document' and str(status or '') not in _LIST_FINAL_REVIEW_STATUSES
+
 
 class _PostgresBadgeCountsMixin:
     """Derive hot console reads without materializing every work-object payload."""
@@ -101,7 +109,19 @@ class _PostgresBadgeCountsMixin:
     def _workflow_list_status_rows(
         self,
         snapshot_ids: list[str] | None = None,
+        *, card_inputs=None,
     ) -> dict[str, dict[str, Any]]:
+        if card_inputs is not None:
+            out = {}
+            for sid in snapshot_ids or []:
+                inputs = card_inputs[sid]
+                if 'unavailable' in inputs:
+                    raise WorkflowDocumentStoreError('review_card_inputs_unavailable')
+                envelope = inputs['envelope']
+                out[sid] = {'state': envelope.get('state'),
+                    'publication_eligibility': envelope.get('publication_eligibility'),
+                    'has_open_review': any(_list_review_open(obj) for obj in inputs['objects'])}
+            return out
         where = ""
         params: tuple[Any, ...] = ()
         if snapshot_ids is not None:
@@ -110,6 +130,7 @@ class _PostgresBadgeCountsMixin:
             where = "WHERE d.snapshot_id=ANY(%s)"
             params = (snapshot_ids,)
         try:
+            final_status_sql = ','.join("'" + status + "'" for status in _LIST_FINAL_REVIEW_STATUSES)
             with self.workflow_document_store._connect() as con:
                 rows = con.execute(
                     f"""
@@ -129,7 +150,7 @@ class _PostgresBadgeCountsMixin:
                                  AND COALESCE(o.payload->>'object_type','')<>'document'
                                  AND COALESCE(
                                      o.payload->'governance'->>'validation_status',''
-                                 ) NOT IN ('approved','rejected','superseded')
+                                 ) NOT IN ({final_status_sql})
                            ) AS has_open_review
                     FROM workflow.documents d
                     {where}
@@ -246,10 +267,12 @@ class _PostgresBadgeCountsMixin:
     def list_document_lifecycle_statuses(
         self,
         snapshot_ids: list[str] | None = None,
+        *, card_inputs=None,
     ) -> dict[str, dict[str, str]]:
         """Return fail-closed list presentation without running publish readiness."""
         try:
-            workflow = self._workflow_list_status_rows(snapshot_ids)
+            workflow = (self._workflow_list_status_rows(snapshot_ids, card_inputs=card_inputs)
+                        if card_inputs is not None else self._workflow_list_status_rows(snapshot_ids))
         except WorkflowDocumentStoreError as exc:
             raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
 
@@ -313,14 +336,21 @@ class _PostgresBadgeCountsMixin:
         metadata_only: bool = False,
     ) -> dict[str, dict[str, Any]]:
         """Select assigned documents; kernel projections own all review duties."""
+        if getattr(self, 'review_card_read_mode', 'legacy') == 'compact' and not metadata_only:
+            summaries = self.review_workboard_summaries(account_id, snapshot_id, metadata_only=True)
+            if not navigation_only:
+                self._enrich_review_workboard_summaries(account_id, summaries)
+            return summaries
         try:
             with self.workflow_document_store._connect() as con:
                 if metadata_only:
                     # The WP7 trigger derives this exact metadata in the same
                     # document write. Old unprepared rows keep explicit lazy
                     # compatibility; prepared rows never inspect their archive.
-                    columns = _DOCUMENT_CARD_COLUMNS.replace('d.envelope_payload',
+                    envelope_column = ('COALESCE(d.review_card_envelope,d.review_read_envelope,d.envelope_payload)'
+                        if getattr(self, 'review_card_read_mode', 'legacy') == 'compact' else
                         'COALESCE(d.review_read_envelope,d.envelope_payload)')
+                    columns = _DOCUMENT_CARD_COLUMNS.replace('d.envelope_payload', envelope_column)
                     rows = con.execute(
                         f"SELECT {columns} FROM workflow.documents d "
                         "LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id WHERE EXISTS ("
@@ -437,6 +467,8 @@ class _PostgresBadgeCountsMixin:
         current durable state independently. No publication gate is evaluated
         merely to display the review overview's lifecycle label.
         """
+        if getattr(self, 'review_card_read_mode', 'legacy') == 'compact':
+            return self._enrich_current_review_cards(account_id, summaries)
         from src.documents.document_status_ui_v1 import current_document_lifecycle_status
         from src.review.review_workboard_v1 import ReviewWorkInputs, review_work_item
 
@@ -486,6 +518,51 @@ class _PostgresBadgeCountsMixin:
         except WorkflowReviewStoreError as exc:
             raise ConsoleError("workflow_review_unavailable", str(exc)) from exc
 
+    def _enrich_current_review_cards(self, account_id, summaries):
+        from src.workflows.workflow_transaction_v1 import workflow_read_transaction
+        from src.workflows.review_card_inputs_postgres_v1 import capture_review_cards
+        from src.review.review_card_facts_v1 import ReviewGraphInventory
+        from src.review.review_workboard_v1 import ReviewWorkInputs, review_work_item
+        ids = list(summaries)
+        if not ids:
+            return
+        account = self._account(account_id, current=True)
+        if 'reviewer' not in (account.get('roles') or []) or account.get('retirement'):
+            raise ConsoleError('reviewer_required')
+        with workflow_read_transaction(self.workflow_document_store) as con:
+            captured = capture_review_cards(self.workflow_document_store, con, ids)
+            bindings = self.workflow_review_store.read_bindings(ids)
+        # Canonical lifecycle has its own owner; no source/domain calculation
+        # or external canonical transaction runs inside the workflow capture.
+        available_ids = [sid for sid in ids if 'unavailable' not in captured[sid]]
+        # The lifecycle list owner offers a disposable tree prefetch. As with
+        # the legacy card reader, never leave it behind for later commands.
+        token = self._tree_publication_batch.set(None)
+        try:
+            lifecycle = self.list_document_lifecycle_statuses(available_ids, card_inputs=captured) if available_ids else {}
+        finally:
+            self._tree_publication_batch.reset(token)
+        for sid in ids:
+            row = captured[sid]
+            header = row.get('envelope')
+            if (account_id not in row.get('reviewers', [])
+                    or isinstance(header, dict) and account_id not in (header.get('named_reviewers') or [])):
+                summaries[sid]['work_item'] = None
+                continue
+            envelope = {**summaries[sid]['envelope'], **(header or {})}
+            envelope['_compact_review_card'] = True
+            summaries[sid]['envelope'] = envelope
+            summaries[sid].pop('_metadata_only', None)
+            if 'unavailable' in row:
+                summaries[sid]['work_item'] = {'snapshot_id': sid, 'envelope': envelope,
+                    'unavailable': row['unavailable'], 'work_state': 'unavailable'}
+                continue
+            inventory = envelope.get('decision_graph_evidence')
+            summaries[sid]['work_item'] = review_work_item(self, account=account, envelope=envelope,
+                inputs=ReviewWorkInputs(row['objects'], bindings.get(sid, []), lifecycle[sid],
+                    lifecycle[sid]['release_status'] != 'none', row['sources'],
+                    ReviewGraphInventory(inventory) if inventory is not None else None))
+
     def _navigation_review_count(self, account: dict[str, Any]) -> int:
         """Use review rules once with call-local batched inputs, not publish gates.
 
@@ -493,6 +570,13 @@ class _PostgresBadgeCountsMixin:
         full publication readiness and source verification remain on their
         existing authoritative command/detail paths.
         """
+        if getattr(self, 'review_card_read_mode', 'legacy') == 'compact':
+            summaries = self.review_workboard_summaries(account['account_id'], metadata_only=True)
+            self._enrich_current_review_cards(account['account_id'], summaries)
+            items = [row['work_item'] for row in summaries.values() if row.get('work_item') is not None]
+            if any('unavailable' in item for item in items):
+                raise ConsoleError('review_card_inputs_unavailable')
+            return sum(item['work_state'] in {'review', 'disposition', 'technical_repair'} for item in items)
         from src.review.review_workboard_v1 import ReviewWorkInputs, review_work_item, review_workboard_items
         try:
             summaries = self.review_workboard_summaries(account["account_id"], navigation_only=True)

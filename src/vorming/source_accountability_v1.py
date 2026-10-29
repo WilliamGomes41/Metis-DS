@@ -62,6 +62,9 @@ def record(*, text, spans, assessment=None, version=VERSION):
 
 
 def evidence_of(obj):
+    from src.review.review_card_facts_v1 import ReviewObjectFacts
+    if isinstance(obj, ReviewObjectFacts):
+        return deepcopy(obj.proof['evidence'])
     md = obj.get("metadata") or {}
     raw = md.get(KEY)
     if not isinstance(raw, dict):

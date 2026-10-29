@@ -5,6 +5,7 @@ selected membership/content under the same trusted immutable PostgreSQL model;
 they never turn a read window into whole-document closure or approval evidence.
 """
 from dataclasses import dataclass
+from contextlib import nullcontext
 import json
 
 from src.integrity_kernel import stable_hash
@@ -56,19 +57,25 @@ def block_fragments(pair):
 
 class ReviewSourceRecords:
     @diagnostic_phase('source_views_prepare_records')
-    def prepare_review_source(self, input_reference, payload):
+    def prepare_review_source(self, input_reference, payload, *, extraction=None):
         from src.vorming.prepared_source_views_v1 import contract, prepare
         from src.vorming.source_preparation_context_v1 import KEY, stored_extraction
-        with self.documents._connect() as con:
-            if 'extraction_hash' in input_reference:
-                row = con.execute('SELECT record_hash,payload FROM workflow.prepared_extraction_versions '
-                    'WHERE record_hash=%s AND snapshot_id=%s',
-                    (input_reference['extraction_hash'], input_reference['snapshot_id'])).fetchone()
-            else:
-                row = con.execute('SELECT e.record_hash,e.payload FROM workflow.formation_inputs i '
-                    'JOIN workflow.prepared_extraction_versions e ON e.record_hash=i.extraction_hash '
-                    'WHERE i.artifact_id=%s AND i.snapshot_id=%s',
-                    (input_reference['artifact_id'], input_reference['snapshot_id'])).fetchone()
+        if extraction is None:
+            with self.documents._connect() as con:
+                if 'extraction_hash' in input_reference:
+                    row = con.execute('SELECT record_hash,payload FROM workflow.prepared_extraction_versions '
+                        'WHERE record_hash=%s AND snapshot_id=%s',
+                        (input_reference['extraction_hash'], input_reference['snapshot_id'])).fetchone()
+                else:
+                    row = con.execute('SELECT e.record_hash,e.payload FROM workflow.formation_inputs i '
+                        'JOIN workflow.prepared_extraction_versions e ON e.record_hash=i.extraction_hash '
+                        'WHERE i.artifact_id=%s AND i.snapshot_id=%s',
+                        (input_reference['artifact_id'], input_reference['snapshot_id'])).fetchone()
+        else:
+            # Processing can prepare a new document before its activation row
+            # exists. stored_extraction below validates the complete record;
+            # publication still requires its matching immutable persisted row.
+            row = {'record_hash': input_reference['extraction_hash'], 'payload': extraction}
         if not row:
             fail('formation_input_missing')
         extraction = row['payload']
@@ -188,16 +195,16 @@ class ReviewSourceRecords:
                 'header_hash': prepared.header_hash}
 
     @diagnostic_phase('source_views_read_records')
-    def read_review_source(self, envelope, *, objects=None):
+    def read_review_source(self, envelope, *, objects=None, con=None):
         import psycopg
         try:
-            return self._read_review_source(envelope, objects=objects)
+            return self._read_review_source(envelope, objects=objects, con=con)
         except (KeyError, TypeError, IndexError, ValueError) as error:
             raise WorkflowDocumentStoreError('source_read_integrity_failed') from error
         except psycopg.Error as error:
             raise WorkflowDocumentStoreError('source_read_unavailable') from error
 
-    def _read_review_source(self, envelope, *, objects=None):
+    def _read_review_source(self, envelope, *, objects=None, con=None):
         from src.vorming.prepared_source_views_v1 import ReadSource, contract
         from src.vorming.source_preparation_context_v1 import KEY, VERSION, SourceIdentity
         from dataclasses import asdict
@@ -205,7 +212,20 @@ class ReviewSourceRecords:
         if not extraction:
             return None
         views_id = stable_hash({'extraction_hash': extraction['record_hash'], 'contract': contract()})
-        with self.documents._connect() as con:
+        block_ids, raw_ids = references(objects)
+        complete = objects is None or not (block_ids or raw_ids)
+        # Whole-document callers already require all records. Capture those
+        # with the root in one SQL snapshot, preserving the existing validators
+        # and publication query budget. Selected-object reads stay windowed.
+        records = """ ,
+            COALESCE((SELECT jsonb_agg(to_jsonb(b) ORDER BY b.view_name,b.ordinal)
+                FROM workflow.source_read_blocks b WHERE b.views_id=r.views_id),'[]'::jsonb) AS read_blocks,
+            COALESCE((SELECT jsonb_agg(to_jsonb(m)) FROM workflow.source_read_block_fragments m
+                WHERE m.views_id=r.views_id),'[]'::jsonb) AS read_members,
+            COALESCE((SELECT jsonb_agg(to_jsonb(f) ORDER BY f.ordinal)
+                FROM workflow.source_read_fragments f WHERE f.views_id=r.views_id),'[]'::jsonb) AS read_fragments
+            """ if complete else ''
+        with (nullcontext(con) if con is not None else self.documents._connect()) as con:
             if con.execute("SELECT to_regclass('workflow.source_read_roots') AS table_name").fetchone()['table_name'] is None:
                 if envelope.get('_review_source_ref') is not None:
                     fail('source_read_root_missing')
@@ -219,15 +239,15 @@ class ReviewSourceRecords:
             if reference is None:
                 # One bounded lookup captures both the optional pin and root.
                 # A missing root must still expose an existing pin and fail closed.
-                row = con.execute('SELECT r.extraction_hash,r.header,r.header_hash,r.sealed,d.review_source_ref '
+                row = con.execute('SELECT r.extraction_hash,r.header,r.header_hash,r.sealed,d.review_source_ref ' + records +
                     'FROM workflow.documents d LEFT JOIN workflow.source_read_roots r ON r.views_id=%s '
                     'WHERE d.snapshot_id=%s', (views_id, envelope['snapshot_id'])).fetchone()
                 reference = row.pop('review_source_ref') if row else None
                 if row is not None and row['extraction_hash'] is None:
                     row = None
             else:
-                row = con.execute('SELECT extraction_hash,header,header_hash,sealed FROM workflow.source_read_roots '
-                                  'WHERE views_id=%s', (views_id,)).fetchone()
+                row = con.execute('SELECT r.extraction_hash,r.header,r.header_hash,r.sealed ' + records +
+                                  'FROM workflow.source_read_roots r WHERE r.views_id=%s', (views_id,)).fetchone()
             if row is None:
                 if reference:
                     fail('source_read_root_missing')
@@ -248,15 +268,8 @@ class ReviewSourceRecords:
                             'extraction_hash': row['extraction_hash'], 'header_hash': row['header_hash']}
             if reference is not None and reference != expected_ref:
                 fail('source_read_reference_invalid')
-            block_ids, raw_ids = references(objects)
-            complete = objects is None or not (block_ids or raw_ids)
             if complete:
-                blocks = con.execute('SELECT * FROM workflow.source_read_blocks WHERE views_id=%s '
-                                     'ORDER BY view_name,ordinal', (views_id,)).fetchall()
-                members = con.execute('SELECT view_name,block_id,fragment_id,payload_hash '
-                    'FROM workflow.source_read_block_fragments WHERE views_id=%s', (views_id,)).fetchall()
-                fragments = con.execute('SELECT * FROM workflow.source_read_fragments WHERE views_id=%s '
-                                        'ORDER BY ordinal', (views_id,)).fetchall()
+                blocks, members, fragments = row['read_blocks'], row['read_members'], row['read_fragments']
             else:
                 blocks, members, fragments = [], [], []
                 pending_blocks, pending_raw = set(block_ids), set(raw_ids)
