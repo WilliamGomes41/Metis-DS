@@ -32,6 +32,8 @@ PHASES = frozenset({'authorization', 'document_list', 'document_store_read', 'do
     'db_connect', 'db_execute', 'db_fetch', 'document_summary', 'review_work_items',
     'payload_copy', 'store_lock_wait', 'store_lock_hold', 'store_transaction',
     'source_prepare', 'source_build_blocks', 'review_capture', 'review_revision',
+    'source_views_prepare_records', 'source_views_publish_records', 'source_views_read_records',
+    'source_views_hydrate', 'source_views_validate',
     'review_projection', 'source_accountability', 'formation_replay'})
 COUNTERS = frozenset({'document_snapshot_reused', 'source_reconstruction_built', 'source_reconstruction_reused',
     'source_reconstruction_unscoped', 'source_input_compared', 'source_input_hashed'})

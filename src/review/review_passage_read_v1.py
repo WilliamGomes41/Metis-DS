@@ -174,14 +174,18 @@ def read_review_passage(console, account, snapshot_id, object_id, *, context_tar
     by_id = {obj['object_id']: obj for obj in objects}
     bindings = [{**row, 'valid': bool(by_id.get(row.get('object_id')))
                  and still_matches(row, by_id[row['object_id']])} for row in bindings]
-    fragments = console.review_source_fragments(snapshot_id, envelope=envelope)
+    fragments = console.review_source_fragments(snapshot_id, envelope=envelope, objects=objects)
     if fragments is not None:
         from src.vorming.source_reconstruction_v1 import review_source_window
         from src.vorming.prepared_source_views_v1 import prepare
         fragments = prepare(review_source_window(fragments, objects)).fragments
     try:
         from src.review.open_original_v1 import open_source_passage, OpenOriginalError
-        _, frozen = console._verified_source_bytes(envelope)
+        from src.vorming.prepared_source_views_v1 import ReadSource
+        if isinstance(getattr(fragments, 'root', None), ReadSource):
+            _, frozen = console._verified_source_bytes(envelope, cache_recovery=False)
+        else:
+            _, frozen = console._verified_source_bytes(envelope)
         open_source_passage(freeze_bytes=frozen, content_kind=envelope['content_kind'], locator=None,
                             object_record=by_id[object_id])
         available = True

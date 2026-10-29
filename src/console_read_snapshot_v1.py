@@ -13,6 +13,7 @@ class ConsoleReadSnapshot:
     current_objects: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     bindings: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     cards: list[dict[str, Any]] | None = None
+    sources: dict[tuple, Any] = field(default_factory=dict)
     publication_summaries: dict[str, dict[str, Any]] = field(default_factory=dict)
     publication_history: dict[str, bool] = field(default_factory=dict)
     publication_summary_failed: bool = False

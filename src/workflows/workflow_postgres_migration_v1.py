@@ -26,8 +26,13 @@ MIGRATION_NAMES = (
     "016_workflow_topic_identity.sql",
     "018_publication_refusal_audit.sql",
     "019_view_checks.sql",
+    "020_source_selection_summary.sql",
+    "021_formation_task_records.sql",
+    "022_formation_task_plans.sql",
+    "023_formation_source_views.sql",
     "024_review_dependency_lookup.sql",
     "025_review_interaction_identity_lookup.sql",
+    "026_review_source_records.sql",
 )
 REQUIRED_TABLES = frozenset(
     {
@@ -46,6 +51,7 @@ REQUIRED_TABLES = frozenset(
         "entra_flows",
         "route_comparisons",
         "publication_refusals",
+        "source_read_roots", "source_read_fragments", "source_read_blocks", "source_read_block_fragments",
     }
 )
 REFUSAL_COLUMNS = (
@@ -58,6 +64,8 @@ REFUSAL_COLUMNS = (
 REQUIRED_CONSTRAINTS = frozenset({("publication_refusals", "publication_refusals_dedup_key_uniq", "u", ("dedup_key",))})
 REQUIRED_COLUMNS = frozenset(
     {
+        ("documents", "review_source_ref"),
+        ("documents", "review_read_envelope"),
         *(("publication_refusals", column) for column in REFUSAL_COLUMNS),
         ("accounts", "retirement"),
         ("documents", "envelope_payload"),
