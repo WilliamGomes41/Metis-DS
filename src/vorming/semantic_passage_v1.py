@@ -29,6 +29,9 @@ from src.vorming.recommendation_semantics_v1 import (
     source_strength_cues,
     adjacent_source_strength_span,
     is_source_strength_label,
+    preceding_source_strength_span,
+    source_verbal_strength_cues,
+    verbal_cue_direction,
     validate_recommendation_semantics,
 )
 from src.vorming.source_reconstruction_v1 import reconstruct_source_fragments, source_fragment_ids_for_text
@@ -42,6 +45,7 @@ SUPPORTED_RECOMMENDATION_SEMANTICS_EVIDENCE_VERSIONS = (
     "recommendation-semantics-evidence-v1", RECOMMENDATION_SEMANTICS_EVIDENCE_VERSION,
 )
 STRENGTH_BINDING_VERSION = "recommendation-strength-binding-v6"
+V3_STRENGTH_VOCABULARY_VERSION = "v3-verbal-strength-and-lead-in-label-v1"
 SELECTION_ORIGIN_PROPOSAL = "proposal_selected"
 SELECTION_ORIGIN_COVERAGE = "coverage_remainder"
 ALLOWED_PROPOSED_TYPES = frozenset(
@@ -303,7 +307,7 @@ def _source_heading(public, source):
     return source.get("object_type") == "heading" or public.get("heading") == public["text"]
 
 
-def _applicable_strength_ranges(selected, evidence_by_id, *, candidate_selection=None):
+def _applicable_strength_ranges(selected, evidence_by_id, *, candidate_selection=None, lead_in=False):
     """Source-owned ranges, not model proximity or a matching section alone.
 
     Candidate text and whitespace-adjacent trailing stamps belong to the
@@ -311,6 +315,16 @@ def _applicable_strength_ranges(selected, evidence_by_id, *, candidate_selection
     their structural path and intervening headings bound that group.
     """
     ranges = [{**row, "reason": "selected_text"} for row in selected]
+    if lead_in:
+        # B5-c: a v3 core may bind a label directly before it in the same
+        # object and sentence (only colon/spaces between). Never a list intro.
+        first = selected[0]
+        span = preceding_source_strength_span(evidence_by_id[first["block_id"]][0]["text"], first["start"])
+        if span and any(row["block_id"] == first["block_id"] and row["start"] <= span[0]
+                        for row in candidate_selection or ()):
+            ranges.append({"block_id": first["block_id"], "start": span[0], "end": span[1],
+                           "text": evidence_by_id[first["block_id"]][0]["text"][span[0]:span[1]],
+                           "reason": "preceding_strength_label"})
     for row in selected:
         public, _ = evidence_by_id[row["block_id"]]
         end = row["end"]
@@ -372,6 +386,7 @@ def _recommendation_semantics_from_proposal(
     selected: list[dict[str, Any]],
     evidence_by_id: dict[str, tuple[dict[str, Any], dict[str, Any]]],
     core_span: dict | None = None,
+    core_contract_v3: bool = False,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     if raw_semantics is None:
         return None, None
@@ -409,6 +424,7 @@ def _recommendation_semantics_from_proposal(
     strength_evidence: dict[str, Any] | None = None
     strength_text: str | None = None
     strength_selection = selected
+    verbal = []
     if core_span is not None:
         core = _source_bound_relation_span(core_span, evidence_by_id=evidence_by_id,
                                           code_prefix="recommendation_strength_evidence")
@@ -418,10 +434,23 @@ def _recommendation_semantics_from_proposal(
             _fail("recommendation_strength_evidence_outside_candidate")
         core["text"] = evidence_by_id[core["block_id"]][0]["text"][core["start"]:core["end"]]
         strength_selection = [core]
-    applicable = _applicable_strength_ranges(strength_selection, evidence_by_id, candidate_selection=selected)
+        if core_contract_v3:
+            # B5-c: verbal strength counts only inside the core itself.
+            verbal = [(core["block_id"], match) for match in source_verbal_strength_cues(
+                evidence_by_id[core["block_id"]][0]["text"], core["start"], core["end"])]
+    applicable = _applicable_strength_ranges(strength_selection, evidence_by_id, candidate_selection=selected,
+                                             lead_in=core_contract_v3 and core_span is not None)
     cues = [match.group() for row in applicable for match in source_strength_cues(row["text"])]
-    strengths = {source_literal_strength(cue) for cue in cues}
-    directions = {source_label_direction(cue) for cue in cues} - {None}
+    strengths = {source_literal_strength(cue) for cue in cues} | ({"strong"} if verbal else set())
+    directions = ({source_label_direction(cue) for cue in cues} - {None}) | {verbal_cue_direction(m) for _, m in verbal}
+    cues += [match.group() for _, match in verbal]
+    if verbal and direction not in directions:
+        _fail("recommendation_direction_literal_mismatch", field="direction", proposed_value=direction,
+              observed_value=sorted(directions)[0], evidence_ref=raw_semantics.get("direction_evidence"))
+
+    def verbal_in(evidence):
+        return [m for block_id, m in verbal if block_id == evidence["block_id"]
+                and evidence["start"] <= m.start() and m.end() <= evidence["end"]]
     assessment = {
         "outcome": "conflicting" if len(strengths) > 1 or len(directions) > 1
                    else "matching" if cues else "absent",
@@ -441,6 +470,8 @@ def _recommendation_semantics_from_proposal(
             code_prefix="recommendation_strength_evidence",
         )
         literal = source_literal_strength(strength_text)
+        if literal is None and verbal_in(strength_evidence):
+            literal = "strong"
         if literal != strength:
             _fail("recommendation_strength_literal_mismatch", field="strength", proposed_value=strength, observed_value=literal, evidence_ref=raw_semantics.get("strength_evidence"), reconstructed_text=strength_text)
         label_direction = source_label_direction(strength_text)
@@ -460,7 +491,7 @@ def _recommendation_semantics_from_proposal(
             candidate_section_path=candidate_section_path,
             code_prefix="recommendation_strength_evidence",
         )
-        if source_literal_strength(strength_text) is not None:
+        if source_literal_strength(strength_text) is not None or verbal_in(strength_evidence):
             _fail("recommendation_strength_unmapped_literal_conflict")
 
     if strength_evidence is not None:
@@ -539,7 +570,8 @@ def validate_bound_recommendation_semantics(obj, *, fragments):
          "strength_evidence": wire(evidence.get("strength"))},
         proposed_type=obj.get("proposed_object_type"), selected=selected, evidence_by_id=blocks,
         core_span=(((metadata.get("source_bound_fields") or {}).get("evidence") or {})
-                   .get("recommendation_evidence_span") or {}).get("span"))
+                   .get("recommendation_evidence_span") or {}).get("span"),
+        core_contract_v3=(metadata.get("source_bound_fields") or {}).get("version") == "source-bound-fields-v3")
     if rebuilt != semantics or binding != evidence:
         _fail("recommendation_semantics_binding_mismatch")
 
@@ -957,6 +989,7 @@ def _project_semantic_selection(
             evidence_by_id=evidence_by_id,
             core_span=(((decision.get("source_bound_fields") or {}).get("evidence") or {})
                        .get("recommendation_evidence_span") or {}).get("span"),
+            core_contract_v3=(decision.get("source_bound_fields") or {}).get("version") == "source-bound-fields-v3",
         )
 
         if semantics is not None:
