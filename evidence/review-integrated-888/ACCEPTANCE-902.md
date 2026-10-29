@@ -1,5 +1,11 @@
 # WP5 / MET-23 — afsluitcontract en herhaalbaar bewijs
 
+Historische WP5-baseline. WP6/#903 heeft de behouden context/single-probe
+inmiddels omgezet naar een veiligheidsassertie zonder cyclus/40P01, met één
+duurzame winnaar. Dezelfde nieuwe harness faalt op de oorspronkelijke basis
+met de echte cyclus. Zie [het WP6-resultaat](../review-command-903/RESULT.md).
+De volgende tekst beschrijft de toestand bij afsluiting van WP5.
+
 Change class: C. Rewrite risk: none. Touches lifecycle invariants: no.
 Geen productiecode, domeinregel, schema, deployment of live productiemeting.
 De uitgevoerde revisie, artifact-ID en resultaten worden vastgelegd in
