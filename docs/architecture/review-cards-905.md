@@ -148,7 +148,7 @@ SQL-archive- en bronreadcanaries bewaken de echte HTTP-ingang.
 
 Met 32 en 128 zware historische versies blijft de kaartread drie actuele facts
 laden. Met 26 en 51 toegewezen documenten laadt pagina 1 exact 25 documenten /
-75 facts / 281200 JSON-bytes; de laatste pagina één document / drie facts.
+75 facts / 322975 JSON-bytes; de laatste pagina één document / drie facts.
 Dit bewijst begrensde factoverdracht en geen bron-/historiepayload op de route.
 Metadataselectie blijft over toegewezen documenten scannen. Navigatie is een
 aggregaat over alle toegewezen documenten en heeft geen paginaconstante kost.
@@ -156,8 +156,15 @@ Andere ingest/publish-badges behouden hun bestaande SQL; geen algemene claim
 dat alle database-I/O historie-onafhankelijk is. MET-17/#888 houdt de uiteindelijke
 runtime-/SLO-acceptatie van maximaal drie seconden.
 
-De afzonderlijke adversariële review vond dat fysieke documentkolommen door
-oude envelopevelden konden worden overschreven. De compact-headertrigger en
-expliciete legacyvoorbereiding normaliseren nu dezelfde fysieke kolommen;
-een native tegenvoorbeeld vergelijkt lifecycle met de bestaande reader.
-Volledige regressie- en CI-uitkomsten worden bij de PR vastgelegd.
+De twee afzonderlijke adversariële reviews hebben fysieke metadata-autoriteit,
+volledige compacte extractieheaderbinding, assignmentrevocatie bij ontbrekende
+facts, reviewerconsistentie en numerieke refs-gelijkheid laten corrigeren.
+Alle gerichte onafhankelijke herstelproeven zijn groen. Canonieke hashes zijn
+daarbij niet genormaliseerd; alleen de bestaande refs-gelijkheid is behouden.
+
+Definitieve native matrix: 44 tests groen plus de afzonderlijke herstart-/
+readerrollbacktest groen. Met 32/128 historieversies zijn de factpayloads
+13387/13391 bytes voor drie actuele records (kleine identiteits-/versielengte-
+variatie). Daarnaast slagen 38 bestaande native POST-/lock-/concurrency- en
+overzichtsregressies en 6 architectuurinvarianten. Volledige regressie- en
+CI-uitkomsten worden bij de PR vastgelegd; productie/SLO is hiermee niet bewezen.
