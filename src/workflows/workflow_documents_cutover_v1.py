@@ -72,15 +72,21 @@ def _document_cards_from_rows(rows):
 class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
     """Runtime operations added on top of the migration-only document store."""
 
-    def review_document_input(self, snapshot_id: str) -> tuple[dict[str, Any], str]:
+    def review_document_input(self, snapshot_id: str, *, command: bool = False) -> tuple[dict[str, Any], str]:
         """Source/authorization inputs without replay and historical attempts."""
         try:
             with self._connect() as con:
                 columns = _DOCUMENT_CARD_COLUMNS.replace('d.envelope_payload', 'd.review_envelope')
+                projection = "d.envelope_payload - ARRAY['semantic_replay','processing_attempts','quality_processing_runs']"
+                if command:
+                    projection = ("(" + projection + " - 'prepared_source_extraction') || CASE "
+                        "WHEN d.envelope_payload ? 'prepared_source_extraction' THEN "
+                        "jsonb_build_object('prepared_source_extraction',"
+                        "(d.envelope_payload->'prepared_source_extraction') - ARRAY['fragments','docling_record']) "
+                        "ELSE '{}'::jsonb END")
                 row = con.execute(
                     "WITH selected AS MATERIALIZED ("
-                    "SELECT d.*, d.envelope_payload - ARRAY['semantic_replay','processing_attempts',"
-                    "'quality_processing_runs'] AS review_envelope FROM workflow.documents d WHERE snapshot_id=%s) "
+                    f"SELECT d.*, {projection} AS review_envelope FROM workflow.documents d WHERE snapshot_id=%s) "
                     f"SELECT {columns}, d.object_generation, d.revision, d.review_envelope, "
                     "jsonb_build_object('provider_evidence',jsonb_build_object('formation_incomplete',"
                     "d.envelope_payload#>'{semantic_replay,provider_evidence,formation_incomplete}')) AS formation_notice, "
@@ -829,6 +835,10 @@ class _PostgresWorkflowDocumentsMixin:
 
     @diagnostic_phase("document_load")
     def _envelope(self, snapshot_id: str) -> dict[str, Any]:
+        from src.review.review_command_state_v1 import active_review_command
+        command = active_review_command(self, snapshot_id)
+        if command is not None:
+            return deepcopy(command.envelope)
         reads = self._document_reads()
         if reads is not None and snapshot_id in reads.envelopes:
             from src.request_diagnostics_v1 import diagnostic_count
@@ -849,6 +859,10 @@ class _PostgresWorkflowDocumentsMixin:
         return envelope
 
     def _load_objects(self, snapshot_id: str, *, remember: bool = True) -> list[dict[str, Any]]:
+        from src.review.review_command_state_v1 import active_review_command
+        command = active_review_command(self, snapshot_id)
+        if command is not None:
+            return deepcopy(command.histories)
         reads = self._document_reads() if not remember else None
         if reads is not None and snapshot_id in reads.objects:
             return reads.objects[snapshot_id][0]
@@ -880,6 +894,10 @@ class _PostgresWorkflowDocumentsMixin:
         return deepcopy(current_revisions(rows, snapshot_id=snapshot_id)), revision
 
     def objects_revision(self, snapshot_id: str) -> str:
+        from src.review.review_command_state_v1 import active_review_command
+        command = active_review_command(self, snapshot_id)
+        if command is not None:
+            return command.revision
         reads = self._document_reads()
         if reads is not None:
             self._load_objects(snapshot_id, remember=False)
@@ -1069,6 +1087,7 @@ class _PostgresWorkflowDocumentsMixin:
         self._require_review_store_configured()
         with self._store_write_lock():
             with workflow_transaction(self.workflow_document_store) as connection:
+                self.workflow_review_store._lock_authorizations(connection)
                 row = connection.execute(
                     "SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
                     (snapshot_id,),

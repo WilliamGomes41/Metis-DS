@@ -440,6 +440,7 @@ def test_t5_documents_mixin_writes_no_mirror_copy_after_failed_commit(
 
     console = _review_tier(tmp_path, workflow_postgres)
     sid, rid, queue = _ingest(console)
+    before = _durable(console, workflow_postgres, sid)
     copy_writes: list[str] = []
     from src import operations_console_v1 as operations_mod
     original_aw = operations_mod._atomic_write
@@ -450,21 +451,22 @@ def test_t5_documents_mixin_writes_no_mirror_copy_after_failed_commit(
         return original_aw(path, payload)
     monkeypatch.setattr(operations_mod, "_atomic_write", spy_aw)
     truncations = _ledger_truncations(monkeypatch, console._ledger_path)
-    original_wb = console.workflow_document_store.write_bundle
-
     def fail_objects(*args, **kwargs):
-        if kwargs.get("objects") is not None:
-            raise OSError("t5_injected")
-        return original_wb(*args, **kwargs)
-    monkeypatch.setattr(console.workflow_document_store, "write_bundle", fail_objects)
+        raise OSError("t5_injected")
+    # Review commands persist their scoped changes through this native writer.
+    # A write_bundle fault would no longer exercise the failing commit path.
+    monkeypatch.setattr(console.workflow_document_store, "apply_review_changes", fail_objects)
     if remirror_fails:
         def broken_remirror():
             raise OSError("t5_remirror_injected")
         monkeypatch.setattr(console, "_refresh_review_runtime", broken_remirror)
-    with pytest.raises(OSError):
+    with pytest.raises(OSError, match="^t5_injected$"):
         _approve(console, rid, sid, queue[0])
     assert copy_writes == []
     assert truncations == []
+    assert _durable(console, workflow_postgres, sid) == before
+    restarted = _review_tier(tmp_path, workflow_postgres)
+    assert _durable(restarted, workflow_postgres, sid) == before
     if not remirror_fails:
         reviews = PostgresWorkflowReviewStore(workflow_postgres)
         assert not (console.runtime / "publish_authorizations.json").exists()
@@ -484,13 +486,13 @@ def _assert_review_write_failed(exc):
 
 
 def test_t6_save_bindings_path_carries_only_code(workflow_postgres, tmp_path, monkeypatch):
-    """review_cutover:120 (_save_bindings)."""
+    """The bounded review binding writer preserves the public error contract."""
     console = _review_tier(tmp_path, workflow_postgres)
     sid, rid, queue = _ingest(console)
 
     def boom(*args, **kwargs):
         raise WorkflowReviewStoreError("t6_store_detail_secret")
-    monkeypatch.setattr(console.workflow_review_store, "replace_snapshot_bindings", boom)
+    monkeypatch.setattr(console.workflow_review_store, "apply_review_binding_delta", boom)
     with pytest.raises(ConsoleError) as info:
         _approve(console, rid, sid, queue[0])
     _assert_review_write_failed(info.value)
@@ -543,13 +545,9 @@ def test_t10_tier_r_conflict_reaches_caller_with_current_revision(workflow_postg
     console = _review_tier(tmp_path, workflow_postgres)
     sid, rid, queue = _ingest(console)
     before = _durable(console, workflow_postgres, sid)
-    original_wb = console.workflow_document_store.write_bundle
-
     def conflict(*args, **kwargs):
-        if kwargs.get("objects") is not None:
-            raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
-        return original_wb(*args, **kwargs)
-    monkeypatch.setattr(console.workflow_document_store, "write_bundle", conflict)
+        raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+    monkeypatch.setattr(console.workflow_document_store, "apply_review_changes", conflict)
     with pytest.raises(ConsoleError) as info:
         _approve(console, rid, sid, queue[0])
     assert info.value.code == SNAPSHOT_OBJECT_WRITE_CONFLICT

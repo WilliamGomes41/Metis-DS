@@ -677,6 +677,7 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         context_q: str = "",
         queue_page: int = 1,
         review_revision: str = "",
+        after: str = "",
     ) -> str:
         account = _current_account(console, request)
         from src.review.review_participation_ui_v1 import overview, require_overview
@@ -698,6 +699,30 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             return RedirectResponse('/source-selection?' + urlencode(params) + '#passage-context',
                                     status_code=303)
         chosen_task = normalize_review_task(task)
+        if document and after:
+            # POST commits one passage only. Navigation uses a fresh authorized
+            # GET capture, sharing its prepared source across the queue scan.
+            from src.review.review_passage_read_v1 import read_review_document
+            navigation = read_review_document(console, account, document)
+            if not chosen_task:
+                from src.review.review_cockpit_v1 import ordinary_review_queue
+                queue = ordinary_review_queue(navigation.objects,
+                    review_path=review_path_for_klasse(navigation.envelope['class']),
+                    bindings=navigation.bindings, fragments=navigation.fragments)
+                # A completed passage has left the actionable queue. Locate its
+                # position in the captured document, then choose its successor.
+                positions = {row['object_id']: index for index, row in enumerate(navigation.objects)}
+                anchor = positions.get(after, len(navigation.objects))
+                object = next((str(row['object_id']) for row in queue
+                    if positions.get(row['object_id'], -1) > anchor), '')
+            else:
+                from src.review.review_duty_v1 import reviewer_route_for
+                object = next((str(row['object_id']) for row in navigation.objects
+                    if row['object_id'] != after and (route := reviewer_route_for(row,
+                        review_path=review_path_for_klasse(navigation.envelope['class']),
+                        reviewer_id=account['account_id'], bindings=navigation.bindings,
+                        fragments=navigation.fragments)) and route.get('actionable')
+                    and route.get('canonical_task') == chosen_task), '')
         if document and chosen_task == 'repair':
             if 'reviewer' not in account.get('roles', []) or account['account_id'] not in console._envelope(document)['named_reviewers']:
                 raise ConsoleError('reviewer_not_named_on_snapshot')

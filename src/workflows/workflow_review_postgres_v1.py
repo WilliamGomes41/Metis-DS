@@ -133,6 +133,53 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
             events.extend(deepcopy(list(level)))
         return events
 
+    def read_review_command_events(
+        self, snapshot_id: str, object_ids: list[str], *, interaction_id: str = "",
+    ) -> list[dict[str, Any]]:
+        """Scoped evidence plus the global interaction-identity history.
+
+        An interaction ID can conflict across snapshots, so that lookup must
+        not be restricted to this command's document. Pending native buffer
+        levels participate in the same identity and command checks.
+        """
+        try:
+            conditions, params = [], []
+            if object_ids:
+                conditions.append(
+                    "((snapshot_id=%s OR event_payload->'details'->>'snapshot_id'=%s) "
+                    "AND object_id=ANY(%s))"
+                )
+                params.extend((snapshot_id, snapshot_id, sorted(set(object_ids))))
+            if interaction_id:
+                conditions.append("event_payload#>>'{details,review_interaction,interaction_id}'=%s")
+                params.append(interaction_id)
+            events = []
+            if conditions:
+                with self._connect() as con:
+                    rows = con.execute(
+                        "SELECT event_payload FROM workflow.review_events WHERE "
+                        + " OR ".join(conditions) + " ORDER BY event_id", tuple(params),
+                    ).fetchall()
+                events = [self._event_payload(row["event_payload"]) for row in rows]
+            levels = []
+            level = self._buffer.get()
+            while level is not None:
+                levels.append(level)
+                level = level.parent
+            wanted = set(object_ids)
+            for level in reversed(levels):
+                for event in level:
+                    details = event.get("details") or {}
+                    interaction = details.get("review_interaction") or {}
+                    if ((details.get("snapshot_id") == snapshot_id and event.get("object_id") in wanted)
+                            or (interaction_id and interaction.get("interaction_id") == interaction_id)):
+                        events.append(deepcopy(event))
+            return events
+        except WorkflowReviewStoreError:
+            raise
+        except Exception as exc:
+            raise WorkflowReviewStoreError("workflow_review_events_read_failed") from exc
+
     def read_events_after(self, previous_event_hash: str | None, limit: int) -> list[dict[str, Any]]:
         """Up to ``limit`` committed events chained directly after ``previous_event_hash``.
 
@@ -483,6 +530,84 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                         (snapshot_id,),
                     )
                     self._insert_binding_rows(con, snapshot_id, rows)
+        except Exception as exc:
+            raise WorkflowReviewStoreError("workflow_publish_authorizations_write_failed") from exc
+
+    def apply_review_binding_delta(
+        self, snapshot_id: str, before: list[dict[str, Any]], after: list[dict[str, Any]],
+    ) -> None:
+        """Renew/invalidate retained tuples and append new ones, preserving order.
+
+        Physical authorization IDs and positions stay private to this adapter;
+        canonical binding payloads retain their established exact representation.
+        Repeated legacy tuples are matched by occurrence, never collapsed.
+        """
+        fields = ("object_id", "object_version", "canonical_object_hash", "confirmed_object_type",
+                  "reviewer_id", "decision")
+        def identity(row):
+            return tuple(row.get(field) for field in fields)
+        if len(after) < len(before) or [identity(row) for row in after[:len(before)]] != [identity(row) for row in before]:
+            raise WorkflowReviewStoreError("workflow_review_binding_removal_or_reorder")
+        object_ids = sorted({str(row.get("object_id") or "") for row in [*before, *after]})
+        if "" in object_ids or not snapshot_id:
+            raise WorkflowReviewStoreError("workflow_publish_authorizations_write_failed")
+        if not object_ids:
+            return
+        try:
+            with self._connect() as con:
+                with con.transaction():
+                    self._lock_authorizations(con)
+                    document = con.execute(
+                        "SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE", (snapshot_id,),
+                    ).fetchone()
+                    if document is None:
+                        raise WorkflowReviewStoreError("unknown_snapshot")
+                    rows = con.execute(
+                        "SELECT authorization_id,position,snapshot_id,object_id,object_version,canonical_object_hash,"
+                        "confirmed_object_type,reviewer_account_id,reviewer_display_name,decision,valid,authorization_payload "
+                        "FROM workflow.publish_authorizations WHERE snapshot_id=%s AND object_id=ANY(%s) "
+                        "ORDER BY position NULLS LAST,authorization_id FOR UPDATE", (snapshot_id, object_ids),
+                    ).fetchall()
+                    current = []
+                    for row in rows:
+                        projection = self._binding_projection(row)
+                        payload = row["authorization_payload"]
+                        binding = projection if payload is None else self._authorization_payload(payload)
+                        if self._binding_projection(binding) != projection:
+                            raise WorkflowReviewStoreError("workflow_publish_authorization_payload_invalid")
+                        current.append(binding)
+                    if current != before:
+                        raise WorkflowReviewStoreError("snapshot_object_write_conflict")
+                    for row, previous, following in zip(rows, before, after):
+                        if previous != following:
+                            con.execute(
+                                "UPDATE workflow.publish_authorizations SET reviewer_display_name=%s,valid=%s,"
+                                "authorization_payload=%s::jsonb WHERE authorization_id=%s",
+                                (following["reviewer"], bool(following.get("valid")), _json_text(following),
+                                 row["authorization_id"]),
+                            )
+                    additions = after[len(before):]
+                    if additions:
+                        tail = con.execute(
+                            "SELECT position FROM workflow.publish_authorizations WHERE snapshot_id=%s "
+                            "ORDER BY position DESC LIMIT 1", (snapshot_id,),
+                        ).fetchone()
+                        for offset, row in enumerate(additions, 1):
+                            # NULL-position legacy rows sort last by authorization_id.
+                            # Appending another NULL retains that established order.
+                            position = None if tail is not None and tail["position"] is None else (
+                                tail["position"] if tail is not None else -1) + offset
+                            con.execute(
+                                "INSERT INTO workflow.publish_authorizations("
+                                "snapshot_id,object_id,object_version,canonical_object_hash,confirmed_object_type,"
+                                "reviewer_account_id,reviewer_display_name,decision,valid,position,authorization_payload) "
+                                "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)",
+                                (snapshot_id, row["object_id"], row["object_version"], row["canonical_object_hash"],
+                                 row["confirmed_object_type"], row["reviewer_id"], row["reviewer"], row["decision"],
+                                 bool(row.get("valid")), position, _json_text(row)),
+                            )
+        except WorkflowReviewStoreError:
+            raise
         except Exception as exc:
             raise WorkflowReviewStoreError("workflow_publish_authorizations_write_failed") from exc
 

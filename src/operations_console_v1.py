@@ -104,6 +104,7 @@ from src.vorming.recommendation_semantics_v1 import (
 from src.review.open_original_v1 import OpenOriginalError, open_source_passage, researcher_visible_prose
 from src.publication.publish_authorization_v1 import record_authorization, invalidate_for_object, still_matches, tuple_record
 from src.review.review_ledger import append_event, read_events
+from src.review.review_command_state_v1 import active_review_command, review_bindings_view, review_envelopes_view
 from src.review.review_interaction_v1 import validate_review_interaction_identity
 from src.review.review_workflow_v3 import _apply_review_state
 from src.review.revision_workflow import (bump_patch, create_revision, revise_object, current_revisions,
@@ -891,7 +892,7 @@ class OperationsConsole:
 
     @diagnostic_phase("document_load")
     def _envelope(self, snapshot_id: str) -> dict[str, Any]:
-        envelope = self._envelopes.get(snapshot_id)
+        envelope = review_envelopes_view(self).get(snapshot_id)
         if not envelope:
             raise ConsoleError("unknown_snapshot")
         return envelope
@@ -1069,7 +1070,7 @@ class OperationsConsole:
         self._envelope(snapshot_id)
         current = {row["object_id"]: row for row in (self._read_current_objects(snapshot_id) if objects is None else objects)}
         out = []
-        for row in (self._bindings.get(snapshot_id, []) if bindings is None else bindings):
+        for row in (review_bindings_view(self).get(snapshot_id, []) if bindings is None else bindings):
             item = dict(row)
             obj = current.get(item.get("object_id"))
             item["valid"] = bool(obj) and still_matches(item, obj)
@@ -1088,7 +1089,7 @@ class OperationsConsole:
             updated["governance"]["validation_status"] = "revise"
         rows = self._load_objects(snapshot_id, remember=False)
         rows = with_current_revision(rows, updated)
-        bindings = deepcopy(self._bindings)
+        bindings = deepcopy(review_bindings_view(self))
         bindings[snapshot_id] = invalidate_for_object(bindings.get(snapshot_id, []), previous["object_id"])
         self._commit_prepared_store(objects=(snapshot_id, rows), bindings=bindings,
                                     expected_revision=revision, snapshot_id=snapshot_id)
@@ -1132,7 +1133,7 @@ class OperationsConsole:
             reason="type confirmation", actor=reviewer["username"])
         stamp_canonical_hashes(target)
         history = with_current_revision(self._load_objects(snapshot_id), target)
-        new_bindings = deepcopy(self._bindings)
+        new_bindings = deepcopy(review_bindings_view(self))
         new_bindings[snapshot_id] = invalidate_for_object(new_bindings.get(snapshot_id, []), object_id)
         self._commit_prepared_store(
             objects=(snapshot_id, history),
@@ -1251,7 +1252,7 @@ class OperationsConsole:
             peer_updates.append(updated_peer)
         history = with_current_revision(self._load_objects(snapshot_id), target)
         history.extend(peer_updates)
-        new_bindings = deepcopy(self._bindings)
+        new_bindings = deepcopy(review_bindings_view(self))
         new_bindings[snapshot_id] = invalidate_for_object(new_bindings.get(snapshot_id, []), object_id)
         for peer in peer_updates:
             new_bindings[snapshot_id] = invalidate_for_object(
@@ -1267,6 +1268,15 @@ class OperationsConsole:
     @diagnostic_phase("source_verify")
     def _verified_source_bytes(self, envelope: dict[str, Any]) -> tuple[Path, bytes]:
         """Rebuild the configured cache from the existing immutable authority."""
+        command = active_review_command(self)
+        if command is not None:
+            baseline = command.inputs.envelope
+            keys = ('snapshot_id', 'source_id', 'document_id', 'sha256', 'version', 'content_kind')
+            if any(envelope.get(key) != baseline.get(key) for key in keys):
+                raise ConsoleError('source_lineage_unavailable')
+            if command.inputs.source_bytes is None or command.inputs.source_path is None:
+                raise ConsoleError(command.inputs.source_failure or 'freeze_bytes_missing')
+            return command.inputs.source_path, command.inputs.source_bytes
         freeze_path = self._source_cache_path(envelope)
         try:
             freeze_bytes = freeze_path.read_bytes() if freeze_path.is_file() else None
@@ -1906,6 +1916,11 @@ class OperationsConsole:
         Public snapshot_objects keeps its detached caller copy. Commands never
         borrow these rows; remember=True always loads/pins current working data.
         """
+        command = active_review_command(self, snapshot_id)
+        if command is not None:
+            if envelope is not None and str(envelope.get('snapshot_id') or '') != snapshot_id:
+                raise ConsoleError('unknown_snapshot')
+            return current_revisions(deepcopy(command.histories), snapshot_id=snapshot_id)
         if envelope is None:
             self._envelope(snapshot_id)
         elif str(envelope.get("snapshot_id") or "") != snapshot_id:
@@ -2567,6 +2582,12 @@ class OperationsConsole:
 
     @diagnostic_phase("source_read")
     def _read_source_fragments(self, envelope, path):
+        command = active_review_command(self)
+        if command is not None:
+            self._verified_source_bytes(envelope)
+            if command.inputs.fragments is None:
+                raise ConsoleError(command.inputs.source_failure or 'source_lineage_unavailable')
+            return command.inputs.fragments
         from src.vorming.source_preparation_context_v1 import stored_extraction
         from src.vorming.docling_contract_v1 import stored_fragments
         retained = stored_extraction(envelope)
@@ -2844,8 +2865,8 @@ class OperationsConsole:
         original_rows, expected_revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
         _, freeze_bytes = self._verified_source_bytes(live)
         envelope = deepcopy(live)
-        new_envelopes = deepcopy(self._envelopes)
-        new_bindings = deepcopy(self._bindings)
+        new_envelopes = deepcopy(review_envelopes_view(self))
+        new_bindings = deepcopy(review_bindings_view(self))
         rows = deepcopy(original_rows)
         envelope["class"] = new_class
         envelope["clinical_rereview_required"] = True
@@ -3479,9 +3500,9 @@ class OperationsConsole:
             updated_target["governance"]["review_snapshot_hash"] = compute_canonical_object_hash(updated_target)
             history = with_current_revision(history, updated_target)
             new_envelopes = None
-            new_bindings = deepcopy(relation_bindings if relation_bindings is not None else self._bindings)
+            new_bindings = deepcopy(relation_bindings if relation_bindings is not None else review_bindings_view(self))
             if decision == "approve":
-                new_envelopes = deepcopy(self._envelopes)
+                new_envelopes = deepcopy(review_envelopes_view(self))
                 new_envelopes[snapshot_id] = deepcopy(envelope)
                 new_envelopes[snapshot_id]["review_passes"] = dict(
                     new_envelopes[snapshot_id].get("review_passes") or {}
@@ -3638,7 +3659,7 @@ class OperationsConsole:
             )
             binding["review_domain"] = "content" if review_path != "boom" else "decision_tree"
             binding["reviewed_at"] = utc_now()
-            new_bindings = deepcopy(self._bindings)
+            new_bindings = deepcopy(review_bindings_view(self))
             rows = _recorded_authorization(new_bindings.get(snapshot_id, []), binding, reviewer)
             new_bindings[snapshot_id] = rows
 
@@ -3913,12 +3934,12 @@ class OperationsConsole:
         history.append(revised)
         new_envelopes: dict[str, Any] | None = None
         if rereview_scope == "document":
-            new_envelopes = deepcopy(self._envelopes)
+            new_envelopes = deepcopy(review_envelopes_view(self))
             new_envelope = deepcopy(envelope)
             new_envelope["review_passes"] = {}
             new_envelope["clinical_rereview_required"] = True
             new_envelopes[snapshot_id] = new_envelope
-        new_bindings = deepcopy(self._bindings)
+        new_bindings = deepcopy(review_bindings_view(self))
         new_bindings[snapshot_id] = invalidate_for_object(new_bindings.get(snapshot_id, []), object_id)
         def record_correction():
             append_event(self._ledger_path, event_type="revision_created", object_id=object_id,

@@ -129,6 +129,11 @@ class _PostgresWorkflowReviewMixin:
 
     def object_review_bindings(self, snapshot_id: str, *, objects=None) -> list[dict[str, Any]]:
         """Own read bindings per operation; command maps refresh only on commands."""
+        from src.review.review_command_state_v1 import active_review_command
+        command = active_review_command(self, snapshot_id)
+        if command is not None:
+            return super().object_review_bindings(
+                snapshot_id, objects=objects, bindings=deepcopy(command.bindings))
         reads = self._document_reads()
         try:
             if reads is not None:
@@ -211,6 +216,7 @@ class _PostgresWorkflowReviewMixin:
                 try:
                     with diagnostic_phase("store_transaction"), \
                             workflow_transaction(self.workflow_review_store) as connection:
+                        self.workflow_review_store._lock_authorizations(connection)
                         if lock_row and snapshot_id:
                             self._lock_document_row(connection, snapshot_id)
                         self._reload_store_locked()
@@ -290,6 +296,13 @@ class _PostgresWorkflowReviewMixin:
         ledger_fn: Any | None = None,
         snapshot_id: str | None = None,
     ) -> None:
+        from src.review.review_command_state_v1 import active_review_command
+        command = active_review_command(self, snapshot_id or (objects[0] if objects is not None else None))
+        if command is not None:
+            command.stage(envelopes=envelopes, bindings=bindings, objects=objects,
+                          expected_revision=expected_revision, ledger_fn=ledger_fn,
+                          snapshot_id=snapshot_id)
+            return
         sid = snapshot_id or (objects[0] if objects is not None else None)
         if sid is not None and getattr(self._objects_tls, "heading_batch_snapshot", None) == sid:
             # The batch owns native rollback, including the final commit. Avoid
@@ -359,6 +372,12 @@ class _PostgresWorkflowReviewMixin:
 
     @contextmanager
     def _atomic_snapshot_mutation(self, snapshot_id: str) -> Iterator[None]:
+        from src.review.review_command_state_v1 import active_review_command
+        command = active_review_command(self, snapshot_id)
+        if command is not None:
+            with command.savepoint(), workflow_transaction(self.workflow_review_store), buffer_events(self._ledger_path):
+                yield
+            return
         if getattr(self._objects_tls, "heading_batch_snapshot", None) == snapshot_id:
             yield
             return

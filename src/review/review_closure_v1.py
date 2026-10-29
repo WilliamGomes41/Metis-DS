@@ -55,6 +55,14 @@ class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewC
     """One-path Review repair with migration and reconstructable evidence."""
 
     def review_object(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        from src.review.review_command_state_v1 import active_review_command
+        from src.workflows.store_command_v1 import owned_store_command
+        if (not args and getattr(self, '_metis_workflow_review_authority', False)
+                and active_review_command(self) is None
+                and owned_store_command(self) is None
+                and not getattr(self._objects_tls, 'heading_batch_snapshot', None)):
+            from src.review.review_command_v1 import execute_review_command
+            return execute_review_command(self, kwargs, lambda command: self.review_object(**command))
         snapshot_id = str(kwargs.get("snapshot_id") or "")
         self._require_mutable_working_revision(snapshot_id)
         return super().review_object(*args, **kwargs)

@@ -134,3 +134,38 @@ Uitgevoerd vóór productiewijzigingen: vier native WP5-referentiegevallen groen
 (beide lockkarakteriseringen en complete/incomplete task-v1). De positieve
 lockkarakterisering vereist nog de bestaande40P01 en is dus geen veiligheidsbewijs.
 Implementatie en nieuwe acceptatieproeven volgen; geen WP6-afronding geclaimd.
+
+## Vooraf gespecificeerd toegangspad voor globale interaction-identiteit
+
+De bestaande identityregel vergelijkt een interaction-ID ook met audit uit andere
+snapshots. `read_review_command_events` behoudt die globale vergelijking via
+`event_payload#>>'{details,review_interaction,interaction_id}'`; uitsluitend op
+snapshot filteren zou een bestaande conflictcontrole verwijderen. De huidige
+schema-indexen dekken deze expressie niet. De OR met de object/snapshot-lookup kan
+daardoor alle globale auditpayloads laten inspecteren.
+
+Migratie `025_review_interaction_identity_lookup.sql` voegt daarom uitsluitend de
+niet-unieke B-tree-index `workflow_review_events_interaction_identity` toe op
+`workflow.review_events ((event_payload#>>'{details,review_interaction,interaction_id}'))`,
+met partial predicate dezelfde expressie `IS NOT NULL`. Geen uniquenessregel,
+receipt, tweede identityautoriteit, gewijzigde auditpayload of historische
+backfill. De bestaande globale ledger en validator blijven eigenaar.
+
+De migratie is idempotent en wordt geregistreerd in de bestaande gecontroleerde
+migratielijst; zij hangt alleen af van de reeds bestaande event_payload-kolom.
+Schema-expansie gaat vóór cutover; de oude writer/readers kunnen deze index laten
+staan bij code-rollback. Production/Azure-apply blijft buiten deze opdracht.
+Native verificatie toetst ongewijzigde globale conflictuitkomst, behouden events
+en een PostgreSQL-plan met indexgebruik bij veel onafhankelijke auditrecords.
+Er wordt geen object-position-index toegevoegd: het huidige MAX(position) levert
+slechts de appendpositie zonder objectpayloads over te dragen; noodzaak voor een
+extra index is nog niet aangetoond.
+
+Expliciete parentbevestiging en impliciete `documentpositie_action=dit_klopt`
+gebruiken alle huidige headings als structurele afhankelijkheid: de bestaande
+TOC/body-inferentie hangt ook van voorafgaande headings af. Deze set groeit met
+het aantal headings. De commandlookup selecteert eerst de laatste appendpositie
+per object, controleert dan heading/path-typevelden en laadt uitsluitend van die
+identiteiten de volledige, opnieuw gevalideerde historie. Oude headingrevisies
+van huidige niet-headings maken de commandset niet groter. De conservatieve
+GET-lookup blijft ongewijzigd.

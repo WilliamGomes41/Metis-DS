@@ -30,7 +30,9 @@ def _setup(root, factory=None, *, production_console):
 
 def _client(console, *, production_app):
     app = production_app(console)
-    client = TestClient(app, raise_server_exceptions=False)
+    # The Azure composition enforces the configured HTTPS same-origin boundary.
+    client = TestClient(app, base_url="https://console.example.test",
+                        headers={"Origin": "https://console.example.test"}, raise_server_exceptions=False)
     assert client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"}, follow_redirects=False).status_code == 303
     return client
 
@@ -94,12 +96,17 @@ def test_http_later_binding_failure_is_atomic_after_restart(tmp_path, monkeypatc
     assert after == before, f"HTTP {response.status_code}; durable statuses after restart: {statuses}"
 
 
-@pytest.fixture(params=["local", "postgres"])
+@pytest.fixture(params=["local", "postgres", "azure"])
 def storage(request, production_console):
+    # Both historical labels use PostgreSQL workflow authority. "azure"
+    # additionally exercises the Azure-authoritative production composition.
     if request.param == "local":
         return lambda root: _console(root, production_console=production_console)
     config = request.getfixturevalue("workflow_postgres")
     from tests.test_review_batch_atomic_postgres import _console as native
+    if request.param == "azure":
+        from src.workflows.workflow_badge_counts_postgres_v1 import FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole
+        return lambda root: native(root, config, console_cls=FastBadgePostgresCompleteWorkflowAzureAuthoritativePublicationConsole)
     return lambda root: native(root, config)
 
 
@@ -375,7 +382,12 @@ def test_batch_and_single_review_overlap_preserves_winner(storage, tmp_path, mon
     from threading import Event
 
     first, accounts, sid, ids = _setup(tmp_path, storage, production_console=production_console)
-    second = storage(tmp_path)
+    # Independent runtime locks force serialization through native PostgreSQL,
+    # rather than preventing the contender from reaching its SQL lock attempt.
+    second_root = tmp_path / "contender-runtime" if hasattr(first, "workflow_review_store") else tmp_path
+    second = storage(second_root)
+    second.source_store = first.source_store
+    second.immutable_source_store = first.immutable_source_store
     content_id = next(row["object_id"] for row in first.snapshot_objects(sid)
                       if row["object_type"] == "unclassified")
     revision = first.objects_revision(sid)
@@ -411,8 +423,29 @@ def test_batch_and_single_review_overlap_preserves_winner(storage, tmp_path, mon
         except ConsoleError as exc:
             return exc.code
 
-    monkeypatch.setattr(first, first_name, hold_winner)
-    monkeypatch.setattr(second, second_name, observe_contender)
+    if first_kind == "single" and hasattr(first, "workflow_document_store"):
+        apply_changes = first.workflow_document_store.apply_review_changes
+        def hold_single_winner(*args, **kwargs):
+            result = apply_changes(*args, **kwargs)
+            # The actual scoped SQL writes have completed, while their outer
+            # transaction still holds the authorization and document locks.
+            ready.set()
+            assert contender_entered.wait(10)
+            return result
+        monkeypatch.setattr(first.workflow_document_store, "apply_review_changes", hold_single_winner)
+    else:
+        monkeypatch.setattr(first, first_name, hold_winner)
+    if second_kind == "single" and hasattr(second, "workflow_review_store"):
+        lock_authorizations = second.workflow_review_store._lock_authorizations
+        def observe_authorization_attempt(connection):
+            # The bounded command acquires authorization before entering the
+            # historical per-object mutation context. Observe the real attempt
+            # without forcing the previous lock ordering or a test-only wait.
+            contender_entered.set()
+            return lock_authorizations(connection)
+        monkeypatch.setattr(second.workflow_review_store, "_lock_authorizations", observe_authorization_attempt)
+    else:
+        monkeypatch.setattr(second, second_name, observe_contender)
     with ThreadPoolExecutor(max_workers=2) as pool:
         winner = pool.submit(command, first, first_kind)
         assert ready.wait(10)
