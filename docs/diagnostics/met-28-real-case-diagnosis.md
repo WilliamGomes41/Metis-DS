@@ -214,7 +214,7 @@ validator-input en de blokken uit de request-payload (code functioneel gelijk aa
 
 | Besluit | Bewijs in deze snapshot |
 | --- | --- |
-| B5-a: uitzonderingscontext in V3 | Geen `exception_span`-afwijzing: geen bevestigend of ontkrachtend geval. Blijft **open** |
+| B5-a: uitzonderingscontext in V3 | Geen `exception_span`-afwijzing: geen bevestigend of ontkrachtend geval. **BESLOTEN 2026-10-29**: niet bouwen (zie MET-5-dossier §8) |
 | B5-b: quarantaine bij relatiefout | Bevestigd: 6 cascadebevindingen na `relation_endpoint_missing` in 5 unieke relatiegevallen. Of de getroffen objecten zelfstandig geldig waren, is zonder hun eigen validatie UNKNOWN |
 
 ## 3. Nieuwe open besluiten (projectlead)
