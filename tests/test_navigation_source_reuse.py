@@ -29,7 +29,10 @@ def source_navigation(tmp_path, *, production_console):
     )["snapshot_id"]
     probe = NavigationProbe(count=0, documents=1)
     probe.objects["synthetic-0"] = console.snapshot_objects(sid)
-    fragments = console.review_source_fragments(sid)
+    # This fixture exercises raw-input reconstruction, mutation detection and
+    # its counters. Native ingestion now also prepares immutable source views;
+    # explicitly detach their rows instead of trying to mutate that carrier.
+    fragments = [deepcopy(dict(row)) for row in console.review_source_fragments(sid)]
     probe.review_source_fragments = lambda *args, **kwargs: deepcopy(fragments)
     return probe, fragments
 
