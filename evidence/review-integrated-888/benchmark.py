@@ -344,7 +344,7 @@ def test_native_review_matrix(case, tmp_path, production_console, production_app
 
 
 @pytest.mark.parametrize('incomplete', [False, True])
-def test_native_task_v1_review(tmp_path, production_console, production_app, monkeypatch, incomplete, fault=None, dependency=None, size=2, history_depth=0):
+def test_native_task_v1_review(tmp_path, production_console, production_app, monkeypatch, incomplete, fault=None, dependency=None, size=2, history_depth=0, integrated=False):
     """Actual bounded processing activates storage v1 before measured HTTP review."""
     from src.request_diagnostics_v1 import RequestDiagnostics
     import src.console_performance_v1 as performance
@@ -386,6 +386,13 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
     history_candidates = candidates[:4] if size > 2 else candidates
     if history_depth:
         seed_post_history(console, sid, history_candidates, {'account_id': reviewer}, history_depth)
+    if integrated and os.environ.get('CONSOLE_REVIEW_CARD_READS') == 'compact':
+        # Explicit preparation is fixture setup, never a measured GET or startup.
+        from src.workflows.review_card_inputs_postgres_v1 import prepare_review_cards, capture_review_cards
+        from src.workflows.workflow_transaction_v1 import workflow_read_transaction
+        prepare_review_cards(console.workflow_document_store, sid)
+        with workflow_read_transaction(console.workflow_document_store) as con:
+            assert 'unavailable' not in capture_review_cards(console.workflow_document_store, con, [sid])[sid]
     setup_stage('measurement')
 
     def storage_state():
@@ -421,6 +428,9 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
         'storage_before': initial_storage, 'samples': [],
         'limitations': ['synthetic task-v1 proof, not a production latency or incident replay claim',
                         'provider transport is deterministic; stores and activation are native']}
+    if integrated:
+        result.update(integrated_acceptance=True, production_diff=git('diff', 'HEAD', '--', 'src', 'db'),
+                      review_card_mode=getattr(console, 'review_card_read_mode', 'legacy'))
     rows = console.workflow_document_store.list_document_objects(sid)
     current = {o['object_id']: o for o in console.snapshot_objects(sid)}
     bindings = console.workflow_review_store.read_bindings([sid]).get(sid, [])
@@ -448,7 +458,7 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
         sql_active[0] = True
         start = perf_counter()
         try:
-            response = getattr(client, method)('/review', follow_redirects=False, **kwargs)
+            response = getattr(client, method)(kwargs.pop('_path', '/review'), follow_redirects=False, **kwargs)
         finally:
             sql_active[0] = False
         assert len(captured) == 1
@@ -472,6 +482,15 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
                            follow_redirects=False).status_code == 303
         params = {'document': sid, 'object': focal['object_id']}
         before = durable(console, [sid])
+        if integrated:
+            for route, query in {'overview': {}, 'individual': {'document': sid, 'task': 'individual'},
+                    'inventory': {'document': sid, 'task': 'inventory'},
+                    'batch': {'document': sid, 'task': 'batch'}, 'passage': params}.items():
+                for temperature in ('first', *[f'warm_{i}' for i in range(7)]):
+                    measured = request(client, f'{route}_{temperature}', 'get', params=query)
+                    assert measured.status_code == 200
+                    assert 'data-personal-state="unavailable"' not in measured.text
+            assert durable(console, [sid]) == before
         page = request(client, 'passage', 'get', params=params)
         assert page.status_code == 200
         assert ('data-formation-incomplete' in page.text) == incomplete
@@ -559,6 +578,12 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
         # category is review_audit rather than a name ending in _write.
         assert result['samples'][-1]['sql_categories']['review_audit']['affected_write_rows'] > 0
         winner = durable(console, [sid])
+        if integrated:
+            redirected = request(client, 'redirect_after_approve', 'get', _path=approved.headers['location'])
+            assert redirected.status_code == 200
+            overview = request(client, 'overview_after_approve', 'get')
+            assert overview.status_code == 200 and 'data-personal-state="unavailable"' not in overview.text
+            assert durable(console, [sid]) == winner
         current = next(o for o in console.snapshot_objects(sid) if o['object_id'] == focal['object_id'])
         assert current['governance']['validation_status'] == 'approved'
         assert any(b['object_id'] == focal['object_id'] and still_matches(b, current)
