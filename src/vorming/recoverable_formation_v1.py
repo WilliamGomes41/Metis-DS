@@ -103,10 +103,11 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
             ends = [resolve(raw[key]) for key in ("source_spans", "target_spans")]
         except (SemanticPassageError, AttributeError, KeyError, TypeError):
             return None
-        if not all(any(spans == end for spans in selections.values()) for end in ends):
+        # Each endpoint names exactly one proposed object, and they differ.
+        owners = [[i for i, spans in selections.items() if spans == end] for end in ends]
+        if any(len(found) != 1 for found in owners) or owners[0] == owners[1]:
             return None
-        owners = {i for i, spans in selections.items() if spans in ends}
-        return owners if len(owners) >= 2 else None
+        return {owners[0][0], owners[1][0]}
 
     relations = []
     bad = set(range(len(proposal["objects"]))) - set(objects)

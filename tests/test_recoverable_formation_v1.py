@@ -386,11 +386,24 @@ def test_unknown_relation_endpoint_still_quarantines_the_whole_call():
     # #909 / B5-b: an unknown endpoint cannot establish independence.
     objects, _, run = _relation_case([FIRST, SECOND, 'Bespreek de omstandigheden'])
     for relation in (_relation(objects[1], objects[0], target=_invented(objects[0]['spans'])),
-                     _relation(objects[1], objects[0], target=[])):
+                     _relation(objects[1], objects[0], target=[]),
+                     _relation(objects[1], objects[1], evidence=_invented(objects[1]['spans']))):
         kept, rejections = run([relation])
         assert kept == []
         assert sorted(r['index'] for r in rejections if r['kind'] == 'object') == [0, 1, 2]
         assert all(r['reason_code'] == 'semantic_dependency_rejected' for r in rejections if r['kind'] == 'object')
+
+
+def test_ambiguous_relation_endpoint_still_quarantines_the_whole_call():
+    # #909 / B5-b: an endpoint shared by two candidates does not name one owner.
+    objects, blocks, run = _relation_case([FIRST, SECOND, 'Bespreek de omstandigheden'])
+    duplicate = deepcopy(objects[1])  # same selection, rejected on its own field evidence
+    duplicate['field_evidence']['recommended_action']['span']['literal'] = 'invented'
+    objects.append(duplicate)
+    for relation in (_relation(objects[1], objects[0], evidence=_invented(objects[1]['spans'])),
+                     _relation(objects[1], objects[1], evidence=_invented(objects[1]['spans']))):
+        kept, _ = run([relation])
+        assert kept == []
 
 
 def test_relation_evidence_failure_follows_transitive_dependants():
