@@ -277,3 +277,36 @@ def test_console_literal_evidence_persists_and_replays_after_restart(tmp_path, *
     c = open_console()
     assert c.snapshot_objects(sid, include_blocked=True) == preserved
     assert c._envelope(sid)["semantic_replay"] == existing_replay
+
+
+B5E_BLOCK = {"block_id": "b", "text": "Bespreek de voorkeuren. Bespreek de ondersteuning."}
+B5E_CANDIDATE = {"block_id": "b", "start": 24, "end": 50}
+
+
+def _b5e(field, literal_text, *, candidate="Bespreek de ondersteuning."):
+    ref = literal(B5E_BLOCK, literal_text)
+    return {"objects": [{"spans": [literal(B5E_BLOCK, candidate)],
+                         "field_evidence": {field: {"span": ref, "missing_reason": None}}}],
+            "relations": [], "abstain_reason": None}
+
+
+def test_v3_core_field_resolves_inside_its_own_candidate():
+    # B5-e: "Bespreek" occurs twice in the block but once inside the candidate,
+    # where a v3 core field must lie anyway (bind_fields).
+    resolved = resolve_proposal_evidence(_b5e("predicate_span", "Bespreek"), blocks=[B5E_BLOCK],
+                                         evidence_blocks=[B5E_BLOCK], field_contract_v3=True)
+    assert resolved["objects"][0]["spans"] == [B5E_CANDIDATE]
+    assert resolved["objects"][0]["field_evidence"]["predicate_span"]["span"] == {"block_id": "b", "start": 24, "end": 32}
+
+
+@pytest.mark.parametrize("field,literal_text,candidate,v3", [
+    ("predicate_span", "Bespreek", "Bespreek de ondersteuning.", False),  # v2 contract unchanged
+    ("scope_span", "Bespreek", "Bespreek de ondersteuning.", True),       # context field may lie outside
+    ("condition_span", "Bespreek", "Bespreek de ondersteuning.", True),
+    ("predicate_span", "de", "Bespreek de ondersteuning.", True),         # twice inside the candidate
+    ("predicate_span", "Bespreek de", "ondersteuning.", True),             # only outside the candidate
+])
+def test_b5e_keeps_whole_block_uniqueness_elsewhere(field, literal_text, candidate, v3):
+    p = _b5e(field, literal_text, candidate=candidate)
+    with pytest.raises(SemanticPassageError, match="semantic_evidence_literal_ambiguous"):
+        resolve_proposal_evidence(p, blocks=[B5E_BLOCK], evidence_blocks=[B5E_BLOCK], field_contract_v3=v3)
