@@ -193,11 +193,16 @@ def execute_review_command(console, submitted, invoke):
                                 # Detached baseline for the bounded error view;
                                 # no failed staged mutation becomes presentation truth.
                                 exc.review_command_inputs = inputs
-                                try:
-                                    console._require_open_original(sid, oid)
-                                    exc.review_source_available = True
-                                except ConsoleError:
-                                    exc.review_source_available = False
+                                exc.review_source_available = False
+                                if compact:
+                                    try:
+                                        console._require_open_original(sid, oid)
+                                        exc.review_source_available = True
+                                    except Exception:
+                                        # A best-effort presentation probe must
+                                        # never mask the original domain error,
+                                        # including malformed legacy locators.
+                                        pass
                                 raise
                             if changes.commit_count:
                                 reviews.apply_review_binding_delta(sid, inputs.bindings, changes.bindings)
