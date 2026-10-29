@@ -26,7 +26,14 @@ store-/fallbackroutes, reviewerconsistentie, actorprecedentie, paginering en
 de bestaande auditindex. Voor de latere facts-cutover blijft de volledige
 writer-, generatie-, bron- en restart/rollbackmatrix hieronder vereist.
 
-## Beslispunt voor de resterende kaartprojectie
+## Vastgelegd bronbesluit voor de resterende kaartprojectie
+
+William heeft op 29 oktober 2026 expliciet gekozen voor actuele kaarttellingen
+uit de geverifieerde retained extractie en actuele reviews. De oorspronkelijke
+bron wordt volledig gecontroleerd bij openen/beoordelen. Op de kaart moet
+duidelijk zijn dat die bron daar niet opnieuw is gecontroleerd. Commands en
+publicatie behouden hun bestaande volledige broncontrole. Dit besluit geldt
+voor de latere kaartcutover; deze eerste wijziging verandert die telling nog niet.
 
 `review_work_item` roept `review_source_fragments` aan. Die methode verifieert via
 `_verified_source_bytes` de volledige oorspronkelijke bytes en hun checksum.
@@ -38,11 +45,11 @@ Een oude geldige bronproof plus actuele existence/size kan vervanging door
 andere bytes van gelijke lengte dus niet onderscheiden.
 
 Exacte pariteit bij bronverwijdering/-corruptie én geen bronbytes lezen is
-onder dit contract onmogelijk. Het vervolg vereist een expliciete keuze:
-de broncontrole behouden, of kaarttellingen baseren op de geverifieerde retained
-extractie met apart zichtbare bronbeschikbaarheid, of eerst het bronstorecontract
-verdiepen. Commands en publicatie houden in alle gevallen hun eigen volledige
-broncontrole. Deze eerste stap kiest geen nieuwe bronbetekenis.
+onder het oude contract onmogelijk. Het bovenstaande besluit lost dat conflict
+op zonder een nieuwe bronstoregarantie te verzinnen: kaarttellingen houden
+actuele reviews bij de exacte retained extractie, ook als de oorspronkelijke
+bron tijdelijk niet beschikbaar is. Een bronproof verleent nooit toestemming
+om te beoordelen of publiceren.
 
 ## Ground → Sketch → Agree → Implement → Scrap
 
