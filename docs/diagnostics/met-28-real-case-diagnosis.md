@@ -128,9 +128,10 @@ besluit B5-c (sectie 3) telt werkwoordelijke sterkte alleen binnen een V3-kern, 
 Het label `sterke aanbeveling` (positie 13–31) ligt binnen de kandidaat (0–192), maar vóór
 de aanbevelingskern (45–192): in een inleidend zinsdeel van dezelfde zin, met de kern direct erna.
 `_applicable_strength_ranges` accepteert alleen de kern, direct volgende stempels en
-omsluitende koppen (A07). Een inleidend label valt daar bewust buiten. Klasse **(g) onbeslist**,
-hetzelfde patroon als S1 in 2.4; het hoort bij besluit B5-c. Een latere call heeft het geval
-opgelost (historical).
+omsluitende koppen (A07). Een inleidend label viel daar bewust buiten. Klasse (g), hetzelfde
+patroon als S1 in 2.4. Een latere call heeft het geval opgelost (historical). **Besluit B5-c**
+(sectie 3): in V3 telt zo'n label wel, mits in hetzelfde object en blok, direct vóór de kern, met
+alleen een dubbele punt of spaties ertussen.
 
 ### 2.6 `semantic_supplement_outside_target` — 0
 
