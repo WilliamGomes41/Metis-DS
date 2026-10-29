@@ -320,14 +320,11 @@ def incoming_relation_targets(obj, objects):
             for field, kinds in TARGET_RELATIONS.items():
                 if rel.get("relation_type") in kinds:
                     found[field].add(peer_id)
-    valid = {}
-    for field, peers in found.items():
-        if len(peers) == 1:
-            peer_id = next(iter(peers))
-            peer = next(p for p in objects if str(p.get("object_id") or "") == peer_id)
-            if not relation_proposal_admission_codes(peer, objects=objects):
-                valid[field] = peer_id
-    return valid
+    # Invalid peers never count, so they cannot make a single valid target ambiguous.
+    by_id = {str(p.get("object_id") or ""): p for p in objects}
+    usable = {peer_id for peers in found.values() for peer_id in peers
+              if not relation_proposal_admission_codes(by_id[peer_id], objects=objects)}
+    return {field: next(iter(peers & usable)) for field, peers in found.items() if len(peers & usable) == 1}
 
 
 def keep_relation_targets(row, before):

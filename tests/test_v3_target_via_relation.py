@@ -104,6 +104,12 @@ def test_no_target_without_one_valid_matching_relation(relations, peers, invalid
     assert "condition_target" not in incoming_relation_targets(QUALIFIER, [QUALIFIER, *peers])
 
 
+def test_an_invalid_peer_does_not_make_the_valid_target_ambiguous(relations):
+    relations.add("broken")
+    objects = [QUALIFIER, _peer("rec", "applies_if"), _peer("broken", "applies_if")]
+    assert incoming_relation_targets(QUALIFIER, objects) == {"condition_target": "rec"}
+
+
 def test_admission_restores_only_a_validated_via_relation_target(relations):
     from src.vorming.admission_gate_v1 import _apply_bound_fields
     record = bind_fields(_raw(condition_target={"span": None, "missing_reason": VIA_RELATION}),
