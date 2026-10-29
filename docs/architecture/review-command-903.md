@@ -66,6 +66,7 @@ appendvolgorde, legacy occurrences, predecessors en bestaande immutabilitychecks
 | Bindinggeldigheid | Actuele gerichte PostgreSQL-read; documentgeneratie vervangt deze controle niet. |
 | Interaction-ID | Globale identitycheck via gerichte ID-query inclusief pending events; geen payloaddeduplicatie. |
 | Audit | Bestaande globale hashketen en late flushvalidatie; geen automatisch herbaseren bij chain conflict. |
+| Kwaliteitsherkomst in audit | Bestaande review_evidence-owner: laatste processing-run-ID en oorspronkelijke candidatefingerprints/herkomst van betrokken identiteiten onder dezelfde documentgrens; geen historische runs of bronpayloads. |
 
 Een normale save commit alleen bestaande semantisch vereiste wijzigingen.
 Validatie en stale/conflict laten geen half besluit achter; rollback gooit de
@@ -132,8 +133,11 @@ lifecyclebetekenis of herhaalde workarounds voor verkeerd ownership.
 
 Uitgevoerd vóór productiewijzigingen: vier native WP5-referentiegevallen groen
 (beide lockkarakteriseringen en complete/incomplete task-v1). De positieve
-lockkarakterisering vereist nog de bestaande40P01 en is dus geen veiligheidsbewijs.
-Implementatie en nieuwe acceptatieproeven volgen; geen WP6-afronding geclaimd.
+lockkarakterisering vereiste de bestaande40P01 en is dus geen veiligheidsbewijs.
+Implementatie en tegenvoorbeelden zijn vastgelegd vanaf eac82e7; de nieuwe
+veiligheidsproef faalt op de oorspronkelijke basis en slaagt op de gewijzigde code.
+Actueel bewijs, beperkingen en nog openstaande eindverificatie staan in
+[het WP6-resultaat](../../evidence/review-command-903/RESULT.md).
 
 ## Vooraf gespecificeerd toegangspad voor globale interaction-identiteit
 
