@@ -107,6 +107,30 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
         except Exception as exc:
             raise WorkflowReviewStoreError('workflow_review_read_failed') from exc
 
+    def read_review_participation_events(self, snapshot_ids: list[str]) -> list[dict[str, Any]]:
+        """Distinct read-only event facts used by the personal start/continue link.
+
+        This does not decide whether an event is a review or belongs to an actor;
+        the existing presentation predicates still own those decisions. Audit
+        details, chain hashes and prior object payloads are deliberately absent.
+        """
+        if not snapshot_ids:
+            return []
+        try:
+            with self._connect() as con:
+                rows = con.execute(
+                    "SELECT DISTINCT jsonb_build_object("
+                    "'event_type',event_payload->'event_type','actor',event_payload->'actor',"
+                    "'details',jsonb_build_object('snapshot_id',event_payload#>'{details,snapshot_id}',"
+                    "'reviewer_id',event_payload#>'{details,reviewer_id}',"
+                    "'reviewer_account_id',event_payload#>'{details,reviewer_account_id}')) AS event "
+                    "FROM workflow.review_events "
+                    "WHERE event_payload->'details'->>'snapshot_id'=ANY(%s)",
+                    (snapshot_ids,)).fetchall()
+            return [self._event_payload(row['event']) for row in rows]
+        except Exception as exc:
+            raise WorkflowReviewStoreError('workflow_review_read_failed') from exc
+
     def read_events(self) -> list[dict[str, Any]]:
         try:
             with self._connect() as con:
