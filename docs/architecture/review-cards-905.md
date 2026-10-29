@@ -141,6 +141,15 @@ en met `python scripts/validate_change_contract.py --text-file <PR-body>`
 daadwerkelijk rood/groen gecontroleerd. Deze check vereist de PR-tekst;
 repository_preflight alleen bewijst het PR-contract niet.
 
+De daaropvolgende volledige suite vond op Python 3.12 én 3.13 dezelfde ene
+fout in `test_metadata_page_bounds_existing_enrichment_and_history_reads`:
+de pagineringstest telde alleen calls naar de vervangen archiefreader. Het
+meetpunt volgt nu de compacte participatiereader, met dezelfde aantallen én
+exacte document-ID's voor pagina 1/2. Een call naar de volledige archiefreader
+laat de test expliciet falen. Native reproductie: eerst rood; daarna alle
+negen persoonlijke-overzicht-/compacte-invoertests groen. Geen productiecode
+of domeinverwachting gewijzigd door deze testreparatie.
+
 Native HTTP-pariteit met de bestaande volledige oracle voor verschillende
 reviewers, eerste/tweede review, wachten/eigen klaar, herstel/disposition, partial
 formation en boom/graph. Tegenvoorbeelden: binding-only legacywriter zonder
