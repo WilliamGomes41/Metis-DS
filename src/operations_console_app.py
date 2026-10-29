@@ -3503,6 +3503,12 @@ def _review_formation_notice(console, snapshot_id, read_inputs, *, document_sour
         # complete, identity-verified extraction from the same full envelope
         # that processing_status will read, never the passage's smaller view.
         fragments = None
+        # The new immutable read layout can supply a complete prepared view
+        # without reconstructing blocks. A selected window is never closure.
+        envelope = console._envelope(snapshot_id)
+        full_prepared = console._prepared_review_source(envelope)
+        if full_prepared is not None:
+            return _formation_incomplete_banner(console, snapshot_id, formation_fragments=full_prepared)
         if reads is not None and read_inputs.fragments is not None:
             from src.vorming.recoverable_formation_v1 import incomplete
             from src.vorming.source_preparation_context_v1 import KEY, stored_extraction
@@ -3518,6 +3524,7 @@ def _review_formation_notice(console, snapshot_id, read_inputs, *, document_sour
                     identity_fields = ('snapshot_id', 'source_id', 'document_id', 'sha256', 'version', 'content_kind')
                     same_identity = all(read_inputs.envelope.get(key) == envelope.get(key) for key in identity_fields)
                     if (isinstance(passage, SourceFragments) and passage.name == 'full'
+                            and getattr(passage.root, 'complete', True)
                             and same_identity
                             and passage.root.payload['fragments_hash'] == envelope[KEY]['fragments_hash']
                             and passage.root.docling_record == getattr(raw, 'extraction_record', None)):

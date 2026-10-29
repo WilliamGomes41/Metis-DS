@@ -107,7 +107,8 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             with self._connect() as con:
                 columns = _DOCUMENT_CARD_COLUMNS.replace('d.envelope_payload', 'd.review_envelope')
                 projection = "d.envelope_payload - ARRAY['semantic_replay','processing_attempts','quality_processing_runs']"
-                if command:
+                has_read_records = con.execute("SELECT to_regclass('workflow.source_read_roots') AS available").fetchone()['available']
+                if command or has_read_records:
                     projection = ("(" + projection + " - 'prepared_source_extraction') || CASE "
                         "WHEN d.envelope_payload ? 'prepared_source_extraction' THEN "
                         "jsonb_build_object('prepared_source_extraction',"
@@ -117,6 +118,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                     "WITH selected AS MATERIALIZED ("
                     f"SELECT d.*, {projection} AS review_envelope FROM workflow.documents d WHERE snapshot_id=%s) "
                     f"SELECT {columns}, d.object_generation, d.revision, d.review_envelope, "
+                    + ("d.review_source_ref, " if has_read_records else "NULL::jsonb AS review_source_ref, ") +
                     "jsonb_build_object('provider_evidence',jsonb_build_object('formation_incomplete',"
                     "d.envelope_payload#>'{semantic_replay,provider_evidence,formation_incomplete}')) AS formation_notice, "
                     "COALESCE(d.envelope_payload->'semantic_replay' NOT IN ('null'::jsonb,'{}'::jsonb),false) AS has_replay, "
@@ -127,6 +129,8 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             if row is None:
                 raise WorkflowDocumentStoreError('unknown_snapshot')
             envelope = dict(row['review_envelope'])
+            if row['review_source_ref'] is not None:
+                envelope['_review_source_ref'] = row['review_source_ref']
             from src.vorming.recoverable_formation_v1 import incomplete
             # A negative prefilter only: uncertain/open formation still runs
             # the existing complete check, including current source closure.
@@ -136,7 +140,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             card = _document_cards_from_rows([row])[0]
             envelope.update({k: v for k, v in card.items()
                              if k not in {'review_envelope', 'object_generation', 'revision',
-                                          'formation_notice', 'has_replay', 'latest_processing_state'}})
+                                          'formation_notice', 'has_replay', 'latest_processing_state', 'review_source_ref'}})
             return envelope, f"{int(row['revision'])}:{int(row['object_generation'])}"
         except WorkflowDocumentStoreError:
             raise

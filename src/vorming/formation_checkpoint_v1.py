@@ -39,6 +39,7 @@ class TaskCheckpointWriter:
         self.preparation = None
         self.source_payload = None
         self.source_reference = deepcopy((attempt.get("diagnostic") or {}).get("source_views_ref"))
+        self.review_source_reference = deepcopy((attempt.get("diagnostic") or {}).get("review_source_ref"))
         self.plan_reference = deepcopy((attempt.get("diagnostic") or {}).get("task_plan_ref"))
         self.input_reference = deepcopy((attempt.get("diagnostic") or {}).get("validator_input_ref"))
         if attempt.get("kind")=="resume" and self.source_reference is not None and self.input_reference is None:
@@ -205,18 +206,32 @@ class TaskCheckpointWriter:
         return stored_extraction({**extraction["source"],KEY:extraction}),extraction["source"],{k:extraction[k] for k in ("record_hash","fragments_hash")}
 
     def retain_source_views(self,payload):
-        if payload is self.source_payload and self.source_reference is not None:
+        if payload is self.source_payload and self.source_reference is not None and self.review_source_reference is not None:
             return
         if not self.input_reference:
             raise ConsoleError("formation_input_required")
         prepared=self.store.prepare_source_views(self.input_reference,payload)
+        with self.store.documents._connect() as con:
+            records_available = con.execute("SELECT to_regclass('workflow.source_read_roots') AS available").fetchone()['available']
+        read_reference = None
+        if records_available:
+            read_prepared = self.store.prepare_review_source(self.input_reference, payload)
+            read_reference = self.store.publish_review_source(read_prepared)
         with self._locked() as (con,active):
             reference=self.store.retain_source_views(con,self.input_reference,payload,prepared=prepared)
             if self.source_reference is not None and self.source_reference!=reference:
                 raise ConsoleError("source_views_reference_invalid")
             active.setdefault("diagnostic",{})["source_views_ref"]=reference
+            if read_reference is not None:
+                pinned = con.execute("UPDATE workflow.documents SET review_source_ref=%s::jsonb WHERE snapshot_id=%s "
+                    "AND envelope_payload#>>'{prepared_source_extraction,record_hash}'=%s",
+                    (_json_text(read_reference),self.snapshot_id,read_reference['extraction_hash']))
+                if pinned.rowcount != 1:
+                    raise ConsoleError('processing_command_conflict')
+                active['diagnostic']['review_source_ref'] = read_reference
             self.store.checkpoint(con,self.attempt_id,"source_views_pinned",{"source_views_ref":reference})
         self.source_reference=reference
+        self.review_source_reference=read_reference
         self.source_payload=payload
 
     def load_task_plan(self):

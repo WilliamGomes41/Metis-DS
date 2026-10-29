@@ -88,6 +88,10 @@ class PreparedSource:
         self.raw=freeze(raw)
         self.payload=freeze(payload)
         self.docling_record=deepcopy(docling_record)
+        self._populate(raw, payload)
+
+    def _populate(self, raw, payload):
+        """Shared block/mapping validation for complete and checked scoped reads."""
         self.carriers={}
         try:
             if set(payload['views'])!={'full','content','candidate','evidence','evidence_content','headings'}:
@@ -98,31 +102,32 @@ class PreparedSource:
             if len(raw_by_id)!=len(raw):
                 raise ValueError()
             for name,view in payload['views'].items():
-                indices=view['fragment_indices']
-                if indices!=sorted(set(indices)) or any(type(i) is not int or not 0<=i<len(raw) for i in indices):
-                    raise ValueError()
-                seen=set()
-                for public,source in view['blocks']:
-                    if (public['block_id'] in seen or public['text']!=source['clean_text']
-                            or any(fid not in raw_ids for fid in public['source_fragment_ids'])):
+                with diagnostic_phase('source_views_validate'):
+                    indices=view['fragment_indices']
+                    if indices!=sorted(set(indices)) or any(type(i) is not int or not 0<=i<len(raw) for i in indices):
                         raise ValueError()
-                    if public['block_id']!=_block_id(source,public['text']):
-                        raise ValueError()
-                    cursor=0
-                    for span in source.get('_raw_source_mapping',[]):
-                        if span['start']!=cursor or not cursor<span['end']<=len(public['text']):
+                    seen=set()
+                    for public,source in view['blocks']:
+                        if (public['block_id'] in seen or public['text']!=source['clean_text']
+                                or any(fid not in raw_ids for fid in public['source_fragment_ids'])):
                             raise ValueError()
-                        cursor=span['end']
-                        if span.get('kind')=='join_separator':
-                            if any(span[key] not in raw_ids for key in ('left_fragment_id','right_fragment_id')):
+                        if public['block_id']!=_block_id(source,public['text']):
+                            raise ValueError()
+                        cursor=0
+                        for span in source.get('_raw_source_mapping',[]):
+                            if span['start']!=cursor or not cursor<span['end']<=len(public['text']):
                                 raise ValueError()
-                        else:
-                            original=raw_by_id[span['fragment_id']]
-                            if not 0<=span['raw_start']<span['raw_end']<=len(original['raw_text']):
-                                raise ValueError()
-                    if source.get('_raw_source_mapping') and cursor!=len(public['text']):
-                        raise ValueError()
-                    seen.add(public['block_id'])
+                            cursor=span['end']
+                            if span.get('kind')=='join_separator':
+                                if any(span[key] not in raw_ids for key in ('left_fragment_id','right_fragment_id')):
+                                    raise ValueError()
+                            else:
+                                original=raw_by_id[span['fragment_id']]
+                                if not 0<=span['raw_start']<span['raw_end']<=len(original['raw_text']):
+                                    raise ValueError()
+                        if source.get('_raw_source_mapping') and cursor!=len(public['text']):
+                            raise ValueError()
+                        seen.add(public['block_id'])
                 self.carriers[name]=SourceFragments(self,name)
             # Six immutable views have at most 36 intersections. Resolve them
             # once instead of intersecting the complete source per candidate.
@@ -138,6 +143,32 @@ class PreparedSource:
     @property
     def fragments(self):
         return self.carriers['full']
+
+
+class ReadSource(PreparedSource):
+    """A checked read window in an existing root, never a new extraction.
+
+    Storage verifies root membership and selected content hashes before calling
+    this constructor. Complete-source consumers must explicitly request all
+    records; a window carries the original root identity and scope.
+    """
+    def __init__(self, raw, views, header, reference, *, complete, docling_loader):
+        self.reference = freeze(reference)
+        self.complete = complete
+        self._docling_loader = docling_loader
+        self.raw = freeze(raw)
+        self.payload = freeze({**header, 'views': views,
+                               'read_scope': 'complete' if complete else 'dependency_window'})
+        self._populate(raw, self.payload)
+        self.filters = {(name, target): self.carriers[result] if result is not None else None
+                        for name, targets in header['filters'].items()
+                        for target, result in targets.items()}
+
+    @property
+    def docling_record(self):
+        # Only explicit consumers of original Docling evidence request it.
+        # Passage mapping uses the exact retained fragment locators directly.
+        return self._docling_loader()
 
 
 @diagnostic_phase('source_prepare')
