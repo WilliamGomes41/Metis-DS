@@ -164,8 +164,8 @@ SEMANTIC_V3_INSTRUCTION = (
     "by their selected spans: the zero-based index of two different objects in this proposal's objects array. "
     "When the statement a condition, exception or explanation applies to is outside its selected core, set "
     "condition_target, exception_target or supported_object to span null with missing_reason via_relation and "
-    "propose applies_if, except_if or explains with that object as source_object and the object containing "
-    "the statement as target_object. "
+    "propose applies_if, except_if or explains with the object containing the statement as source_object and "
+    "the condition, exception or explanation as target_object. "
     "A list introduction that states the clinical situation of its items may be the scope_span via a "
     "list_introduction context entry. "
 )

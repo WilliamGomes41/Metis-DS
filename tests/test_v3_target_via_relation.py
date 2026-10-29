@@ -10,7 +10,7 @@ import pytest
 from src.vorming.source_bound_fields_v2 import KEY, evidence_schema as schema_v2
 from src.vorming.source_bound_fields_v3 import (
     FIELDS, TARGET_FIELDS, VIA_RELATION, additional_context_codes, bind_fields, bound_values, evidence_schema,
-    keep_relation_targets, own_relation_targets,
+    incoming_relation_targets, keep_relation_targets,
 )
 
 TEXT = "Controleer de huid dagelijks."
@@ -68,28 +68,54 @@ def test_list_introduction_context_may_carry_scope():
     assert bound_values(record, text=TEXT, proposed_type="recommendation", context=context)["scope_span"] == "patiënten met diabetes"
 
 
-def test_only_the_objects_own_relation_supplies_a_target():
-    # A peer's incoming relation may carry a stale endpoint version: never a source.
-    own = {"relations": [{"relation_type": "applies_if", "target_object_id": "obj-rec"}]}
-    assert own_relation_targets(own) == {"condition_target": "obj-rec"}
-    assert own_relation_targets({"relations": []}) == {}
-    assert own_relation_targets(None) == {}
-    two = {"relations": [{"relation_type": "applies_if", "target_object_id": "a"},
-                         {"relation_type": "applies_if", "target_object_id": "b"}]}
-    assert own_relation_targets(two) == {}  # ambiguous: admission keeps condition_target_missing
+QUALIFIER = {"object_id": "cond", "object_version": "2"}
 
 
-def test_admission_takes_a_via_relation_target_only_from_own_relations():
+def _peer(object_id, relation_type, version="2", target="cond"):
+    return {"object_id": object_id, "relations_for_test": [
+        {"relation_type": relation_type, "target_object_id": target, "target_object_version": version}]}
+
+
+@pytest.fixture
+def relations(monkeypatch):
+    import src.vorming.knowledge_relation_proposal_v1 as proposals
+    invalid = set()
+    monkeypatch.setattr(proposals, "proposed_knowledge_relations_of", lambda obj: obj.get("relations_for_test") or [])
+    monkeypatch.setattr(proposals, "relation_proposal_admission_codes",
+                        lambda obj, objects: ["relation_proposal_invalid"] if obj["object_id"] in invalid else [])
+    return invalid
+
+
+def test_target_comes_from_one_valid_incoming_relation_on_this_revision(relations):
+    # knowledge_relation_proposal_v1: statement applies_if condition, so the edge is incoming.
+    objects = [QUALIFIER, _peer("rec", "applies_if"), _peer("claim", "supported_by")]
+    assert incoming_relation_targets(QUALIFIER, objects) == {"condition_target": "rec", "supported_object": "claim"}
+
+
+@pytest.mark.parametrize("peers,invalid", [
+    ([_peer("rec", "applies_if", version="1")], set()),                 # stale endpoint version
+    ([_peer("rec", "applies_if")], {"rec"}),                             # relation fails admission checks
+    ([_peer("rec", "applies_if"), _peer("rec2", "applies_if")], set()),  # ambiguous target
+    ([_peer("rec", "applies_if", target="other")], set()),               # names another object
+    ([_peer("rec", "except_if")], set()),                                # wrong type for condition_target
+])
+def test_no_target_without_one_valid_matching_relation(relations, peers, invalid):
+    relations.update(invalid)
+    assert "condition_target" not in incoming_relation_targets(QUALIFIER, [QUALIFIER, *peers])
+
+
+def test_admission_restores_only_a_validated_via_relation_target(relations):
     from src.vorming.admission_gate_v1 import _apply_bound_fields
     record = bind_fields(_raw(condition_target={"span": None, "missing_reason": VIA_RELATION}),
                          selected=SELECTED, candidate_text=TEXT, proposed_type="condition")
-    def row():  # condition_target as the legacy _target_for derived it from a peer relation
+    def row():  # the legacy _target_for value must never be trusted as such
         return {KEY: record, "candidate_text": TEXT, "proposed_type": "condition", "condition_target": "peer"}
-    peer_only = row()
-    assert _apply_bound_fields(peer_only, {"relations": []}) == [] and peer_only["condition_target"] == ""
-    owned = row()
-    assert _apply_bound_fields(owned, {"relations": [{"relation_type": "applies_if", "target_object_id": "obj-rec"}]}) == []
-    assert owned["condition_target"] == "obj-rec"
+    stale = row()
+    assert _apply_bound_fields(stale, QUALIFIER, [QUALIFIER, _peer("rec", "applies_if", version="1")]) == []
+    assert stale["condition_target"] == ""
+    valid = row()
+    assert _apply_bound_fields(valid, QUALIFIER, [QUALIFIER, _peer("rec", "applies_if")]) == []
+    assert valid["condition_target"] == "rec"
 
 
 def test_list_introduction_realizes_a_scope_heading():

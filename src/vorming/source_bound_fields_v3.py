@@ -293,22 +293,41 @@ def additional_context_codes(row, realization, *, obj=None, fragments=None):
     return codes
 
 
-# B5-f: the relation types of a via_relation target, owned by the object itself.
+# B5-f: a qualifier's target is the source of a validated relation pointing at
+# the current qualifier revision (knowledge_relation_proposal_v1: statement
+# applies_if condition, except_if exception, explains/supported_by explanation).
 TARGET_RELATIONS = {"condition_target": {"applies_if"}, "exception_target": {"except_if"},
                     "supported_object": {"explains", "supported_by"}}
 
 
-def own_relation_targets(obj):
-    """The single target per field named by the object's own relations, never by a peer's."""
-    targets = {}
-    for field, kinds in TARGET_RELATIONS.items():
-        found = {str(rel.get("target_object_id") or "").strip()
-                 for rel in (obj or {}).get("relations") or ()
-                 if isinstance(rel, dict) and rel.get("relation_type") in kinds}
-        found.discard("")
-        if len(found) == 1:
-            targets[field] = found.pop()
-    return targets
+def incoming_relation_targets(obj, objects):
+    """The single peer per field whose valid relation names this exact object revision."""
+    from src.vorming.knowledge_relation_proposal_v1 import (
+        proposed_knowledge_relations_of, relation_proposal_admission_codes,
+    )
+    object_id, version = str((obj or {}).get("object_id") or ""), str((obj or {}).get("object_version") or "")
+    found = {field: set() for field in TARGET_RELATIONS}
+    if not object_id or not version:
+        return {}
+    for peer in objects:
+        peer_id = str(peer.get("object_id") or "")
+        if not peer_id or peer_id == object_id:
+            continue
+        for rel in proposed_knowledge_relations_of(peer):
+            if (str(rel.get("target_object_id") or "") != object_id
+                    or str(rel.get("target_object_version") or "") != version):
+                continue
+            for field, kinds in TARGET_RELATIONS.items():
+                if rel.get("relation_type") in kinds:
+                    found[field].add(peer_id)
+    valid = {}
+    for field, peers in found.items():
+        if len(peers) == 1:
+            peer_id = next(iter(peers))
+            peer = next(p for p in objects if str(p.get("object_id") or "") == peer_id)
+            if not relation_proposal_admission_codes(peer, objects):
+                valid[field] = peer_id
+    return valid
 
 
 def keep_relation_targets(row, before):
