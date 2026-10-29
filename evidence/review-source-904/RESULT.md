@@ -99,3 +99,17 @@ het niet evalueren van de legacyarchiefprojectie. Deze afleiding voegt werk
 toe aan bestaande documentwrites; de oorspronkelijke lifecycle-trigger
 normaliseert de envelope daar al. De bestaande POST-/lockproeven blijven
 vereist; geen claim dat documentwrites onafhankelijk van archiefgrootte zijn.
+
+
+## Definitieve gerichte HTTP-meting
+
+Broncommit `7b94d79`; zes native HTTP-tests groen,0 skips,47.94s.
+[Machine-uitvoer](http-metrics.json) bevat acht opeenvolgende GET-samples:
+32/128 passages × lokale/Azure compositie × twee verzoeken na herstart.
+Hetzelfde venster draagt steeds138 bronrecords over,141780/141782 JSON-bytes.
+Hydratatie exclusief validatie:1.741–4.415ms; mappingvalidatie:2.650–14.335ms.
+Totale HTTP-tijd:0.2048–1.8697s; de vier suiteprocessen startten tijdens de
+latere samples, dus deze gedeelde runner bewijst geen latencyverdeling/SLO.
+Azure betekent de ondersteunde compositie met fixture bronstore en echte
+HTTPS Origin, geen live Azure-netwerkmeting. Transfercijfers tellen alleen
+source_read-records; bronbyteverificatie en overige responsekosten staan apart.

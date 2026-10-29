@@ -1,0 +1,90 @@
+{
+  "source_commit": "7b94d798982278688e2935f4bac0843944f682cb",
+  "python": "3.12.14",
+  "postgres_major": 16,
+  "samples": [
+    {
+      "size": 32,
+      "azure": false,
+      "seconds": 0.5689,
+      "rows": 138,
+      "bytes": 141780,
+      "hydrate_exclusive_ms": 3.097,
+      "validate_ms": 5.383
+    },
+    {
+      "size": 32,
+      "azure": false,
+      "seconds": 0.2271,
+      "rows": 138,
+      "bytes": 141780,
+      "hydrate_exclusive_ms": 2.057,
+      "validate_ms": 3.368
+    },
+    {
+      "size": 128,
+      "azure": false,
+      "seconds": 0.4504,
+      "rows": 138,
+      "bytes": 141782,
+      "hydrate_exclusive_ms": 2.404,
+      "validate_ms": 3.967
+    },
+    {
+      "size": 128,
+      "azure": false,
+      "seconds": 0.4635,
+      "rows": 138,
+      "bytes": 141782,
+      "hydrate_exclusive_ms": 2.351,
+      "validate_ms": 3.364
+    },
+    {
+      "size": 32,
+      "azure": true,
+      "seconds": 0.2584,
+      "rows": 138,
+      "bytes": 141780,
+      "hydrate_exclusive_ms": 3.349,
+      "validate_ms": 3.184
+    },
+    {
+      "size": 32,
+      "azure": true,
+      "seconds": 0.2048,
+      "rows": 138,
+      "bytes": 141780,
+      "hydrate_exclusive_ms": 2.747,
+      "validate_ms": 14.335
+    },
+    {
+      "size": 128,
+      "azure": true,
+      "seconds": 1.8697,
+      "rows": 138,
+      "bytes": 141782,
+      "hydrate_exclusive_ms": 4.415,
+      "validate_ms": 6.867
+    },
+    {
+      "size": 128,
+      "azure": true,
+      "seconds": 0.7725,
+      "rows": 138,
+      "bytes": 141782,
+      "hydrate_exclusive_ms": 1.741,
+      "validate_ms": 2.65
+    }
+  ],
+  "tests": {
+    "passed": 6,
+    "skipped": 0,
+    "seconds": 47.94
+  },
+  "limits": [
+    "Synthetic native HTTP fixtures, no production SLO or percentile claim.",
+    "Four suite shards started during later samples; total latency includes shared-runner contention.",
+    "Rows/bytes count source_read records only; source-byte verification and complete response costs remain separate.",
+    "Azure composition uses fixture immutable source store and real HTTPS Origin, not a live Azure network measurement."
+  ]
+}
