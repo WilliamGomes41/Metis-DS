@@ -13,7 +13,7 @@ from src.vorming.semantic_passage_v1 import SemanticPassageError
 from src.vorming.recommendation_semantics_v1 import adjacent_source_strength_span
 
 VERSION = "source-evidence-resolution-v1"
-V3_VERSION = "source-evidence-resolution-v1/v3-adjacent-strength-v2"
+V3_VERSION = "source-evidence-resolution-v1/v3-adjacent-strength-v2/candidate-scoped-core-v1"
 
 
 def resolve_proposal_evidence(proposal, *, blocks, evidence_blocks, field_contract_v3=False):
@@ -21,7 +21,8 @@ def resolve_proposal_evidence(proposal, *, blocks, evidence_blocks, field_contra
 
     Occurrence is zero-based, counting exact (including overlapping) matches.
     A null/absent occurrence requires uniqueness, except for v3 directional
-    strength stamps exactly adjacent to a uniquely selected recommendation.
+    strength stamps exactly adjacent to a uniquely selected recommendation and
+    v3 core fields that occur exactly once inside their own candidate (B5-e).
     Offsets alongside a literal are non-authoritative hints.
     """
     texts = {}
@@ -72,6 +73,32 @@ def resolve_proposal_evidence(proposal, *, blocks, evidence_blocks, field_contra
             return span[0]
         return None
 
+    def candidate_scoped(path, ref, text):
+        # B5-e: a v3 core field must lie inside its own candidate (bind_fields),
+        # so only a match there is admissible. Exactly one such match resolves;
+        # zero or several stay ambiguous. Context fields may lie outside the
+        # candidate and keep whole-block uniqueness.
+        from src.vorming.source_bound_fields_v3 import CONTEXT_FIELDS
+        shape = re.fullmatch(r"objects\.(\d+)\.field_evidence\.(\w+)\.span(?:\.\d+)?", path)
+        if not field_contract_v3 or not shape or shape.group(2) in CONTEXT_FIELDS:
+            return None
+        index = int(shape.group(1))
+        obj = proposal["objects"][index]
+        if not isinstance(obj, dict) or not isinstance(obj.get("spans"), list):
+            return None
+        try:
+            candidates = [resolve(span, f"objects.{index}.spans.{n}") for n, span in enumerate(obj["spans"])]
+        except SemanticPassageError:
+            return None
+        literal, matches, start = ref["literal"], [], 0
+        while (match := text.find(literal, start)) >= 0:
+            if any(isinstance(c, dict) and c.get("block_id") == ref["block_id"]
+                   and type(c.get("start")) is int and type(c.get("end")) is int
+                   and c["start"] <= match and match + len(literal) <= c["end"] for c in candidates):
+                matches.append(match)
+            start = match + 1
+        return matches[0] if len(matches) == 1 else None
+
     def resolve(value, path):
         if isinstance(value, list):
             return [resolve(row, f"{path}.{index}" if path else str(index))
@@ -104,6 +131,8 @@ def resolve_proposal_evidence(proposal, *, blocks, evidence_blocks, field_contra
                 if occurrence is None:
                     if count:
                         found = adjacent_strength(path, value, text)
+                        if found is None:
+                            found = candidate_scoped(path, value, text)
                         if found is None:
                             fail("semantic_evidence_literal_ambiguous", path, value)
                         break
