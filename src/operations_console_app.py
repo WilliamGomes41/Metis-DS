@@ -1077,9 +1077,10 @@ def _review_context_block(
 
         open_link = ""
         if object_id and resolution != RESOLUTION_MISSING:
+            location = f'/review?document={snap}&object={quote(object_id, safe="")}{task_query}'
             open_link = (
                 f'<a class="btn-secondary relation-context-open" '
-                f'href="/review?document={snap}&object={quote(object_id, safe="")}{task_query}">'
+                f'href="{_esc(location)}">'
                 "Open passage</a>"
             )
 
@@ -3314,7 +3315,7 @@ def _render_review_card(
         if draft.get('proposed_correction') else ''
     )
     return f"""
-                <p><a class="btn-secondary" href="{_review_location(console, snapshot_id, task=task or "contextual")}">← Terug naar kennisvoorstellen</a></p>
+                <p><a class="btn-secondary" href="{_esc(_review_location(console, snapshot_id, task=task or "contextual"))}">← Terug naar kennisvoorstellen</a></p>
                 <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
                     <div class="review-decision-layout">
                     <div class="review-source-column">
@@ -5636,37 +5637,41 @@ def create_console_app(
             raise ConsoleError("snapshot_revision_required")
         if type_action == "dit_klopt" and not confirmed_object_type.strip():
             confirmed_object_type = proposed_object_type
-        current_rows = state.snapshot_objects(snapshot_id)
-        focal = next(
-            (row for row in current_rows if row.get("object_id") == object_id),
-            None,
-        )
-        if focal is None:
-            raise ConsoleError("unknown_object")
-        review_path = review_path_for_klasse(state._envelope(snapshot_id)["class"])
-        bindings = state.object_review_bindings(snapshot_id)
-        duty = review_duty_for(
-            focal,
-            review_path=review_path,
-            bindings=bindings, fragments=state.review_source_fragments(snapshot_id)
-        )
-        evidence = (
-            build_review_interaction_evidence(
-                interaction_id=interaction_id,
-                interaction_kind="contextual",
-                reviewer_account_id=str(account["account_id"]),
-                snapshot_id=snapshot_id,
-                review_stage=str((duty or {}).get("stage") or "first_review"),
-                focal=focal,
-                objects=current_rows,
-                review_path=review_path,
+        bounded = getattr(state, '_metis_workflow_review_authority', False)
+        evidence = None
+        if not bounded:
+            current_rows = state.snapshot_objects(snapshot_id)
+            focal = next(
+                (row for row in current_rows if row.get("object_id") == object_id),
+                None,
             )
-            if interaction_id.strip() and mapped != "later"
-            else None
-        )
+            if focal is None:
+                raise ConsoleError("unknown_object")
+            review_path = review_path_for_klasse(state._envelope(snapshot_id)["class"])
+            bindings = state.object_review_bindings(snapshot_id)
+            duty = review_duty_for(
+                focal,
+                review_path=review_path,
+                bindings=bindings, fragments=state.review_source_fragments(snapshot_id)
+            )
+            evidence = (
+                build_review_interaction_evidence(
+                    interaction_id=interaction_id,
+                    interaction_kind="contextual",
+                    reviewer_account_id=str(account["account_id"]),
+                    snapshot_id=snapshot_id,
+                    review_stage=str((duty or {}).get("stage") or "first_review"),
+                    focal=focal,
+                    objects=current_rows,
+                    review_path=review_path,
+                )
+                if interaction_id.strip() and mapped != "later"
+                else None
+            )
         try:
             from src.review.review_passage_read_v1 import resolve_review_revision
-            snapshot_revision = resolve_review_revision(state, snapshot_id, snapshot_revision.strip())
+            if not bounded:
+                snapshot_revision = resolve_review_revision(state, snapshot_id, snapshot_revision.strip())
             state.review_object(
                 actor_id=account["account_id"],
                 snapshot_id=snapshot_id,
@@ -5693,6 +5698,7 @@ def create_console_app(
                 expected_revision=snapshot_revision.strip() or None,
                 interaction_evidence=evidence,
                 source_discrepancy=list(source_discrepancy or []),
+                **({'_compact_result': True, '_interaction_id': interaction_id} if bounded else {}),
             )
         except ConsoleError as exc:
             semantic_error = exc.code in {
@@ -5710,6 +5716,23 @@ def create_console_app(
             }
             if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT and not (semantic_error or discrepancy_error):
                 raise
+            if bounded:
+                from src.review.review_command_response_v1 import review_command_error
+                return review_command_error(state, account, snapshot_id, object_id,
+                    snapshot_revision, normalize_review_task(return_task), {
+                        'suitability': suitability, 'documentpositie_action': documentpositie_action,
+                        'found_under': found_under, 'parent_choice': parent_choice,
+                        'type_action': type_action, 'confirmed_object_type': confirmed_object_type,
+                        'recommendation_strength': recommendation_strength,
+                        'recommendation_direction': recommendation_direction,
+                        'recommendation_strength_level': recommendation_strength_level,
+                        'relation_choice': list(relation_choice or []), 'relation_review_ack': relation_review_ack,
+                        'validation_error': exc.code if semantic_error else '',
+                        'discrepancy_error': exc.code if discrepancy_error else '',
+                        'source_discrepancy': list(source_discrepancy or []), 'eindoordeel': eindoordeel,
+                        'decision': decision, 'comment': comment, 'proposed_correction': proposed_correction,
+                        'proposed_object_type': proposed_object_type,
+                    }, exc)
             # Render the same object set and revision that we compare here. A
             # second read could silently replace the posted revision after a
             # semantic validation error, hiding another reviewer's change.
@@ -5752,6 +5775,11 @@ def create_console_app(
                 ),
                 status_code=400 if input_error else 409,
             )
+        if bounded:
+            params = {'document': snapshot_id, 'after': object_id}
+            if safe_task := normalize_review_task(return_task):
+                params['task'] = safe_task
+            return RedirectResponse('/review?' + urlencode(params), status_code=303)
         if mapped == "revise" and proposed_correction.strip():
             state.correct_object(
                 actor_id=account["account_id"],

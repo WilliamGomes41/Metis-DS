@@ -1,0 +1,43 @@
+{
+  "tool": "CodeQL 2.27.3",
+  "queries": "codeql/python-queries 1.8.13",
+  "query": "Security/CWE-079/ReflectedXss.ql",
+  "scope": "Full source; verdict limited to new review_command_response sink, not absence of existing alerts",
+  "before_source": "1ecda2420c1f45e2febe1df0edddf865e71bc41e",
+  "after_change": "HTML attribute escaping at relation-context-open and Review-card back link; response helper unchanged from063524f",
+  "before": {
+    "sarif_sha256": "6f890bbb7fbd286b889b6ca7cd689fba7dadba9b03a9ecd0a543b7c5b31d13d7",
+    "results": [
+      {
+        "path": "src/operations_console_app.py",
+        "line": 5539,
+        "rule_id": "py/reflective-xss"
+      },
+      {
+        "path": "src/operations_console_app.py",
+        "line": 5745,
+        "rule_id": "py/reflective-xss"
+      },
+      {
+        "path": "src/review/review_command_response_v1.py",
+        "line": 49,
+        "rule_id": "py/reflective-xss"
+      }
+    ]
+  },
+  "after": {
+    "sarif_sha256": "9a15ea0bc79e5d247afd89850c62b393bf299513aa65efaf40845cb4208b5a6b",
+    "results": [
+      {
+        "path": "src/operations_console_app.py",
+        "line": 5540,
+        "rule_id": "py/reflective-xss"
+      },
+      {
+        "path": "src/operations_console_app.py",
+        "line": 5746,
+        "rule_id": "py/reflective-xss"
+      }
+    ]
+  }
+}

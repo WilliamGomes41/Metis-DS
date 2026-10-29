@@ -234,6 +234,7 @@ def test_explicit_reapproval_reuses_exact_authorization_without_erasing_events(t
     _approve(console, reviewer, sid, obj, expected_revision=console.objects_revision(sid))
     old = deepcopy(console.object_review_bindings(sid)[0])
     first_events = deepcopy(read_events(console._ledger_path))
+    console._refresh_review_runtime()  # Explicit legacy map-mutation adapter.
     console._bindings[sid][0]["valid"] = False
     console._save_bindings()
     current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
@@ -344,7 +345,7 @@ def test_historical_binding_survives_changed_context_without_approval_carry(tmp_
     from tests.semantic_fixture_support import install_fixture_history
     install_fixture_history(console, sid, rows)
     current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
-    assert console._bindings[sid] == old
+    assert console.workflow_review_store.read_bindings([sid])[sid] == old
     assert exact_current_approver_ids(current, console.object_review_bindings(sid)) == ()
     assert review_stage(current, review_path="richtlijn", bindings=console.object_review_bindings(sid),
                         fragments=console.review_source_fragments(sid)) == FIRST_REVIEW

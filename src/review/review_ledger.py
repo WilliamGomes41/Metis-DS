@@ -57,6 +57,9 @@ def buffer_events(path: Path) -> Iterator[None]:
 
 def read_events(path: Path) -> list[dict[str, Any]]:
     backend = _backend(path)
+    scoped = _review_command_events(path, backend)
+    if scoped is not None:
+        return scoped
     if backend is not None:
         return backend.read_events()
     if not path.exists():
@@ -67,8 +70,24 @@ def read_events(path: Path) -> list[dict[str, Any]]:
 def read_command_events(path: Path) -> list[dict[str, Any]]:
     """Explicit command-local evidence read; public audit reads stay unchanged."""
     backend = _backend(path)
+    scoped = _review_command_events(path, backend)
+    if scoped is not None:
+        return scoped
     reader = getattr(backend, "read_command_events", None)
     return reader() if reader is not None else read_events(path)
+
+
+def _review_command_events(path: Path, backend: Any) -> list[dict[str, Any]] | None:
+    from src.review.review_command_state_v1 import review_command_for_ledger
+    command = review_command_for_ledger(path)
+    if command is None:
+        return None
+    reader = getattr(backend, 'read_review_command_events', None)
+    if reader is None:
+        from src.operations_console_v1 import ConsoleError
+        raise ConsoleError('review_command_ledger_backend_required')
+    return reader(command.snapshot_id, command.object_ids,
+                  interaction_id=command.inputs.interaction_id)
 
 
 def append_event(

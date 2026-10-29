@@ -185,7 +185,11 @@ def test_reject_with_revision_is_one_commit_without_type_or_position_write(tmp_p
     real_commit = console._commit_prepared_store
 
     def counted_commit(**kwargs):
-        commits.append(kwargs)
+        from src.review.review_command_state_v1 import active_review_command
+        command = active_review_command(console)
+        assert command is not None
+        assert kwargs['expected_revision'] == command.revision
+        commits.append(command.inputs.precondition)
         return real_commit(**kwargs)
 
     monkeypatch.setattr(console, "_commit_prepared_store", counted_commit)
@@ -209,7 +213,7 @@ def test_reject_with_revision_is_one_commit_without_type_or_position_write(tmp_p
     after = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
     passage = (after.get("metadata") or {}).get("review_passage") or {}
     assert len(commits) == 1
-    assert commits[0]["expected_revision"] == revision
+    assert commits[0].token == revision
     assert after["governance"]["validation_status"] == "rejected"
     assert passage_register_of(after)["status"] == "excluded_with_reason"
     assert passage["suitability"] == "ja"

@@ -199,7 +199,9 @@ def test_stale_or_invalid_context_cannot_close(tmp_path, invalid, *, production_
     envelope = deepcopy(state._envelope(sid))
     objects = deepcopy(state.snapshot_objects(sid))
     obj = next(o for o in objects if o.get("proposed_object_type") == "recommendation")
-    bindings = deepcopy(state._bindings)
+    # Review's request-owned changeset does not refresh shared process maps.
+    # The synthetic corruption starts from the actual committed authority.
+    bindings = {sid: deepcopy(state.object_review_bindings(sid))}
     if invalid in {"source_id", "source_checksum", "version"}:
         obj["source"][invalid] = "other"
     elif invalid == "source_blocks_hash":

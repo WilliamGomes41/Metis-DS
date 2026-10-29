@@ -83,12 +83,12 @@ def _assert_document_authority_without_mirrors(console, sid):
     assert console._envelope(sid) == console.workflow_document_store.get_envelope(sid)
 
 
-def test_u1_one_reload_per_approve(workflow_postgres, tmp_path, monkeypatch):
+def test_u1_bounded_approve_has_no_shared_map_reload(workflow_postgres, tmp_path, monkeypatch):
     console, rid, sid, (obj_a, _obj_b) = _setup(tmp_path, workflow_postgres)
     reloads = _count_reloads(monkeypatch, console)
     _approve(console, rid, sid, obj_a)
     print("U1_APPROVE_RELOADS", len(reloads))
-    assert len(reloads) == 1, f"only the command owner MAG reload: {len(reloads)} reloads"
+    assert reloads == [], 'A bounded Review command must not reload shared document maps'
 
 
 def test_u1_batch_reloads_constant_in_k(workflow_postgres, tmp_path, monkeypatch):

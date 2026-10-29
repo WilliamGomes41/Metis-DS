@@ -60,6 +60,7 @@ def confirm_source_exclusions(console: Any, *, actor_id: str, snapshot_id: str,
         try:
             with workflow_transaction(reviews) if reviews is not None else nullcontext() as connection:
                 if connection is not None:
+                    reviews._lock_authorizations(connection)
                     connection.execute("SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
                                        (snapshot_id,))
                 console._reload_store_locked()
@@ -241,6 +242,7 @@ def confirm_source_context(console: Any, **command: Any) -> dict[str, Any]:
     with console._store_write_lock():
         try:
             with workflow_transaction(reviews) as connection:
+                reviews._lock_authorizations(connection)
                 connection.execute("SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
                                    (command["snapshot_id"],))
                 result = _confirm_source_context(console, **command)

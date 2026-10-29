@@ -185,6 +185,7 @@ def lock_worker(folder, kind):
         if kind == 'single':
             original_lock = console.workflow_review_store._lock_authorizations
             def hold_auth(con):
+                (folder / 'single.attempt').write_text(str(con.info.backend_pid))
                 original_lock(con)
                 (folder / 'single.ready').write_text(str(con.info.backend_pid))
                 deadline = monotonic() + 15
@@ -198,10 +199,27 @@ def lock_worker(folder, kind):
                 recommendation_direction='against', recommendation_strength_level='not_stated',
                 relation_review_ack=True, expected_revision=inputs['revision'])
         else:
+            original_lock = console.workflow_review_store._lock_authorizations
+            def observe_auth_attempt(con):
+                # The old writer reaches this after taking the document row;
+                # the corrected writer reaches it before that row. Signal the
+                # same real boundary without forcing the old, cyclic order.
+                (folder / 'context.ready').write_text(str(con.info.backend_pid))
+                return original_lock(con)
+            console.workflow_review_store._lock_authorizations = observe_auth_attempt
             original_context = context._confirm_source_context
             def observe_context(owner, **command):
                 with owner.workflow_document_store._connect() as con:
                     (folder / 'context.ready').write_text(str(con.info.backend_pid))
+                    (folder / 'context.row.ready').write_text(str(con.info.backend_pid))
+                if not inputs['with_binding']:
+                    # Preserve the original no-binding control's context-win
+                    # schedule, including a competing native single command.
+                    deadline = monotonic() + 15
+                    while not (folder / 'single.attempt').exists():
+                        if monotonic() >= deadline:
+                            raise TimeoutError('single_authorization_attempt_not_observed')
+                        sleep(0.01)
                 return original_context(owner, **command)
             context._confirm_source_context = observe_context
             console.confirm_source_context(actor_id=inputs['reviewer'], snapshot_id=inputs['sid'],
@@ -238,13 +256,15 @@ def context_lock_cycle(tmp_path, production_console, monkeypatch, with_binding):
         prior = console.workflow_review_store.read_bindings([sid])[sid]
         assert any(b['valid'] and b['object_id'] == focal['object_id'] for b in prior)
         assert not any(still_matches(b, focal) for b in prior)
+    before_events = console.workflow_review_store.read_events()
     source = next(o for o in console.snapshot_objects(sid) if o.get('proposed_object_type') == 'recommendation'
                   and o['object_id'] != focal['object_id'])
     folder = tmp_path / 'lock-probe'
     folder.mkdir()
     (folder / 'inputs.json').write_text(json.dumps({'sid': sid, 'reviewer': reviewer,
         'focal': focal['object_id'], 'source': source['object_id'],
-        'revision': console.objects_revision(sid), 'source_store': str(console.source_store)}))
+        'revision': console.objects_revision(sid), 'source_store': str(console.source_store),
+        'with_binding': with_binding}))
     environment = dict(os.environ, METIS_WP5_TEST_DSN=console.workflow_document_store.config.dsn)
     # DB config remains in environment, never in argv, artifacts or result logs.
     command = [sys.executable, '-c', 'import runpy,sys; runpy.run_path(sys.argv[1])["lock_worker"](sys.argv[2],sys.argv[3])',
@@ -252,21 +272,26 @@ def context_lock_cycle(tmp_path, production_console, monkeypatch, with_binding):
     children = {}
     cycle = False
     try:
-        children['single'] = subprocess.Popen([*command, 'single'], env=environment,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        deadline = monotonic() + 30
-        while not (folder / 'single.ready').exists():
-            assert children['single'].poll() is None, 'single process exited before its lock'
-            assert monotonic() < deadline, 'single process did not acquire authorization lock'
-            sleep(0.01)
-        children['context'] = subprocess.Popen([*command, 'context'], env=environment,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        deadline = monotonic() + 30
-        while not (folder / 'context.ready').exists():
-            assert children['context'].poll() is None, 'context process exited before its row lock'
-            assert monotonic() < deadline, 'context process did not acquire document lock'
-            sleep(0.01)
-        a = int((folder / 'single.ready').read_text())
+        def start(kind):
+            children[kind] = subprocess.Popen([*command, kind], env=environment,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        def wait_for(kind, marker):
+            deadline = monotonic() + 30
+            while not (folder / marker).exists():
+                assert children[kind].poll() is None, f'{kind} process exited before {marker}'
+                assert monotonic() < deadline, f'{kind} process did not reach {marker}'
+                sleep(0.01)
+        if with_binding:
+            start('single')
+            wait_for('single', 'single.ready')
+            start('context')
+            wait_for('context', 'context.ready')
+        else:
+            start('context')
+            wait_for('context', 'context.row.ready')
+            start('single')
+            wait_for('single', 'single.attempt')
+        a = int((folder / 'single.attempt').read_text())
         b = int((folder / 'context.ready').read_text())
         with console.workflow_document_store._connect() as observer:
             observer.autocommit = True
@@ -296,10 +321,12 @@ def context_lock_cycle(tmp_path, production_console, monkeypatch, with_binding):
                     child.kill()
                     child.wait(timeout=5)
     record('context_lock_cycle_observation', has_prior_binding=with_binding, observed_cycle=cycle, results=results)
-    assert cycle == with_binding, results
+    assert not cycle, results
+    assert not any(r['sqlstates'] for r in results.values()), results
     assert sum(r['committed'] for r in results.values()) == 1, results
     if with_binding:
-        assert any('40P01' in r['sqlstates'] for r in results.values()), results
+        assert results['single']['committed']
+        assert results['context']['error_code'] == 'snapshot_object_write_conflict'
     else:
         assert results['context']['committed']
         assert results['single']['error_code'] == 'snapshot_object_write_conflict'
@@ -313,10 +340,17 @@ def context_lock_cycle(tmp_path, production_console, monkeypatch, with_binding):
     current_source = next(o for o in fresh.snapshot_objects(sid) if o['object_id'] == source['object_id'])
     assert (current_source['object_version'] != source['object_version']) == results['context']['committed']
     events = fresh.workflow_review_store.read_events()
+    assert events[:len(before_events)] == before_events
+    approval_events = [e for e in events[len(before_events):]
+                       if e.get('object_id') == focal['object_id']
+                       and str(e.get('event_type', '')).endswith('_review_approve')]
+    assert len(approval_events) == int(results['single']['committed'])
     context_events = [e for e in events if e.get('event_type') == 'source_context_review'
                       and (e.get('details') or {}).get('command_id') == 'context-concurrent']
     assert len(context_events) == int(results['context']['committed'])
     record('context_lock_cycle', has_prior_binding=with_binding, observed_cycle=cycle,
            wait_categories=['advisory', 'transactionid'] if cycle else [],
            results=results, restart_reads_single_winner=True, losing_source_and_context_audit_rolled_back=True,
-           interpretation='controlled baseline defect; no production incident attribution; no fix in WP5')
+           losing_approval_audit_rolled_back=True,
+           winner='single' if with_binding else 'context',
+           interpretation='native lock-order safety proof; old authorization/document cycle must fail this assertion')

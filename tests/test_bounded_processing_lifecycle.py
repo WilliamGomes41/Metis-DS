@@ -115,8 +115,14 @@ def test_native_stall_reserves_before_call_and_recovers_same_source(workflow_pos
     from src.cli import main
     monkeypatch.setattr(sys,"argv",["metis","processing-status","--snapshot-id",sid,"--actor-id",actor])
     assert main()==0
-    assert cmd_processing_status(Namespace(snapshot_id=sid,actor_id=reviewer))==_client(console).get(
-        '/review/processing-diagnostics',params={'document':sid}).json()['processing']
+    # Compare the two read projections at one instant: real startup between
+    # these reads can cross cooldown expiry on a busy native suite. Transport
+    # deadlines and the preceding real-time cooldown refusal remain unchanged.
+    observed = now()
+    with monkeypatch.context() as status_clock:
+        status_clock.setattr('src.vorming.processing_retry_v1.now',lambda:observed)
+        assert cmd_processing_status(Namespace(snapshot_id=sid,actor_id=reviewer))==_client(console).get(
+            '/review/processing-diagnostics',params={'document':sid}).json()['processing']
     original_hash=envelope['sha256']
     future=now()+timedelta(minutes=1)
     monkeypatch.setattr('src.vorming.processing_retry_v1.now',lambda:future)

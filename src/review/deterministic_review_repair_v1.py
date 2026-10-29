@@ -21,6 +21,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from src.review.closed_review_loop_v1 import ClosedLoopReviewConsole
 from src.integrity_kernel import schema_errors, stable_hash, stamp_canonical_hashes
+from src.review.review_command_state_v1 import review_bindings_view
 from src.operations_console_v1 import ConsoleError, OperationsConsole, SNAPSHOT_OBJECT_WRITE_CONFLICT
 from src.vorming.admission_gate_v1 import is_admission_blocked
 from src.review.source_discrepancy_v1 import normalize as normalize_discrepancy
@@ -528,7 +529,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             if errors:
                 raise ConsoleError("revision_schema_invalid", " | ".join(errors))
             rows[index] = updated
-        bindings = deepcopy(self._bindings)
+        bindings = deepcopy(review_bindings_view(self))
         for object_id in target_ids:
             bindings[snapshot_id] = invalidate_for_object(
                 bindings.get(snapshot_id, []), object_id

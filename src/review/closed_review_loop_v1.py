@@ -14,6 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from src.integrity_kernel import compute_canonical_object_hash, stamp_canonical_hashes
+from src.review.review_command_state_v1 import review_bindings_view
 from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
 from src.vorming.passage_register_v1 import (
     apply_register_from_review,
@@ -399,7 +400,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                         "snapshot_hash": None,
                     }
                 )
-        bindings = deepcopy(self._bindings)
+        bindings = deepcopy(review_bindings_view(self))
         for oid in object_ids:
             bindings[snapshot_id] = invalidate_for_object(
                 bindings.get(snapshot_id, []), oid

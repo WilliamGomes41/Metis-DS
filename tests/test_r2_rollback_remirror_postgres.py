@@ -1,13 +1,13 @@
-"""R2 guards: after a native rollback the review mixin only remirrors.
+"""R2 guards: native bounded rollback discards state; legacy owners only remirror.
 
 T3: without a concurrent writer a failed review mutation leaves PostgreSQL unchanged.
-T4: after the rollback no write reaches workflow.* from the review mixin's error
-    path (including remirror/refresh_*), and disk mirrors are written under the lock.
+T4: after rollback no write reaches workflow.* from the error path. Bounded
+    commands discard their workspace; legacy owners refresh only under the lock.
 T5: two threads on one console object (sync route + threadpool): B's concurrent
     approve survives A's failed review.
 T7: the review path NOOIT enters the inherited documents_cutover compensating
     context (blind write_bundle + ledger truncation, documents_cutover:774-790).
-T6: a remirror failure logs codes, ids and error types only.
+T6: a legacy remirror failure logs codes, ids and error types only.
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: opslag concurrent stale recovery
@@ -25,8 +25,8 @@ from src.workflows import workflow_documents_cutover_v1 as documents_cutover
 from src.workflows import workflow_review_cutover_v1 as rc
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 
-REVIEW_WRITES = ("append_event", "replace_snapshot_bindings", "replace_bindings")
-DOCUMENT_WRITES = ("write_bundle", "create_document_bundle")
+REVIEW_WRITES = ("append_event", "replace_snapshot_bindings", "replace_bindings", "apply_review_binding_delta")
+DOCUMENT_WRITES = ("write_bundle", "create_document_bundle", "apply_review_changes")
 # No exemption: on the review path neither the inherited compensating block in
 # documents_cutover (blind write_bundle, ledger truncation) nor anything else
 # MAG write workflow.* after the native rollback (Route 1).
@@ -83,15 +83,30 @@ def _serialise(events):
 
 
 def _assert_review_authority_without_mirrors(console):
-    """The ledger API and process view agree with PG without creating copies."""
+    """Public reads agree with PG without requiring a shared process mirror."""
     assert _ledger_state_bytes(console) == _serialise(console.workflow_review_store.read_events())
-    assert console._bindings == console.workflow_review_store.read_bindings()
+    for sid, bindings in console.workflow_review_store.read_bindings().items():
+        # The bounded Review command deliberately leaves shared maps untouched.
+        # Compare raw authority, since the public read also decorates validity.
+        current = console.object_review_bindings(sid)
+        assert [{key: value for key, value in row.items() if key != 'valid'} for row in current] == [
+            {key: value for key, value in row.items() if key != 'valid'} for row in bindings]
     assert not console._ledger_path.exists()
     assert not (console.runtime / "publish_authorizations.json").exists()
 
 
 def _inject_fault(monkeypatch, flag):
-    """Fail after the real commit in the documents layer (below the review mixin)."""
+    """Fail after actual SQL, before COMMIT, on bounded and legacy routes."""
+    from src.workflows.workflow_document_concurrency_v1 import PostgresConcurrentWorkflowDocumentStore
+    native = PostgresConcurrentWorkflowDocumentStore.apply_review_changes
+
+    def faulty_native(self, *args, **kwargs):
+        native(self, *args, **kwargs)
+        if not flag.is_set():
+            flag.set()
+            raise RuntimeError("r2_injected_fault")
+
+    monkeypatch.setattr(PostgresConcurrentWorkflowDocumentStore, "apply_review_changes", faulty_native)
     original = documents_cutover._PostgresWorkflowDocumentsMixin._commit_prepared_store
 
     def faulty(self, **kwargs):
@@ -139,6 +154,8 @@ def test_t3_failed_review_without_concurrency_leaves_state_unchanged(workflow_po
     with pytest.raises(RuntimeError, match="r2_injected_fault"):
         _approve(console, rid, sid, obj_a)
     assert flag.is_set()
+    from src.review.review_command_state_v1 import active_review_command
+    assert active_review_command(console) is None
     assert _state(console, sid) == before
     # R1: ledger size and bytes unchanged; R3: bindings file equals PostgreSQL.
     assert len(_ledger_state_bytes(console)) == len(before_ledger)
@@ -157,7 +174,7 @@ def test_t4_review_path_no_workflow_write_after_rollback(workflow_postgres, tmp_
         _approve(console, rid, sid, obj_a)
     print("R2_T4_REVIEW", {"writes_after_rollback": writes, "mirror_depths": depths})
     assert writes == [], f"workflow.* writes after rollback: {writes}"
-    assert depths and all(d > 0 for d in depths), f"mirror written outside lock: {depths}"
+    assert depths == [], f"bounded rollback must discard owned state without shared refresh: {depths}"
 
 
 def test_t4_commit_prepared_store_path_no_workflow_write_after_rollback(workflow_postgres, tmp_path, monkeypatch):
@@ -206,7 +223,9 @@ def test_t4_negative_review_path_spy_catches_forbidden_remirror_write(workflow_p
     _spy_writes(monkeypatch, console, flag, writes)
     _inject_forbidden_remirror_write(monkeypatch, console)
     with pytest.raises(RuntimeError, match="r2_injected_fault"):
-        _approve(console, rid, sid, obj_a)
+        # An explicit outer mutation keeps the legacy StoreCommand owner route.
+        with console._atomic_snapshot_mutation(sid):
+            _approve(console, rid, sid, obj_a)
     assert "append_event" in writes, f"spy MOET catch a remirror write: {writes}"
 
 
@@ -283,14 +302,11 @@ def test_t5_two_threads_same_console_concurrent_approve_survives(workflow_postgr
     assert not ta.is_alive() and not tb.is_alive()
     assert errors == ["r2_injected_fault"]
     print("R2_T5_ORDER", order)
-    # #678 (B1): the Storeopdracht owner remirrors after its rollback while it
-    # still holds the store lock, so the pre-#678 window (A releases, B commits,
-    # A remirrors stale) MAG NIET exist. B commits only after A's remirror.
-    released = [i for i, m in enumerate(order) if m.startswith("a_released:")]
-    locked = [i for i, m in enumerate(order) if m.startswith("a_post_rollback_locked:")]
-    assert released == [], f"A MAG NIET remirror after releasing the store lock: {order}"
-    assert locked, f"A's post-rollback remirror MOET run: {order}"
-    assert order.index("a_fault") < locked[0] < order.index("b_committed"), order
+    # The bounded owner discards its ContextVar workspace on rollback. Neither
+    # refresh hook may run, including after B has committed its durable winner.
+    assert not any(m.startswith("a_released:") or m.startswith("a_post_rollback")
+                   for m in order), order
+    assert order.index("a_fault") < order.index("b_committed"), order
     fresh = _console(tmp_path, workflow_postgres)
     b_bindings = [x for x in fresh.workflow_review_store.read_bindings().get(sid, [])
                   if x["object_id"] == obj_b["object_id"] and x["decision"] == "approve"]
@@ -321,7 +337,9 @@ def test_t6_remirror_failure_warning_carries_only_allowed_fields(workflow_postgr
     monkeypatch.setattr(console, "_refresh_review_runtime", failing_remirror)
     caplog.set_level(logging.WARNING, logger="src.workflows.workflow_review_cutover_v1")
     with pytest.raises(RuntimeError, match="r2_injected_fault"):
-        _approve(console, rid, sid, obj_a)
+        # An explicit outer mutation keeps the legacy StoreCommand owner route.
+        with console._atomic_snapshot_mutation(sid):
+            _approve(console, rid, sid, obj_a)
     records = [r for r in caplog.records if r.name == "src.workflows.workflow_review_cutover_v1"]
     assert records, "a remirror failure MOET log a structured warning"
     for record in records:
@@ -432,7 +450,9 @@ def test_r4_inner_nested_fault_with_remirror_failure_logs_one_warning(workflow_p
     monkeypatch.setattr(console, "_refresh_review_runtime", failing_remirror)
     caplog.set_level(logging.WARNING, logger="src.workflows.workflow_review_cutover_v1")
     with pytest.raises(RuntimeError, match="^r2_inner_fault$"):
-        _approve(console, rid, sid, obj_a)
+        # An explicit outer mutation keeps the legacy StoreCommand owner route.
+        with console._atomic_snapshot_mutation(sid):
+            _approve(console, rid, sid, obj_a)
     records = [r.getMessage() for r in caplog.records if r.name == "src.workflows.workflow_review_cutover_v1"]
     print("R4_WARNINGS", records)
     assert _state(_console(tmp_path, workflow_postgres), sid) == before
@@ -507,7 +527,9 @@ def test_optc_ordinary_fault_through_commit_prepared_store_logs_one_warning(work
 
     monkeypatch.setattr(rc._PostgresWorkflowReviewMixin, "_refresh_after_rollback", counting)
     with pytest.raises(RuntimeError, match="^r2_injected_fault$"):
-        _approve(console, rid, sid, obj_a)
+        # An explicit outer mutation keeps the legacy StoreCommand owner route.
+        with console._atomic_snapshot_mutation(sid):
+            _approve(console, rid, sid, obj_a)
     records = collected()
     print("OPTC_COMMIT_WARNINGS", records, "REMIRROR_CALLS", remirror_calls)
     assert len(remirror_calls) == 1, f"only the command owner MAG remirror: {remirror_calls}"
