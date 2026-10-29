@@ -245,7 +245,11 @@ def verbal_cue_direction(match) -> str:
 
 
 def preceding_source_strength_span(text: str, start: int) -> tuple[int, int] | None:
-    """B5-c lead-in label: directly before the core, only colon/spaces between."""
+    """B5-c lead-in label: directly before the core, only colon/spaces between.
+
+    Without a colon, a label after other text may be the trailing stamp of
+    that text; it stays unbound (fail closed).
+    """
     end = start
     while end > 0 and text[end - 1] in " \t:\u00a0":
         end -= 1
@@ -254,6 +258,8 @@ def preceding_source_strength_span(text: str, start: int) -> tuple[int, int] | N
     for pattern in (SOURCE_DIRECTIONAL_LABEL_RE, SOURCE_LITERAL_STRONG_RE, SOURCE_LITERAL_WEAK_RE):
         for match in pattern.finditer(text, 0, end):
             if match.end() == end:
+                if ":" not in text[end:start] and text[:match.start()].strip():
+                    return None
                 return match.span()
     return None
 

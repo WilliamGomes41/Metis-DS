@@ -123,8 +123,11 @@ def test_lead_in_label_directly_before_core_binds(label, strength, direction, ga
 @pytest.mark.parametrize("text", [
     "Sterke aanbeveling. Gebruik geen zalf.",           # other sentence
     "Sterke aanbeveling: bij twijfel, Gebruik geen zalf.",  # prose between label and core
+    "Vermijd A. Sterke aanbeveling Gebruik geen zalf.",  # may be A's trailing stamp
 ])
 def test_lead_in_label_needs_same_sentence_adjacency(text):
+    assert validate("Vermijd A. Sterke aanbeveling: Gebruik geen zalf.", "Gebruik geen zalf.",
+                    direction="against", label="Sterke aanbeveling")["strength"] == "strong"
     core = "Gebruik geen zalf."
     with pytest.raises(SemanticPassageError, match="recommendation_strength_evidence_not_applicable"):
         validate(text, core, direction="against", label="Sterke aanbeveling")
