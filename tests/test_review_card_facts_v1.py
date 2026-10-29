@@ -329,3 +329,31 @@ def test_reference_equality_keeps_numeric_representation_parity():
     changed = facts_for(rows, None)
     assert context_issues(changed) == context_issues(rows)
     assert 'target' in context_issues(changed)
+
+
+@pytest.mark.parametrize('all_trajectories', [True, False])
+def test_compact_mode_keeps_batched_status_for_trajectory_overview(tmp_path, production_console, production_app, monkeypatch, all_trajectories):
+    from fastapi.testclient import TestClient
+    from tests.test_d5_4_review_interaction_evidence import _system, PASSWORD
+    console, users, sid, oid = _system(tmp_path, production_console=lambda **options: production_console(
+        environment={'CONSOLE_REVIEW_CARD_READS':'compact'}, **options))
+    actor = users['reviewer_a'] if all_trajectories else console.create_account(
+        username='trajectory-publisher', password=PASSWORD, roles=('publisher',))
+    client = TestClient(production_app(console), base_url='https://testserver')
+    assert client.post('/login', data={'username':actor['username'], 'password':PASSWORD}, follow_redirects=False).status_code == 303
+    console._source_cache_path(console._envelope(sid)).unlink()
+    calls = []
+    original = console.list_document_lifecycle_statuses
+    def batch(*args, **kwargs):
+        calls.append((args, kwargs))
+        return original(*args, **kwargs)
+    def forbidden(*args, **kwargs):
+        pytest.fail('Trajectory overview performed per-document readiness/source work')
+    monkeypatch.setattr(console, 'list_document_lifecycle_statuses', batch)
+    monkeypatch.setattr(console, 'document_lifecycle_status', forbidden)
+    monkeypatch.setattr(console, 'document_readiness', forbidden)
+    monkeypatch.setattr(console, 'review_source_fragments', forbidden)
+    monkeypatch.setattr(console, '_verified_source_bytes', forbidden)
+    page = client.get('/review', params={'work':'all'} if all_trajectories else {})
+    assert page.status_code == 200 and sid in page.text
+    assert calls == [((), {})]

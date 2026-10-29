@@ -163,7 +163,8 @@ Alle gerichte onafhankelijke herstelproeven zijn groen. Canonieke hashes zijn
 daarbij niet genormaliseerd; alleen de bestaande refs-gelijkheid is behouden.
 
 Definitieve native matrix: 44 tests groen plus de afzonderlijke herstart-/
-readerrollback- en publicatieactualiteitstests groen (46 totaal). De compacte
+readerrollback- en publicatieactualiteitstests groen, plus twee routeproeven
+voor het trajectoverzicht (48 totaal). De compacte
 lifecycle-read herstelt, net als de legacy reader, altijd zijn tijdelijke tree-
 prefetchscope: een volgende commandread ziet een tussentijdse canonieke publicatie.
 Het native tegenvoorbeeld is rood/groen uitgevoerd; de fix is afzonderlijk
@@ -191,3 +192,8 @@ met stringreferenties. De compacte velden behouden die representatie zonder
 nieuw bronbewijs; hash/bronowners en capturechecks veranderen niet. De bestaande
 native audit-/publicatiegateproef is rood/groen uitgevoerd en de compatfix is
 afzonderlijk read-only gecontroleerd.
+De automatische PR-review signaleerde daarnaast dat de middlewarebypass te
+breed was. Alleen de persoonlijke reviewerlanding (`work=mine`) slaat de globale
+lifecycle-prefetch over. `work=all` en publisher-only houden de bestaande batch,
+ook bij een ontbrekend origineel; twee echte auth-/HTTP-tegenvoorbeelden zijn
+rood/groen uitgevoerd. De route-/auth-/threadgrens is afzonderlijk gereviewd.
