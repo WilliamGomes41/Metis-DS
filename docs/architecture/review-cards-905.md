@@ -173,3 +173,16 @@ Met 32/128 historieversies zijn de factpayloads
 variatie). Daarnaast slagen 38 bestaande native POST-/lock-/concurrency- en
 overzichtsregressies en 6 architectuurinvarianten. Volledige regressie- en
 CI-uitkomsten worden bij de PR vastgelegd; productie/SLO is hiermee niet bewezen.
+
+De volledige CI bracht aanvullende bestaande readcontracten aan het licht.
+Nu ingest geïndexeerde bronviews voorbereidt, toetsen instrumentatie- en
+bronhergebruiktests beide layouts expliciet: native nul reconstructies en de
+oorspronkelijke raw-/legacybudgetten, met identieke HTML en objectevidence.
+De bestaande bronwindowowner selecteert voor de native variant het objectvenster;
+de strikte één-fragmentassertie blijft voor eerste/middelste/laatste object gelden.
+Volledige bronconsumers halen root, blocks, membership en fragments nu in één
+SQL-snapshot op, met alle bestaande pin-/hash-/membershipchecks. Dit herstelt
+het ongewijzigde publicatiegereedheidsbudget van maximaal vijf queries; het
+begrenst geen volledige bronpayload en verandert de selected/windowbranch niet.
+Rood/groenbewijs: 60 betrokken bron-/diagnostiek-/publicatietests plus zes
+windowtests groen. De SQL-batch is afzonderlijk read-only gereviewd.

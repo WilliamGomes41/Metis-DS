@@ -212,6 +212,19 @@ class ReviewSourceRecords:
         if not extraction:
             return None
         views_id = stable_hash({'extraction_hash': extraction['record_hash'], 'contract': contract()})
+        block_ids, raw_ids = references(objects)
+        complete = objects is None or not (block_ids or raw_ids)
+        # Whole-document callers already require all records. Capture those
+        # with the root in one SQL snapshot, preserving the existing validators
+        # and publication query budget. Selected-object reads stay windowed.
+        records = """ ,
+            COALESCE((SELECT jsonb_agg(to_jsonb(b) ORDER BY b.view_name,b.ordinal)
+                FROM workflow.source_read_blocks b WHERE b.views_id=r.views_id),'[]'::jsonb) AS read_blocks,
+            COALESCE((SELECT jsonb_agg(to_jsonb(m)) FROM workflow.source_read_block_fragments m
+                WHERE m.views_id=r.views_id),'[]'::jsonb) AS read_members,
+            COALESCE((SELECT jsonb_agg(to_jsonb(f) ORDER BY f.ordinal)
+                FROM workflow.source_read_fragments f WHERE f.views_id=r.views_id),'[]'::jsonb) AS read_fragments
+            """ if complete else ''
         with (nullcontext(con) if con is not None else self.documents._connect()) as con:
             if con.execute("SELECT to_regclass('workflow.source_read_roots') AS table_name").fetchone()['table_name'] is None:
                 if envelope.get('_review_source_ref') is not None:
@@ -226,15 +239,15 @@ class ReviewSourceRecords:
             if reference is None:
                 # One bounded lookup captures both the optional pin and root.
                 # A missing root must still expose an existing pin and fail closed.
-                row = con.execute('SELECT r.extraction_hash,r.header,r.header_hash,r.sealed,d.review_source_ref '
+                row = con.execute('SELECT r.extraction_hash,r.header,r.header_hash,r.sealed,d.review_source_ref ' + records +
                     'FROM workflow.documents d LEFT JOIN workflow.source_read_roots r ON r.views_id=%s '
                     'WHERE d.snapshot_id=%s', (views_id, envelope['snapshot_id'])).fetchone()
                 reference = row.pop('review_source_ref') if row else None
                 if row is not None and row['extraction_hash'] is None:
                     row = None
             else:
-                row = con.execute('SELECT extraction_hash,header,header_hash,sealed FROM workflow.source_read_roots '
-                                  'WHERE views_id=%s', (views_id,)).fetchone()
+                row = con.execute('SELECT r.extraction_hash,r.header,r.header_hash,r.sealed ' + records +
+                                  'FROM workflow.source_read_roots r WHERE r.views_id=%s', (views_id,)).fetchone()
             if row is None:
                 if reference:
                     fail('source_read_root_missing')
@@ -255,15 +268,8 @@ class ReviewSourceRecords:
                             'extraction_hash': row['extraction_hash'], 'header_hash': row['header_hash']}
             if reference is not None and reference != expected_ref:
                 fail('source_read_reference_invalid')
-            block_ids, raw_ids = references(objects)
-            complete = objects is None or not (block_ids or raw_ids)
             if complete:
-                blocks = con.execute('SELECT * FROM workflow.source_read_blocks WHERE views_id=%s '
-                                     'ORDER BY view_name,ordinal', (views_id,)).fetchall()
-                members = con.execute('SELECT view_name,block_id,fragment_id,payload_hash '
-                    'FROM workflow.source_read_block_fragments WHERE views_id=%s', (views_id,)).fetchall()
-                fragments = con.execute('SELECT * FROM workflow.source_read_fragments WHERE views_id=%s '
-                                        'ORDER BY ordinal', (views_id,)).fetchall()
+                blocks, members, fragments = row['read_blocks'], row['read_members'], row['read_fragments']
             else:
                 blocks, members, fragments = [], [], []
                 pending_blocks, pending_raw = set(block_ids), set(raw_ids)
