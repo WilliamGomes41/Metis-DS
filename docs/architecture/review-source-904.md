@@ -71,6 +71,16 @@ read-layout zonder marker blijft een geldige afleiding, geen reviewbevoegdheid.
 Een marker met verdwenen layout/root wordt geweigerd, niet als legacy gelezen.
 Geen nieuwe job-/status-/cacheautoriteit of productiebackfill.
 
+`review_read_envelope` bevat de bestaande reviewmetadata zonder de grote
+extractie/replay/pogingsarchieven. Een SQL-trigger leidt deze kolom synchroon af
+uit dezelfde envelopewrite; ook een directe cachewrite wordt opnieuw afgeleid.
+Referentiepinning vult deze metadata expliciet voor oude rijen. Er is geen
+historische migratie-update. De read selecteert benoemde actuele documentvelden
+en de compacte metadata, zonder `d.*` of archiefprojectie; alleen oude rijen
+zonder voorbereiding gebruiken de lazy legacyfallback. Rollen, reviewers,
+revisie en beleid behouden hun bestaande controles. Dit voegt klein afgeleid
+werk toe aan bestaande envelopewrites, zonder objectset-/archiefbackfill.
+
 Dezelfde immutable PostgreSQL-trust als de bestaande extractiestore geldt.
 Readers controleren headeridentiteit/contract, geselecteerde membership,
 counts, payloadhashes en bestaande mappingvalidator. Een geprivilegieerde

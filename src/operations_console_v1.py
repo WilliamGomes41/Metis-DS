@@ -2641,10 +2641,15 @@ class OperationsConsole:
         record = envelope.get('prepared_source_extraction')
         if record and 'fragments' not in record:
             # Explicit old-layout reader, bound to the same captured extraction.
-            full = self.workflow_document_store.get_envelope(envelope['snapshot_id'])
-            if not full or (full.get('prepared_source_extraction') or {}).get('record_hash') != record.get('record_hash'):
+            from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+            try:
+                extraction = self.workflow_document_store.review_source_extraction(
+                    envelope['snapshot_id'], record.get('record_hash'))
+            except WorkflowDocumentStoreError as error:
+                raise ConsoleError(str(error)) from error
+            if {k:v for k,v in extraction.items() if k not in {'fragments','docling_record'}} != record:
                 raise ConsoleError('source_extraction_identity_mismatch')
-            return full
+            return {**envelope, 'prepared_source_extraction': extraction}
         return envelope
 
     def _prepared_review_source(self, envelope, *, objects=None):
@@ -2712,7 +2717,7 @@ class OperationsConsole:
             authorize(self, actor_id, self._envelope(snapshot_id))
             self._require_mutable_working_revision(snapshot_id)
             with store.documents._connect() as con:
-                pinned = con.execute("UPDATE workflow.documents SET review_source_ref=%s::jsonb WHERE snapshot_id=%s "
+                pinned = con.execute("UPDATE workflow.documents SET review_source_ref=%s::jsonb,review_read_envelope=NULL WHERE snapshot_id=%s "
                     "AND envelope_payload#>>'{prepared_source_extraction,record_hash}'=%s",
                     (_json_text(reference),snapshot_id,reference['extraction_hash']))
                 if pinned.rowcount != 1:

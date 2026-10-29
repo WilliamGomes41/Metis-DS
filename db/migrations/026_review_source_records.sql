@@ -1,6 +1,37 @@
 -- Additive indexed access to fully verified immutable source views.
 -- No source, object, review, publication or historical payload is rewritten.
 ALTER TABLE workflow.documents ADD COLUMN IF NOT EXISTS review_source_ref JSONB;
+ALTER TABLE workflow.documents ADD COLUMN IF NOT EXISTS review_read_envelope JSONB;
+
+-- Compute once on existing envelope writes, not by detoasting immutable raw
+-- extraction/processing archives on each passage read. No historical backfill.
+CREATE OR REPLACE FUNCTION workflow.review_read_envelope_for(payload JSONB)
+RETURNS JSONB LANGUAGE SQL IMMUTABLE STRICT AS $body$
+    SELECT (payload - ARRAY['semantic_replay','processing_attempts','quality_processing_runs','prepared_source_extraction'])
+      || CASE WHEN payload ? 'prepared_source_extraction' THEN
+           jsonb_build_object('prepared_source_extraction',
+             CASE WHEN jsonb_typeof(payload->'prepared_source_extraction')='object'
+                  THEN (payload->'prepared_source_extraction') - ARRAY['fragments','docling_record']
+                  ELSE payload->'prepared_source_extraction' END)
+         ELSE '{}'::jsonb END
+      || jsonb_build_object('_review_formation_notice',jsonb_build_object('provider_evidence',
+           jsonb_build_object('formation_incomplete',payload#>'{semantic_replay,provider_evidence,formation_incomplete}')),
+           '_review_has_replay',COALESCE(payload->'semantic_replay' NOT IN ('null'::jsonb,'{}'::jsonb),false))
+$body$;
+CREATE OR REPLACE FUNCTION workflow.refresh_review_read_envelope()
+RETURNS TRIGGER LANGUAGE plpgsql AS $body$
+BEGIN
+    NEW.review_read_envelope := workflow.review_read_envelope_for(NEW.envelope_payload);
+    RETURN NEW;
+END
+$body$;
+DROP TRIGGER IF EXISTS refresh_review_read_envelope ON workflow.documents;
+-- Run after trg_workflow_documents_lifecycle_identity, including updates whose
+-- SET list omits envelope_payload but whose identity trigger normalizes it.
+DROP TRIGGER IF EXISTS zzz_refresh_review_read_envelope ON workflow.documents;
+CREATE TRIGGER zzz_refresh_review_read_envelope
+    BEFORE INSERT OR UPDATE ON workflow.documents
+    FOR EACH ROW EXECUTE FUNCTION workflow.refresh_review_read_envelope();
 CREATE TABLE IF NOT EXISTS workflow.source_read_roots (
     views_id TEXT PRIMARY KEY,
     extraction_hash TEXT NOT NULL REFERENCES workflow.prepared_extraction_versions(record_hash) ON DELETE CASCADE,

@@ -81,8 +81,21 @@ geselecteerde dependencies. Er is geen nieuwe cryptoboom of signingframework.
 
 ## Verificatie bij start van de volledige suite
 
-Repositorypreflight, release-control, compileall, architectuurgrenzen en de zes
-architectuurtests zijn groen. Een sequentiële verkennende suite is na139 groene
+Repositorypreflight, release-control, compileall en architectuurgrenzen zijn groen.
+De uitgebreidere architectuurset vond twee legacyread-regressies; die zijn
+hersteld met een exact gebonden extractieread zonder replayarchief.
+De workerresume nam aanvankelijk review_source_ref niet mee; resume/retry
+bewaart nu deze broncontext naast de bestaande source_views_ref. De50
+worker-/Docling-regressies zijn daarna groen. Een sequentiële verkennende suite is na139 groene
 tests netjes onderbroken; de volledige bestaande vierdelige CI-runner wordt
 uitgevoerd met inventaris/digest/JUnit-aggregatie. Nog geen volledige groenclaim.
 Deployment, productieapply, backfill en merge zijn niet uitgevoerd.
+
+
+Compacte metadata wordt synchroon uit de definitieve envelope afgeleid na de
+bestaande lifecycle-trigger, ook wanneer die een impliciete reparatie doet.
+Native tests bewijzen directe cachewrite-correctie, impliciete reparatie en
+het niet evalueren van de legacyarchiefprojectie. Deze afleiding voegt werk
+toe aan bestaande documentwrites; de oorspronkelijke lifecycle-trigger
+normaliseert de envelope daar al. De bestaande POST-/lockproeven blijven
+vereist; geen claim dat documentwrites onafhankelijk van archiefgrootte zijn.

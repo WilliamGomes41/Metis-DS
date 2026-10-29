@@ -1,7 +1,12 @@
 """WP7 native immutable source reads, independent of Review permissions.
 
-# release-control-evidence: scope/belofte opslag concurrent stale recovery
-# release-control-evidence: toegang kwaliteit metrics slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: opslag concurrent stale recovery
+# release-control-evidence: toegang
+# release-control-evidence: kwaliteit
+# release-control-evidence: metrics
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from copy import deepcopy
 
@@ -282,3 +287,52 @@ def test_retained_docling_mapping_and_record_survive_selective_native_read(
     assert selected.blocks == oracle.fragments.blocks
     assert selected.fragment_index == oracle.fragments.fragment_index
     assert selected.extraction_record == translated.extraction_record
+
+
+def test_compact_capture_is_atomic_and_does_not_evaluate_legacy_archive(tmp_path, production_console):
+    from src.workflows.workflow_documents_postgres_v1 import _json_text
+    console, envelope, store, root, artifact = source_records(tmp_path, production_console)
+    sid = envelope['snapshot_id']
+    with store.documents._connect() as con:
+        assert con.execute('SELECT review_read_envelope=workflow.review_read_envelope_for(envelope_payload) AS valid FROM workflow.documents WHERE snapshot_id=%s',(sid,)).fetchone()['valid']
+    expected, generation = store.documents.review_document_input(sid)
+    assert 'fragments' not in expected['prepared_source_extraction']
+    with store.documents._connect() as con:
+        # A direct cache write cannot invent different policy; the existing-row
+        # trigger always derives it from that row's actual envelope.
+        con.execute("UPDATE workflow.documents SET review_read_envelope='{}'::jsonb WHERE snapshot_id=%s", (sid,))
+    assert store.documents.review_document_input(sid) == (expected,generation)
+    with store.documents._connect() as con:
+        original = con.execute('SELECT envelope_payload FROM workflow.documents WHERE snapshot_id=%s', (sid,)).fetchone()['envelope_payload']
+        # Privileged test-only poison: evaluating JSON deletion on this scalar
+        # would fail. A prepared capture must use its compact projection instead
+        # of materializing/inspecting unused extraction and processing archives.
+        con.execute('ALTER TABLE workflow.documents DISABLE TRIGGER USER')
+        con.execute("UPDATE workflow.documents SET envelope_payload='null'::jsonb WHERE snapshot_id=%s", (sid,))
+    try:
+        assert store.documents.review_document_input(sid) == (expected,generation)
+    finally:
+        with store.documents._connect() as con:
+            con.execute('ALTER TABLE workflow.documents ENABLE TRIGGER USER')
+            con.execute('UPDATE workflow.documents SET envelope_payload=%s::jsonb WHERE snapshot_id=%s', (_json_text(original),sid))
+    updated = {**original, 'review_passes': {'fixture': {'object_id':'unchanged'}}}
+    with store.documents._connect() as con:
+        con.execute('UPDATE workflow.documents SET envelope_payload=%s::jsonb WHERE snapshot_id=%s', (_json_text(updated),sid))
+    current, _ = store.documents.review_document_input(sid)
+    assert current['review_passes'] == updated['review_passes']
+
+
+def test_compact_capture_follows_lifecycle_trigger_on_implicit_envelope_repair(tmp_path, production_console):
+    console, envelope, store, root, artifact = source_records(tmp_path, production_console)
+    sid = envelope['snapshot_id']
+    with store.documents._connect() as con:
+        con.execute('ALTER TABLE workflow.documents DISABLE TRIGGER USER')
+        try:
+            con.execute("UPDATE workflow.documents SET envelope_payload=envelope_payload-'working_revision_id',review_read_envelope='{}'::jsonb WHERE snapshot_id=%s",(sid,))
+        finally:
+            con.execute('ALTER TABLE workflow.documents ENABLE TRIGGER USER')
+        # SET omits envelope_payload; the existing lifecycle owner repairs it.
+        con.execute('UPDATE workflow.documents SET revision=revision+1 WHERE snapshot_id=%s',(sid,))
+        row = con.execute('SELECT review_read_envelope,review_read_envelope=workflow.review_read_envelope_for(envelope_payload) AS valid FROM workflow.documents WHERE snapshot_id=%s',(sid,)).fetchone()
+        assert row['valid']
+        assert row['review_read_envelope']['working_revision_id']

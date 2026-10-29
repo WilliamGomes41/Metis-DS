@@ -14,6 +14,7 @@ from src.review.revision_workflow import current_revisions, validate_revision_wr
 import hashlib
 import json
 import logging
+import re
 from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path
@@ -114,14 +115,27 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                         "jsonb_build_object('prepared_source_extraction',"
                         "(d.envelope_payload->'prepared_source_extraction') - ARRAY['fragments','docling_record']) "
                         "ELSE '{}'::jsonb END")
+                notice = ("jsonb_build_object('provider_evidence',jsonb_build_object('formation_incomplete',"
+                          "d.envelope_payload#>'{semantic_replay,provider_evidence,formation_incomplete}'))")
+                replay = "COALESCE(d.envelope_payload->'semantic_replay' NOT IN ('null'::jsonb,'{}'::jsonb),false)"
+                if has_read_records:
+                    projection = f"COALESCE(d.review_read_envelope,({projection}))"
+                    notice = f"COALESCE(d.review_read_envelope->'_review_formation_notice',({notice}))"
+                    replay = f"COALESCE((d.review_read_envelope->>'_review_has_replay')::boolean,({replay}))"
+                # Derive the physical columns from the existing owned card
+                # projection. Do not materialize d.* and its raw source archive.
+                physical = (set(re.findall(r'\bd\.([a-z_][a-z_0-9]*)', columns)) - {'review_envelope'}) | {
+                    'object_generation','revision','topic_id','snapshot_id'}
+                if has_read_records:
+                    physical.add('review_source_ref')
+                selected = ','.join('d.' + name for name in sorted(physical))
                 row = con.execute(
                     "WITH selected AS MATERIALIZED ("
-                    f"SELECT d.*, {projection} AS review_envelope FROM workflow.documents d WHERE snapshot_id=%s) "
+                    f"SELECT {selected}, {projection} AS review_envelope, {notice} AS formation_notice, "
+                    f"{replay} AS has_replay FROM workflow.documents d WHERE snapshot_id=%s) "
                     f"SELECT {columns}, d.object_generation, d.revision, d.review_envelope, "
                     + ("d.review_source_ref, " if has_read_records else "NULL::jsonb AS review_source_ref, ") +
-                    "jsonb_build_object('provider_evidence',jsonb_build_object('formation_incomplete',"
-                    "d.envelope_payload#>'{semantic_replay,provider_evidence,formation_incomplete}')) AS formation_notice, "
-                    "COALESCE(d.envelope_payload->'semantic_replay' NOT IN ('null'::jsonb,'{}'::jsonb),false) AS has_replay, "
+                    "d.formation_notice,d.has_replay, "
                     "(SELECT p.payload->'processing_attempts'->0->>'state' "
                     "FROM workflow.processing_document_summaries p WHERE p.snapshot_id=d.snapshot_id) AS latest_processing_state "
                     "FROM selected d LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id", (snapshot_id,),
@@ -129,6 +143,8 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             if row is None:
                 raise WorkflowDocumentStoreError('unknown_snapshot')
             envelope = dict(row['review_envelope'])
+            envelope.pop('_review_formation_notice', None)
+            envelope.pop('_review_has_replay', None)
             if row['review_source_ref'] is not None:
                 envelope['_review_source_ref'] = row['review_source_ref']
             from src.vorming.recoverable_formation_v1 import incomplete
@@ -142,6 +158,23 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                              if k not in {'review_envelope', 'object_generation', 'revision',
                                           'formation_notice', 'has_replay', 'latest_processing_state', 'review_source_ref'}})
             return envelope, f"{int(row['revision'])}:{int(row['object_generation'])}"
+        except WorkflowDocumentStoreError:
+            raise
+        except Exception as exc:
+            raise WorkflowDocumentStoreError('workflow_document_read_failed') from exc
+
+    def review_source_extraction(self, snapshot_id: str, record_hash: str) -> dict[str, Any]:
+        """Explicit legacy source read without decoding unrelated replay/history."""
+        try:
+            with self._connect() as con:
+                row = con.execute(
+                    "SELECT envelope_payload->'prepared_source_extraction' AS extraction "
+                    "FROM workflow.documents WHERE snapshot_id=%s "
+                    "AND envelope_payload#>>'{prepared_source_extraction,record_hash}'=%s",
+                    (snapshot_id, record_hash)).fetchone()
+            if row is None:
+                raise WorkflowDocumentStoreError('source_extraction_identity_mismatch')
+            return row['extraction']
         except WorkflowDocumentStoreError:
             raise
         except Exception as exc:

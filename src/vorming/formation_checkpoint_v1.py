@@ -223,7 +223,7 @@ class TaskCheckpointWriter:
                 raise ConsoleError("source_views_reference_invalid")
             active.setdefault("diagnostic",{})["source_views_ref"]=reference
             if read_reference is not None:
-                pinned = con.execute("UPDATE workflow.documents SET review_source_ref=%s::jsonb WHERE snapshot_id=%s "
+                pinned = con.execute("UPDATE workflow.documents SET review_source_ref=%s::jsonb,review_read_envelope=NULL WHERE snapshot_id=%s "
                     "AND envelope_payload#>>'{prepared_source_extraction,record_hash}'=%s",
                     (_json_text(read_reference),self.snapshot_id,read_reference['extraction_hash']))
                 if pinned.rowcount != 1:

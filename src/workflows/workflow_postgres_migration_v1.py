@@ -65,6 +65,7 @@ REQUIRED_CONSTRAINTS = frozenset({("publication_refusals", "publication_refusals
 REQUIRED_COLUMNS = frozenset(
     {
         ("documents", "review_source_ref"),
+        ("documents", "review_read_envelope"),
         *(("publication_refusals", column) for column in REFUSAL_COLUMNS),
         ("accounts", "retirement"),
         ("documents", "envelope_payload"),
