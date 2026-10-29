@@ -590,7 +590,10 @@ def _workboard_page(console: OperationsConsole, *, account: dict[str, Any],
         items = review_workboard_items(console, account=account, summaries=selected)
     by_id = {item['snapshot_id']: item for item in items}
     ledger_path = getattr(console, '_ledger_path', None)
-    reader = getattr(getattr(console, 'workflow_review_store', None), 'read_events_for_snapshots', None)
+    store = getattr(console, 'workflow_review_store', None)
+    reader = getattr(store, 'read_review_participation_events', None)
+    if not callable(reader):
+        reader = getattr(store, 'read_events_for_snapshots', None)
     history = (reader([row['snapshot_id'] for row in visible]) if callable(reader) else
                read_events(ledger_path) if ledger_path is not None else [])
     started = set()
