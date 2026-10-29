@@ -82,7 +82,7 @@ def relations(monkeypatch):
     invalid = set()
     monkeypatch.setattr(proposals, "proposed_knowledge_relations_of", lambda obj: obj.get("relations_for_test") or [])
     monkeypatch.setattr(proposals, "relation_proposal_admission_codes",
-                        lambda obj, objects: ["relation_proposal_invalid"] if obj["object_id"] in invalid else [])
+                        lambda obj, *, objects: ["relation_proposal_invalid"] if obj["object_id"] in invalid else [])
     return invalid
 
 

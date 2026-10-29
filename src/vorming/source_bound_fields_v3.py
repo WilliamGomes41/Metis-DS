@@ -325,7 +325,7 @@ def incoming_relation_targets(obj, objects):
         if len(peers) == 1:
             peer_id = next(iter(peers))
             peer = next(p for p in objects if str(p.get("object_id") or "") == peer_id)
-            if not relation_proposal_admission_codes(peer, objects):
+            if not relation_proposal_admission_codes(peer, objects=objects):
                 valid[field] = peer_id
     return valid
 
