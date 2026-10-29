@@ -1,7 +1,10 @@
 """Native HTTP byte/row budgets: current facts, never source/history payloads.
 
 # release-control-evidence: scope/belofte opslag concurrent stale recovery
-# release-control-evidence: toegang kwaliteit metrics teller noemer score-must-drop slop releasebewijs
+# release-control-evidence: toegang
+# release-control-evidence: kwaliteit
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from copy import deepcopy
 import json

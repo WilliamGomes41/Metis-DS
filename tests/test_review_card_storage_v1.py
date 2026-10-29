@@ -2,7 +2,11 @@
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: opslag concurrent stale durable recovery
-# release-control-evidence: toegang kwaliteit beschikbaarheid slop releasebewijs
+# release-control-evidence: toegang
+# release-control-evidence: kwaliteit
+# release-control-evidence: beschikbaarheid
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
