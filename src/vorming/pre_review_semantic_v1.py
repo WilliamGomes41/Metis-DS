@@ -602,7 +602,7 @@ def _replay_identity(
 
 def semantic_contract_version(*, field_contract_v2=False, field_contract_v3=False):
     """The one semantic contract string; replay identity and reservation MOETEN share it."""
-    return ("source-accountability-v2/bounded-formation-v1/" if field_contract_v3 else "source-accountability-v1/") + (f"recoverable-formation-v1/relation-object-index-v1/target-via-relation-v1/scope-list-introduction-v1/{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{V3_STRENGTH_VOCABULARY_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}") + f"/{STRENGTH_BINDING_VERSION}/{SOURCE_OCCURRENCE_AUTHORITY_VERSION}"
+    return ("source-accountability-v2/bounded-formation-v1/" if field_contract_v3 else "source-accountability-v1/") + (f"recoverable-formation-v1/relation-object-index-v1/target-via-relation-v1/scope-list-introduction-v1/predicate-contiguous-v1/{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{V3_STRENGTH_VOCABULARY_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}") + f"/{STRENGTH_BINDING_VERSION}/{SOURCE_OCCURRENCE_AUTHORITY_VERSION}"
 
 
 def semantic_contract_version_for_mode(mode):
