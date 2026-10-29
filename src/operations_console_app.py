@@ -3538,6 +3538,10 @@ def _review_formation_notice(console, snapshot_id, read_inputs, *, document_sour
                     # inputs that cannot form a prepared carrier.
                     fragments = None
         return _formation_incomplete_banner(console, snapshot_id, formation_fragments=fragments)
+    except ConsoleError:
+        # Corrupt prepared evidence stays unavailable; the existing status owner
+        # still renders its fail-closed repair notice without rebuilding views.
+        return _formation_incomplete_banner(console, snapshot_id)
     finally:
         if reads is not None:
             reads.envelopes[snapshot_id] = read_inputs.envelope

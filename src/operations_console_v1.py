@@ -2659,6 +2659,8 @@ class OperationsConsole:
             return None
         record = envelope.get('prepared_source_extraction')
         if record is None:
+            if envelope.get('_review_source_ref') is not None:
+                raise ConsoleError('source_extraction_integrity_failed')
             return None
         if not isinstance(record, dict):
             raise ConsoleError('source_extraction_integrity_failed')
@@ -2733,6 +2735,7 @@ class OperationsConsole:
         try:
             prepared = self._prepared_review_source(envelope, objects=objects)
             if prepared is not None:
+                self._verified_source_bytes(envelope, cache_recovery=False)
                 return prepared
             source_path, _ = self._verified_source_bytes(envelope)
             return self._read_source_fragments(envelope, source_path)

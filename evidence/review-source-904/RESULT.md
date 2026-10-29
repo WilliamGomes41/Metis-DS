@@ -141,3 +141,32 @@ gerichte herhaling; de volgende ongewijzigde herhaling slaagde. De vervangen
 lokale suite is onderbroken na de gevonden CI-queryregressie, niet als volledig
 groen geregistreerd. De PR vermeldt de finale volledige CI-matrix en artifacts;
 geen testgrens, fixture of controle is verruimd of verwijderd.
+
+
+## Volledige-matrixbevindingen op geïntegreerde main
+
+De volledige Python3.12/3.13-matrix vond dezelfde zes failures in beide
+shard0-runs; de zes andere shards waren groen. Dit is geen groen suitebewijs.
+De niet-bounded-v1 retry kon bestaande bronviews opnieuw reconstrueren. De
+producer hergebruikt nu uitsluitend een sealed root met exacte header/source/
+extractie/Docling-/viewcontractbinding én dezelfde volledige023-payloadhash.
+De oorspronkelijke volledige bronoracle wordt alleen bij nieuwe inhoud gebouwd.
+De native idempotentieproef verbiedt reconstructie, controleert dezelfde
+publicatie-identiteit en alle viewblokken, en weigert gewijzigde inhoud.
+
+Prepared contentreads controleren weer de oorspronkelijke bronbytes vóór
+inhoudsgebruik, zonder cacheherstelwrite. Een bronpin zonder extractie geeft
+geen legacydowngrade. Corrupte prepared evidence laat de bestaande statusowner
+een fail-closed herstelmelding renderen in plaats van een HTTP-fout.
+De passageproeven lopen nu apart op legacy én prepared storage: de bestaande
+legacy-herstelcontroles blijven; prepared reads mogen nooit reconstrueren en
+mogen een nieuw extractierecord met een oude pin niet als closure gebruiken.
+Twee onafhankelijke begrensde reviews vonden geen nieuwe authority/context-
+blocker. Finale native regressies en volledige CI staan in de PR-handoff.
+
+
+Na deze fixes zijn76 native retry-/passage-/storage-/HTTP-regressies groen,
+0 skips,165.69s. De aanvullende actuele header-/retry- en architectuurproef
+is7/7 groen. Bronbytes blijven onderdeel van inhoudsbeschikbaarheid; het
+prepared-pad doet geen cacheherstelwrite. Geen budget of fail-closed eis is
+verruimd. De volledige matrix wordt op de nieuwe broncommit opnieuw uitgevoerd.

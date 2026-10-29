@@ -71,9 +71,10 @@ def test_incomplete_passage_prepares_the_complete_source_once(tmp_path, producti
             console.workflow_review_store.read_events(), console.workflow_review_store.read_bindings([sid])) == before
 
 
+@pytest.mark.parametrize('layout', ['legacy', 'prepared'])
 @pytest.mark.parametrize('case', ['missing_extraction', 'corrupt_extraction', 'corrupt_replay',
                                 'missing_source', 'partial_window', 'carrier_error'])
-def test_incomplete_passage_keeps_existing_fail_closed_behavior(tmp_path, production_console, monkeypatch, case):
+def test_incomplete_passage_keeps_existing_fail_closed_behavior(tmp_path, production_console, monkeypatch, case, layout):
     from copy import deepcopy
     from fastapi.testclient import TestClient
     from src.operations_console_v1 import ConsoleError
@@ -85,6 +86,10 @@ def test_incomplete_passage_keeps_existing_fail_closed_behavior(tmp_path, produc
     console, sid, author, _, _, _, _ = received(tmp_path, production_console, monkeypatch)
     execute(console, sid, author, 'passage-fail-closed')
     store = console.workflow_document_store
+    if layout == 'legacy':
+        with store._connect() as con:
+            con.execute('TRUNCATE workflow.source_read_roots CASCADE')
+            con.execute('UPDATE workflow.documents SET review_source_ref=NULL')
     if case not in {'missing_source', 'partial_window', 'carrier_error'}:
         envelope = store.get_envelope(sid)
         if case == 'missing_extraction':
@@ -123,7 +128,7 @@ def test_incomplete_passage_keeps_existing_fail_closed_behavior(tmp_path, produc
     def prepare(raw):
         calls.append(1)
         # The first call is the passage view; fail only the optional full view.
-        if case == 'carrier_error' and len(calls) == 2:
+        if layout == 'legacy' and case == 'carrier_error' and len(calls) == 2:
             raise ConsoleError('source_views_integrity_failed')
         return original_prepare(raw)
 
@@ -131,6 +136,17 @@ def test_incomplete_passage_keeps_existing_fail_closed_behavior(tmp_path, produc
         login(client, 'reviewer')
         monkeypatch.setattr(console, 'processing_status', status)
         monkeypatch.setattr(prepared, 'prepare', prepare)
+        if layout == 'prepared':
+            def no_rebuild(*args, **kwargs):
+                raise AssertionError('Prepared partial formation may not reconstruct source')
+            monkeypatch.setattr('src.vorming.source_reconstruction_v1._with_status', no_rebuild)
+            if case == 'carrier_error':
+                original_reader = console._prepared_review_source
+                def unavailable_full(envelope, *, objects=None):
+                    if objects is None:
+                        raise ConsoleError('source_views_integrity_failed')
+                    return original_reader(envelope, objects=objects)
+                monkeypatch.setattr(console, '_prepared_review_source', unavailable_full)
         if case == 'missing_source':
             def missing(*args, **kwargs):
                 raise ConsoleError('source_integrity_failed')
@@ -142,15 +158,19 @@ def test_incomplete_passage_keeps_existing_fail_closed_behavior(tmp_path, produc
         assert list(results[0][0]) == full_source
         assert len(results[0][0]) > len(window)
     if case in {'partial_window', 'carrier_error'}:
-        assert len(calls) >= 2
+        if layout == 'legacy':
+            assert len(calls) >= 2
+        else:
+            assert len(calls) == 1  # Existing checked carrier; no reconstruction.
     if case == 'missing_source':
         assert not calls
     assert (store.get_envelope(sid), console.snapshot_objects(sid),
             console.workflow_review_store.read_events(), console.workflow_review_store.read_bindings([sid])) == before
 
 
+@pytest.mark.parametrize('layout', ['legacy', 'prepared'])
 @pytest.mark.parametrize('change', ['extraction', 'source_identity'])
-def test_incomplete_passage_does_not_reuse_changed_extraction(tmp_path, production_console, monkeypatch, change):
+def test_incomplete_passage_does_not_reuse_changed_extraction(tmp_path, production_console, monkeypatch, change, layout):
     from copy import deepcopy
     from dataclasses import replace
     from src.integrity_kernel import stable_hash
@@ -162,6 +182,10 @@ def test_incomplete_passage_does_not_reuse_changed_extraction(tmp_path, producti
     console, sid, author, reviewer, _, _, _ = received(tmp_path, production_console, monkeypatch)
     execute(console, sid, author, 'passage-changed-extraction')
     store = console.workflow_document_store
+    if layout == 'legacy':
+        with store._connect() as con:
+            con.execute('TRUNCATE workflow.source_read_roots CASCADE')
+            con.execute('UPDATE workflow.documents SET review_source_ref=NULL')
     obj = next(o for o in console.snapshot_objects(sid)
                if (o.get('metadata') or {}).get('semantic_passage', {}).get('spans'))
     before = deepcopy(store.get_envelope(sid))
@@ -191,7 +215,12 @@ def test_incomplete_passage_does_not_reuse_changed_extraction(tmp_path, producti
     assert 'data-formation-incomplete' in notice
     assert len(captured) == 1 and captured[0][1]['formation_incomplete']
     assert captured[0][0] is not prior_carrier
-    assert captured[0][0].root.payload['fragments_hash'] == record['fragments_hash']
+    if layout == 'prepared' and change == 'extraction':
+        # A new extraction with the old durable pin is unavailable, never rebuilt
+        # or silently treated as legacy. Its partial carrier proves no closure.
+        assert captured[0][0] is None
+    else:
+        assert captured[0][0].root.payload['fragments_hash'] == record['fragments_hash']
     assert store.get_envelope(sid) == before
 
 

@@ -77,15 +77,27 @@ def test_publishing_is_atomic_idempotent_and_seals_membership(tmp_path, producti
         store.prepare_review_source({'artifact_id': 'missing', 'snapshot_id': envelope['snapshot_id']}, corrupt)
 
 
-def test_reordered_json_views_reuse_the_same_published_identity(tmp_path, production_console):
+def test_reordered_json_views_reuse_the_same_published_identity(tmp_path, production_console, monkeypatch):
     console, envelope, store, root, artifact = source_records(tmp_path, production_console)
     first = store.publish_review_source(artifact)
+    def no_rebuild(*args, **kwargs):
+        raise AssertionError('An exactly published source must reuse its oracle proof')
+    monkeypatch.setattr('src.vorming.source_reconstruction_v1._with_status', no_rebuild)
     reordered = deepcopy(root.payload)
     reordered['views'] = dict(reversed(list(reordered['views'].items())))
     same = store.prepare_review_source({'snapshot_id':envelope['snapshot_id'],
         'extraction_hash':envelope['prepared_source_extraction']['record_hash']}, reordered)
-    assert same == artifact
+    assert (same.views_id, same.extraction_hash, same.header, same.header_hash) == (
+        artifact.views_id, artifact.extraction_hash, artifact.header, artifact.header_hash)
     assert store.publish_review_source(same) == first
+    retained = store.read_review_source(envelope)
+    for name in root.carriers:
+        assert list(retained.root.carriers[name].blocks) == list(root.carriers[name].blocks)
+    reordered['views']['full']['blocks'][0][0]['text'] = 'forged'
+    from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+    with pytest.raises(WorkflowDocumentStoreError, match='source_read_oracle_mismatch'):
+        store.prepare_review_source({'snapshot_id':envelope['snapshot_id'],
+            'extraction_hash':envelope['prepared_source_extraction']['record_hash']}, reordered)
 
 
 @pytest.mark.parametrize('damage', ['root_missing','layout_missing','root_hash','source','contract',

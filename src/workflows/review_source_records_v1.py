@@ -76,6 +76,30 @@ class ReviewSourceRecords:
                 or extraction.get('source', {}).get('snapshot_id') != input_reference['snapshot_id']):
             fail('formation_input_source_mismatch')
         raw = stored_extraction({**extraction['source'], KEY: extraction})
+        views_id = stable_hash({'extraction_hash': row['record_hash'], 'contract': contract()})
+        with self.documents._connect() as con:
+            existing = con.execute('SELECT header,header_hash,sealed FROM workflow.source_read_roots WHERE views_id=%s',
+                                   (views_id,)).fetchone()
+        if existing is not None:
+            header = existing['header']
+            if (not existing['sealed'] or stable_hash(header) != existing['header_hash']
+                    or header.get('views_id') != views_id or header.get('layout') != 1
+                    or header.get('extraction_hash') != row['record_hash']
+                    or header.get('source') != extraction['source']
+                    or header.get('version') != payload.get('version')
+                    or header.get('fragments_hash') != extraction['fragments_hash']
+                    or header.get('docling_hash') != stable_hash(extraction.get('docling_record'))
+                    or header.get('extractor_contract') != extraction['extractor_contract']
+                    or header.get('contract') != contract()):
+                fail()
+            recorded = {**payload, 'extraction_hash': row['record_hash'],
+                        'extractor_contract': extraction['extractor_contract']}
+            if stable_hash(recorded) != header['payload_hash']:
+                fail('source_read_oracle_mismatch')
+            # This exact payload already passed the complete source oracle at
+            # immutable publication. Reuse its proof on retry, without rebuilding.
+            return PreparedReadSource(views_id, row['record_hash'], _json_text(header),
+                                      existing['header_hash'], (), (), ())
         # Constructor checks alone establish mapping shape, not that supplied
         # text was actually reconstructed from the recorded raw source. Compare
         # the complete existing oracle before publishing any derived membership.
