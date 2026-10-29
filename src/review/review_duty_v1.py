@@ -10,7 +10,7 @@ from __future__ import annotations
 from src.request_diagnostics_v1 import diagnostic_phase
 
 from typing import Any, Iterable
-from src.vorming.prepared_source_views_v1 import preserve_fragments
+from src.review.review_card_facts_v1 import preserve_review_sources as preserve_fragments
 
 from src.vorming.admission_gate_v1 import GATE_ALLOWED, GATE_BLOCKED, admission_of
 from src.review.four_eyes_v1 import requires_four_eyes, reviewer_is_agent
@@ -56,7 +56,7 @@ def exact_current_approver_ids(
     object_id = str(obj.get("object_id") or "")
     object_version = str(obj.get("object_version") or "")
     confirmed_type = str(obj.get("confirmed_object_type") or "")
-    from src.integrity_kernel import exact_review_snapshot_hash
+    from src.review.review_card_facts_v1 import projection_hash
     canonical_hash = None
     seen: set[str] = set()
     out: list[str] = []
@@ -80,7 +80,7 @@ def exact_current_approver_ids(
         # Without a potentially matching approval there is no hash to compare.
         # Keep the exact authoritative hash check for every matching tuple.
         if canonical_hash is None:
-            canonical_hash = exact_review_snapshot_hash(obj)
+            canonical_hash = projection_hash(obj)
         if str(row.get("canonical_object_hash") or "") != canonical_hash:
             continue
         seen.add(reviewer_id)

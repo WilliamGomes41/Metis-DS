@@ -295,10 +295,13 @@ class _PostgresWorkflowReviewMixin:
         expected_revision: str | None = None,
         ledger_fn: Any | None = None,
         snapshot_id: str | None = None,
+        review_card_preparation=None,
     ) -> None:
         from src.review.review_command_state_v1 import active_review_command
         command = active_review_command(self, snapshot_id or (objects[0] if objects is not None else None))
         if command is not None:
+            if review_card_preparation is not None:
+                raise ConsoleError("review_card_preparation_not_a_review_command")
             command.stage(envelopes=envelopes, bindings=bindings, objects=objects,
                           expected_revision=expected_revision, ledger_fn=ledger_fn,
                           snapshot_id=snapshot_id)
@@ -310,7 +313,7 @@ class _PostgresWorkflowReviewMixin:
             return super()._commit_prepared_store(
                 envelopes=envelopes, bindings=bindings, objects=objects,
                 expected_revision=expected_revision, ledger_fn=ledger_fn,
-                snapshot_id=snapshot_id,
+                snapshot_id=snapshot_id, review_card_preparation=review_card_preparation,
             )
         if self._store_command_applies():
             try:
@@ -318,7 +321,7 @@ class _PostgresWorkflowReviewMixin:
                     super()._commit_prepared_store(
                         envelopes=envelopes, bindings=bindings, objects=objects,
                         expected_revision=expected_revision, ledger_fn=ledger_fn,
-                        snapshot_id=snapshot_id,
+                        snapshot_id=snapshot_id, review_card_preparation=review_card_preparation,
                     )
                     if bindings is not None:
                         current = self.workflow_review_store.read_bindings()
@@ -339,7 +342,7 @@ class _PostgresWorkflowReviewMixin:
                             objects=objects,
                             expected_revision=expected_revision,
                             ledger_fn=ledger_fn,
-                            snapshot_id=snapshot_id,
+                            snapshot_id=snapshot_id, review_card_preparation=review_card_preparation,
                         )
                         if bindings is not None:
                             current = self.workflow_review_store.read_bindings()

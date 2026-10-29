@@ -1,161 +1,163 @@
 # WP8 — actuele compacte Review-invoer
 
-Change class: B. Rewrite risk: high. Touches lifecycle invariants: no.
-Issue #905 / MET-26. Basis main `6b2374b`; WP7 is gemergd.
+Change class: B
+Promise: actuele persoonlijke kaarttellingen zonder volledige objecthistorie of broninhoud op de overzichtsroute.
+Proof: native HTTP-oraclepariteit, begrensde rijen/bytes, actuele bindings/policy/actor en stale/concurrency/recoverytegenvoorbeelden.
+Touches lifecycle invariants: no
+Rewrite risk: high
 
-## Status van deze eerste stap
+Issue #905 / MET-26. Basis main `4844fbe`; WP7 en de metadata/auditvoorstap
+uit PR #923 zijn gemergd. Deze wijziging implementeert de resterende compacte
+kaartinvoer. De productiereader blijft standaard `legacy` tot expliciete cutover.
 
-Geïmplementeerd: metadata gebruikt de bestaande transactioneel onderhouden
-`review_read_envelope`; de Beginnen/Verder-link leest alleen distinct auditheaders.
-Geen schemawijziging, nieuwe persistente facts of cutover van de kaartoracle.
-WP8 blijft onvoltooid: de onderstaande facts-opzet is een ontwerprichting,
-geen geïmplementeerde of geaccepteerde afleiding.
+## Bronbesluit
 
-Native bewijs: een afzonderlijk gecommitteerde corrupte archiefenvelope laat
-de oude metadataquery falen; dezelfde read gebruikt met de wijziging uitsluitend
-de intacte compacte invoer. Herhaalde 64-KiB auditdetails (32/128 events) leveren
-dezelfde afzonderlijke actorbeslissingen en minder dan 5 KiB headers op na
-een nieuwe runtimecompositie. Beide PostgreSQL-productietopologieën en de
-nullable legacyprojectie zijn afzonderlijk getest. Dit begrenst overdracht;
-SQL moet nog iedere geselecteerde
-eventpayload inspecteren. Het is geen claim dat alle database-I/O historie-onafhankelijk is.
-
-Twee afzonderlijke read-only adversariële reviews vonden geen correctnessdefect
-in deze beperkte wijziging. Zij toetsten triggeractualiteit, alternatieve
-store-/fallbackroutes, reviewerconsistentie, actorprecedentie, paginering en
-de bestaande auditindex. Voor de latere facts-cutover blijft de volledige
-writer-, generatie-, bron- en restart/rollbackmatrix hieronder vereist.
-
-## Vastgelegd bronbesluit voor de resterende kaartprojectie
-
-William heeft op 29 oktober 2026 expliciet gekozen voor actuele kaarttellingen
-uit de geverifieerde retained extractie en actuele reviews. De oorspronkelijke
-bron wordt volledig gecontroleerd bij openen/beoordelen. Op de kaart moet
-duidelijk zijn dat die bron daar niet opnieuw is gecontroleerd. Commands en
-publicatie behouden hun bestaande volledige broncontrole. Dit besluit geldt
-voor de latere kaartcutover; deze eerste wijziging verandert die telling nog niet.
-
-`review_work_item` roept `review_source_fragments` aan. Die methode verifieert via
-`_verified_source_bytes` de volledige oorspronkelijke bytes en hun checksum.
-Bij ontbreken of mismatch vervallen contentduties in de bestaande oracle.
-De bronstore biedt `load_verified`, geen goedkoop bewijs dat dezelfde bytes
-nog aanwezig zijn. Azure `probe` vermeldt expliciet dat existence geen
-checksumverificatie is; `overwrite=False` is geen WORM-/blobversioncontract.
-Een oude geldige bronproof plus actuele existence/size kan vervanging door
-andere bytes van gelijke lengte dus niet onderscheiden.
-
-Exacte pariteit bij bronverwijdering/-corruptie én geen bronbytes lezen is
-onder het oude contract onmogelijk. Het bovenstaande besluit lost dat conflict
-op zonder een nieuwe bronstoregarantie te verzinnen: kaarttellingen houden
-actuele reviews bij de exacte retained extractie, ook als de oorspronkelijke
-bron tijdelijk niet beschikbaar is. Een bronproof verleent nooit toestemming
-om te beoordelen of publiceren.
+William koos op 29 oktober 2026 expliciet voor tellingen uit de geverifieerde
+retained extractie plus actuele reviews. De oorspronkelijke bron wordt volledig
+gecontroleerd bij openen/beoordelen en publicatie. De kaart vermeldt dat controle
+bij openen/beoordelen plaatsvindt. Daardoor blijven taken op de kaart bestaan als
+de oorspronkelijke bron ontbreekt of corrupt is; dat geeft geen reviewbevoegdheid.
+Ontbrekende/verouderde afgeleide kaartinvoer betekent onbekend/onbeschikbaar,
+nooit impliciet nul taken. Een existence-/sizecontrole bewijst geen checksum en
+vervangt de bestaande broncontrole niet.
 
 ## Ground → Sketch → Agree → Implement → Scrap
 
-Ground: workboard en navigatie laden alle objectversies, alle bindings en bronviews;
-dezelfde ReviewDuty/source_accountability/projectie beslist daarna. De kaartpagina
-pagineert metadata vooraf, maar verrijkt vervolgens ieder zichtbaar document diep.
-`current_revisions` controleert volledige strikte afstamming; `max(position)` is
-zonder bewijs geen vervanging. Exacte reviewhash omvat bijna alle objectinhoud.
-`object_generation` mist legacy- en binding-only-wijzigingen.
+Ground: de bestaande overzichtsreader laadt huidige objecten via volledige
+histories, bindings en bronviews. `current_revisions` beslist over afstamming;
+ReviewDuty, bronaccountability, reviewpolicy en graphowners beslissen over taken.
+Een verkort object opnieuw hashen zou exacte reviews ongeldig maken.
 
-Sketch: twee afzonderlijke bestaande agents onderzochten dynamische compacte SQL
-(A) en duurzaam geverifieerde neutrale feiten (B). Geen cross-modelclaim. A alleen
-kan bronmapping en exacte hashes niet controleren zonder de weggelaten inhoud.
-B alleen mag geen gesynchroniseerde persoonlijke kaart-/goedkeuringsdatabase
-worden. Gekozen: dynamische actuele metadata/governance/bindings/actor met kleine,
-geverifieerde object-/bronfeiten bij dezelfde workflowstore. Kaartbeslissingen
-blijven in de bestaande Python-eigenaren; geen tweede SQL-reglement.
-Agree: uitvoering van de volgende WP is expliciet opgedragen door William.
-Implement: eerst onnodige metadata-/auditarchiefreads verwijderen; daarna alleen
-de werkelijk noodzakelijke bewezen feiten en hun actuele selectie verdiepen.
-Scrap: herontwerpen bij een tweede lifecycleautoriteit, verborgen GET-herbouw of
-volledige accountabilityberekening tijdens iedere save.
+Sketch: twee afzonderlijke read-only runners hebben alternatieven getoetst.
+Uitsluitend dynamische SQL kan letterlijke mapping en exacte canonieke hashes
+niet controleren zonder de weggelaten inhoud. Een aparte persoonlijke
+kaart-/closurestatus zou een tweede autoriteit worden. Gekozen: kleine
+intrinsieke feiten bij dezelfde documentstore; de bestaande Python-owners
+projecteren met actuele governance, policy, bindings en actor.
+
+Agree: de gebruiker heeft de vervolgstap en het bovenstaande bronbesluit expliciet
+opgedragen. Implement: eerst primitive-oraclepariteit, dan writer/freshnessbewijs,
+dan native HTTP en bounded-I/O. Scrap bij een tweede statusautoriteit, verborgen
+GET-herbouw of volledige closureberekening onder iedere savelock.
 
 ## Gebruik en eigenaarschap
 
 ```python
-# Read: één consistente actuele capture, alleen zichtbare documenten.
-inputs = document_store.review_card_inputs(visible_snapshot_ids)
-# Bestaande kaartoracle consumeert expliciete geverifieerde invoer.
+# In workflow_read_transaction: alleen coherente databasecapture.
+captured = capture_review_cards(store, con, visible_snapshot_ids)
+bindings = review_store.read_bindings(visible_snapshot_ids)
+# Buiten de transactie: bestaande owners beslissen over persoonlijke taken.
 item = review_work_item(console, account=current_account, envelope=envelope,
-                        inputs=inputs[snapshot_id])
-# Write: bestaande store valideert en schrijft facts met dezelfde objectwrite;
-# binding-only/policy/rollen blijven actuele read-time invoer.
+                       inputs=ReviewWorkInputs(objects, bindings, lifecycle,
+                                               published, sources, graph_inventory))
+# Expliciete beheervoorbereiding van bestaande authority, nooit GET/startup.
+prepare_review_cards(store, snapshot_id)
 ```
 
-ReviewObjectFacts is een expliciete read-only invoerdrager, geen synthetisch
-verkort object dat opnieuw wordt gehasht en geen commandinput. Een bronproof
-bevat alleen bron-/tekst-/mappingvalidatie bij exact dezelfde immutable extractie;
-nooit approved, complete, remaining of actorstatus. Volledige commands en closure
-houden volledige objecten en bronvalidatie. De kaart verleent geen toestemming.
+`ReviewObjectFacts` is immutable en niet JSON-serialiseerbaar als KnowledgeObject.
+`ReviewFactSources` bindt primitive bronproofs aan exact de objectinstanties uit
+dezelfde capture. De carrier is geen volledige bron en geen commandinput.
+Exacte reviewhashes worden door de bestaande kernel bij schrijven berekend;
+op GET wordt de geverifieerde hash hergebruikt. Policy-, vierogen-, context-,
+repair- en graphregels blijven bij hun bestaande owners. Geen opgeslagen
+approved/complete/remaining/actorstatus. Commands en publicatie houden hun
+volledige objecten en bronvalidatie.
 
-## Context en actualiteit
+| Gegeven | Eigenaar en actualiteit | Ontbrekend/verouderd |
+| --- | --- | --- |
+| Huidige objectselectie en exacte hash | current_revisions/kernel, gevalideerd bij writer; fysieke dirty/coveragebewaking | Kaart onbekend |
+| Bron-/mappingprimitives | bestaande validators; exacte inputhash, extractie/source/view/producercontract | Kaart onbekend; geen GET-herstel |
+| Governance en objectpolicy | bestaande documentstore, live copied fields bij veilige SQL-update | Onveilige mutatie invalideert |
+| Bindings | bestaande reviewstore, dezelfde repeatable-readcapture | Geen gecachte approval |
+| Documentmetadata/policy/deelname | bestaande fysieke kolommen en envelope; trigger onderhoudt compact header | Geen oude envelope over fysieke autoriteit |
+| Actor/rol | actuele identityowner vóór capture | Toegang geweigerd na intrekking |
+| Lifecycle/publicatiestatus | bestaande canonical lifecycleowner | Geen nieuwe servingautoriteit |
+| Beginnen/Verder | bestaande compacte auditheuristiek uit PR923 | Geen auditdetails laden |
 
-| Gegeven | Producent/eigenaar | Geldigheid | Ontbrekend/verouderd |
-| --- | --- | --- | --- |
-| Objectinhoud/hash | integrity kernel + bestaande documentstore | Exact native JSONB-invoerfingerprint en producercontract | Geen actuele kaart suggereren |
-| Bronproof | bestaande bron-/mappingvalidators + WP7 | Exacte extractie/source/viewcontract en volledige primitive input | Geen reconstructie op GET |
-| Huidige versie/afstamming | current_revisions + documentstore | Volledige gevalideerde chain, technische readgeneratie voor alle SQL-mutaties | Expliciet onbeschikbare afleiding |
-| Bindings | bestaande reviewstore | Actuele capture; dezelfde exacte tuple-/menselijke-reviewerregels | Geen gecachte approval |
-| Policy/context/rol | bestaande eigenaren | Actuele endpointgegevens, wederkerige links, live actor/account | Geen actor×document-persistentiestatus |
-| Deelnamepresentatie | bestaand audit | Alleen relevante eventheaders; zelfde beslissingspredicate | Geen auditdetails voor een begin/verder-link |
+## Opslag, writers en herstel
 
-Alle runtime objectschrijvers: concurrent apply_review_changes/write_bundle,
-runtime write_bundle en legacy import. Dezelfde afleiding moet atomair volgen.
-Binding delta, snapshot/whole binding replacement en backfill blijven live inputs;
-ze hoeven geen objectgeneratie te bumpen. Directe SQL-governance/bindingwijzigingen
-moeten actueel zichtbaar zijn; onverwachte canonical/history-SQL-mutatie moet een
-oude afleiding aantoonbaar ongeldig maken. Invalidation alleen is geen voltooiing
-voor een ondersteunde runtimewriter. Beheer-SQL mag geen stale kaart als current
-laten gelden. De geïmporteerde legacytoestand vereist expliciete voorbereiding.
+Additieve migratie 027 maakt `review_fact_state`, `review_object_facts` en
+`documents.review_card_envelope`. Geen historische backfill in de migratie.
+State bevat input/prepared-epoch, source identity en verwacht aantal actuele
+objecten. Objectfacts bevatten historycount, dirty, geselecteerde versie/volgorde,
+compacte velden, intrinsieke proof en technische CRC. De CRC over JSONB-text is
+geen vervanging van de canonieke reviewhash.
 
-## Grenzen en mitigatie
+Alle fysieke SQL-objectwrites onderhouden invalidatie in dezelfde transactie,
+ook position, identity move, delete/reinsert en TRUNCATE. Tombstones voorkomen
+ABA. Exacte vergelijking onderscheidt `1` van `1.0`. Alleen canoniek/intrinsiek
+ongewijzigde governance/admission/passageregisterupdates mogen live velden
+kopiëren. Historische governance overschrijft het huidige object niet.
 
-Stateless gedrag: persoonlijke readprojectie. Afgeleide opslag, indien nodig,
-is niet-authoritatief en alleen kernel/workflowstore bezit onderhoud. Durable
-state vóór/na: dezelfde bron/objecten/reviews plus reproduceerbare readfeiten.
-Transaction boundary: authoritywrite en bijbehorende facts/selectie atomair.
-Failure/recovery: vorige geldige authority behouden; ontbrekende feiten zichtbaar,
-geen fictieve nul, geen GET/startup-backfill. Idempotentie: identieke exacte input
-geeft dezelfde bewijsidentiteit. Concurrency: actuele snapshot plus gecontroleerde
-facts; nieuwere writers winnen, oude voorbereiding mag niet activeren.
+Runtime/concurrent `write_bundle` en scoped `apply_review_changes` sealen de
+gevalideerde geraakte histories atomair met hun authoritywrite. Proofs met exact
+dezelfde intrinsieke input worden hergebruikt. Initiële verwerking en reprocess
+bereiden bronviews/proofs vóór de beschermde activatietransactie voor. Dezelfde
+transactie publiceert de immutable views en facts. Geen volledige
+source_accountability bij iedere save. Binding-only replacement/backfill blijft
+live readinput en behoeft geen objectcounterbump.
 
-Rewrite target: workboard/navigation readgrens. Lokale HTML-patches verwijderen
-bronvoorbereiding niet. Topologieën: beide CompleteWorkflow PostgreSQL-composities,
-nieuwe processen/herstart; appbron lokaal/Azure. Persisted impact: alleen additieve
-niet-authoritatieve facts waar nodig. Migratie: expand, expliciete voorbereiding,
-alle writers bewijzen, dan gecontroleerde readercutover. Oude reader blijft
-expliciet rollbackpad; geen stille deep fallback op nieuwe incomplete projectie.
-Cleanup: documentbrede verrijking en auditpayloadreads uit overgezette route.
-Blast radius: kaartpresentatie, geen review-/publicatiebevoegdheid of bronmutatie.
+Legacy-import zonder complete posities/retained extractie wordt niet stil
+hersteld: eerst de bestaande cutover/preparation uitvoeren. Expliciete
+kaartvoorbereiding mag ontbrekende geïndexeerde views uit de geverifieerde
+retained extractie maken, zonder oorspronkelijke bronbytes. Corrupte pinned
+views worden niet stil vervangen. Voorbereiding berekent buiten de beschermde
+write en installeert onder epoch/source-CAS; een nieuwere writer wint.
+Rollback draait authoritydelta en facts samen terug. Contract, CRC, source
+identity, objecttuple, coverage en dirty-markers worden op iedere capture getoetst.
 
-## Bewijsplan
+## Mitigatie en rollout
 
-De eerste CI-run van PR #923 stopte bij het machineleesbare wijzigingscontract:
-de PR-beschrijving miste losse `Proof`, `Touches lifecycle invariants` en
-`Rewrite risk`-velden. Daardoor werden de suite-shards overgeslagen en faalden
-de verzameljobs wegens ontbrekend testbewijs. De beschrijving is gecorrigeerd
-en met `python scripts/validate_change_contract.py --text-file <PR-body>`
-daadwerkelijk rood/groen gecontroleerd. Deze check vereist de PR-tekst;
-repository_preflight alleen bewijst het PR-contract niet.
+Rewrite target: de gedeelde workboard/navigation readgrens en afgeleid writeronderhoud.
+Why local patching is insufficient: minder HTML of kleinere interfaces verwijderen de diepe bron-/historieafhankelijkheid niet.
+Current authority/writer/reader map: workflowdocumenten/objecten/reviewbindings blijven authority; runtime/concurrent bundle en scoped commandwriters onderhouden afleiding; legacy/import/SQL invalidatie; workboard en navigatie consumeren; command/detail/publicatie behouden volledige owners.
+Supported runtime topologies: CompleteWorkflow PostgreSQL lokaal en Azure-broncompositie; herstart/nieuw proces. Geen nieuwe multi-instancegarantie.
+Persisted-state impact: uitsluitend additieve reproduceerbare facts/compacte envelope; geen review-, object-, bron- of lifecycle-identiteit vervangen.
+Compatibility/migration plan: expand via 027, writers onderhouden ook in legacy mode, expliciete voorbereiding/check, daarna opt-in compact reader.
+Rollback/recovery plan: zet reader terug op legacy en herstart; authority is ongewijzigd. Herstel afleiding via expliciete voorbereiding; geen destructieve reset.
+Cutover trigger: alle toegewezen actieve documenten hebben actuele facts, oracle-/writer-/recoverybewijs en CI groen; beheerder zet expliciet CONSOLE_REVIEW_CARD_READS=compact.
+Cleanup/decommission criteria: oude reader pas verwijderen na afzonderlijk geaccepteerde rollout; zolang rollback nodig is geen contract/remove-migratie. Geen automatische expiry.
+Failure blast radius: overzichtstelling kan onbekend zijn; geen extra review/publicatiebevoegdheid of wijziging van serving.
+Adversarial proof matrix: alternate writers/overrides, binding-only, policy/actor, SQL identity/numeric/history, corrupte/missende facts, concurrent prep/writer, rollback, nieuw proces, beide HTTP-topologieën en pagina-/historiegroei.
 
-De daaropvolgende volledige suite vond op Python 3.12 én 3.13 dezelfde ene
-fout in `test_metadata_page_bounds_existing_enrichment_and_history_reads`:
-de pagineringstest telde alleen calls naar de vervangen archiefreader. Het
-meetpunt volgt nu de compacte participatiereader, met dezelfde aantallen én
-exacte document-ID's voor pagina 1/2. Een call naar de volledige archiefreader
-laat de test expliciet falen. Native reproductie: eerst rood; daarna alle
-negen persoonlijke-overzicht-/compacte-invoertests groen. Geen productiecode
-of domeinverwachting gewijzigd door deze testreparatie.
+Gebruik de bestaande databaseconfiguratie/credentialowner. Na toepassing van de
+additieve migratie, in de beoogde omgeving:
 
-Native HTTP-pariteit met de bestaande volledige oracle voor verschillende
-reviewers, eerste/tweede review, wachten/eigen klaar, herstel/disposition, partial
-formation en boom/graph. Tegenvoorbeelden: binding-only legacywriter zonder
-counterbump, gewijzigde policy/rol/context/target, historische bron-/hashmutatie,
-ontbrekende/corrupte facts, concurrente voorbereiding/writer, nieuw proces en
-rollback. Vast paginavenster bij groeiende onafhankelijke documenten en zware
-historie; meet kaart-, audit- en bron-I/O afzonderlijk. Geen source_prepare,
-volledige historie/bron of GET-writes verbergen achter kleine interfaces.
-Bestaande POST/lockbudgetten blijven gelden; #888/MET-17 houdt runtime/SLO-eindacceptatie.
+```sh
+python scripts/prepare_review_cards.py --snapshot SNAPSHOT_ID
+python scripts/prepare_review_cards.py --snapshot SNAPSHOT_ID --check
+# Alleen als expliciet volledige scope bedoeld is:
+python scripts/prepare_review_cards.py --all
+python scripts/prepare_review_cards.py --all --check
+```
+
+Een niet-actueel document geeft exit 1 en een veilige foutcode. `--check` gebruikt
+een read-only repeatable-readtransactie. Scope is verplicht. GET/startup doen
+geen voorbereiding en de compacte reader heeft geen verborgen deep fallback.
+Default/rollback: `CONSOLE_REVIEW_CARD_READS=legacy`. Voor readercutover:
+`CONSOLE_REVIEW_CARD_READS=compact` en runtime herstarten. Productiemigratie,
+configuratiewijziging en deployment zijn in dit werk niet uitgevoerd.
+
+## Uitgevoerd bewijs en grenzen
+
+Native oracle-, HTTP-, storage- en I/O-tests staan in
+`tests/test_review_card_{facts,storage,io}_v1.py`. Zij toetsen bestaande
+reviewbeslissingen, graph/context, sourcecorruptie met geblokkeerde echte command,
+missing/CRC/contract/foreign tuple, rollback, stale voorbereiding en nieuw proces.
+SQL-archive- en bronreadcanaries bewaken de echte HTTP-ingang.
+
+Met 32 en 128 zware historische versies blijft de kaartread drie actuele facts
+laden. Met 26 en 51 toegewezen documenten laadt pagina 1 exact 25 documenten /
+75 facts / 281200 JSON-bytes; de laatste pagina één document / drie facts.
+Dit bewijst begrensde factoverdracht en geen bron-/historiepayload op de route.
+Metadataselectie blijft over toegewezen documenten scannen. Navigatie is een
+aggregaat over alle toegewezen documenten en heeft geen paginaconstante kost.
+Andere ingest/publish-badges behouden hun bestaande SQL; geen algemene claim
+dat alle database-I/O historie-onafhankelijk is. MET-17/#888 houdt de uiteindelijke
+runtime-/SLO-acceptatie van maximaal drie seconden.
+
+De afzonderlijke adversariële review vond dat fysieke documentkolommen door
+oude envelopevelden konden worden overschreven. De compact-headertrigger en
+expliciete legacyvoorbereiding normaliseren nu dezelfde fysieke kolommen;
+een native tegenvoorbeeld vergelijkt lifecycle met de bestaande reader.
+Volledige regressie- en CI-uitkomsten worden bij de PR vastgelegd.

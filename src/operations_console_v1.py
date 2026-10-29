@@ -530,7 +530,7 @@ def slow_review_duty(
 ) -> list[dict[str, Any]]:
     """Presented Inhoud cards: recommendation + condition/exception/high-risk."""
     bindings = tuple(bindings or ())
-    from src.vorming.prepared_source_views_v1 import preserve_fragments
+    from src.review.review_card_facts_v1 import preserve_review_sources as preserve_fragments
     fragments = preserve_fragments(fragments) if fragments is not None else None
     rows = [obj for obj in objects if is_slow_review_duty(obj, review_path=review_path, bindings=bindings, fragments=fragments)]
     return rows if review_path == "boom" else sorted(rows, key=review_priority_rank)
@@ -1733,6 +1733,8 @@ class OperationsConsole:
                 envelope["publication_eligibility"] = initial_eligibility
                 envelope.pop("processing_blocker", None)
             prepared_envelopes = {snapshot_id: envelope}
+            from src.workflows.review_card_inputs_postgres_v1 import prepare_activation
+            review_card_preparation = prepare_activation(getattr(self, 'workflow_document_store', None), envelope, objects, fragments)
             try:
                 transaction = self._reprocessing_transaction(snapshot_id) if attempt_id else self._store_write_lock()
                 with transaction:
@@ -1755,6 +1757,7 @@ class OperationsConsole:
                     self._commit_prepared_store(
                         objects=(snapshot_id, objects), envelopes=prepared_envelopes,
                         expected_revision=expected_revision if attempt_id else "" if ingest_command else None,
+                        review_card_preparation=review_card_preparation,
                     )
             except ConsoleError:
                 if not ingest_command or attempt_id:
@@ -2366,6 +2369,8 @@ class OperationsConsole:
                 self.snapshot_objects(replaces_snapshot_id),
                 objects,
             )
+        from src.workflows.review_card_inputs_postgres_v1 import prepare_activation
+        review_card_preparation = prepare_activation(getattr(self, 'workflow_document_store', None), prepared_envelope, objects, fragments)
         with self._reprocessing_transaction(snapshot_id):
             self._reload_store_locked()
             if _attempt_id is not None:
@@ -2423,6 +2428,7 @@ class OperationsConsole:
                 envelopes={snapshot_id: prepared_envelope},
                 bindings={snapshot_id: []},
                 expected_revision=expected_revision,
+                review_card_preparation=review_card_preparation,
             )
         if _attempt_id is not None:
             from src.vorming.processing_trace_v1 import observe

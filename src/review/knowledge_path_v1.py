@@ -176,6 +176,9 @@ def source_lineage_resolves(obj: dict[str, Any], *, fragments) -> bool:
     additionally resolve against the verified snapshot's retained extraction.
     This reader never stamps or rewrites a persisted object or binding.
     """
+    from src.review.review_card_facts_v1 import ReviewFactSources
+    if isinstance(fragments, ReviewFactSources):
+        return fragments.proof_for(obj)['lineage']
     if fragments is None or not has_exact_source_spans(obj):
         return False
     from src.vorming.knowledge_materialisation_v1 import validate_materialised_candidate

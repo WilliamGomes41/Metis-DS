@@ -684,6 +684,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         envelope: Mapping[str, Any],
         objects: list[dict[str, Any]] | None = None,
         expected_revision: str | None = None,
+        review_card_preparation=None,
     ) -> str:
         snapshot_id = str(envelope.get("snapshot_id") or "")
         if not snapshot_id:
@@ -707,6 +708,8 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                         from src.workflows.formation_task_store_v1 import FormationTaskStore
                         FormationTaskStore.assert_activation(con,envelope)
                     self._write_envelope_locked(con, envelope)
+                    from src.workflows.review_card_inputs_postgres_v1 import publish_preparation
+                    publish_preparation(self, con, snapshot_id, review_card_preparation)
                     next_objects = current_objects if objects is None else objects
                     identities = [
                         (str(row.get("object_id") or ""), str(row.get("object_version") or ""))
@@ -723,6 +726,8 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                                 "VALUES(%s,%s,%s,%s::jsonb,%s)",
                                 (snapshot_id, obj["object_id"], obj["object_version"], _json_text(obj), position),
                             )
+                        from src.workflows.review_card_inputs_postgres_v1 import maintain
+                        maintain(self, con, snapshot_id, next_objects, complete=True, preparation=review_card_preparation)
             return self._revision(next_objects)
         except WorkflowDocumentStoreError:
             raise
@@ -1068,6 +1073,7 @@ class _PostgresWorkflowDocumentsMixin:
         expected_revision: str | None = None,
         ledger_fn: Any | None = None,
         snapshot_id: str | None = None,
+        review_card_preparation=None,
     ) -> None:
         self._require_review_store_configured()
         if envelopes is None and objects is None:
@@ -1130,6 +1136,7 @@ class _PostgresWorkflowDocumentsMixin:
                     envelope=envelope,
                     objects=objects[1] if objects is not None else None,
                     expected_revision=pinned_revision if objects is not None else None,
+                    review_card_preparation=review_card_preparation,
                 )
                 canonical_envelope = self.workflow_document_store.get_envelope(sid)
                 if canonical_envelope is None:

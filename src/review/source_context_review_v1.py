@@ -20,6 +20,9 @@ EVENT = "source_context_review"
 
 
 def literal_identity(obj: dict[str, Any]) -> str:
+    from src.review.review_card_facts_v1 import ReviewObjectFacts
+    if isinstance(obj, ReviewObjectFacts):
+        return obj.proof['literal_identity']
     return stable_hash({
         "content": obj.get("content") or {},
         "source": obj.get("source") or {},
@@ -149,6 +152,7 @@ def links_of(obj: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def context_issues(objects: Iterable[dict[str, Any]]) -> dict[str, list[str]]:
+    from src.review.review_card_facts_v1 import literal_link_matches, literal_refs_match
     rows = list(objects)
     by_id = {str(row.get("object_id") or ""): row for row in rows}
     issues: dict[str, list[str]] = {}
@@ -176,8 +180,8 @@ def context_issues(objects: Iterable[dict[str, Any]]) -> dict[str, list[str]]:
                 and link.get("source_literal_hash") == literal_identity(source)
                 and source_role.get("literal_hash") == literal_identity(source)
                 and link.get("target_literal_hash") == literal_identity(target)
-                and link.get("text") == str((source.get("content") or {}).get("clean_text") or "")
-                and link.get("source_fragments") == (source.get("provenance") or {}).get("source_fragments")
+                and literal_link_matches(target, link, source)
+                and literal_refs_match(target, link, source)
                 and link.get("reviewer_id") == source_role.get("reviewer_id")
                 and link.get("target_object_id") == target_id
                 and link.get("role") == source_role.get("role")
@@ -417,6 +421,10 @@ def verify_literal_source(obj: dict[str, Any], fragments: list[dict[str, Any]], 
     source_blocks may carry the caller's full-source view of these same,
     unchanged fragments; every check below still runs per object.
     """
+    from src.review.review_card_facts_v1 import ReviewFactSources
+    if isinstance(fragments, ReviewFactSources):
+        return bool(source_hash and (obj.get('source') or {}).get('source_checksum') == source_hash
+                    and fragments.proof_for(obj)['literal'])
     from src.object_taxonomy_v1 import normalize_visible_prose
     from src.vorming.knowledge_materialisation_v1 import _read_source_blocks
     from src.vorming.source_layout_v1 import mapped_raw_spans

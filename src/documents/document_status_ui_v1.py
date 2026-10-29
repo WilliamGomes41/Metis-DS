@@ -97,6 +97,11 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
             return await document_status_calculation(request, call_next)
 
     async def document_status_calculation(request: Request, call_next):
+        if (getattr(console, 'review_card_read_mode', 'legacy') == 'compact'
+                and request.url.path == '/review' and not request.query_params.get('document')):
+            # The compact overview captures only its visible documents; avoid a
+            # global historical-object prefetch before its own pagination.
+            return await call_next(request)
         if request.url.path not in _STATUS_PATHS:
             return await call_next(request)
 

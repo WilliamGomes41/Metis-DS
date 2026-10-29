@@ -70,6 +70,9 @@ def reconstruct(evidence, fragments):
 
 
 def unit_issues(obj):
+    from src.review.review_card_facts_v1 import ReviewObjectFacts
+    if isinstance(obj, ReviewObjectFacts):
+        return list(obj.proof['unit_issues'])
     evidence = (obj.get("metadata") or {}).get(KEY)
     if not evidence:
         return []  # Legacy snapshots and explicit freezes keep their contract.
