@@ -184,6 +184,12 @@ def execute_review_command(console, submitted, invoke):
                             try:
                                 result = invoke(command)
                             except ConsoleError as exc:
+                                from src.review.deterministic_review_repair_v1 import StructuredRepairRequired
+                                if isinstance(exc, StructuredRepairRequired):
+                                    # The scoped revision is private to this
+                                    # workspace. The next repair command must
+                                    # receive the caller's original contract.
+                                    exc.submission['expected_revision'] = str(expected or '')
                                 # Detached baseline for the bounded error view;
                                 # no failed staged mutation becomes presentation truth.
                                 exc.review_command_inputs = inputs

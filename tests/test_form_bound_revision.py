@@ -2,8 +2,8 @@
 
 Overlapping review forms MUST carry an explicit snapshot revision from
 GET to POST. The pin is bound to the edit, not ``threading.local`` /
-worker-thread reuse. A stale form keeps the reviewer's draft and shows
-current store differences. The same-POST inject tests in
+worker-thread reuse. A stale response keeps the reviewer's draft and links
+to a current GET without issuing a new mutation precondition. The same-POST inject tests in
 ``test_stale_write_ux.py`` stay; this file adds the cross-client
 regressions the audit reproduced.
 
@@ -18,7 +18,9 @@ from tests.semantic_fixture_support import bind_fixture_selections
 
 import re
 import threading
+from html import escape, unescape
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,7 +30,7 @@ from src.operations_console_v1 import OperationsConsole
 ROOT = Path(__file__).resolve().parents[1]
 HTML_FIXTURE = ROOT / "data/fixtures/source2_html_factory_fixture.html"
 SNAPSHOT_WRITE_CONFLICT = "snapshot_object_write_conflict"
-ANNE_COMMENT = "G1-form-rev-anne-comment-42"
+ANNE_COMMENT = 'G1-form-rev-anne-comment-42 <draft title="bewaren"> & tekst'
 BERT_COMMENT = "G1-form-rev-bert-comment-99"
 ANNE_SUIT = "geen_kenniseenheid"
 BERT_SUIT = "samenvoegen"
@@ -128,15 +130,36 @@ def _textarea_value(html: str, name: str) -> str:
     return match.group(1) if match else ""
 
 
-def _radio_checked(html: str, name: str, value: str) -> bool:
-    pattern = (
-        rf'<input[^>]*name="{re.escape(name)}"[^>]*value="{re.escape(value)}"[^>]*>'
-        rf'|<input[^>]*value="{re.escape(value)}"[^>]*name="{re.escape(name)}"[^>]*>'
-    )
-    for match in re.finditer(pattern, html):
-        if re.search(r"\bchecked\b", match.group(0)):
-            return True
-    return False
+def _assert_stale_draft(response, client, console, snapshot_id, object_id, previous_revision):
+    from src.review.review_passage_read_v1 import PREFIX, resolve_review_revision
+
+    assert response.status_code == 409
+    body = response.text
+    assert "data-stale-write-conflict" in body
+    assert "data-review-draft" in body
+    assert _hidden(body, "suitability") == escape(ANNE_SUIT, quote=True)
+    assert _hidden(body, "eindoordeel") == "afwijzen"
+    assert _textarea_value(body, "comment") == escape(ANNE_COMMENT, quote=True)
+    assert ANNE_COMMENT not in body
+    assert not _hidden(body, "snapshot_revision")
+    assert 'name="snapshot_revision"' not in body
+    assert not re.search(r'<form\b[^>]*\bdata-review-form\b', body)
+
+    link = re.search(r'<a href="([^"]+)">Bekijk de actuele passage</a>', body)
+    assert link, "a stale response must offer explicit navigation to the current passage"
+    location = unescape(link.group(1))
+    query = parse_qs(urlsplit(location).query)
+    assert query["document"] == [snapshot_id]
+    assert query["object"] == [object_id]
+    current = client.get(location)
+    assert current.status_code == 200
+    fresh = _hidden(current.text, "snapshot_revision")
+    assert fresh.startswith(PREFIX)
+    assert fresh != previous_revision
+    assert resolve_review_revision(console, snapshot_id, fresh) == console.objects_revision(snapshot_id)
+    # Opening the current passage does not silently reapply the retained draft.
+    assert ANNE_COMMENT not in unescape(current.text)
+    return current
 
 
 def _passage_suitability(row: dict) -> str:
@@ -237,15 +260,10 @@ def test_two_clients_overlapping_forms_conflict_on_stale_revision(tmp_path: Path
         ),
         follow_redirects=False,
     )
-    assert posted_a.status_code != 303
-    assert posted_a.status_code in {200, 409}
+    _assert_stale_draft(posted_a, anne, console, snapshot_id, target["object_id"], rev_a)
     body = posted_a.text
     assert SNAPSHOT_WRITE_CONFLICT in body or "data-stale-write-conflict" in body
     assert "succes" not in body.lower()
-    assert ANNE_COMMENT in _textarea_value(body, "comment")
-    assert _radio_checked(body, "suitability", ANNE_SUIT)
-    assert "data-stale-write-differences" in body
-    assert BERT_SUIT in body
     after = next(
         row
         for row in production_console(processing_binder=bind_fixture_selections,
@@ -313,12 +331,7 @@ def test_overlapping_forms_conflict_survives_worker_thread_reuse(tmp_path: Path,
     assert not thread.is_alive()
     assert errors == []
     response = posted["response"]
-    assert response.status_code != 303
-    assert response.status_code in {200, 409}
-    body = response.text
-    assert SNAPSHOT_WRITE_CONFLICT in body or "data-stale-write-conflict" in body
-    assert ANNE_COMMENT in _textarea_value(body, "comment")
-    assert "data-stale-write-differences" in body
+    _assert_stale_draft(response, anne, console, snapshot_id, target["object_id"], rev_a)
     live = next(
         row
         for row in console.snapshot_objects(snapshot_id)
@@ -327,7 +340,7 @@ def test_overlapping_forms_conflict_survives_worker_thread_reuse(tmp_path: Path,
     assert _passage_suitability(live) == BERT_SUIT
 
 
-def test_stale_form_keeps_draft_and_shows_current_differences(tmp_path: Path, *, production_app, production_console) -> None:
+def test_stale_form_keeps_draft_and_links_to_current_form(tmp_path: Path, *, production_app, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
@@ -337,7 +350,7 @@ def test_stale_form_keeps_draft_and_shows_current_differences(tmp_path: Path, *,
     bert = _client(console, "reviewer.bert", production_app=production_app)
     _opened_a, rev_a = _open_review_form(anne, snapshot_id, target["object_id"])
     _opened_b, rev_b = _open_review_form(bert, snapshot_id, target["object_id"])
-    bert.post(
+    winner = bert.post(
         "/review",
         data=_review_payload(
             snapshot_id,
@@ -348,6 +361,9 @@ def test_stale_form_keeps_draft_and_shows_current_differences(tmp_path: Path, *,
         ),
         follow_redirects=False,
     )
+    assert winner.status_code == 303
+    committed = console.snapshot_objects(snapshot_id)
+    revision = console.objects_revision(snapshot_id)
     posted = anne.post(
         "/review",
         data=_review_payload(
@@ -359,19 +375,9 @@ def test_stale_form_keeps_draft_and_shows_current_differences(tmp_path: Path, *,
         ),
         follow_redirects=False,
     )
-    body = posted.text
-    assert posted.status_code in {200, 409}
-    assert "data-review-form" in body
-    assert ANNE_COMMENT in _textarea_value(body, "comment")
-    assert _radio_checked(body, "suitability", ANNE_SUIT)
-    assert "data-stale-write-differences" in body
-    lowered = body.lower()
-    assert "huidige" in lowered or "verschil" in lowered
-    assert BERT_SUIT in body
-    fresh = _hidden(body, "snapshot_revision")
-    assert fresh
-    assert fresh != rev_a
-    assert fresh == console.objects_revision(snapshot_id)
+    _assert_stale_draft(posted, anne, console, snapshot_id, target["object_id"], rev_a)
+    assert console.snapshot_objects(snapshot_id) == committed
+    assert console.objects_revision(snapshot_id) == revision
 
 
 def test_batch_confirm_carries_and_compares_form_revision(tmp_path: Path, *, production_app, production_console) -> None:

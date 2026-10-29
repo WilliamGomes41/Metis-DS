@@ -53,13 +53,13 @@ def test_r2_restore_after_lock_release_overwrites_concurrent_review(workflow_pos
     seen = {}
 
     # Fault injection inside A's supported review command, after its writes.
-    original_commit = a._commit_prepared_store
+    original_commit = a.workflow_document_store.apply_review_changes
 
-    def faulty_commit(**kwargs):
-        original_commit(**kwargs)
+    def faulty_commit(*args, **kwargs):
+        original_commit(*args, **kwargs)
         raise RuntimeError("r2_injected_fault")
 
-    monkeypatch.setattr(a, "_commit_prepared_store", faulty_commit)
+    monkeypatch.setattr(a.workflow_document_store, "apply_review_changes", faulty_commit)
 
     # Hook the post-rollback step: _restore_review_state on main, the remirror
     # after the fix. B interleaves where A's step runs without the lock.
@@ -104,7 +104,9 @@ def test_r2_restore_after_lock_release_overwrites_concurrent_review(workflow_pos
         seen["a_lock_depth"] = a._store_lock_depth
         run_b()
     assert seen["a_lock_depth"] == 0
-    print("R2_RESTORE_DEPTHS", seen["restore_depths"])
+    # Bounded commands discard their owned context; no process-map restoration
+    # is required after rollback and no late restore can overwrite B.
+    assert seen.get("restore_depths", []) == []
     assert seen["bindings_after_b"], "precondition: B's binding committed"
 
     fresh = _console(tmp_path, workflow_postgres)

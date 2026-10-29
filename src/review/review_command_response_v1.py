@@ -43,7 +43,7 @@ def review_command_error(console, account, snapshot_id, object_id, revision, tas
             + '<p>Controleer de actuele passage voordat je opnieuw een besluit neemt.</p>'
             + fields
             + f'<label>Toelichting<textarea name="comment">{_esc(draft.get("comment", ""))}</textarea></label>'
-            + f'<label>Voorgestelde correctie<textarea name="proposed_correction">{_esc(draft.get("proposed_correction", ""))}</textarea></label>'
+            + f'<label>Voorgestelde correctie<textarea name="proposed_correction" readonly>{_esc(draft.get("proposed_correction", ""))}</textarea></label>'
             + '</section>')
     return HTMLResponse(_page(_nav(account, 'review') + content + navigation, title='Review'),
         status_code=409 if conflict else 400, headers={'Cache-Control': 'no-store'})

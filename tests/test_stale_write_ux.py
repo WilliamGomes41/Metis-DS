@@ -3,8 +3,9 @@
 When a review/object save is rejected as stale /
 ``snapshot_object_write_conflict``, the reviewer MUST NOT see a success
 flash or a next-object redirect. Concurrent stale rejection MUST keep
-the submitted input on the form so it can be retried against a fresh
-revision. PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
+the submitted draft without issuing a new mutation precondition. A retry
+requires explicit inspection of the current passage through GET.
+PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 publish() stays G2-BLOCKED. Wave 2 ingest and wave 3 stay out of scope.
 Package migration regression evidence: storage concurrency and stale-write behavior must remain unchanged.
 
@@ -20,6 +21,7 @@ from tests.semantic_fixture_support import bind_fixture_selections
 import html
 import re
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -115,15 +117,10 @@ def _passage_suitability(row: dict) -> str:
     return str(((row.get("metadata") or {}).get("review_passage") or {}).get("suitability") or "")
 
 
-def _radio_checked(html: str, name: str, value: str) -> bool:
-    pattern = (
-        rf'<input[^>]*name="{re.escape(name)}"[^>]*value="{re.escape(value)}"[^>]*>'
-        rf'|<input[^>]*value="{re.escape(value)}"[^>]*name="{re.escape(name)}"[^>]*>'
-    )
-    for match in re.finditer(pattern, html):
-        if re.search(r"\bchecked\b", match.group(0)):
-            return True
-    return False
+def _retained_value(body: str, name: str) -> str:
+    match = re.search(rf'<input[^>]*name="{re.escape(name)}"[^>]*value="([^"]*)"', body)
+    assert match, f"stale draft must retain {name}"
+    return html.unescape(match.group(1))
 
 
 def _textarea_value(html: str, name: str) -> str:
@@ -137,8 +134,47 @@ def _textarea_value(html: str, name: str) -> str:
 
 def _form_revision(body: str) -> str:
     match = re.search(r'<input[^>]*name="snapshot_revision"[^>]*value="([^"]+)"', body)
-    assert match, "Review and conflict forms must expose the revision being reviewed"
+    assert match, "The inspected current GET must expose the revision being reviewed"
     return html.unescape(match.group(1))
+
+
+def _assert_stale_draft(response, snapshot_id, object_id, *, comment=UNIQUE_COMMENT,
+                        correction=UNIQUE_CORRECTION):
+    assert response.status_code == 409
+    body = response.text
+    assert 'data-stale-write-conflict' in body
+    assert 'data-review-draft' in body
+    assert not re.search(r'<form\b[^>]*\bdata-review-form\b', body)
+    assert 'name="snapshot_revision"' not in body
+    assert html.unescape(_textarea_value(body, "comment")) == comment
+    assert html.unescape(_textarea_value(body, "proposed_correction")) == correction
+    assert re.search(r'<textarea[^>]*name="proposed_correction"[^>]*readonly', body)
+    assert _retained_value(body, "suitability") == UNIQUE_SUITABILITY
+    assert _retained_value(body, "eindoordeel") == "afwijzen"
+    link = re.search(r'<a href="([^"]+)">Bekijk de actuele passage</a>', body)
+    assert link
+    location = html.unescape(link.group(1))
+    query = parse_qs(urlsplit(location).query)
+    assert query["document"] == [snapshot_id]
+    assert query["object"] == [object_id]
+    return location
+
+
+def _inspect_current(client, console, response, snapshot_id, object_id, previous_revision,
+                     *, comment=UNIQUE_COMMENT, correction=UNIQUE_CORRECTION):
+    from src.review.review_passage_read_v1 import PREFIX, resolve_review_revision
+    location = _assert_stale_draft(response, snapshot_id, object_id,
+                                  comment=comment, correction=correction)
+    before = console.snapshot_objects(snapshot_id)
+    current = client.get(location)
+    assert current.status_code == 200
+    fresh = _form_revision(current.text)
+    assert fresh.startswith(PREFIX) and fresh != previous_revision
+    assert resolve_review_revision(console, snapshot_id, fresh) == console.objects_revision(snapshot_id)
+    assert comment not in html.unescape(current.text)
+    assert correction not in html.unescape(current.text)
+    assert console.snapshot_objects(snapshot_id) == before
+    return fresh
 
 
 def _review_payload(snapshot_id: str, object_id: str, revision: str) -> dict[str, str]:
@@ -171,7 +207,7 @@ def _install_concurrent_winner(console: OperationsConsole, snapshot_id: str, oth
     other._save_objects(snapshot_id, other_rows)
 
 
-def _stale_review_post(tmp_path: Path, *, production_app, production_console) -> tuple[TestClient, dict, str, object]:
+def _stale_review_post(tmp_path: Path, *, production_app, production_console):
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
@@ -187,23 +223,20 @@ def _stale_review_post(tmp_path: Path, *, production_app, production_console) ->
         data=_review_payload(snapshot_id, first["object_id"], _form_revision(opened.text)),
         follow_redirects=False,
     )
-    return client, receipt, first["object_id"], posted
+    return client, receipt, first["object_id"], posted, console, _form_revision(opened.text)
 
 
 def test_stale_review_save_does_not_show_success_or_redirect_next(tmp_path: Path, *, production_app, production_console) -> None:
-    _client, receipt, object_id, posted = _stale_review_post(tmp_path, production_app=production_app, production_console=production_console)
+    _client, receipt, object_id, posted, _console_instance, _revision = _stale_review_post(tmp_path, production_app=production_app, production_console=production_console)
     location = posted.headers.get("location") or ""
     body = posted.text
-    assert posted.status_code != 303, "stale write MUST NOT follow the success redirect"
-    assert posted.status_code in {200, 409}
+    _assert_stale_draft(posted, receipt["snapshot_id"], object_id)
     assert not location or object_id in location
     assert "succes" not in body.lower()
     assert SNAPSHOT_WRITE_CONFLICT in body or 'data-stale-write-conflict' in body
     lowered = body.lower()
     for phrase in CONFLICT_COPY:
         assert phrase in lowered, phrase
-    assert 'data-review-form' in body
-    assert f'name="object_id" value="{object_id}"' in body
     live = next(
         row
         for row in production_console(processing_binder=bind_fixture_selections,
@@ -218,29 +251,25 @@ def test_stale_review_save_does_not_show_success_or_redirect_next(tmp_path: Path
 
 
 def test_stale_review_save_keeps_submitted_input_in_the_form(tmp_path: Path, *, production_app, production_console) -> None:
-    _client, _receipt, object_id, posted = _stale_review_post(tmp_path, production_app=production_app, production_console=production_console)
+    _client, receipt, object_id, posted, _console_instance, _revision = _stale_review_post(tmp_path, production_app=production_app, production_console=production_console)
     body = posted.text
-    assert posted.status_code != 303
-    assert 'data-review-form' in body
+    _assert_stale_draft(posted, receipt["snapshot_id"], object_id)
     assert UNIQUE_COMMENT in _textarea_value(body, "comment")
     assert UNIQUE_CORRECTION in _textarea_value(body, "proposed_correction")
     assert re.search(r'<textarea[^>]*name="proposed_correction"[^>]*readonly', body)
-    assert _radio_checked(body, "suitability", UNIQUE_SUITABILITY)
-    assert _radio_checked(body, "eindoordeel", "afwijzen")
-    assert f'name="object_id" value="{object_id}"' in body
     assert "Actie niet uitgevoerd" not in body
 
 
 def test_stale_review_save_retry_applies_input_after_fresh_revision(tmp_path: Path, *, production_app, production_console) -> None:
-    client, receipt, object_id, posted = _stale_review_post(tmp_path, production_app=production_app, production_console=production_console)
-    assert posted.status_code != 303
+    client, receipt, object_id, posted, console, revision = _stale_review_post(tmp_path, production_app=production_app, production_console=production_console)
+    fresh = _inspect_current(client, console, posted, receipt["snapshot_id"], object_id, revision)
     assert UNIQUE_COMMENT in posted.text
     retried = client.post(
         "/review",
-        data=_review_payload(receipt["snapshot_id"], object_id, _form_revision(posted.text)),
+        data=_review_payload(receipt["snapshot_id"], object_id, fresh),
         follow_redirects=False,
     )
-    assert retried.status_code in {303, 200}
+    assert retried.status_code == 303
     location = retried.headers.get("location") or ""
     if retried.status_code == 303:
         assert "/review" in location
@@ -289,7 +318,8 @@ def test_stale_review_conflicts_preserve_special_characters_exactly(tmp_path: Pa
     assert "&lt;script&gt;" in raw_comment
 
     retry_payload = dict(payload)
-    retry_payload["snapshot_revision"] = _form_revision(first_conflict.text)
+    retry_payload["snapshot_revision"] = _inspect_current(client, console, first_conflict,
+        snapshot_id, first["object_id"], payload["snapshot_revision"], comment=comment, correction=correction)
     retry_payload["comment"] = html.unescape(raw_comment)
     retry_payload["proposed_correction"] = html.unescape(raw_correction)
 
@@ -307,13 +337,14 @@ def test_stale_review_conflicts_preserve_special_characters_exactly(tmp_path: Pa
     assert second_raw_correction == raw_correction
 
     final_payload = dict(retry_payload)
-    final_payload["snapshot_revision"] = _form_revision(second_conflict.text)
+    final_payload["snapshot_revision"] = _inspect_current(client, console, second_conflict,
+        snapshot_id, first["object_id"], retry_payload["snapshot_revision"], comment=comment, correction=correction)
     final_payload["comment"] = html.unescape(second_raw_comment)
     final_payload["proposed_correction"] = html.unescape(second_raw_correction)
     final_payload["eindoordeel"] = "afwijzen"
     saved = client.post("/review", data=final_payload, follow_redirects=False)
 
-    assert saved.status_code in {200, 303}
+    assert saved.status_code == 303
     events = read_events(console._ledger_path)
     saved_review = next(
         event
@@ -325,3 +356,5 @@ def test_stale_review_conflicts_preserve_special_characters_exactly(tmp_path: Pa
     assert details["proposed_correction"] == correction
     assert "&amp;" not in details["comment"]
     assert "&lt;script&gt;" not in details["comment"]
+    stored = console.snapshot_objects(snapshot_id)
+    assert next(row for row in stored if row["object_id"] == second["object_id"])["reliability_marker"] == "concurrent-winner-2"
