@@ -301,8 +301,6 @@ def test_v3_core_field_resolves_inside_its_own_candidate():
 
 @pytest.mark.parametrize("field,literal_text,candidate,v3", [
     ("predicate_span", "Bespreek", "Bespreek de ondersteuning.", False),  # v2 contract unchanged
-    ("scope_span", "Bespreek", "Bespreek de ondersteuning.", True),       # context field may lie outside
-    ("condition_span", "Bespreek", "Bespreek de ondersteuning.", True),
     ("predicate_span", "de", "Bespreek de ondersteuning.", True),         # twice inside the candidate
     ("predicate_span", "Bespreek de", "ondersteuning.", True),             # only outside the candidate
 ])
@@ -310,3 +308,39 @@ def test_b5e_keeps_whole_block_uniqueness_elsewhere(field, literal_text, candida
     p = _b5e(field, literal_text, candidate=candidate)
     with pytest.raises(SemanticPassageError, match="semantic_evidence_literal_ambiguous"):
         resolve_proposal_evidence(p, blocks=[B5E_BLOCK], evidence_blocks=[B5E_BLOCK], field_contract_v3=v3)
+
+
+def test_v3_context_field_without_context_entry_resolves_inside_candidate():
+    # bind_fields admits the candidate itself as owner of a context field too.
+    resolved = resolve_proposal_evidence(_b5e("scope_span", "Bespreek"), blocks=[B5E_BLOCK],
+                                         evidence_blocks=[B5E_BLOCK], field_contract_v3=True)
+    assert resolved["objects"][0]["field_evidence"]["scope_span"]["span"] == {"block_id": "b", "start": 24, "end": 32}
+
+
+CONTEXT_BLOCK = {"block_id": "h", "text": "Thuiszorg: ouderen. Ziekenhuis: ouderen."}
+
+
+def _context_case(role="target_group", entry="Thuiszorg: ouderen.", unresolved=None):
+    p = _b5e("target_group_span", "ouderen")
+    p["objects"][0]["field_evidence"]["target_group_span"]["span"] = literal(CONTEXT_BLOCK, "ouderen")
+    p["objects"][0]["context_evidence"] = [{"role": role, "span": literal(CONTEXT_BLOCK, entry),
+                                            "unresolved_reason": unresolved}]
+    return resolve_proposal_evidence(p, blocks=[B5E_BLOCK, CONTEXT_BLOCK],
+                                     evidence_blocks=[B5E_BLOCK, CONTEXT_BLOCK], field_contract_v3=True)
+
+
+def test_v3_context_field_resolves_inside_its_admissible_context_entry():
+    # B5-e: "ouderen" occurs twice in the heading block, once inside the supplied
+    # target_group context entry that bind_fields admits as owner.
+    resolved = _context_case()
+    assert resolved["objects"][0]["field_evidence"]["target_group_span"]["span"] == {"block_id": "h", "start": 11, "end": 18}
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"role": "condition"},                                   # role not admissible for target_group_span
+    {"unresolved": "ambiguous_heading"},                     # unresolved entry is no owner
+    {"entry": "Thuiszorg: ouderen. Ziekenhuis: ouderen."},  # two admissible matches
+])
+def test_v3_context_field_without_one_admissible_match_stays_ambiguous(kwargs):
+    with pytest.raises(SemanticPassageError, match="semantic_evidence_literal_ambiguous"):
+        _context_case(**kwargs)
