@@ -612,9 +612,14 @@ def test_save_redirects_to_next_ordinary_object(tmp_path: Path, *, production_ap
         },
         follow_redirects=False,
     )
-    assert posted.status_code in {303, 200}
+    assert posted.status_code == 303
     location = posted.headers.get("location") or ""
-    assert nxt["object_id"] in location
+    # The write commits only its passage; the authorized GET selects the next
+    # task using fresh state rather than scanning the document in the POST.
+    opened = client.get(location)
+    assert opened.status_code == 200
+    assert f'id="review-form-{nxt["object_id"]}"' in opened.text
+    assert f'id="review-form-{adviseert["object_id"]}"' not in opened.text
 
 
 # ---------------------------------------------------------------------------
