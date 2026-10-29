@@ -11,7 +11,7 @@ from copy import deepcopy
 from src.object_taxonomy_v1 import normalize_visible_prose
 from src.vorming.semantic_replay_v1 import stable_json_hash
 from src.vorming.source_bound_fields_v2 import (
-    FIELDS as V2_FIELDS, FIELD_DESCRIPTIONS, MISSING, TYPE_FIELDS as V2_TYPE_FIELDS,
+    FIELDS as V2_FIELDS, FIELD_DESCRIPTIONS, KEY, MISSING, TYPE_FIELDS as V2_TYPE_FIELDS,
     bind_fields as bind_v2, evidence_schema as schema_v2,
 )
 
@@ -26,9 +26,20 @@ TYPE_FIELDS = {**V2_TYPE_FIELDS, "recommendation": (
 )}
 CONTEXT_FIELDS = {
     "actor_span": {"scope"}, "target_group_span": {"target_group"},
-    "scope_span": {"scope", "condition", "row_header", "column_header"},
+    "scope_span": {"scope", "condition", "row_header", "column_header", "list_introduction"},
     "condition_span": {"condition"},
 }
+
+
+# B5-f: the statement a condition, exception or explanation applies to may be
+# a separate proposed object. Its field then stays empty and names a relation;
+# admission takes the target from that relation, never from proximity.
+TARGET_FIELDS = ("condition_target", "exception_target", "supported_object")
+VIA_RELATION = "via_relation"
+
+
+def _via_relation(field, entry):
+    return field in TARGET_FIELDS and entry == {"span": None, "missing_reason": VIA_RELATION}
 
 
 def evidence_schema(span):
@@ -49,6 +60,11 @@ def evidence_schema(span):
         "Literal condition in the core or an explicitly supplied condition-role context entry. "
         "An external condition must also be present in context_evidence; proximity alone is insufficient."
     )
+    for name in TARGET_FIELDS:
+        prop = schema["properties"][name]
+        prop["properties"]["missing_reason"]["enum"] = [*prop["properties"]["missing_reason"]["enum"], VIA_RELATION]
+        prop["description"] += (" If that statement is outside the selected core, use span null with "
+                                "missing_reason via_relation and propose a relation to the object containing it.")
     return schema
 
 
@@ -61,6 +77,8 @@ def bind_fields(raw, *, selected, candidate_text, proposed_type, context=()):
     for field, entry in raw.items():
         if not isinstance(entry, dict) or set(entry) != {"span", "missing_reason"}:
             raise ValueError("source_bound_field_invalid")
+        if _via_relation(field, entry):
+            continue
         owners = list(selected)
         for row in context:
             if (field in CONTEXT_FIELDS and row["role"] in CONTEXT_FIELDS[field]
@@ -72,7 +90,15 @@ def bind_fields(raw, *, selected, candidate_text, proposed_type, context=()):
         legacy = {f: {"span": None, "missing_reason": "not_applicable"} for f in V2_FIELDS}
         legacy[legacy_field] = entry
         corpus = normalize_visible_prose(" ".join(s["text"] for s in owners))
-        bound = bind_v2(legacy, selected=owners, candidate_text=corpus, proposed_type=proposed_type)
+        try:
+            bound = bind_v2(legacy, selected=owners, candidate_text=corpus, proposed_type=proposed_type)
+        except ValueError as error:
+            # The v2 validator only knows its legacy name; report the v3 field
+            # (actor_span, target_group_span, scope_span) so diagnostics are exact.
+            finding = getattr(error, "finding", None)
+            if isinstance(finding, dict) and finding.get("field") == legacy_field != field:
+                finding["field"] = field
+            raise
         if legacy_field in bound["values"]:
             values[field] = bound["values"][legacy_field]
     payload = {"version": VERSION, "candidate_text": candidate_text,
@@ -104,7 +130,7 @@ def _bound_values(record, *, text, proposed_type, context):
         if not isinstance(entry, dict) or set(entry) != {"span", "missing_reason"}:
             raise ValueError("source_bound_field_invalid")
         if entry["span"] is None:
-            if entry["missing_reason"] not in MISSING or field in record["values"]:
+            if (entry["missing_reason"] not in MISSING and not _via_relation(field, entry)) or field in record["values"]:
                 raise ValueError("source_bound_fields_invalid")
             continue
         if entry["missing_reason"] is not None or field not in record["values"]:
@@ -224,6 +250,11 @@ def _scope_present(scope, text):
     return bool(scope) and re.search(r"(?<!\w)" + re.escape(scope) + r"(?!\w)", text) is not None
 
 
+# Roles that realize a known scope cue; list_introduction may carry scope_span (B5-d).
+SCOPE_REALIZING_ROLES = frozenset({"scope", "condition", "exception", "row_header", "column_header",
+                                   "list_introduction"})
+
+
 def additional_context_codes(row, realization, *, obj=None, fragments=None):
     """Known scope cues must be realized; absence of cues proves no completeness."""
     core = str(row.get("recommendation_evidence_span") or "")
@@ -246,7 +277,7 @@ def additional_context_codes(row, realization, *, obj=None, fragments=None):
         cue = item.get("scope_cue")
         if cue and not _scope_present(cue["text"], core) and not any(
             _scope_present(cue["text"], r.get("text") or "")
-            and r.get("role") in {"scope", "condition", "exception", "row_header", "column_header"}
+            and r.get("role") in SCOPE_REALIZING_ROLES
             for r in realized
         ):
             codes.append("recommendation_scope_context_missing")
@@ -255,8 +286,50 @@ def additional_context_codes(row, realization, *, obj=None, fragments=None):
                 or heading.rstrip().endswith(":")):
             if not _scope_present(heading, core) and not any(
                 _scope_present(heading, r.get("text") or "")
-                and r.get("role") in {"scope", "condition", "exception", "row_header", "column_header"}
+                and r.get("role") in SCOPE_REALIZING_ROLES
                 for r in realized
             ):
                 codes.append("recommendation_scope_context_missing")
     return codes
+
+
+# B5-f: a qualifier's target is the source of a validated relation pointing at
+# the current qualifier revision (knowledge_relation_proposal_v1: statement
+# applies_if condition, except_if exception, explains/supported_by explanation).
+TARGET_RELATIONS = {"condition_target": {"applies_if"}, "exception_target": {"except_if"},
+                    "supported_object": {"explains", "supported_by"}}
+
+
+def incoming_relation_targets(obj, objects):
+    """The single peer per field whose valid relation names this exact object revision."""
+    from src.vorming.knowledge_relation_proposal_v1 import (
+        proposed_knowledge_relations_of, relation_proposal_admission_codes,
+    )
+    object_id, version = str((obj or {}).get("object_id") or ""), str((obj or {}).get("object_version") or "")
+    found = {field: set() for field in TARGET_RELATIONS}
+    if not object_id or not version:
+        return {}
+    for peer in objects:
+        peer_id = str(peer.get("object_id") or "")
+        if not peer_id or peer_id == object_id:
+            continue
+        for rel in proposed_knowledge_relations_of(peer):
+            if (str(rel.get("target_object_id") or "") != object_id
+                    or str(rel.get("target_object_version") or "") != version):
+                continue
+            for field, kinds in TARGET_RELATIONS.items():
+                if rel.get("relation_type") in kinds:
+                    found[field].add(peer_id)
+    # Invalid peers never count, so they cannot make a single valid target ambiguous.
+    by_id = {str(p.get("object_id") or ""): p for p in objects}
+    usable = {peer_id for peers in found.values() for peer_id in peers
+              if not relation_proposal_admission_codes(by_id[peer_id], objects=objects)}
+    return {field: next(iter(peers & usable)) for field, peers in found.items() if len(peers & usable) == 1}
+
+
+def keep_relation_targets(row, before):
+    """Restore an admission target derived from a relation for via_relation fields."""
+    evidence = (row.get(KEY) or {}).get("evidence") or {}
+    for field in TARGET_FIELDS:
+        if _via_relation(field, evidence.get(field)) and before.get(field):
+            row[field] = before[field]
