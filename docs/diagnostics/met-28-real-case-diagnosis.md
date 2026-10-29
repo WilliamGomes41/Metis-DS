@@ -249,7 +249,7 @@ na triage. Ze zijn niet in dit dossier uitgevoerd.
 ## 5. Gereed (#911)
 
 - [x] Elke foutcode in deze snapshot heeft een oorzaakklasse (2.1–2.5 en 2.7), en de zesde MET-5-code staat expliciet als "komt niet voor" (2.6).
-- [x] B5-a en B5-b hebben een bevestigend of ontkrachtend bronvoorbeeld, of blijven expliciet open (2.8).
+- [x] B5-a en B5-b hebben een bevestigend of ontkrachtend bronvoorbeeld, blijven expliciet open, of zijn door de projectlead besloten (2.8). B5-b: bevestigd en besloten; B5-a: zonder bronvoorbeeld besloten (niet bouwen, heropenen bij een referentiegeval).
 - [x] Gevallen met klasse (g) zijn per geval vastgesteld en bewust open, omdat hun uitkomst van een domeinbesluit afhangt: S2 en het inleidende label (2.4, 2.5) wachten op B5-c. Ook de zelfstandige geldigheid onder B5-b blijft open. Dit volgt #878: "Onbeslist blijft open"; geen van deze gevallen mist een vastgestelde oorzaak.
 - [x] Geen private brontekst of ruwe provideruitvoer in GitHub.
 - [x] Geen runtime- of productieacceptatie geclaimd. Reads/writes en runtime per I/O-pad zijn NOT TESTED (de export bevat ze niet); dat hoort bij MET-10.
