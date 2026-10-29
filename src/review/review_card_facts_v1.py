@@ -139,7 +139,8 @@ def prepare_object_facts(obj, *, proof):
         'revision_reason', 'revision_patch_hash') if k in prov}
     if 'source_fragments' in prov:
         fields['provenance']['source_fragments'] = [
-            {'raw_object_id': row.get('raw_object_id')} for row in prov['source_fragments']]
+            {'raw_object_id': row.get('raw_object_id')} if isinstance(row, dict) else deepcopy(row)
+            for row in prov['source_fragments']]
     md = obj.get('metadata') or {}
     selected = ('admission', 'passage_register', 'review_policy',
                 'revision_lineage', 'source_role_review', 'result_bundle', 'risk_level', *HIGH_RISK_FIELDS)

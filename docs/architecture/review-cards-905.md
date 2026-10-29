@@ -186,3 +186,8 @@ het ongewijzigde publicatiegereedheidsbudget van maximaal vijf queries; het
 begrenst geen volledige bronpayload en verandert de selected/windowbranch niet.
 Rood/groenbewijs: 60 betrokken bron-/diagnostiek-/publicatietests plus zes
 windowtests groen. De SQL-batch is afzonderlijk read-only gereviewd.
+De resterende volledige-suitebevinding betrof historische structurele objecten
+met stringreferenties. De compacte velden behouden die representatie zonder
+nieuw bronbewijs; hash/bronowners en capturechecks veranderen niet. De bestaande
+native audit-/publicatiegateproef is rood/groen uitgevoerd en de compatfix is
+afzonderlijk read-only gecontroleerd.
