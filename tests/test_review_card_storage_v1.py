@@ -297,3 +297,19 @@ def test_reader_rollback_restarts_on_unchanged_authority(prepared):
     assert restarted.object_review_bindings(sid) == bindings
     with store._connect() as con:
         assert con.execute('SELECT * FROM workflow.review_fact_state WHERE snapshot_id=%s', (sid,)).fetchone() == state
+
+
+def test_compact_card_cannot_leave_stale_publication_prefetch_for_next_command(prepared):
+    from tests.complete_workflow_support import seed_canonical_release
+    console, users, sid, oid = prepared
+    console.review_card_read_mode = 'compact'
+    token = console._tree_publication_batch.set(None)
+    try:
+        summary = console.review_workboard_summaries(users['reviewer_a']['account_id'], sid)
+        assert summary[sid]['work_item']['lifecycle_status']['release_status'] == 'none'
+        seed_canonical_release(console.canonical_publication_store, snapshot_id=sid, token='card-after-read')
+        # A subsequent command/publication-history read must consult current
+        # canonical authority, never a disposable overview's previous answer.
+        assert console.snapshot_is_published(sid)
+    finally:
+        console._tree_publication_batch.reset(token)

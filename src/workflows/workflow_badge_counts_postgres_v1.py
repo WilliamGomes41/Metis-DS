@@ -535,7 +535,13 @@ class _PostgresBadgeCountsMixin:
         # Canonical lifecycle has its own owner; no source/domain calculation
         # or external canonical transaction runs inside the workflow capture.
         available_ids = [sid for sid in ids if 'unavailable' not in captured[sid]]
-        lifecycle = self.list_document_lifecycle_statuses(available_ids, card_inputs=captured) if available_ids else {}
+        # The lifecycle list owner offers a disposable tree prefetch. As with
+        # the legacy card reader, never leave it behind for later commands.
+        token = self._tree_publication_batch.set(None)
+        try:
+            lifecycle = self.list_document_lifecycle_statuses(available_ids, card_inputs=captured) if available_ids else {}
+        finally:
+            self._tree_publication_batch.reset(token)
         for sid in ids:
             row = captured[sid]
             header = row.get('envelope')

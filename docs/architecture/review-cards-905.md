@@ -163,7 +163,12 @@ Alle gerichte onafhankelijke herstelproeven zijn groen. Canonieke hashes zijn
 daarbij niet genormaliseerd; alleen de bestaande refs-gelijkheid is behouden.
 
 Definitieve native matrix: 44 tests groen plus de afzonderlijke herstart-/
-readerrollbacktest groen. Met 32/128 historieversies zijn de factpayloads
+readerrollback- en publicatieactualiteitstests groen (46 totaal). De compacte
+lifecycle-read herstelt, net als de legacy reader, altijd zijn tijdelijke tree-
+prefetchscope: een volgende commandread ziet een tussentijdse canonieke publicatie.
+Het native tegenvoorbeeld is rood/groen uitgevoerd; de fix is afzonderlijk
+read-only gereviewd en alle 21 betrokken kaart-/badge-/rollbacktests slagen.
+Met 32/128 historieversies zijn de factpayloads
 13387/13391 bytes voor drie actuele records (kleine identiteits-/versielengte-
 variatie). Daarnaast slagen 38 bestaande native POST-/lock-/concurrency- en
 overzichtsregressies en 6 architectuurinvarianten. Volledige regressie- en
