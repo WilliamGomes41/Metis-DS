@@ -1077,9 +1077,10 @@ def _review_context_block(
 
         open_link = ""
         if object_id and resolution != RESOLUTION_MISSING:
+            location = f'/review?document={snap}&object={quote(object_id, safe="")}{task_query}'
             open_link = (
                 f'<a class="btn-secondary relation-context-open" '
-                f'href="/review?document={snap}&object={quote(object_id, safe="")}{task_query}">'
+                f'href="{_esc(location)}">'
                 "Open passage</a>"
             )
 
@@ -3314,7 +3315,7 @@ def _render_review_card(
         if draft.get('proposed_correction') else ''
     )
     return f"""
-                <p><a class="btn-secondary" href="{_review_location(console, snapshot_id, task=task or "contextual")}">← Terug naar kennisvoorstellen</a></p>
+                <p><a class="btn-secondary" href="{_esc(_review_location(console, snapshot_id, task=task or "contextual"))}">← Terug naar kennisvoorstellen</a></p>
                 <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
                     <div class="review-decision-layout">
                     <div class="review-source-column">

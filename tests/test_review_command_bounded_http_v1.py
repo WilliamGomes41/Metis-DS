@@ -89,6 +89,7 @@ def test_native_compact_post_is_bounded_and_preserves_independent_rows(
                            follow_redirects=False).status_code == 303
         page = client.get("/review", params={"document": sid, "object": focal["object_id"]})
         assert page.status_code == 200
+        assert html.escape(f'/review?document={sid}&task=contextual', quote=True) in page.text
         data = submission(page, sid, focal, draft)
         before = physical_state(console, sid)
         assert any(row["object_id"] == independent["object_id"] for row in before["bindings"])

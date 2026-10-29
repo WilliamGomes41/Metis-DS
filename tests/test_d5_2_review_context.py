@@ -345,6 +345,25 @@ def test_review_context_ui_marks_stale_version_and_does_not_change_relation_choi
     assert relation["target_object_version"] == "1.0"
     assert relation["target_object_id"] in review_html
 
+    # HTML attributes escape query separators after URL encoding; navigation
+    # must still point at exactly the same document, passage and task.
+    from html.parser import HTMLParser
+    from urllib.parse import parse_qs, urlsplit
+
+    class Links(HTMLParser):
+        href = None
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == 'a' and 'relation-context-open' in attrs.get('class', ''):
+                self.href = attrs['href']
+
+    links = Links()
+    links.feed(context_html)
+    assert '&amp;object=' in context_html
+    assert parse_qs(urlsplit(links.href).query) == {
+        'document': ['snap-1'], 'object': [condition_v2['object_id']]}
+
 
 def test_queue_context_resolves_outside_task_and_preserves_stale_warning():
     from src.operations_console_app import _review_section_groups

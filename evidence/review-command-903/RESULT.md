@@ -10,8 +10,14 @@ De vijf eerder genoemde testworkflows waren groen, maar de afzonderlijke
 CodeQL-check meldde XSS op de foutrespons. De eerdere eindmelding omvatte die
 check ten onrechte niet. Een parserproef met textarea-sluit-tags, een img-onerror
 en attribuutinjectie toont dat de oorspronkelijke escape-helper deze invoer
-inert houdt. De response gebruikt nu rechtstreeks `html.escape(..., quote=True)`
-zodat de sanitizer ook aan deze modulegrens expliciet is; geen alertsuppressie.
+inert houdt. Expliciete escaping in alleen die response lost de CodeQL-melding
+niet op en is daarom weer verwijderd. Lokale CodeQL2.27.3 met dezelfde
+python-queries1.8.13 reproduceert de melding en geeft de daadwerkelijke paden:
+`snapshot_id → _review_context_block → open_link → _render_review_card` en
+`return_task → _review_location → _render_review_card`. De twee URL's waren
+percentgecodeerd, maar werden zonder HTML-attribuutescaping ingevoegd.
+Beide HTML-sinks gebruiken nu de bestaande `_esc` na URL-constructie. Geen
+alertsuppressie, extra decoder of wijziging aan navigatie-/besluitsemantiek.
 Een geïsoleerde mutatie zonder comment-escaping wordt door de regressietest
 ontdekt. Native 400/409-proeven behouden dezelfde kwaadaardige tekst exact.
 
@@ -22,9 +28,17 @@ reparatie. Een native proef verwijdert alleen de drie afgeleide indexen in een
 eigen testdatabase en past het gecontroleerde plan tweemaal succesvol toe;
 alle drie indexen worden gecontroleerd. Geen productieapply of datamigratie.
 
-Gerichte eindcontrole:11 tests groen (migratierunner inclusief native herhaling,
-HTML-parser, begrensde32/128-POST en stale herstel), geen skips. Nieuwe CodeQL-
-en volledige CI-uitkomsten moeten op de nieuwe PR-head worden gecontroleerd.
+De eerste gerichte controle telde11 groene tests (migratierunner inclusief native
+herhaling, HTML-parser, begrensde32/128-POST en stale herstel), geen skips.
+Na de gerichte sinkreparatie verwijdert dezelfde lokale CodeQL-query de nieuwe
+melding op `review_command_response_v1.py`; twee bestaande meldingen op andere
+app-responses blijven buiten deze reparatie. Zie
+[queryresultaat en SARIF-hashes](codeql-xss-recheck.json). De aanvullende native
+context-/linknavigatieproeven zijn groen. Zes karakterisatiebestanden veranderen
+uitsluitend de queryscheiding `&` naar `&amp;` in het teruglinkattribuut; geen
+andere uitvoer of normalisatie is aangepast. Alle27 Review-karakterisaties slagen
+na deze gerichte aanpassing; de overige28 gerichte tests waren al groen.
+Nieuwe volledige CI-uitkomsten moeten op de nieuwe PR-head worden gecontroleerd.
 
 ## Werking en grenzen
 
