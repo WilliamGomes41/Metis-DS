@@ -233,13 +233,16 @@ def is_inhoudelijk_candidate(obj: dict[str, Any]) -> bool:
     return spans_are_exact(semantic.get("spans"))
 
 
-def _apply_bound_fields(row: dict[str, Any]) -> list[str]:
-    """Bind source fields; a v3 via_relation target keeps its relation-derived target (B5-f)."""
-    from src.vorming.source_bound_fields_v3 import TARGET_FIELDS, keep_relation_targets
-    relation_targets = {field: row.get(field) for field in TARGET_FIELDS}
+def _apply_bound_fields(row: dict[str, Any], object_revision: dict[str, Any] | None) -> list[str]:
+    """Bind source fields; a v3 via_relation target takes the object's own relation target (B5-f).
+
+    Only the current object's own relations count: those are validated with this
+    object revision. A peer's incoming relation may carry a stale endpoint version.
+    """
+    from src.vorming.source_bound_fields_v3 import keep_relation_targets, own_relation_targets
     codes = apply_bound_fields(row)
     if not codes:
-        keep_relation_targets(row, relation_targets)
+        keep_relation_targets(row, own_relation_targets(object_revision))
     return codes
 
 
@@ -635,7 +638,7 @@ def admit_candidate(
     ]
     row = build_candidate_record(**{k: v for k, v in candidate.items() if k != "skip_context_scan"})
     v2 = FIELD_EVIDENCE_KEY in row
-    codes: list[str] = _apply_bound_fields(row) if v2 else []
+    codes: list[str] = _apply_bound_fields(row, object_revision) if v2 else []
     from src.vorming.source_bound_fields_v3 import VERSION as V3_VERSION, MODE as V3_MODE
     v3 = isinstance(row.get(FIELD_EVIDENCE_KEY), dict) and row[FIELD_EVIDENCE_KEY].get("version") == V3_VERSION
     if row.get("field_formation_mode") == V3_MODE and not v3:

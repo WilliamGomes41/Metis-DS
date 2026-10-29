@@ -9,7 +9,8 @@ import pytest
 
 from src.vorming.source_bound_fields_v2 import KEY, evidence_schema as schema_v2
 from src.vorming.source_bound_fields_v3 import (
-    FIELDS, TARGET_FIELDS, VIA_RELATION, bind_fields, bound_values, evidence_schema, keep_relation_targets,
+    FIELDS, TARGET_FIELDS, VIA_RELATION, additional_context_codes, bind_fields, bound_values, evidence_schema,
+    keep_relation_targets, own_relation_targets,
 )
 
 TEXT = "Controleer de huid dagelijks."
@@ -65,3 +66,36 @@ def test_list_introduction_context_may_carry_scope():
     record = bind_fields(raw, selected=SELECTED, candidate_text=TEXT, proposed_type="recommendation", context=context)
     assert record["values"]["scope_span"] == "patiënten met diabetes"
     assert bound_values(record, text=TEXT, proposed_type="recommendation", context=context)["scope_span"] == "patiënten met diabetes"
+
+
+def test_only_the_objects_own_relation_supplies_a_target():
+    # A peer's incoming relation may carry a stale endpoint version: never a source.
+    own = {"relations": [{"relation_type": "applies_if", "target_object_id": "obj-rec"}]}
+    assert own_relation_targets(own) == {"condition_target": "obj-rec"}
+    assert own_relation_targets({"relations": []}) == {}
+    assert own_relation_targets(None) == {}
+    two = {"relations": [{"relation_type": "applies_if", "target_object_id": "a"},
+                         {"relation_type": "applies_if", "target_object_id": "b"}]}
+    assert own_relation_targets(two) == {}  # ambiguous: admission keeps condition_target_missing
+
+
+def test_admission_takes_a_via_relation_target_only_from_own_relations():
+    from src.vorming.admission_gate_v1 import _apply_bound_fields
+    record = bind_fields(_raw(condition_target={"span": None, "missing_reason": VIA_RELATION}),
+                         selected=SELECTED, candidate_text=TEXT, proposed_type="condition")
+    def row():  # condition_target as the legacy _target_for derived it from a peer relation
+        return {KEY: record, "candidate_text": TEXT, "proposed_type": "condition", "condition_target": "peer"}
+    peer_only = row()
+    assert _apply_bound_fields(peer_only, {"relations": []}) == [] and peer_only["condition_target"] == ""
+    owned = row()
+    assert _apply_bound_fields(owned, {"relations": [{"relation_type": "applies_if", "target_object_id": "obj-rec"}]}) == []
+    assert owned["condition_target"] == "obj-rec"
+
+
+def test_list_introduction_realizes_a_scope_heading():
+    heading = "Bij patiënten met diabetes:"
+    row = {"recommendation_evidence_span": TEXT, "section_path": [heading]}
+    realized = [{"role": "list_introduction", "text": heading}]
+    assert additional_context_codes(row, {"realized": realized}) == []
+    assert additional_context_codes(row, {"realized": [{"role": "support", "text": heading}]}) == [
+        "recommendation_scope_context_missing"]

@@ -250,6 +250,11 @@ def _scope_present(scope, text):
     return bool(scope) and re.search(r"(?<!\w)" + re.escape(scope) + r"(?!\w)", text) is not None
 
 
+# Roles that realize a known scope cue; list_introduction may carry scope_span (B5-d).
+SCOPE_REALIZING_ROLES = frozenset({"scope", "condition", "exception", "row_header", "column_header",
+                                   "list_introduction"})
+
+
 def additional_context_codes(row, realization, *, obj=None, fragments=None):
     """Known scope cues must be realized; absence of cues proves no completeness."""
     core = str(row.get("recommendation_evidence_span") or "")
@@ -272,7 +277,7 @@ def additional_context_codes(row, realization, *, obj=None, fragments=None):
         cue = item.get("scope_cue")
         if cue and not _scope_present(cue["text"], core) and not any(
             _scope_present(cue["text"], r.get("text") or "")
-            and r.get("role") in {"scope", "condition", "exception", "row_header", "column_header"}
+            and r.get("role") in SCOPE_REALIZING_ROLES
             for r in realized
         ):
             codes.append("recommendation_scope_context_missing")
@@ -281,11 +286,29 @@ def additional_context_codes(row, realization, *, obj=None, fragments=None):
                 or heading.rstrip().endswith(":")):
             if not _scope_present(heading, core) and not any(
                 _scope_present(heading, r.get("text") or "")
-                and r.get("role") in {"scope", "condition", "exception", "row_header", "column_header"}
+                and r.get("role") in SCOPE_REALIZING_ROLES
                 for r in realized
             ):
                 codes.append("recommendation_scope_context_missing")
     return codes
+
+
+# B5-f: the relation types of a via_relation target, owned by the object itself.
+TARGET_RELATIONS = {"condition_target": {"applies_if"}, "exception_target": {"except_if"},
+                    "supported_object": {"explains", "supported_by"}}
+
+
+def own_relation_targets(obj):
+    """The single target per field named by the object's own relations, never by a peer's."""
+    targets = {}
+    for field, kinds in TARGET_RELATIONS.items():
+        found = {str(rel.get("target_object_id") or "").strip()
+                 for rel in (obj or {}).get("relations") or ()
+                 if isinstance(rel, dict) and rel.get("relation_type") in kinds}
+        found.discard("")
+        if len(found) == 1:
+            targets[field] = found.pop()
+    return targets
 
 
 def keep_relation_targets(row, before):
