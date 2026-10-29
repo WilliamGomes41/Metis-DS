@@ -248,7 +248,7 @@ Nieuw: P2-cascadereikwijdte (#909), testgat 2.6 (#910), bewijs per geval (#911);
 
 | ID | Vraag | Status |
 | --- | --- | --- |
-| B5-a | Mag een `exception`-contextentry `exception_span` dragen (V3)? | OPEN — vereist bronreferentie (#530) |
+| B5-a | Mag een `exception`-contextentry `exception_span` dragen (V3)? | BESLOTEN 2026-10-29 (projectlead: advies B overgenomen). Nee, niet bouwen. Een uitzondering buiten de kern wordt een eigen uitzonderingsobject met een `except_if`-relatie (B5-f). Echte snapshot: 0 gevallen. Heropenen alleen bij een referentiegeval (MET-7/#530) dat een onterecht geblokkeerde uitzondering toont. Huidig gedrag vastgelegd in `tests/test_v3_exception_context_b5a.py` |
 | B5-b | Beperken we de quarantaine bij een relatiefout tot oplosbare eindpunten? | BESLOTEN 2026-10-29 (projectlead): ja. Bij exact oplosbare eindpunten alleen die eindpunten en hun afhankelijken; bij een onbekend eindpunt blijft het call-breed. Uitgevoerd in #909 |
 | B5-h | Verwijzen relaties naar objecten via hun index in de call in plaats van via herhaalde bronspans? | BESLOTEN 2026-10-29 (projectlead: "ga door"). Ja, alleen in het V3-contract: `source_object`/`target_object` (index), vertaald aan de producergrens (`recoverable_formation_v1.prepare`) naar de eigen selecties van die objecten. V2 en opgeslagen legacy-uitvoer met spans blijven werken. Contractdeel `relation-object-index-v1`. Eigenaar MET-6 |
 | E1 | Echte export per foutcode op één snapshot (bron-SHA, spans, voorstel) | GELEVERD — `met-28-real-case-diagnosis.md` (#911) |
