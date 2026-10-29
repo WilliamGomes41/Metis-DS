@@ -120,17 +120,18 @@ herkent in het gekozen bewijs geen sterkte, niet een andere sterkte.
 
 `afgeraden` impliceert bovendien de richting "tegen"; een besluit moet richting en sterkte samen
 regelen. Eigenaar: MET-7 (richtlijnsterkte, #530), na besluit. De huidige grens is vastgelegd in
-`tests/test_source_strength_labels.py::test_verbal_strength_phrasing_is_not_a_label_until_decided`;
-die test verandert alleen samen met een vastgelegd besluit B5-c.
+`tests/test_source_strength_labels.py::test_verbal_strength_phrasing_is_never_a_label`. Na
+besluit B5-c (sectie 3) telt werkwoordelijke sterkte alleen binnen een V3-kern, nooit als label.
 
 ### 2.5 `recommendation_strength_evidence_not_applicable` — 1 uniek (historisch)
 
 Het label `sterke aanbeveling` (positie 13–31) ligt binnen de kandidaat (0–192), maar vóór
 de aanbevelingskern (45–192): in een inleidend zinsdeel van dezelfde zin, met de kern direct erna.
 `_applicable_strength_ranges` accepteert alleen de kern, direct volgende stempels en
-omsluitende koppen (A07). Een inleidend label valt daar bewust buiten. Klasse **(g) onbeslist**,
-hetzelfde patroon als S1 in 2.4; het hoort bij besluit B5-c. Een latere call heeft het geval
-opgelost (historical).
+omsluitende koppen (A07). Een inleidend label viel daar bewust buiten. Klasse (g), hetzelfde
+patroon als S1 in 2.4. Een latere call heeft het geval opgelost (historical). **Besluit B5-c**
+(sectie 3): in V3 telt zo'n label wel, mits in hetzelfde object en blok, direct vóór de kern, met
+alleen een dubbele punt of spaties ertussen.
 
 ### 2.6 `semantic_supplement_outside_target` — 0
 
@@ -220,7 +221,7 @@ validator-input en de blokken uit de request-payload (code functioneel gelijk aa
 
 | ID | Vraag | Bewijs | Kleinste wijziging na een "ja" |
 | --- | --- | --- | --- |
-| B5-c | Telt werkwoordelijke sterkte in de bron (`sterk aanbevolen/geadviseerd/afgeraden`) als expliciete sterkte en richting? En een inleidend label in dezelfde zin vóór de kern (2.5)? | 5 bronplekken, 15 pending bevindingen (S2); 1 historisch geval (2.5) | Vocabulaire uitbreiden in `recommendation_semantics_v1`, met een negatieve test (`sterk` als bijwoord in andere betekenis). Eigenaar MET-7 |
+| B5-c | Telt werkwoordelijke sterkte in de bron (`sterk aanbevolen/geadviseerd/afgeraden`) als expliciete sterkte en richting? En een inleidend label in dezelfde zin vóór de kern (2.5)? | 5 bronplekken, 15 pending bevindingen (S2); 1 historisch geval (2.5) | **BESLOTEN 2026-10-29** (projectlead: beide adviezen overgenomen). (1) Gesloten lijst, alleen binnen de V3-aanbevelingskern zelf: `sterk aanbevolen`/`sterk geadviseerd` → sterk, voor; `sterk afgeraden`/`sterk ontraden` → sterk, tegen. Een ontkenning (`niet`, `geen`, `nooit`) eerder in dezelfde zin sluit de cue uit (fail closed). Zwak wordt nooit uit een werkwoord afgeleid. Buiten de kern, als stempel of als kop telt een werkwoordsvorm niet. Een werkwoordelijke richting die de voorgestelde richting tegenspreekt, wijst af. (2) Een inleidend label telt alleen in hetzelfde object en hetzelfde bronblok, direct vóór de kern, met alleen dubbele punt of spaties ertussen. Zonder dubbele punt telt het label alleen aan het begin van het blok; anders kan het de nastempel van de vorige tekst zijn (fail closed). Een label boven een lijst (eigen bronblok) telt niet. V2 ongewijzigd. Contractdeel `v3-verbal-strength-and-lead-in-label-v1`; tests `tests/test_v3_verbal_strength_b5c.py`. Restrisico: binnen één fragment worden regeleinden tot spaties genormaliseerd, dus een label en kern in één fragment gelden als dezelfde zin. Eigenaar MET-6 (uitvoering), MET-7 (vocabulaire) |
 | B5-d | Mag een `list_introduction`-context een `scope_span` dragen? | 4 unieke gevallen | **BESLOTEN 2026-10-29** (projectlead): ja. `CONTEXT_FIELDS["scope_span"]` bevat `list_introduction` (V3; contractdeel `scope-list-introduction-v1`). Eigenaar MET-6 |
 | B5-e | Mag `occurrence = null` voor een **kernveld** binnen de kandidaatspans worden opgelost? | 30 unieke kernveldgevallen (47 incl. contextvelden) | **BESLOTEN 2026-10-29** (projectlead: advies overgenomen). Ja, alleen voor V3-kernvelden en alleen bij precies één treffer binnen de eigen kandidaat. V2 houdt blokbrede uniciteit. Resolverversie `candidate-scoped-core-v1`. **Uitbreiding 2026-10-29** (projectlead: "ga door"): ook contextvelden, binnen de eigenaren die `bind_fields` toelaat (de kandidaat plus opgeloste contextentries met een toegelaten rol). Resolverversie `owner-scoped-fields-v2`. Eigenaar MET-6 |
 | B5-f | Horen doelvelden (`supported_object`, `condition_target`) binnen de kandidaat, of via een relatie? | 22 unieke gevallen (24 op main na B5-e) | **BESLOTEN 2026-10-29** (projectlead): via een relatie. In V3 mag een doelveld `span null` met `missing_reason via_relation` dragen; admissie neemt het doel uitsluitend uit `incoming_relation_targets`: precies één peer-relatie (`applies_if`/`except_if`/`explains`/`supported_by`) die deze exacte objectversie noemt en de relatie-admissiechecks doorstaat. De compatibiliteitswaarde van `_target_for` telt niet. Zonder zo'n relatie blijft `*_target_missing` blokkeren. Contractdeel `target-via-relation-v1`. Eigenaar MET-6 |
