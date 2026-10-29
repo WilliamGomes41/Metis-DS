@@ -97,8 +97,34 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
         else:
             break
 
+    def indexed_endpoints(raw):
+        """B5-h: the two distinct proposal objects a relation names by index, or None."""
+        if not isinstance(raw, dict) or not {"source_object", "target_object"} <= set(raw):
+            return None
+        ends = (raw["source_object"], raw["target_object"])
+        if (any(type(i) is not int or not 0 <= i < len(proposal["objects"]) for i in ends)
+                or ends[0] == ends[1] or not all(isinstance(proposal["objects"][i], dict) for i in ends)):
+            return None
+        return ends
+
+    def span_relation(raw):
+        # Index endpoints become the named objects' own selections, so the
+        # unchanged resolver, validator and relation attachment see exactly the
+        # spans those objects selected. Unusable indexes stay unresolvable.
+        ends = indexed_endpoints(raw)
+        if not isinstance(raw, dict) or not {"source_object", "target_object"} & set(raw):
+            return raw
+        rest = {k: v for k, v in raw.items() if k not in ("source_object", "target_object")}
+        if ends is None:
+            return {**rest, "source_spans": [], "target_spans": []}
+        return {**rest, "source_spans": deepcopy(proposal["objects"][ends[0]].get("spans")),
+                "target_spans": deepcopy(proposal["objects"][ends[1]].get("spans"))}
+
     def endpoint_owners(raw):
         """Objects named by both relation endpoints, or None when either is unknown."""
+        ends = indexed_endpoints(raw)
+        if ends is not None:
+            return set(ends)
         try:
             ends = [resolve(raw[key]) for key in ("source_spans", "target_spans")]
         except (SemanticPassageError, AttributeError, KeyError, TypeError):
@@ -113,18 +139,19 @@ quarantine to both endpoints, transitively, rather than disappearing silently.
     bad = set(range(len(proposal["objects"]))) - set(objects)
     for index, raw in enumerate(proposal.get("relations", [])):
         try:
-            relation = resolve(raw)
+            relation = resolve(span_relation(raw))
             ends = [relation.get(key) for key in ("source_spans", "target_spans")]
-            owners = {i for i, spans in selections.items() if spans in ends}
+            indexed = indexed_endpoints(raw)
+            owners = set(indexed) if indexed else {i for i, spans in selections.items() if spans in ends}
             if len(owners) < 2:
                 raise SemanticPassageError("relation_endpoint_missing")
             relations.append((index, relation, owners))
         except (SemanticPassageError, AttributeError) as error:
             if not isinstance(error, SemanticPassageError):
                 error = SemanticPassageError("knowledge_relation_invalid")
-            # B5-b (#909): when both endpoints still resolve exactly to proposed
-            # objects, only those endpoints (and, below, their dependants) are
-            # quarantined. Unknown endpoints cannot establish independence:
+            # B5-b (#909): when both endpoints still name exactly one proposed
+            # object each, only those endpoints (and, below, their dependants)
+            # are quarantined. Unknown endpoints cannot establish independence:
             # quarantine this call, while an earlier validated call remains.
             endpoints = endpoint_owners(raw)
             bad.update(objects if endpoints is None else endpoints)

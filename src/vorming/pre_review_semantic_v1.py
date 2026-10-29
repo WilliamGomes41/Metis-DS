@@ -160,6 +160,8 @@ SEMANTIC_V3_INSTRUCTION = (
     "formation_task.selectable_ranges is the authoritative candidate boundary, including for initial tasks. "
     "evidence_blocks are context-only; never form a new candidate from them. Source blocks may contain "
     "previous selections outside the selectable ranges: those ranges are context-only as well. "
+    "In this contract, identify relation source and target by source_object and target_object instead of "
+    "by their selected spans: the zero-based index of two different objects in this proposal's objects array. "
 )
 
 SOURCE_ACCOUNTABILITY_INSTRUCTION = (
@@ -336,6 +338,15 @@ def _proposal_schema(field_contract_v2: bool = False, field_contract_v3: bool = 
             "recommendation_semantics",
         ],
     }
+    if field_contract_v3:
+        # B5-h: a v3 relation names its endpoints by object index; the producer
+        # boundary (recoverable_formation_v1.prepare) maps them to the objects'
+        # own selections, so repeated span literals cannot miss an endpoint.
+        props = relation["properties"]
+        del props["source_spans"], props["target_spans"]
+        props["source_object"] = {"type": "integer", "minimum": 0}
+        props["target_object"] = {"type": "integer", "minimum": 0}
+        relation["required"] = ["source_object", "relation_type", "target_object", "evidence_spans"]
     if field_contract_v2 or field_contract_v3:
         from src.vorming.source_bound_fields_v3 import evidence_schema as schema_v3
         obj["properties"]["field_evidence"] = schema_v3(span) if field_contract_v3 else evidence_schema(span)
@@ -584,7 +595,7 @@ def _replay_identity(
 
 def semantic_contract_version(*, field_contract_v2=False, field_contract_v3=False):
     """The one semantic contract string; replay identity and reservation MOETEN share it."""
-    return ("source-accountability-v2/bounded-formation-v1/" if field_contract_v3 else "source-accountability-v1/") + (f"recoverable-formation-v1/{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}") + f"/{STRENGTH_BINDING_VERSION}/{SOURCE_OCCURRENCE_AUTHORITY_VERSION}"
+    return ("source-accountability-v2/bounded-formation-v1/" if field_contract_v3 else "source-accountability-v1/") + (f"recoverable-formation-v1/relation-object-index-v1/{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}") + f"/{STRENGTH_BINDING_VERSION}/{SOURCE_OCCURRENCE_AUTHORITY_VERSION}"
 
 
 def semantic_contract_version_for_mode(mode):

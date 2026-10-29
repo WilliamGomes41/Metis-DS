@@ -250,7 +250,7 @@ Nieuw: P2-cascadereikwijdte (#909), testgat 2.6 (#910), bewijs per geval (#911);
 | --- | --- | --- |
 | B5-a | Mag een `exception`-contextentry `exception_span` dragen (V3)? | OPEN — vereist bronreferentie (#530) |
 | B5-b | Beperken we de quarantaine bij een relatiefout tot oplosbare eindpunten? | BESLOTEN 2026-10-29 (projectlead): ja. Bij exact oplosbare eindpunten alleen die eindpunten en hun afhankelijken; bij een onbekend eindpunt blijft het call-breed. Uitgevoerd in #909 |
-| B5-h | Verwijzen relaties naar objecten via hun index in de call in plaats van via herhaalde bronspans? | OPEN — oorzaak van alle 5 `relation_endpoint_missing`-gevallen in MET-28; wijziging van het producercontract (nieuwe contractversie en route, MET-13). Eigenaar MET-6 |
+| B5-h | Verwijzen relaties naar objecten via hun index in de call in plaats van via herhaalde bronspans? | BESLOTEN 2026-10-29 (projectlead: "ga door"). Ja, alleen in het V3-contract: `source_object`/`target_object` (index), vertaald aan de producergrens (`recoverable_formation_v1.prepare`) naar de eigen selecties van die objecten. V2 en opgeslagen legacy-uitvoer met spans blijven werken. Contractdeel `relation-object-index-v1`. Eigenaar MET-6 |
 | E1 | Echte export per foutcode op één snapshot (bron-SHA, spans, voorstel) | GELEVERD — `met-28-real-case-diagnosis.md` (#911) |
 | E2 | Gevallen van 2.4/2.5/2.6 in echte evidence | 2.4 en 2.5 gevonden; 2.6 komt in die snapshot niet voor (#911) |
 | E3 | Azure-SHA en route van het v12-incident | UNKNOWN |
