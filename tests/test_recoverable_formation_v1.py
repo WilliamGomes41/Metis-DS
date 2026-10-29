@@ -406,6 +406,46 @@ def test_ambiguous_relation_endpoint_still_quarantines_the_whole_call():
         assert kept == []
 
 
+def _indexed(source, target, evidence):
+    return {'source_object': source, 'relation_type': 'applies_if', 'target_object': target,
+            'evidence_spans': deepcopy(evidence)}
+
+
+def test_indexed_relation_names_its_endpoints_directly():
+    # B5-h: endpoints by object index; no repeated span literal can miss an object.
+    objects, blocks, run = _relation_case([FIRST, SECOND, 'Bespreek de omstandigheden'])
+    kept, rejections = run([_indexed(1, 0, objects[1]['spans'])])
+    assert kept == [b['block_id'] for b in blocks] and rejections == []
+    kept, rejections = run([_indexed(1, 0, _invented(objects[1]['spans']))])
+    assert kept == [blocks[2]['block_id']]
+    assert sorted(r['index'] for r in rejections if r['kind'] == 'object') == [0, 1]
+
+
+def test_indexed_relation_to_a_rejected_object_quarantines_only_its_endpoints():
+    objects, blocks, run = _relation_case([FIRST, SECOND, 'Bespreek de omstandigheden'])
+    objects[0]['field_evidence']['recommended_action']['span']['literal'] = 'invented'
+    kept, rejections = run([_indexed(1, 0, objects[1]['spans'])])
+    assert kept == [blocks[2]['block_id']]
+    assert {(r['index'], r['reason_code']) for r in rejections if r['kind'] == 'object'} == {
+        (0, 'semantic_evidence_literal_not_found'), (1, 'semantic_dependency_rejected')}
+
+
+@pytest.mark.parametrize('source,target', [(1, 7), (1, 1), (-1, 0), (True, 0), ('1', 0)])
+def test_unusable_relation_index_still_quarantines_the_whole_call(source, target):
+    objects, _, run = _relation_case([FIRST, SECOND, 'Bespreek de omstandigheden'])
+    kept, _ = run([_indexed(source, target, objects[1]['spans'])])
+    assert kept == []
+
+
+def test_v3_relation_schema_names_objects_by_index_and_v2_is_unchanged():
+    from src.vorming.pre_review_semantic_v1 import _proposal_schema
+    v3 = _proposal_schema(field_contract_v3=True)['properties']['relations']['items']
+    assert v3['required'] == ['source_object', 'relation_type', 'target_object', 'evidence_spans']
+    assert 'source_spans' not in v3['properties'] and v3['additionalProperties'] is False
+    v2 = _proposal_schema(field_contract_v2=True)['properties']['relations']['items']
+    assert v2['required'] == ['source_spans', 'relation_type', 'target_spans', 'evidence_spans']
+
+
 def test_relation_evidence_failure_follows_transitive_dependants():
     # #909 / B5-b: obj2 depends on obj1 through a valid relation, so it follows obj1;
     # obj3 has no recorded dependency and is retained.
