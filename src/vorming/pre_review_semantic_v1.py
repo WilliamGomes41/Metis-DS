@@ -162,6 +162,11 @@ SEMANTIC_V3_INSTRUCTION = (
     "previous selections outside the selectable ranges: those ranges are context-only as well. "
     "In this contract, identify relation source and target by source_object and target_object instead of "
     "by their selected spans: the zero-based index of two different objects in this proposal's objects array. "
+    "When the statement a condition, exception or explanation applies to is outside its selected core, set "
+    "condition_target, exception_target or supported_object to span null with missing_reason via_relation and "
+    "propose applies_if, except_if or explains between that object and the object containing the statement. "
+    "A list introduction that states the clinical situation of its items may be the scope_span via a "
+    "list_introduction context entry. "
 )
 
 SOURCE_ACCOUNTABILITY_INSTRUCTION = (
@@ -595,7 +600,7 @@ def _replay_identity(
 
 def semantic_contract_version(*, field_contract_v2=False, field_contract_v3=False):
     """The one semantic contract string; replay identity and reservation MOETEN share it."""
-    return ("source-accountability-v2/bounded-formation-v1/" if field_contract_v3 else "source-accountability-v1/") + (f"recoverable-formation-v1/relation-object-index-v1/{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}") + f"/{STRENGTH_BINDING_VERSION}/{SOURCE_OCCURRENCE_AUTHORITY_VERSION}"
+    return ("source-accountability-v2/bounded-formation-v1/" if field_contract_v3 else "source-accountability-v1/") + (f"recoverable-formation-v1/relation-object-index-v1/target-via-relation-v1/scope-list-introduction-v1/{FIELDS_V3_VERSION}/{CONTEXT_VERSION}/condition-context-and-timing-list-v2/recommendation-core-admission-v3/recommendation-coverage-v1/{SEMANTIC_PASSAGE_VERSION}/{V3_EVIDENCE_RESOLUTION_VERSION}" if field_contract_v3 else f"source-bound-fields-v2/{CONTEXT_VERSION}/{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}" if field_contract_v2 else f"{SEMANTIC_PASSAGE_VERSION}/{EVIDENCE_RESOLUTION_VERSION}") + f"/{STRENGTH_BINDING_VERSION}/{SOURCE_OCCURRENCE_AUTHORITY_VERSION}"
 
 
 def semantic_contract_version_for_mode(mode):

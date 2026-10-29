@@ -625,9 +625,14 @@ def admit_candidate(
     ]
     row = build_candidate_record(**{k: v for k, v in candidate.items() if k != "skip_context_scan"})
     v2 = FIELD_EVIDENCE_KEY in row
+    from src.vorming.source_bound_fields_v3 import (
+        TARGET_FIELDS, VERSION as V3_VERSION, MODE as V3_MODE, keep_relation_targets,
+    )
+    relation_targets = {field: row.get(field) for field in TARGET_FIELDS}
     codes: list[str] = apply_bound_fields(row) if v2 else []
-    from src.vorming.source_bound_fields_v3 import VERSION as V3_VERSION, MODE as V3_MODE
     v3 = isinstance(row.get(FIELD_EVIDENCE_KEY), dict) and row[FIELD_EVIDENCE_KEY].get("version") == V3_VERSION
+    if v3 and not codes:
+        keep_relation_targets(row, relation_targets)  # B5-f
     if row.get("field_formation_mode") == V3_MODE and not v3:
         codes.append("source_bound_fields_contract_mismatch")
     if not v2:
