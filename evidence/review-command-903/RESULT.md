@@ -102,7 +102,9 @@ De nieuwe no-deadlockharness faalt daar met een echte40P01; op de gewijzigde
 code blijven beide controles zonder cyclus, met precies één duurzame winnaar,
 rollback van verliezende audit en dezelfde toestand na herstart.
 
-## Eindstatus
+## Status bij overdracht aan CI
 
-CI_PENDING — concept-PR dient voor volledige schone verificatie na verlies van
-de managed uitvoeromgeving. Menselijke review en repositorychecks bepalen merge.
+Bij aanmaak van de concept-PR: CI_PENDING na verlies van de managed
+uitvoeromgeving. De actuele eindstatus staat bij de PR-checks en in de
+PR-beschrijving; dit document bewaart de uitgevoerde lokale waarnemingen.
+Menselijke review en repositorychecks bepalen merge.
