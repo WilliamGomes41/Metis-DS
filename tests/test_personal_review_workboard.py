@@ -126,18 +126,24 @@ def test_metadata_page_bounds_existing_enrichment_and_history_reads(mixed, monke
             else:
                 real_enrich(account_id, {sid: summary})
     monkeypatch.setattr(console, '_enrich_review_workboard_summaries', enrich)
-    reader = console.workflow_review_store.read_events_for_snapshots
+    reader = console.workflow_review_store.read_review_participation_events
+    history_pages = []
     def history(ids):
         calls['history'] += 1
         assert len(ids) <= 25
+        history_pages.append(list(ids))
         return reader(ids)
-    monkeypatch.setattr(console.workflow_review_store, 'read_events_for_snapshots', history)
+    monkeypatch.setattr(console.workflow_review_store, 'read_review_participation_events', history)
+    monkeypatch.setattr(console.workflow_review_store, 'read_events_for_snapshots',
+        lambda *args, **kwargs: pytest.fail('Personal participation must not read full audit archives'))
     monkeypatch.setattr(console, 'list_accounts', lambda: pytest.fail('No participant roster reader on personal landing'))
     first = _workboard_page(console, account=actor, theme='personal')
     assert calls == Counter(enrich=1, visible=25, history=1)
+    assert history_pages == [[f'page-{i}' for i in range(25)]]
     assert 'Op deze pagina heb je geen uitvoerbare beoordelingen.' in first
     assert open_sid not in first
     assert 'theme=personal' in first and 'page=2' in first
     second = _workboard_page(console, account=actor, page=2)
     assert calls == Counter(enrich=2, visible=26, history=2)
+    assert history_pages[1] == [open_sid]
     assert 'data-personal-open>2<' in card(second, open_sid)

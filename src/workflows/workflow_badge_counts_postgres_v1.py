@@ -316,16 +316,18 @@ class _PostgresBadgeCountsMixin:
         try:
             with self.workflow_document_store._connect() as con:
                 if metadata_only:
-                    columns = _DOCUMENT_CARD_COLUMNS.replace('d.envelope_payload', 'd.review_envelope')
+                    # The WP7 trigger derives this exact metadata in the same
+                    # document write. Old unprepared rows keep explicit lazy
+                    # compatibility; prepared rows never inspect their archive.
+                    columns = _DOCUMENT_CARD_COLUMNS.replace('d.envelope_payload',
+                        'COALESCE(d.review_read_envelope,d.envelope_payload)')
                     rows = con.execute(
-                        "WITH selected AS MATERIALIZED (SELECT d.*, d.envelope_payload - ARRAY["
-                        "'semantic_replay','processing_attempts','quality_processing_runs','prepared_source_extraction'] "
-                        "AS review_envelope FROM workflow.documents d WHERE EXISTS ("
+                        f"SELECT {columns} FROM workflow.documents d "
+                        "LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id WHERE EXISTS ("
                         "SELECT 1 FROM workflow.document_reviewers r WHERE r.snapshot_id=d.snapshot_id "
                         "AND r.account_id=%s) AND d.snapshot_id=COALESCE(%s,d.snapshot_id) "
-                        "AND d.publication_eligibility<>%s) "
-                        f"SELECT {columns} FROM selected d LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id "
-                        "ORDER BY d.snapshot_id", (account_id, snapshot_id or None, PRE_REVIEW_BLOCKED),
+                        "AND d.publication_eligibility<>%s ORDER BY d.snapshot_id",
+                        (account_id, snapshot_id or None, PRE_REVIEW_BLOCKED),
                     ).fetchall()
                     return {row['snapshot_id']: {'envelope': row, '_metadata_only': True}
                             for row in _document_cards_from_rows(rows)}
