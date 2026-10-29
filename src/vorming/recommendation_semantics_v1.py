@@ -235,8 +235,11 @@ def source_label_direction(text: str) -> str | None:
 def source_verbal_strength_cues(text: str, start: int = 0, end: int | None = None):
     """B5-c verbal cues inside text[start:end], negation read from the whole sentence."""
     blob = str(text or "")
-    for match in SOURCE_VERBAL_STRENGTH_RE.finditer(blob, start, len(blob) if end is None else end):
-        if not _NEGATION_RE.search(re.split(r"[.!?;\n]", blob[:match.start()])[-1]):
+    # Scan the whole text so word boundaries past the range still apply; a
+    # semicolon does not end the sentence for the negation check.
+    for match in SOURCE_VERBAL_STRENGTH_RE.finditer(blob):
+        if (start <= match.start() and match.end() <= (len(blob) if end is None else end)
+                and not _NEGATION_RE.search(re.split(r"[.!?\n]", blob[:match.start()])[-1])):
             yield match
 
 

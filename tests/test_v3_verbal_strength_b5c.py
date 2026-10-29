@@ -74,7 +74,8 @@ def test_weak_is_never_inferred_from_a_verb():
 
 
 @pytest.mark.parametrize("text", ["Fixatie wordt niet sterk aanbevolen.",
-                                  "Fixatie wordt in die gevallen niet zo sterk aanbevolen."])
+                                  "Fixatie wordt in die gevallen niet zo sterk aanbevolen.",
+                                  "Fixatie wordt niet gebruikt; daarom wordt deze sterk aanbevolen."])
 def test_negated_verbal_strength_is_not_a_cue(text):
     with pytest.raises(SemanticPassageError, match="recommendation_strength_literal_mismatch"):
         validate(text, text, direction="for", label="sterk aanbevolen")
@@ -100,6 +101,11 @@ def test_verbal_strength_stays_outside_v2():
 def test_other_meanings_of_sterk_are_not_verbal_cues(text):
     expected = ["sterk\naanbevolen"] if text.startswith("sterk\n") else []
     assert [m.group() for m in source_verbal_strength_cues(text)] == expected
+
+
+def test_core_range_cannot_cut_a_word_into_a_cue():
+    text = "Dit is sterk aanbevolenheid."
+    assert list(source_verbal_strength_cues(text, 0, text.index("heid"))) == []
 
 
 def test_verbal_cue_helpers_never_widen_label_vocabulary():
