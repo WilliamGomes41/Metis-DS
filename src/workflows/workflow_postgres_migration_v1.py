@@ -84,6 +84,52 @@ REQUIRED_COLUMNS = frozenset(
     }
 )
 
+# Least privileges the console runtime uses per table created by a registered migration
+# (#930). `GRANT ... ON ALL TABLES` misses later tables, so verify checks these explicitly.
+_S, _I, _U, _D = "SELECT", "INSERT", "UPDATE", "DELETE"
+RUNTIME_TABLE_PRIVILEGES = {
+    "accounts": (_S, _I, _U),
+    "sessions": (_S, _I, _U, _D),
+    "documents": (_S, _I, _U, _D),
+    "topics": (_S, _I),
+    "document_reviewers": (_S, _I, _D),
+    "document_objects": (_S, _I, _U, _D),
+    "review_events": (_S, _I, _U),
+    "publish_authorizations": (_S, _I, _U, _D),
+    "audit_records": (_S, _I, _U, _D),
+    "audit_secrets": (_S, _I, _U),
+    "entra_identities": (_S, _I, _U),
+    "entra_sessions": (_S, _I),
+    "entra_flows": (_S, _I, _D),
+    "quality_measurements": (_S, _I, _U),
+    "route_comparisons": (_S, _I, _U),
+    "publication_refusals": (_S, _I, _D),
+    "view_checks": (_S, _I, _U),
+    "processing_attempts": (_S, _I, _U),
+    "processing_document_summaries": (_S, _I, _U),
+    "processing_checkpoints": (_S, _I),
+    "prepared_extraction_versions": (_S, _I),
+    "formation_inputs": (_S, _I),
+    "formation_contexts": (_S, _I, _U),
+    "formation_task_results": (_S, _I, _U),
+    "formation_task_findings": (_S, _I),
+    "formation_task_result_history": (_S, _I),
+    "formation_task_plans": (_S, _I),
+    "formation_source_views": (_S, _I),
+    "source_read_roots": (_S, _I, _U),
+    "source_read_fragments": (_S, _I),
+    "source_read_blocks": (_S, _I),
+    "source_read_block_fragments": (_S, _I),
+}
+# Serial sequences the runtime advances on INSERT (identity columns need no grant).
+RUNTIME_SEQUENCE_PRIVILEGES = {
+    "review_events_event_id_seq": ("USAGE",),
+    "publish_authorizations_authorization_id_seq": ("USAGE",),
+    "publication_refusals_refusal_id_seq": ("USAGE",),
+}
+# Only required when the view check is enabled (METIS_VIEW_CHECK_ORIGIN).
+VIEW_CHECK_TABLES = frozenset({"view_checks"})
+
 
 class WorkflowMigrationError(RuntimeError):
     """Migration target, digest, connectivity, or schema verification failure."""
@@ -178,6 +224,41 @@ def observe_schema(connection: Any) -> dict[str, Any]:
         "missing_columns": missing_columns,
         "row_counts": counts,
     }
+
+
+def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool = False) -> dict[str, Any]:
+    """Report missing runtime grants and the targeted GRANT lines; never grants anything."""
+    if not role.strip():
+        raise WorkflowMigrationError("workflow_runtime_role_required")
+    try:
+        if not connection.execute("SELECT 1 FROM pg_roles WHERE rolname=%s", (role,)).fetchone():
+            return {"status": "BLOCKED", "runtime_role": role, "error": "workflow_runtime_role_missing",
+                    "missing_relations": [], "missing_privileges": [], "grants": []}
+        tables = {str(row["relname"]): str(row["relkind"]) for row in connection.execute(
+            "SELECT c.relname, c.relkind::text AS relkind FROM pg_class c "
+            "JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname='workflow' AND c.relkind IN ('r','S')"
+        ).fetchall()}
+        missing: list[str] = []
+        grants: list[str] = []
+        absent: list[str] = []
+        checks = [(name, privs, "r") for name, privs in RUNTIME_TABLE_PRIVILEGES.items()
+                  if view_check or name not in VIEW_CHECK_TABLES]
+        checks += [(name, privs, "S") for name, privs in RUNTIME_SEQUENCE_PRIVILEGES.items()]
+        for name, privileges, kind in sorted(checks):
+            if tables.get(name) != kind:
+                absent.append(name)  # Not every registered table is in REQUIRED_TABLES.
+                continue
+            function = "has_table_privilege" if kind == "r" else "has_sequence_privilege"
+            lacking = [p for p in privileges if not connection.execute(
+                f"SELECT {function}(%s, %s, %s) AS ok", (role, f"workflow.{name}", p)).fetchone()["ok"]]
+            if lacking:
+                missing += [f"{name}:{p}" for p in lacking]
+                target = f"workflow.{name}" if kind == "r" else f"SEQUENCE workflow.{name}"
+                grants.append(f'GRANT {", ".join(lacking)} ON {target} TO "{role}";')
+    except Exception as exc:
+        raise WorkflowMigrationError("workflow_runtime_privilege_observation_failed") from exc
+    return {"status": "PASS" if not missing and not absent else "BLOCKED", "runtime_role": role,
+            "missing_relations": absent, "missing_privileges": missing, "grants": grants}
 
 
 def apply_migrations(
