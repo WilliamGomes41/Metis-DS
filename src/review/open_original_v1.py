@@ -388,14 +388,20 @@ def full_document_segments(
 def passage_from_pdf_freeze(freeze_bytes: bytes, locator_value: str) -> str:
     import fitz
 
-    page_no, bbox = parse_page_bbox(locator_value)
     doc = fitz.open(stream=BytesIO(freeze_bytes), filetype="pdf")
     try:
-        page = doc[page_no - 1]
-        rect = fitz.Rect(bbox)
-        return page.get_text("text", clip=rect).strip()
+        return passage_from_pdf_document(doc, locator_value)
     finally:
         doc.close()
+
+
+def passage_from_pdf_document(doc: Any, locator_value: str) -> str:
+    """The same clip as passage_from_pdf_freeze, on a document opened once by the caller."""
+    import fitz
+
+    page_no, bbox = parse_page_bbox(locator_value)
+    page = doc[page_no - 1]
+    return page.get_text("text", clip=fitz.Rect(bbox)).strip()
 
 
 def _fragment_locators(object_record: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -428,6 +434,7 @@ def open_source_passage(
     locator: dict[str, Any] | None,
     object_record: dict[str, Any] | None = None,
     include_locators: bool = False,
+    pdf_document: Any = None,
 ) -> dict[str, Any]:
     loc = locator if locator is not None else (locator_of(object_record or {}) if object_record else None)
     if not isinstance(loc, dict) or not str(loc.get("locator_value") or "").strip():
@@ -448,6 +455,8 @@ def open_source_passage(
         if kind == "page_bbox":
             if content_kind != "pdf":
                 raise OpenOriginalError("locator_kind_mismatch")
+            if pdf_document is not None:
+                return passage_from_pdf_document(pdf_document, item_value)
             return passage_from_pdf_freeze(freeze_bytes, item_value)
         raise OpenOriginalError("unsupported_locator")
 

@@ -127,6 +127,9 @@ SCHEMA_V13 = REPO_ROOT / "schemas" / "knowledge_object.schema.v1.3.json"
 SCHEMA_V14 = REPO_ROOT / "schemas" / "knowledge_object.schema.v1.4.json"
 CONSOLE_VERSION = "operations-console-v1.0.0"
 SNAPSHOT_OBJECT_WRITE_CONFLICT = "snapshot_object_write_conflict"
+# Open-original failures that mean the record cannot be shown from its source.
+OPEN_ORIGINAL_REQUIRED_CODES = frozenset({
+    "source_locator_missing", "freeze_bytes_missing", "locator_kind_mismatch", "unsupported_locator"})
 CAPTURED = "captured_not_published"
 # These two normal progress reasons are written by receipt/formation below.
 PROCESSING_NOT_STARTED = "source_selection_not_started"
@@ -1334,14 +1337,35 @@ class OperationsConsole:
         try:
             return self.open_source_passage(snapshot_id=snapshot_id, object_id=object_id)
         except ConsoleError as exc:
-            if exc.code in {
-                "source_locator_missing",
-                "freeze_bytes_missing",
-                "locator_kind_mismatch",
-                "unsupported_locator",
-            }:
+            if exc.code in OPEN_ORIGINAL_REQUIRED_CODES:
                 raise ConsoleError("open_original_required") from exc
             raise
+
+    @contextmanager
+    def _open_original_reader(self, envelope: dict[str, Any], freeze_bytes: bytes | None):
+        """_require_open_original for many records of one already-verified source.
+
+        The caller has read the current objects and verified the source bytes once;
+        a PDF is opened once. Each record gets the same check and error codes.
+        """
+        document = None
+        if freeze_bytes is not None and envelope["content_kind"] == "pdf":
+            import fitz
+            document = fitz.open(stream=BytesIO(freeze_bytes), filetype="pdf")
+
+        def require(record: dict[str, Any]) -> dict[str, Any]:
+            try:
+                return open_source_passage(freeze_bytes=freeze_bytes, content_kind=envelope["content_kind"],
+                                           locator=None, object_record=record, pdf_document=document)
+            except OpenOriginalError as exc:
+                if exc.code in OPEN_ORIGINAL_REQUIRED_CODES:
+                    raise ConsoleError("open_original_required") from exc
+                raise ConsoleError(exc.code) from exc
+        try:
+            yield require
+        finally:
+            if document is not None:
+                document.close()
 
     def ingest(
         self,

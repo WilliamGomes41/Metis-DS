@@ -244,8 +244,7 @@ def _excluded_version(console: Any, ctx: dict[str, Any], source: dict[str, Any],
                       command_id: str, group: bool = False) -> dict[str, Any]:
     """The one exclusion write shared by the batch and the group command."""
     from src.operations_console_v1 import ConsoleError
-    oid = source["object_id"]
-    console._require_open_original(ctx["snapshot_id"], oid)
+    ctx["require_open_original"](source)
     if not verify_literal_source(source, ctx["fragments"], ctx["envelope"]["sha256"]):
         raise ConsoleError("source_context_evidence_invalid")
     updated = source_role_version(source, role="excluded", command_id=command_id, actor_id=ctx["actor_id"],
@@ -301,13 +300,17 @@ def _source_batch(console: Any, *, actor_id: str, snapshot_id: str, command_id: 
                 current, revision = console.snapshot_objects_and_revision(snapshot_id)
                 if revision != expected_revision:
                     raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=revision)
-                path, _ = console._verified_source_bytes(envelope)
+                path, freeze_bytes = console._verified_source_bytes(envelope)
                 ctx = {"actor_id": actor_id, "snapshot_id": snapshot_id, "reviewer": reviewer,
                        "envelope": envelope, "current": current, "now": utc_now(),
                        "by_id": {row["object_id"]: row for row in current},
                        "fragments": console._read_source_fragments(envelope, path),
                        "review_path": review_path_for_klasse(envelope["class"])}
-                changed, result, extra = body(ctx)
+                # One source read and one PDF open per command, not per member:
+                # per-member reopening held the transaction for minutes (incident 2026-10-30).
+                with console._open_original_reader(envelope, freeze_bytes) as require_open_original:
+                    ctx["require_open_original"] = require_open_original
+                    changed, result, extra = body(ctx)
                 history = console._load_objects(snapshot_id, remember=False) + changed
                 bindings = deepcopy(console._bindings)
                 for row in changed:
