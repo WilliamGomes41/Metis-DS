@@ -197,3 +197,52 @@ def test_single_and_group_commands_write_the_same_source_state(tmp_path, *, prod
     reset_source_group(state, actor_id=reviewer, snapshot_id=sid, group_command_id="group-1", reason="Terug.",
                        command_id="group-reset", expected_revision=state.objects_revision(sid))
     assert shape(FIRST) == shape(SECOND)
+
+
+from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: F401,E402
+
+
+def test_native_group_commit_failure_concurrent_reviewer_restart_and_publication(
+        recovery_postgres, tmp_path, monkeypatch, *, production_console):
+    """All-or-nothing on a failing commit, first writer wins, durable after restart, sealed once published."""
+    import psycopg
+    from src.review.source_context_review_v1 import confirm_source_group, reset_source_group
+    from tests.test_lifecycle_withdrawal_recovery_v1 import _console
+    from tests.test_publication_chain_recovery_v1 import FakeBlobStore
+    blobs = FakeBlobStore()
+
+    def console_at(name):
+        root = tmp_path / name
+        root.mkdir()
+        return _console(root, recovery_postgres, blobs)
+
+    writer = console_at("writer")
+    state, sid, reviewer = _document(tmp_path / "doc", production_console=lambda **_kw: writer)
+    first, second = _by_text(state, sid, FIRST)["object_id"], _by_text(state, sid, SECOND)["object_id"]
+    command = _command(state, sid, reviewer, ids=[first, second])
+    before = state.snapshot_objects(sid)
+    with psycopg.connect(recovery_postgres.dsn) as con:
+        con.execute("""CREATE FUNCTION workflow.fail_source_group_test() RETURNS trigger
+            LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'source_group_commit_failure'; END; $$""")
+        con.execute("""CREATE CONSTRAINT TRIGGER fail_source_group_test
+            AFTER INSERT ON workflow.document_objects DEFERRABLE INITIALLY DEFERRED
+            FOR EACH ROW EXECUTE FUNCTION workflow.fail_source_group_test()""")
+    try:
+        with pytest.raises(Exception, match="source_group_commit_failure"):
+            confirm_source_group(state, **command)
+        assert state.snapshot_objects(sid) == before  # Neither member changed.
+    finally:
+        with psycopg.connect(recovery_postgres.dsn) as con:
+            con.execute("DROP TRIGGER fail_source_group_test ON workflow.document_objects")
+            con.execute("DROP FUNCTION workflow.fail_source_group_test()")
+    other = console_at("other")  # A second reviewer's worker, same revision seen.
+    confirm_source_group(state, **command)
+    with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
+        confirm_source_group(other, **{**command, "command_id": "other-reviewer"})
+    fresh = console_at("restart")
+    assert fresh.snapshot_objects(sid) == state.snapshot_objects(sid)
+    assert confirm_source_group(fresh, **command)["idempotent"] is True
+    monkeypatch.setattr(fresh, "snapshot_is_published", lambda _: True)
+    with pytest.raises(ConsoleError, match="published_working_revision_immutable"):
+        reset_source_group(fresh, actor_id=reviewer, snapshot_id=sid, group_command_id="group-1",
+                           reason="Na publicatie.", command_id="late", expected_revision=fresh.objects_revision(sid))
