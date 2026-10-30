@@ -251,7 +251,13 @@ def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool =
         checks = [(name, privs, "r") for name, privs in RUNTIME_TABLE_PRIVILEGES.items()
                   if view_check or name not in VIEW_CHECK_TABLES]
         checks += [(name, privs, "S") for name, privs in RUNTIME_SEQUENCE_PRIVILEGES.items()]
-        checks += [(name, privs, "r") for name, privs in OPTIONAL_TABLE_PRIVILEGES.items() if name in tables]
+        for optional in OPTIONAL_MIGRATION_TABLES.values():
+            if any(name in tables for name in optional):  # Partly installed counts as installed.
+                checks += [(name, OPTIONAL_TABLE_PRIVILEGES[name], "r") for name in optional]
+        if not connection.execute("SELECT has_schema_privilege(%s, 'workflow', 'USAGE') AS ok",
+                                  (role,)).fetchone()["ok"]:
+            missing.append("schema workflow:USAGE")
+            grants.append(f'GRANT USAGE ON SCHEMA workflow TO "{role}";')
         for name, privileges, kind in sorted(checks):
             if tables.get(name) != kind:
                 absent.append(name)  # Not every registered table is in REQUIRED_TABLES.

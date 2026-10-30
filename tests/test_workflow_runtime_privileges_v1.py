@@ -76,6 +76,7 @@ def runtime_role(complete_postgres):
     role = f"metis_runtime_{uuid.uuid4().hex[:8]}"
     with psycopg.connect(complete_postgres.dsn, autocommit=True) as con:
         con.execute(f'CREATE ROLE "{role}"')
+        con.execute(f'GRANT USAGE ON SCHEMA workflow TO "{role}"')  # Initial provisioning (cutover runbook).
         try:
             yield con, role
         finally:
@@ -150,8 +151,24 @@ def test_installed_review_card_tables_are_checked_and_absent_ones_are_not(runtim
     assert {"review_fact_state:INSERT", "review_object_facts:UPDATE"} <= set(result["missing_privileges"])
     _grant_expected(con, role)
     assert _observe(con, role, view_check=True)["status"] == "PASS"
+    # A partly installed 027 blocks on its missing peer.
+    con.execute("DROP TABLE workflow.review_object_facts CASCADE")
+    assert _observe(con, role, view_check=True)["missing_relations"] == ["review_object_facts"]
     # Where 027 was never applied (production today), its tables are not required.
-    con.execute("DROP TABLE workflow.review_object_facts, workflow.review_fact_state CASCADE")
+    con.execute("DROP TABLE workflow.review_fact_state CASCADE")
+    assert _observe(con, role, view_check=True)["status"] == "PASS"
+
+
+def test_missing_schema_usage_blocks_with_its_grant(runtime_role):
+    con, role = runtime_role
+    _grant_expected(con, role)
+    assert _observe(con, role, view_check=True)["status"] == "PASS"
+    con.execute(f'REVOKE USAGE ON SCHEMA workflow FROM "{role}"')
+    con.execute('REVOKE USAGE ON SCHEMA workflow FROM PUBLIC')
+    result = _observe(con, role, view_check=True)
+    assert result["status"] == "BLOCKED" and result["missing_privileges"] == ["schema workflow:USAGE"]
+    assert result["grants"] == [f'GRANT USAGE ON SCHEMA workflow TO "{role}";']
+    con.execute(result["grants"][0])
     assert _observe(con, role, view_check=True)["status"] == "PASS"
 
 
