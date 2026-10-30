@@ -75,7 +75,7 @@ def runtime_role(complete_postgres):
     import psycopg
     role = f"metis_runtime_{uuid.uuid4().hex[:8]}"
     with psycopg.connect(complete_postgres.dsn, autocommit=True) as con:
-        con.execute(f'CREATE ROLE "{role}"')
+        con.execute(f'CREATE ROLE "{role}" LOGIN')
         con.execute(f'GRANT USAGE ON SCHEMA workflow TO "{role}"')  # Initial provisioning (cutover runbook).
         try:
             yield con, role
@@ -196,6 +196,21 @@ def test_compact_card_functions_need_execute(runtime_role):
     assert result["grants"] == [f'GRANT EXECUTE ON FUNCTION workflow.review_card_envelope_for(jsonb) TO "{role}";']
     con.execute(result["grants"][0])
     assert _observe(con, role, view_check=True)["status"] == "PASS"
+
+
+def test_role_that_cannot_log_in_blocks(runtime_role):
+    con, role = runtime_role
+    _grant_expected(con, role)
+    con.execute(f'ALTER ROLE "{role}" NOLOGIN')
+    result = _observe(con, role, view_check=True)
+    assert result["missing_privileges"] == ["role:LOGIN"] and result["grants"] == [f'ALTER ROLE "{role}" LOGIN;']
+
+
+def test_nested_helper_functions_are_derived_not_listed(runtime_role):
+    con, role = runtime_role
+    _grant_expected(con, role)
+    con.execute("REVOKE EXECUTE ON FUNCTION workflow.review_read_envelope_for(jsonb) FROM PUBLIC")
+    assert _observe(con, role, view_check=True)["missing_privileges"] == ["review_read_envelope_for(jsonb):EXECUTE"]
 
 
 def test_unknown_role_blocks_without_guessing(runtime_role):

@@ -133,11 +133,6 @@ VIEW_CHECK_TABLES = frozenset({"view_checks"})
 # Checked whenever present: their triggers write them on every document mutation.
 OPTIONAL_MIGRATION_TABLES = {"027_review_card_facts.sql": ("review_fact_state", "review_object_facts")}
 COMPACT_CARD_MIGRATION = "027_review_card_facts.sql"
-# Helper functions 027 calls directly and from its triggers (both run as the invoker).
-OPTIONAL_MIGRATION_FUNCTIONS = {COMPACT_CARD_MIGRATION: (
-    "review_card_envelope_for(jsonb)", "review_fact_static_input(jsonb)",
-    "review_fact_live_fields(jsonb, jsonb)", "invalidate_review_object(text, text, integer)",
-)}
 OPTIONAL_TABLE_PRIVILEGES = {
     "review_fact_state": (_S, _I, _U),
     "review_object_facts": (_S, _I, _U),
@@ -245,7 +240,8 @@ def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool =
     if not role.strip():
         raise WorkflowMigrationError("workflow_runtime_role_required")
     try:
-        if not connection.execute("SELECT 1 FROM pg_roles WHERE rolname=%s", (role,)).fetchone():
+        login = connection.execute("SELECT rolcanlogin AS ok FROM pg_roles WHERE rolname=%s", (role,)).fetchone()
+        if not login:
             return {"status": "BLOCKED", "runtime_role": role, "error": "workflow_runtime_role_missing",
                     "missing_relations": [], "missing_privileges": [], "grants": []}
         tables = {str(row["relname"]): str(row["relkind"]) for row in connection.execute(
@@ -254,8 +250,10 @@ def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool =
         ).fetchall()}
         missing: list[str] = []
         grants: list[str] = []
+        if not login["ok"]:
+            missing.append("role:LOGIN")
+            grants.append(f'ALTER ROLE "{role}" LOGIN;')
         absent: list[str] = []
-        functions: list[str] = []
         checks = [(name, privs, "r") for name, privs in RUNTIME_TABLE_PRIVILEGES.items()
                   if view_check or name not in VIEW_CHECK_TABLES]
         checks += [(name, privs, "S") for name, privs in RUNTIME_SEQUENCE_PRIVILEGES.items()]
@@ -263,16 +261,17 @@ def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool =
             # Partly installed counts as installed; compact cards (CONSOLE_REVIEW_CARD_READS) require 027.
             if any(name in tables for name in optional) or (compact_cards and migration == COMPACT_CARD_MIGRATION):
                 checks += [(name, OPTIONAL_TABLE_PRIVILEGES[name], "r") for name in optional]
-                functions += OPTIONAL_MIGRATION_FUNCTIONS.get(migration, ())
-        for signature in functions:
-            target = f"workflow.{signature}"
-            if connection.execute("SELECT to_regprocedure(%s) IS NOT NULL AS ok", (target,)).fetchone()["ok"]:
-                if not connection.execute("SELECT has_function_privilege(%s, %s, 'EXECUTE') AS ok",
-                                          (role, target)).fetchone()["ok"]:
-                    missing.append(f"{signature}:EXECUTE")
-                    grants.append(f'GRANT EXECUTE ON FUNCTION {target} TO "{role}";')
-            else:
-                absent.append(signature)
+        # Every non-trigger function in the schema: the runtime and the triggers call them
+        # as the invoker, and nested calls need EXECUTE too. Derived, never a list to maintain.
+        for row in connection.execute(
+                "SELECT p.oid::regprocedure::text AS signature FROM pg_proc p "
+                "JOIN pg_namespace n ON n.oid = p.pronamespace "
+                "WHERE n.nspname='workflow' AND p.prorettype <> 'trigger'::regtype ORDER BY 1").fetchall():
+            signature = str(row["signature"])
+            if not connection.execute("SELECT has_function_privilege(%s, %s, 'EXECUTE') AS ok",
+                                      (role, signature)).fetchone()["ok"]:
+                missing.append(f"{signature.removeprefix('workflow.')}:EXECUTE")
+                grants.append(f'GRANT EXECUTE ON FUNCTION {signature} TO "{role}";')
         database = connection.execute("SELECT current_database() AS name").fetchone()["name"]
         if not connection.execute("SELECT has_database_privilege(%s, current_database(), 'CONNECT') AS ok",
                                   (role,)).fetchone()["ok"]:
