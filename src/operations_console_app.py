@@ -2723,6 +2723,7 @@ def _review_inventory(
     source_items = []
     metadata_items = []
     source_groups = {}
+    selectable_groups = set()
     containers = partition(objects, projection=projection)
     source_usage = {row["record"]["object_id"]: row["usage"] for row in containers["source"]}
     from src.vorming.source_accountability_v1 import is_source_record, evidence_of
@@ -2759,9 +2760,10 @@ def _review_inventory(
             usage = source_usage[object_id]
             kind = usage["kind"]
             label = _SOURCE_KIND_LABELS[kind]
-            section = " / ".join((obj.get("structure") or {}).get("section_path") or
-                                  (obj.get("metadata") or {}).get("section_path") or []) or "Document"
-            group = source_groups.setdefault((label, section), [])
+            # Group by the raw path, so "A / B" and ["A", "B"] stay separate forms.
+            path = tuple(str(p) for p in ((obj.get("structure") or {}).get("section_path") or
+                                         (obj.get("metadata") or {}).get("section_path") or []))
+            group = source_groups.setdefault((label, path), [])
             status = ("Technisch herstel nodig" if usage["human_action"] == "technical_repair" else
                       "Handmatig afgehandeld" if kind == "reviewed" else
                       "Automatisch als documentinformatie aangemerkt" if kind == "document_information" else
@@ -2776,7 +2778,15 @@ def _review_inventory(
             source_link = "Bronbewijs herstellen" if source_task == "repair" else "Bronbesluit bekijken of wijzigen"
             source_path = '/source-selection'
             source_task = 'disposition'
-            group.append(f'<li data-source-record="{_esc(object_id)}"><p>{_esc((obj.get("content") or {}).get("clean_text"))}</p>'
+            # V3 records use the same exact exclusion command as the v1 form below:
+            # only open, unrouted model proposals for metadata or structure.
+            selectable = (source_only and edit_exclusions and usage["human_action"] == "source_disposition"
+                          and evidence_of(obj).get("proposed_role") in {"metadata", "structure"} and not role_of(obj))
+            selection = ('<label><input type="checkbox" name="source_object_ids" '
+                         f'value="{_esc(object_id)}" checked> Opnemen in mijn bronbesluit</label>' if selectable else '')
+            if selectable:
+                selectable_groups.add((label, path))
+            group.append(f'<li data-source-record="{_esc(object_id)}">{selection}<p>{_esc((obj.get("content") or {}).get("clean_text"))}</p>'
                 f'<p>{_esc(status)} · {_esc(usage_reason)}</p>{targets}'
                 f'<a href="{source_path}?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={source_task}">{source_link}</a></li>')
             continue
@@ -2844,9 +2854,23 @@ def _review_inventory(
             '<p>Deze bronregels zijn geen gevormde kennisobjecten. De bron blijft behouden. '
             'Open inhoudelijke bronafhandeling blokkeert publicatie.</p>'
             + _source_category_tiles(source_usage))
-        for (label, section), group in source_groups.items():
+        for (label, path), group in source_groups.items():
+            section = " / ".join(path) or "Document"
+            body = '<ol>' + "".join(group) + '</ol>'
+            if (label, path) in selectable_groups:
+                body = ('<form method="post" action="/review/source-exclusions" data-source-group-exclusion>'
+                    f'<input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">'
+                    + _snapshot_revision_input(snapshot_revision)
+                    + f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
+                    + '<p>Aangevinkte regels zijn door het model voorgesteld als metadata of structuur. '
+                    'Dit voorstel is nog geen uitsluiting; vink kennis uit.</p>' + body
+                    + '<label>Reden voor mijn bronbesluit<input name="reason" required maxlength="4000" '
+                    f'value="{_esc("Geen kennis: " + section)}"></label>'
+                    + '<label><input type="checkbox" name="source_checked" value="1" required>'
+                    + ' Ik heb de aangevinkte bronregels gecontroleerd; zij bevatten geen op te nemen kennis.</label>'
+                    + '<button type="submit">Aangevinkte bronregels gemotiveerd uitsluiten</button></form>')
             source_html += (f'<details data-source-group><summary>{_esc(label)} · {_esc(section)} ({len(group)} bronregels)</summary>'
-                            + '<ol>' + "".join(group) + '</ol></details>')
+                            + body + '</details>')
         if metadata_items and source_only and edit_exclusions:
             source_html += ('<form method="post" action="/review/source-exclusions">'
                 f'<input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">'
