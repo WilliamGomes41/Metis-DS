@@ -198,10 +198,11 @@ def reset_source_group(console: Any, *, actor_id: str, snapshot_id: str, group_c
 
 def source_role_version(source: dict[str, Any], *, role: str, command_id: str, actor_id: str, reviewer: str,
                         now: str, reason: str, source_sha256: str, group: bool = False) -> dict[str, Any]:
-    """The one source-role successor: single, batch and group commands all use it.
+    """The source-role successor shared by the batch and group commands.
 
-    Sets the role record, passage register and governance for label/context/
-    excluded, or clears them for reset. Sealing and links stay with the caller.
+    It mirrors the single-passage command's own writer (_confirm_source_context);
+    a test keeps both outcomes equal. Consolidating that writer here is a
+    separate, high-rewrite-risk change.
     """
     from src.vorming.passage_register_v1 import passage_register_record
     from src.review.revision_workflow import bump_patch
@@ -451,6 +452,7 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
                            reason: str, command_id: str, expected_revision: str) -> dict[str, Any]:
     from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT, utc_now
     from src.review.revision_workflow import bump_patch
+    from src.vorming.passage_register_v1 import passage_register_record
 
     if role not in {"label", "context", "excluded", "reset"}:
         raise ConsoleError("source_context_role_invalid")
@@ -497,9 +499,29 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
                 raise ConsoleError("source_context_target_invalid")
         now = utc_now()
         changed: dict[str, dict[str, Any]] = {}
-        source_after = source_role_version(source, role=role, command_id=command_id, actor_id=actor_id,
-                                           reviewer=reviewer["username"], now=now, reason=reason,
-                                           source_sha256=envelope["sha256"])
+        source_after = deepcopy(source)
+        source_after["object_version"] = bump_patch(str(source["object_version"]))
+        metadata = source_after.setdefault("metadata", {})
+        metadata[ROLE_KEY] = {
+            "version": CONTRACT, "role": role, "command_id": command_id,
+            "reviewer_id": actor_id, "reviewer": reviewer["username"], "reviewed_at": now,
+            "reason": reason.strip(), "literal_hash": literal_identity(source),
+            "source_sha256": envelope["sha256"],
+        }
+        if role == "reset":
+            metadata.pop(ROLE_KEY, None)
+        source_after["metadata"]["passage_register"] = passage_register_record(
+            status="not_yet_assessed" if role == "reset" else "excluded_with_reason" if role == "excluded" else "used_as_context",
+            reason_codes=["reviewer_confirmed_source_role"], source="review",
+        )
+        governance = source_after.setdefault("governance", {})
+        governance.update(validation_status="needs_review" if role == "reset" else "rejected",
+                          validated_by=None if role == "reset" else reviewer["username"],
+                          validation_date=None if role == "reset" else now[:10], review_snapshot_hash=None,
+                          publication_status="unpublished")
+        second = governance.get("second_review")
+        if isinstance(second, dict) and second.get("required"):
+            second.update(status="pending", reviewer=None, review_date=None, snapshot_hash=None)
         changed[source_object_id] = source_after
         for oid, original in by_id.items():
             previous = links_of(original)
