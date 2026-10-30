@@ -43,10 +43,6 @@ _TOC_TITLES = (
 _PERSON_NAME = (r"(?:[A-ZÀ-Ý]\.\s?|[A-ZÀ-Ý][a-zà-ÿ'’]+)"
                 r"(?:(?:\s?-\s?|\s)(?:[A-ZÀ-Ý]\.|[A-ZÀ-Ý][a-zà-ÿ'’]+|van|de|der|den|ten|ter|het|in|'t)){0,6}")
 
-# Organisation name: capitalised words or acronyms (V&VN), "(NVMM)", "&" and the
-# lowercase joiners of Dutch society names; a verb such as "adviseert" ends the match.
-_ORG_WORD = r"(?:[A-ZÀ-Ý][A-Za-zÀ-ÿ&'’-]*|\([A-Z]{2,10}\)|&|voor|en|van|de|der|het)"
-_ORGANISATION = r"[A-ZÀ-Ý][A-Za-zÀ-ÿ&'’-]*(?:\s" + _ORG_WORD + r"){0,12}"
 
 # Role: a profession from a closed list, optionally "in/bij een/de <work setting>"
 # from a closed list. Advice in this field ("adviseert dagelijks zinkzalf") never fits.
@@ -64,11 +60,29 @@ _SETTINGS = (
 _ROLE = (r"(?i:" + "|".join(re.escape(p) for p in _PROFESSIONS) + r")"
          r"(?:\s(?:in|bij)\s(?:een|de|het)\s(?i:" + "|".join(re.escape(x) for x in _SETTINGS) + r"))?")
 
-# Bibliographic locator closing a reference: the journal's ", volume[(issue)]",
-# optional pages, then optionally a DOI (not any URL): "Blad, 12(3), 1-9. https://doi.org/…".
-_LOCATOR = (r"\s?[,.]\s?\d{1,4}(?:\sSuppl\s\d+)?\s?(?:\(\s?[\w–-]{1,12}(?:\s\d+)?\s?\))?"
-            r"(?:,\s?[A-Za-z]?\d+(?:\s?[-–]\s?[A-Za-z]?\d+)?)?\s?\.?"
-            r"(?:\s(?:https?://doi\.org/|doi:\s?)\S+?)?[.,]?")
+# Bibliographic tail of a reference: a title-cased journal name, then its volume
+# with an issue, pages or a DOI ("Blad , 12(3), 1-9. https://doi.org/…"). A bare
+# "<word>, 2" or any other URL is not a locator.
+_JOURNAL = (r"[A-Z0-9=(][^\s,]*(?:(?:\s|,\s(?=[A-Z]))(?:[A-Z0-9(&:=\-][^\s,]*"
+            r"|of|and|the|de|du|des|la|le|voor|en|for|in|on|van|der|und|y|et|\u202f:))*")
+_LOCATOR = (r"\s?[,.]\s?\d{1,4}(?:\sSuppl\s\d+)?\s?(?:"
+            r"\(\s?[\w–-]{1,12}(?:\s\d+)?\s?\)(?:,\s?[A-Za-z]?\d+(?:\s?[-–]\s?[A-Za-z]?\d+)?)?\s?\.?(?:" + (_DOI := r"\s(?:https?://doi\.org/|doi:\s?)\S+?") + r")?"
+            r"|,\s?[A-Za-z]?\d+(?:\s?[-–]\s?[A-Za-z]?\d+)?\s?\.?(?:" + _DOI + r")?"
+            r"|\s?\.?" + _DOI + r")[.,]?")
+
+# Organisation: V&VN with an optional department, or a society from a closed list.
+_VVN_DEPARTMENTS = (
+    "Wondexpertise", "Geriatrie & Gerontologie", "Verpleegkundig Specialisten", "Verzorgenden",
+    "Oncologie", "Dermatologie", "Wijkverpleging", "Kinderverpleegkunde", "Praktijkverpleegkundigen",
+)
+_SOCIETIES = (
+    "Nederlandse Vereniging voor Dermatologie en Venerologie", "Ergotherapie Nederland (EN)",
+    "Ergotherapie Nederland", "Verenso", "Nederlandse Vereniging Medische Microbiologie (NVMM)",
+    "Nederlands Huisartsen Genootschap", "Koninklijk Nederlands Genootschap voor Fysiotherapie",
+    "Nederlandse Vereniging van Diëtisten", "Patiëntenfederatie Nederland", "ActiZ", "Zorgthuisnl",
+)
+_ORGANISATION = (r"(?:V&VN(?:\s(?:" + "|".join(re.escape(x) for x in _VVN_DEPARTMENTS) + r"))?|"
+                 + "|".join(re.escape(x) for x in _SOCIETIES) + r")")
 
 # B6 (#933): closed whole-range rules for source accountability only. They never
 # change formation planning, which keeps using metadata_reason.
@@ -84,20 +98,18 @@ _ACCOUNTING_RULES = (
     (re.compile(r"(?:Concept)?richtlijn\s+[^\n.:;!?]{1,100}\s+[–-]\s+commentaarronde\s+[a-z]+\s+20\d{2}(?:\s+\d{1,3})?", re.I),
      "page_furniture"),
     # Bibliographic reference: a strict author list ("Surname, I. I., ... & Surname, I.")
-    # directly followed by "(2021)." or "(n.d.).", and a title that ends in the
-    # journal volume locator above.
+    # directly followed by "(2021)." or "(n.d.).", a title, and the journal tail above.
     (re.compile(r"(?:\(PDF\)\s*)?" + (author := r"(?:[a-z]{1,4}\s){0,3}[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]*(?:\s?-\s?[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]*)?"
                                      r"(?:\s[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]*){0,2},\s(?:[A-Z]\.\s?(?:-\s?[A-Z]\.\s?)?){1,5}")
                 + r"(?:,\s" + author + r"){0,30}(?:,?\s(?:&|and|en)\s" + author + r")?(?:,?\set al\.)?"
-                r"\s?\((?:(?:19|20)\d{2}[a-z]?|n\.d\.)\)\.\s[^\n]+?" + _LOCATOR), "document_metadata"),
+                r"\s?\((?:(?:19|20)\d{2}[a-z]?|n\.d\.)\)\.\s[^\n]+?\.\s?" + _JOURNAL + _LOCATOR), "document_metadata"),
     # "Bronnen: (Surname et al., 2022; Surname & Surname, 2019)": in-text citations only.
     (re.compile(r"Bronnen?\s*:\s*\(" + (cite := r"(?:[a-z]{1,4}\s){0,3}[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]+"
                 r"(?:\s(?:et al\.|(?:&|en)\s(?:[a-z]{1,4}\s){0,3}[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]+))?,\s(?:19|20)\d{2}[a-z]?")
                 + r"(?:;\s" + cite + r")*\)\.?"), "document_metadata"),
     (re.compile(r"Zie\s+bijlage\s+\d+(?:\.\d+)*\.?", re.I), "navigation"),
-    # Working-group roster line: "Mw. Name, role, namens Organisation". Role and
-    # organisation are single comma-free fields without sentence punctuation, and
-    # the organisation is a proper name, so advice "namens de werkgroep" stays.
+    # Working-group roster line: "Mw. Name, role, namens Organisation", each field
+    # closed (person name, listed profession, listed organisation); nothing may follow.
     (re.compile(r"[·•\-]?\s*(?:Mw|Dhr|Mevr)\.\s+" + _PERSON_NAME + r"\s?,\s" + _ROLE + r"\s?,\s+namens\s+"
                 r"(?:de\s+)?" + _ORGANISATION),
      "document_metadata"),

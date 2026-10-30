@@ -41,7 +41,7 @@ from src.vorming.source_containers_v1 import accounting_reason, metadata_reason
      "document_metadata"),
     ("· Mw. Eva Voorbeeld, Specialist Ouderengeneeskunde , namens Verenso", "document_metadata"),
     ("Zie Bijlage 2", "navigation"),
-    ("· Mw. Anna Voorbeeld, Verpleegkundige in een ziekenhuis, namens Voorbeeldvereniging", "document_metadata"),
+    ("· Mw. Anna Voorbeeld, Verpleegkundige in een ziekenhuis, namens V&VN Wondexpertise", "document_metadata"),
 ])
 def test_closed_non_knowledge_rules_account_the_whole_passage(text, reason):
     assert accounting_reason(text) == reason
@@ -59,6 +59,9 @@ def test_closed_non_knowledge_rules_account_the_whole_passage(text, reason):
     "Mw. Jansen, adviseert dagelijks zinkzalf, namens V&VN",
     "Jansen, A. (2019). Gebruik dagelijks zinkzalf op de aangedane huid.",
     "Jansen, A. (2019). Gebruik geen zalf. https://voorbeeld.nl",
+    "Jansen, A. (2019). Behandel huidplooien gedurende week 1, 2.",
+    "Jansen, A. (2019). Gebruik geen zalf. Daarna, 2.",
+    "Mw. Jansen, Verpleegkundige, namens V&VN Gebruik Geen Zinkzalf",
     "Jansen, A. (2019). Gebruik geen zalf. https://doi.org/10.1000/xyz",
     "Jansen, A. (2019). Gebruik zinkzalf 2-3 keer per dag op de aangedane huid.",
     "Bronnen: (gebruik dagelijks zinkzalf bij natte plekken, 2019)",
