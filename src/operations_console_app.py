@@ -2760,9 +2760,10 @@ def _review_inventory(
             usage = source_usage[object_id]
             kind = usage["kind"]
             label = _SOURCE_KIND_LABELS[kind]
-            section = " / ".join((obj.get("structure") or {}).get("section_path") or
-                                  (obj.get("metadata") or {}).get("section_path") or []) or "Document"
-            group = source_groups.setdefault((label, section), [])
+            # Group by the raw path, so "A / B" and ["A", "B"] stay separate forms.
+            path = tuple(str(p) for p in ((obj.get("structure") or {}).get("section_path") or
+                                         (obj.get("metadata") or {}).get("section_path") or []))
+            group = source_groups.setdefault((label, path), [])
             status = ("Technisch herstel nodig" if usage["human_action"] == "technical_repair" else
                       "Handmatig afgehandeld" if kind == "reviewed" else
                       "Automatisch als documentinformatie aangemerkt" if kind == "document_information" else
@@ -2784,7 +2785,7 @@ def _review_inventory(
             selection = ('<label><input type="checkbox" name="source_object_ids" '
                          f'value="{_esc(object_id)}" checked> Opnemen in mijn bronbesluit</label>' if selectable else '')
             if selectable:
-                selectable_groups.add((label, section))
+                selectable_groups.add((label, path))
             group.append(f'<li data-source-record="{_esc(object_id)}">{selection}<p>{_esc((obj.get("content") or {}).get("clean_text"))}</p>'
                 f'<p>{_esc(status)} · {_esc(usage_reason)}</p>{targets}'
                 f'<a href="{source_path}?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={source_task}">{source_link}</a></li>')
@@ -2853,9 +2854,10 @@ def _review_inventory(
             '<p>Deze bronregels zijn geen gevormde kennisobjecten. De bron blijft behouden. '
             'Open inhoudelijke bronafhandeling blokkeert publicatie.</p>'
             + _source_category_tiles(source_usage))
-        for (label, section), group in source_groups.items():
+        for (label, path), group in source_groups.items():
+            section = " / ".join(path) or "Document"
             body = '<ol>' + "".join(group) + '</ol>'
-            if (label, section) in selectable_groups:
+            if (label, path) in selectable_groups:
                 body = ('<form method="post" action="/review/source-exclusions" data-source-group-exclusion>'
                     f'<input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">'
                     + _snapshot_revision_input(snapshot_revision)

@@ -103,3 +103,22 @@ def test_published_or_unnamed_viewers_get_no_group_form(tmp_path, monkeypatch, *
         assert outsider.post("/login", data={"username": "author", "password": "long-test-password"},
                              follow_redirects=False).status_code == 303
         assert outsider.get("/source-selection", params={"document": sid, "task": "disposition"}).status_code == 403
+
+
+def test_section_groups_key_on_the_raw_path_not_its_display_text(tmp_path, *, production_console):
+    """["Risico / preventie"] and ["Risico", "preventie"] render as two separate forms."""
+    from copy import deepcopy
+    from src.operations_console_app import _review_inventory
+    state, sid = _v3_document(tmp_path, production_console=production_console)
+    rows = deepcopy(state.snapshot_objects(sid))
+    colofon = next(r for r in rows if (r.get("content") or {}).get("clean_text") == COLOFON)
+    twin = deepcopy(colofon)
+    twin["object_id"] = colofon["object_id"] + "-twin"
+    colofon.setdefault("structure", {})["section_path"] = ["Risico / preventie"]
+    twin.setdefault("structure", {})["section_path"] = ["Risico", "preventie"]
+    rows.append(twin)
+    page = _review_inventory(sid, rows, review_path="richtlijn", bindings=None, reviewer_id="r",
+                             task="inventory", snapshot_revision="rev", source_only=True, edit_exclusions=True)
+    forms = [f for f in Forms(page).forms if "data-source-group-exclusion" in f["attrs"]]
+    selected = [[i["value"] for i in f["inputs"] if i.get("name") == "source_object_ids"] for f in forms]
+    assert sorted(selected) == sorted([[colofon["object_id"]], [twin["object_id"]]])
