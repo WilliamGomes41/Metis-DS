@@ -15,3 +15,8 @@
 .claude/skills/blast-radius/SKILL.md text eol=lf
 .claude/skills/show-me-your-work/SKILL.md text eol=lf
 .claude/skills/principle-explain-the-number/SKILL.md text eol=lf
+.agents/skills/impeccable/** text eol=lf
+.agents/skills/impeccable/scripts/impeccable.cmd -text
+.agents/licenses/impeccable-* text eol=lf
+.claude/skills/impeccable/SKILL.md text eol=lf
+.cursor/skills/impeccable/SKILL.md text eol=lf
