@@ -11,7 +11,7 @@ from src.vorming.source_accountability_v1 import evidence_of, is_source_record, 
 from src.vorming.source_bound_fields_v2 import context_matches_target, CONTEXT_KEY
 from src.review.review_disposition_v1 import definitive_review_disposition
 
-VERSION = "source-containers-v1"
+VERSION = "source-containers-v2"
 SOURCE_VERSION = CONTAINERS_VERSION
 
 
@@ -29,6 +29,33 @@ def metadata_reason(text):
     if re.fullmatch(r"(?:Concept)?richtlijn\s+[^\n]{1,100}\s+[–-]\s+commentaarronde\s+[a-z]+\s+20\d{2}\s+\d{1,3}", text, re.I):
         return "page_furniture"
     return None
+
+
+# B6 (#933): closed whole-range rules for source accountability only. They never
+# change formation planning, which keeps using metadata_reason.
+_ACCOUNTING_RULES = (
+    # Table-of-contents line: dot leader, optional terminal page number.
+    (re.compile(r"[^\n]{0,160}?(?:\.\s?){8,}\s*\d{0,4}|\.{2,}\s*\d{1,4}"), "navigation"),
+    (re.compile(r"(?:Concept)?richtlijn\s+[^\n]{1,100}\s+[–-]\s+commentaarronde\s+[a-z]+\s+20\d{2}(?:\s+\d{1,3})?", re.I),
+     "page_furniture"),
+    # Bibliographic reference: "Surname, I. ... (2021). Title ...".
+    (re.compile(r"(?:\(PDF\)\s*)?[A-ZÀ-Ý][A-Za-zÀ-ÿ'\- ]{1,40},\s(?:[A-Z]\.\s?)+[^\n]{0,600}?"
+                r"\((?:(?:19|20)\d{2}[a-z]?|n\.d\.)\)\.[^\n]*"), "document_metadata"),
+    (re.compile(r"Bronnen?\s*:\s*\([^()]{3,200}(?:19|20)\d{2}[a-z]?\)\.?"), "document_metadata"),
+    (re.compile(r"Zie\s+bijlage\s+\d+(?:\.\d+)*\.?", re.I), "navigation"),
+    # Working-group member: "Mw. Name, role, namens Organisation".
+    (re.compile(r"[·•\-]?\s*(?:Mw|Dhr|Mevr)\.\s+[^,\n]{2,60},\s[^\n]{2,200}?,?\s+namens\s+[^\n]{2,120}"),
+     "document_metadata"),
+)
+
+
+def accounting_reason(text):
+    """Machine reason for source accountability; whole range only, never location."""
+    reason = metadata_reason(text)
+    if reason:
+        return reason
+    text = text.strip()
+    return next((reason for rule, reason in _ACCOUNTING_RULES if rule.fullmatch(text)), None)
 
 
 def _covers(ref, spans):
@@ -232,7 +259,7 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
         if isinstance(fragments, ReviewFactSources):
             machine_reason = fragments.proof_for(obj)['metadata_reason'] if not manual else None
         else:
-            machine_reason = metadata_reason(evidence["text"]) if not manual else None
+            machine_reason = accounting_reason(evidence["text"]) if not manual else None
         if machine_reason:
             finish("navigation" if machine_reason == "navigation" else "document_information",
                    "accounted", "none", machine_reason, "document_information")
