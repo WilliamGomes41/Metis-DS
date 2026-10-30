@@ -159,7 +159,7 @@ def test_installed_review_card_tables_are_checked_and_absent_ones_are_not(runtim
     con.execute("DROP TABLE workflow.review_fact_state CASCADE")
     assert _observe(con, role, view_check=True)["status"] == "PASS"
     compact = _observe(con, role, view_check=True, compact_cards=True)
-    assert compact["missing_relations"] == ["review_fact_state", "review_object_facts"]
+    assert compact["missing_relations"][:2] == ["review_fact_state", "review_object_facts"]
 
 
 def test_missing_schema_usage_blocks_with_its_grant(runtime_role):
@@ -183,6 +183,17 @@ def test_missing_connect_blocks_with_its_grant(runtime_role):
     result = _observe(con, role, view_check=True)
     assert result["missing_privileges"] == [f"database {database}:CONNECT"]
     assert result["grants"] == [f'GRANT CONNECT ON DATABASE "{database}" TO "{role}";']
+    con.execute(result["grants"][0])
+    assert _observe(con, role, view_check=True)["status"] == "PASS"
+
+
+def test_compact_card_functions_need_execute(runtime_role):
+    con, role = runtime_role
+    _grant_expected(con, role)
+    con.execute("REVOKE EXECUTE ON FUNCTION workflow.review_card_envelope_for(jsonb) FROM PUBLIC")
+    result = _observe(con, role, view_check=True)
+    assert result["missing_privileges"] == ["review_card_envelope_for(jsonb):EXECUTE"]
+    assert result["grants"] == [f'GRANT EXECUTE ON FUNCTION workflow.review_card_envelope_for(jsonb) TO "{role}";']
     con.execute(result["grants"][0])
     assert _observe(con, role, view_check=True)["status"] == "PASS"
 

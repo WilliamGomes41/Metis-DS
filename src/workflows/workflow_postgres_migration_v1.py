@@ -133,6 +133,11 @@ VIEW_CHECK_TABLES = frozenset({"view_checks"})
 # Checked whenever present: their triggers write them on every document mutation.
 OPTIONAL_MIGRATION_TABLES = {"027_review_card_facts.sql": ("review_fact_state", "review_object_facts")}
 COMPACT_CARD_MIGRATION = "027_review_card_facts.sql"
+# Helper functions 027 calls directly and from its triggers (both run as the invoker).
+OPTIONAL_MIGRATION_FUNCTIONS = {COMPACT_CARD_MIGRATION: (
+    "review_card_envelope_for(jsonb)", "review_fact_static_input(jsonb)",
+    "review_fact_live_fields(jsonb, jsonb)", "invalidate_review_object(text, text, integer)",
+)}
 OPTIONAL_TABLE_PRIVILEGES = {
     "review_fact_state": (_S, _I, _U),
     "review_object_facts": (_S, _I, _U),
@@ -250,6 +255,7 @@ def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool =
         missing: list[str] = []
         grants: list[str] = []
         absent: list[str] = []
+        functions: list[str] = []
         checks = [(name, privs, "r") for name, privs in RUNTIME_TABLE_PRIVILEGES.items()
                   if view_check or name not in VIEW_CHECK_TABLES]
         checks += [(name, privs, "S") for name, privs in RUNTIME_SEQUENCE_PRIVILEGES.items()]
@@ -257,6 +263,16 @@ def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool =
             # Partly installed counts as installed; compact cards (CONSOLE_REVIEW_CARD_READS) require 027.
             if any(name in tables for name in optional) or (compact_cards and migration == COMPACT_CARD_MIGRATION):
                 checks += [(name, OPTIONAL_TABLE_PRIVILEGES[name], "r") for name in optional]
+                functions += OPTIONAL_MIGRATION_FUNCTIONS.get(migration, ())
+        for signature in functions:
+            target = f"workflow.{signature}"
+            if connection.execute("SELECT to_regprocedure(%s) IS NOT NULL AS ok", (target,)).fetchone()["ok"]:
+                if not connection.execute("SELECT has_function_privilege(%s, %s, 'EXECUTE') AS ok",
+                                          (role, target)).fetchone()["ok"]:
+                    missing.append(f"{signature}:EXECUTE")
+                    grants.append(f'GRANT EXECUTE ON FUNCTION {target} TO "{role}";')
+            else:
+                absent.append(signature)
         database = connection.execute("SELECT current_database() AS name").fetchone()["name"]
         if not connection.execute("SELECT has_database_privilege(%s, current_database(), 'CONNECT') AS ok",
                                   (role,)).fetchone()["ok"]:
