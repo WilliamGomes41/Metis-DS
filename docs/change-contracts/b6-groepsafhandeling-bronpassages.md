@@ -5,7 +5,7 @@ GitHub: #933. Linear: MET-33 (onder MET-6).
 Besluit: B6, opties 3 en 2 (projectlead, 30 oktober 2026). Besluit B is aangepast: onderbouwing loopt via groepsbevestiging per sectie.
 
 Change class: A (het besluit over een bronpassage is lifecyclestatus van het object)
-Rewrite risk: none (hergebruik van de bestaande opdracht per passage; geen vervanging van een gedeelde grens)
+Rewrite risk: none voor §3.1–3.6 (hergebruik van de bestaande opdracht per passage; geen vervanging van een gedeelde grens). **High** voor §3.7: die stap verandert wanneer `bounded_formation_v1` een vormingstaak als afgesloten telt.
 
 ## 1. Probleem
 
@@ -136,6 +136,14 @@ Ontwerpkeuze vóór de bouw:
 
 **BESLOTEN: (a)** (projectlead, 30 oktober 2026). Dat is alleen toegestaan als de bevestigde passages het bereik volledig dekken, en het wordt vastgelegd met dezelfde `command_id`.
 
+Deze stap heeft **Rewrite risk: high**. Vóór de bouw komt er een eigen change contract met alle velden van lifecycle-vsa §13A:
+- de huidige autoriteit, schrijvers en lezers van vormingsvoltooiing;
+- het effect op opgeslagen toestand en migratie;
+- rollback en herstel;
+- het cutovermoment;
+- de blast radius;
+- een aparte adversariële review op omwegen.
+
 ## 4. Domeininvarianten
 
 - Geen kennisobject wordt goedgekeurd of gepubliceerd door een groepsbesluit. Uitsluitend de rol `excluded` (en `reset` om terug te draaien).
@@ -192,5 +200,5 @@ Ontwerpkeuze vóór de bouw:
 
 1. Vaste regels (3.6): per regel een kleine PR.
 2. Groepsafhandeling: opdracht, schermen en tests, in één PR met change class A.
-3. Keuze 3.7 vastleggen en bouwen.
+3. Keuze 3.7: eerst een eigen change contract met rewrite risk high (§13A), daarna bouwen.
 4. Meten op Richtlijn Smetten.
