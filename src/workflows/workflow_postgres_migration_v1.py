@@ -84,6 +84,67 @@ REQUIRED_COLUMNS = frozenset(
     }
 )
 
+# Least privileges the console runtime uses per table created by a registered migration
+# (#930). `GRANT ... ON ALL TABLES` misses later tables, so verify checks these explicitly.
+_S, _I, _U, _D = "SELECT", "INSERT", "UPDATE", "DELETE"
+RUNTIME_TABLE_PRIVILEGES = {
+    "accounts": (_S, _I, _U),
+    "sessions": (_S, _I, _U, _D),
+    "documents": (_S, _I, _U, _D),
+    "topics": (_S, _I),
+    "document_reviewers": (_S, _I, _D),
+    "document_objects": (_S, _I, _U, _D),
+    "review_events": (_S, _I, _U),
+    "publish_authorizations": (_S, _I, _U, _D),
+    "audit_records": (_S, _I, _U, _D),
+    "audit_secrets": (_S, _I, _U),
+    "entra_identities": (_S, _I, _U),
+    "entra_sessions": (_S, _I),
+    "entra_flows": (_S, _I, _D),
+    "quality_measurements": (_S, _I, _U),
+    "route_comparisons": (_S, _I, _U),
+    "publication_refusals": (_S, _I, _D),
+    "view_checks": (_S, _I, _U),
+    "processing_attempts": (_S, _I, _U),
+    "processing_document_summaries": (_S, _I, _U),
+    "processing_checkpoints": (_S, _I),
+    "prepared_extraction_versions": (_S, _I),
+    "formation_inputs": (_S, _I),
+    "formation_contexts": (_S, _I, _U),
+    "formation_task_results": (_S, _I, _U),
+    "formation_task_findings": (_S, _I),
+    "formation_task_result_history": (_S, _I),
+    "formation_task_plans": (_S, _I),
+    "formation_source_views": (_S, _I),
+    "source_read_roots": (_S, _I, _U),
+    "source_read_fragments": (_S, _I),
+    "source_read_blocks": (_S, _I),
+    "source_read_block_fragments": (_S, _I),
+}
+# Serial sequences the runtime advances on INSERT (identity columns need no grant).
+RUNTIME_SEQUENCE_PRIVILEGES = {
+    "review_events_event_id_seq": ("USAGE",),
+    "publish_authorizations_authorization_id_seq": ("USAGE",),
+    "publication_refusals_refusal_id_seq": ("USAGE",),
+}
+# Only required when the view check is enabled (METIS_VIEW_CHECK_ORIGIN).
+VIEW_CHECK_TABLES = frozenset({"view_checks"})
+# Tables from migrations applied outside MIGRATION_NAMES (027, compact review cards).
+# Checked whenever present: their triggers write them on every document mutation.
+OPTIONAL_MIGRATION_TABLES = {"027_review_card_facts.sql": ("review_fact_state", "review_object_facts")}
+COMPACT_CARD_MIGRATION = "027_review_card_facts.sql"
+# Functions an optional migration creates: any survivor proves it was applied (its triggers
+# keep writing the tables), even if the tables are gone. Kept equal to the file by a test.
+OPTIONAL_MIGRATION_MARKERS = {COMPACT_CARD_MIGRATION: (
+    "review_card_envelope_for", "refresh_review_card_envelope", "review_card_document_change",
+    "review_fact_static_input", "review_fact_live_fields", "invalidate_review_object",
+    "review_card_object_change", "review_card_truncate",
+)}
+OPTIONAL_TABLE_PRIVILEGES = {
+    "review_fact_state": (_S, _I, _U),
+    "review_object_facts": (_S, _I, _U),
+}
+
 
 class WorkflowMigrationError(RuntimeError):
     """Migration target, digest, connectivity, or schema verification failure."""
@@ -178,6 +239,75 @@ def observe_schema(connection: Any) -> dict[str, Any]:
         "missing_columns": missing_columns,
         "row_counts": counts,
     }
+
+
+def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool = False,
+                               compact_cards: bool = False) -> dict[str, Any]:
+    """Report missing runtime grants and the targeted GRANT lines; never grants anything."""
+    if not role.strip():
+        raise WorkflowMigrationError("workflow_runtime_role_required")
+    try:
+        login = connection.execute("SELECT rolcanlogin AS ok FROM pg_roles WHERE rolname=%s", (role,)).fetchone()
+        if not login:
+            return {"status": "BLOCKED", "runtime_role": role, "error": "workflow_runtime_role_missing",
+                    "missing_relations": [], "missing_privileges": [], "grants": []}
+        tables = {str(row["relname"]): str(row["relkind"]) for row in connection.execute(
+            "SELECT c.relname, c.relkind::text AS relkind FROM pg_class c "
+            "JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname='workflow' AND c.relkind IN ('r','S')"
+        ).fetchall()}
+        missing: list[str] = []
+        grants: list[str] = []
+        if not login["ok"]:
+            missing.append("role:LOGIN")
+            grants.append(f'ALTER ROLE "{role}" LOGIN;')
+        absent: list[str] = []
+        checks = [(name, privs, "r") for name, privs in RUNTIME_TABLE_PRIVILEGES.items()
+                  if view_check or name not in VIEW_CHECK_TABLES]
+        checks += [(name, privs, "S") for name, privs in RUNTIME_SEQUENCE_PRIVILEGES.items()]
+        for migration, optional in OPTIONAL_MIGRATION_TABLES.items():
+            # Partly installed counts as installed; compact cards (CONSOLE_REVIEW_CARD_READS) require 027.
+            applied = connection.execute(
+                "SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+                "WHERE n.nspname='workflow' AND p.proname = ANY(%s)) AS ok",
+                (list(OPTIONAL_MIGRATION_MARKERS.get(migration, ())),)).fetchone()["ok"]
+            if (applied or any(name in tables for name in optional)
+                    or (compact_cards and migration == COMPACT_CARD_MIGRATION)):
+                checks += [(name, OPTIONAL_TABLE_PRIVILEGES[name], "r") for name in optional]
+        # Every non-trigger function in the schema: the runtime and the triggers call them
+        # as the invoker, and nested calls need EXECUTE too. Derived, never a list to maintain.
+        for row in connection.execute(
+                "SELECT p.oid::regprocedure::text AS signature FROM pg_proc p "
+                "JOIN pg_namespace n ON n.oid = p.pronamespace "
+                "WHERE n.nspname='workflow' AND p.prorettype <> 'trigger'::regtype ORDER BY 1").fetchall():
+            signature = str(row["signature"])
+            if not connection.execute("SELECT has_function_privilege(%s, %s, 'EXECUTE') AS ok",
+                                      (role, signature)).fetchone()["ok"]:
+                missing.append(f"{signature.removeprefix('workflow.')}:EXECUTE")
+                grants.append(f'GRANT EXECUTE ON FUNCTION {signature} TO "{role}";')
+        database = connection.execute("SELECT current_database() AS name").fetchone()["name"]
+        if not connection.execute("SELECT has_database_privilege(%s, current_database(), 'CONNECT') AS ok",
+                                  (role,)).fetchone()["ok"]:
+            missing.append(f"database {database}:CONNECT")
+            grants.append(f'GRANT CONNECT ON DATABASE "{database}" TO "{role}";')
+        if not connection.execute("SELECT has_schema_privilege(%s, 'workflow', 'USAGE') AS ok",
+                                  (role,)).fetchone()["ok"]:
+            missing.append("schema workflow:USAGE")
+            grants.append(f'GRANT USAGE ON SCHEMA workflow TO "{role}";')
+        for name, privileges, kind in sorted(checks):
+            if tables.get(name) != kind:
+                absent.append(name)  # Not every registered table is in REQUIRED_TABLES.
+                continue
+            function = "has_table_privilege" if kind == "r" else "has_sequence_privilege"
+            lacking = [p for p in privileges if not connection.execute(
+                f"SELECT {function}(%s, %s, %s) AS ok", (role, f"workflow.{name}", p)).fetchone()["ok"]]
+            if lacking:
+                missing += [f"{name}:{p}" for p in lacking]
+                target = f"workflow.{name}" if kind == "r" else f"SEQUENCE workflow.{name}"
+                grants.append(f'GRANT {", ".join(lacking)} ON {target} TO "{role}";')
+    except Exception as exc:
+        raise WorkflowMigrationError("workflow_runtime_privilege_observation_failed") from exc
+    return {"status": "PASS" if not missing and not absent else "BLOCKED", "runtime_role": role,
+            "missing_relations": absent, "missing_privileges": missing, "grants": grants}
 
 
 def apply_migrations(

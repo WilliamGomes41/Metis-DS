@@ -11,7 +11,7 @@ from src.vorming.source_accountability_v1 import evidence_of, is_source_record, 
 from src.vorming.source_bound_fields_v2 import context_matches_target, CONTEXT_KEY
 from src.review.review_disposition_v1 import definitive_review_disposition
 
-VERSION = "source-containers-v1"
+VERSION = "source-containers-v2"
 SOURCE_VERSION = CONTAINERS_VERSION
 
 
@@ -29,6 +29,100 @@ def metadata_reason(text):
     if re.fullmatch(r"(?:Concept)?richtlijn\s+[^\n]{1,100}\s+[–-]\s+commentaarronde\s+[a-z]+\s+20\d{2}\s+\d{1,3}", text, re.I):
         return "page_furniture"
     return None
+
+
+_TOC_TITLES = (
+    "Aanbevelingen", "Achtergrond", "Uitgangsvraag", "Inleiding", "Samenvatting", "Verantwoording",
+    "Literatuursamenvatting", "Literatuurconclusies", "Zoeken en selecteren", "Overwegingen",
+    "Van bewijs naar aanbeveling (overwegingen)", "Van bewijs naar aanbeveling", "Rationale",
+    "Implementatietabel", "Kennisvragen", "Verder onderzoek", "Referenties", "Bijlagen",
+)
+
+# Person name: capitalised name parts or initials, Dutch particles, hyphenated
+# double names; no sentence punctuation, so "Jansen. Gebruik ..." is not a name.
+_PERSON_NAME = (r"(?:[A-ZÀ-Ý]\.\s?|[A-ZÀ-Ý][a-zà-ÿ'’]+)"
+                r"(?:(?:\s?-\s?|\s)(?:[A-ZÀ-Ý]\.|[A-ZÀ-Ý][a-zà-ÿ'’]+|van|de|der|den|ten|ter|het|in|'t)){0,6}")
+
+
+# Role: a profession from a closed list, optionally "in/bij een/de <work setting>"
+# from a closed list. Advice in this field ("adviseert dagelijks zinkzalf") never fits.
+_PROFESSIONS = (
+    "Verpleegkundig specialist", "Verpleegkundige", "Wondconsulent", "Wondconsultent", "Verzorgende IG",
+    "Verzorgende", "Specialist Ouderengeneeskunde", "Arts-microbioloog", "Dermatoloog", "Huisarts",
+    "Ergotherapeut", "Fysiotherapeut", "Diëtist", "Apotheker", "Arts", "Onderzoeker", "Adviseur",
+    "Beleidsmedewerker", "Patiëntvertegenwoordiger", "Ervaringsdeskundige",
+)
+_SETTINGS = (
+    "ziekenhuis", "verpleeghuis", "verzorgingshuis", "thuiszorg", "wijkverpleging", "huisartsenpraktijk",
+    "intra- en extramurale zorg", "intramurale zorg", "extramurale zorg", "gehandicaptenzorg", "ggz",
+    "revalidatiecentrum", "eerste lijn", "tweede lijn", "langdurige zorg",
+)
+_ROLE = (r"(?i:" + "|".join(re.escape(p) for p in _PROFESSIONS) + r")"
+         r"(?:\s(?:in|bij)\s(?:een|de|het)\s(?i:" + "|".join(re.escape(x) for x in _SETTINGS) + r"))?")
+
+# Bibliographic tail of a reference: a title-cased journal name, its volume with an
+# optional issue and pages, and a mandatory DOI link ("Blad , 12(3), 1-9.
+# https://doi.org/…"). Without a DOI the passage stays human work.
+_JOURNAL = (r"[A-Z0-9=(][^\s,]*(?:(?:\s|,\s(?=[A-Z]))(?:[A-Z0-9(&:=\-][^\s,]*"
+            r"|of|and|the|de|du|des|la|le|voor|en|for|in|on|van|der|und|y|et|\u202f:))*")
+_LOCATOR = (r"\s?[,.]\s?\d{1,4}(?:\sSuppl\s\d+)?\s?(?:\(\s?[\w–-]{1,12}(?:\s\d+)?\s?\))?"
+            r"(?:,\s?[A-Za-z]?\d+(?:\s?[-–]\s?[A-Za-z]?\d+)?)?\s?\.?\shttps?://doi\.org/10\.\d{4,9}/\S+?[.,]?")
+
+# Organisation: V&VN with an optional department, or a society from a closed list.
+_VVN_DEPARTMENTS = (
+    "Wondexpertise", "Geriatrie & Gerontologie", "Verpleegkundig Specialisten", "Verzorgenden",
+    "Oncologie", "Dermatologie", "Wijkverpleging", "Kinderverpleegkunde", "Praktijkverpleegkundigen",
+)
+_SOCIETIES = (
+    "Nederlandse Vereniging voor Dermatologie en Venerologie", "Ergotherapie Nederland (EN)",
+    "Ergotherapie Nederland", "Verenso", "Nederlandse Vereniging Medische Microbiologie (NVMM)",
+    "Nederlands Huisartsen Genootschap", "Koninklijk Nederlands Genootschap voor Fysiotherapie",
+    "Nederlandse Vereniging van Diëtisten", "Patiëntenfederatie Nederland", "ActiZ", "Zorgthuisnl",
+)
+_ORGANISATION = (r"(?:V&VN(?:\s(?:" + "|".join(re.escape(x) for x in _VVN_DEPARTMENTS) + r"))?|"
+                 + "|".join(re.escape(x) for x in _SOCIETIES) + r")")
+
+# B6 (#933): closed whole-range rules for source accountability only. They never
+# change formation planning, which keeps using metadata_reason.
+_ACCOUNTING_RULES = (
+    # Table-of-contents line: a dot leader after a heading from a closed list of
+    # guideline section titles (or "Module/Hoofdstuk/Bijlage N: title"), optionally
+    # behind the draft footer, or a bare leader tail with a page number. Free text
+    # before a leader stays human work, however long the leader is.
+    (re.compile(r"(?:(?:Concept)?richtlijn\s+[^\n.:;!?]{1,100}\s+[–-]\s+commentaarronde\s+[a-z]+\s+20\d{2}\s+)?"
+                r"(?:" + "|".join(re.escape(title) for title in _TOC_TITLES)
+                + r"|(?:Module|Hoofdstuk|Bijlage)\s+\d{1,2}(?::\s[^\n.:;!?]{1,120}?)?)"
+                r"\s+(?:\.\s?){8,}\s*\d{0,4}|(?:\.\s?){2,}\s*\d{1,4}", re.I), "navigation"),
+    (re.compile(r"(?:Concept)?richtlijn\s+[^\n.:;!?]{1,100}\s+[–-]\s+commentaarronde\s+[a-z]+\s+20\d{2}(?:\s+\d{1,3})?", re.I),
+     "page_furniture"),
+    # Bibliographic reference(s): a strict author list, "(2021)." or "(n.d.).", a
+    # one-sentence title (no ". ", "? ", "! " or "; " inside), and the
+    # journal tail above. Several complete references may follow each other.
+    (re.compile(r"(?:\(PDF\)\s*)?" + (ref := r"(?:" + (author := r"(?:[a-z]{1,4}\s){0,3}[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]*(?:\s?-\s?[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]*)?"
+                                     r"(?:\s[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]*){0,2},\s(?:[A-Z]\.\s?(?:-\s?[A-Z]\.\s?)?){1,5}")
+                + r"(?:,\s" + author + r"){0,30}(?:,?\s(?:&|and|en)\s" + author + r")?(?:,?\set al\.)?"
+                r"\s?\((?:(?:19|20)\d{2}[a-z]?|n\.d\.)\)\.\s(?:(?![.?!;]\s)[^\n])+?\.\s?" + _JOURNAL + _LOCATOR + r")")
+                + r"(?:\s" + ref + r")*"), "document_metadata"),
+    # "Bronnen: (Surname et al., 2022; Surname & Surname, 2019)": in-text citations only.
+    (re.compile(r"Bronnen?\s*:\s*\(" + (cite := r"(?:[a-z]{1,4}\s){0,3}[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]+"
+                r"(?:\s(?:et al\.|(?:&|en)\s(?:[a-z]{1,4}\s){0,3}[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]+))?,\s(?:19|20)\d{2}[a-z]?")
+                + r"(?:;\s" + cite + r")*\)\.?"), "document_metadata"),
+    (re.compile(r"Zie\s+bijlage\s+\d+(?:\.\d+)*\.?", re.I), "navigation"),
+    # Working-group roster line: "Mw. Name, role, namens Organisation", each field
+    # closed (person name, listed profession, listed organisation); nothing may follow.
+    (re.compile(r"[·•\-]?\s*(?:Mw|Dhr|Mevr)\.\s+" + _PERSON_NAME + r"\s?,\s" + _ROLE + r"\s?,\s+namens\s+"
+                r"(?:de\s+)?" + _ORGANISATION),
+     "document_metadata"),
+)
+
+
+def accounting_reason(text):
+    """Machine reason for source accountability; whole range only, never location."""
+    reason = metadata_reason(text)
+    if reason:
+        return reason
+    text = text.strip()
+    return next((reason for rule, reason in _ACCOUNTING_RULES if rule.fullmatch(text)), None)
 
 
 def _covers(ref, spans):
@@ -232,7 +326,7 @@ def source_accountability(objects, *, review_path="richtlijn", bindings=None, fr
         if isinstance(fragments, ReviewFactSources):
             machine_reason = fragments.proof_for(obj)['metadata_reason'] if not manual else None
         else:
-            machine_reason = metadata_reason(evidence["text"]) if not manual else None
+            machine_reason = accounting_reason(evidence["text"]) if not manual else None
         if machine_reason:
             finish("navigation" if machine_reason == "navigation" else "document_information",
                    "accounted", "none", machine_reason, "document_information")
