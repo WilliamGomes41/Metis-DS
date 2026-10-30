@@ -164,15 +164,27 @@ def reset_source_group(console: Any, *, actor_id: str, snapshot_id: str, group_c
         if group is None:
             raise ConsoleError("source_group_unknown")
         changed = []
+        history = {(row["object_id"], row["object_version"]): row
+                   for row in console._load_objects(snapshot_id, remember=False)}
         for member in group["result"]["members"]:
             current = ctx["by_id"].get(member["object_id"])
             role = role_of(current) if current else {}
             if (not current or current.get("object_version") != member["new_version"]
                     or role.get("command_id") != group_command_id or role.get("role") != "excluded"):
                 raise ConsoleError("source_group_members_changed")
+            prior = history.get((member["object_id"], member["old_version"]))
+            if prior is None:
+                raise ConsoleError("source_group_members_changed")
             updated = source_role_version(current, role="reset", command_id=command_id, actor_id=actor_id,
                                           reviewer=ctx["reviewer"]["username"], now=ctx["now"], reason=reason,
                                           source_sha256=ctx["envelope"]["sha256"])
+            # Undo restores the pre-group register (e.g. extract-owned not_yet_assessed),
+            # so machine and linked-target closure apply again exactly as before (3.5).
+            restored = deepcopy((prior.get("metadata") or {}).get("passage_register"))
+            if restored is None:
+                updated["metadata"].pop("passage_register", None)
+            else:
+                updated["metadata"]["passage_register"] = restored
             changed.append(_sealed(console, updated))
         result = {"snapshot_id": snapshot_id, "command_id": command_id, "idempotent": False,
                   "group_command_id": group_command_id,

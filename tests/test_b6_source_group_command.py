@@ -130,10 +130,11 @@ def test_group_reset_restores_open_state_and_refuses_after_member_drift(tmp_path
     rows = state.snapshot_objects(sid)
     unresolved = source_passage_closure(rows)["unresolved_source_passage_ids"]
     assert {first["object_id"], second["object_id"]} <= set(unresolved)
-    for text in (FIRST, SECOND):
+    for text, before in ((FIRST, first), (SECOND, second)):
         row = _by_text(state, sid, text)
-        assert not role_of(row) and row["metadata"]["passage_register"]["status"] == "not_yet_assessed"
-        assert row["governance"]["validation_status"] == "needs_review"
+        assert not role_of(row) and row["governance"]["validation_status"] == "needs_review"
+        # Exactly the pre-group register (extract-owned), so machine/linked closure applies again.
+        assert row["metadata"].get("passage_register") == before["metadata"].get("passage_register")
     assert reset_source_group(state, **reset)["idempotent"] is True
     # Confirm again, then change one member individually: the group undo must refuse.
     confirm_source_group(state, **_command(state, sid, reviewer, ids=[first["object_id"], second["object_id"]],
@@ -203,7 +204,12 @@ def test_single_and_group_commands_write_the_same_source_state(tmp_path, *, prod
                            expected_revision=state.objects_revision(sid))
     reset_source_group(state, actor_id=reviewer, snapshot_id=sid, group_command_id="group-1", reason="Terug.",
                        command_id="group-reset", expected_revision=state.objects_revision(sid))
-    assert shape(FIRST) == shape(SECOND)
+    single_role, _single_register, single_governance, _ = shape(FIRST)
+    group_role, group_register, group_governance, _ = shape(SECOND)
+    # Same writer for role and governance; the group undo additionally restores the
+    # pre-group register, where a single reset records a manual (review-owned) reopen.
+    assert (single_role, single_governance) == (group_role, group_governance)
+    assert group_register.get("source") != "review"
 
 
 from tests.test_workflow_chain_recovery_v1 import recovery_postgres  # noqa: F401,E402
