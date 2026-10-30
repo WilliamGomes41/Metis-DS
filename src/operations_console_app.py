@@ -18,7 +18,7 @@ import uuid
 from typing import Any
 from urllib.parse import quote, urlencode, urlsplit
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -504,16 +504,25 @@ def _login_brand() -> str:
     """
 
 
-def _page(body: str, *, title: str | None = None, light: bool = False) -> str:
+def _brand_stylesheet_url(name: str) -> str:
+    stylesheet = BRAND_DIR / name
+    url = "/brand/" + name
+    if stylesheet.is_file():
+        # ZIP entries have fixed mtimes; version by content, not Last-Modified.
+        url += "?v=" + hashlib.sha256(stylesheet.read_bytes()).hexdigest()[:16]
+    return url
+
+
+def _page(body: str, *, title: str | None = None, light: bool = False,
+          stylesheets: tuple[str, ...] = ()) -> str:
     from src.console_release_v1 import console_release
     release = console_release()
     page_title = title or "V&amp;VN Data Services — Interne operations console"
-    stylesheet = BRAND_DIR / "console.css"
-    stylesheet_url = "/brand/console.css"
-    if stylesheet.is_file():
-        # ZIP entries have fixed mtimes; version by content, not Last-Modified.
-        version = hashlib.sha256(stylesheet.read_bytes()).hexdigest()[:16]
-        stylesheet_url += f"?v={version}"
+    stylesheet_url = _brand_stylesheet_url("console.css")
+    additional_stylesheets = "".join(
+        f'<link rel="stylesheet" href="{_esc(_brand_stylesheet_url(name))}">\n'
+        for name in stylesheets
+    )
     return f"""<!doctype html>
 <html lang="nl">
 <head>
@@ -528,7 +537,7 @@ try {{
 }} catch (_) {{ document.documentElement.dataset.theme = 'light'; }}
 </script>
 <link rel="stylesheet" href="{stylesheet_url}">
-</head>
+{additional_stylesheets}</head>
 <body>
 <div class="shell">
 <div class="canvas">
@@ -4808,14 +4817,20 @@ def create_console_app(
         )
 
     @app.get("/over-console", response_class=HTMLResponse)
-    def about_console(request: Request) -> str:
+    def about_console(request: Request, section: str = "start",
+                      q: str = Query(default="", max_length=200), model: str = "") -> str:
         account = _require(request)
+        try:
+            explanation = render_metis_dictionary(_esc, section=section, query=q, model_id=model)
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
         return _page(
             f"""
             {_nav(account, "about")}
-            {render_metis_dictionary(_esc)}
+            {explanation}
             """,
             title="Metis uitgelegd — V&amp;VN Data Services",
+            stylesheets=("metis-explained.css",),
         )
 
     @app.get("/wat-is-nieuw", response_class=HTMLResponse)

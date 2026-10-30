@@ -52,6 +52,9 @@ dist/
 *.azure-deploy.zip
 config/console_build.json
 
+# Impeccable local engine cache (keep reviewed project configuration trackable)
+.impeccable/cache/
+
 # Human review returns / audit exports belong in controlled data storage, not source control
 output/v2/review_return/
 output/*_review.csv

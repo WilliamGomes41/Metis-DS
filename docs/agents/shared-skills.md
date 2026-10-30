@@ -1,5 +1,10 @@
 # Shared agent skills
 
+Frontend creation and changes also require the separately pinned
+[Impeccable integration](impeccable.md), as specified in root `AGENTS.md`.
+Its canonical skill lives in `.agents/skills/impeccable/` and its independent
+manifest is `config/impeccable.v1.json`.
+
 The independent source repository is
 [WilliamGomes41/plugins](https://github.com/WilliamGomes41/plugins).
 Metis commits only the reviewed files listed in
