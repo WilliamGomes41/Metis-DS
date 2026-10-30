@@ -100,7 +100,7 @@ def prepare_source_proof(obj, fragments):
     from src.review.knowledge_path_v1 import source_lineage_resolves
     from src.review.source_context_review_v1 import literal_identity, verify_literal_source
     from src.vorming.source_accountability_v1 import evidence_of
-    from src.vorming.source_containers_v1 import metadata_reason, bound_context_valid
+    from src.vorming.source_containers_v1 import accounting_reason, bound_context_valid
     from src.vorming.decision_unit_construction_v1 import unit_issues
 
     evidence = evidence_of(obj)
@@ -120,7 +120,7 @@ def prepare_source_proof(obj, fragments):
         'source_refs_hash': _refs_equality_hash((obj.get('provenance') or {}).get('source_fragments')),
         'bound_context': bound_context_valid(obj, fragments=fragments),
         'evidence': {k: deepcopy(v) for k, v in evidence.items() if k not in {'text', 'binding_hash'}},
-        'metadata_reason': metadata_reason(evidence['text']) if evidence else None,
+        'metadata_reason': accounting_reason(evidence['text']) if evidence else None,
         'unit_issues': unit_issues(obj),
     }
 

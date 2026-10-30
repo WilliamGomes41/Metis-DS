@@ -27,6 +27,7 @@ Elke stap die Azure wijzigt (build, migratie, app settings, image-wissel) gebeur
    - `SELECT bool_and(has_table_privilege('vvn-metis-console', 'workflow.view_checks', p)) FROM unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE']) AS p;` geeft `true` (één lijst in één aanroep zou al `true` geven bij één recht). Anders: `GRANT SELECT, INSERT, UPDATE, DELETE ON workflow.view_checks TO "vvn-metis-console";`
    Zonder tabel of recht start de app niet zodra `METIS_VIEW_CHECK_ORIGIN` gezet is.
 6. Weergavecontrole: dit runbook zet haar niet aan. Rapporteert de preflight `"view_check": "enabled"`, controleer dan ook wat de preflight niet kan zien, volgens `docs/change-contracts/zorgmaatje.md`: de private evidence-container bestaat, heeft een lifecycle-regel van 7 dagen, en de app-identiteit heeft daarop `Storage Blob Data Contributor`. Doe na de wissel één weergavecontrole. Aanzetten is een aparte stap met GO.
+7. Compacte reviewkaarten: staat `CONSOLE_REVIEW_CARD_READS=compact` aan, en wijzigt de release het `producer_contract` van `review_card_facts_v1`? Dat gebeurt bijvoorbeeld bij een nieuwe `source_containers_v1.VERSION`. Voer dan direct na de wissel `python scripts/prepare_review_cards.py --all` uit, en daarna dezelfde opdracht met `--check`. Zonder die stap tonen de kaarten "Kaartgegevens niet beschikbaar", omdat GET niets opnieuw opbouwt. In de standaardstand (`legacy`) is deze stap niet nodig.
 
 ## 2. Image bouwen
 
@@ -62,5 +63,7 @@ az webapp config container set -g <rg> -n <app> \
   --container-image-name "${rollback#DOCKER|}"
 python scripts/verify_console_deployment.py --health-url <url>/health --expected-commit <vorige sha>
 ```
+
+Stond `CONSOLE_REVIEW_CARD_READS=compact` aan, en is bij de release stap 1.7 uitgevoerd? Voer dan na de terugwissel met de herstelde versie opnieuw `python scripts/prepare_review_cards.py --all` uit, en daarna dezelfde opdracht met `--check`. De voorbereide kaarten dragen anders het `producer_contract` van de nieuwere versie, en de oudere code weigert ze ("Kaartgegevens niet beschikbaar").
 
 De PostgreSQL-toestand blijft geldig: 019 is alleen-toevoegen en oudere code negeert de tabel. Een gewijzigde `METIS_PASSAGE_FORMATION_MODE` mag na een rollback blijven staan; een semantische modus wordt door oudere code ook gelezen.
