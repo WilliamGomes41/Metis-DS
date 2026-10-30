@@ -1,6 +1,8 @@
 """#930: migration verify checks the runtime identity's grants, never grants them.
 
+# release-control-evidence: scope/belofte
 # release-control-evidence: opslag toegang
+# release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
@@ -13,6 +15,8 @@ import pytest
 
 from src.workflows.workflow_postgres_migration_v1 import (
     MIGRATION_NAMES,
+    OPTIONAL_MIGRATION_TABLES,
+    OPTIONAL_TABLE_PRIVILEGES,
     RUNTIME_SEQUENCE_PRIVILEGES,
     RUNTIME_TABLE_PRIVILEGES,
     observe_runtime_privileges,
@@ -30,6 +34,17 @@ def test_every_registered_table_has_a_runtime_privilege_expectation():
     assert set(RUNTIME_TABLE_PRIVILEGES) == _registered_tables()
 
 
+def test_every_workflow_migration_outside_the_registry_is_inventoried():
+    """A migration file not in MIGRATION_NAMES (027) still declares its runtime grants."""
+    files = {p.name for p in (ROOT / "db" / "migrations").glob("0*.sql")}
+    for name in sorted(files - set(MIGRATION_NAMES)):
+        created = set(re.findall(r"CREATE TABLE IF NOT EXISTS workflow\.([a-z_]+)",
+                                 (ROOT / "db" / "migrations" / name).read_text()))
+        if created:
+            assert set(OPTIONAL_MIGRATION_TABLES.get(name, ())) == created, name
+    assert {t for ts in OPTIONAL_MIGRATION_TABLES.values() for t in ts} == set(OPTIONAL_TABLE_PRIVILEGES)
+
+
 def test_every_serial_sequence_of_a_registered_table_is_expected():
     sql = "\n".join((ROOT / "db" / "migrations" / name).read_text() for name in MIGRATION_NAMES)
     serials = set()
@@ -41,7 +56,7 @@ def test_every_serial_sequence_of_a_registered_table_is_expected():
 def test_runtime_sql_writes_are_covered_by_the_expectation():
     """Every write the console code issues on a registered table is an expected privilege."""
     code = "\n".join(p.read_text() for p in (ROOT / "src").rglob("*.py"))
-    for table, privileges in RUNTIME_TABLE_PRIVILEGES.items():
+    for table, privileges in {**RUNTIME_TABLE_PRIVILEGES, **OPTIONAL_TABLE_PRIVILEGES}.items():
         name = rf"(?:workflow\.)?{table}\b"
         used = {"SELECT"}
         # _immutable() builds INSERT ... ON CONFLICT DO NOTHING from a module-owned table literal.
@@ -93,21 +108,25 @@ def test_missing_grant_fails_with_the_exact_targeted_grant_and_passes_after_it(r
                                   "missing_privileges": [], "grants": []}
 
 
+def _grant_expected(con, role, *, skip=(), optional=True, sequences=True):
+    expected = {**RUNTIME_TABLE_PRIVILEGES, **(OPTIONAL_TABLE_PRIVILEGES if optional else {})}
+    for table, privileges in expected.items():
+        if table not in skip:
+            con.execute(f'GRANT {", ".join(privileges)} ON workflow.{table} TO "{role}"')
+    for sequence in RUNTIME_SEQUENCE_PRIVILEGES if sequences else ():
+        con.execute(f'GRANT USAGE ON SEQUENCE workflow.{sequence} TO "{role}"')
+
+
 def test_deliberately_narrow_grants_do_not_fail(runtime_role):
     con, role = runtime_role
-    for table, privileges in RUNTIME_TABLE_PRIVILEGES.items():
-        con.execute(f'GRANT {", ".join(privileges)} ON workflow.{table} TO "{role}"')
-    for sequence in RUNTIME_SEQUENCE_PRIVILEGES:
-        con.execute(f'GRANT USAGE ON SEQUENCE workflow.{sequence} TO "{role}"')
+    _grant_expected(con, role)
     # publication_refusals has no UPDATE, and that is correct.
     assert _observe(con, role, view_check=True)["status"] == "PASS"
 
 
 def test_view_check_table_is_only_required_when_enabled_and_sequences_are_checked(runtime_role):
     con, role = runtime_role
-    for table, privileges in RUNTIME_TABLE_PRIVILEGES.items():
-        if table != "view_checks":
-            con.execute(f'GRANT {", ".join(privileges)} ON workflow.{table} TO "{role}"')
+    _grant_expected(con, role, skip={"view_checks"}, sequences=False)
     assert _observe(con, role)["missing_privileges"] == [
         f"{sequence}:USAGE" for sequence in sorted(RUNTIME_SEQUENCE_PRIVILEGES)]
     assert f'GRANT USAGE ON SEQUENCE workflow.publication_refusals_refusal_id_seq TO "{role}";' in _observe(con, role)["grants"]
@@ -116,14 +135,24 @@ def test_view_check_table_is_only_required_when_enabled_and_sequences_are_checke
 
 def test_an_unapplied_registered_table_blocks_instead_of_passing(runtime_role):
     con, role = runtime_role
-    for table, privileges in RUNTIME_TABLE_PRIVILEGES.items():
-        con.execute(f'GRANT {", ".join(privileges)} ON workflow.{table} TO "{role}"')
-    for sequence in RUNTIME_SEQUENCE_PRIVILEGES:
-        con.execute(f'GRANT USAGE ON SEQUENCE workflow.{sequence} TO "{role}"')
+    _grant_expected(con, role)
     con.execute("DROP TABLE workflow.view_checks")  # Schema verify does not list 019 itself.
     assert _observe(con, role)["status"] == "PASS"
     result = _observe(con, role, view_check=True)
     assert result["status"] == "BLOCKED" and result["missing_relations"] == ["view_checks"]
+
+
+def test_installed_review_card_tables_are_checked_and_absent_ones_are_not(runtime_role):
+    con, role = runtime_role
+    _grant_expected(con, role, optional=False)
+    assert con.execute("SELECT to_regclass('workflow.review_fact_state') IS NOT NULL").fetchone()[0]
+    result = _observe(con, role, view_check=True)
+    assert {"review_fact_state:INSERT", "review_object_facts:UPDATE"} <= set(result["missing_privileges"])
+    _grant_expected(con, role)
+    assert _observe(con, role, view_check=True)["status"] == "PASS"
+    # Where 027 was never applied (production today), its tables are not required.
+    con.execute("DROP TABLE workflow.review_object_facts, workflow.review_fact_state CASCADE")
+    assert _observe(con, role, view_check=True)["status"] == "PASS"
 
 
 def test_unknown_role_blocks_without_guessing(runtime_role):

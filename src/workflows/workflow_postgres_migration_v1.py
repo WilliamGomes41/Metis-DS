@@ -129,6 +129,13 @@ RUNTIME_SEQUENCE_PRIVILEGES = {
 }
 # Only required when the view check is enabled (METIS_VIEW_CHECK_ORIGIN).
 VIEW_CHECK_TABLES = frozenset({"view_checks"})
+# Tables from migrations applied outside MIGRATION_NAMES (027, compact review cards).
+# Checked whenever present: their triggers write them on every document mutation.
+OPTIONAL_MIGRATION_TABLES = {"027_review_card_facts.sql": ("review_fact_state", "review_object_facts")}
+OPTIONAL_TABLE_PRIVILEGES = {
+    "review_fact_state": (_S, _I, _U),
+    "review_object_facts": (_S, _I, _U),
+}
 
 
 class WorkflowMigrationError(RuntimeError):
@@ -244,6 +251,7 @@ def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool =
         checks = [(name, privs, "r") for name, privs in RUNTIME_TABLE_PRIVILEGES.items()
                   if view_check or name not in VIEW_CHECK_TABLES]
         checks += [(name, privs, "S") for name, privs in RUNTIME_SEQUENCE_PRIVILEGES.items()]
+        checks += [(name, privs, "r") for name, privs in OPTIONAL_TABLE_PRIVILEGES.items() if name in tables]
         for name, privileges, kind in sorted(checks):
             if tables.get(name) != kind:
                 absent.append(name)  # Not every registered table is in REQUIRED_TABLES.
