@@ -25,6 +25,9 @@ from src.vorming.source_containers_v1 import accounting_reason, metadata_reason
     ("Al - Voorbeeld, N. (2011). Een titel. Tijdschrift, 3(2), 1-9. https://doi.org/10.1000/abc", "document_metadata"),
     ("Eerste, I. H. J., Tweede, J., van der Derde, J. C. M., & Vierde, K. (2021). Titel. Blad, 7, 112-118. https://doi.org/10.1000/abc", "document_metadata"),
     ("Jansen, A., et al. (2020). Titel met et al. Tijdschrift, 4(1). https://doi.org/10.1000/abc", "document_metadata"),
+    ("Eerste, A. (2011). Titel een. Blad , 38(4), 359 – 370. https://doi.org/10.1000/a, "
+     "del Tweede - Derde, M., & Vierde, I. (2021). Titel twee: een studie. Blad , 63 . https://doi.org/10.1000/b",
+     "document_metadata"),
     ("De Vries, K. (n.d.). Een titel zonder jaar. Blad , 143 . https://doi.org/10.1000/abc", "document_metadata"),
     ("Bronnen: (Voorbeeld et al., 2022)", "document_metadata"),
     ("Bronnen: (Voorbeeld & Tweede, 2019; van Derde, 2020a)", "document_metadata"),
@@ -62,6 +65,7 @@ def test_closed_non_knowledge_rules_account_the_whole_passage(text, reason):
     "Jansen, A. (2019). Behandel huidplooien gedurende week 1, 2.",
     "Jansen, A. (2019). Gebruik geen zalf. Daarna, 2.",
     "Jansen, A. (2019). Gebruik zinkzalf. Week, 2, 3-4.",
+    "Jansen, A. (2019). Huidzorg bij ouderen. Gebruik geen zinkzalf. Tijdschrift, 12, 1-9. https://doi.org/10.1000/abc",
     "Mw. Jansen, Verpleegkundige, namens V&VN Gebruik Geen Zinkzalf",
     "Jansen, A. (2019). Gebruik geen zalf. https://doi.org/10.1000/xyz",
     "Jansen, A. (2019). Gebruik zinkzalf 2-3 keer per dag op de aangedane huid.",
