@@ -38,9 +38,12 @@ _ACCOUNTING_RULES = (
     (re.compile(r"[^\n]{0,160}?(?:\.\s?){8,}\s*\d{0,4}|\.{2,}\s*\d{1,4}"), "navigation"),
     (re.compile(r"(?:Concept)?richtlijn\s+[^\n]{1,100}\s+[–-]\s+commentaarronde\s+[a-z]+\s+20\d{2}(?:\s+\d{1,3})?", re.I),
      "page_furniture"),
-    # Bibliographic reference: "Surname, I. ... (2021). Title ...".
-    (re.compile(r"(?:\(PDF\)\s*)?[A-ZÀ-Ý][A-Za-zÀ-ÿ'\- ]{1,40},\s(?:[A-Z]\.\s?)+[^\n]{0,600}?"
-                r"\((?:(?:19|20)\d{2}[a-z]?|n\.d\.)\)\.[^\n]*"), "document_metadata"),
+    # Bibliographic reference: a strict author list ("Surname, I. I., ... & Surname, I.")
+    # directly followed by "(2021)." or "(n.d.)."; no free prose before the year.
+    (re.compile(r"(?:\(PDF\)\s*)?" + (author := r"(?:[a-z]{1,4}\s){0,3}[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]*(?:\s?-\s?[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]*)?"
+                                     r"(?:\s[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]*){0,2},\s(?:[A-Z]\.\s?(?:-\s?[A-Z]\.\s?)?){1,5}")
+                + r"(?:,\s" + author + r"){0,30}(?:,?\s(?:&|and|en)\s" + author + r")?(?:,?\set al\.)?"
+                r"\s?\((?:(?:19|20)\d{2}[a-z]?|n\.d\.)\)\.\s[^\n]+"), "document_metadata"),
     (re.compile(r"Bronnen?\s*:\s*\([^()]{3,200}(?:19|20)\d{2}[a-z]?\)\.?"), "document_metadata"),
     (re.compile(r"Zie\s+bijlage\s+\d+(?:\.\d+)*\.?", re.I), "navigation"),
     # Working-group member: "Mw. Name, role, namens Organisation".
