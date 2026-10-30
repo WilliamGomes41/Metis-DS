@@ -154,9 +154,12 @@ def test_installed_review_card_tables_are_checked_and_absent_ones_are_not(runtim
     # A partly installed 027 blocks on its missing peer.
     con.execute("DROP TABLE workflow.review_object_facts CASCADE")
     assert _observe(con, role, view_check=True)["missing_relations"] == ["review_object_facts"]
+    # Both tables gone while 027's triggers remain: still blocked.
+    con.execute("DROP TABLE workflow.review_fact_state CASCADE")
+    assert _observe(con, role, view_check=True)["missing_relations"] == ["review_fact_state", "review_object_facts"]
     # Where 027 was never applied (production today), its tables are not required,
     # unless compact cards are enabled.
-    con.execute("DROP TABLE workflow.review_fact_state CASCADE")
+    con.execute("DROP FUNCTION workflow.review_card_document_change() CASCADE")
     assert _observe(con, role, view_check=True)["status"] == "PASS"
     compact = _observe(con, role, view_check=True, compact_cards=True)
     assert compact["missing_relations"][:2] == ["review_fact_state", "review_object_facts"]
