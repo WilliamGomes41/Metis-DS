@@ -14,6 +14,7 @@ from src.vorming.source_containers_v1 import accounting_reason, metadata_reason
 
 @pytest.mark.parametrize("text,reason", [
     ("Literatuurconclusies    ................................ ......................    35", "navigation"),
+    ("Rationale ................................ ................................", "navigation"),
     ("Module 3: Diagnostiek    ................................ ................................", "navigation"),
     (".......    44", "navigation"),
     ("Conceptrichtlijn Voorbeeld – commentaarronde juli 2026", "page_furniture"),
@@ -36,6 +37,9 @@ def test_closed_non_knowledge_rules_account_the_whole_passage(text, reason):
 @pytest.mark.parametrize("text", [
     # Clinical sentences that resemble a rule must stay human/reviewer work.
     "Gebruik geen zalf in de huidplooi...",
+    "Breng zinkzalf aan op de aangedane huid: ........",
+    "Naam patiënt: ..................................................",
+    "Gebruik zinkzalf. ....................................",
     "Controleer de huidplooien dagelijks (Jansen, 2019).",
     "Jansen, A. (2019) beschrijft dat drooghouden smetten voorkomt.",
     "Jansen, A. adviseert de huid dagelijks droog te houden (2019). Dit voorkomt smetten.",

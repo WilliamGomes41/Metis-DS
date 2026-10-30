@@ -34,8 +34,10 @@ def metadata_reason(text):
 # B6 (#933): closed whole-range rules for source accountability only. They never
 # change formation planning, which keeps using metadata_reason.
 _ACCOUNTING_RULES = (
-    # Table-of-contents line: dot leader, optional terminal page number.
-    (re.compile(r"[^\n]{0,160}?(?:\.\s?){8,}\s*\d{0,4}|\.{2,}\s*\d{1,4}"), "navigation"),
+    # Table-of-contents line: an optional heading title (no sentence punctuation, never
+    # ending in ':' like a form field) and a long dot leader, or a leader tail with page.
+    (re.compile(r"(?:[^\n.:;!?]{1,160}?(?::\s[^\n.:;!?]{1,120}?)?\s+)?(?:\.\s?){30,}\s*\d{0,4}"
+                r"|\.{2,}\s*\d{1,4}"), "navigation"),
     (re.compile(r"(?:Concept)?richtlijn\s+[^\n]{1,100}\s+[–-]\s+commentaarronde\s+[a-z]+\s+20\d{2}(?:\s+\d{1,3})?", re.I),
      "page_furniture"),
     # Bibliographic reference: a strict author list ("Surname, I. I., ... & Surname, I.")

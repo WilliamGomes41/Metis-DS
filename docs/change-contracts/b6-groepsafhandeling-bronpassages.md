@@ -118,7 +118,7 @@ Terugdraaien kan niet meer na publicatie. Het gepubliceerde werk blijft immutabl
 
 ### 3.6 Vaste niet-kennisregels (optie 3)
 
-Er komen extra regels in `metadata_reason`, alleen over de **hele passage**. Elke regel krijgt:
+Er komen extra regels in `accounting_reason` (alleen bronverantwoording; de vorming blijft `metadata_reason` gebruiken), alleen over de **hele passage**. Elke regel krijgt:
 - een positieve test;
 - een negatieve test met een klinische zin die erop lijkt.
 
