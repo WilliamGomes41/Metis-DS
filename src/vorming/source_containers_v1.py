@@ -96,12 +96,12 @@ _ACCOUNTING_RULES = (
     (re.compile(r"(?:Concept)?richtlijn\s+[^\n.:;!?]{1,100}\s+[–-]\s+commentaarronde\s+[a-z]+\s+20\d{2}(?:\s+\d{1,3})?", re.I),
      "page_furniture"),
     # Bibliographic reference(s): a strict author list, "(2021)." or "(n.d.).", a
-    # one-sentence title (no ". " inside, so no extra clinical sentence), and the
+    # one-sentence title (no ". ", "? ", "! " or "; " inside), and the
     # journal tail above. Several complete references may follow each other.
     (re.compile(r"(?:\(PDF\)\s*)?" + (ref := r"(?:" + (author := r"(?:[a-z]{1,4}\s){0,3}[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]*(?:\s?-\s?[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]*)?"
                                      r"(?:\s[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]*){0,2},\s(?:[A-Z]\.\s?(?:-\s?[A-Z]\.\s?)?){1,5}")
                 + r"(?:,\s" + author + r"){0,30}(?:,?\s(?:&|and|en)\s" + author + r")?(?:,?\set al\.)?"
-                r"\s?\((?:(?:19|20)\d{2}[a-z]?|n\.d\.)\)\.\s(?:(?!\.\s)[^\n])+?\.\s?" + _JOURNAL + _LOCATOR + r")")
+                r"\s?\((?:(?:19|20)\d{2}[a-z]?|n\.d\.)\)\.\s(?:(?![.?!;]\s)[^\n])+?\.\s?" + _JOURNAL + _LOCATOR + r")")
                 + r"(?:\s" + ref + r")*"), "document_metadata"),
     # "Bronnen: (Surname et al., 2022; Surname & Surname, 2019)": in-text citations only.
     (re.compile(r"Bronnen?\s*:\s*\(" + (cite := r"(?:[a-z]{1,4}\s){0,3}[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]+"
