@@ -5,6 +5,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+import json
+
 import pytest
 
 from src.vorming.source_containers_v1 import accounting_reason, metadata_reason
@@ -42,6 +44,9 @@ def test_closed_non_knowledge_rules_account_the_whole_passage(text, reason):
     "Raadpleeg bij twijfel de arts. Zie bijlage 2.",
     "Mw. Jansen, 80 jaar, heeft smetten in de liesplooi.",
     "· Mw. Jansen, verpleegkundige, adviseert dagelijks drooghouden.",
+    "Mevr. Jansen, verpleegkundige, adviseert namens de werkgroep dagelijks zinkzalf.",
+    "Mw. Jansen, verpleegkundige, namens de werkgroep: gebruik geen zinkzalf",
+    "Mw. Jansen, verpleegkundige, namens V&VN. Gebruik geen zinkzalf.",
     "Conceptrichtlijn: gebruik geen zinkzalf bij een natte smetplek.",
     "22",
     "Bronnen van vocht, zoals transpiratie (2019), verhogen het risico.",
@@ -88,3 +93,44 @@ def test_clinical_remainder_still_needs_human_disposition():
 def test_formation_planning_rules_are_unchanged(text):
     # Accountability only: formation keeps sending these blocks to the model.
     assert metadata_reason(text) is None
+
+
+@pytest.mark.parametrize("extra,closed", [
+    ("Jansen, A. B. (2019). Huidzorg bij ouderen. Tijdschrift, 12, 1-9.", True),
+    ("Bij kinderen geldt ander beleid.", False),
+])
+def test_readiness_blocker_follows_closed_rule_through_the_console(extra, closed, tmp_path, *, production_console):
+    """Black box: ingest -> containers -> publication readiness, no direct registry calls."""
+    from src.publication.publication_readiness_v1 import SOURCE_PASSAGE_REVIEW_INCOMPLETE
+    from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
+    from tests.test_recommendation_context_v3 import response_for
+    def make():
+        return production_console(processing_binder=lambda console: None, root=tmp_path,
+                                  source_store=tmp_path / 'sources', runtime=tmp_path / 'runtime')
+    state = make()
+    author = state.create_account(username='author', password='strong-test-password', roles=('researcher',))
+    reviewer = state.create_account(username='reviewer', password='strong-test-password', roles=('reviewer',))
+
+    def provider(_url, _headers, payload, _timeout):
+        blocks = json.loads(payload['input'][1]['content'])['source_blocks']
+        answer = (response_for(payload, 'Gebruik geen zalf')
+                  if any('Gebruik geen zalf' in b['text'] for b in blocks)
+                  else {'objects': [], 'relations': [], 'abstain_reason': 'uncertain'})
+        return {'output': [{'type': 'message', 'content': [{'type': 'output_text', 'text': json.dumps(answer)}]}]}
+    bind_pre_review_semantic_processing(state, environ={'METIS_PASSAGE_FORMATION_MODE': 'semantic-source-bound-v3',
+        'METIS_LLM_API_KEY': 'fixture', 'METIS_LLM_MODEL': 'fixture'}, post_json=provider)
+    html = f'<html><body><h1>Aanbevelingen</h1><p>Gebruik geen zalf</p><p>{extra}</p></body></html>'
+    sid = state.ingest(actor_id=author['account_id'], filename='source.html', data=html.encode(),
+        content_type='text/html', ingest_kind='new', title='Test', version='1', date='2026-10-05', live_url='',
+        class_='richtlijn', family='test', named_reviewers=[reviewer['account_id']])['snapshot_id']
+    source = state.snapshot_containers(sid)['source']
+    assert [r['record']['content']['clean_text'] for r in source] == [extra]
+    source_id = source[0]['record']['object_id']
+    readiness = state.publication_readiness(sid)
+    # Derived at read time, so a restarted console gives the same projection.
+    assert make().publication_readiness(sid)['unresolved_source_passage_ids'] == readiness['unresolved_source_passage_ids']
+    # Readiness is the publication authority; the reference no longer holds the
+    # source-passage blocker open, a clinical remainder still does.
+    assert (source_id not in readiness['unresolved_source_passage_ids']) is closed
+    assert (source_id not in readiness['source_disposition_object_ids']) is closed
+    assert SOURCE_PASSAGE_REVIEW_INCOMPLETE in readiness['curation_blockers']  # The recommendation awaits review.

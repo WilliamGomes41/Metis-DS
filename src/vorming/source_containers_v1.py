@@ -46,8 +46,11 @@ _ACCOUNTING_RULES = (
                 r"\s?\((?:(?:19|20)\d{2}[a-z]?|n\.d\.)\)\.\s[^\n]+"), "document_metadata"),
     (re.compile(r"Bronnen?\s*:\s*\([^()]{3,200}(?:19|20)\d{2}[a-z]?\)\.?"), "document_metadata"),
     (re.compile(r"Zie\s+bijlage\s+\d+(?:\.\d+)*\.?", re.I), "navigation"),
-    # Working-group member: "Mw. Name, role, namens Organisation".
-    (re.compile(r"[·•\-]?\s*(?:Mw|Dhr|Mevr)\.\s+[^,\n]{2,60},\s[^\n]{2,200}?,?\s+namens\s+[^\n]{2,120}"),
+    # Working-group roster line: "Mw. Name, role, namens Organisation". Role and
+    # organisation are single comma-free fields without sentence punctuation, and
+    # the organisation is a proper name, so advice "namens de werkgroep" stays.
+    (re.compile(r"[·•\-]?\s*(?:Mw|Dhr|Mevr)\.\s+[^,:;\n]{2,60},\s[^,.:;\n]{2,120}?\s?,\s+namens\s+"
+                r"(?:de\s+)?(?:[A-Z]|V&VN)[^,.:;\n]{1,120}"),
      "document_metadata"),
 )
 
