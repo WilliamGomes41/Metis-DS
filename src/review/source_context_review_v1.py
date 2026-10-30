@@ -148,8 +148,6 @@ def reset_source_group(console: Any, *, actor_id: str, snapshot_id: str, group_c
                        reason: str, command_id: str, expected_revision: str) -> dict[str, Any]:
     """Undo one confirmed group, only if no member changed since (B6 3.5)."""
     from src.operations_console_v1 import ConsoleError
-    from src.vorming.passage_register_v1 import passage_register_record
-    from src.review.revision_workflow import bump_patch
 
     if not group_command_id.strip() or not reason.strip() or len(reason) > 4000:
         raise ConsoleError("source_group_command_invalid")
@@ -170,13 +168,9 @@ def reset_source_group(console: Any, *, actor_id: str, snapshot_id: str, group_c
             if (not current or current.get("object_version") != member["new_version"]
                     or role.get("command_id") != group_command_id or role.get("role") != "excluded"):
                 raise ConsoleError("source_group_members_changed")
-            updated = deepcopy(current)
-            updated["object_version"] = bump_patch(str(current["object_version"]))
-            updated["metadata"].pop(ROLE_KEY, None)
-            updated["metadata"]["passage_register"] = passage_register_record(
-                status="not_yet_assessed", reason_codes=["reviewer_confirmed_source_role"], source="review")
-            updated.setdefault("governance", {}).update(validation_status="needs_review", validated_by=None,
-                validation_date=None, review_snapshot_hash=None, publication_status="unpublished")
+            updated = source_role_version(current, role="reset", command_id=command_id, actor_id=actor_id,
+                                          reviewer=ctx["reviewer"]["username"], now=ctx["now"], reason=reason,
+                                          source_sha256=ctx["envelope"]["sha256"])
             changed.append(_sealed(console, updated))
         result = {"snapshot_id": snapshot_id, "command_id": command_id, "idempotent": False,
                   "group_command_id": group_command_id,
@@ -186,6 +180,43 @@ def reset_source_group(console: Any, *, actor_id: str, snapshot_id: str, group_c
     return _source_batch(console, actor_id=actor_id, snapshot_id=snapshot_id, command_id=command_id,
                          expected_revision=expected_revision, event_type=GROUP_RESET_EVENT,
                          payload_hash=payload_hash, body=body)
+
+
+def source_role_version(source: dict[str, Any], *, role: str, command_id: str, actor_id: str, reviewer: str,
+                        now: str, reason: str, source_sha256: str, group: bool = False) -> dict[str, Any]:
+    """The one source-role successor: single, batch and group commands all use it.
+
+    Sets the role record, passage register and governance for label/context/
+    excluded, or clears them for reset. Sealing and links stay with the caller.
+    """
+    from src.vorming.passage_register_v1 import passage_register_record
+    from src.review.revision_workflow import bump_patch
+    updated = deepcopy(source)
+    updated["object_version"] = bump_patch(str(source["object_version"]))
+    metadata = updated.setdefault("metadata", {})
+    metadata[ROLE_KEY] = {
+        "version": CONTRACT, "role": role, "command_id": command_id,
+        "reviewer_id": actor_id, "reviewer": reviewer, "reviewed_at": now,
+        "reason": reason.strip(), "literal_hash": literal_identity(source),
+        "source_sha256": source_sha256,
+    }
+    if group:
+        metadata[ROLE_KEY]["group"] = True
+    if role == "reset":
+        metadata.pop(ROLE_KEY, None)
+    metadata["passage_register"] = passage_register_record(
+        status="not_yet_assessed" if role == "reset" else "excluded_with_reason" if role == "excluded" else "used_as_context",
+        reason_codes=["reviewer_confirmed_source_role"], source="review",
+    )
+    governance = updated.setdefault("governance", {})
+    governance.update(validation_status="needs_review" if role == "reset" else "rejected",
+                      validated_by=None if role == "reset" else reviewer,
+                      validation_date=None if role == "reset" else now[:10], review_snapshot_hash=None,
+                      publication_status="unpublished")
+    second = governance.get("second_review")
+    if isinstance(second, dict) and second.get("required"):
+        second.update(status="pending", reviewer=None, review_date=None, snapshot_hash=None)
+    return updated
 
 
 def _open_source(source: dict[str, Any]) -> bool:
@@ -198,29 +229,13 @@ def _excluded_version(console: Any, ctx: dict[str, Any], source: dict[str, Any],
                       command_id: str, group: bool = False) -> dict[str, Any]:
     """The one exclusion write shared by the batch and the group command."""
     from src.operations_console_v1 import ConsoleError
-    from src.vorming.passage_register_v1 import passage_register_record
-    from src.review.revision_workflow import bump_patch
     oid = source["object_id"]
     console._require_open_original(ctx["snapshot_id"], oid)
     if not verify_literal_source(source, ctx["fragments"], ctx["envelope"]["sha256"]):
         raise ConsoleError("source_context_evidence_invalid")
-    updated = deepcopy(source)
-    updated["object_version"] = bump_patch(str(source["object_version"]))
-    metadata = updated.setdefault("metadata", {})
-    metadata[ROLE_KEY] = {"version": CONTRACT, "role": "excluded", "command_id": command_id,
-        "reviewer_id": ctx["actor_id"], "reviewer": ctx["reviewer"]["username"], "reviewed_at": ctx["now"],
-        "reason": reason.strip(), "literal_hash": literal_identity(source),
-        "source_sha256": ctx["envelope"]["sha256"]}
-    if group:
-        metadata[ROLE_KEY]["group"] = True
-    metadata["passage_register"] = passage_register_record(status="excluded_with_reason",
-        reason_codes=["reviewer_confirmed_source_role"], source="review")
-    governance = updated.setdefault("governance", {})
-    governance.update(validation_status="rejected", validated_by=ctx["reviewer"]["username"],
-        validation_date=ctx["now"][:10], review_snapshot_hash=None, publication_status="unpublished")
-    second = governance.get("second_review")
-    if isinstance(second, dict) and second.get("required"):
-        second.update(status="pending", reviewer=None, review_date=None, snapshot_hash=None)
+    updated = source_role_version(source, role="excluded", command_id=command_id, actor_id=ctx["actor_id"],
+                                  reviewer=ctx["reviewer"]["username"], now=ctx["now"], reason=reason,
+                                  source_sha256=ctx["envelope"]["sha256"], group=group)
     return _sealed(console, updated)
 
 
@@ -422,7 +437,6 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
                            reason: str, command_id: str, expected_revision: str) -> dict[str, Any]:
     from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT, utc_now
     from src.review.revision_workflow import bump_patch
-    from src.vorming.passage_register_v1 import passage_register_record
 
     if role not in {"label", "context", "excluded", "reset"}:
         raise ConsoleError("source_context_role_invalid")
@@ -469,29 +483,9 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
                 raise ConsoleError("source_context_target_invalid")
         now = utc_now()
         changed: dict[str, dict[str, Any]] = {}
-        source_after = deepcopy(source)
-        source_after["object_version"] = bump_patch(str(source["object_version"]))
-        metadata = source_after.setdefault("metadata", {})
-        metadata[ROLE_KEY] = {
-            "version": CONTRACT, "role": role, "command_id": command_id,
-            "reviewer_id": actor_id, "reviewer": reviewer["username"], "reviewed_at": now,
-            "reason": reason.strip(), "literal_hash": literal_identity(source),
-            "source_sha256": envelope["sha256"],
-        }
-        if role == "reset":
-            metadata.pop(ROLE_KEY, None)
-        source_after["metadata"]["passage_register"] = passage_register_record(
-            status="not_yet_assessed" if role == "reset" else "excluded_with_reason" if role == "excluded" else "used_as_context",
-            reason_codes=["reviewer_confirmed_source_role"], source="review",
-        )
-        governance = source_after.setdefault("governance", {})
-        governance.update(validation_status="needs_review" if role == "reset" else "rejected",
-                          validated_by=None if role == "reset" else reviewer["username"],
-                          validation_date=None if role == "reset" else now[:10], review_snapshot_hash=None,
-                          publication_status="unpublished")
-        second = governance.get("second_review")
-        if isinstance(second, dict) and second.get("required"):
-            second.update(status="pending", reviewer=None, review_date=None, snapshot_hash=None)
+        source_after = source_role_version(source, role=role, command_id=command_id, actor_id=actor_id,
+                                           reviewer=reviewer["username"], now=now, reason=reason,
+                                           source_sha256=envelope["sha256"])
         changed[source_object_id] = source_after
         for oid, original in by_id.items():
             previous = links_of(original)

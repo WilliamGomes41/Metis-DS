@@ -171,3 +171,29 @@ def test_http_group_form_shows_open_members_and_confirms_them(tmp_path, *, produ
         assert outsider.post("/login", data={"username": "author", "password": "long-test-password"},
                              follow_redirects=False).status_code == 303
         assert outsider.post("/review/source-group", data={**data, "source_checked": "1"}).status_code == 403
+
+
+def test_single_and_group_commands_write_the_same_source_state(tmp_path, *, production_console):
+    """One writer: a group decision equals the single-passage decision, for exclude and undo."""
+    from src.review.source_context_review_v1 import confirm_source_context, confirm_source_group, reset_source_group
+    state, sid, reviewer = _document(tmp_path, production_console=production_console)
+    single, grouped = _by_text(state, sid, FIRST)["object_id"], _by_text(state, sid, SECOND)["object_id"]
+
+    def shape(text):
+        row = _by_text(state, sid, text)
+        role = {k: v for k, v in (row["metadata"].get("source_role_review") or {}).items()
+                if k not in {"command_id", "reviewed_at", "reason", "group", "literal_hash"}}
+        governance = {k: v for k, v in row["governance"].items() if k != "validation_date"}
+        return role, row["metadata"].get("passage_register"), governance, sorted(row["metadata"])
+
+    confirm_source_context(state, actor_id=reviewer, snapshot_id=sid, source_object_id=single, role="excluded",
+                           target_object_ids=[], reason="Los.", command_id="single",
+                           expected_revision=state.objects_revision(sid))
+    confirm_source_group(state, **_command(state, sid, reviewer, ids=[grouped]))
+    assert shape(FIRST) == shape(SECOND)
+    confirm_source_context(state, actor_id=reviewer, snapshot_id=sid, source_object_id=single, role="reset",
+                           target_object_ids=[], reason="Los terug.", command_id="single-reset",
+                           expected_revision=state.objects_revision(sid))
+    reset_source_group(state, actor_id=reviewer, snapshot_id=sid, group_command_id="group-1", reason="Terug.",
+                       command_id="group-reset", expected_revision=state.objects_revision(sid))
+    assert shape(FIRST) == shape(SECOND)
