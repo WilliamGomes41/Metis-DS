@@ -43,6 +43,11 @@ _TOC_TITLES = (
 _PERSON_NAME = (r"(?:[A-ZÀ-Ý]\.\s?|[A-ZÀ-Ý][a-zà-ÿ'’]+)"
                 r"(?:(?:\s?-\s?|\s)(?:[A-ZÀ-Ý]\.|[A-ZÀ-Ý][a-zà-ÿ'’]+|van|de|der|den|ten|ter|het|in|'t)){0,6}")
 
+# Organisation name: capitalised words or acronyms (V&VN), "(NVMM)", "&" and the
+# lowercase joiners of Dutch society names; a verb such as "adviseert" ends the match.
+_ORG_WORD = r"(?:[A-ZÀ-Ý][A-Za-zÀ-ÿ&'’-]*|\([A-Z]{2,10}\)|&|voor|en|van|de|der|het)"
+_ORGANISATION = r"[A-ZÀ-Ý][A-Za-zÀ-ÿ&'’-]*(?:\s" + _ORG_WORD + r"){0,12}"
+
 # B6 (#933): closed whole-range rules for source accountability only. They never
 # change formation planning, which keeps using metadata_reason.
 _ACCOUNTING_RULES = (
@@ -68,7 +73,7 @@ _ACCOUNTING_RULES = (
     # organisation are single comma-free fields without sentence punctuation, and
     # the organisation is a proper name, so advice "namens de werkgroep" stays.
     (re.compile(r"[·•\-]?\s*(?:Mw|Dhr|Mevr)\.\s+" + _PERSON_NAME + r"\s?,\s[^,.:;\n]{2,120}?\s?,\s+namens\s+"
-                r"(?:de\s+)?(?:[A-Z]|V&VN)[^,.:;\n]{1,120}"),
+                r"(?:de\s+)?" + _ORGANISATION),
      "document_metadata"),
 )
 

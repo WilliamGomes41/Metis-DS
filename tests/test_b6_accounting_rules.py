@@ -32,6 +32,10 @@ from src.vorming.source_containers_v1 import accounting_reason, metadata_reason
     ("Conceptrichtlijn Voorbeeld – commentaarronde juli 2026    Implementatietabel ..........", "navigation"),
     ("· Mw. Anna Bout - Voorbeeld , Verpleegkundige, namens V&VN", "document_metadata"),
     ("· Mw. Alma Voorbeeld-van Dijk, Verpleegkundige, namens V&VN Wondexpertise", "document_metadata"),
+    ("· Mw. Eva Voorbeeld, Ergotherapeut , namens Ergotherapie Nederland (EN)", "document_metadata"),
+    ("· Mw. Eva Voorbeeld, dermatoloog, namens de Nederlandse Vereniging voor Dermatologie en Venerologie",
+     "document_metadata"),
+    ("· Mw. Eva Voorbeeld, Verpleegkundige, namens V&VN Geriatrie & Gerontologie", "document_metadata"),
     ("Zie Bijlage 2", "navigation"),
     ("· Mw. Anna Voorbeeld, Verpleegkundige in een ziekenhuis, namens Voorbeeldvereniging", "document_metadata"),
 ])
@@ -47,6 +51,7 @@ def test_closed_non_knowledge_rules_account_the_whole_passage(text, reason):
     "Gebruik zinkzalf. ....................................",
     "Breng zinkzalf dagelijks aan ............................................................",
     "Mw. Jansen. Gebruik dagelijks zinkzalf, verpleegkundige, namens V&VN",
+    "Mw. Jansen, verpleegkundige, namens V&VN adviseert dagelijks zinkzalf",
     "Controleer de huidplooien dagelijks (Jansen, 2019).",
     "Jansen, A. (2019) beschrijft dat drooghouden smetten voorkomt.",
     "Jansen, A. adviseert de huid dagelijks droog te houden (2019). Dit voorkomt smetten.",

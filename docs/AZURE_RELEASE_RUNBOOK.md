@@ -64,4 +64,6 @@ az webapp config container set -g <rg> -n <app> \
 python scripts/verify_console_deployment.py --health-url <url>/health --expected-commit <vorige sha>
 ```
 
+Stond `CONSOLE_REVIEW_CARD_READS=compact` aan, en is bij de release stap 1.7 uitgevoerd? Voer dan na de terugwissel met de herstelde versie opnieuw `python scripts/prepare_review_cards.py --all` uit, en daarna dezelfde opdracht met `--check`. De voorbereide kaarten dragen anders het `producer_contract` van de nieuwere versie, en de oudere code weigert ze ("Kaartgegevens niet beschikbaar").
+
 De PostgreSQL-toestand blijft geldig: 019 is alleen-toevoegen en oudere code negeert de tabel. Een gewijzigde `METIS_PASSAGE_FORMATION_MODE` mag na een rollback blijven staan; een semantische modus wordt door oudere code ook gelezen.
