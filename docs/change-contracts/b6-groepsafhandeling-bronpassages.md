@@ -1,6 +1,6 @@
 # B6 — Groepsafhandeling van bronpassages (ontwerp ter goedkeuring)
 
-Status: **ONTWERP — wacht op goedkeuring projectlead.** Er is nog geen code gebouwd.
+Status: **GOEDGEKEURD (projectlead, 30 oktober 2026), inclusief keuze (a) in §3.7.** Bouwen volgt in de volgorde van §9.
 GitHub: #933. Linear: MET-33 (onder MET-6).
 Besluit: B6, opties 3 en 2 (projectlead, 30 oktober 2026). Besluit B is aangepast: onderbouwing loopt via groepsbevestiging per sectie.
 
@@ -132,7 +132,7 @@ Ontwerpkeuze vóór de bouw:
 - (a) een bevestigde bronafhandeling over het hele bereik van een pending rejection telt als afgehandeld voor de vormingsvoltooiing;
 - of (b) de vorming blijft open en de beoordelaar kiest expliciet "vorming afsluiten" voor die sectie.
 
-**Advies: (a).** Dat is alleen toegestaan als de bevestigde passages het bereik volledig dekken, en het wordt vastgelegd met dezelfde `command_id`.
+**BESLOTEN: (a)** (projectlead, 30 oktober 2026). Dat is alleen toegestaan als de bevestigde passages het bereik volledig dekken, en het wordt vastgelegd met dezelfde `command_id`.
 
 ## 4. Domeininvarianten
 
