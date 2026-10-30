@@ -133,8 +133,13 @@ VIEW_CHECK_TABLES = frozenset({"view_checks"})
 # Checked whenever present: their triggers write them on every document mutation.
 OPTIONAL_MIGRATION_TABLES = {"027_review_card_facts.sql": ("review_fact_state", "review_object_facts")}
 COMPACT_CARD_MIGRATION = "027_review_card_facts.sql"
-# A surviving object that proves an optional migration was applied, even if its tables are gone.
-OPTIONAL_MIGRATION_MARKERS = {COMPACT_CARD_MIGRATION: "workflow.review_card_document_change()"}
+# Functions an optional migration creates: any survivor proves it was applied (its triggers
+# keep writing the tables), even if the tables are gone. Kept equal to the file by a test.
+OPTIONAL_MIGRATION_MARKERS = {COMPACT_CARD_MIGRATION: (
+    "review_card_envelope_for", "refresh_review_card_envelope", "review_card_document_change",
+    "review_fact_static_input", "review_fact_live_fields", "invalidate_review_object",
+    "review_card_object_change", "review_card_truncate",
+)}
 OPTIONAL_TABLE_PRIVILEGES = {
     "review_fact_state": (_S, _I, _U),
     "review_object_facts": (_S, _I, _U),
@@ -261,9 +266,10 @@ def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool =
         checks += [(name, privs, "S") for name, privs in RUNTIME_SEQUENCE_PRIVILEGES.items()]
         for migration, optional in OPTIONAL_MIGRATION_TABLES.items():
             # Partly installed counts as installed; compact cards (CONSOLE_REVIEW_CARD_READS) require 027.
-            marker = OPTIONAL_MIGRATION_MARKERS.get(migration)
-            applied = bool(marker) and connection.execute(
-                "SELECT to_regprocedure(%s) IS NOT NULL AS ok", (marker,)).fetchone()["ok"]
+            applied = connection.execute(
+                "SELECT EXISTS(SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+                "WHERE n.nspname='workflow' AND p.proname = ANY(%s)) AS ok",
+                (list(OPTIONAL_MIGRATION_MARKERS.get(migration, ())),)).fetchone()["ok"]
             if (applied or any(name in tables for name in optional)
                     or (compact_cards and migration == COMPACT_CARD_MIGRATION)):
                 checks += [(name, OPTIONAL_TABLE_PRIVILEGES[name], "r") for name in optional]

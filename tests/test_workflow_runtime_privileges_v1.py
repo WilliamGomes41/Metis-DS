@@ -15,6 +15,7 @@ import pytest
 
 from src.workflows.workflow_postgres_migration_v1 import (
     MIGRATION_NAMES,
+    OPTIONAL_MIGRATION_MARKERS,
     OPTIONAL_MIGRATION_TABLES,
     OPTIONAL_TABLE_PRIVILEGES,
     RUNTIME_SEQUENCE_PRIVILEGES,
@@ -43,6 +44,10 @@ def test_every_workflow_migration_outside_the_registry_is_inventoried():
         if created:
             assert set(OPTIONAL_MIGRATION_TABLES.get(name, ())) == created, name
     assert {t for ts in OPTIONAL_MIGRATION_TABLES.values() for t in ts} == set(OPTIONAL_TABLE_PRIVILEGES)
+    for name, markers in OPTIONAL_MIGRATION_MARKERS.items():
+        functions = re.findall(r"CREATE OR REPLACE FUNCTION workflow\.([a-z_]+)",
+                               (ROOT / "db" / "migrations" / name).read_text())
+        assert set(markers) == set(functions), name
 
 
 def test_every_serial_sequence_of_a_registered_table_is_expected():
@@ -160,6 +165,10 @@ def test_installed_review_card_tables_are_checked_and_absent_ones_are_not(runtim
     # Where 027 was never applied (production today), its tables are not required,
     # unless compact cards are enabled.
     con.execute("DROP FUNCTION workflow.review_card_document_change() CASCADE")
+    # Any surviving 027 writer (here the object trigger) still requires both tables.
+    assert _observe(con, role, view_check=True)["missing_relations"] == ["review_fact_state", "review_object_facts"]
+    for function in OPTIONAL_MIGRATION_MARKERS["027_review_card_facts.sql"]:
+        con.execute(f"DROP FUNCTION IF EXISTS workflow.{function} CASCADE")
     assert _observe(con, role, view_check=True)["status"] == "PASS"
     compact = _observe(con, role, view_check=True, compact_cards=True)
     assert compact["missing_relations"][:2] == ["review_fact_state", "review_object_facts"]
