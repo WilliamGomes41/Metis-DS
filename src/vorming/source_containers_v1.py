@@ -31,13 +31,29 @@ def metadata_reason(text):
     return None
 
 
+_TOC_TITLES = (
+    "Aanbevelingen", "Achtergrond", "Uitgangsvraag", "Inleiding", "Samenvatting", "Verantwoording",
+    "Literatuursamenvatting", "Literatuurconclusies", "Zoeken en selecteren", "Overwegingen",
+    "Van bewijs naar aanbeveling (overwegingen)", "Van bewijs naar aanbeveling", "Rationale",
+    "Implementatietabel", "Kennisvragen", "Verder onderzoek", "Referenties", "Bijlagen",
+)
+
+# Person name: capitalised name parts or initials, Dutch particles, hyphenated
+# double names; no sentence punctuation, so "Jansen. Gebruik ..." is not a name.
+_PERSON_NAME = (r"(?:[A-ZÀ-Ý]\.\s?|[A-ZÀ-Ý][a-zà-ÿ'’]+)"
+                r"(?:(?:\s?-\s?|\s)(?:[A-ZÀ-Ý]\.|[A-ZÀ-Ý][a-zà-ÿ'’]+|van|de|der|den|ten|ter|het|in|'t)){0,6}")
+
 # B6 (#933): closed whole-range rules for source accountability only. They never
 # change formation planning, which keeps using metadata_reason.
 _ACCOUNTING_RULES = (
-    # Table-of-contents line: an optional heading title (no sentence punctuation, never
-    # ending in ':' like a form field) and a long dot leader, or a leader tail with page.
-    (re.compile(r"(?:[^\n.:;!?]{1,160}?(?::\s[^\n.:;!?]{1,120}?)?\s+)?(?:\.\s?){30,}\s*\d{0,4}"
-                r"|\.{2,}\s*\d{1,4}"), "navigation"),
+    # Table-of-contents line: a dot leader after a heading from a closed list of
+    # guideline section titles (or "Module/Hoofdstuk/Bijlage N: title"), optionally
+    # behind the draft footer, or a bare leader tail with a page number. Free text
+    # before a leader stays human work, however long the leader is.
+    (re.compile(r"(?:(?:Concept)?richtlijn\s+[^\n]{1,100}\s+[–-]\s+commentaarronde\s+[a-z]+\s+20\d{2}\s+)?"
+                r"(?:" + "|".join(re.escape(title) for title in _TOC_TITLES)
+                + r"|(?:Module|Hoofdstuk|Bijlage)\s+\d{1,2}(?::\s[^\n.:;!?]{1,120}?)?)"
+                r"\s+(?:\.\s?){8,}\s*\d{0,4}|(?:\.\s?){2,}\s*\d{1,4}", re.I), "navigation"),
     (re.compile(r"(?:Concept)?richtlijn\s+[^\n]{1,100}\s+[–-]\s+commentaarronde\s+[a-z]+\s+20\d{2}(?:\s+\d{1,3})?", re.I),
      "page_furniture"),
     # Bibliographic reference: a strict author list ("Surname, I. I., ... & Surname, I.")
@@ -51,7 +67,7 @@ _ACCOUNTING_RULES = (
     # Working-group roster line: "Mw. Name, role, namens Organisation". Role and
     # organisation are single comma-free fields without sentence punctuation, and
     # the organisation is a proper name, so advice "namens de werkgroep" stays.
-    (re.compile(r"[·•\-]?\s*(?:Mw|Dhr|Mevr)\.\s+[^,:;\n]{2,60},\s[^,.:;\n]{2,120}?\s?,\s+namens\s+"
+    (re.compile(r"[·•\-]?\s*(?:Mw|Dhr|Mevr)\.\s+" + _PERSON_NAME + r"\s?,\s[^,.:;\n]{2,120}?\s?,\s+namens\s+"
                 r"(?:de\s+)?(?:[A-Z]|V&VN)[^,.:;\n]{1,120}"),
      "document_metadata"),
 )

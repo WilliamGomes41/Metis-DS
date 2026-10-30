@@ -116,6 +116,8 @@ Met "Groep terugdraaien" voert het systeem met een nieuwe `command_id` de bestaa
 
 Terugdraaien kan niet meer na publicatie. Het gepubliceerde werk blijft immutable.
 
+Terugdraaien vergelijkt eerst, in dezelfde transactie, elk lid met het groeps-event. Elk lid moet nog de objectversie na de groepsbevestiging hebben, en een `source_role` met de `command_id` van de groep. Is één lid daarna afzonderlijk gewijzigd, dan wordt het hele terugdraaien geweigerd met `source_group_members_changed`. Een later besluit wordt dus nooit stil overschreven.
+
 ### 3.6 Vaste niet-kennisregels (optie 3)
 
 Er komen extra regels in `accounting_reason` (alleen bronverantwoording; de vorming blijft `metadata_reason` gebruiken), alleen over de **hele passage**. Elke regel krijgt:
