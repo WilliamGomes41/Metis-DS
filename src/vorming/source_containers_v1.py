@@ -48,6 +48,22 @@ _PERSON_NAME = (r"(?:[A-ZÀ-Ý]\.\s?|[A-ZÀ-Ý][a-zà-ÿ'’]+)"
 _ORG_WORD = r"(?:[A-ZÀ-Ý][A-Za-zÀ-ÿ&'’-]*|\([A-Z]{2,10}\)|&|voor|en|van|de|der|het)"
 _ORGANISATION = r"[A-ZÀ-Ý][A-Za-zÀ-ÿ&'’-]*(?:\s" + _ORG_WORD + r"){0,12}"
 
+# Role: a profession from a closed list, optionally "in/bij een/de <work setting>"
+# from a closed list. Advice in this field ("adviseert dagelijks zinkzalf") never fits.
+_PROFESSIONS = (
+    "Verpleegkundig specialist", "Verpleegkundige", "Wondconsulent", "Wondconsultent", "Verzorgende IG",
+    "Verzorgende", "Specialist Ouderengeneeskunde", "Arts-microbioloog", "Dermatoloog", "Huisarts",
+    "Ergotherapeut", "Fysiotherapeut", "Diëtist", "Apotheker", "Arts", "Onderzoeker", "Adviseur",
+    "Beleidsmedewerker", "Patiëntvertegenwoordiger", "Ervaringsdeskundige",
+)
+_SETTINGS = (
+    "ziekenhuis", "verpleeghuis", "verzorgingshuis", "thuiszorg", "wijkverpleging", "huisartsenpraktijk",
+    "intra- en extramurale zorg", "intramurale zorg", "extramurale zorg", "gehandicaptenzorg", "ggz",
+    "revalidatiecentrum", "eerste lijn", "tweede lijn", "langdurige zorg",
+)
+_ROLE = (r"(?i:" + "|".join(re.escape(p) for p in _PROFESSIONS) + r")"
+         r"(?:\s(?:in|bij)\s(?:een|de|het)\s(?i:" + "|".join(re.escape(x) for x in _SETTINGS) + r"))?")
+
 # B6 (#933): closed whole-range rules for source accountability only. They never
 # change formation planning, which keeps using metadata_reason.
 _ACCOUNTING_RULES = (
@@ -55,11 +71,11 @@ _ACCOUNTING_RULES = (
     # guideline section titles (or "Module/Hoofdstuk/Bijlage N: title"), optionally
     # behind the draft footer, or a bare leader tail with a page number. Free text
     # before a leader stays human work, however long the leader is.
-    (re.compile(r"(?:(?:Concept)?richtlijn\s+[^\n]{1,100}\s+[–-]\s+commentaarronde\s+[a-z]+\s+20\d{2}\s+)?"
+    (re.compile(r"(?:(?:Concept)?richtlijn\s+[^\n.:;!?]{1,100}\s+[–-]\s+commentaarronde\s+[a-z]+\s+20\d{2}\s+)?"
                 r"(?:" + "|".join(re.escape(title) for title in _TOC_TITLES)
                 + r"|(?:Module|Hoofdstuk|Bijlage)\s+\d{1,2}(?::\s[^\n.:;!?]{1,120}?)?)"
                 r"\s+(?:\.\s?){8,}\s*\d{0,4}|(?:\.\s?){2,}\s*\d{1,4}", re.I), "navigation"),
-    (re.compile(r"(?:Concept)?richtlijn\s+[^\n]{1,100}\s+[–-]\s+commentaarronde\s+[a-z]+\s+20\d{2}(?:\s+\d{1,3})?", re.I),
+    (re.compile(r"(?:Concept)?richtlijn\s+[^\n.:;!?]{1,100}\s+[–-]\s+commentaarronde\s+[a-z]+\s+20\d{2}(?:\s+\d{1,3})?", re.I),
      "page_furniture"),
     # Bibliographic reference: a strict author list ("Surname, I. I., ... & Surname, I.")
     # directly followed by "(2021)." or "(n.d.)."; no free prose before the year.
@@ -67,12 +83,15 @@ _ACCOUNTING_RULES = (
                                      r"(?:\s[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]*){0,2},\s(?:[A-Z]\.\s?(?:-\s?[A-Z]\.\s?)?){1,5}")
                 + r"(?:,\s" + author + r"){0,30}(?:,?\s(?:&|and|en)\s" + author + r")?(?:,?\set al\.)?"
                 r"\s?\((?:(?:19|20)\d{2}[a-z]?|n\.d\.)\)\.\s[^\n]+"), "document_metadata"),
-    (re.compile(r"Bronnen?\s*:\s*\([^()]{3,200}(?:19|20)\d{2}[a-z]?\)\.?"), "document_metadata"),
+    # "Bronnen: (Surname et al., 2022; Surname & Surname, 2019)": in-text citations only.
+    (re.compile(r"Bronnen?\s*:\s*\(" + (cite := r"(?:[a-z]{1,4}\s){0,3}[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]+"
+                r"(?:\s(?:et al\.|(?:&|en)\s(?:[a-z]{1,4}\s){0,3}[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]+))?,\s(?:19|20)\d{2}[a-z]?")
+                + r"(?:;\s" + cite + r")*\)\.?"), "document_metadata"),
     (re.compile(r"Zie\s+bijlage\s+\d+(?:\.\d+)*\.?", re.I), "navigation"),
     # Working-group roster line: "Mw. Name, role, namens Organisation". Role and
     # organisation are single comma-free fields without sentence punctuation, and
     # the organisation is a proper name, so advice "namens de werkgroep" stays.
-    (re.compile(r"[·•\-]?\s*(?:Mw|Dhr|Mevr)\.\s+" + _PERSON_NAME + r"\s?,\s[^,.:;\n]{2,120}?\s?,\s+namens\s+"
+    (re.compile(r"[·•\-]?\s*(?:Mw|Dhr|Mevr)\.\s+" + _PERSON_NAME + r"\s?,\s" + _ROLE + r"\s?,\s+namens\s+"
                 r"(?:de\s+)?" + _ORGANISATION),
      "document_metadata"),
 )
