@@ -80,19 +80,21 @@ def group_members_hash(rows: Iterable[dict[str, Any]]) -> str:
 
 
 def source_group_candidates(objects: Iterable[dict[str, Any]], *, review_path: str = "richtlijn",
-                            bindings=None, fragments=None) -> dict[tuple[str, ...], list[dict[str, Any]]]:
-    """Open source passages per exact section path, in source order (B6 3.1).
+                            bindings=None, fragments=None) -> dict[tuple[tuple[str, ...], str], list[dict[str, Any]]]:
+    """Open source passages per (exact section path, proposed reason), in source order (B6 3.1).
 
     A proposal, never a stored state: derived from the current objects on
     every read. Any model role qualifies here; closing needs a human command.
     """
     from src.vorming.source_containers_v1 import partition
+    from src.vorming.source_accountability_v1 import evidence_of
     groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
     for row in partition(list(objects), review_path=review_path, bindings=bindings, fragments=fragments)["source"]:
         record = row["record"]
         if row["usage"]["human_action"] != "source_disposition" or not _open_source(record):
             continue
-        groups.setdefault(section_path_of(record), []).append(record)
+        # The model's proposed reason (unformed_meaning / uncertain_source_role), as shown.
+        groups.setdefault((section_path_of(record), str(evidence_of(record).get("reason") or "")), []).append(record)
     return groups
 
 
@@ -102,7 +104,7 @@ def section_path_of(obj: dict[str, Any]) -> tuple[str, ...]:
 
 
 def confirm_source_group(console: Any, *, actor_id: str, snapshot_id: str, section_path: Iterable[str],
-                         shown_object_ids: Iterable[str], source_object_ids: Iterable[str],
+                         group_reason: str, shown_object_ids: Iterable[str], source_object_ids: Iterable[str],
                          members_hash: str, reason: str, command_id: str,
                          expected_revision: str) -> dict[str, Any]:
     """Exclude a reviewer-confirmed group of open source passages in one section.
@@ -120,12 +122,12 @@ def confirm_source_group(console: Any, *, actor_id: str, snapshot_id: str, secti
             or not members_hash or not reason.strip() or len(reason) > 4000):
         raise ConsoleError("source_group_command_invalid")
     payload_hash = stable_hash({"actor_id": actor_id, "snapshot_id": snapshot_id, "section_path": list(path),
-                               "shown": sorted(shown), "source_object_ids": ids,
+                               "group_reason": group_reason, "shown": sorted(shown), "source_object_ids": ids,
                                "members_hash": members_hash, "reason": reason.strip()})
 
     def body(ctx):
         groups = source_group_candidates(ctx["current"], review_path=ctx["review_path"])
-        eligible = {row["object_id"]: row for row in groups.get(path, [])}
+        eligible = {row["object_id"]: row for row in groups.get((path, group_reason), [])}
         if any(oid not in eligible for oid in shown):
             raise ConsoleError("source_group_members_changed")
         if group_members_hash(eligible[oid] for oid in shown) != members_hash:
@@ -135,7 +137,7 @@ def confirm_source_group(console: Any, *, actor_id: str, snapshot_id: str, secti
         members = [{"object_id": row["object_id"], "old_version": eligible[row["object_id"]]["object_version"],
                     "new_version": row["object_version"], "literal_hash": literal_identity(row)} for row in changed]
         result = {"snapshot_id": snapshot_id, "command_id": command_id, "idempotent": False,
-                  "section_path": list(path), "members": members,
+                  "section_path": list(path), "group_reason": group_reason, "members": members,
                   "source_versions": {row["object_id"]: row["object_version"] for row in changed}}
         return changed, result, {"reason": reason.strip(), "members_hash": members_hash}
 

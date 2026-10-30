@@ -2797,7 +2797,7 @@ def _review_inventory(
                 selectable_groups.add((label, path))
             group_role = role_of(obj)
             if source_only and edit_exclusions and group_role.get("group") and group_role.get("role") == "excluded":
-                group_resets.setdefault(path, set()).add(str(group_role.get("command_id") or ""))
+                group_resets.setdefault((label, path), set()).add(str(group_role.get("command_id") or ""))
             group.append(("meta" if selectable else "open" if groupable else "other", obj,
                 f'<li data-source-record="{_esc(object_id)}">{selection}<p>{_esc((obj.get("content") or {}).get("clean_text"))}</p>'
                 f'<p>{_esc(status)} · {_esc(usage_reason)}</p>{targets}'
@@ -2886,13 +2886,18 @@ def _review_inventory(
                     + '<label><input type="checkbox" name="source_checked" value="1" required>'
                     + ' Ik heb de aangevinkte bronregels gecontroleerd; zij bevatten geen op te nemen kennis.</label>'
                     + '<button type="submit">Aangevinkte bronregels gemotiveerd uitsluiten</button></form>')
-            for start in range(0, len(open_rows), GROUP_MAX):
-                chunk = open_rows[start:start + GROUP_MAX]
+            by_reason = {}
+            for row, html in open_rows:
+                by_reason.setdefault(str(evidence_of(row).get("reason") or ""), []).append((row, html))
+            chunks = [(group_reason, rows[start:start + GROUP_MAX])
+                      for group_reason, rows in by_reason.items() for start in range(0, len(rows), GROUP_MAX)]
+            for group_reason, chunk in chunks:
                 body += ('<form method="post" action="/review/source-group" data-source-group-confirm>'
                     f'<input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">'
                     + _snapshot_revision_input(snapshot_revision)
                     + f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
                     + "".join(f'<input type="hidden" name="section_path" value="{_esc(part)}">' for part in path)
+                    + f'<input type="hidden" name="group_reason" value="{_esc(group_reason)}">'
                     + "".join(f'<input type="hidden" name="shown_object_ids" value="{_esc(row["object_id"])}">'
                               for row, _html in chunk)
                     + f'<input type="hidden" name="members_hash" value="{_esc(group_members_hash(row for row, _html in chunk))}">'
@@ -2906,7 +2911,7 @@ def _review_inventory(
                     + '<button type="submit">Groep bevestigen: geen kennis</button></form>')
             if other:
                 body += '<ol>' + "".join(other) + '</ol>'
-            for group_command in sorted(group_resets.get(path, ())):
+            for group_command in sorted(group_resets.get((label, path), ())):
                 body += ('<form method="post" action="/review/source-group/reset" data-source-group-reset>'
                     f'<input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">'
                     + _snapshot_revision_input(snapshot_revision)
@@ -5935,7 +5940,8 @@ def create_console_app(
 
     @app.post("/review/source-group")
     def review_source_group(request: Request, snapshot_id: str = Form(...),
-            section_path: list[str] = Form(default=[]), shown_object_ids: list[str] = Form(default=[]),
+            section_path: list[str] = Form(default=[]), group_reason: str = Form(""),
+            shown_object_ids: list[str] = Form(default=[]),
             source_object_ids: list[str] = Form(default=[]), members_hash: str = Form(""),
             reason: str = Form(""), command_id: str = Form(""), snapshot_revision: str = Form(""),
             source_checked: str = Form("")) -> Response:
@@ -5944,7 +5950,8 @@ def create_console_app(
             raise ConsoleError("source_context_check_required")
         from src.review.source_context_review_v1 import confirm_source_group
         confirm_source_group(state, actor_id=account["account_id"], snapshot_id=snapshot_id,
-            section_path=section_path, shown_object_ids=shown_object_ids, source_object_ids=source_object_ids,
+            section_path=section_path, group_reason=group_reason, shown_object_ids=shown_object_ids,
+            source_object_ids=source_object_ids,
             members_hash=members_hash, reason=reason, command_id=command_id, expected_revision=snapshot_revision)
         return RedirectResponse('/source-selection?' + urlencode({'document': snapshot_id, 'task': 'disposition'}), status_code=303)
 

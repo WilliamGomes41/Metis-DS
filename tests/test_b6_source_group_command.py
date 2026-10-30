@@ -19,7 +19,7 @@ FIRST = "Bij verslechtering is extra observatie nodig."
 SECOND = "Overweeg dagelijkse huidinspectie bij bedlegerige cliënten."
 
 
-def _document(tmp_path, *, production_console):
+def _document(tmp_path, *, production_console, second_reason=None):
     state = production_console(processing_binder=lambda console: None, root=tmp_path,
                                source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     author = state.create_account(username="author", password="long-test-password", roles=("researcher",))
@@ -29,6 +29,11 @@ def _document(tmp_path, *, production_console):
         data = json.loads(payload["input"][1]["content"])
         answer = (proposal(data, v3=True) if any(DEFINITION in b["text"] for b in data["source_blocks"])
                   else {"objects": [], "relations": [], "abstain_reason": "uncertain"})
+        if second_reason and answer.get("objects"):
+            answer["source_assessments"] = [
+                {"span": {"block_id": b["block_id"], "literal": b["text"], "occurrence": 0},
+                 "role": "unresolved", "reason": second_reason}
+                for b in data["source_blocks"] if b["text"] == SECOND]
         return {"output": [{"type": "message", "content": [{"type": "output_text", "text": json.dumps(answer)}]}]}
     bind_pre_review_semantic_processing(state, environ={"METIS_PASSAGE_FORMATION_MODE": "semantic-source-bound-v3",
         "METIS_LLM_API_KEY": "fixture", "METIS_LLM_MODEL": "fixture"}, post_json=provider)
@@ -45,13 +50,13 @@ def _by_text(state, sid, text):
 
 def _group(state, sid):
     from src.review.source_context_review_v1 import group_members_hash, source_group_candidates
-    ((path, rows),) = source_group_candidates(state.snapshot_objects(sid)).items()
-    return path, rows, group_members_hash(rows)
+    (((path, reason), rows),) = source_group_candidates(state.snapshot_objects(sid)).items()
+    return (path, reason), rows, group_members_hash(rows)
 
 
 def _command(state, sid, reviewer, *, ids, command_id="group-1", **overrides):
-    path, rows, members_hash = _group(state, sid)
-    command = dict(actor_id=reviewer, snapshot_id=sid, section_path=list(path),
+    (path, reason), rows, members_hash = _group(state, sid)
+    command = dict(actor_id=reviewer, snapshot_id=sid, section_path=list(path), group_reason=reason,
                    shown_object_ids=[r["object_id"] for r in rows], source_object_ids=ids,
                    members_hash=members_hash, reason="Geen op te nemen kennis.", command_id=command_id,
                    expected_revision=state.objects_revision(sid))
@@ -89,6 +94,7 @@ def test_group_excludes_only_confirmed_members_and_is_idempotent(tmp_path, *, pr
     ("empty", "source_group_command_invalid"),
     ("too_many", "source_group_command_invalid"),
     ("section", "source_group_members_changed"),
+    ("reason", "source_group_members_changed"),
 ])
 def test_group_refuses_without_any_write(change, error, tmp_path, *, production_console):
     from src.review.source_context_review_v1 import confirm_source_group
@@ -102,6 +108,7 @@ def test_group_refuses_without_any_write(change, error, tmp_path, *, production_
         "empty": {**command, "source_object_ids": []},
         "too_many": {**command, "shown_object_ids": command["shown_object_ids"] + [f"x{i}" for i in range(50)]},
         "section": {**command, "section_path": ["Andere sectie"]},
+        "reason": {**command, "group_reason": "document_metadata"},
     }[change]
     before = state.snapshot_objects(sid)
     with pytest.raises(ConsoleError, match=error):
@@ -246,3 +253,29 @@ def test_native_group_commit_failure_concurrent_reviewer_restart_and_publication
     with pytest.raises(ConsoleError, match="published_working_revision_immutable"):
         reset_source_group(fresh, actor_id=reviewer, snapshot_id=sid, group_command_id="group-1",
                            reason="Na publicatie.", command_id="late", expected_revision=fresh.objects_revision(sid))
+
+
+def test_one_section_with_two_proposed_reasons_gets_two_groups_and_reset_stays_with_its_group(
+        tmp_path, *, production_app, production_console):
+    from fastapi.testclient import TestClient
+    from src.review.source_context_review_v1 import confirm_source_group, group_members_hash, source_group_candidates
+    state, sid, reviewer = _document(tmp_path, production_console=production_console, second_reason="unformed_meaning")
+    groups = source_group_candidates(state.snapshot_objects(sid))
+    assert sorted(reason for _path, reason in groups) == ["uncertain_source_role", "unformed_meaning"]
+    (path, reason), rows = next(((k, v) for k, v in groups.items() if k[1] == "unformed_meaning"))
+    command = dict(actor_id=reviewer, snapshot_id=sid, section_path=list(path), group_reason=reason,
+                   shown_object_ids=[r["object_id"] for r in rows], source_object_ids=[r["object_id"] for r in rows],
+                   members_hash=group_members_hash(rows), reason="Geen kennis.", command_id="g-unformed",
+                   expected_revision=state.objects_revision(sid))
+    # One confirmation cannot span both reasons.
+    with pytest.raises(ConsoleError, match="source_group_members_changed"):
+        confirm_source_group(state, **{**command, "group_reason": "uncertain_source_role"})
+    confirm_source_group(state, **command)
+    with TestClient(production_app(state), base_url="https://testserver") as client:
+        assert client.post("/login", data={"username": "reviewer", "password": "long-test-password"},
+                           follow_redirects=False).status_code == 303
+        page = client.get("/source-selection", params={"document": sid, "task": "disposition"}).text
+    resets = [f for f in Forms(page).forms if f["attrs"].get("action") == "/review/source-group/reset"]
+    assert len(resets) == 1  # Only beside the excluded group, not beside the still-open one.
+    opened = [f for f in Forms(page).forms if f["attrs"].get("action") == "/review/source-group"]
+    assert [i["value"] for f in opened for i in f["inputs"] if i.get("name") == "group_reason"] == ["uncertain_source_role"]
