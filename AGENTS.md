@@ -10,6 +10,18 @@ For bug repairs, normally select `diagnosing-bugs` and `risk-proportional-verifi
 
 The dispatcher selects working methods; it grants no execution, deployment, messaging, or merge permission and does not replace this repository's development or lifecycle contracts. If a required skill is unavailable, report the limitation and continue independent work without claiming that skill was applied.
 
+### Frontend design — Impeccable (mandatory)
+
+For every task that creates or changes frontend, agents MUST read and apply
+[Impeccable](.agents/skills/impeccable/SKILL.md) before designing or editing UI.
+This includes pages, layouts, components, HTML/CSS, client-side interactions,
+responsive behavior, accessibility and user-facing UX copy. Apply it without
+requiring the user to name the skill. Backend-only work does not trigger it.
+Follow [the project integration](docs/agents/impeccable.md) for launcher setup,
+existing brand constraints, verification and an unavailable-engine fallback.
+Preserve Metis domain contracts and existing verification requirements; a design
+workflow grants no deployment, publication or additional execution authority.
+
 ### Shared plugin skills
 
 The reviewed, pinned shared workflows and agent entry points are listed in

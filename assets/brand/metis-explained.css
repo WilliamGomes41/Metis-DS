@@ -1,0 +1,95 @@
+/* Metis uitgelegd: one readable document, navigation derived from its content. */
+.explained-room { max-width: 92rem; margin-inline: auto; }
+.explained-header { padding-block: 1rem 2rem; border-bottom: 1px solid var(--line); }
+.explained-header h1 { color: var(--text); margin-bottom: .65rem; font-size: 2rem; }
+.explained-header > p { color: var(--muted); margin: 0 0 1.75rem; }
+.explained-search { max-width: 46rem; }
+.explained-search label { display: block; margin-bottom: .5rem; font-weight: 600; }
+.explained-search > div { display: flex; gap: .75rem; align-items: stretch; }
+.explained-search input { min-width: 0; flex: 1; margin: 0; caret-color: var(--paars); }
+.explained-search input::placeholder { color: var(--muted); opacity: 1; }
+.explained-search button { margin: 0; min-height: 44px; }
+.explained-layout { display: grid; grid-template-columns: 13rem minmax(0, 72ch); gap: 3rem; align-items: start; padding-top: 2rem; }
+.explained-layout.explained-with-toc { grid-template-columns: 13rem minmax(0, 72ch) 12rem; gap: 2.5rem; }
+.explained-nav { grid-column: 1; grid-row: 1; position: sticky; top: 1.25rem; }
+.explained-nav ul, .explained-toc ul, .explained-topic-index ul, .explained-model-list, .explained-reading-links, .explained-search-results { list-style: none; padding: 0; margin: 0; }
+.explained-nav a { display: block; padding: .8rem .75rem; border-radius: 6px; text-decoration: none; line-height: 1.45; color: var(--text); }
+.explained-nav li + li { margin-top: .2rem; }
+.explained-nav a:hover { background: var(--surface-soft); text-decoration: underline; }
+.explained-nav a[aria-current="page"] { background: var(--water-light); color: var(--text); font-weight: 700; }
+.explained-content { grid-column: 2; grid-row: 1; min-width: 0; line-height: 1.65; overflow-wrap: anywhere; }
+.explained-content h2 { color: var(--text); font-size: 1.55rem; line-height: 1.3; margin: 0 0 1rem; text-wrap: balance; }
+.explained-content h3 { color: var(--text); font-size: 1.2rem; line-height: 1.4; margin: 0 0 .65rem; }
+.explained-content h4 { font-size: 1.05rem; margin: 1rem 0 .5rem; line-height: 1.4; }
+.explained-content p { margin: 0 0 1rem; max-width: 72ch; }
+.explained-content a { text-underline-offset: .2em; }
+.explained-content li + li { margin-top: .5rem; }
+.explained-intro { font-size: 1.1rem; }
+.explained-muted { color: var(--muted); }
+.explained-reading-section { margin-top: 2.5rem; }
+.explained-chain { list-style: none; counter-reset: knowledge-step; padding: 0; margin: 2rem 0 2.75rem; }
+.explained-chain li { counter-increment: knowledge-step; position: relative; padding: 0 0 1.3rem 3rem; }
+.explained-chain li::before { content: counter(knowledge-step); position: absolute; left: 0; top: 0; width: 2rem; height: 2rem; display: grid; place-items: center; background: var(--water-light); color: var(--text); border-radius: 50%; font-weight: 700; font-variant-numeric: tabular-nums; }
+.explained-chain li:not(:last-child)::after { content: ""; position: absolute; left: 1rem; top: 2.3rem; bottom: .25rem; border-left: 1px solid var(--line); }
+.explained-chain p { margin: .25rem 0 0; color: var(--muted); }
+.explained-principles { margin: 0; }
+.explained-principles > div { padding-block: 1rem; border-top: 1px solid var(--line); }
+.explained-principles dt { font-weight: 700; }
+.explained-principles dd { margin: .35rem 0 0; }
+.explained-reading-links li, .explained-model-list li, .explained-search-results li { padding-block: 1.2rem; border-top: 1px solid var(--line); }
+.explained-reading-links a, .explained-model-list a { font-weight: 700; font-size: 1.05rem; }
+.explained-reading-links p, .explained-model-list p { color: var(--muted); margin: .4rem 0 0; }
+.explained-topic-index { margin-block: 1.5rem 2.5rem; padding: 1rem 1.25rem; background: var(--surface-soft); }
+.explained-topic-index ul { columns: 2; column-gap: 2rem; }
+.explained-topic-index li { break-inside: avoid; margin: 0; }
+.explained-topic-index a { display: inline-block; padding-block: .4rem; }
+.explained-category { margin-top: 3rem; scroll-margin-top: 1rem; }
+.explained-category > h3 { color: var(--paars); }
+.explained-room .dictionary-term { padding-block: 1.5rem; border-top: 1px solid var(--line); scroll-margin-top: 1rem; }
+.explained-room .dictionary-term h4 { margin: 0 0 .65rem; font-size: 1.15rem; }
+.explained-anchor { color: var(--text); text-decoration: none; }
+.explained-anchor:hover { text-decoration: underline; }
+.explained-room .dictionary-example { display: block; margin: .8rem 0 0 !important; color: var(--muted); }
+.explained-room .dictionary-example strong { display: block; font-size: .9rem; color: var(--text); margin-bottom: .2rem; }
+.explained-room .dictionary-example span { font: inherit; color: inherit; text-transform: none; letter-spacing: normal; }
+.explained-boundary { margin-block: 1.25rem !important; padding: 1rem 1.15rem; background: var(--surface-soft); color: var(--text); }
+.explained-status { display: grid; gap: .7rem; margin: 1.5rem 0 2rem; padding-block: 1rem; border-block: 1px solid var(--line); font-size: .9rem; }
+.explained-status > div { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: .75rem; }
+.explained-status dt { color: var(--muted); }
+.explained-status dd { margin: 0; font-weight: 600; }
+.explained-back { display: inline-block; padding-block: .5rem; margin-bottom: 1rem; }
+.explained-toc { grid-column: 3; grid-row: 1; position: sticky; top: 1.25rem; font-size: .9rem; line-height: 1.5; }
+.explained-toc strong { display: block; margin-bottom: .75rem; }
+.explained-toc a { display: inline-block; padding-block: .4rem; }
+.explained-content section[id] { scroll-margin-top: 1.5rem; }
+.explained-result-kind { color: var(--muted); font-size: .85rem; }
+.explained-search-results h3 { margin-block: .3rem .5rem; }
+.explained-search-results p { margin-bottom: 0; }
+.explained-skip { display: inline-block; padding-block: .5rem; font-size: .85rem; }
+.explained-room :is(a, button, input):focus-visible { outline: 3px solid var(--paars); outline-offset: 3px; }
+.explained-room ::selection { background: var(--paars); color: var(--wit); }
+@media (max-width: 1200px) {
+  .explained-layout.explained-with-toc { grid-template-columns: 12rem minmax(0, 72ch); gap: 1.5rem 2rem; }
+  .explained-with-toc .explained-nav { grid-row: 1 / span 2; }
+  .explained-with-toc .explained-toc { grid-column: 2; grid-row: 1; position: static; }
+  .explained-with-toc .explained-toc ul { display: flex; flex-wrap: wrap; gap: .25rem 1rem; }
+  .explained-with-toc .explained-content { grid-row: 2; }
+}
+@media (max-width: 760px) {
+  .explained-layout, .explained-layout.explained-with-toc { grid-template-columns: minmax(0, 1fr); gap: 1.75rem; padding-top: 1rem; }
+  .explained-nav, .explained-with-toc .explained-nav { grid-column: 1; grid-row: 1; position: static; }
+  .explained-nav ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem; }
+  .explained-nav li + li { margin-top: 0; }
+  .explained-nav a { padding: .7rem .5rem; min-height: 44px; }
+  .explained-content { grid-column: 1; grid-row: 2; }
+  .explained-with-toc .explained-toc { grid-column: 1; grid-row: 2; }
+  .explained-with-toc .explained-content { grid-column: 1; grid-row: 3; }
+  .explained-header { padding-top: .5rem; }
+  .explained-header h1 { font-size: 1.7rem; }
+  .explained-topic-index ul { columns: 1; }
+  .explained-status > div { grid-template-columns: minmax(0, 1fr); gap: .15rem; }
+}
+@media (max-width: 400px) {
+  .explained-search > div { flex-wrap: wrap; }
+  .explained-search input { flex-basis: 100%; }
+}
