@@ -19,12 +19,12 @@ from src.vorming.source_containers_v1 import accounting_reason, metadata_reason
     (".......    44", "navigation"),
     ("................................ ...    25", "navigation"),
     ("Conceptrichtlijn Voorbeeld – commentaarronde juli 2026", "page_furniture"),
-    ("Jansen, A. B., & Pietersen, C. (2019). Huidzorg bij ouderen: een overzicht. Tijdschrift, 12(3), 1-9.",
+    ("Jansen, A. B., & Pietersen, C. (2019). Huidzorg bij ouderen: een overzicht. Tijdschrift, 12(3), 1-9. https://doi.org/10.1000/abc",
      "document_metadata"),
     ("(PDF) Voorbeeld, Q. (2021). Een titel over huidplooien. Blad , 30(1), 102–107. https://doi.org/10.1000/xyz", "document_metadata"),
-    ("Al - Voorbeeld, N. (2011). Een titel. Tijdschrift, 3(2), 1-9.", "document_metadata"),
-    ("Eerste, I. H. J., Tweede, J., van der Derde, J. C. M., & Vierde, K. (2021). Titel. Blad, 7, 112-118.", "document_metadata"),
-    ("Jansen, A., et al. (2020). Titel met et al. Tijdschrift, 4(1).", "document_metadata"),
+    ("Al - Voorbeeld, N. (2011). Een titel. Tijdschrift, 3(2), 1-9. https://doi.org/10.1000/abc", "document_metadata"),
+    ("Eerste, I. H. J., Tweede, J., van der Derde, J. C. M., & Vierde, K. (2021). Titel. Blad, 7, 112-118. https://doi.org/10.1000/abc", "document_metadata"),
+    ("Jansen, A., et al. (2020). Titel met et al. Tijdschrift, 4(1). https://doi.org/10.1000/abc", "document_metadata"),
     ("De Vries, K. (n.d.). Een titel zonder jaar. Blad , 143 . https://doi.org/10.1000/abc", "document_metadata"),
     ("Bronnen: (Voorbeeld et al., 2022)", "document_metadata"),
     ("Bronnen: (Voorbeeld & Tweede, 2019; van Derde, 2020a)", "document_metadata"),
@@ -61,6 +61,7 @@ def test_closed_non_knowledge_rules_account_the_whole_passage(text, reason):
     "Jansen, A. (2019). Gebruik geen zalf. https://voorbeeld.nl",
     "Jansen, A. (2019). Behandel huidplooien gedurende week 1, 2.",
     "Jansen, A. (2019). Gebruik geen zalf. Daarna, 2.",
+    "Jansen, A. (2019). Gebruik zinkzalf. Week, 2, 3-4.",
     "Mw. Jansen, Verpleegkundige, namens V&VN Gebruik Geen Zinkzalf",
     "Jansen, A. (2019). Gebruik geen zalf. https://doi.org/10.1000/xyz",
     "Jansen, A. (2019). Gebruik zinkzalf 2-3 keer per dag op de aangedane huid.",
@@ -98,7 +99,7 @@ def _remainder(text):
 def test_reference_remainder_is_accounted_without_human_disposition():
     from src.publication.publication_readiness_v1 import source_passage_closure
     from src.vorming.source_containers_v1 import partition
-    rows = _remainder("Jansen, A. B. (2019). Huidzorg bij ouderen. Tijdschrift, 12, 1-9.")
+    rows = _remainder("Jansen, A. B. (2019). Huidzorg bij ouderen. Tijdschrift, 12, 1-9. https://doi.org/10.1000/abc")
     record = next(r for r in partition(rows)["source"]
                   if r["record"]["content"]["clean_text"].startswith("Jansen"))
     usage = record["usage"]
@@ -127,7 +128,7 @@ def test_formation_planning_rules_are_unchanged(text):
 
 
 @pytest.mark.parametrize("extra,closed", [
-    ("Jansen, A. B. (2019). Huidzorg bij ouderen. Tijdschrift, 12, 1-9.", True),
+    ("Jansen, A. B. (2019). Huidzorg bij ouderen. Tijdschrift, 12, 1-9. https://doi.org/10.1000/abc", True),
     ("Bij kinderen geldt ander beleid.", False),
 ])
 def test_readiness_blocker_follows_closed_rule_through_the_console(extra, closed, tmp_path, *, production_console):

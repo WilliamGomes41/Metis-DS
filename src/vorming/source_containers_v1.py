@@ -60,15 +60,13 @@ _SETTINGS = (
 _ROLE = (r"(?i:" + "|".join(re.escape(p) for p in _PROFESSIONS) + r")"
          r"(?:\s(?:in|bij)\s(?:een|de|het)\s(?i:" + "|".join(re.escape(x) for x in _SETTINGS) + r"))?")
 
-# Bibliographic tail of a reference: a title-cased journal name, then its volume
-# with an issue, pages or a DOI ("Blad , 12(3), 1-9. https://doi.org/…"). A bare
-# "<word>, 2" or any other URL is not a locator.
+# Bibliographic tail of a reference: a title-cased journal name, its volume with an
+# optional issue and pages, and a mandatory DOI link ("Blad , 12(3), 1-9.
+# https://doi.org/…"). Without a DOI the passage stays human work.
 _JOURNAL = (r"[A-Z0-9=(][^\s,]*(?:(?:\s|,\s(?=[A-Z]))(?:[A-Z0-9(&:=\-][^\s,]*"
             r"|of|and|the|de|du|des|la|le|voor|en|for|in|on|van|der|und|y|et|\u202f:))*")
-_LOCATOR = (r"\s?[,.]\s?\d{1,4}(?:\sSuppl\s\d+)?\s?(?:"
-            r"\(\s?[\w–-]{1,12}(?:\s\d+)?\s?\)(?:,\s?[A-Za-z]?\d+(?:\s?[-–]\s?[A-Za-z]?\d+)?)?\s?\.?(?:" + (_DOI := r"\s(?:https?://doi\.org/|doi:\s?)\S+?") + r")?"
-            r"|,\s?[A-Za-z]?\d+(?:\s?[-–]\s?[A-Za-z]?\d+)?\s?\.?(?:" + _DOI + r")?"
-            r"|\s?\.?" + _DOI + r")[.,]?")
+_LOCATOR = (r"\s?[,.]\s?\d{1,4}(?:\sSuppl\s\d+)?\s?(?:\(\s?[\w–-]{1,12}(?:\s\d+)?\s?\))?"
+            r"(?:,\s?[A-Za-z]?\d+(?:\s?[-–]\s?[A-Za-z]?\d+)?)?\s?\.?\shttps?://doi\.org/10\.\d{4,9}/\S+?[.,]?")
 
 # Organisation: V&VN with an optional department, or a society from a closed list.
 _VVN_DEPARTMENTS = (
