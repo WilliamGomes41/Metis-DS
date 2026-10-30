@@ -154,9 +154,12 @@ def test_installed_review_card_tables_are_checked_and_absent_ones_are_not(runtim
     # A partly installed 027 blocks on its missing peer.
     con.execute("DROP TABLE workflow.review_object_facts CASCADE")
     assert _observe(con, role, view_check=True)["missing_relations"] == ["review_object_facts"]
-    # Where 027 was never applied (production today), its tables are not required.
+    # Where 027 was never applied (production today), its tables are not required,
+    # unless compact cards are enabled.
     con.execute("DROP TABLE workflow.review_fact_state CASCADE")
     assert _observe(con, role, view_check=True)["status"] == "PASS"
+    compact = _observe(con, role, view_check=True, compact_cards=True)
+    assert compact["missing_relations"] == ["review_fact_state", "review_object_facts"]
 
 
 def test_missing_schema_usage_blocks_with_its_grant(runtime_role):
@@ -168,6 +171,18 @@ def test_missing_schema_usage_blocks_with_its_grant(runtime_role):
     result = _observe(con, role, view_check=True)
     assert result["status"] == "BLOCKED" and result["missing_privileges"] == ["schema workflow:USAGE"]
     assert result["grants"] == [f'GRANT USAGE ON SCHEMA workflow TO "{role}";']
+    con.execute(result["grants"][0])
+    assert _observe(con, role, view_check=True)["status"] == "PASS"
+
+
+def test_missing_connect_blocks_with_its_grant(runtime_role):
+    con, role = runtime_role
+    _grant_expected(con, role)
+    database = con.execute("SELECT current_database()").fetchone()[0]
+    con.execute(f'REVOKE CONNECT ON DATABASE "{database}" FROM PUBLIC')
+    result = _observe(con, role, view_check=True)
+    assert result["missing_privileges"] == [f"database {database}:CONNECT"]
+    assert result["grants"] == [f'GRANT CONNECT ON DATABASE "{database}" TO "{role}";']
     con.execute(result["grants"][0])
     assert _observe(con, role, view_check=True)["status"] == "PASS"
 

@@ -132,6 +132,7 @@ VIEW_CHECK_TABLES = frozenset({"view_checks"})
 # Tables from migrations applied outside MIGRATION_NAMES (027, compact review cards).
 # Checked whenever present: their triggers write them on every document mutation.
 OPTIONAL_MIGRATION_TABLES = {"027_review_card_facts.sql": ("review_fact_state", "review_object_facts")}
+COMPACT_CARD_MIGRATION = "027_review_card_facts.sql"
 OPTIONAL_TABLE_PRIVILEGES = {
     "review_fact_state": (_S, _I, _U),
     "review_object_facts": (_S, _I, _U),
@@ -233,7 +234,8 @@ def observe_schema(connection: Any) -> dict[str, Any]:
     }
 
 
-def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool = False) -> dict[str, Any]:
+def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool = False,
+                               compact_cards: bool = False) -> dict[str, Any]:
     """Report missing runtime grants and the targeted GRANT lines; never grants anything."""
     if not role.strip():
         raise WorkflowMigrationError("workflow_runtime_role_required")
@@ -251,9 +253,15 @@ def observe_runtime_privileges(connection: Any, role: str, *, view_check: bool =
         checks = [(name, privs, "r") for name, privs in RUNTIME_TABLE_PRIVILEGES.items()
                   if view_check or name not in VIEW_CHECK_TABLES]
         checks += [(name, privs, "S") for name, privs in RUNTIME_SEQUENCE_PRIVILEGES.items()]
-        for optional in OPTIONAL_MIGRATION_TABLES.values():
-            if any(name in tables for name in optional):  # Partly installed counts as installed.
+        for migration, optional in OPTIONAL_MIGRATION_TABLES.items():
+            # Partly installed counts as installed; compact cards (CONSOLE_REVIEW_CARD_READS) require 027.
+            if any(name in tables for name in optional) or (compact_cards and migration == COMPACT_CARD_MIGRATION):
                 checks += [(name, OPTIONAL_TABLE_PRIVILEGES[name], "r") for name in optional]
+        database = connection.execute("SELECT current_database() AS name").fetchone()["name"]
+        if not connection.execute("SELECT has_database_privilege(%s, current_database(), 'CONNECT') AS ok",
+                                  (role,)).fetchone()["ok"]:
+            missing.append(f"database {database}:CONNECT")
+            grants.append(f'GRANT CONNECT ON DATABASE "{database}" TO "{role}";')
         if not connection.execute("SELECT has_schema_privilege(%s, 'workflow', 'USAGE') AS ok",
                                   (role,)).fetchone()["ok"]:
             missing.append("schema workflow:USAGE")

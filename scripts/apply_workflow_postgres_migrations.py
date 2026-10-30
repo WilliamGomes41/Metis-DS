@@ -31,6 +31,8 @@ def main() -> int:
     parser.add_argument("--confirm-digest", help="Digest printed by plan; required for apply")
     parser.add_argument("--runtime-role", help="verify: also check the runtime identity's grants (e.g. vvn-metis-console)")
     parser.add_argument("--view-check", action="store_true", help="verify: the view check is enabled, so require view_checks grants")
+    parser.add_argument("--compact-cards", action="store_true",
+                        help="verify: CONSOLE_REVIEW_CARD_READS=compact, so require the migration 027 tables")
     args = parser.parse_args()
     paths = migration_paths(ROOT)
     digest = migration_digest(paths)
@@ -53,7 +55,8 @@ def main() -> int:
             if args.command == "verify":
                 result = observe_schema(connection)
                 if args.runtime_role:
-                    privileges = observe_runtime_privileges(connection, args.runtime_role, view_check=args.view_check)
+                    privileges = observe_runtime_privileges(connection, args.runtime_role, view_check=args.view_check,
+                                                            compact_cards=args.compact_cards)
                     result["runtime_privileges"] = privileges
                     if privileges["status"] != "PASS":
                         result["status"] = "BLOCKED"
