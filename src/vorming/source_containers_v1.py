@@ -64,9 +64,11 @@ _SETTINGS = (
 _ROLE = (r"(?i:" + "|".join(re.escape(p) for p in _PROFESSIONS) + r")"
          r"(?:\s(?:in|bij)\s(?:een|de|het)\s(?i:" + "|".join(re.escape(x) for x in _SETTINGS) + r"))?")
 
-# Bibliographic locator closing a reference: "12(3), 1-9", ", 112-118" or a DOI/URL.
-_LOCATOR = (r"(?:[,.]\s?\d{1,4}\s?\(\d{1,4}[^)\n]{0,12}\)(?:,\s?[A-Za-z]?\d+(?:\s?[-–]\s?[A-Za-z]?\d+)?)?"
-            r"|,\s?[A-Za-z]?\d+\s?[-–]\s?[A-Za-z]?\d+|\s(?:https?://|doi\.org/|doi:\s?)\S+)\.?")
+# Bibliographic locator closing a reference: the journal's ", volume[(issue)]",
+# optional pages, then optionally a DOI (not any URL): "Blad, 12(3), 1-9. https://doi.org/…".
+_LOCATOR = (r"\s?[,.]\s?\d{1,4}(?:\sSuppl\s\d+)?\s?(?:\(\s?[\w–-]{1,12}(?:\s\d+)?\s?\))?"
+            r"(?:,\s?[A-Za-z]?\d+(?:\s?[-–]\s?[A-Za-z]?\d+)?)?\s?\.?"
+            r"(?:\s(?:https?://doi\.org/|doi:\s?)\S+?)?[.,]?")
 
 # B6 (#933): closed whole-range rules for source accountability only. They never
 # change formation planning, which keeps using metadata_reason.
@@ -82,8 +84,8 @@ _ACCOUNTING_RULES = (
     (re.compile(r"(?:Concept)?richtlijn\s+[^\n.:;!?]{1,100}\s+[–-]\s+commentaarronde\s+[a-z]+\s+20\d{2}(?:\s+\d{1,3})?", re.I),
      "page_furniture"),
     # Bibliographic reference: a strict author list ("Surname, I. I., ... & Surname, I.")
-    # directly followed by "(2021)." or "(n.d.).", and a title that ends in a
-    # bibliographic locator (volume(issue)[, pages], a page range, or a DOI/URL).
+    # directly followed by "(2021)." or "(n.d.).", and a title that ends in the
+    # journal volume locator above.
     (re.compile(r"(?:\(PDF\)\s*)?" + (author := r"(?:[a-z]{1,4}\s){0,3}[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]*(?:\s?-\s?[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]*)?"
                                      r"(?:\s[A-ZÀ-Ý][A-Za-zÀ-ÿ'\-]*){0,2},\s(?:[A-Z]\.\s?(?:-\s?[A-Z]\.\s?)?){1,5}")
                 + r"(?:,\s" + author + r"){0,30}(?:,?\s(?:&|and|en)\s" + author + r")?(?:,?\set al\.)?"
