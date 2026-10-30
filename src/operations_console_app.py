@@ -387,6 +387,9 @@ ERROR_COPY = {
     "source_context_target_required": "Selecteer minstens één passage die deze context nodig heeft. Gebruik de aparte actie om alle koppelingen te verwijderen.",
     "source_context_target_invalid": "Kies een inhoudelijke passage uit dit document. Een kop, het label zelf of een ander contextfragment kan hier geen doel zijn.",
     "source_context_evidence_required": "Het exacte bronbewijs ontbreekt. Laat de koppeling open en vraag de beheerder de bronverwijzing te controleren.",
+    "source_group_members_changed": "De groep is gewijzigd sinds je hem opende. Er is niets uitgesloten of teruggedraaid; laad de pagina opnieuw.",
+    "source_group_command_invalid": "Deze groepsbevestiging is onvolledig of te groot (maximaal 50 bronregels). Er is niets gewijzigd.",
+    "source_group_unknown": "Dit groepsbesluit bestaat niet voor dit document. Er is niets gewijzigd.",
     "source_exclusion_not_proposed": "Deze selectie bevat inhoudelijk of gewijzigd bronwerk. Controleer de bronafhandeling opnieuw; er is niets uitgesloten.",
     "source_context_not_knowledge": "Dit is bronbewijs, geen gevormd kennisobject. Verantwoord het brongebruik of herstel de kennisvorming; keur deze bronregel niet als kennisobject goed.",
     "source_context_review_incomplete": "Een broncontextkoppeling verwijst naar gewijzigde of ontbrekende tekst. Controleer de koppeling en beoordeel de betrokken passages opnieuw.",
@@ -2733,6 +2736,7 @@ def _review_inventory(
     metadata_items = []
     source_groups = {}
     selectable_groups = set()
+    group_resets = {}
     containers = partition(objects, projection=projection)
     source_usage = {row["record"]["object_id"]: row["usage"] for row in containers["source"]}
     from src.vorming.source_accountability_v1 import is_source_record, evidence_of
@@ -2791,13 +2795,22 @@ def _review_inventory(
             # only open, unrouted model proposals for metadata or structure.
             selectable = (source_only and edit_exclusions and usage["human_action"] == "source_disposition"
                           and evidence_of(obj).get("proposed_role") in {"metadata", "structure"} and not role_of(obj))
+            # Other open passages (unformed or uncertain) go to the section-bound
+            # group command: the reviewer confirms exactly the shown members (B6 2b).
+            groupable = (source_only and edit_exclusions and not selectable and usage["human_action"] == "source_disposition"
+                         and evidence_of(obj).get("proposed_role") == "unresolved" and not role_of(obj))
             selection = ('<label><input type="checkbox" name="source_object_ids" '
-                         f'value="{_esc(object_id)}" checked> Opnemen in mijn bronbesluit</label>' if selectable else '')
+                         f'value="{_esc(object_id)}" checked> Opnemen in mijn bronbesluit</label>'
+                         if selectable or groupable else '')
             if selectable:
                 selectable_groups.add((label, path))
-            group.append(f'<li data-source-record="{_esc(object_id)}">{selection}<p>{_esc((obj.get("content") or {}).get("clean_text"))}</p>'
+            group_role = role_of(obj)
+            if source_only and edit_exclusions and group_role.get("group") and group_role.get("role") == "excluded":
+                group_resets.setdefault((label, path), set()).add(str(group_role.get("command_id") or ""))
+            group.append(("meta" if selectable else "open" if groupable else "other", obj,
+                f'<li data-source-record="{_esc(object_id)}">{selection}<p>{_esc((obj.get("content") or {}).get("clean_text"))}</p>'
                 f'<p>{_esc(status)} · {_esc(usage_reason)}</p>{targets}'
-                f'<a href="{source_path}?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={source_task}">{source_link}</a></li>')
+                f'<a href="{source_path}?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={source_task}">{source_link}</a></li>'))
             continue
         if is_source_record(obj):
             evidence = evidence_of(obj)
@@ -2863,21 +2876,58 @@ def _review_inventory(
             '<p>Deze bronregels zijn geen gevormde kennisobjecten. De bron blijft behouden. '
             'Open inhoudelijke bronafhandeling blokkeert publicatie.</p>'
             + _source_category_tiles(source_usage))
+        from src.review.source_context_review_v1 import GROUP_MAX, group_members_hash
         for (label, path), group in source_groups.items():
             section = " / ".join(path) or "Document"
-            body = '<ol>' + "".join(group) + '</ol>'
-            if (label, path) in selectable_groups:
-                body = ('<form method="post" action="/review/source-exclusions" data-source-group-exclusion>'
+            meta = [html for kind, _obj, html in group if kind == "meta"]
+            open_rows = [(row, html) for kind, row, html in group if kind == "open"]
+            other = [html for kind, _obj, html in group if kind == "other"]
+            body = ''
+            if meta:
+                body += ('<form method="post" action="/review/source-exclusions" data-source-group-exclusion>'
                     f'<input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">'
                     + _snapshot_revision_input(snapshot_revision)
                     + f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
                     + '<p>Aangevinkte regels zijn door het model voorgesteld als metadata of structuur. '
-                    'Dit voorstel is nog geen uitsluiting; vink kennis uit.</p>' + body
+                    'Dit voorstel is nog geen uitsluiting; vink kennis uit.</p><ol>' + "".join(meta) + '</ol>'
                     + '<label>Reden voor mijn bronbesluit<input name="reason" required maxlength="4000" '
                     f'value="{_esc("Geen kennis: " + section)}"></label>'
                     + '<label><input type="checkbox" name="source_checked" value="1" required>'
                     + ' Ik heb de aangevinkte bronregels gecontroleerd; zij bevatten geen op te nemen kennis.</label>'
                     + '<button type="submit">Aangevinkte bronregels gemotiveerd uitsluiten</button></form>')
+            by_reason = {}
+            for row, html in open_rows:
+                by_reason.setdefault(str(evidence_of(row).get("reason") or ""), []).append((row, html))
+            chunks = [(group_reason, rows[start:start + GROUP_MAX])
+                      for group_reason, rows in by_reason.items() for start in range(0, len(rows), GROUP_MAX)]
+            for group_reason, chunk in chunks:
+                body += ('<form method="post" action="/review/source-group" data-source-group-confirm>'
+                    f'<input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">'
+                    + _snapshot_revision_input(snapshot_revision)
+                    + f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
+                    + "".join(f'<input type="hidden" name="section_path" value="{_esc(part)}">' for part in path)
+                    + f'<input type="hidden" name="group_reason" value="{_esc(group_reason)}">'
+                    + "".join(f'<input type="hidden" name="shown_object_ids" value="{_esc(row["object_id"])}">'
+                              for row, _html in chunk)
+                    + f'<input type="hidden" name="members_hash" value="{_esc(group_members_hash(row for row, _html in chunk))}">'
+                    + '<p>Deze bronregels zijn niet als kennis gevormd en het model kon hun rol niet vaststellen. '
+                    'Lees elke regel; vink uit wat wél kennis is. Uitgevinkte regels blijven open.</p><ol>'
+                    + "".join(html for _row, html in chunk) + '</ol>'
+                    + '<label>Reden voor mijn bronbesluit<input name="reason" required maxlength="4000" '
+                    f'value="{_esc("Geen op te nemen kennis: " + section)}"></label>'
+                    + '<label><input type="checkbox" name="source_checked" value="1" required>'
+                    + ' Ik heb elke aangevinkte bronregel gelezen; zij bevatten geen op te nemen kennis.</label>'
+                    + '<button type="submit">Groep bevestigen: geen kennis</button></form>')
+            if other:
+                body += '<ol>' + "".join(other) + '</ol>'
+            for group_command in sorted(group_resets.get((label, path), ())):
+                body += ('<form method="post" action="/review/source-group/reset" data-source-group-reset>'
+                    f'<input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">'
+                    + _snapshot_revision_input(snapshot_revision)
+                    + f'<input type="hidden" name="command_id" value="{uuid.uuid4().hex}">'
+                    + f'<input type="hidden" name="group_command_id" value="{_esc(group_command)}">'
+                    + '<label>Reden om dit groepsbesluit te heropenen<input name="reason" required maxlength="4000"></label>'
+                    + '<button type="submit">Groepsbesluit terugdraaien</button></form>')
             source_html += (f'<details data-source-group><summary>{_esc(label)} · {_esc(section)} ({len(group)} bronregels)</summary>'
                             + body + '</details>')
         if metadata_items and source_only and edit_exclusions:
@@ -5900,6 +5950,34 @@ def create_console_app(
         from src.review.source_context_review_v1 import confirm_source_exclusions
         confirm_source_exclusions(state, actor_id=account["account_id"], snapshot_id=snapshot_id,
             source_object_ids=source_object_ids, reason=reason, command_id=command_id,
+            expected_revision=snapshot_revision)
+        return RedirectResponse('/source-selection?' + urlencode({'document': snapshot_id, 'task': 'disposition'}), status_code=303)
+
+    @app.post("/review/source-group")
+    def review_source_group(request: Request, snapshot_id: str = Form(...),
+            section_path: list[str] = Form(default=[]), group_reason: str = Form(""),
+            shown_object_ids: list[str] = Form(default=[]),
+            source_object_ids: list[str] = Form(default=[]), members_hash: str = Form(""),
+            reason: str = Form(""), command_id: str = Form(""), snapshot_revision: str = Form(""),
+            source_checked: str = Form("")) -> Response:
+        account = _require(request)
+        if source_checked != "1":
+            raise ConsoleError("source_context_check_required")
+        from src.review.source_context_review_v1 import confirm_source_group
+        confirm_source_group(state, actor_id=account["account_id"], snapshot_id=snapshot_id,
+            section_path=section_path, group_reason=group_reason, shown_object_ids=shown_object_ids,
+            source_object_ids=source_object_ids,
+            members_hash=members_hash, reason=reason, command_id=command_id, expected_revision=snapshot_revision)
+        return RedirectResponse('/source-selection?' + urlencode({'document': snapshot_id, 'task': 'disposition'}), status_code=303)
+
+    @app.post("/review/source-group/reset")
+    def review_source_group_reset(request: Request, snapshot_id: str = Form(...),
+            group_command_id: str = Form(""), reason: str = Form(""), command_id: str = Form(""),
+            snapshot_revision: str = Form("")) -> Response:
+        account = _require(request)
+        from src.review.source_context_review_v1 import reset_source_group
+        reset_source_group(state, actor_id=account["account_id"], snapshot_id=snapshot_id,
+            group_command_id=group_command_id, reason=reason, command_id=command_id,
             expected_revision=snapshot_revision)
         return RedirectResponse('/source-selection?' + urlencode({'document': snapshot_id, 'task': 'disposition'}), status_code=303)
 

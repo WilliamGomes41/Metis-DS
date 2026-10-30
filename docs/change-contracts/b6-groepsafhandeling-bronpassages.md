@@ -196,6 +196,15 @@ Deze stap heeft **Rewrite risk: high**. Vóór de bouw komt er een eigen change 
 - Onderbouwing koppelen aan een specifieke aanbeveling (optie C). Dat is pas aan de orde als MET-7 aantoont dat het nodig is.
 - Groepsgoedkeuring van kennisobjecten.
 
+## 8a. Uitvoering
+
+- **Stap 1 (#934):** vaste regels in `accounting_reason`.
+- **Stap 2a (#939):** de bestaande batch-uitsluiting per sectie voor V3-records die het model als metadata/structuur voorstelde.
+- **Stap 2b-1:** `confirm_source_group` en `reset_source_group` voor de overige open bronpassages, volgens §3.3 en §3.5. Op twee punten wijkt de uitvoering af van het ontwerp, of vult die aan:
+  - **`members_hash`:** de hash dekt de *getoonde* leden (id, versie, literal-hash). De opdracht krijgt ook die getoonde ids mee; de bevestigde leden zijn de getoonde minus wat als kennis is uitgevinkt. Zo blijft de hash geldig wanneer de reviewer een lid uitvinkt.
+  - **Schrijvers:** de batch en de groep delen `source_role_version`. De losse opdracht (`_confirm_source_context`) houdt bewust zijn eigen, ongewijzigde schrijver (besluit projectlead: optie A). Een test bewaakt dat los en groep bij uitsluiten hetzelfde resultaat geven. Het samenvoegen van de losse schrijver is een aparte wijziging met rewrite risk high.
+- **Stap 2b-2 (onderbouwing, §3.4) en §3.7 (vorming afsluiten, rewrite risk high):** volgen apart.
+
 ## 9. Vervolg na goedkeuring
 
 1. Vaste regels (3.6): per regel een kleine PR.

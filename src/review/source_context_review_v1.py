@@ -37,28 +37,246 @@ def confirm_source_exclusions(console: Any, *, actor_id: str, snapshot_id: str,
     """Confirm an exact non-knowledge batch in one existing workflow commit.
 
     Only proposed metadata/structure qualifies. Unformed substantive content
-    needs the existing individual source-context/repair command. Model roles
-    never close the passage register by themselves.
+    needs the existing individual source-context/repair command or the
+    section-bound group command below. Model roles never close the passage
+    register by themselves.
     """
-    from contextlib import nullcontext
-    from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT, utc_now
-    from src.vorming.passage_register_v1 import passage_register_record
-    from src.review.revision_workflow import bump_patch
+    from src.operations_console_v1 import ConsoleError
     from src.vorming.source_accountability_v1 import evidence_of
-    from src.workflows.workflow_transaction_v1 import workflow_transaction, workflow_transaction_active
 
     ids = sorted(set(source_object_ids))
     if (not ids or len(ids) > 4096 or any(not isinstance(oid, str) or not oid for oid in ids)
-            or not reason.strip() or len(reason) > 4000 or not command_id.strip()
-            or len(command_id) > 128 or not expected_revision):
+            or not reason.strip() or len(reason) > 4000):
+        raise ConsoleError("source_context_command_required")
+    payload_hash = stable_hash({"actor_id": actor_id, "snapshot_id": snapshot_id,
+                               "source_object_ids": ids, "reason": reason.strip()})
+
+    def body(ctx):
+        changed = []
+        for oid in ids:
+            source = ctx["by_id"].get(oid)
+            evidence = evidence_of(source) if source else {}
+            if not evidence or evidence["proposed_role"] not in {"metadata", "structure"} or not _open_source(source):
+                raise ConsoleError("source_exclusion_not_proposed")
+            changed.append(_excluded_version(console, ctx, source, reason=reason, command_id=command_id))
+        result = {"snapshot_id": snapshot_id, "command_id": command_id, "idempotent": False,
+                  "source_versions": {row["object_id"]: row["object_version"] for row in changed}}
+        return changed, result, {"reason": reason.strip()}
+
+    return _source_batch(console, actor_id=actor_id, snapshot_id=snapshot_id, command_id=command_id,
+                         expected_revision=expected_revision, event_type="source_exclusions_confirmed",
+                         payload_hash=payload_hash, body=body)
+
+
+GROUP_EVENT = "source_group_confirmed"
+GROUP_RESET_EVENT = "source_group_reset"
+GROUP_MAX = 50
+
+
+def group_members_hash(rows: Iterable[dict[str, Any]]) -> str:
+    """What the reviewer saw: exact member identity, version and literal."""
+    return stable_hash(sorted([str(row["object_id"]), str(row["object_version"]), literal_identity(row)]
+                              for row in rows))
+
+
+def source_group_candidates(objects: Iterable[dict[str, Any]], *, review_path: str = "richtlijn",
+                            bindings=None, fragments=None) -> dict[tuple[tuple[str, ...], str], list[dict[str, Any]]]:
+    """Open source passages per (exact section path, proposed reason), in source order (B6 3.1).
+
+    A proposal, never a stored state: derived from the current objects on
+    every read. Any model role qualifies here; closing needs a human command.
+    """
+    from src.vorming.source_containers_v1 import partition
+    from src.vorming.source_accountability_v1 import evidence_of
+    groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+    for row in partition(list(objects), review_path=review_path, bindings=bindings, fragments=fragments)["source"]:
+        record = row["record"]
+        if row["usage"]["human_action"] != "source_disposition" or not _open_source(record):
+            continue
+        # The model's proposed reason (unformed_meaning / uncertain_source_role), as shown.
+        groups.setdefault((section_path_of(record), str(evidence_of(record).get("reason") or "")), []).append(record)
+    return groups
+
+
+def section_path_of(obj: dict[str, Any]) -> tuple[str, ...]:
+    return tuple(str(part) for part in ((obj.get("structure") or {}).get("section_path")
+                                        or (obj.get("metadata") or {}).get("section_path") or []))
+
+
+def confirm_source_group(console: Any, *, actor_id: str, snapshot_id: str, section_path: Iterable[str],
+                         group_reason: str, shown_object_ids: Iterable[str], source_object_ids: Iterable[str],
+                         members_hash: str, reason: str, command_id: str,
+                         expected_revision: str) -> dict[str, Any]:
+    """Exclude a reviewer-confirmed group of open source passages in one section.
+
+    The reviewer saw `shown_object_ids` (members_hash binds their exact
+    versions and literals) and confirmed `source_object_ids`, the shown set
+    minus what they marked as knowledge. All-or-nothing; max 50 members.
+    """
+    from src.operations_console_v1 import ConsoleError
+
+    path = tuple(str(part) for part in section_path)
+    shown = list(dict.fromkeys(str(oid) for oid in shown_object_ids))
+    ids = sorted(set(str(oid) for oid in source_object_ids))
+    if (not ids or len(shown) > GROUP_MAX or not set(ids) <= set(shown)
+            or not members_hash or not reason.strip() or len(reason) > 4000):
+        raise ConsoleError("source_group_command_invalid")
+    payload_hash = stable_hash({"actor_id": actor_id, "snapshot_id": snapshot_id, "section_path": list(path),
+                               "group_reason": group_reason, "shown": sorted(shown), "source_object_ids": ids,
+                               "members_hash": members_hash, "reason": reason.strip()})
+
+    def body(ctx):
+        groups = source_group_candidates(ctx["current"], review_path=ctx["review_path"])
+        eligible = {row["object_id"]: row for row in groups.get((path, group_reason), [])}
+        if any(oid not in eligible for oid in shown):
+            raise ConsoleError("source_group_members_changed")
+        if group_members_hash(eligible[oid] for oid in shown) != members_hash:
+            raise ConsoleError("source_group_members_changed")
+        changed = [_excluded_version(console, ctx, eligible[oid], reason=reason, command_id=command_id, group=True)
+                   for oid in ids]
+        members = [{"object_id": row["object_id"], "old_version": eligible[row["object_id"]]["object_version"],
+                    "new_version": row["object_version"], "literal_hash": literal_identity(row)} for row in changed]
+        result = {"snapshot_id": snapshot_id, "command_id": command_id, "idempotent": False,
+                  "section_path": list(path), "group_reason": group_reason, "members": members,
+                  "source_versions": {row["object_id"]: row["object_version"] for row in changed}}
+        return changed, result, {"reason": reason.strip(), "members_hash": members_hash}
+
+    return _source_batch(console, actor_id=actor_id, snapshot_id=snapshot_id, command_id=command_id,
+                         expected_revision=expected_revision, event_type=GROUP_EVENT,
+                         payload_hash=payload_hash, body=body)
+
+
+def reset_source_group(console: Any, *, actor_id: str, snapshot_id: str, group_command_id: str,
+                       reason: str, command_id: str, expected_revision: str) -> dict[str, Any]:
+    """Undo one confirmed group, only if no member changed since (B6 3.5)."""
+    from src.operations_console_v1 import ConsoleError
+
+    if not group_command_id.strip() or not reason.strip() or len(reason) > 4000:
+        raise ConsoleError("source_group_command_invalid")
+    payload_hash = stable_hash({"actor_id": actor_id, "snapshot_id": snapshot_id,
+                               "group_command_id": group_command_id, "reason": reason.strip()})
+
+    def body(ctx):
+        group = next((event.get("details") or {} for event in read_events(console._ledger_path)
+                      if event.get("event_type") == GROUP_EVENT
+                      and (event.get("details") or {}).get("snapshot_id") == snapshot_id
+                      and (event.get("details") or {}).get("command_id") == group_command_id), None)
+        if group is None:
+            raise ConsoleError("source_group_unknown")
+        changed = []
+        history = {(row["object_id"], row["object_version"]): row
+                   for row in console._load_objects(snapshot_id, remember=False)}
+        for member in group["result"]["members"]:
+            current = ctx["by_id"].get(member["object_id"])
+            role = role_of(current) if current else {}
+            if (not current or current.get("object_version") != member["new_version"]
+                    or role.get("command_id") != group_command_id or role.get("role") != "excluded"):
+                raise ConsoleError("source_group_members_changed")
+            prior = history.get((member["object_id"], member["old_version"]))
+            if prior is None:
+                raise ConsoleError("source_group_members_changed")
+            updated = source_role_version(current, role="reset", command_id=command_id, actor_id=actor_id,
+                                          reviewer=ctx["reviewer"]["username"], now=ctx["now"], reason=reason,
+                                          source_sha256=ctx["envelope"]["sha256"])
+            # Undo restores the pre-group register (e.g. extract-owned not_yet_assessed),
+            # so machine and linked-target closure apply again exactly as before (3.5).
+            restored = deepcopy((prior.get("metadata") or {}).get("passage_register"))
+            if restored is None:
+                updated["metadata"].pop("passage_register", None)
+            else:
+                updated["metadata"]["passage_register"] = restored
+            changed.append(_sealed(console, updated))
+        result = {"snapshot_id": snapshot_id, "command_id": command_id, "idempotent": False,
+                  "group_command_id": group_command_id,
+                  "source_versions": {row["object_id"]: row["object_version"] for row in changed}}
+        return changed, result, {"reason": reason.strip(), "group_command_id": group_command_id}
+
+    return _source_batch(console, actor_id=actor_id, snapshot_id=snapshot_id, command_id=command_id,
+                         expected_revision=expected_revision, event_type=GROUP_RESET_EVENT,
+                         payload_hash=payload_hash, body=body)
+
+
+def source_role_version(source: dict[str, Any], *, role: str, command_id: str, actor_id: str, reviewer: str,
+                        now: str, reason: str, source_sha256: str, group: bool = False) -> dict[str, Any]:
+    """The source-role successor shared by the batch and group commands.
+
+    It mirrors the single-passage command's own writer (_confirm_source_context);
+    a test keeps both outcomes equal. Consolidating that writer here is a
+    separate, high-rewrite-risk change.
+    """
+    from src.vorming.passage_register_v1 import passage_register_record
+    from src.review.revision_workflow import bump_patch
+    updated = deepcopy(source)
+    updated["object_version"] = bump_patch(str(source["object_version"]))
+    metadata = updated.setdefault("metadata", {})
+    metadata[ROLE_KEY] = {
+        "version": CONTRACT, "role": role, "command_id": command_id,
+        "reviewer_id": actor_id, "reviewer": reviewer, "reviewed_at": now,
+        "reason": reason.strip(), "literal_hash": literal_identity(source),
+        "source_sha256": source_sha256,
+    }
+    if group:
+        metadata[ROLE_KEY]["group"] = True
+    if role == "reset":
+        metadata.pop(ROLE_KEY, None)
+    metadata["passage_register"] = passage_register_record(
+        status="not_yet_assessed" if role == "reset" else "excluded_with_reason" if role == "excluded" else "used_as_context",
+        reason_codes=["reviewer_confirmed_source_role"], source="review",
+    )
+    governance = updated.setdefault("governance", {})
+    governance.update(validation_status="needs_review" if role == "reset" else "rejected",
+                      validated_by=None if role == "reset" else reviewer,
+                      validation_date=None if role == "reset" else now[:10], review_snapshot_hash=None,
+                      publication_status="unpublished")
+    second = governance.get("second_review")
+    if isinstance(second, dict) and second.get("required"):
+        second.update(status="pending", reviewer=None, review_date=None, snapshot_hash=None)
+    return updated
+
+
+def _open_source(source: dict[str, Any]) -> bool:
+    return bool(source and not role_of(source) and not links_of(source)
+                and not source.get("confirmed_object_type")
+                and (source.get("governance") or {}).get("validation_status") == "needs_review")
+
+
+def _excluded_version(console: Any, ctx: dict[str, Any], source: dict[str, Any], *, reason: str,
+                      command_id: str, group: bool = False) -> dict[str, Any]:
+    """The one exclusion write shared by the batch and the group command."""
+    from src.operations_console_v1 import ConsoleError
+    oid = source["object_id"]
+    console._require_open_original(ctx["snapshot_id"], oid)
+    if not verify_literal_source(source, ctx["fragments"], ctx["envelope"]["sha256"]):
+        raise ConsoleError("source_context_evidence_invalid")
+    updated = source_role_version(source, role="excluded", command_id=command_id, actor_id=ctx["actor_id"],
+                                  reviewer=ctx["reviewer"]["username"], now=ctx["now"], reason=reason,
+                                  source_sha256=ctx["envelope"]["sha256"], group=group)
+    return _sealed(console, updated)
+
+
+def _sealed(console: Any, updated: dict[str, Any]) -> dict[str, Any]:
+    from src.operations_console_v1 import ConsoleError
+    stamp_canonical_hashes(updated)
+    errors = schema_errors(updated, console.schema_path)
+    if errors:
+        raise ConsoleError("revision_schema_invalid", " | ".join(errors))
+    return updated
+
+
+def _source_batch(console: Any, *, actor_id: str, snapshot_id: str, command_id: str, expected_revision: str,
+                  event_type: str, payload_hash: str, body) -> dict[str, Any]:
+    """One authorized, idempotent, revision-pinned commit of source-role writes."""
+    from contextlib import nullcontext
+    from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT, utc_now
+    from src.review.beslisboom_path_v1 import review_path_for_klasse
+    from src.workflows.workflow_transaction_v1 import workflow_transaction, workflow_transaction_active
+
+    if not command_id.strip() or len(command_id) > 128 or not expected_revision:
         raise ConsoleError("source_context_command_required")
     documents = getattr(console, "workflow_document_store", None)
     reviews = getattr(console, "workflow_review_store", None)
     if (documents is None) != (reviews is None) or workflow_transaction_active():
         raise ConsoleError("source_context_independent_transaction_required")
-    event_type = "source_exclusions_confirmed"
-    payload_hash = stable_hash({"actor_id": actor_id, "snapshot_id": snapshot_id,
-                               "source_object_ids": ids, "reason": reason.strip()})
     with console._store_write_lock():
         try:
             with workflow_transaction(reviews) if reviews is not None else nullcontext() as connection:
@@ -83,55 +301,26 @@ def confirm_source_exclusions(console: Any, *, actor_id: str, snapshot_id: str,
                 current, revision = console.snapshot_objects_and_revision(snapshot_id)
                 if revision != expected_revision:
                     raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=revision)
-                by_id = {row["object_id"]: row for row in current}
                 path, _ = console._verified_source_bytes(envelope)
-                fragments = console._read_source_fragments(envelope, path)
-                changed = []
-                now = utc_now()
-                for oid in ids:
-                    source = by_id.get(oid)
-                    evidence = evidence_of(source) if source else {}
-                    if (not evidence or evidence["proposed_role"] not in {"metadata", "structure"}
-                            or role_of(source) or links_of(source)
-                            or source.get("confirmed_object_type")
-                            or (source.get("governance") or {}).get("validation_status") != "needs_review"):
-                        raise ConsoleError("source_exclusion_not_proposed")
-                    console._require_open_original(snapshot_id, oid)
-                    if not verify_literal_source(source, fragments, envelope["sha256"]):
-                        raise ConsoleError("source_context_evidence_invalid")
-                    updated = deepcopy(source)
-                    updated["object_version"] = bump_patch(str(source["object_version"]))
-                    metadata = updated.setdefault("metadata", {})
-                    metadata[ROLE_KEY] = {"version": CONTRACT, "role": "excluded", "command_id": command_id,
-                        "reviewer_id": actor_id, "reviewer": reviewer["username"], "reviewed_at": now,
-                        "reason": reason.strip(), "literal_hash": literal_identity(source),
-                        "source_sha256": envelope["sha256"]}
-                    metadata["passage_register"] = passage_register_record(status="excluded_with_reason",
-                        reason_codes=["reviewer_confirmed_source_role"], source="review")
-                    governance = updated.setdefault("governance", {})
-                    governance.update(validation_status="rejected", validated_by=reviewer["username"],
-                        validation_date=now[:10], review_snapshot_hash=None, publication_status="unpublished")
-                    second = governance.get("second_review")
-                    if isinstance(second, dict) and second.get("required"):
-                        second.update(status="pending", reviewer=None, review_date=None, snapshot_hash=None)
-                    stamp_canonical_hashes(updated)
-                    errors = schema_errors(updated, console.schema_path)
-                    if errors:
-                        raise ConsoleError("revision_schema_invalid", " | ".join(errors))
-                    changed.append(updated)
+                ctx = {"actor_id": actor_id, "snapshot_id": snapshot_id, "reviewer": reviewer,
+                       "envelope": envelope, "current": current, "now": utc_now(),
+                       "by_id": {row["object_id"]: row for row in current},
+                       "fragments": console._read_source_fragments(envelope, path),
+                       "review_path": review_path_for_klasse(envelope["class"])}
+                changed, result, extra = body(ctx)
                 history = console._load_objects(snapshot_id, remember=False) + changed
                 bindings = deepcopy(console._bindings)
-                for oid in ids:
-                    bindings[snapshot_id] = invalidate_for_object(bindings.get(snapshot_id, []), oid)
-                result = {"snapshot_id": snapshot_id, "command_id": command_id, "idempotent": False,
-                          "source_versions": {row["object_id"]: row["object_version"] for row in changed}}
+                for row in changed:
+                    bindings[snapshot_id] = invalidate_for_object(bindings.get(snapshot_id, []), row["object_id"])
+                first = changed[0]
                 console._commit_prepared_store(objects=(snapshot_id, history), bindings=bindings,
                     snapshot_id=snapshot_id, expected_revision=revision,
                     ledger_fn=lambda: append_event(console._ledger_path, event_type=event_type,
-                        object_id=ids[0], object_version=result["source_versions"][ids[0]], actor=reviewer["username"],
+                        object_id=first["object_id"], object_version=first["object_version"],
+                        actor=reviewer["username"],
                         details={"snapshot_id": snapshot_id, "actor_account_id": actor_id,
-                            "command_id": command_id, "payload_hash": payload_hash,
-                            "reason": reason.strip(), "result": deepcopy(result)}))
+                                 "command_id": command_id, "payload_hash": payload_hash,
+                                 **extra, "result": deepcopy(result)}))
             return result
         except Exception:
             console._reload_store_locked()

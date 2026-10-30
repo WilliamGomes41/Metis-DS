@@ -515,6 +515,18 @@
       ]
     ],
     [
+      "/review/source-group",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/review/source-group/reset",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/review/successor",
       [
         "POST"
