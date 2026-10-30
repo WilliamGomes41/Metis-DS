@@ -3,6 +3,7 @@
 # release-control-evidence: scope/belofte
 # release-control-evidence: toegang
 # release-control-evidence: opslag stale recovery
+# release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
 import json
