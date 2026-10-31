@@ -198,10 +198,14 @@ def test_metadata_write_cannot_detach_or_change_pinned_producer_evidence(pending
     store = writer.store.documents
     sid = envelope['snapshot_id']
     store.write_bundle(envelope=envelope, objects=console.snapshot_objects(sid), expected_revision=console.objects_revision(sid), formation_activation_ref=envelope['processing_attempts'][-1]['diagnostic']['formation_evidence_ref'])
-    changed = deepcopy(envelope)
-    changed['semantic_replay']['provider_evidence'] = {}
-    with pytest.raises(WorkflowDocumentStoreError, match='workflow_document_bundle_write_failed'):
-        store.write_bundle(envelope=changed)
+    for field in ('semantic_replay', 'prepared_source_extraction'):
+        changed = deepcopy(envelope)
+        if field == 'semantic_replay':
+            changed[field]['provider_evidence'] = {}
+        else:
+            changed.pop(field)
+        with pytest.raises(WorkflowDocumentStoreError, match='workflow_document_bundle_write_failed'):
+            store.write_bundle(envelope=changed)
     with pytest.raises(psycopg.Error, match='formation_evidence_pin_required'):
         with store._connect() as con:
             con.execute('UPDATE workflow.documents SET formation_evidence_id=NULL WHERE snapshot_id=%s', (sid,))
