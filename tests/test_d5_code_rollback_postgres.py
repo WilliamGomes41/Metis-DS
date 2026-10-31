@@ -75,6 +75,19 @@ def test_code_rollback_rebuilds_copies_and_preserves_pg_and_product_api(complete
                                     cwd=code, env=env, capture_output=True, text=True, timeout=90)
             assert result.returncode == 0, result.stderr[-5000:]
             outcome = _normalise(json.loads(output.read_text()), root)
+            # This is a rollback proof for legacy, unpinned documents. Format 8
+            # adds formation/source backup records that the pinned binary
+            # cannot export. Compare the common durable/product state exactly;
+            # never interpret this legacy scenario as a rollback of proof-v3.
+            state = outcome['state']
+            if name == 'current':
+                assert state.pop('workflow_recovery_version') == 8
+                formation = state.pop('formation_recovery')
+                assert not formation['tables']['formation_evidence_roots']
+                assert all(d['formation_evidence_id'] is None for d in formation['documents'])
+            else:
+                assert state.pop('workflow_recovery_version') == 7
+                assert 'formation_recovery' not in state
             for row in outcome['state']['workflow_tables']['document_objects']:
                 # WP6 updates retained rows; the pinned full-set writer deletes
                 # and reinserts them, resetting this physical write counter.
