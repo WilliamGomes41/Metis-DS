@@ -11,6 +11,21 @@ from tests.test_review_render_source_reuse import review_client  # noqa: F401
 import pytest
 
 
+def execute_legacy_receipt(console, sid, author, command, monkeypatch):
+    """Historical pre-029 receipt; readers run with current capabilities again.
+
+    These tests deliberately inject invalid legacy inline data. Current sealed
+    proof/source immutability is covered by test_formation_evidence_postgres.
+    """
+    from tests.test_review_formation_problems import execute
+    with monkeypatch.context() as historical:
+        historical.setattr('src.workflows.formation_evidence_v1.available', lambda con: False)
+        execute(console, sid, author, command)
+    with console.workflow_document_store._connect() as con:
+        assert con.execute('SELECT formation_evidence_id FROM workflow.documents WHERE snapshot_id=%s',
+                           (sid,)).fetchone()['formation_evidence_id'] is None
+
+
 def test_incomplete_passage_prepares_the_complete_source_once(tmp_path, production_console, monkeypatch):
     """A bounded passage must not replace the full source used for closure."""
     from copy import deepcopy
@@ -84,7 +99,7 @@ def test_incomplete_passage_keeps_existing_fail_closed_behavior(tmp_path, produc
     from tests.test_availability_repair import login
 
     console, sid, author, _, _, _, _ = received(tmp_path, production_console, monkeypatch)
-    execute(console, sid, author, 'passage-fail-closed')
+    execute_legacy_receipt(console, sid, author, 'passage-fail-closed', monkeypatch)
     store = console.workflow_document_store
     if layout == 'legacy':
         with store._connect() as con:
@@ -180,7 +195,7 @@ def test_incomplete_passage_does_not_reuse_changed_extraction(tmp_path, producti
     from tests.test_review_formation_problems import received, execute
 
     console, sid, author, reviewer, _, _, _ = received(tmp_path, production_console, monkeypatch)
-    execute(console, sid, author, 'passage-changed-extraction')
+    execute_legacy_receipt(console, sid, author, 'passage-changed-extraction', monkeypatch)
     store = console.workflow_document_store
     if layout == 'legacy':
         with store._connect() as con:

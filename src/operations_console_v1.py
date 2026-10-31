@@ -1757,6 +1757,10 @@ class OperationsConsole:
                 envelope["publication_eligibility"] = initial_eligibility
                 envelope.pop("processing_blocker", None)
             prepared_envelopes = {snapshot_id: envelope}
+            if attempt_id:
+                from src.workflows.formation_task_store_v1 import FormationTaskStore
+                envelope = FormationTaskStore(self.workflow_document_store).activation_envelope(envelope, attempt_id)
+                prepared_envelopes[snapshot_id] = envelope
             from src.workflows.review_card_inputs_postgres_v1 import prepare_activation
             review_card_preparation = prepare_activation(getattr(self, 'workflow_document_store', None), envelope, objects, fragments)
             try:
@@ -1782,6 +1786,7 @@ class OperationsConsole:
                         objects=(snapshot_id, objects), envelopes=prepared_envelopes,
                         expected_revision=expected_revision if attempt_id else "" if ingest_command else None,
                         review_card_preparation=review_card_preparation,
+                        formation_activation_ref=(next(reversed(envelope.get('processing_attempts') or []), {}).get('diagnostic') or {}).get('formation_evidence_ref'),
                     )
             except ConsoleError:
                 if not ingest_command or attempt_id:
@@ -2394,6 +2399,9 @@ class OperationsConsole:
                 objects,
             )
         from src.workflows.review_card_inputs_postgres_v1 import prepare_activation
+        if _attempt_id is not None:
+            from src.workflows.formation_task_store_v1 import FormationTaskStore
+            prepared_envelope = FormationTaskStore(self.workflow_document_store).activation_envelope(prepared_envelope, _attempt_id)
         review_card_preparation = prepare_activation(getattr(self, 'workflow_document_store', None), prepared_envelope, objects, fragments)
         with self._reprocessing_transaction(snapshot_id):
             self._reload_store_locked()
@@ -2453,6 +2461,7 @@ class OperationsConsole:
                 bindings={snapshot_id: []},
                 expected_revision=expected_revision,
                 review_card_preparation=review_card_preparation,
+                formation_activation_ref=(next(reversed(prepared_envelope.get('processing_attempts') or []), {}).get('diagnostic') or {}).get('formation_evidence_ref'),
             )
         if _attempt_id is not None:
             from src.vorming.processing_trace_v1 import observe
@@ -2750,6 +2759,8 @@ class OperationsConsole:
             authorize(self, actor_id, self._envelope(snapshot_id))
             self._require_mutable_working_revision(snapshot_id)
             with store.documents._connect() as con:
+                from src.workflows.formation_evidence_v1 import assert_source_reference
+                assert_source_reference(con, snapshot_id, reference)
                 pinned = con.execute("UPDATE workflow.documents SET review_source_ref=%s::jsonb,review_read_envelope=NULL WHERE snapshot_id=%s "
                     "AND envelope_payload#>>'{prepared_source_extraction,record_hash}'=%s",
                     (_json_text(reference),snapshot_id,reference['extraction_hash']))

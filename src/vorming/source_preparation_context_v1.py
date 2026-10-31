@@ -153,6 +153,9 @@ def build_formation_context(console, *, envelope, actor_id, expected_revision,
         return context
     contract = extractor_contract(source.content_kind)
     fresh_extraction = not attempt or attempt.get('kind') == 'reextract'
+    staged_extraction = getattr(checkpoint_writer, 'staged_extraction', None)
+    if staged_extraction is not None:
+        context['retained_fragments'] = stored_extraction({**envelope, KEY:staged_extraction}, required_contract=contract)
     if resume and hasattr(checkpoint_writer,'retained_source') and checkpoint_writer.input_reference is not None:
         retained,retained_identity,summary=checkpoint_writer.retained_source(contract)
         if retained_identity!=asdict(source):
@@ -160,7 +163,7 @@ def build_formation_context(console, *, envelope, actor_id, expected_revision,
         context['retained_fragments']=retained
         context['extraction_reuse_summary']=summary
         return context
-    if not fresh_extraction:
+    if not fresh_extraction and staged_extraction is None:
         retained = stored_extraction(envelope, required_contract=contract)
         if retained is None and source.content_kind == 'pdf':
             from src.vorming.docling_contract_v1 import stored_fragments
@@ -180,6 +183,8 @@ def build_formation_context(console, *, envelope, actor_id, expected_revision,
     def retain(fragments):
         record = extraction_record(envelope, fragments, contract)
         summary = {key: record[key] for key in ('record_hash', 'fragments_hash')}
+        if hasattr(checkpoint_writer, 'stage_extraction') and checkpoint_writer.stage_extraction(record):
+            return
         if envelope.get(KEY) == record:
             if context['diagnostic_checkpoint']:
                 context['diagnostic_checkpoint']('extraction_reused', {'extraction_checkpoint': summary})

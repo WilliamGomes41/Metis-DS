@@ -680,8 +680,9 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         task_storage = stored_envelope.get("processing_storage") == "task-v1"
         attempts = stored_envelope.pop("processing_attempts", []) if task_storage else []
         if task_storage:
-            provider = (stored_envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
-            provider.pop("formation_progress",None)
+            if isinstance(stored_envelope.get('semantic_replay'), dict):
+                from src.workflows.formation_evidence_v1 import activation_replay
+                stored_envelope['semantic_replay'] = activation_replay(stored_envelope['semantic_replay'])
         values = self._document_values(stored_envelope)
         topic_values = (*values[:5], topic["topic_id"], *values[5:])
         snapshot_id = str(stored_envelope["snapshot_id"])
@@ -732,10 +733,13 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         objects: list[dict[str, Any]] | None = None,
         expected_revision: str | None = None,
         review_card_preparation=None,
+        formation_activation_ref=None,
     ) -> str:
         snapshot_id = str(envelope.get("snapshot_id") or "")
         if not snapshot_id:
             raise WorkflowDocumentStoreError("workflow_document_metadata_incomplete")
+        if formation_activation_ref is not None and objects is None:
+            raise WorkflowDocumentStoreError('formation_evidence_activation_objects_required')
         try:
             with self._connect() as con:
                 with con.transaction():
@@ -753,7 +757,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
 
                     if objects is not None:
                         from src.workflows.formation_task_store_v1 import FormationTaskStore
-                        FormationTaskStore.assert_activation(con,envelope)
+                        FormationTaskStore.assert_activation(con,envelope,formation_activation_ref)
                     self._write_envelope_locked(con, envelope)
                     from src.workflows.review_card_inputs_postgres_v1 import publish_preparation
                     publish_preparation(self, con, snapshot_id, review_card_preparation)
@@ -1115,8 +1119,11 @@ class _PostgresWorkflowDocumentsMixin:
         ledger_fn: Any | None = None,
         snapshot_id: str | None = None,
         review_card_preparation=None,
+        formation_activation_ref=None,
     ) -> None:
         self._require_review_store_configured()
+        if formation_activation_ref is not None and objects is None:
+            raise ConsoleError('formation_evidence_activation_objects_required')
         if envelopes is None and objects is None:
             # The review mixin owns the native transaction. Do not enter the
             # file-store rollback boundary for bindings/event-only commands.
@@ -1178,6 +1185,7 @@ class _PostgresWorkflowDocumentsMixin:
                     objects=objects[1] if objects is not None else None,
                     expected_revision=pinned_revision if objects is not None else None,
                     review_card_preparation=review_card_preparation,
+                    formation_activation_ref=formation_activation_ref,
                 )
                 canonical_envelope = self.workflow_document_store.get_envelope(sid)
                 if canonical_envelope is None:
