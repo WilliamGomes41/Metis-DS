@@ -34,3 +34,7 @@ Model at least one agreed invariant, a normal completion path, a retry/interrupt
 ## Completion gate
 
 The integration is not complete until the skill is installed reproducibly, executable in the intended environment, its checks pass, and one real model has been checked against the corresponding implementation. Do not claim model checking proves the deployed code correct.
+
+## CI event freshness
+
+The change-contract validator reads the pull-request body from the triggering GitHub event payload. Editing the PR description and re-running an older job does not refresh that payload. After correcting the contract, trigger a new pull-request synchronize event with a meaningful branch commit, and verify the new run rather than retrying the stale job.
