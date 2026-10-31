@@ -2409,3 +2409,33 @@ html[data-theme="dark"] mark.broncontext-marked { color: #1f2933; }
   border-radius: 8px;
   text-decoration: none;
 }
+
+/* Source accountability: handled rows recede so open work stays prominent. */
+[data-source-accountability] li[data-source-state] {
+  margin: var(--space-2) 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: 8px;
+}
+[data-source-accountability] li[data-source-state="open"],
+[data-source-accountability] li[data-source-state="repair"],
+[data-source-accountability] li[data-source-state="waiting"] {
+  background: var(--white);
+  border: 1px solid var(--line);
+}
+[data-source-accountability] li[data-source-state="handled"] {
+  background: transparent;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+}
+.source-state-badge {
+  display: inline-block;
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  background: var(--water-light);
+  color: var(--brand-ink);
+  font-size: 0.85em;
+  font-weight: 600;
+}
+[data-source-accountability] li[data-source-state="handled"] a { color: var(--muted); }
+[data-source-accountability] details[data-source-state="handled"] > summary { color: var(--muted); }
+.source-handled-mark { font-weight: 600; }

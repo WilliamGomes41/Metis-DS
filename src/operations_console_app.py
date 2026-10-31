@@ -2782,6 +2782,10 @@ def _review_inventory(
                       "Automatisch als documentinformatie aangemerkt" if kind == "document_information" else
                       "Context bij goedgekeurde kennis" if usage["accounted"] else
                       "Wacht op kennisbeoordeling" if kind == "linked_context" else "Open")
+            # Presentation only: handled rows are muted so they are not mistaken for open work.
+            state = ("repair" if usage["human_action"] == "technical_repair" else
+                     "handled" if usage["accounted"] or kind in {"reviewed", "document_information"} else
+                     "waiting" if kind == "linked_context" else "open")
             usage_reason = {"document_metadata": "Documentversie of datum", "page_furniture": "Documentlabel met editie en paginanummer",
                             "navigation": "Inhoudsopgave of navigatieregel", "uncertain_source_role": "Brongebruik nog niet vastgesteld",
                             "unformed_meaning": "Niet geselecteerde broninhoud"}.get(usage["reason"], "Bronbesluit controleren")
@@ -2808,7 +2812,9 @@ def _review_inventory(
             if source_only and edit_exclusions and group_role.get("group") and group_role.get("role") == "excluded":
                 group_resets.setdefault((label, path), set()).add(str(group_role.get("command_id") or ""))
             group.append(("meta" if selectable else "open" if groupable else "other", obj,
-                f'<li data-source-record="{_esc(object_id)}">{selection}<p>{_esc((obj.get("content") or {}).get("clean_text"))}</p>'
+                f'<li data-source-record="{_esc(object_id)}" data-source-state="{state}">{selection}'
+                + ('<span class="source-state-badge">Afgehandeld</span>' if state == "handled" else '') +
+                f'<p>{_esc((obj.get("content") or {}).get("clean_text"))}</p>'
                 f'<p>{_esc(status)} · {_esc(usage_reason)}</p>{targets}'
                 f'<a href="{source_path}?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={source_task}">{source_link}</a></li>'))
             continue
@@ -2928,8 +2934,11 @@ def _review_inventory(
                     + f'<input type="hidden" name="group_command_id" value="{_esc(group_command)}">'
                     + '<label>Reden om dit groepsbesluit te heropenen<input name="reason" required maxlength="4000"></label>'
                     + '<button type="submit">Groepsbesluit terugdraaien</button></form>')
-            source_html += (f'<details data-source-group><summary>{_esc(label)} · {_esc(section)} ({len(group)} bronregels)</summary>'
-                            + body + '</details>')
+            handled = all('data-source-state="handled"' in html for _kind, _obj, html in group)
+            source_html += (f'<details data-source-group data-source-state="{"handled" if handled else "open"}">'
+                            f'<summary>{_esc(label)} · {_esc(section)} ({len(group)} bronregels)'
+                            + ('<span class="source-handled-mark"> · afgehandeld</span>' if handled else '')
+                            + '</summary>' + body + '</details>')
         if metadata_items and source_only and edit_exclusions:
             source_html += ('<form method="post" action="/review/source-exclusions">'
                 f'<input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">'
