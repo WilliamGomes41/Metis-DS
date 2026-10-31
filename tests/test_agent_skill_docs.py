@@ -9,6 +9,32 @@ ROOT = Path(__file__).resolve().parents[1]
 # release-control-evidence: releasebewijs
 
 
+def test_statechart_preparation_preserves_authority_and_requires_executable_proof() -> None:
+    contract = (ROOT / "docs/agents/statechart-integration.md").read_text(encoding="utf-8")
+    purpose = contract.split("## Purpose and boundaries\n", 1)[1].split("\n## ", 1)[0]
+    installation = contract.split("## Installation prerequisite\n", 1)[1].split("\n## ", 1)[0]
+    completion = contract.split("## Completion gate\n", 1)[1].split("\n## ", 1)[0]
+
+    # A model must never replace the existing domain or persistence authority.
+    assert "existing Metis domain contracts and Class A/B/C classification remain authoritative" in purpose
+    assert "A chart is not a domain-state source of truth" in purpose
+    assert "Postgres/Azure remain the authoritative persistence boundary" in purpose
+    assert "replay each reported counterexample against code" in purpose
+
+    # Preparation cannot claim installation or code correctness from a checksum/model alone.
+    assert "executable pstack statechart skill is not yet installed" in contract
+    assert "Do not silently mix revisions" in installation
+    assert "python scripts/sync_shared_agent_skills.py --check" in installation
+    assert "static checksum check alone does not establish that the executable works" in installation
+    for requirement in (
+        "installed reproducibly",
+        "executable in the intended environment",
+        "one real model has been checked against the corresponding implementation",
+        "Do not claim model checking proves the deployed code correct",
+    ):
+        assert requirement in completion
+
+
 def test_agent_skill_wayfinding_docs_are_present_and_linked() -> None:
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
 
