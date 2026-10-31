@@ -1006,6 +1006,8 @@ def _semantic_execution_before_review(
             evidence_fragments=evidence_fragments,
             object_version="1.0",
         )
+    if replay_record is not None and hasattr(checkpoint, 'seal_formation'):
+        checkpoint.seal_formation(replay_record)
     return units, replay_record
 
 

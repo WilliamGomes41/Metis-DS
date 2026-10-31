@@ -296,11 +296,12 @@ class _PostgresWorkflowReviewMixin:
         ledger_fn: Any | None = None,
         snapshot_id: str | None = None,
         review_card_preparation=None,
+        formation_activation_ref=None,
     ) -> None:
         from src.review.review_command_state_v1 import active_review_command
         command = active_review_command(self, snapshot_id or (objects[0] if objects is not None else None))
         if command is not None:
-            if review_card_preparation is not None:
+            if review_card_preparation is not None or formation_activation_ref is not None:
                 raise ConsoleError("review_card_preparation_not_a_review_command")
             command.stage(envelopes=envelopes, bindings=bindings, objects=objects,
                           expected_revision=expected_revision, ledger_fn=ledger_fn,
@@ -314,6 +315,7 @@ class _PostgresWorkflowReviewMixin:
                 envelopes=envelopes, bindings=bindings, objects=objects,
                 expected_revision=expected_revision, ledger_fn=ledger_fn,
                 snapshot_id=snapshot_id, review_card_preparation=review_card_preparation,
+                formation_activation_ref=formation_activation_ref,
             )
         if self._store_command_applies():
             try:
@@ -322,6 +324,7 @@ class _PostgresWorkflowReviewMixin:
                         envelopes=envelopes, bindings=bindings, objects=objects,
                         expected_revision=expected_revision, ledger_fn=ledger_fn,
                         snapshot_id=snapshot_id, review_card_preparation=review_card_preparation,
+                        formation_activation_ref=formation_activation_ref,
                     )
                     if bindings is not None:
                         current = self.workflow_review_store.read_bindings()
@@ -343,6 +346,7 @@ class _PostgresWorkflowReviewMixin:
                             expected_revision=expected_revision,
                             ledger_fn=ledger_fn,
                             snapshot_id=snapshot_id, review_card_preparation=review_card_preparation,
+                            formation_activation_ref=formation_activation_ref,
                         )
                         if bindings is not None:
                             current = self.workflow_review_store.read_bindings()

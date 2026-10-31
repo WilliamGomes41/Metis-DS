@@ -499,10 +499,13 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         objects: list[dict[str, Any]] | None = None,
         expected_revision: str | None = None,
         review_card_preparation=None,
+        formation_activation_ref=None,
     ) -> str:
         snapshot_id = str(envelope.get("snapshot_id") or "")
         if not snapshot_id:
             raise WorkflowDocumentStoreError("workflow_document_metadata_incomplete")
+        if formation_activation_ref is not None and objects is None:
+            raise WorkflowDocumentStoreError('formation_evidence_activation_objects_required')
         try:
             with self._connect() as con:
                 with con.transaction():
@@ -550,7 +553,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
 
                     if objects is not None:
                         from src.workflows.formation_task_store_v1 import FormationTaskStore
-                        FormationTaskStore.assert_activation(con,envelope)
+                        FormationTaskStore.assert_activation(con,envelope,formation_activation_ref)
                     self._write_envelope_locked(con, envelope)
                     from src.workflows.review_card_inputs_postgres_v1 import publish_preparation
                     publish_preparation(self, con, snapshot_id, review_card_preparation)

@@ -55,6 +55,8 @@ def publish_preparation(store, con, sid, preparation):
     task_store._immutable(con, 'prepared_extraction_versions', 'record_hash', preparation.extraction['record_hash'],
                           ['snapshot_id'], [sid], preparation.extraction)
     reference = task_store.publish_review_source(preparation.artifact, con=con)
+    from src.workflows.formation_evidence_v1 import assert_source_reference
+    assert_source_reference(con, sid, reference)
     con.execute('UPDATE workflow.documents SET review_source_ref=%s::jsonb WHERE snapshot_id=%s', (_json_text(reference), sid))
 
 

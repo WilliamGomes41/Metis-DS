@@ -7,6 +7,7 @@ from src.vorming.processing_document_budget_v1 import leased, document_scoped, b
 
 from contextlib import contextmanager
 from copy import deepcopy
+import json
 
 from src.operations_console_v1 import ConsoleError
 from src.vorming.processing_retry_v1 import assert_active
@@ -26,6 +27,13 @@ class TaskCheckpointWriter:
         self.console, self.snapshot_id = console, snapshot_id
         self.store = FormationTaskStore(console.workflow_document_store)
         self.attempt_id = attempt["attempt_id"]
+        self.expected_revision = attempt['expected_revision']
+        with self.store.documents._connect() as con:
+            self.source_envelope = con.execute('SELECT snapshot_id,source_id,document_id,source_sha256 AS sha256,'
+                'source_version AS version,content_kind,logical_document_id,working_revision_id '
+                'FROM workflow.documents WHERE snapshot_id=%s', (snapshot_id,)).fetchone()
+        if self.source_envelope is None:
+            raise ConsoleError('unknown_snapshot')
         self.claim_token = (attempt.get("dispatch") or {}).get("token")
         self.configuration = deepcopy(attempt.get("processing_configuration"))
         if not self.configuration:
@@ -42,6 +50,17 @@ class TaskCheckpointWriter:
         self.review_source_reference = deepcopy((attempt.get("diagnostic") or {}).get("review_source_ref"))
         self.plan_reference = deepcopy((attempt.get("diagnostic") or {}).get("task_plan_ref"))
         self.input_reference = deepcopy((attempt.get("diagnostic") or {}).get("validator_input_ref"))
+        self.staged_extraction = None
+        staged_hash = (attempt.get('diagnostic') or {}).get('staged_extraction_hash')
+        if staged_hash is not None:
+            with self.store.documents._connect() as con:
+                staged = con.execute('SELECT payload FROM workflow.prepared_extraction_versions '
+                    'WHERE record_hash=%s AND snapshot_id=%s', (staged_hash, snapshot_id)).fetchone()
+            if staged is None:
+                raise ConsoleError('formation_extraction_required')
+            from src.vorming.source_preparation_context_v1 import KEY, stored_extraction
+            stored_extraction({**self.source_envelope, KEY:staged['payload']})
+            self.staged_extraction = staged['payload']
         if attempt.get("kind")=="resume" and self.source_reference is not None and self.input_reference is None:
             raise ConsoleError("formation_input_required")
 
@@ -95,6 +114,11 @@ class TaskCheckpointWriter:
         # Timings are attempt evidence, but each checkpoint carries only its
         # latest task measurement, never the cumulative list.
         values = dict(values)
+        call_ref = None
+        if phase == 'task_rejected' and 'evidence' in values:
+            call_ref = self._archive_calls([values['evidence']], 'call')
+        elif phase == 'budget_exhausted' and 'formation_calls' in values:
+            call_ref = self._archive_calls(values.pop('formation_calls'), 'budget')
         if "formation_timings" in values:
             values["formation_timings"] = values["formation_timings"][-1:]
         reference = None
@@ -112,6 +136,9 @@ class TaskCheckpointWriter:
                 active.setdefault("diagnostic",{}).update(phase=phase,**values,validator_input_ref=self.input_reference)
         elif "validator_input" in values:
             envelope = self.console._envelope(self.snapshot_id)
+            if self.staged_extraction is not None:
+                from src.vorming.source_preparation_context_v1 import KEY
+                envelope = {**envelope, KEY:self.staged_extraction}
             with self._locked() as (con, active):
                 reference = self.store.retain_input(con, envelope=envelope,
                     validator_input=values.pop("validator_input"), semantic_identity=values["semantic_identity"],
@@ -128,6 +155,8 @@ class TaskCheckpointWriter:
                     from src.vorming.processing_document_budget_v1 import reserve_call
                     values["document_budget"] = reserve_call(active)
                 self.store.checkpoint(con,self.attempt_id,phase,values)
+                if call_ref is not None:
+                    self.store.checkpoint(con,self.attempt_id,'formation_call',{'call_ref':call_ref})
                 if phase == "task_rejected":
                     self._commit_cursor(active)
                 active.setdefault("diagnostic", {})["phase"] = phase
@@ -214,9 +243,12 @@ class TaskCheckpointWriter:
         with self.store.documents._connect() as con:
             records_available = con.execute("SELECT to_regclass('workflow.source_read_roots') AS available").fetchone()['available']
         read_reference = None
+        from src.workflows.formation_evidence_v1 import available
         if records_available:
             read_prepared = self.store.prepare_review_source(self.input_reference, payload)
             read_reference = self.store.publish_review_source(read_prepared)
+        with self.store.documents._connect() as con:
+            evidence_available = available(con)
         with self._locked() as (con,active):
             reference=self.store.retain_source_views(con,self.input_reference,payload,prepared=prepared)
             if self.source_reference is not None and self.source_reference!=reference:
@@ -224,15 +256,43 @@ class TaskCheckpointWriter:
             active.setdefault("diagnostic",{})["source_views_ref"]=reference
             if read_reference is not None:
                 pinned = con.execute("UPDATE workflow.documents SET review_source_ref=%s::jsonb,review_read_envelope=NULL WHERE snapshot_id=%s "
-                    "AND envelope_payload#>>'{prepared_source_extraction,record_hash}'=%s",
+                    "AND envelope_payload#>>'{prepared_source_extraction,record_hash}'=%s "
+                    + ("AND formation_evidence_id IS NULL" if evidence_available else ""),
                     (_json_text(read_reference),self.snapshot_id,read_reference['extraction_hash']))
                 if pinned.rowcount != 1:
-                    raise ConsoleError('processing_command_conflict')
+                    active_proof = con.execute('SELECT formation_evidence_id FROM workflow.documents WHERE snapshot_id=%s',
+                        (self.snapshot_id,)).fetchone()
+                    if not active_proof or active_proof['formation_evidence_id'] is None:
+                        raise ConsoleError('processing_command_conflict')
                 active['diagnostic']['review_source_ref'] = read_reference
             self.store.checkpoint(con,self.attempt_id,"source_views_pinned",{"source_views_ref":reference})
         self.source_reference=reference
         self.review_source_reference=read_reference
         self.source_payload=payload
+
+    def stage_extraction(self, record):
+        """Keep active Review input intact while preparing a successor result."""
+        from src.vorming.source_preparation_context_v1 import KEY, stored_extraction
+        from src.workflows.formation_evidence_v1 import available
+        with self.store.documents._connect() as con:
+            if not available(con):
+                return False
+            current = con.execute('SELECT formation_evidence_id FROM workflow.documents WHERE snapshot_id=%s',
+                                  (self.snapshot_id,)).fetchone()
+        if not current or current['formation_evidence_id'] is None:
+            return False
+        stored_extraction({**self.source_envelope, KEY:record})
+        if workflow_transaction_active():
+            raise ConsoleError('formation_checkpoint_requires_independent_transaction')
+        # Retain the large immutable input before taking the document claim lock.
+        with self.store.documents._connect() as con:
+            self.store._immutable(con, 'prepared_extraction_versions', 'record_hash', record['record_hash'],
+                                  ['snapshot_id'], [self.snapshot_id], record)
+        with self._locked() as (con, active):
+            active.setdefault('diagnostic', {})['staged_extraction_hash'] = record['record_hash']
+            self.store.checkpoint(con, self.attempt_id, 'extraction_staged', {'record_hash':record['record_hash']})
+        self.staged_extraction = record
+        return True
 
     def load_task_plan(self):
         if not self.input_reference:
@@ -280,10 +340,13 @@ class TaskCheckpointWriter:
             raise ConsoleError("formation_input_required")
         # Provider and validation have finished before opening this transaction.
         payload = {"task": task, "proposal": proposal, "evidence": evidence, "timing": timing}
+        call_ref = self._archive_calls([evidence], 'call')
         with self._locked() as (con, active):
             committed = self.store.commit_task(con,context_id=self.input_reference["context_id"],ranges=task["target_spans"],
                 payload=payload,attempt_id=self.attempt_id,claim_token=self.claim_token)
             self._commit_cursor(active)
+            if call_ref is not None:
+                self.store.checkpoint(con,self.attempt_id,'formation_call',{'call_ref':call_ref})
             if committed:
                 active["formation_progress_made"] = True
             active.setdefault("diagnostic", {})["phase"] = "proposal_received"
@@ -291,16 +354,47 @@ class TaskCheckpointWriter:
             self._formation_cursor = deepcopy(self._next_cursor)
         self.committed_this_worker = True
 
+    def _archive_calls(self, calls, label):
+        from src.workflows.formation_evidence_v1 import available
+        from src.vorming.semantic_replay_v1 import stable_json_hash
+        with self.store.documents._connect() as con:
+            if not available(con):
+                return None
+        prepared = self.store.prepare_processing_archive(self.source_envelope, kind='semantic_replay',
+            record_key=label + ':' + self.attempt_id + ':' + stable_json_hash(calls),
+            observed_revision=self.expected_revision, payload={'calls':calls})
+        return self.store.retain_processing_archive(prepared)
+
+    def begin_formation_calls(self, evidence, *, resuming):
+        from src.workflows.formation_evidence_v1 import call_sequence, available
+        from src.workflows.processing_archives_v1 import encoded
+        with self.store.documents._connect() as con:
+            if not available(con):
+                return
+        prior = self.console._envelope(self.snapshot_id).get('semantic_replay') or {}
+        expected = call_sequence(prior.get('provider_evidence') or {}) if resuming else []
+        expected += [row['evidence'] for row in self.task_results()]
+        expected += [row['evidence'] for row in self.task_failures()]
+        actual = call_sequence(evidence)
+        if encoded(expected) != encoded(actual):
+            raise ConsoleError('formation_evidence_call_basis_changed')
+        reference = self._archive_calls(actual, 'basis')
+        if reference is not None:
+            with self._locked() as (con, active):
+                self.store.checkpoint(con,self.attempt_id,'formation_call_basis',{'call_ref':reference})
+
     def final_validation(self, proposal):
         """Bind the one successful joint gate to the exact committed result set."""
         from src.vorming.semantic_replay_v1 import stable_json_hash
         from src.vorming.attempt_diagnostics_v1 import validator_identity
         if not self.input_reference:
             raise ConsoleError("formation_input_required")
+        from src.workflows.formation_evidence_v1 import available
         with self.store.documents._connect() as con:
+            version = 3 if available(con) else 2
             rows = con.execute("SELECT ranges_hash,result_hash FROM workflow.formation_task_results "
                                "WHERE context_id=%s ORDER BY ranges_hash",(self.input_reference["context_id"],)).fetchall()
-        evidence = {"version":2,"result_set_hash":stable_json_hash(rows),
+        evidence = {"version":version,"result_set_hash":stable_json_hash(rows),
                     "proposal_hash":stable_json_hash(proposal),"validator_identity":validator_identity()}
         with self._locked() as (con, active):
             current = con.execute("SELECT ranges_hash,result_hash FROM workflow.formation_task_results "
@@ -313,6 +407,38 @@ class TaskCheckpointWriter:
             con.execute("UPDATE workflow.formation_contexts SET final_result_hash=%s,final_validation=%s::jsonb WHERE context_id=%s",
                         (evidence["result_set_hash"],_json_text(evidence),self.input_reference["context_id"]))
             active.setdefault("diagnostic", {})["final_validation"] = evidence
+
+    def seal_formation(self, replay):
+        """Producer hook after complete accounting, before object activation."""
+        from src.workflows.formation_evidence_v1 import available, capture
+        from src.vorming.semantic_replay_v1 import stable_json_hash
+        with self.store.documents._connect() as con:
+            if not available(con):
+                return
+        if not self.input_reference:
+            raise ConsoleError('formation_input_required')
+        envelope = self.console._envelope(self.snapshot_id)
+        archive = self.store.prepare_processing_archive(envelope, kind='semantic_replay',
+            record_key='final:' + self.attempt_id + ':' + stable_json_hash(replay),
+            observed_revision=self.console.objects_revision(self.snapshot_id), payload=replay)
+        reference = self.store.retain_processing_archive(archive)
+        with self._locked() as (con, active):
+            gate = (active.get('diagnostic') or {}).get('final_validation') or {}
+            if gate.get('version') != 3 or gate.get('proposal_hash') != replay.get('proposal_hash'):
+                raise ConsoleError('formation_final_validation_required')
+            active['diagnostic']['formation_finalized_ref'] = reference
+        prepared = self.store.prepare_formation_evidence(envelope,
+            context_id=self.input_reference['context_id'], attempt_id=self.attempt_id)
+        sealed = self.store.publish_formation_evidence(envelope, prepared)
+        expected = json.loads(prepared.header_text)['capture']
+        with self._locked() as (con, active):
+            current, _, _, _, _, _ = capture(con, self.input_reference['context_id'], self.attempt_id)
+            if current != expected:
+                raise ConsoleError('formation_evidence_activation_changed')
+            gate = {**active['diagnostic']['final_validation'], 'stage': 'sealed', 'formation_evidence_ref': sealed}
+            active['diagnostic'].update(final_validation=gate, formation_evidence_ref=sealed)
+            con.execute('UPDATE workflow.formation_contexts SET final_validation=%s::jsonb WHERE context_id=%s',
+                        (_json_text(gate), self.input_reference['context_id']))
 
     def reject_final(self, proposal, finding):
         """Invalidate only an exactly located task; retain all original proof.

@@ -9,6 +9,7 @@ from src.vorming.semantic_replay_v1 import stable_json_hash
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError, _json_text
 from src.workflows.review_source_records_v1 import ReviewSourceRecords
 from src.workflows.processing_archives_v1 import ProcessingArchives
+from src.workflows.formation_evidence_v1 import FormationEvidence
 
 STORAGE_VERSION = 1
 
@@ -19,7 +20,7 @@ def integrity(value, expected, code="formation_record_integrity_failed"):
     return value
 
 
-class FormationTaskStore(ReviewSourceRecords, ProcessingArchives):
+class FormationTaskStore(ReviewSourceRecords, ProcessingArchives, FormationEvidence):
     def __init__(self, document_store):
         self.documents = document_store
 
@@ -246,13 +247,42 @@ class FormationTaskStore(ReviewSourceRecords, ProcessingArchives):
         return True
 
     @staticmethod
-    def assert_activation(con, envelope):
+    def assert_activation(con, envelope, formation_activation_ref=None):
+        from src.workflows.formation_evidence_v1 import available
+        if formation_activation_ref is not None:
+            latest = next(reversed(envelope.get('processing_attempts') or []), {})
+            diagnostic = latest.get('diagnostic') or {}
+            if (envelope.get('processing_storage') != 'task-v1'
+                    or not diagnostic.get('validator_input_ref')
+                    or (diagnostic.get('final_validation') or {}).get('version') != 3):
+                raise WorkflowDocumentStoreError('formation_evidence_compatible_writer_required')
+        if available(con):
+            pinned = con.execute('SELECT formation_evidence_id FROM workflow.documents WHERE snapshot_id=%s',
+                                 (envelope['snapshot_id'],)).fetchone()
+            if pinned and pinned['formation_evidence_id'] is not None:
+                if formation_activation_ref is None:
+                    from src.workflows.formation_evidence_v1 import retain_active_evidence
+                    retain_active_evidence(con, envelope, pinned['formation_evidence_id'])
+                    return
+                submitted = next(reversed(envelope.get('processing_attempts') or []), {})
+                diagnostic = submitted.get('diagnostic') or {}
+                if (envelope.get('processing_storage') != 'task-v1' or not diagnostic.get('validator_input_ref')
+                        or (diagnostic.get('final_validation') or {}).get('version') != 3):
+                    raise WorkflowDocumentStoreError('formation_evidence_compatible_writer_required')
         if envelope.get("processing_storage") != "task-v1":
             return
         latest = next(reversed(envelope.get("processing_attempts") or []),{})
         reference = (latest.get("diagnostic") or {}).get("validator_input_ref")
         # Decision-tree formation has its own existing activation contract.
         if not reference:
+            return
+        from src.workflows.formation_evidence_v1 import assert_activation
+        if ((latest.get('diagnostic') or {}).get('final_validation') or {}).get('version') == 3:
+            if formation_activation_ref is None:
+                raise WorkflowDocumentStoreError('formation_evidence_activation_operation_required')
+            if formation_activation_ref != (latest.get('diagnostic') or {}).get('formation_evidence_ref'):
+                raise WorkflowDocumentStoreError('formation_evidence_activation_changed')
+            assert_activation(con, envelope)
             return
         row = con.execute("SELECT final_validation,semantic_identity,expected_revision FROM workflow.formation_contexts "
                           "WHERE context_id=%s AND snapshot_id=%s",(reference["context_id"],envelope["snapshot_id"])).fetchone()

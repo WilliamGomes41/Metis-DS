@@ -43,7 +43,7 @@ from src.publication.publication_chain_recovery_v1 import (
     check_chain_integrity,
 )
 
-WORKFLOW_RECOVERY_VERSION = 7  # 7: workflow.publication_refusals (#636)
+WORKFLOW_RECOVERY_VERSION = 8  # 8: exact formation/source/proof state and active pins (MET-41)
 API_ACCESS_TABLES = tuple(API_ACCESS_COLUMNS)
 _API_ACCESS_ORDER_BY = {
     table: ",".join(columns)
@@ -145,6 +145,12 @@ def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:
     version = int(state.get("workflow_recovery_version") or 0)
     if version == WORKFLOW_RECOVERY_VERSION:
         return deepcopy(dict(state))
+    if version == 7:
+        upgraded = deepcopy(dict(state))
+        upgraded['workflow_recovery_version'] = WORKFLOW_RECOVERY_VERSION
+        from src.workflows.formation_recovery_v1 import validate
+        validate(upgraded)
+        return upgraded
     if version == REFUSALS_ADDED_RECOVERY_VERSION:
         return _add_empty_refusals(deepcopy(dict(state)))
     if version != LEGACY_WORKFLOW_RECOVERY_VERSION:
@@ -230,6 +236,8 @@ def _validate_workflow_shape(state: Mapping[str, Any]) -> None:
         raise PublicationChainRecoveryError("workflow_backup_tables_missing:" + ",".join(missing))
     for table in WORKFLOW_TABLES:
         _rows(state, table)
+    from src.workflows.formation_recovery_v1 import validate
+    validate(state)
     _audit_entries_from_state(state)
 
 
@@ -540,6 +548,8 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                     con.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
                     snapshot_at = _json_safe(con.execute("SELECT clock_timestamp() AS moment").fetchone()["moment"])
                     self._verify_workflow_schema(con)
+                    from src.workflows.formation_recovery_v1 import export as export_formation
+                    formation = export_formation(con)
                     tables: dict[str, list[dict[str, Any]]] = {}
                     for table in DB_TABLES:
                         rows = con.execute(
@@ -582,12 +592,16 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
             "api_access_tables": access_tables,
             "entra_identities": entra_rows,
         }
+        if formation is not None:
+            state['formation_recovery'] = formation
         report = check_workflow_integrity(state)
         if not report["ok"]:
             raise PublicationChainRecoveryError("workflow_backup_integrity_failed:" + ";".join(report["errors"]))
         return state
 
     def _assert_empty(self, con: Any) -> None:
+        from src.workflows.formation_recovery_v1 import assert_empty
+        assert_empty(con)
         nonempty: list[str] = []
         for table in (
             *DB_TABLES, *(f"workflow.{table}" for table in WORKFLOW_TABLES),
@@ -642,6 +656,9 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                         *DB_TABLES, *(f"workflow.{table}" for table in WORKFLOW_TABLES),
                         *(f"api_access.{table}" for table in API_ACCESS_TABLES),
                     )
+                    from src.workflows.formation_recovery_v1 import available, TABLES, FACT_TABLES
+                    if available(con):
+                        targets += tuple(f'workflow.{table}' for table in TABLES + FACT_TABLES)
                     con.execute("LOCK TABLE " + ",".join(targets) + " IN ACCESS EXCLUSIVE MODE")
                     self._assert_empty(con)
                     trigger = con.execute(
@@ -675,9 +692,6 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                     _insert_rows(
                         con, schema="workflow", table="documents", rows=_ordered_documents(state),
                         columns=_WORKFLOW_COLUMNS["documents"], json_columns=_WORKFLOW_JSON_COLUMNS["documents"],
-                    )
-                    con.execute(
-                        "ALTER TABLE workflow.documents ENABLE TRIGGER trg_workflow_documents_lifecycle_identity"
                     )
 
                     for table in (
@@ -714,6 +728,14 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                                 "SELECT setval(pg_get_serial_sequence(%s,%s), %s, true)",
                                 (table, column, int(row["n"])),
                             )
+                    from src.workflows.formation_recovery_v1 import restore
+                    restore(con, state, self.store)
+                    # Validate deferred proof/FK bindings before trigger DDL;
+                    # PostgreSQL refuses ALTER with pending constraint events.
+                    con.execute('SET CONSTRAINTS ALL IMMEDIATE')
+                    con.execute(
+                        "ALTER TABLE workflow.documents ENABLE TRIGGER trg_workflow_documents_lifecycle_identity"
+                    )
         except PublicationChainRecoveryError:
             raise
         except Exception as exc:
@@ -772,6 +794,9 @@ def restore_workflow_chain(archive: Any, *, database: PostgresWorkflowRecoveryAd
     for group in ("workflow_tables", "api_access_tables"):
         if stable_hash(restored[group]) != stable_hash(expected[group]):
             raise PublicationChainRecoveryError(f"{group}_restore_roundtrip_mismatch")
+    if expected.get('formation_recovery') is not None:
+        if stable_hash(restored.get('formation_recovery')) != stable_hash(expected['formation_recovery']):
+            raise PublicationChainRecoveryError('formation_restore_roundtrip_mismatch')
     workflow = check_workflow_integrity(restored)
     canonical = check_chain_integrity(restored, source_store=source_store)
     if not workflow["ok"] or not canonical["ok"]:

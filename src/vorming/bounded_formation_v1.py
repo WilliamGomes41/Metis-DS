@@ -224,6 +224,8 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
         for failure in checkpoint.task_failures():
             evidence["tasks"].append(deepcopy(failure["task"]))
             evidence.setdefault("supplementary_calls", []).append(deepcopy(failure["evidence"]))
+    if hasattr(checkpoint, 'begin_formation_calls'):
+        checkpoint.begin_formation_calls(evidence, resuming=resuming)
     # Source-role classification is independent of knowledge extraction. These
     # closed whole-range rules cannot classify arbitrary clinical text.
     if not resuming:
@@ -310,6 +312,7 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                 # separate durable checkpoints. Record every unstarted source
                 # range in memory so recovery remains complete, persist once,
                 # then return control to the caller immediately.
+                pending_calls = []
                 for offset, pending_task in enumerate(phase_tasks[index:], start=index + 1):
                     timings.append({"task_id": pending_task["task_id"], "phase": phase, "index": offset,
                                     "planned": len(phase_tasks), "status": "not_started"})
@@ -322,6 +325,7 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                         "error_code": "source_task_budget_exhausted",
                         "failure_reason": "source_task_budget_exhausted",
                     }
+                    pending_calls.append(deepcopy(pending_call))
                     evidence["tasks"].append(pending_record)
                     if "target_spans" not in evidence and not evidence.get("supplementary_calls"):
                         evidence.update(pending_call)
@@ -330,7 +334,7 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                 budget_exhausted = True
                 if checkpoint:
                     timed_checkpoint("budget_exhausted" if durable else "proposal_received",
-                        {"remaining_task_count": len(phase_tasks) - index} if durable else {"provider_evidence": evidence,
+                        {"remaining_task_count": len(phase_tasks) - index, "formation_calls": pending_calls} if durable else {"provider_evidence": evidence,
                          "resolved_proposal": proposal, "resolved_proposal_hash": stable_json_hash(proposal)})
                 break
 
