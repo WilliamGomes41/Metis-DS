@@ -8,6 +8,7 @@ from copy import deepcopy
 from src.vorming.semantic_replay_v1 import stable_json_hash
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError, _json_text
 from src.workflows.review_source_records_v1 import ReviewSourceRecords
+from src.workflows.processing_archives_v1 import ProcessingArchives
 
 STORAGE_VERSION = 1
 
@@ -18,7 +19,7 @@ def integrity(value, expected, code="formation_record_integrity_failed"):
     return value
 
 
-class FormationTaskStore(ReviewSourceRecords):
+class FormationTaskStore(ReviewSourceRecords, ProcessingArchives):
     def __init__(self, document_store):
         self.documents = document_store
 

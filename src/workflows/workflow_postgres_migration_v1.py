@@ -33,6 +33,7 @@ MIGRATION_NAMES = (
     "024_review_dependency_lookup.sql",
     "025_review_interaction_identity_lookup.sql",
     "026_review_source_records.sql",
+    "028_processing_archives.sql",
 )
 REQUIRED_TABLES = frozenset(
     {
@@ -120,6 +121,7 @@ RUNTIME_TABLE_PRIVILEGES = {
     "source_read_fragments": (_S, _I),
     "source_read_blocks": (_S, _I),
     "source_read_block_fragments": (_S, _I),
+    "processing_archives": (_S, _I),
 }
 # Serial sequences the runtime advances on INSERT (identity columns need no grant).
 RUNTIME_SEQUENCE_PRIVILEGES = {
