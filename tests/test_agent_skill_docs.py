@@ -1,6 +1,8 @@
 from pathlib import Path
 import re
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -40,6 +42,7 @@ def test_agent_skill_wayfinding_docs_are_present_and_linked() -> None:
 
     expected_docs = (
         "docs/agents/issue-tracker.md",
+        "docs/agents/linear-github-handoff.md",
         "docs/agents/triage-labels.md",
         "docs/agents/domain.md",
     )
@@ -59,6 +62,45 @@ def test_agent_skill_wayfinding_docs_are_present_and_linked() -> None:
         "wontfix",
     ):
         assert label in triage_labels
+
+
+def test_handoff_preserves_github_authority_and_requires_done_evidence() -> None:
+    contract = (ROOT / "docs/agents/linear-github-handoff.md").read_text(encoding="utf-8")
+    for obligation in (
+        "GitHub is de bron van waarheid: code, gedragsbepalende besluiten en bewijs",
+        "Linear verwijst naar GitHub en herhaalt het niet. Bij verschil wint GitHub.",
+        "Een gedragsbepalend besluit dat alleen in Linear of in chat staat, geldt niet als vastgelegd.",
+        "Done = gemerged + (waar nodig) gedeployed + geverifieerd.",
+        "een verwijzing naar concreet bewijs",
+        "CI- of testrun (PR-nummer en head-SHA)",
+        "deployment_verified commit=",
+        "handmatige check met wat, wie, wanneer en de gemeten uitkomst",
+        "Zonder die verwijzing blijft het werkpakket open.",
+    ):
+        assert obligation in contract
+
+
+def test_handoff_yaml_contains_required_context_and_allows_no_decision() -> None:
+    contract = (ROOT / "docs/agents/linear-github-handoff.md").read_text(encoding="utf-8")
+    template = yaml.safe_load(contract.split("```yaml\n", 1)[1].split("```", 1)[0])
+    assert set(template) == {
+        "handoff", "github_state", "production_state", "done", "half_done",
+        "decision_needed", "next_step", "agreements_in_force", "diagram_update",
+        "diagram_reason",
+    }
+    assert set(template["github_state"]) == {"main", "open_prs"}
+    assert set(template["production_state"]) == {"commit", "image", "rollback"}
+    assert set(template["decision_needed"]) == {"needed", "what"}
+    assert "n.v.t." in template["decision_needed"]["what"]
+    assert "Bij `needed: nee` vul je `what: n.v.t.` in" in contract
+    assert "Bij `needed: ja` zijn opties en advies verplicht" in contract
+    for obligation in (
+        "`diagram_update: ja`, met een verwijzing naar de update",
+        "`niet relevant`, met een reden",
+        "`nee` mag alleen met een reden en een vervolg-issue",
+        "Een leeg veld telt als een ontbrekende handoff",
+    ):
+        assert obligation in contract
 
 
 def test_class_b_program_design_gate_requires_existing_path_before_code() -> None:

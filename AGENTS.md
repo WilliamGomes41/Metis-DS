@@ -38,7 +38,7 @@ PostgreSQL tests need a server; never treat their skip as a pass. `pytest` start
 
 ### Issue tracker
 
-Issues live in this repo’s GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md`.
+Issues live in this repo’s GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md`. What agents record in GitHub versus Linear, and the session handoff format: `docs/agents/linear-github-handoff.md`.
 
 ### Triage labels
 
