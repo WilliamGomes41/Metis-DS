@@ -125,7 +125,7 @@ Why local patching is insufficient: elke route die het hele snapshot herschrijft
 Current authority/writer/reader map: authority = PostgreSQL workflow.document_objects (ongewijzigd). Writers = write_bundle (concurrency en cutover), apply_review_changes (delta, alleen review_object), workflow_documents_postgres_v1 INSERT (migratie). Readers sorteren op position of lezen current_revisions; trigger advance_object_generation per rij (ongewijzigd).
 Supported runtime topologies: R+ lokaal en productie (PostgreSQL). De bestandstopologie (zonder PostgreSQL) houdt de bestaande lijstopslag; daar speelt het schaalprobleem niet. Tier D/I-weigering ongewijzigd.
 Persisted-state impact: geen schema- of datamigratie. Bestaande rijen en posities blijven geldig; nieuwe rijen worden achteraan toegevoegd.
-Compatibility/migration plan: expand -> migrate -> contract. (1) expand: apply_object_changes als veralgemenisering van apply_review_changes, plus een bounded mutation command naast execute_review_command. (2) migrate: route voor route uit §4 overzetten, elk met een gelijkwaardigheidstest; bronbesluiten eerst (blokkeert MET-33). (3) contract: V3 aanzetten, zodat write_bundle met objecten op een bestaand snapshot wordt geweigerd; daarna de inventaristest.
+Compatibility/migration plan: expand -> migrate -> contract. (1) expand (slice 3a): write_bundle zelf schrijft alleen het verschil (_write_objects_locked): verwijder alleen verdwenen identiteiten, voeg nieuwe in, werk alleen gewijzigde payload of positie bij. Het eindresultaat is identiek aan de volledige vervanging (gelijkwaardigheidstest), dus alle routes uit §4 zijn tegelijk begrensd zonder gedragswijziging. (2) migrate: herverwerking naar supersede (D2), identiteitsslot (D1), en daarna begrensde reads per route (alleen geraakte geschiedenissen lezen, zoals execute_review_command). (3) contract: V3 aanzetten (een verwijdering bij een bestaand snapshot wordt geweigerd, behalve bij ingest) plus de inventaristest.
 Rollback/recovery plan: per stap terug te draaien met een revert. Er is geen persistente afhankelijkheid: delta-rijen zijn gewone rijen die de oude code ook leest. Na contract (3) betekent een rollback alleen dat de weigering weer uit gaat.
 Cutover trigger: per stap merge na groene CI, de schaaltest op productieschaal en GO van de projectlead. Productie per stap deployen; eerst één kleine sectie proberen op Richtlijn Smetten.
 Cleanup/decommission criteria: na stap 3 bestaat er in src/ geen aanroep van write_bundle(objects=…) buiten de aanmaakroute; de inventaristest bewaakt dat.
@@ -156,8 +156,8 @@ Adversarial proof matrix: §10.
 
 ## 12. Volgorde van uitvoering (na GO op dit contract)
 
-1. Slice 3a: expand (`apply_object_changes` plus de mutatieopdracht) en de bronbesluiten migreren (los, batch, groep), met schaal-, gelijkwaardigheids- en weigeringstests. Dit ontgrendelt MET-33.
-2. Slice 3b: de overige routes uit §4, één PR per routegroep.
+1. Slice 3a: verschil-schrijven in de gedeelde opslag (`_write_objects_locked` in `write_bundle`), met gelijkwaardigheids- en begrenzingstests (`tests/test_met36_object_delta_write.py`). Dit begrenst alle routes uit §4 tegelijk en ontgrendelt MET-33. De verwijdersemantiek is nog ongewijzigd (V3 volgt in slice 6).
+2. Slice 3b: begrensde reads per route (alleen geraakte geschiedenissen lezen), te beginnen bij de bronbesluiten; nodig voor de leestijd, niet voor het schrijfincident.
 3. Slice 4: D2 herverwerking.
 4. Slice 5: D1 inloggen.
 5. Slice 6: contract (V3) en de inventaristest.

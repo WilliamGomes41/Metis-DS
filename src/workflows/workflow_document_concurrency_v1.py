@@ -563,13 +563,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                             expected_revision=None if existing is None and expected_revision == "" else expected_revision,
                         )
                         validate_revision_write(current_objects, next_objects, snapshot_id=snapshot_id)
-                        con.execute("DELETE FROM workflow.document_objects WHERE snapshot_id=%s", (snapshot_id,))
-                        for position, obj in enumerate(next_objects):
-                            con.execute(
-                                "INSERT INTO workflow.document_objects(snapshot_id,object_id,object_version,payload,position) "
-                                "VALUES(%s,%s,%s,%s::jsonb,%s)",
-                                (snapshot_id, obj["object_id"], obj["object_version"], _json_text(obj), position),
-                            )
+                        self._write_objects_locked(con, snapshot_id, current_objects, next_objects)
                         from src.workflows.review_card_inputs_postgres_v1 import maintain
                         maintain(self, con, snapshot_id, next_objects, complete=True, preparation=review_card_preparation)
             return self._revision_token(next_objects)
