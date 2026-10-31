@@ -622,6 +622,53 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             for row in rows
         ]
 
+    def _write_objects_locked(
+        self, con: Any, snapshot_id: str, current: list[dict[str, Any]], following: list[dict[str, Any]],
+    ) -> None:
+        """Store ``following`` as the snapshot's object list, writing only the difference.
+
+        The result equals deleting every row and inserting ``following`` at
+        positions 0..n-1, but unchanged rows are not touched, so the cost (and the
+        per-row ``advance_object_generation`` trigger) follows the change, not the
+        document size (MET-36). The caller holds the document row lock.
+        """
+        before = {(str(row["object_id"]), str(row["object_version"])): row for row in current}
+        stored = {
+            (row["object_id"], row["object_version"]): row["position"]
+            for row in con.execute(
+                "SELECT object_id,object_version,position FROM workflow.document_objects WHERE snapshot_id=%s",
+                (snapshot_id,),
+            ).fetchall()
+        }
+        kept = {(str(obj["object_id"]), str(obj["object_version"])) for obj in following}
+        for object_id, object_version in sorted(set(stored) - kept):
+            con.execute(
+                "DELETE FROM workflow.document_objects WHERE snapshot_id=%s AND object_id=%s AND object_version=%s",
+                (snapshot_id, object_id, object_version),
+            )
+        for position, obj in enumerate(following):
+            identity = (str(obj["object_id"]), str(obj["object_version"]))
+            if identity not in stored:
+                con.execute(
+                    "INSERT INTO workflow.document_objects(snapshot_id,object_id,object_version,payload,position) "
+                    "VALUES(%s,%s,%s,%s::jsonb,%s)",
+                    (snapshot_id, *identity, _json_text(obj), position),
+                )
+            # Compare the stored text, not Python equality: 1 == 1.0 in Python but
+            # not in the stored JSON or the revision hash.
+            elif identity not in before or _json_text(before[identity]) != _json_text(obj):
+                con.execute(
+                    "UPDATE workflow.document_objects SET payload=%s::jsonb,position=%s,revision=revision+1,"
+                    "updated_at=CURRENT_TIMESTAMP WHERE snapshot_id=%s AND object_id=%s AND object_version=%s",
+                    (_json_text(obj), position, snapshot_id, *identity),
+                )
+            elif stored[identity] != position:
+                con.execute(
+                    "UPDATE workflow.document_objects SET position=%s "
+                    "WHERE snapshot_id=%s AND object_id=%s AND object_version=%s",
+                    (position, snapshot_id, *identity),
+                )
+
     def objects_revision(self, snapshot_id: str) -> str:
         return self._revision(self.list_document_objects(snapshot_id))
 
@@ -719,13 +766,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                         raise WorkflowDocumentStoreError("workflow_object_identity_invalid")
                     if objects is not None:
                         validate_revision_write(current_objects, next_objects, snapshot_id=snapshot_id)
-                        con.execute("DELETE FROM workflow.document_objects WHERE snapshot_id=%s", (snapshot_id,))
-                        for position, obj in enumerate(next_objects):
-                            con.execute(
-                                "INSERT INTO workflow.document_objects(snapshot_id,object_id,object_version,payload,position) "
-                                "VALUES(%s,%s,%s,%s::jsonb,%s)",
-                                (snapshot_id, obj["object_id"], obj["object_version"], _json_text(obj), position),
-                            )
+                        self._write_objects_locked(con, snapshot_id, current_objects, next_objects)
                         from src.workflows.review_card_inputs_postgres_v1 import maintain
                         maintain(self, con, snapshot_id, next_objects, complete=True, preparation=review_card_preparation)
             return self._revision(next_objects)
