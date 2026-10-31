@@ -72,6 +72,17 @@ def test_append_update_and_remove_store_the_same_rows_and_touch_only_the_change(
     _assert_full_replacement_result(store, sid, changed)
     assert _touched(before, _rows(store, sid)) == [(changed[target]["object_id"], changed[target]["object_version"])]
 
+    # 2b. An int that becomes an equal float is a change in stored JSON and revision (1 == 1.0 in Python).
+    floated = deepcopy(changed)
+    floated[target].setdefault("metadata", {})["met36_number"] = 1
+    store.write_bundle(envelope=envelope, objects=floated)
+    floated = deepcopy(floated)
+    floated[target]["metadata"]["met36_number"] = 1.0
+    store.write_bundle(envelope=envelope, objects=floated)
+    _assert_full_replacement_result(store, sid, floated)
+    assert isinstance(_rows(store, sid)[target]["payload"]["metadata"]["met36_number"], float)
+    changed = floated
+
     # 3. Drop one working (source) record: replacement semantics are kept for now (V3 comes later).
     dropped = [r for r in changed if r["object_id"] != sources[2]["object_id"]]
     before = _rows(store, sid)

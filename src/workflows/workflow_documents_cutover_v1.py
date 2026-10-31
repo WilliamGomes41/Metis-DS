@@ -654,7 +654,9 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                     "VALUES(%s,%s,%s,%s::jsonb,%s)",
                     (snapshot_id, *identity, _json_text(obj), position),
                 )
-            elif before.get(identity) != obj:
+            # Compare the stored text, not Python equality: 1 == 1.0 in Python but
+            # not in the stored JSON or the revision hash.
+            elif identity not in before or _json_text(before[identity]) != _json_text(obj):
                 con.execute(
                     "UPDATE workflow.document_objects SET payload=%s::jsonb,position=%s,revision=revision+1,"
                     "updated_at=CURRENT_TIMESTAMP WHERE snapshot_id=%s AND object_id=%s AND object_version=%s",
