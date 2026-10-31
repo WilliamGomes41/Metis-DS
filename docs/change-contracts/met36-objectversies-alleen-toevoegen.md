@@ -63,7 +63,7 @@ Ubiquitous terms:
 | Aanmaak | `ingest` (3 aanroepen) | volledig | aanmaakroute, de enige |
 | Cutover-migratie | `workflow_documents_cutover_v1._save_objects` | volledig | eenmalige migratie, blijft buiten de mutatieroute |
 
-## 4a. Besluiten
+## 4a. Besluiten (GO projectlead 2026-10-31 op D1, D2 en D3)
 
 - **D1 (inloggen loskoppelen):** `execute_review_command` doet `_require_role(..., current=True)` → `account_by_id(for_share=True)`, dus `FOR SHARE` op de `accounts`-rij voor de hele transactie. `sign_in` neemt `FOR UPDATE` op dezelfde rij onder identity-lock 734821095.
   - **Voorstel:** de identiteitscontrole in een domeinopdracht wordt `FOR KEY SHARE`, en `sign_in` gebruikt `FOR NO KEY UPDATE` (de sleutel verandert niet). Die twee conflicteren niet. Pensionering en blokkering blijven bewaakt, omdat beide de `accounts`-rij in `FOR NO KEY UPDATE` bijwerken.
@@ -74,6 +74,7 @@ Ubiquitous terms:
   - er wordt niets verwijderd.
   - **Gevolg:** de geschiedenis van eerdere vormingspogingen blijft bewaard en herleidbaar; dat is een winst voor de herkomst. Het snapshot groeit bij herhaalde herverwerking.
   - **Te bewijzen:** lezers en de publicatiegereedheid negeren vervallen kandidaten.
+  - **Vervolg (projectlead):** het effect van de groei bij herhaalde herverwerking wordt later apart onderzocht (opslag, leestijd, grenzen); geregistreerd als eigen issue.
 - **D3 (klasse wijzigen):** `promote_class` zet de governance van de huidige rijen terug. Dat mag als update van de huidige rij, mits `validate_revision_write` dit toestaat. Anders wordt het een nieuwe versie per object; dat wordt vastgesteld in slice 3.
 
 ## 5. Transactiegrens
