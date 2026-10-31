@@ -1,6 +1,8 @@
 # Linear en GitHub: wat agents waar vastleggen
 
-Promise: agents leggen waarheid vast in GitHub en status in Linear, en sluiten elke sessie af met een gestructureerde handoff. Change class: C (agent workflow). Rewrite risk: none.
+Promise: agents leggen waarheid vast in GitHub en status in Linear, en sluiten elke sessie af met een gestructureerde handoff. Change class: C (agent-governance; gerichte contracttests verplicht). Rewrite risk: none.
+
+Deze documentatie verandert agent-governance en is daarom geen gewone cosmetische Class C-wijziging. `tests/test_agent_skill_docs.py` bewaakt de gezagsverdeling, het bewijs bij Done en de verplichte handoffvelden.
 
 ## Grondregel
 
@@ -54,12 +56,14 @@ done: ["… (bewijsverwijzing)"]
 half_done: ["branch + wat ontbreekt"]   # of []
 decision_needed:
   needed: ja|nee
-  what: "opties + advies"
+  what: "opties + advies bij ja; n.v.t. bij nee"
 next_step: "één concrete actie"
 agreements_in_force: ["…"]
 diagram_update: ja|nee|niet relevant
 diagram_reason: "verplicht bij nee of niet relevant"
 ```
+
+Bij `needed: nee` vul je `what: n.v.t.` in. Bij `needed: ja` zijn opties en advies verplicht. Zo blijft de handoff volledig zonder een besluit te verzinnen.
 
 **Compositiediagrammen** ("Alles over Metis", `src/settings/metis_explained_content.py`): raakt een change de compositie (opslag, schrijf- of leesroutes, componenten, deploytopologie), dan geldt `diagram_update: ja`, met een verwijzing naar de update. Anders `niet relevant`, met een reden. `nee` mag alleen met een reden en een vervolg-issue. Een leeg veld telt als een ontbrekende handoff.
 
