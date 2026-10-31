@@ -205,6 +205,16 @@ Deze stap heeft **Rewrite risk: high**. Vóór de bouw komt er een eigen change 
   - **Schrijvers:** de batch en de groep delen `source_role_version`. De losse opdracht (`_confirm_source_context`) houdt bewust zijn eigen, ongewijzigde schrijver (besluit projectlead: optie A). Een test bewaakt dat los en groep bij uitsluiten hetzelfde resultaat geven. Het samenvoegen van de losse schrijver is een aparte wijziging met rewrite risk high.
 - **Stap 2b-2 (onderbouwing, §3.4) en §3.7 (vorming afsluiten, rewrite risk high):** volgen apart.
 
+## 8b. Incident 2026-10-30 en herstel
+
+- **Wat er gebeurde:** in productie (2cf13200) bleef één batch-uitsluiting op Richtlijn Smetten meer dan 26 minuten in zijn schrijftransactie hangen. Zolang die liep, bleven ook aanmeldingen hangen. De app is teruggezet naar 31d854c6; er bleef geen half besluit achter.
+- **Oorzaak:** de batch- en groepsopdracht controleerden per lid of de passage in het origineel te openen is. Die controle las bij elk lid opnieuw alle objecten, haalde de bronbytes opnieuw op en verifieerde ze, en opende de volledige PDF opnieuw. Op een kleine HTML-test merk je daar niets van; op een grote PDF met tientallen leden duurt het minuten.
+- **Herstel:** `_source_batch` haalt de bronbytes één keer op en opent de PDF één keer (`_open_original_reader`). Daarna krijgt elk lid dezelfde controle met dezelfde foutcodes. De losse opdracht verandert niet.
+- **Bewijs:** `tests/test_b6_source_batch_scale.py`. Op een gegenereerde PDF met 200 regels gebeurt per opdracht één bronread en hoogstens twee keer een PDF-open (één voor de controles, één voor de bestaande fragmentread), ongeacht het aantal leden. Voor elk record geeft de gedeelde controle hetzelfde resultaat als de losse controle, ook de weigering `open_original_required`. Tegen de oude code faalt de test.
+- **Scenario:** GIVEN een PDF-document met 200 open bronregels, WHEN de aangewezen reviewer alle voorgestelde regels in één opdracht uitsluit, THEN wordt de bron één keer gelezen, zijn alle leden verantwoord, en geeft elk lid dezelfde controle en foutcodes als de losse controle (`test_batch_exclusion_on_a_large_pdf_reads_the_source_once`).
+- **Nazorg na de deploy:** eerst één kleine sectie bevestigen, met één klik, en daarna de duur van `request_finished` in de logs controleren. Pas daarna verder.
+- **Niet in dit herstel:** de reden waarom aanmeldingen op de lange transactie wachtten. Na dit herstel duurt de transactie seconden, maar de wachtketen zelf is niet bewezen. Die analyse volgt apart; aan de sloten verandert hier niets.
+
 ## 9. Vervolg na goedkeuring
 
 1. Vaste regels (3.6): per regel een kleine PR.
