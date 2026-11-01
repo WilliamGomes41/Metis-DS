@@ -146,7 +146,7 @@ class PostgresWorkflowIdentityStore:
             with self._connect() as con:
                 row = con.execute(
                     "SELECT account_id,username,display_name,roles,password_salt,password_hash,created_at,to_jsonb(accounts)->'retirement' AS retirement "
-                    "FROM workflow.accounts WHERE account_id=%s" + (" FOR SHARE" if for_share else ""),
+                    "FROM workflow.accounts WHERE account_id=%s" + (" FOR KEY SHARE" if for_share else ""),
                     (account_id,),
                 ).fetchone()
             return self._account(row) if row else None

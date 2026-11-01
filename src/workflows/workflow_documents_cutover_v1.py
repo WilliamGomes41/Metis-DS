@@ -836,6 +836,8 @@ class PostgresWorkflowDocumentRuntimeStore(OperationalDocumentInputs, PostgresWo
                         self._write_objects_locked(con, snapshot_id, current_objects, next_objects)
                         from src.workflows.review_card_inputs_postgres_v1 import maintain
                         maintain(self, con, snapshot_id, next_objects, complete=True, preparation=review_card_preparation)
+                        from src.workflows.revision_frontiers_postgres_v1 import seal_complete
+                        seal_complete(self, con, snapshot_id, next_objects)
             return self._revision(next_objects)
         except WorkflowDocumentStoreError:
             raise

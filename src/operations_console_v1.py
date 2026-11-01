@@ -1335,6 +1335,13 @@ class OperationsConsole:
 
     def _require_open_original(self, snapshot_id: str, object_id: str) -> dict[str, Any]:
         try:
+            command = active_review_command(self, snapshot_id)
+            if command is not None and command.inputs.original_checks is not None:
+                target = next((row for row in self.snapshot_objects(snapshot_id)
+                               if row['object_id'] == object_id), None)
+                if target is None:
+                    raise ConsoleError('unknown_object')
+                return command.inputs.require_original(target)
             return self.open_source_passage(snapshot_id=snapshot_id, object_id=object_id)
         except ConsoleError as exc:
             if exc.code in OPEN_ORIGINAL_REQUIRED_CODES:

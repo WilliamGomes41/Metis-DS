@@ -5966,14 +5966,16 @@ def create_console_app(
                               source_checked: str = Form(""), return_object_id: str = Form(""),
                               review_revision: str = Form("")) -> Response:
         account = _require(request)
-        objects = state.snapshot_objects(snapshot_id)
+        documents = getattr(state, 'workflow_document_store', None)
+        objects = (documents.review_command_current_heads(snapshot_id, [source_object_id, return_object_id])
+                   if documents is not None else state.snapshot_objects(snapshot_id))
         return_id = return_object_id if any(row["object_id"] == return_object_id for row in objects) else source_object_id
         pair_target = return_id if return_id != source_object_id else ""
         try:
             if source_checked != "1":
                 raise ConsoleError("source_context_check_required")
-            from src.review.review_passage_read_v1 import resolve_review_revision
-            snapshot_revision = resolve_review_revision(state, snapshot_id, snapshot_revision)
+            # The command owner checks the original generation under its lock;
+            # expanding it into a whole-history m2 token defeats bounded input.
             state.confirm_source_context(actor_id=account['account_id'], snapshot_id=snapshot_id,
                 source_object_id=source_object_id, role=role, target_object_ids=target_object_ids,
                 reason=reason, command_id=command_id, expected_revision=snapshot_revision)
@@ -5982,7 +5984,7 @@ def create_console_app(
                     "source_context_target_required", "source_context_check_required", "open_original_required",
                     "source_context_command_required", SNAPSHOT_OBJECT_WRITE_CONFLICT}:
                 raise
-            if pair_target and any(row["object_id"] == pair_target and role_of(row) for row in state.snapshot_objects(snapshot_id)):
+            if pair_target and any(row["object_id"] == pair_target and role_of(row) for row in objects):
                 pair_target = ""
             from src.vorming.source_selection_ui_v1 import render_context
             return HTMLResponse(render_context(state, account, snapshot_id, source_object_id,

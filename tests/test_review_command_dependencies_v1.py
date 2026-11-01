@@ -27,7 +27,9 @@ def test_native_capture_ignores_removed_incoming_relation_but_retains_current_de
     owner = SimpleNamespace(workflow_document_store=documents)
     captured = capture_histories(owner, sid, 'delta-a', {'decision': 'approve'})
     assert {row['object_id'] for row in captured} == {'delta-a'}
-    assert [row['object_version'] for row in captured] == ['1.0', '1.1']
+    assert [row['object_version'] for row in captured] == ['1.1']
+    assert captured.frontiers['delta-a']['history_count'] == 2
+    assert [row['object_version'] for row in documents.review_command_histories(sid, ['delta-a'])] == ['1.0', '1.1']
 
     # Filtering historical edges must not omit the same edge when current.
     linked = deepcopy(current)
@@ -37,8 +39,9 @@ def test_native_capture_ignores_removed_incoming_relation_but_retains_current_de
     documents.write_bundle(envelope=envelope, objects=[*rows, linked])
     captured = capture_histories(owner, sid, 'delta-a', {'decision': 'approve'})
     assert {row['object_id'] for row in captured} == {'delta-a', 'delta-b'}
-    assert [row['object_version'] for row in captured if row['object_id'] == 'delta-b'] == [
-        '1.0', '1.1', '1.2']
+    assert [row['object_version'] for row in captured if row['object_id'] == 'delta-b'] == ['1.2']
+    assert captured.frontiers['delta-b']['history_count'] == 3
+    assert [row['object_version'] for row in documents.review_command_histories(sid, ['delta-b'])] == ['1.0', '1.1', '1.2']
 
 
 def test_explicit_parent_capture_preserves_full_heading_toc_validation(complete_postgres):

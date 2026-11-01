@@ -78,6 +78,13 @@ def knowledge_revision(obj):
     return semantic.get("selection_origin") == "proposal_selected"
 
 
+def historical_revision_inputs(rows):
+    """Intrinsic inputs of unseen historical rows, not a publication verdict."""
+    return {'historical_has_knowledge': any(knowledge_revision(row) for row in rows),
+            'historical_has_publication': any((row.get('governance') or {}).get('publication_status') == 'published'
+                                              for row in rows)}
+
+
 def _version(value):
     match = re.fullmatch(r"(\d+)\.(\d+)(?:\.(\d+))?", str(value))
     if not match:
@@ -165,6 +172,9 @@ def current_revisions(rows, *, snapshot_id=None):
     to the exact immediately preceding stored revision in this WorkingRevision.
     """
     from src.integrity_kernel import compute_canonical_object_hash
+    from src.review.revision_window_v1 import RevisionWindow
+    if isinstance(rows, RevisionWindow) and snapshot_id is not None and rows.snapshot_id != snapshot_id:
+        raise ValueError('revision_scope_mismatch')
     current = {}
     seen = set()
     strict_identities = set()
@@ -179,7 +189,10 @@ def current_revisions(rows, *, snapshot_id=None):
             strict_identities.add(identity)
         if edge is None and oid in current and lineage_evidence(current[oid]) is not None:
             raise ValueError("revision_lineage_downgrade")
-        if edge is not None:
+        anchor = edge is not None and isinstance(rows, RevisionWindow) and oid not in current and rows.is_anchor(row)
+        if anchor and (row.get('provenance') or {}).get('canonical_object_hash') != compute_canonical_object_hash(row):
+            raise ValueError('revision_evidence_invalid')
+        if edge is not None and not anchor:
             previous = current.get(oid)
             if not isinstance(edge, dict) or edge.get("contract") != LINEAGE_CONTRACT:
                 raise ValueError("revision_lineage_contract_invalid")
@@ -210,7 +223,8 @@ def current_revisions(rows, *, snapshot_id=None):
 
 def with_current_revision(rows, revision):
     """Replace only the final occurrence, or append a genuinely new version."""
-    result = list(rows)
+    from src.review.revision_window_v1 import RevisionWindow
+    result = rows.copy() if isinstance(rows, RevisionWindow) else list(rows)
     identity = (revision["object_id"], revision["object_version"])
     for position in range(len(result) - 1, -1, -1):
         if (result[position]["object_id"], result[position]["object_version"]) == identity:
@@ -228,6 +242,10 @@ def validate_revision_write(previous, submitted, *, snapshot_id):
     old = {(row["object_id"], row["object_version"]): row for row in previous}
     new = {(row["object_id"], row["object_version"]): row for row in submitted}
     protected_ids = {row["object_id"] for row in previous + submitted if knowledge_revision(row)}
+    from src.review.revision_window_v1 import RevisionWindow
+    for window in (previous, submitted):
+        if isinstance(window, RevisionWindow):
+            protected_ids.update(oid for oid, prefix in window.frontiers.items() if prefix['historical_has_knowledge'])
     # Keep occurrence order/multiplicity: old writers could repeat a legacy version.
     # A dict keyed only by identity would erase those immutable historical rows.
     for oid in protected_ids:
@@ -250,6 +268,8 @@ def validate_revision_write(previous, submitted, *, snapshot_id):
     if len(new_identities) != len(set(new_identities)):
         raise ValueError("revision_identity_duplicate")
     sealed = any((row.get("governance") or {}).get("publication_status") == "published" for row in previous)
+    if isinstance(previous, RevisionWindow):
+        sealed = sealed or any(prefix['historical_has_publication'] for prefix in previous.frontiers.values())
     write_current = dict(old_current)
     for identity, after in new.items():
         if identity in old:

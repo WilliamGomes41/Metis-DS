@@ -162,7 +162,7 @@
     "src/review/revision_window_v1.py": "cdf5db690a9559136b078aaf6585a364a5ff0d7f11b904c7ebf6e97482deb47b",
     "src/review/revision_workflow.py": "044a3ebf3bac9d80cf1bb0f7e11a05832ccc1a4fc132a1a957d8a202428e3c73",
     "src/review/source_context_review_v1.py": "e269e11f8c99ad8bf84ae9f1826afde0290120a39ddfef1947da6710871176f3",
-    "src/settings/metis_explained_content.py": "b28b7cf79c3ee5e0650d277114497e88b62cb02686bbbb5b41fbe9932a36a5f5",
+    "src/settings/metis_explained_content.py": "d5b8ecb1947a6800c08a21b294913f5d172383f6a300c10699dedd13fbc1fe87",
     "src/workflows/review_card_inputs_postgres_v1.py": "8ed4986f69b6d504ece26cc57bc6962af18d211198fdb3b16bf9f3271cfa4f3c",
     "src/workflows/revision_frontiers_postgres_v1.py": "9b60595830f640f31147843d0babe18055d549eeb0980cce20f38add61f51df5",
     "src/workflows/workflow_document_concurrency_v1.py": "1bd5f15a310d0f3ab2c6bf68b15978579d150cedad0eead8e94ac7710624d961",
@@ -185,5 +185,11 @@
     "tests/test_workflow_postgres_migration_v1.py": "d0ed179cd0258c76e017275a3a3dfaa08e3596e6040a4c9bc588b6e16a5f0cab"
   },
   "full_suite": "pending; record outcome separately before PR",
-  "production_acceptance": "not performed; no live latency or publication claim"
+  "production_acceptance": "not performed; no live latency or publication claim",
+  "additional_native_proof": {
+    "tests": 11,
+    "failed": 0,
+    "seconds": 43.94,
+    "scope": "native0 unselected serialization, unlinked admission context, MET-43 current dependencies, actual backup/restore and explicit preparation"
+  }
 }

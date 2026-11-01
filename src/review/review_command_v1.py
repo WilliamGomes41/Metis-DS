@@ -73,10 +73,11 @@ def _outgoing(obj, *, children=False):
     return out
 
 
-def capture_histories(console, snapshot_id, object_id, command):
+def capture_histories(console, snapshot_id, object_id, command, *, admission_context=False):
     """Mutation dependencies, never the GET picker or its recursive users."""
     store = console.workflow_document_store
     pending = {object_id}
+    pending.update(command.get('_dependency_ids') or [])
     if command.get('parent_choice'):
         pending.add(str(command['parent_choice']))
     # Parent inference uses the existing global heading/TOC disambiguation rule.
@@ -85,26 +86,41 @@ def capture_histories(console, snapshot_id, object_id, command):
     if command.get('parent_choice') or command.get('documentpositie_action') == 'dit_klopt':
         pending.update(store.review_command_heading_ids(snapshot_id))
     pending.update(store.review_command_neighbor_ids(snapshot_id, [object_id]))
+    if admission_context:
+        pending.update(store.review_command_neighbor_ids(snapshot_id, sorted(pending)))
+        neighbours = store.source_admission_neighbor_ids(snapshot_id, sorted(pending))
+        if neighbours is None:
+            # Explicit existing-data compatibility until complete preparation.
+            histories = store.list_document_objects(snapshot_id)
+            current_revisions(histories, snapshot_id=snapshot_id)
+            return histories
+        pending.update(neighbours)
     seen = set()
     while pending:
         seen.update(pending)
-        rows = store.review_command_histories(snapshot_id, sorted(pending))
-        live = current_revisions(rows, snapshot_id=snapshot_id)
+        # Candidate discovery needs current raw heads, not historical payloads.
+        # The complete selected prefix is checked by its owner-issued frontier
+        # below, or by the explicit unprepared legacy compatibility adapter.
+        live = store.review_command_current_heads(snapshot_id, sorted(pending))
         outgoing = set()
         for obj in live:
             outgoing.update(_outgoing(obj, children=obj['object_id'] == object_id))
         pending = outgoing - seen
-    histories = store.review_command_histories(snapshot_id, sorted(seen))
+    histories = store.review_command_window(snapshot_id, sorted(seen))
+    if histories is None:
+        histories = store.review_command_histories(snapshot_id, sorted(seen))
+        current_revisions(histories, snapshot_id=snapshot_id)
     if not any(row['object_id'] == object_id for row in histories):
         raise ConsoleError('unknown_object')
     return histories
 
 
-def execute_review_command(console, submitted, invoke):
+def execute_review_command(console, submitted, invoke, *, completed_command=None):
     """Enclose the entire existing MRO in one request-owned native command."""
     command = dict(submitted)
     compact = command.pop('_compact_result', False)
     interaction_id = str(command.pop('_interaction_id', '') or '')
+    original_ids = command.pop('_original_ids', None)
     if not interaction_id:
         interaction_id = str((command.get('interaction_evidence') or {}).get('interaction_id') or '')
     sid, oid = str(command.get('snapshot_id') or ''), str(command.get('object_id') or '')
@@ -134,6 +150,18 @@ def execute_review_command(console, submitted, invoke):
                 # if its chosen branch actually requires source validation.
                 source_failure = exc.code
                 fragments = None
+        original_checks = None
+        if original_ids is not None:
+            from src.integrity_kernel import stable_hash
+            original_checks = {}
+            if frozen is not None:
+                original_rows = documents.review_command_current_heads(sid, original_ids)
+                with console._open_original_reader(envelope, frozen) as require:
+                    for obj in original_rows:
+                        try:
+                            original_checks[stable_hash(obj)] = {'opened': require(obj)}
+                        except ConsoleError as exc:
+                            original_checks[stable_hash(obj)] = {'error': exc.code}
         if envelope.get('decision_graph'):
             envelope=console._tree_envelope(sid,envelope=envelope)
         identity = _source_identity(envelope)
@@ -147,18 +175,27 @@ def execute_review_command(console, submitted, invoke):
                         console._lock_document_row(con, sid)
                         console._require_role(command['actor_id'], 'reviewer', current=True)
                         current, counters = documents.review_document_input(sid, command=True)
+                        if completed_command is not None and generation is None:
+                            completed = completed_command(current)
+                            if completed is not None:
+                                return completed
                         if _source_identity(current) != identity:
                             raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
                         if generation is not None:
                             if generation != counters:
                                 raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+                            if completed_command is not None:
+                                completed = completed_command(current)
+                                if completed is not None:
+                                    return completed
                         elif expected is not None:
                             # Explicit old-token compatibility; the compact POST
                             # never enters this whole-objectset equality adapter.
                             actual = documents.objects_revision(sid)
                             if actual != expected:
                                 raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=actual)
-                        histories = capture_histories(console, sid, oid, command)
+                        histories = capture_histories(console, sid, oid, command,
+                            admission_context=original_ids is not None)
                         object_ids = sorted({row['object_id'] for row in histories})
                         if 'decision_graph_evidence' in envelope:
                             if (current.get('_document_inputs') or {}).get('tree')!=(envelope.get('_document_inputs') or {}).get('tree'):
@@ -167,7 +204,8 @@ def execute_review_command(console, submitted, invoke):
                         current['quality_processing_runs'] = documents.review_command_quality_input(sid, object_ids)
                         bindings = reviews.read_bindings([sid], object_ids=object_ids).get(sid, [])
                         inputs = ReviewCommandInputs(console, sid, current, histories, bindings,
-                            fragments, frozen, source_path, oid, interaction_id, precondition, source_failure)
+                            fragments, frozen, source_path, oid, interaction_id, precondition, source_failure,
+                            original_checks)
                         with review_command_scope(inputs) as changes, buffer_events(console._ledger_path):
                             # The original precondition has just been checked in
                             # its own contract. Nested existing validators use
@@ -187,6 +225,7 @@ def execute_review_command(console, submitted, invoke):
                                     reviewer_account_id=command['actor_id'], snapshot_id=sid,
                                     review_stage=str((duty or {}).get('stage') or 'first_review'),
                                     focal=focal, objects=live, review_path=path)
+                            command.pop('_dependency_ids', None)
                             try:
                                 result = invoke(command)
                             except ConsoleError as exc:

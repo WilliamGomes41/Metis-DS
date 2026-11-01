@@ -425,6 +425,23 @@ def projection(obj: dict[str, Any], objects: Iterable[dict[str, Any]]) -> dict[s
     return projections(objects)[str(obj.get("object_id") or "")]
 
 
+def _context_submission(*, actor_id, snapshot_id, source_object_id, role, target_object_ids,
+                        reason, command_id, expected_revision):
+    from src.operations_console_v1 import ConsoleError
+    if role not in {'label', 'context', 'excluded', 'reset'}:
+        raise ConsoleError('source_context_role_invalid')
+    if not reason.strip() or len(reason) > 4000:
+        raise ConsoleError('source_context_reason_required')
+    if not command_id.strip() or len(command_id) > 128 or not expected_revision:
+        raise ConsoleError('source_context_command_required')
+    targets = sorted(set(str(value).strip() for value in target_object_ids if str(value).strip()))
+    if len(targets) > 100 or (role in {'excluded', 'reset'} and targets) or (role in {'label', 'context'} and not targets):
+        raise ConsoleError('source_context_target_required')
+    payload_hash = stable_hash({'actor_id': actor_id, 'snapshot_id': snapshot_id,
+        'source_object_id': source_object_id, 'role': role, 'targets': targets, 'reason': reason.strip()})
+    return targets, payload_hash
+
+
 def confirm_source_context(console: Any, **command: Any) -> dict[str, Any]:
     """Serialize the snapshot before reading, through the real DB commit."""
     documents = getattr(console, "workflow_document_store", None)
@@ -435,19 +452,29 @@ def confirm_source_context(console: Any, **command: Any) -> dict[str, Any]:
     from src.workflows.workflow_transaction_v1 import workflow_transaction, workflow_transaction_active
     if documents is None or reviews is None or workflow_transaction_active():
         raise ConsoleError("source_context_independent_transaction_required")
-    with console._store_write_lock():
-        try:
-            with workflow_transaction(reviews) as connection:
-                reviews._lock_authorizations(connection)
-                connection.execute("SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
-                                   (command["snapshot_id"],))
-                result = _confirm_source_context(console, **command)
-            return result
-        except Exception:
-            # Refresh the process view from rolled-back PG authority.
-            console._reload_store_locked()
-            console._refresh_review_runtime()
-            raise
+    from src.review.review_command_v1 import execute_review_command
+    targets, payload_hash = _context_submission(**command)
+    command['target_object_ids'] = targets
+    sid, oid = command['snapshot_id'], command['source_object_id']
+
+    def completed(current):
+        if command['actor_id'] not in current.get('named_reviewers', []):
+            raise ConsoleError('reviewer_not_named_on_snapshot')
+        if console.snapshot_is_published(sid):
+            raise ConsoleError('published_working_revision_immutable')
+        event = reviews.source_command_receipt(sid, EVENT, command['command_id'])
+        if event is None:
+            return None
+        details = event['details']
+        if details.get('payload_hash') != payload_hash:
+            raise ConsoleError('source_context_command_conflict')
+        return {**deepcopy(details['result']), 'idempotent': True}
+
+    return execute_review_command(console, {'actor_id': command['actor_id'], 'snapshot_id': sid,
+        'object_id': oid, 'expected_revision': command['expected_revision'],
+        '_dependency_ids': targets, '_original_ids': [oid]},
+        lambda internal: _confirm_source_context(console, **{**command,
+            'expected_revision': internal['expected_revision']}), completed_command=completed)
 
 
 def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
@@ -457,18 +484,11 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
     from src.review.revision_workflow import bump_patch
     from src.vorming.passage_register_v1 import passage_register_record
 
-    if role not in {"label", "context", "excluded", "reset"}:
-        raise ConsoleError("source_context_role_invalid")
-    if not reason.strip() or len(reason) > 4000:
-        raise ConsoleError("source_context_reason_required")
-    if not command_id.strip() or len(command_id) > 128 or not expected_revision:
-        raise ConsoleError("source_context_command_required")
-    targets = sorted(set(str(value).strip() for value in target_object_ids if str(value).strip()))
-    if len(targets) > 100 or (role in {"excluded", "reset"} and targets) or (role in {"label", "context"} and not targets):
-        raise ConsoleError("source_context_target_required")
-    payload_hash = stable_hash({"actor_id": actor_id, "snapshot_id": snapshot_id,
-                               "source_object_id": source_object_id, "role": role,
-                               "targets": targets, "reason": reason.strip()})
+    targets, payload_hash = _context_submission(actor_id=actor_id, snapshot_id=snapshot_id,
+        source_object_id=source_object_id, role=role, target_object_ids=target_object_ids,
+        reason=reason, command_id=command_id, expected_revision=expected_revision)
+    from src.review.review_command_state_v1 import active_review_command, review_bindings_view
+    scoped = active_review_command(console, snapshot_id)
     with console._store_write_lock():
         console._reload_store_locked()
         reviewer = console._require_role(actor_id, "reviewer")
@@ -477,7 +497,7 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
             raise ConsoleError("reviewer_not_named_on_snapshot")
         if console.snapshot_is_published(snapshot_id):
             raise ConsoleError("published_working_revision_immutable")
-        for event in read_events(console._ledger_path):
+        for event in [] if scoped is not None else read_events(console._ledger_path):
             details = event.get("details") or {}
             if event.get("event_type") == EVENT and details.get("snapshot_id") == snapshot_id and details.get("command_id") == command_id:
                 if details.get("payload_hash") != payload_hash:
@@ -559,7 +579,7 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
         # This is part of the same object/binding/audit transaction, no backfill.
         from src.vorming.admission_gate_v1 import apply_admission_gate
         path, data = console._verified_source_bytes(envelope)
-        extracted = console._extract(envelope["content_kind"], path,
+        extracted = scoped.inputs.fragments if scoped is not None else console._extract(envelope["content_kind"], path,
                                      document_id=envelope["document_id"], source_id=envelope["source_id"],
                                      assess_pages=envelope["class"] != "beslisboom",
                                      accounted_pages=envelope.get("source_page_accountings"))
@@ -581,7 +601,7 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
             if row["object_id"] in changed and row["object_id"] != source_object_id:
                 changed[row["object_id"]] = row
         history = console._load_objects(snapshot_id, remember=False)
-        bindings = deepcopy(console._bindings)
+        bindings = deepcopy(review_bindings_view(console))
         for oid, updated in changed.items():
             stamp_canonical_hashes(updated)
             errors = schema_errors(updated, console.schema_path)
