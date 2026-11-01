@@ -74,5 +74,16 @@ MET-44. MET-42 en het parentissue worden hiermee niet automatisch gesloten.
 - Repositorypreflight, architectuurgrenzen, zes architectuurinvarianten en
   het volledige Class-A/high-risk-PR-contract zijn gecontroleerd.
 
-De volledige regressiesuite en remote CI moeten nog afronden. Deze controles
-vervangen het expliciet rode gecombineerde ketenbewijs niet.
+De volledige lokale collectie is uitgevoerd: 6754 cases, 6709 geslaagd,
+2 falende oude formulierasserties, 43 bestaande optionele skips, nul
+PostgreSQL-skips. De twee tests eisten de oude volledige objectsettoken op
+het foutscherm; de begrensde foutread gebruikt dezelfde bestaande generatie-
+preconditie als gewone passage-GET. Hun modules zijn daarna aangepast en
+afzonderlijk groen (4 + 6 tests), inclusief werkelijk indienen van het
+herstelde formulier. Een aanvullende echte formuliercontrole bewaart ook alle
+bestaande contextdoelen buiten de 25-rijenkeuzepagina (2 cases groen).
+
+De rode volledige-runresultaten worden niet als groen samengevoegd.
+`local-results.json` bewaart de aantallen en de status. Definitieve GitHub CI
+op de laatste commit moet nog afronden. Deze controles vervangen het expliciet
+rode gecombineerde ketenbewijs niet.

@@ -480,6 +480,14 @@ def test_linked_context_outside_picker_page_keeps_full_projection(review_client,
     selected = source_accountability(package.objects, bindings=package.bindings, fragments=package.fragments)
     for oid in [source['object_id'], *(o['object_id'] for o in targets)]:
         assert selected[oid] == full[oid]
+    if many_targets:
+        from tests.test_source_context_review_ui_v1 import _link_form, _payload
+        page = _client.get('/source-selection', params={'document': sid, 'object': source['object_id']})
+        assert page.status_code == 200
+        # The 25-row display picker must not silently uncheck an existing
+        # target outside that page when the user opens this source's form.
+        draft = _payload(_link_form(page))
+        assert set(draft['target_object_ids']) == {o['object_id'] for o in targets}
 
 
 def test_unknown_snapshot_and_database_failure_remain_distinct(review_client, monkeypatch):

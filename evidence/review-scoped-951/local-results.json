@@ -1,0 +1,25 @@
+{
+  "status": "full_scan_red_two_assertions_corrected_in_targeted_runs_final_ci_pending",
+  "full_scan_revision": "1527dddd4e8db6f748913fc68b7a2d2ae66870d6",
+  "product_code_identical_through": "26495702567a06e220e1e4bee1165d15832abb8d",
+  "collected": 6754,
+  "executed_cases": 6754,
+  "passed": 6709,
+  "failed": 2,
+  "errors": 0,
+  "skipped": 43,
+  "postgres_skips": [],
+  "complete_partition": true,
+  "corrected_modules": {
+    "tests/test_review_context_navigation_asgi_v1.py": {
+      "passed": 4
+    },
+    "tests/test_source_context_review_ui_v1.py": {
+      "passed": 6
+    }
+  },
+  "offpage_context_form_cases": {
+    "passed": 2
+  },
+  "combined_post_budget": "FAIL legacy21.873s compact23.027s; goal3s; unchanged"
+}
