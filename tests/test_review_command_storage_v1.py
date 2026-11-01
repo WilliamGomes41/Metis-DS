@@ -90,6 +90,27 @@ def test_native_review_delta_refuses_stale_history_and_unsupported_envelope(comp
     assert object_storage(documents, sid) == durable[0]
 
 
+def test_legacy_generation_does_not_replace_independent_current_history_guard(complete_postgres):
+    """Migration021's counter is conditional; native0 still needs exact reread."""
+    documents, _reviews, sid, _reviewer = seed(complete_postgres)
+    before = documents.review_command_histories(sid, ['delta-a'])
+    envelope = documents.get_envelope(sid)
+    counters = document_counters(documents, sid)
+    with documents._connect() as con:
+        assert con.execute('SELECT processing_storage_version FROM workflow.documents '
+            'WHERE snapshot_id=%s', (sid,)).fetchone()['processing_storage_version'] in (None, 0)
+        changed = con.execute("UPDATE workflow.document_objects SET payload=jsonb_set(payload,'{text}',"
+            "'\"Independent legacy writer\"'::jsonb) WHERE snapshot_id=%s "
+            "AND object_id='delta-a' AND object_version='1.1'", (sid,))
+        assert changed.rowcount == 1
+    assert document_counters(documents, sid) == counters
+    winner = object_storage(documents, sid)
+    with pytest.raises(WorkflowDocumentStoreError, match='snapshot_object_write_conflict'):
+        documents.apply_review_changes(sid, before, before, envelope, envelope)
+    assert object_storage(documents, sid) == winner
+    assert document_counters(documents, sid) == counters
+
+
 def test_native_transition_chain_keeps_each_history_guard(tmp_path, production_console):
     from src.review.revision_workflow import revise_object
     from tests.test_t9_review_knowledge_authority import _console

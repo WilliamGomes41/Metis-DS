@@ -344,6 +344,9 @@ def test_postcanonical_workflow_failure_retries_same_release_and_converges(
     source = MemorySourceStore()
     console, accounts, receipt = _ready_console(tmp_path, workflow_postgres, durable, source)
     snapshot_id = receipt["snapshot_id"]
+    # Compose B before publication: startup after the crash is itself allowed
+    # to reconcile, which would skip the still-unreconciled ingress window.
+    restarted = _console(tmp_path, workflow_postgres, durable, source, runtime_name="runtime-b")
     documents = console.workflow_document_store
     real_write = documents.write_bundle
     failed = {"value": False}
@@ -368,7 +371,23 @@ def test_postcanonical_workflow_failure_retries_same_release_and_converges(
     assert persisted_after_failure is not None
     assert persisted_after_failure["state"] == "captured_not_published"
 
-    retry = console.publish(
+    # MET-43: an independent ordinary Review ingress must see canonical sealing
+    # during this crash window, even though workflow publication is still old.
+    before_objects = restarted.snapshot_objects(snapshot_id)
+    before_bindings = restarted.object_review_bindings(snapshot_id)
+    before_events = restarted.workflow_review_store.read_events()
+    before_revision = restarted.objects_revision(snapshot_id)
+    target = next(obj for obj in before_objects if obj.get("object_type") != "document")
+    with pytest.raises(ConsoleError, match="published_working_revision_immutable"):
+        restarted.review_object(actor_id=accounts["reviewer"]["account_id"],
+            snapshot_id=snapshot_id, object_id=target["object_id"], decision="later")
+    assert restarted.snapshot_objects(snapshot_id) == before_objects
+    assert restarted.object_review_bindings(snapshot_id) == before_bindings
+    assert restarted.workflow_review_store.read_events() == before_events
+    assert restarted.objects_revision(snapshot_id) == before_revision
+    assert documents.get_envelope(snapshot_id) == persisted_after_failure
+
+    retry = restarted.publish(
         actor_id=accounts["publisher"]["account_id"], snapshot_id=snapshot_id
     )
 

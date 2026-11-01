@@ -5,8 +5,9 @@ Rewrite risk: high
 Promise: ordinary review/source decisions validate the current transition without
 reloading a retained historical prefix on every decision; atomicity, lineage,
 current dependencies and existing precondition variants remain effective.
-Base: `3cc653bc26fd61748bd9f0b402c012b846dc0d27`. This implements the remaining
-#729 scope under #959, consuming #952's dependency/atomicity proof. It does not
+Base: `3cc653bc26fd61748bd9f0b402c012b846dc0d27`. This implements the first bounded
+ordinary/single-source mutation slice of #729 under #959, consuming #952's
+dependency/atomicity proof. It does not
 claim #729 or production acceptance complete from a partial technical increment.
 
 ## Usage before implementation
@@ -44,7 +45,30 @@ unbounded and is not accepted as the normal prepared-path performance proof.
   indexed raw head and frontier. Every actual row change invalidates the derived
   certificate and advances its epoch, including nativeNULL/0, identity moves,
   historical live-field changes and TRUNCATE. Epoch plus own affected-row counts
-  detects an extra same-connection mutation before resealing.
+  detects an extra same-connection mutation before resealing. Each intended SQL
+  write must return exactly one row with the planned physical identity, position
+  and exact JSON; BEFORE-trigger alteration/suppression cannot seal a wrong prefix.
+- The certificate retains the original lineage owner's hidden-prefix knowledge
+  and publication inputs, excluding the current boundary head. The current head
+  and each new edge still undergo the existing strict self-hash/transition rules.
+- Source admission includes actual ordered neighbours, including unlinked
+  conditions and heading sentinels. Indexed order is derived from validated heads;
+  absent/unprepared indexing selects the explicit complete legacy adapter.
+- Every object-write trigger shares the existing document row serialization,
+  including native0. Unselected source order cannot commit during a protected
+  command. Supported runtime ingress retains document-before-object locking;
+  arbitrary direct SQL with inverted order may safely deadlock/rollback, as with
+  the existing native1 generation writer. No deadlock-free arbitrary SQL claim.
+- Migration032 seeds identifier coverage only (NULL certificates), uses a deferred
+  FK preventing index deletion from hiding existing objects, and a fail-closed
+  JSON/hash/epoch CHECK. Existing object-writer SELECT/INSERT/UPDATE grantees receive
+  exactly those index grants atomically with migration; no DELETE/ALL/PUBLIC.
+- Source-context preflight opens original source outside the protected lock;
+  exact captured head/source identity pins the result at commit. The original
+  source representation owner supplies retained accepted fragments. No model,
+  extraction or second source-role writer runs on the prepared single-command path.
+- D1 uses account KEY SHARE and sign-in NO KEY UPDATE. Retirement still refuses
+  the next command; this introduces no stronger in-flight cancellation promise.
 
 This is validation metadata over `document_objects`, not a second history,
 KnowledgeObject, source-fact, approval, closure or publication authority. Optional
@@ -131,7 +155,8 @@ Supported runtime topologies: complete native PostgreSQL local/Azure composition
 independent runtimes/lock files over one DB; legacy raw-list/file adapters retain
 their original contracts. Process locks do not substitute for native concurrency.
 Persisted-state impact: additive derived execution index/trigger migration only;
-no object identity/content/history, release or source mutation/backfill by DDL.
+identifier-only coverage seed and deferred physical-coverage FK; no content,
+identity, release or source backfill. Table triggers serialize legacy writers too.
 Compatibility/migration plan: expand schema, seal new validated writers, explicitly
 prepare old retained state with consistent capture/CAS, prove parity and bounded
 route, controlled cutover then legacy cleanup. Optional review cards stay optional.
@@ -150,3 +175,55 @@ all precondition variants, policy/binding/actor/source races, failed intermediat
 transition/audit/commit, missing certificates, TRUNCATE/restore, sealed canonical
 crash window, restart, unrelated-data growth, concurrent GET/signin and actual lock
 hold/wait. Consume MET-43's exact proof source/head; no scope closure from CI alone.
+
+
+## Scope and retained work
+
+This slice changes actual production ingress for ordinary Review and individual
+`confirm_source_context`. The source bulk/group adapter remains explicit legacy
+behavior; D2 supersession, V3 removal policy, complete route inventory, independent
+cross-document concurrency and production existing-data acceptance remain open in
+#729/#959/#953. Do not close MET-36, MET-43 or MET-44 from this PR. MET-35's source
+writer consolidation is not absorbed. Old m2 callers intentionally retain full
+objectset equality; generation and None contracts are unchanged. Receipt-first
+old-m2 duplicate handling and generation-form stale409 remain distinct contracts.
+
+The component diagram is [bounded-review-mutations-729](../architecture/bounded-review-mutations-729.md),
+linked from the existing Alles over Metis document-storage model.
+
+## Executed local evidence and limits
+
+Red-test/design commit `877e0bbde65780e0f8fa88901e26876ce8918c93`, based on main
+`3cc653bc26fd61748bd9f0b402c012b846dc0d27`, reproduced the retained-history HTTP
+save at **22.654s**, above the unchanged 3s budget. A separate negative test
+refused any full-prefix read on the prepared ordinary command path.
+
+The first implementation run saved in **0.362s**; the subsequent full-chain run
+saved in **0.325s**, opened in1.256s, redirected in3.125s, reopened in1.243s and
+rejected the stale form in0.065s. The full-chain test also preserves another
+reviewer's decision and refuses incomplete publication. The latter run recorded
+outer hold **250.537ms** and transaction250.506ms: ordinary250ms lock acceptance
+is explicitly **not proven** by that measurement. Subsequent exact final-tip
+measurements and suite results are recorded in the PR/evidence summary, not
+inferred from this earlier run.
+
+The real single-source HTTP operation measured small/1500-retained-history/
+1500-history+24-independent-documents+1000-events+1000-bindings at0.126/0.121/
+0.162s with outerholds74/77/106ms in the initial focused run. It forbids global
+object/event/binding readers, re-extraction, full writers and source I/O inside
+the protected lock. These are local synthetic measurements, not productionlatency.
+
+The eight current-dependency/atomicity tests from MET-43 proof commit
+`36112a6f1559601e77d96ab098a682e20f3727dd` passed against this implementation,
+using this checkout's actual source modules. Existing source-context publication,
+successor, withdrawal and restart regression tests also passed. Dedicated native
+negatives cover direct/native0 historical edits, truncation, stale/wrong-store
+carriers, physical/payload identity mismatch, invalid strict self-hash, hidden
+historical protection, preparation CAS races, raw numeric equality and ordered
+transition substitution. Exact rows/counters/index state are compared at refusal.
+
+Independent adversarial review found strict-head self-hash, source-neighbour,
+physical-identity, SQLNULL CHECK, Python-numeric equality and actual written-row
+holes. All require concrete negative proof before PR review; no green-suite-only
+safety conclusion. Existing-data preparation and live original failing-URL proof
+remain MET-44 after authorized merge/deployment; no production action here.
