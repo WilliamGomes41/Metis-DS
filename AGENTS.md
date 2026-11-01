@@ -40,6 +40,8 @@ PostgreSQL tests need a server; never treat their skip as a pass. `pytest` start
 
 Issues live in this repo’s GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md`. What agents record in GitHub versus Linear, and the session handoff format: `docs/agents/linear-github-handoff.md`.
 
+Every console deployment MUST follow `docs/agents/deployment-protocol.md`: container image by digest from an exact `main` commit, rollback point recorded first, one command block per step, and Done only after `deployment_verified` plus the in-console check.
+
 ### Triage labels
 
 Canonical roles map 1:1 to tracker labels. See `docs/agents/triage-labels.md`.

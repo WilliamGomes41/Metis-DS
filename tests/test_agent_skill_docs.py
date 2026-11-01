@@ -64,6 +64,41 @@ def test_agent_skill_wayfinding_docs_are_present_and_linked() -> None:
         assert label in triage_labels
 
 
+def test_deployment_protocol_is_mandatory_and_keeps_the_container_route() -> None:
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "Every console deployment MUST follow `docs/agents/deployment-protocol.md`" in agents
+    protocol = (ROOT / "docs/agents/deployment-protocol.md").read_text(encoding="utf-8")
+    assert "docs/AZURE_RELEASE_RUNBOOK.md" in protocol
+    assert (ROOT / "docs/AZURE_RELEASE_RUNBOOK.md").is_file()
+
+    # One route: an exact main commit as a container image, swapped by digest.
+    for rule in (
+        "scripts/build_azure_release_image.sh",
+        "@sha256:",
+        "De ZIP-route (`deploy-production.yml`) is niet van toepassing",
+        "Wissel nooit op een tag",
+        "Alleen een exacte `main`-commit",
+        "GO van de projectlead per stap die Azure wijzigt",
+        "Zet het rollbackcommando nooit in hetzelfde blok als de wissel",
+    ):
+        assert rule in protocol
+
+    # Preconditions before the swap, in order.
+    order = [protocol.index(step) for step in (
+        "Rollbackpunt vastleggen", "release_settings_preflight.py",
+        "Geen lopende verwerking", "--runtime-role vvn-metis-console",
+        "Image bouwen", "Wisselen op digest", "Verifiëren",
+    )]
+    assert order == sorted(order)
+
+    # Done needs measured verification and a recorded handoff.
+    for evidence in (
+        "deployment_verified commit=<sha>", "pg_stat_activity", "request_finished",
+        "linear-github-handoff.md", "gemerged + gedeployed + geverifieerd",
+    ):
+        assert evidence in protocol
+
+
 def test_handoff_preserves_github_authority_and_requires_done_evidence() -> None:
     contract = (ROOT / "docs/agents/linear-github-handoff.md").read_text(encoding="utf-8")
     for obligation in (
