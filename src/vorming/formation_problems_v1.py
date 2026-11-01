@@ -46,6 +46,7 @@ def collect(console, *, actor_id, snapshot_id):
     from src.review.beslisboom_path_v1 import review_path_for_klasse
     envelope = console._envelope(snapshot_id)
     authorize(console, actor_id, envelope)
+    envelope = console._processing_history_envelope(snapshot_id)
     objects = console._read_current_objects(snapshot_id)
     bindings = console.object_review_bindings(snapshot_id, objects=objects)
     fragments = stored_extraction(envelope)

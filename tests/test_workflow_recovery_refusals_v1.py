@@ -14,7 +14,7 @@ from src.workflows import workflow_chain_recovery_v1 as recovery
 
 def test_refusals_are_part_of_the_workflow_recovery_boundary():
     assert 'publication_refusals' in recovery.WORKFLOW_TABLES
-    assert recovery.WORKFLOW_RECOVERY_VERSION == 8
+    assert recovery.WORKFLOW_RECOVERY_VERSION == 9
     columns = recovery._WORKFLOW_COLUMNS['publication_refusals']
     assert columns[0] == 'refusal_id' and 'dedup_key' in columns and 'reason_codes' in columns
     assert recovery._WORKFLOW_JSON_COLUMNS['publication_refusals'] == {'reason_codes'}
@@ -23,7 +23,7 @@ def test_refusals_are_part_of_the_workflow_recovery_boundary():
 def test_version_6_backup_upgrades_with_empty_refusals():
     state = {'workflow_recovery_version': 6, 'workflow_tables': {'documents': []}}
     upgraded = recovery._upgrade_workflow_state(state)
-    assert upgraded['workflow_recovery_version'] == 8
+    assert upgraded['workflow_recovery_version'] == 9
     assert upgraded['workflow_tables']['publication_refusals'] == []
     assert 'publication_refusals' not in state['workflow_tables']  # input NOOIT mutated
 

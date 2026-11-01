@@ -26,18 +26,38 @@ def execute(console: Any, **command: Any) -> dict[str, Any]:
         raise ConsoleError("decision_review_independent_transaction_required")
     bind_workflow_stores(documents, reviews, getattr(console, "workflow_identity_store", None),
                          getattr(console, "workflow_remaining_store", None))
+    prepared_header=console._envelope(command["snapshot_id"])
+    console._require_role(command["actor_id"],'reviewer')
+    if command["actor_id"] not in prepared_header.get('named_reviewers',[]):
+        raise ConsoleError('reviewer_not_named_on_snapshot')
+    duplicate=any(event.get('event_type')==EVENT and
+        (event.get('details') or {}).get('snapshot_id')==command['snapshot_id'] and
+        (event.get('details') or {}).get('command_id')==command['command_id']
+        for event in read_events(console._ledger_path))
+    if duplicate:
+        with console._store_command(command['snapshot_id'],lock_row=True):
+            return _execute(console,_receipt_only=True,**command)
+    prepared_tree=console._tree_envelope(command["snapshot_id"],envelope=prepared_header)
+    from src.vorming.decision_graph_v1 import verify_source_evidence
+    try:
+        verify_source_evidence(console,prepared_tree)
+    except ValueError as error:
+        raise ConsoleError(str(error)) from error
     with console._store_command(command["snapshot_id"], lock_row=True):
-        return _execute(console, **command)
+        return _execute(console, _prepared_header=prepared_header, _prepared_tree=prepared_tree, **command)
 
 
 def _execute(console: Any, *, action: str, actor_id: str, snapshot_id: str,
              command_id: str, expected_revision: str, reason: str,
-             policy: dict[str, Any] | None = None, graph: dict[str, Any] | None = None) -> dict[str, Any]:
+             policy: dict[str, Any] | None = None, graph: dict[str, Any] | None = None,
+             _prepared_header=None, _prepared_tree=None, _receipt_only=False) -> dict[str, Any]:
     from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT, utc_now
     if not command_id.strip() or len(command_id) > 128 or not expected_revision or not reason.strip():
         raise ConsoleError("decision_review_command_required")
     payload_hash = stable_hash({"action": action, "actor": actor_id, "snapshot": snapshot_id,
                                "reason": reason, "policy": policy, "graph": graph})
+    prepared_header=_prepared_header or console._envelope(snapshot_id)
+    prepared_tree=(_prepared_tree or console._tree_envelope(snapshot_id,envelope=prepared_header)) if not _receipt_only else None
     with console._store_write_lock():
         console._reload_store_locked()
         account = console._require_role(actor_id, "reviewer")
@@ -52,6 +72,14 @@ def _execute(console: Any, *, action: str, actor_id: str, snapshot_id: str,
                 if d.get("payload_hash") != payload_hash:
                     raise ConsoleError("decision_review_command_conflict")
                 return {**deepcopy(d["result"]), "idempotent": True}
+        if _receipt_only:
+            raise ConsoleError('decision_review_command_conflict')
+        if _prepared_tree is None:
+            from src.vorming.decision_graph_v1 import verify_source_evidence
+            try:
+                verify_source_evidence(console,prepared_tree)
+            except ValueError as error:
+                raise ConsoleError(str(error)) from error
         current, revision = console.snapshot_objects_and_revision(snapshot_id)
         if revision != expected_revision:
             raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=revision)
@@ -61,11 +89,12 @@ def _execute(console: Any, *, action: str, actor_id: str, snapshot_id: str,
             raise ConsoleError("decision_graph_not_available")
         bindings = deepcopy(console._bindings)
         history = console._load_objects(snapshot_id, remember=False)
-        from src.vorming.decision_graph_v1 import verify_source_evidence
-        try:
-            verify_source_evidence(console, envelope)
-        except ValueError as exc:
-            raise ConsoleError(str(exc)) from exc
+        if '_document_inputs' in envelope:
+            if envelope['_document_inputs'].get('tree')!=prepared_header['_document_inputs'].get('tree'):
+                raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+            envelope['decision_graph_evidence']=prepared_tree['decision_graph_evidence']
+        elif envelope.get('decision_graph_evidence')!=prepared_tree.get('decision_graph_evidence'):
+            raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
         changed_routes = {}
         if action == "confirm":
             graph = envelope["decision_graph"]
@@ -133,6 +162,9 @@ def _execute(console: Any, *, action: str, actor_id: str, snapshot_id: str,
         prior = {o["object_id"]: o for o in current}
         history.extend(o for o in gated if o != prior[o["object_id"]])
         envelopes = deepcopy(console._envelopes)
+        if '_document_inputs' in envelope:
+            from src.workflows.processing_archives_v1 import TREE_FIELDS
+            envelope={k:v for k,v in envelope.items() if k not in TREE_FIELDS}
         envelopes[snapshot_id] = envelope
         result = {"snapshot_id": snapshot_id, "action": action, "command_id": command_id, "idempotent": False}
         console._commit_prepared_store(objects=(snapshot_id, history), envelopes=envelopes,

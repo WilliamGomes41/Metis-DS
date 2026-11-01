@@ -121,6 +121,8 @@ class McpQueries:
             rows = [pick(r, PASSAGE_FIELDS) for r in selected if not args.get('object_id') or r['object_id'] == args['object_id']]
             return {**result, **page(rows, args)}
         if name == 'get_processing_evidence':
+            if '_document_inputs' in envelope:
+                envelope=self.console._processing_history_envelope(sid)
             current_objects = list({row['object_id']: row for row in objects}.values())
             task_evidence = {}
             if envelope.get('processing_storage') == 'task-v1':
@@ -141,6 +143,8 @@ class McpQueries:
                       and (not args.get('object_id') or r.get('object_id') == args['object_id'])]
             return {**result, **page(events, args), 'note': 'Only events explicitly bound to this snapshot; unbound historical events excluded.'}
         if name == 'get_publication_status':
+            if envelope.get('decision_graph') and '_document_inputs' in envelope:
+                envelope=self.console._tree_envelope(sid,envelope=envelope)
             current = list({r['object_id']: r for r in objects}.values())
             store = getattr(self.console, 'canonical_publication_store', None)
             active = None if store is None else store.active_registry_summary(sid)

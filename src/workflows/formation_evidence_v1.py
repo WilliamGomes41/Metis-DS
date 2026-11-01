@@ -69,7 +69,18 @@ def retain_active_evidence(con, envelope, proof_id):
                          (envelope['snapshot_id'],)).fetchone()
     if not source or source['review_source_ref'] != header['capture']['source_ref']:
         fail('source_basis_mismatch')
-    if stable_json_hash(activation_replay(envelope.get('semantic_replay') or {})) != header['activation_replay_hash']:
+    pins=envelope.get('_document_inputs')
+    if pins is not None:
+        ref=pins.get('replay')
+        if not ref or not (ref==header['capture']['replay_ref'] or ref.get('payload_hash')==header['activation_replay_hash']):
+            fail('replay_changed')
+        return
+    if '_document_inputs' in envelope:
+        from src.workflows.operational_document_inputs_v1 import replay_reference
+        active_replay_ref=replay_reference(envelope)
+        if not active_replay_ref or not (active_replay_ref==header['capture']['replay_ref'] or active_replay_ref.get('payload_hash')==header['activation_replay_hash']):
+            fail('replay_changed')
+    elif stable_json_hash(activation_replay(envelope.get('semantic_replay') or {})) != header['activation_replay_hash']:
         fail('replay_changed')
     original = next((a for a in envelope.get('processing_attempts') or []
                      if a['attempt_id'] == header['capture']['attempt_id']), None)
@@ -226,7 +237,13 @@ class FormationEvidence:
                 owner_envelope = self.documents.get_envelope(envelope['snapshot_id'])
                 if owner_envelope is None or source_binding(owner_envelope) != source_binding(envelope):
                     fail('source_mismatch')
-                prior = owner_envelope.get('semantic_replay') or {}
+                if '_document_inputs' in owner_envelope:
+                    owner_ref=owner_envelope['_document_inputs'].get('replay')
+                    if owner_ref is None:
+                        fail('call_basis_missing')
+                    prior=self.read_processing_archive(owner_ref,envelope=owner_envelope)
+                else:
+                    prior = owner_envelope.get('semantic_replay') or {}
                 if replay.get('semantic_execution') != 'replay' or prior.get('identity') != identity:
                     fail('call_basis_missing')
                 expected_calls = call_sequence(prior.get('provider_evidence') or {})
@@ -370,7 +387,12 @@ def assert_activation(con, envelope):
         authorize_account(account, {'named_reviewers':reviewers})
     except ConsoleError as error:
         raise WorkflowDocumentStoreError('formation_evidence_activation_not_authorized') from error
-    if stable_json_hash(activation_replay(envelope.get('semantic_replay') or {})) != header['activation_replay_hash']:
+    if '_document_inputs' in envelope:
+        from src.workflows.operational_document_inputs_v1 import replay_reference
+        active_replay_ref=replay_reference(envelope)
+        if not active_replay_ref or not (active_replay_ref==header['capture']['replay_ref'] or active_replay_ref.get('payload_hash')==header['activation_replay_hash']):
+            fail('replay_changed')
+    elif stable_json_hash(activation_replay(envelope.get('semantic_replay') or {})) != header['activation_replay_hash']:
         fail('replay_changed')
     # Account lock waiting and hashing may consume the remaining lease.
     try:

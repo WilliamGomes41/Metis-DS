@@ -57,7 +57,7 @@ class _PostgresBadgeCountsMixin:
                                d.state,
                                d.publication_eligibility,
                                d.clinical_rereview_required,
-                               d.envelope_payload->'review_policy' IS NOT NULL AS has_explicit_policy,
+                               workflow.current_document_envelope(d)->'review_policy' IS NOT NULL AS has_explicit_policy,
                                EXISTS (
                                    SELECT 1
                                    FROM current_objects o
@@ -347,9 +347,9 @@ class _PostgresBadgeCountsMixin:
                     # The WP7 trigger derives this exact metadata in the same
                     # document write. Old unprepared rows keep explicit lazy
                     # compatibility; prepared rows never inspect their archive.
-                    envelope_column = ('COALESCE(d.review_card_envelope,d.review_read_envelope,d.envelope_payload)'
+                    envelope_column = ('COALESCE(d.review_card_envelope,d.review_read_envelope,workflow.current_document_envelope(d))'
                         if getattr(self, 'review_card_read_mode', 'legacy') == 'compact' else
-                        'COALESCE(d.review_read_envelope,d.envelope_payload)')
+                        'COALESCE(d.review_read_envelope,workflow.current_document_envelope(d))')
                     columns = _DOCUMENT_CARD_COLUMNS.replace('d.envelope_payload', envelope_column)
                     rows = con.execute(
                         f"SELECT {columns} FROM workflow.documents d "
@@ -363,17 +363,17 @@ class _PostgresBadgeCountsMixin:
                             for row in _document_cards_from_rows(rows)}
                 rows = con.execute(
                     f"""
-                    SELECT {_DOCUMENT_CARD_COLUMNS},
-                           COALESCE((SELECT jsonb_object_agg(k,d.envelope_payload->k)
+                    SELECT {_DOCUMENT_CARD_COLUMNS.replace('d.envelope_payload','workflow.current_document_envelope(d)')},
+                           COALESCE((SELECT jsonb_object_agg(k,workflow.current_document_envelope(d)->k)
                              FROM unnest(ARRAY['content_kind','binary_path','immutable_storage_locator',
                                'prepared_source_extraction','decision_tree_formation','decision_unit_contract',
                                'decision_graph','decision_graph_evidence','decision_graph_reviews']) k
-                             WHERE d.envelope_payload ? k), '{{}}'::jsonb)
+                             WHERE workflow.current_document_envelope(d) ? k), '{{}}'::jsonb)
                            || jsonb_build_object('quality_processing_runs', COALESCE((
                                SELECT jsonb_agg((SELECT jsonb_object_agg(k,a->k)
                                    FROM unnest(ARRAY['outcome','document_extraction','extractor_versions','source_fragments']) k
                                    WHERE a ? k) ORDER BY n)
-                               FROM jsonb_array_elements(COALESCE(NULLIF(d.envelope_payload->'quality_processing_runs','null'::jsonb),'[]'::jsonb))
+                               FROM jsonb_array_elements(COALESCE(NULLIF(workflow.current_document_envelope(d)->'quality_processing_runs','null'::jsonb),'[]'::jsonb))
                                  WITH ORDINALITY AS runs(a,n)), '[]'::jsonb)) AS review_inputs
                     FROM workflow.documents d
                     LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id

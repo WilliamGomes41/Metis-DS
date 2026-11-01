@@ -134,6 +134,8 @@ def execute_review_command(console, submitted, invoke):
                 # if its chosen branch actually requires source validation.
                 source_failure = exc.code
                 fragments = None
+        if envelope.get('decision_graph'):
+            envelope=console._tree_envelope(sid,envelope=envelope)
         identity = _source_identity(envelope)
         try:
             with console._store_write_lock():
@@ -158,6 +160,10 @@ def execute_review_command(console, submitted, invoke):
                                 raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=actual)
                         histories = capture_histories(console, sid, oid, command)
                         object_ids = sorted({row['object_id'] for row in histories})
+                        if 'decision_graph_evidence' in envelope:
+                            if (current.get('_document_inputs') or {}).get('tree')!=(envelope.get('_document_inputs') or {}).get('tree'):
+                                raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+                            current['decision_graph_evidence']=envelope['decision_graph_evidence']
                         current['quality_processing_runs'] = documents.review_command_quality_input(sid, object_ids)
                         bindings = reviews.read_bindings([sid], object_ids=object_ids).get(sid, [])
                         inputs = ReviewCommandInputs(console, sid, current, histories, bindings,

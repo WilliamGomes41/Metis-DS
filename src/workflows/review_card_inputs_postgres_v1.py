@@ -66,7 +66,7 @@ def available(con):
 
 def _document(con, sid, *, preparation=False):
     # Full-envelope fallback is confined to explicit/writer preparation, never GET.
-    fallback = """workflow.review_card_envelope_for(d.envelope_payload)
+    fallback = """workflow.review_card_envelope_for(workflow.current_document_envelope(d))
       || jsonb_build_object('snapshot_id',d.snapshot_id,'document_id',d.document_id,
         'source_id',d.source_id,'title',d.title,'class',d.class,'state',d.state,
         'date',to_char(d.source_date,'YYYY-MM-DD'),'version',d.source_version,
@@ -74,8 +74,8 @@ def _document(con, sid, *, preparation=False):
         'publication_eligibility',d.publication_eligibility) || jsonb_build_object(
         '_source_identity',jsonb_build_object('snapshot_id',d.snapshot_id,'source_id',d.source_id,'document_id',d.document_id,
         'sha256',d.source_sha256,'version',d.source_version,'content_kind',d.content_kind,
-        'extraction',d.envelope_payload#>'{prepared_source_extraction,record_hash}',
-        'extraction_header',workflow.review_card_envelope_for(d.envelope_payload)->'prepared_source_extraction',
+        'extraction',workflow.current_document_envelope(d)#>'{prepared_source_extraction,record_hash}',
+        'extraction_header',workflow.review_card_envelope_for(workflow.current_document_envelope(d))->'prepared_source_extraction',
         'source_ref',d.review_source_ref))"""
     header = f'COALESCE(d.review_card_envelope,({fallback}))' if preparation else 'd.review_card_envelope'
     row = con.execute(f'SELECT {header} AS envelope FROM workflow.documents d WHERE snapshot_id=%s', (sid,)).fetchone()

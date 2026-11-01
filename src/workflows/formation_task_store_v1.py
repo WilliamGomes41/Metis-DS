@@ -9,6 +9,7 @@ from src.vorming.semantic_replay_v1 import stable_json_hash
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError, _json_text
 from src.workflows.review_source_records_v1 import ReviewSourceRecords
 from src.workflows.processing_archives_v1 import ProcessingArchives
+from src.workflows.processing_archive_inputs_v1 import ProcessingArchiveInputs
 from src.workflows.formation_evidence_v1 import FormationEvidence
 
 STORAGE_VERSION = 1
@@ -20,9 +21,21 @@ def integrity(value, expected, code="formation_record_integrity_failed"):
     return value
 
 
-class FormationTaskStore(ReviewSourceRecords, ProcessingArchives, FormationEvidence):
+class FormationTaskStore(ReviewSourceRecords, ProcessingArchiveInputs, ProcessingArchives, FormationEvidence):
     def __init__(self, document_store):
         self.documents = document_store
+
+    def retained_extraction(self, envelope, record_hash):
+        from src.vorming.source_preparation_context_v1 import stored_extraction
+        with self.documents._connect() as con:
+            row = con.execute('SELECT payload FROM workflow.prepared_extraction_versions '
+                'WHERE record_hash=%s AND snapshot_id=%s',(record_hash,envelope['snapshot_id'])).fetchone()
+        if not row or row['payload'].get('record_hash') != record_hash:
+            raise WorkflowDocumentStoreError('source_extraction_identity_mismatch')
+        extraction = row['payload']
+        if stored_extraction({**envelope,'prepared_source_extraction':extraction}) is None:
+            raise WorkflowDocumentStoreError('source_extraction_identity_mismatch')
+        return extraction
 
     def _immutable(self, con, table, identity_column, identity, columns, values, payload):
         # All SQL identifiers are module-owned literals, never caller input.
@@ -337,11 +350,20 @@ class FormationTaskStore(ReviewSourceRecords, ProcessingArchives, FormationEvide
 
     @staticmethod
     def save_attempts(con, snapshot_id, attempts):
+        changed=False
         for attempt in attempts:
             attempt = dict(attempt)
             expected_version = attempt.pop("_record_version",None)
+            projection=attempt.pop('_input_projection',False)
+            if projection:
+                indexed=con.execute('SELECT payload=workflow.processing_attempt_input_for(%s::jsonb) AS unchanged '
+                    'FROM workflow.processing_attempt_inputs WHERE attempt_id=%s',(_json_text(attempt),attempt['attempt_id'])).fetchone()
+                if indexed and indexed['unchanged']:
+                    continue
             existing = con.execute("SELECT snapshot_id,command_id,payload,record_version FROM workflow.processing_attempts WHERE attempt_id=%s FOR UPDATE",
                                    (attempt["attempt_id"],)).fetchone()
+            if existing and projection:
+                attempt={**attempt,'diagnostic':{**(existing['payload'].get('diagnostic') or {}),**(attempt.get('diagnostic') or {})}}
             if existing and (existing["snapshot_id"] != snapshot_id or existing["command_id"] != attempt["command_id"]):
                 raise WorkflowDocumentStoreError("processing_command_conflict")
             if existing:
@@ -354,16 +376,21 @@ class FormationTaskStore(ReviewSourceRecords, ProcessingArchives, FormationEvide
                             k:v for k,v in existing["payload"].items() if k != "diagnostic"}:
                         continue
                     raise WorkflowDocumentStoreError("processing_attempt_write_conflict")
+            changed=True
             con.execute("INSERT INTO workflow.processing_attempts(attempt_id,snapshot_id,command_id,started_at,object_generation,payload) "
                         "SELECT %s,snapshot_id,%s,%s,object_generation,%s::jsonb FROM workflow.documents WHERE snapshot_id=%s "
                         "ON CONFLICT(attempt_id) DO UPDATE SET payload=EXCLUDED.payload,record_version=workflow.processing_attempts.record_version+1",
                         (attempt["attempt_id"],attempt["command_id"],attempt["started_at"],_json_text(attempt),snapshot_id))
-        if attempts:
-            latest = con.execute("SELECT payload FROM workflow.processing_attempts WHERE attempt_id=%s",
-                                 (attempts[-1]["attempt_id"],)).fetchone()["payload"]
+        if attempts and changed:
+            latest = con.execute("SELECT payload FROM workflow.processing_attempts WHERE snapshot_id=%s "
+                "ORDER BY started_at DESC,attempt_id DESC LIMIT 1",(snapshot_id,)).fetchone()['payload']
             summary = {"processing_attempts": [{k: deepcopy(v) for k,v in latest.items() if k != "diagnostic"}],
                        "ingest_observations": [{k: a.get(k) for k in ("started_at","finished_at")}
                            for a in attempts if a.get("state") == "succeeded" and a.get("kind") == "ingest"]}
+            if con.execute('SELECT document_storage_version FROM workflow.documents WHERE snapshot_id=%s',(snapshot_id,)).fetchone()['document_storage_version']==1:
+                summary['ingest_observations']=[{'started_at':r['payload'].get('started_at'),'finished_at':r['payload'].get('finished_at')}
+                    for r in con.execute("SELECT payload FROM workflow.processing_attempt_inputs WHERE snapshot_id=%s "
+                        "AND state='succeeded' AND kind='ingest' ORDER BY started_at,attempt_id",(snapshot_id,)).fetchall()]
             summary["processing_attempts"][0]["diagnostic"] = {"phase": (latest.get("diagnostic") or {}).get("phase")}
             reference = (latest.get("diagnostic") or {}).get("validator_input_ref")
             if reference:

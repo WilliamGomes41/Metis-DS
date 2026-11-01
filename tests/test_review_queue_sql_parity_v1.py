@@ -45,6 +45,7 @@ def summary_database():
     }
     for table, columns in definitions.items():
         con.execute(f"CREATE TABLE {schema}.{table} ({columns})")
+    con.execute(f"CREATE FUNCTION {schema}.current_document_envelope({schema}.documents) RETURNS jsonb LANGUAGE SQL STABLE AS 'SELECT $1.envelope_payload'")
     con.execute(f"INSERT INTO {schema}.topics VALUES (%s,%s)", ("parity-topic", "Parity"))
     captured = {}
 

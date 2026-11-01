@@ -471,6 +471,10 @@ def test_budget_stop_without_new_progress_consumes_retry_budget(tmp_path,product
         data=b'<html><body><h1>Een</h1><p>Gebruik geen zalf.</p><h1>Twee</h1><p>Controleer dagelijks de huid.</p></body></html>',
         ingest_kind="new",title="Budget",version="1",date="2026-10-24",live_url="",class_="richtlijn",family="test",
         named_reviewers=[users["reviewer_a"]["account_id"]])["snapshot_id"]
+    # Exhaust the model budget with the controlled monotonic clock. The real
+    # owner deadline must stay live while PG prepares/seals the partial proof;
+    # one wall-clock second made this accounting test depend on runner load.
+    model_budget_seconds = 60
     elapsed = [0]
     failure_code = [None]
     def provider(_url,_headers,payload,_timeout):
@@ -478,12 +482,12 @@ def test_budget_stop_without_new_progress_consumes_retry_budget(tmp_path,product
             raise ConsoleError(failure_code[0])
         text = json.loads(payload["input"][1]["content"])["source_blocks"][0]["text"]
         proposal = response_for(payload,text)
-        elapsed[0] = 2
+        elapsed[0] = model_budget_seconds + 1
         return {"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":json.dumps(proposal)}]}]}
     bind_pre_review_semantic_processing(console,environ={"METIS_PASSAGE_FORMATION_MODE":MODE,
         "METIS_LLM_API_KEY":"fixture","METIS_LLM_MODEL":"test"},post_json=provider)
     monkeypatch.setenv("METIS_FORMATION_TASK_STORAGE","v1")
-    monkeypatch.setattr(console,"_model_call_limits_reader",lambda:ModelCallLimits(total=1))
+    monkeypatch.setattr(console,"_model_call_limits_reader",lambda:ModelCallLimits(total=model_budget_seconds))
     monkeypatch.setattr(bounded,"time",SimpleNamespace(monotonic=lambda:time.monotonic()+elapsed[0]))
     attempt,_ = console.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id="budget-first",expected_revision=console.objects_revision(sid))
     console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=attempt)
@@ -501,7 +505,7 @@ def test_budget_stop_without_new_progress_consumes_retry_budget(tmp_path,product
     assert console.snapshot_objects(sid) == partial
     assert console.processing_status(sid)["retry_attempts_used"] == 1
     failure_code[0] = "pre_review_llm_input_limit_exceeded"
-    monkeypatch.setattr(console,"_model_call_limits_reader",lambda:ModelCallLimits(total=1))
+    monkeypatch.setattr(console,"_model_call_limits_reader",lambda:ModelCallLimits(total=model_budget_seconds))
     final,_ = console.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id="structural-stop",expected_revision=console.objects_revision(sid))
     with pytest.raises(ConsoleError,match="pre_review_llm_input_limit_exceeded"):
         console.execute_source_selection(actor_id=actor,snapshot_id=sid,attempt=final)

@@ -68,7 +68,7 @@ def test_runtime_sql_writes_are_covered_by_the_expectation():
         if re.search(rf"INSERT INTO {name}", code) or re.search(rf"_immutable\(con, ['\"]{table}['\"]", code):
             used.add("INSERT")
         if re.search(rf"UPDATE {name}", code) or re.search(
-                rf"INSERT INTO {name}[^;]{{0,800}}?DO UPDATE", code, re.DOTALL):
+                rf"INSERT INTO {name}(?:(?!\bcon\.execute\().){{0,800}}?DO UPDATE", code, re.DOTALL):
             used.add("UPDATE")
         if re.search(rf"DELETE FROM {name}", code):
             used.add("DELETE")

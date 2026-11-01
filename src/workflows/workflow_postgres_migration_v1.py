@@ -35,9 +35,12 @@ MIGRATION_NAMES = (
     "026_review_source_records.sql",
     "028_processing_archives.sql",
     "029_formation_evidence.sql",
+    "030_operational_document_inputs.sql",
 )
 REQUIRED_TABLES = frozenset(
     {
+        "document_inputs", "document_processing_records", "processing_archive_inputs",
+        "processing_archive_input_members", "processing_attempt_inputs",
         "accounts",
         "sessions",
         "documents",
@@ -66,6 +69,9 @@ REFUSAL_COLUMNS = (
 REQUIRED_CONSTRAINTS = frozenset({("publication_refusals", "publication_refusals_dedup_key_uniq", "u", ("dedup_key",))})
 REQUIRED_COLUMNS = frozenset(
     {
+        ("documents", "document_storage_version"),
+        ("document_inputs", "refs"),
+        ("processing_attempt_inputs", "record_version"),
         ("documents", "review_source_ref"),
         ("documents", "review_read_envelope"),
         *(("publication_refusals", column) for column in REFUSAL_COLUMNS),
@@ -125,6 +131,11 @@ RUNTIME_TABLE_PRIVILEGES = {
     "processing_archives": (_S, _I),
     "formation_evidence_roots": (_S, _I, _U),
     "formation_evidence_members": (_S, _I),
+    "document_inputs": (_S, _I, _U),
+    "document_processing_records": (_S, _I, _D),
+    "processing_archive_inputs": (_S, _I, _U),
+    "processing_archive_input_members": (_S, _I),
+    "processing_attempt_inputs": (_S, _I, _U),
 }
 # Serial sequences the runtime advances on INSERT (identity columns need no grant).
 RUNTIME_SEQUENCE_PRIVILEGES = {

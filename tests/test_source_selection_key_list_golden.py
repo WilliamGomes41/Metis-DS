@@ -29,7 +29,8 @@ def _legacy_documents(console, document=''):
     # summary projection. Both feed the same conservative overview contract.
     if document:
         console._envelope(document)
-    rows = console.workflow_document_store.list_envelopes()
+    rows = [console.workflow_document_store.processing_history_input(row['snapshot_id'])
+            for row in console.workflow_document_store.list_envelopes()]
     for row in rows:
         runs = row.get('quality_processing_runs') or []
         row['source_fragment_count'] = len(runs[-1].get('source_fragments', [])) if runs else None

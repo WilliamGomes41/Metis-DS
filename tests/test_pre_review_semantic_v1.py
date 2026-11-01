@@ -487,7 +487,7 @@ def test_processing_error_retains_failed_intent_without_activating_objects(tmp_p
         )
 
     assert error.value.code == "extract_failed"
-    envelope = console.list_envelopes()[0]
+    envelope = console._processing_history_envelope(console.list_envelopes()[0]['snapshot_id'])
     assert envelope["processing_attempts"][-1]["state"] == "failed"
     assert envelope["processing_attempts"][-1]["error_code"] == "extract_failed"
     assert console.snapshot_objects(envelope["snapshot_id"]) == []

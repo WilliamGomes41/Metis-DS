@@ -23,7 +23,7 @@ def claim(console, *, snapshot_id, attempt_id, actor_id=None, stop_event=None):
             observe("processing_claimed", snapshot_id, result)
         return result
     with console._reprocessing_transaction(snapshot_id):
-        envelope = console._envelope(snapshot_id)
+        envelope = console._processing_command_envelope(snapshot_id,attempt_id=attempt_id)
         attempt = assert_active(envelope, attempt_id, now())
         from src.vorming.source_selection_v1 import authorize
         authorize(console, actor_id or attempt["actor_id"], envelope)
@@ -64,7 +64,7 @@ def pending(console, *, limit=None, after_snapshot=None):
                     return found
             continue
         with console._reprocessing_transaction(sid):
-            envelope = console._envelope(sid)
+            envelope = console._processing_command_envelope(sid)
             before = deepcopy(envelope.get("processing_attempts"))
             expire_running(envelope, now())
             if envelope.get("processing_attempts") != before:

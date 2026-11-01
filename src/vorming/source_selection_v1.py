@@ -71,7 +71,7 @@ def assert_resume_configuration(console, envelope):
 
 def reserve_selection(console, *, actor_id, snapshot_id, command_id, expected_revision):
     with console._reprocessing_transaction(snapshot_id):
-        envelope = deepcopy(console._envelope(snapshot_id))
+        envelope = deepcopy(console._processing_command_envelope(snapshot_id,command_id=command_id))
         authorize(console, actor_id, envelope)
         if console.snapshot_is_published(snapshot_id):
             raise ConsoleError("published_objects_must_not_be_rewritten")
@@ -194,7 +194,7 @@ def projection(console, *, actor_id, snapshot_id, documents, observations=None, 
     from pathlib import Path
     from src.vorming.source_accountability_v1 import is_source_record
     from src.vorming.admission_gate_v1 import is_admission_blocked
-    envelope = console._envelope(snapshot_id)
+    envelope = console._processing_envelope(snapshot_id)
     authorize(console, actor_id, envelope)
     # The combined workspace may already own this exact document's problem read.
     # Reuse its disposable status instead of repeating the completeness checks.

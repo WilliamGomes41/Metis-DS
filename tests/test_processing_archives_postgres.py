@@ -131,7 +131,7 @@ def test_sql_mutations_fail_but_existing_document_cascade_is_allowed(archived_sy
     for sql, params in [
         ('UPDATE workflow.processing_archives SET record_key=record_key WHERE archive_id=%s', (ref['archive_id'],)),
         ('DELETE FROM workflow.processing_archives WHERE archive_id=%s', (ref['archive_id'],)),
-        ('TRUNCATE workflow.processing_archives', ())]:
+        ('TRUNCATE workflow.processing_archives CASCADE', ())]:
         with pytest.raises(psycopg.Error, match='processing_archive_immutable'):
             with store.documents._connect() as con:
                 con.execute(sql, params)

@@ -231,6 +231,10 @@ def unresolved_rejections(envelope, *, objects=None, bindings=None, fragments=No
     """The same exact closure decision for readiness and the problem projection."""
     replay = envelope.get("semantic_replay") or {}
     evidence = replay.get("provider_evidence") or {}
+    pins=envelope.get('_document_inputs')
+    if pins is not None and (bool(pins.get('replay')) != (pins.get('formation_variant')=='semantic')
+            or (pins.get('formation_variant')=='semantic' and not replay)):
+        return [{"kind":"formation","reason_code":"formation_evidence_unverified","spans":[]}]
     if not evidence.get("formation_incomplete"):
         return []
     pending = evidence.get("pending_rejections") or [{

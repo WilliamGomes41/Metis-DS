@@ -406,7 +406,8 @@ def test_same_pin_explicit_producer_retry_requires_live_authorization(pending_pr
 
 
 @pytest.mark.parametrize('azure', [False, True], ids=['local-source','azure-source'])
-def test_new_source_context_is_staged_and_switches_only_with_activation(tmp_path, production_console, monkeypatch, azure):
+@pytest.mark.parametrize('compact',[False,True],ids=['legacy-envelope','compact-envelope'])
+def test_new_source_context_is_staged_and_switches_only_with_activation(tmp_path, production_console, monkeypatch, azure, compact):
     from src.operations_console_v1 import ConsoleError
     from src.vorming.formation_checkpoint_v1 import TaskCheckpointWriter
     import src.vorming.extract_html_v1 as extractor
@@ -419,10 +420,12 @@ def test_new_source_context_is_staged_and_switches_only_with_activation(tmp_path
     migrate(console.workflow_document_store, sid, apply=True)
     console.reextract_unpublished(actor_id=actor, snapshot_id=sid)
     store = console.workflow_document_store
+    if compact:
+        store.activate_operational_inputs(store.prepare_operational_inputs(sid))
     def active():
         with store._connect() as con:
             return con.execute('SELECT formation_evidence_id,review_source_ref,'
-                "envelope_payload#>>'{prepared_source_extraction,record_hash}' AS extraction "
+                "CASE WHEN document_storage_version=1 THEN (SELECT refs->>'extraction_hash' FROM workflow.document_inputs i WHERE i.snapshot_id=workflow.documents.snapshot_id) ELSE envelope_payload#>>'{prepared_source_extraction,record_hash}' END AS extraction "
                 'FROM workflow.documents WHERE snapshot_id=%s', (sid,)).fetchone()
     before = active()
     original = TaskCheckpointWriter.seal_formation
@@ -433,7 +436,8 @@ def test_new_source_context_is_staged_and_switches_only_with_activation(tmp_path
         assert writer.staged_extraction['record_hash'] != before['extraction']
         assert writer.review_source_reference != before['review_source_ref']
         # An independent new worker reuses the staged immutable extraction.
-        attempt = writer.store.documents.get_envelope(sid)['processing_attempts'][-1]
+        header=writer.store.documents.get_envelope(sid)
+        attempt = writer.store.documents.processing_command_input(header)['processing_attempts'][-1]
         restarted = TaskCheckpointWriter(console, sid, attempt)
         assert restarted.staged_extraction == writer.staged_extraction
         captured.append(writer.staged_extraction['record_hash'])

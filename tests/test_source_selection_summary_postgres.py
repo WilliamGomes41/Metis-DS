@@ -342,6 +342,7 @@ def test_missing_projection_requires_explicit_resumable_backfill(
     with store._connect() as con:
         con.execute('ALTER TABLE workflow.documents DISABLE TRIGGER refresh_source_selection_summary')
         con.execute('UPDATE workflow.documents SET source_selection_summary=NULL WHERE snapshot_id=%s', (sid,))
+        con.execute('SET CONSTRAINTS ALL IMMEDIATE')
         con.execute('ALTER TABLE workflow.documents ENABLE TRIGGER refresh_source_selection_summary')
     with pytest.raises(WorkflowDocumentStoreError):
         store.list_source_selection_summaries()

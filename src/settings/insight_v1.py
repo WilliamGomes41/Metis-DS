@@ -550,6 +550,8 @@ def install_insight_routes(app: FastAPI, state, *, require_account: Callable[[Re
         else:
             state._require_role(account["account_id"], "publisher", current=True)
             processing = {}
+        if processing_access:
+            envelope=state._processing_history_envelope(document)
         query = escape(urlencode({"document": document}), quote=True)
         code = ("source_formation_incomplete" if processing.get("formation_incomplete")
                 else processing.get("error_code") or processing.get("reason_code") or "")

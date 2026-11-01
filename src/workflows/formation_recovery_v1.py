@@ -4,6 +4,7 @@ No independent backup authority, migration, reconstruction or activation. Import
 uses existing immutable root seal guards and validates the retained proof again.
 """
 import json
+from copy import deepcopy
 
 from src.publication.publication_chain_recovery_v1 import PublicationChainRecoveryError, _json_safe
 
@@ -15,11 +16,14 @@ TABLES = (
     'formation_task_plans', 'formation_source_views', 'source_read_roots',
     'source_read_fragments', 'source_read_blocks', 'source_read_block_fragments',
     'processing_archives', 'formation_evidence_roots', 'formation_evidence_members',
+    'processing_archive_inputs','processing_archive_input_members','document_inputs','document_processing_records',
 )
 FACT_TABLES = ('review_fact_state', 'review_object_facts')
 DOCUMENT_COLUMNS = ('snapshot_id', 'processing_storage_version', 'object_generation',
-                    'review_source_ref', 'formation_evidence_id', 'review_read_envelope', 'review_card_envelope')
-ROOTS = {'source_read_roots':'views_id', 'formation_evidence_roots':'proof_id'}
+                    'review_source_ref', 'formation_evidence_id', 'review_read_envelope', 'review_card_envelope','document_storage_version')
+ROOTS = {'source_read_roots':'views_id', 'formation_evidence_roots':'proof_id','processing_archive_inputs':'archive_id'}
+OPERATIONAL_TABLES=('document_processing_records','document_inputs')
+NEW_TABLES=('processing_archive_inputs','processing_archive_input_members',*OPERATIONAL_TABLES)
 ORDER = {
     'processing_attempts':'attempt_id', 'processing_document_summaries':'snapshot_id',
     'processing_checkpoints':'checkpoint_id', 'prepared_extraction_versions':'record_hash',
@@ -33,6 +37,8 @@ ORDER = {
     'source_read_block_fragments':'views_id,view_name,block_id,fragment_id',
     'processing_archives':'archive_id', 'formation_evidence_roots':'proof_id',
     'formation_evidence_members':'proof_id,role,member_key',
+    'processing_archive_inputs':'archive_id','processing_archive_input_members':'archive_id,role,member_key',
+    'document_inputs':'snapshot_id','document_processing_records':'snapshot_id,kind,ordinal',
     'review_fact_state':'snapshot_id', 'review_object_facts':'snapshot_id,object_id',
 }
 
@@ -45,6 +51,25 @@ def available(con):
     return con.execute("SELECT to_regclass('workflow.formation_evidence_roots') AS name").fetchone()['name'] is not None
 
 
+def upgrade_legacy(state):
+    """Add only absent storage capabilities to an original v8 backup.
+
+    No proof, task, source input or lifecycle decision is reconstructed.
+    The disposable attempt index is rebuilt by its normal row trigger.
+    """
+    result=deepcopy(state)
+    section=result.get('formation_recovery')
+    if section is not None and section.get('version')==1:
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(NEW_TABLES):
+            fail('shape_invalid')
+        section['version']=2
+        for table in NEW_TABLES:
+            section['tables'][table]=[]
+        for document in section['documents']:
+            document['document_storage_version']=0
+    return result
+
+
 def validate(state):
     section = state.get('formation_recovery')
     if section is None:
@@ -52,7 +77,7 @@ def validate(state):
                for d in (state.get('workflow_tables') or {}).get('documents', [])):
             fail('missing_reexport_required')
         return None
-    if (not isinstance(section, dict) or section.get('version') != 1
+    if (not isinstance(section, dict) or section.get('version') != 2
             or set(section.get('tables') or {}) != set(TABLES + FACT_TABLES)
             or not isinstance(section.get('documents'), list)):
         fail('shape_invalid')
@@ -71,7 +96,7 @@ def validate(state):
 def export(con):
     if not available(con):
         return None
-    return {'version':1,
+    return {'version':2,
             'documents':[_json_safe(dict(r)) for r in con.execute(
                 'SELECT '+','.join(DOCUMENT_COLUMNS)+' FROM workflow.documents ORDER BY snapshot_id').fetchall()],
             'tables':{table:[_json_safe(dict(r)) for r in con.execute(
@@ -101,7 +126,7 @@ def restore(con, state, store):
         rows = section['tables'][table]
         if any(set(row) != columns for row in rows):
             fail('columns_invalid:' + table)
-        if table in FACT_TABLES:
+        if table in FACT_TABLES or table in OPERATIONAL_TABLES:
             # Existing document/object triggers create disposable dirty facts.
             # Restore exact committed facts after all document pin updates below.
             continue
@@ -115,6 +140,10 @@ def restore(con, state, store):
             if not root['sealed']:
                 fail('unsealed_root')
             con.execute(f'UPDATE workflow.{table} SET sealed=true WHERE {key}=%s', (root[key],))
+    for table in OPERATIONAL_TABLES:
+        for row in section['tables'][table]:
+            con.execute(f'INSERT INTO workflow.{table} SELECT * FROM jsonb_populate_record(NULL::workflow.{table},%s::jsonb)',
+                        (json.dumps(row,ensure_ascii=False),))
     for document in section['documents']:
         # Generation was advanced by the ordinary object insertion triggers.
         # Restore the captured allocator/pins, never derive a fresh identity.

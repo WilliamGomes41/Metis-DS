@@ -1,0 +1,83 @@
+{
+  "commit": "6303b0895a5e77c2a84f8659a0babea1e1d972f5",
+  "python": "3.12.14",
+  "seconds": 6641.136,
+  "wall_seconds": 1741.515,
+  "exit_code": 0,
+  "tests": 6722,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 26,
+  "postgres_skips": [],
+  "postgres_version": 160015,
+  "collected": 6722,
+  "collection_digest": "34d34d95ab8749bcfc71b0857f44a8120b23f4a046caee4a2d5a5d947a129933",
+  "tree": "4cee99338fbca842db9d96ea427b0ce16c56fd4d",
+  "passed": 6696,
+  "command": "python scripts/measure_test_suite.py --shard-count 4 --shard-index <0..3>; python scripts/ci_test_shards.py merge",
+  "scope": "Exact complete pytest collection; four independent PostgreSQL 16 clusters; Chromium enabled.",
+  "skip_reasons": {
+    "real_Docling_models_acceptance": 12,
+    "optional_Bend": 11,
+    "existing_B23_not_implemented": 3
+  },
+  "final_followup": "Only documentation evidence and the fixed GitHub reference revision in Metis explained; content/browser checks rerun separately.",
+  "shards": [
+    {
+      "shard_index": 0,
+      "commit": "6303b0895a5e77c2a84f8659a0babea1e1d972f5",
+      "tests": 1300,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 22,
+      "postgres_skips": [],
+      "postgres_version": 160015,
+      "exit_code": 0,
+      "collection_digest": "34d34d95ab8749bcfc71b0857f44a8120b23f4a046caee4a2d5a5d947a129933",
+      "collected": 6722,
+      "seconds": 1741.515
+    },
+    {
+      "shard_index": 1,
+      "commit": "6303b0895a5e77c2a84f8659a0babea1e1d972f5",
+      "tests": 2145,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "postgres_skips": [],
+      "postgres_version": 160015,
+      "exit_code": 0,
+      "collection_digest": "34d34d95ab8749bcfc71b0857f44a8120b23f4a046caee4a2d5a5d947a129933",
+      "collected": 6722,
+      "seconds": 1741.515
+    },
+    {
+      "shard_index": 2,
+      "commit": "6303b0895a5e77c2a84f8659a0babea1e1d972f5",
+      "tests": 1565,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 4,
+      "postgres_skips": [],
+      "postgres_version": 160015,
+      "exit_code": 0,
+      "collection_digest": "34d34d95ab8749bcfc71b0857f44a8120b23f4a046caee4a2d5a5d947a129933",
+      "collected": 6722,
+      "seconds": 1706.52
+    },
+    {
+      "shard_index": 3,
+      "commit": "6303b0895a5e77c2a84f8659a0babea1e1d972f5",
+      "tests": 1712,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "postgres_skips": [],
+      "postgres_version": 160015,
+      "exit_code": 0,
+      "collection_digest": "34d34d95ab8749bcfc71b0857f44a8120b23f4a046caee4a2d5a5d947a129933",
+      "collected": 6722,
+      "seconds": 1451.586
+    }
+  ]
+}

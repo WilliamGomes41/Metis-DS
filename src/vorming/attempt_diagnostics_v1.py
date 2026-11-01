@@ -112,6 +112,13 @@ def finish_diagnostic(attempt, error=None):
 
 def comparable_envelope(envelope):
     result = deepcopy(envelope)
+    if '_document_inputs' in result:
+        # Artifact identity is carried by the fixed owner refs; attempt claims
+        # have their own existing fences. No raw execution input under doc CAS.
+        for key in ('semantic_replay','quality_processing_runs','prepared_source_extraction',
+                    'processing_attempts','_processing_counts','_prepared_document_write'):
+            result.pop(key,None)
+        return result
     for attempt in result.get("processing_attempts", []):
         attempt.pop("diagnostic", None)
         attempt.pop("_record_version",None)

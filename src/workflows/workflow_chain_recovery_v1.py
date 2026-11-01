@@ -43,7 +43,7 @@ from src.publication.publication_chain_recovery_v1 import (
     check_chain_integrity,
 )
 
-WORKFLOW_RECOVERY_VERSION = 8  # 8: exact formation/source/proof state and active pins (MET-41)
+WORKFLOW_RECOVERY_VERSION = 9  # 9: compact document inputs and exact archive input membership (MET-41)
 API_ACCESS_TABLES = tuple(API_ACCESS_COLUMNS)
 _API_ACCESS_ORDER_BY = {
     table: ",".join(columns)
@@ -145,8 +145,9 @@ def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:
     version = int(state.get("workflow_recovery_version") or 0)
     if version == WORKFLOW_RECOVERY_VERSION:
         return deepcopy(dict(state))
-    if version == 7:
-        upgraded = deepcopy(dict(state))
+    if version in {7,8}:
+        from src.workflows.formation_recovery_v1 import upgrade_legacy
+        upgraded = upgrade_legacy(dict(state))
         upgraded['workflow_recovery_version'] = WORKFLOW_RECOVERY_VERSION
         from src.workflows.formation_recovery_v1 import validate
         validate(upgraded)

@@ -34,6 +34,15 @@ def _retry_budget_attempts(attempts):
     return [attempt for attempt in attempts if not free(attempt)]
 
 
+def attempt_counts(envelope):
+    selected = envelope.get(KEY) or []
+    previous = envelope.get('_processing_counts')
+    if previous is None:
+        return len(selected), len(_retry_budget_attempts(selected))
+    return (previous['total']-previous['selected_total']+len(selected),
+            previous['used']-previous['selected_used']+len(_retry_budget_attempts(selected)))
+
+
 ADMISSION_ENV = "METIS_PROCESSING_ADMISSION"
 
 
@@ -67,7 +76,7 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
     if any(attempt["state"] == "running" for attempt in attempts):
         raise ConsoleError("processing_attempt_in_progress")
     grant = envelope.get("processing_recovery") or {}
-    recovery = len(_retry_budget_attempts(attempts)) >= limits.max_attempts
+    recovery = attempt_counts(envelope)[1] >= limits.max_attempts
     if recovery and (grant.get("consumed_by") or grant.get("source_hash") != envelope["sha256"]
                      or grant.get("source_version") != envelope["version"] or grant.get("revision") != revision):
         raise ConsoleError("processing_attempt_limit_reached")
@@ -182,11 +191,11 @@ def formation_budget_exhausted(envelope: dict) -> bool:
 
 
 def finish(envelope: dict, attempt_id: str, *, state: str, error: Exception | None = None,
-           budget_aware: bool = False) -> dict:
+           budget_aware: bool = False, formation_input=None) -> dict:
     attempt = next(a for a in envelope[KEY] if a["attempt_id"] == attempt_id)
-    evidence = stop_evidence(envelope, state)
+    evidence = stop_evidence(envelope if formation_input is None else formation_input, state)
     # A3: a budget-exhausted attempt MOET NOOIT 'succeeded' zijn (budget-aware callers).
-    if budget_aware and state == "succeeded" and formation_budget_exhausted(envelope):
+    if budget_aware and state == "succeeded" and formation_budget_exhausted(envelope if formation_input is None else formation_input):
         state = "incomplete_budget"
     attempt.update(state=state, finished_at=now().isoformat(),
                    phase="activated" if state == "succeeded" else "budget_stopped" if state == "incomplete_budget" else "stopped",
@@ -240,7 +249,7 @@ def status(envelope: dict, *, clock: datetime | None = None, retry_supported=Tru
     recovery_available = bool(grant and not grant.get("consumed_by")
                               and grant.get("source_hash") == envelope.get("sha256")
                               and grant.get("source_version") == envelope.get("version"))
-    retry_attempts_used = len(_retry_budget_attempts(attempts))
+    attempts_used, retry_attempts_used = attempt_counts(envelope)
     if state != "running" and retry_attempts_used >= max_attempts and not recovery_available:
         allowed, reason = False, "processing_attempt_limit_reached"
     elif state != "running" and retry_at and datetime.fromisoformat(retry_at) > clock:
@@ -249,6 +258,6 @@ def status(envelope: dict, *, clock: datetime | None = None, retry_supported=Tru
         allowed, reason = False, "processing_structural_limit"
     return {"state":state, "stored_state":latest.get("state"), "attempt_id":latest.get("attempt_id"),
             "reason_code":reason, "error_code":latest.get("error_code"), "retry_allowed":allowed, "retry_not_before":retry_at,
-            "recovery_available": recovery_available, "attempts_used":len(attempts),
+            "recovery_available": recovery_available, "attempts_used":attempts_used,
             "retry_attempts_used": retry_attempts_used, "max_attempts":max_attempts,
             "external_cancellation":(latest.get("transport") or {}).get("external_cancellation", "not_requested" if "replayed_call_id" in latest else "not_recorded")}
