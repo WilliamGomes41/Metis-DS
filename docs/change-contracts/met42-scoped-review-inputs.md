@@ -84,6 +84,7 @@ Restart result: dezelfde objecten, derived keys, besluiten en actieve registryto
 Recovery result: originele payload hersteld via bestaande owner, keys deterministisch gegenereerd; geen modelwerk of nieuw curatorbesluit.
 Legacy-data result: bestaande objecten afleiden zonder herinvoer, identities/hashes/historie behouden; legacyformation apart correct niet-voorbereid/incompatibel behandelen.
 Required black-box scenario: 25MB partial formation + 1100 versies → passage GET → geldig besluit → redirect → opnieuw openen → complete documentassessment met echte/onbekende bronbevindingen → juiste publicatie-uitkomst, met oorspronkelijke budgets en twee broncomposities.
+Explicit non-goals: Geen gewijzigde closure-/publicatievoorwaarden, tweede kandidaatcreator, herinvoer, timeoutverhoging, bewijsverwijdering, nieuwe cacheauthority of impliciete productiecutover. De rode gecombineerde POST-proef blijft een expliciete ketenblokkade.
 
 ## Pad naar publicatie
 

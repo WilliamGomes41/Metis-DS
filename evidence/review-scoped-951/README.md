@@ -54,3 +54,25 @@ groene routinetests zijn geen bewijs dat deze keten groen is.
 Resterend: commandlatency en atomaire command-/publicatieraces onder MET-43,
 behoud van originele Smetten-besluiten en echte live review/publicatie onder
 MET-44. MET-42 en het parentissue worden hiermee niet automatisch gesloten.
+
+## Uitgevoerde aanvullende verificatie
+
+- Native gerichte checks: dependencytypes/containment, directe SQL-writers,
+  gegenereerde waarde niet vervalsbaar, rollback/herstel, ontbrekend/vervalst
+  schema, coherente documentpoging bij gelijktijdige reserve, en gewone
+  passage-GET zonder globale archiefread. Beide bestaande broncomposities.
+- Zes pickerchecks groen, inclusief noodzakelijke context buiten de pagina,
+  een aangeboden keuze die geen ongerelateerde dependencycomponent inlaadt,
+  en hergebruik van een al gekoppelde contextbron voor een extra passage.
+- Werkelijke Chromium-broncontextketen op desktop/mobiel groen: navigeren,
+  kiezen, bewaren en heropenen via de bestaande form-/commandowners.
+- Nieuwe niet-geëvalueerde documentmelding gerenderd en visueel bekeken op
+  1440 en 390 pixels: 16px tekst, echte stylesheet, geen horizontale overflow
+  of geneste formulieren. De broncontextlink blijft bereikbaar.
+- Impeccable regexdetector op gewijzigde UI-bestanden: geen meldingen;
+  elementregels voor contrast/layout liepen niet op Pythonbestanden.
+- Repositorypreflight, architectuurgrenzen, zes architectuurinvarianten en
+  het volledige Class-A/high-risk-PR-contract zijn gecontroleerd.
+
+De volledige regressiesuite en remote CI moeten nog afronden. Deze controles
+vervangen het expliciet rode gecombineerde ketenbewijs niet.
