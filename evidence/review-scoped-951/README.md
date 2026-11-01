@@ -87,3 +87,22 @@ De rode volledige-runresultaten worden niet als groen samengevoegd.
 `local-results.json` bewaart de aantallen en de status. Definitieve GitHub CI
 op de laatste commit moet nog afronden. Deze controles vervangen het expliciet
 rode gecombineerde ketenbewijs niet.
+
+## Herstel van de CI-testomgeving
+
+Class C, rewrite risk none: uitsluitend testvoorzieningen; geen wijziging van
+productcode, testselectie, vereiste controles of publicatievoorwaarden.
+
+De CI-run op `f91aa130` strandde in beide browserjobs vóór de tests:
+`Playwright does not support chromium on ubuntu26.04-x64`. De jobs gebruikten
+`ubuntu-latest` bij de vastgepinde Playwright 1.58.2. Beide browserjobs gebruiken
+nu expliciet de ondersteunde Ubuntu 24.04-image. De Bend/consolevergelijking
+strandde op ontbrekend PostgreSQL 16; die job krijgt dezelfde expliciete
+PostgreSQL 16-service en Unixsocket als de andere native CI-proeven, plus de
+bestaande databasepreflight vóór de consolevergelijking.
+
+Een gerichte configuratieprobe was rood op de oorspronkelijke workflowbestanden
+en groen na deze wijziging. Vijf workflowcontracttests zijn groen; ze behouden
+ook de onafhankelijkheid van browserjobs, verplichte gates en weigering van
+overgeslagen native bewijschecks. De echte browserinstallatie en uitvoering
+moeten vervolgens in GitHub Actions slagen; een YAML-test bewijst dat niet.

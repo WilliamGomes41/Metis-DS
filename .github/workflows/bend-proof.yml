@@ -38,9 +38,24 @@ permissions:
 
 jobs:
   proof:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: metis_test
+        ports:
+          - 5432:5432
+        volumes:
+          - /tmp/metis-test-postgres-socket:/var/run/postgresql
+        options: >-
+          --health-cmd "pg_isready -U postgres -d metis_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
     env:
+      METIS_TEST_POSTGRES_DSN: host=/tmp/metis-test-postgres-socket dbname=metis_test user=postgres
       BEND_NO_TELEMETRY: '1'
       TAR_OPTIONS: '--no-same-owner --warning=no-unknown-keyword'
       METIS_BEND_VERDICT: '1'
@@ -77,6 +92,8 @@ jobs:
           echo "$HOME/.local/share/metis-lean-4.34.0/bin" >> "$GITHUB_PATH"
       - name: Install existing Metis test dependencies
         run: python -m pip install -r requirements-dev.lock
+      - name: Require native PostgreSQL 16 before console proof
+        run: bash scripts/test_postgres.sh > /dev/null
       - name: Verify PR-D2 laws with BendTT and compare with the console
         run: |
           command -v lean
