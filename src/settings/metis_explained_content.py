@@ -52,6 +52,21 @@ REFERENCE_REVISION = "31d854c6a008d9294fb26b04c4bcee5865410afc"
 
 MODELS = (
     Model(
+        "documentopslag", "Documentopslag en verwerkingsbewijs",
+        "Hoe actueel reviewwerk verbonden blijft met het oorspronkelijke verwerkingsbewijs.",
+        "Review moet bereikbaar blijven wanneer de verwerkingshistorie groeit.",
+        "De documentaggregate bewaart de actuele metadata en vaste verwijzingen naar bron en bewijs. Bronlezers, vormingscontroles en diagnose lezen elk hun eigen benodigde invoer. De volledige oorspronkelijke historie blijft afzonderlijk bewaard.",
+        "Deze scheiding voorkomt dat iedere gewone documenthandeling alle eerdere provideruitvoer en kwaliteitsmetingen moet ophalen en herschrijven.",
+        ("Een bewijsverwijzing is geen goedkeuring of publicatiebesluit.",
+         "Bestaande documenten worden alleen via expliciete voorbereiding en versiecontrole omgezet. Deze uitleg bewijst geen productiecutover."),
+        "De documentstore beheert actuele documentgegevens. De bestaande bewijs- en bronowners bewaken de oorspronkelijke inhoud; de bevoegde beoordelaar en publisher behouden hun eigen besluiten.",
+        "Het compositiediagram en het wijzigingscontract leggen de leesgrenzen, opslagovergang en herstelvoorwaarden vast.",
+        (Reference("Compositie van documentopslag", "docs/architecture/operational-document-inputs-950.md"),
+         Reference("Wijzigingscontract MET-41", "docs/change-contracts/met41-operational-document-inputs.md")),
+        ("verwerkingspoging", "auditspoor", "versiegebonden-beoordeling"),
+        ("operationele opslag", "verwerkingsarchief"),
+    ),
+    Model(
         "kennisobjecten", "Kennisobjectmodel",
         "Welke soorten kennis er zijn en hoe een bronpassage een controleerbaar kennisstuk wordt.",
         "Een beoordelaar moet een aanbeveling kunnen onderscheiden van een definitie, toelichting, voorwaarde of uitzondering.",

@@ -12,7 +12,8 @@ from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreEr
 from src.workflows.workflow_transaction_v1 import workflow_transaction_active
 
 
-KINDS = frozenset({'semantic_replay', 'quality_processing_run'})
+KINDS = frozenset({'semantic_replay', 'quality_processing_run','tree_formation'})
+TREE_FIELDS=frozenset({'decision_graph_evidence','decision_tree_formation','decision_tree_construction'})
 HEADER = 'archive_id,layout,snapshot_id,kind,record_key,binding,revision_hash,payload_hash'
 
 

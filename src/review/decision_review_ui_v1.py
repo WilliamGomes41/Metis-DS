@@ -11,6 +11,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from src.vorming.decision_graph_v1 import CONTRACT
+from src.vorming.decision_tree_route_v1 import has_recorded_route
 from src.operations_console_v1 import ConsoleError
 
 
@@ -29,6 +30,7 @@ def render_graph(console, actor, document, *, editing=False):
         raise ConsoleError('reviewer_not_named_on_snapshot')
     if 'decision_graph' not in env:
         raise ConsoleError('decision_graph_not_available')
+    env=console._tree_envelope(document,envelope=env)
     rows = [o for o in console.snapshot_objects(document) if o["object_type"] != "document"]
     graph = env["decision_graph"]
     nodes = {n["object_id"]: n for n in graph["nodes"]}
@@ -84,7 +86,7 @@ def render_graph(console, actor, document, *, editing=False):
     unresolved = [u for u in graph.get("unresolved", []) if u != "human_route_confirmation_required"]
     proposal_note = (f'<p>{len(unresolved)} verbindingen of rollen zijn niet uit de bron te binden en blijven open. '
                      'Voorgestelde verbindingen zijn nog niet bevestigd; controleer ook verbindingen die ontbreken.</p>'
-                     if "decision_tree_formation" in env else '')
+                     if has_recorded_route(env) else '')
     original = f'/review/brondocument?document={esc(document)}&amp;object={esc(rows[0]["object_id"])}' if rows else ""
     from src.operations_console_app import _task_links, _nav, _page
     owner = '/source-selection?' + urlencode(dict(document=document, task='graph'))
@@ -204,6 +206,7 @@ def install_decision_review_routes(app, console, require, page):
         if form.get("action") == "confirm":
             console.confirm_decision_graph(**command)
         elif form.get("action") == "graph":
+            env=console._tree_envelope(sid,envelope=env)
             current = {o["object_id"]: o for o in console.snapshot_objects(sid)}
             ids, modes = form.getlist("node_id"), form.getlist("node_mode")
             if len(ids) != len(modes) or any(i not in current for i in ids):

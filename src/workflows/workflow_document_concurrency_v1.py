@@ -217,10 +217,13 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         try:
             with self._connect() as con:
                 with con.transaction():
+                    con.execute("SELECT set_config('metis.document_storage_writer','v1',true)")
                     PostgresWorkflowReviewStore._lock_authorizations(con)
                     document = con.execute(
-                        "SELECT state,envelope_payload->'review_passes' AS review_passes "
-                        "FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE", (snapshot_id,),
+                        "SELECT state,document_storage_version,CASE WHEN document_storage_version=1 THEN "
+                        "(SELECT metadata->'review_passes' FROM workflow.document_inputs i WHERE i.snapshot_id=d.snapshot_id) "
+                        "ELSE envelope_payload->'review_passes' END AS review_passes "
+                        "FROM workflow.documents d WHERE snapshot_id=%s FOR UPDATE", (snapshot_id,),
                     ).fetchone()
                     if document is None:
                         raise WorkflowDocumentStoreError("unknown_snapshot")
@@ -281,12 +284,20 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                             if ((actor in current_passes) != (actor in previous)
                                     or current_passes.get(actor) != previous.get(actor)):
                                 raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
-                        con.execute(
-                            "UPDATE workflow.documents SET revision=revision+%s,updated_at=CURRENT_TIMESTAMP, "
-                            "envelope_payload=jsonb_set(envelope_payload,"
-                            "'{review_passes}',COALESCE(NULLIF(envelope_payload->'review_passes','null'::jsonb),"
-                            "'{}'::jsonb)||%s::jsonb,true) WHERE snapshot_id=%s", (commit_count, _json_text(changes), snapshot_id),
-                        )
+                        if document['document_storage_version']==1:
+                            con.execute("UPDATE workflow.document_inputs SET metadata=jsonb_set(metadata,'{review_passes}',"
+                                "COALESCE(NULLIF(metadata->'review_passes','null'::jsonb),'{}'::jsonb)||%s::jsonb,true) "
+                                "WHERE snapshot_id=%s",(_json_text(changes),snapshot_id))
+                            if commit_count>1:
+                                con.execute('UPDATE workflow.documents SET revision=revision+%s WHERE snapshot_id=%s',
+                                    (commit_count-1,snapshot_id))
+                        else:
+                            con.execute(
+                                "UPDATE workflow.documents SET revision=revision+%s,updated_at=CURRENT_TIMESTAMP, "
+                                "envelope_payload=jsonb_set(envelope_payload,"
+                                "'{review_passes}',COALESCE(NULLIF(envelope_payload->'review_passes','null'::jsonb),"
+                                "'{}'::jsonb)||%s::jsonb,true) WHERE snapshot_id=%s", (commit_count, _json_text(changes), snapshot_id),
+                            )
                     elif commit_count:
                         con.execute(
                             "UPDATE workflow.documents SET revision=revision+%s,updated_at=CURRENT_TIMESTAMP "
@@ -464,8 +475,8 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         if _instant(submitted.get("published_at")) != _instant(release["published_at"]):
             raise WorkflowDocumentStoreError(PUBLISHED_WORKING_REVISION_IMMUTABLE)
 
-    @staticmethod
     def _write_release_projection_locked(
+        self,
         con: Any,
         *,
         snapshot_id: str,
@@ -478,6 +489,9 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         workflow state is copied from the already-validated historical projection
         instead of being hard-coded back to ``published``.
         """
+        if '_document_inputs' in current_payload:
+            self._write_envelope_locked(con,envelope)
+            return
         stored = dict(envelope)
         if stored.get("processing_storage") == "task-v1":
             stored.pop("processing_attempts",None)
@@ -500,6 +514,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         expected_revision: str | None = None,
         review_card_preparation=None,
         formation_activation_ref=None,
+        document_storage_admission=False,
     ) -> str:
         snapshot_id = str(envelope.get("snapshot_id") or "")
         if not snapshot_id:
@@ -512,7 +527,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                     if expected_revision == "":
                         con.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))", (snapshot_id,))
                     existing = con.execute(
-                        "SELECT d.snapshot_id,d.topic_id,d.envelope_payload,t.display_name "
+                        "SELECT d.snapshot_id,d.topic_id,workflow.current_document_envelope(d) AS envelope_payload,t.display_name "
                         "FROM workflow.documents d "
                         "LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id "
                         "WHERE d.snapshot_id=%s FOR UPDATE OF d",
@@ -554,7 +569,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                     if objects is not None:
                         from src.workflows.formation_task_store_v1 import FormationTaskStore
                         FormationTaskStore.assert_activation(con,envelope,formation_activation_ref)
-                    self._write_envelope_locked(con, envelope)
+                    self._write_envelope_locked(con, envelope,document_storage_admission=document_storage_admission)
                     from src.workflows.review_card_inputs_postgres_v1 import publish_preparation
                     publish_preparation(self, con, snapshot_id, review_card_preparation)
                     next_objects = current_objects

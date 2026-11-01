@@ -70,7 +70,10 @@ def _document_cards_from_rows(rows):
              **(row['details'] or {})} for row in rows]
 
 
-class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
+from src.workflows.operational_document_inputs_v1 import OperationalDocumentInputs
+
+
+class PostgresWorkflowDocumentRuntimeStore(OperationalDocumentInputs, PostgresWorkflowDocumentStore):
     """Runtime operations added on top of the migration-only document store."""
 
     def review_command_quality_input(self, snapshot_id: str, object_ids: list[str]) -> list[dict[str, Any]]:
@@ -80,6 +83,15 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         Keep that order and its original fingerprint/origin; source fragments
         and processing history are not command inputs.
         """
+        envelope=self.get_envelope(snapshot_id)
+        if envelope is not None and '_document_inputs' in envelope:
+            ref=envelope['_document_inputs']['quality']
+            if ref is None:
+                return []
+            from src.workflows.formation_task_store_v1 import FormationTaskStore
+            parts=FormationTaskStore(self).read_archive_inputs(ref,envelope=envelope,roles=('meta','candidate'),object_ids=object_ids)
+            meta=next(v for r,_,v in parts if r=='meta')
+            return [{'run_id':meta.get('run_id'),'candidates':[v for r,_,v in parts if r=='candidate']}]
         try:
             with self._connect() as con:
                 row = con.execute("""
@@ -122,6 +134,9 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                     projection = f"COALESCE(d.review_read_envelope,({projection}))"
                     notice = f"COALESCE(d.review_read_envelope->'_review_formation_notice',({notice}))"
                     replay = f"COALESCE((d.review_read_envelope->>'_review_has_replay')::boolean,({replay}))"
+                projection=projection.replace('d.envelope_payload','workflow.current_document_envelope(d)')
+                notice=notice.replace('d.envelope_payload','workflow.current_document_envelope(d)')
+                replay=replay.replace('d.envelope_payload','workflow.current_document_envelope(d)')
                 # Derive the physical columns from the existing owned card
                 # projection. Do not materialize d.* and its raw source archive.
                 physical = (set(re.findall(r'\bd\.([a-z_][a-z_0-9]*)', columns)) - {'review_envelope'}) | {
@@ -165,6 +180,12 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
 
     def review_source_extraction(self, snapshot_id: str, record_hash: str) -> dict[str, Any]:
         """Explicit legacy source read without decoding unrelated replay/history."""
+        envelope=self.get_envelope(snapshot_id)
+        if envelope is not None and '_document_inputs' in envelope:
+            if envelope['_document_inputs']['extraction_hash']!=record_hash:
+                raise WorkflowDocumentStoreError('source_extraction_identity_mismatch')
+            from src.workflows.formation_task_store_v1 import FormationTaskStore
+            return FormationTaskStore(self).retained_extraction(envelope,record_hash)
         try:
             with self._connect() as con:
                 row = con.execute(
@@ -274,12 +295,12 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                 rows = con.execute(
                     "SELECT table_name,column_name FROM information_schema.columns "
                     "WHERE table_schema='workflow' AND "
-                    "((table_name='documents' AND column_name IN ('envelope_payload','processing_storage_version','object_generation')) OR "
+                    "((table_name='documents' AND column_name IN ('envelope_payload','processing_storage_version','object_generation','document_storage_version')) OR "
                     "(table_name='document_objects' AND column_name='position'))"
                 ).fetchall()
                 present = {(str(row["table_name"]), str(row["column_name"])) for row in rows}
                 required = {("documents", "envelope_payload"), ("document_objects", "position"),
-                            ("documents","processing_storage_version"),("documents","object_generation")}
+                            ("documents","processing_storage_version"),("documents","object_generation"),("documents","document_storage_version")}
                 if present != required:
                     raise WorkflowDocumentStoreError("workflow_document_cutover_schema_missing")
                 task_tables = {str(r["tablename"]) for r in con.execute(
@@ -325,7 +346,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             ).fetchall()
         ]
 
-    def _envelope_from_row(self, con: Any, row: Mapping[str, Any]) -> dict[str, Any]:
+    def _envelope_from_row(self, con: Any, row: Mapping[str, Any], *, include_processing=True) -> dict[str, Any]:
         if row.get("envelope_payload") is None:
             raise WorkflowDocumentStoreError("workflow_document_cutover_not_prepared")
         topic_id = str(row.get("topic_id") or "")
@@ -342,26 +363,35 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             raise WorkflowDocumentStoreError("workflow_document_reviewers_authority_mismatch")
         envelope["topic_id"] = topic_id
         envelope["family"] = display_name
-        if envelope.get("processing_storage") == "task-v1":
+        if include_processing and envelope.get("processing_storage") == "task-v1" and "_document_inputs" not in envelope:
             from src.workflows.formation_task_store_v1 import FormationTaskStore
             envelope["processing_attempts"] = FormationTaskStore.attempts(con, snapshot_id,include_versions=True)
         return envelope
 
-    @diagnostic_phase("document_store_read")
-    def list_envelopes(self) -> list[dict[str, Any]]:
-        try:
-            with self._connect() as con:
-                rows = con.execute(
-                    "SELECT d.snapshot_id,d.topic_id,d.envelope_payload,t.display_name "
-                    "FROM workflow.documents d "
-                    "LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id "
-                    "ORDER BY d.acquired_at,d.snapshot_id"
-                ).fetchall()
-                return [self._envelope_from_row(con, row) for row in rows]
-        except WorkflowDocumentStoreError:
-            raise
-        except Exception as exc:
-            raise WorkflowDocumentStoreError("workflow_documents_read_failed") from exc
+    @diagnostic_phase('document_store_read')
+    def list_envelopes(self):
+        """Only stored metadata, including during constructor and map refresh."""
+        with self._connect() as con:
+            rows=con.execute('SELECT d.snapshot_id,d.topic_id,CASE WHEN d.document_storage_version=1 THEN workflow.current_document_envelope(d) '
+                "ELSE COALESCE(CASE WHEN d.class<>'beslisboom' THEN d.review_read_envelope END,workflow.document_scalar_envelope(d)||jsonb_build_object("
+                "'named_reviewers',ARRAY(SELECT account_id FROM workflow.document_reviewers WHERE snapshot_id=d.snapshot_id ORDER BY account_id),"
+                "'_metadata_header_unprepared',true)) END AS envelope_payload,t.display_name "
+                'FROM workflow.documents d LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id '
+                'ORDER BY d.acquired_at,d.snapshot_id').fetchall()
+            result=[]
+            for row in rows:
+                if row['envelope_payload'] is None:
+                    raise WorkflowDocumentStoreError('workflow_document_header_unprepared')
+                envelope=self._envelope_from_row(con,row,include_processing=False)
+                envelope.pop('_review_formation_notice',None)
+                envelope.pop('_review_has_replay',None)
+                if '_document_inputs' not in envelope:
+                    envelope['_document_header_only']=True
+                result.append(envelope)
+            return result
+
+    def list_processing_history_inputs(self):
+        return [self.processing_history_input(h['snapshot_id']) for h in self.list_envelopes()]
 
     def list_document_cards(self, snapshot_ids: list[str] | None = None) -> list[dict[str, Any]]:
         """List/chooser data, without replay, extraction, attempts or object rows."""
@@ -370,7 +400,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         try:
             with self._connect() as con:
                 rows = con.execute(f"""
-                    SELECT {_DOCUMENT_CARD_COLUMNS}
+                    SELECT {_DOCUMENT_CARD_COLUMNS.replace('d.envelope_payload','workflow.current_document_envelope(d)')}
                     FROM workflow.documents d LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id
                 """ + (" WHERE d.snapshot_id=ANY(%s)" if snapshot_ids is not None else "")
                     + " ORDER BY d.acquired_at,d.snapshot_id",
@@ -388,17 +418,17 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                 rows = con.execute("""
                     SELECT d.snapshot_id,d.title,d.source_version AS version,d.class,d.state,
                            d.publication_eligibility,
-                           d.envelope_payload->>'processing_blocker' AS processing_blocker,
+                           workflow.current_document_envelope(d)->>'processing_blocker' AS processing_blocker,
                            CASE WHEN d.processing_storage_version=1 THEN
                                (SELECT p.payload->'processing_attempts'->0->>'state' FROM workflow.processing_document_summaries p WHERE p.snapshot_id=d.snapshot_id)
-                               ELSE d.envelope_payload->'processing_attempts'->-1->>'state' END AS latest_processing_state,
+                               ELSE workflow.current_document_envelope(d)->'processing_attempts'->-1->>'state' END AS latest_processing_state,
                            CASE WHEN d.processing_storage_version=1 THEN
                                (SELECT p.payload->'processing_attempts'->0->>'expires_at' FROM workflow.processing_document_summaries p WHERE p.snapshot_id=d.snapshot_id)
-                               ELSE d.envelope_payload->'processing_attempts'->-1->>'expires_at' END AS latest_processing_expires_at,
+                               ELSE workflow.current_document_envelope(d)->'processing_attempts'->-1->>'expires_at' END AS latest_processing_expires_at,
                            ARRAY(SELECT r.account_id FROM workflow.document_reviewers r
                                  WHERE r.snapshot_id=d.snapshot_id ORDER BY r.account_id) AS named_reviewers,
                            (SELECT COALESCE(jsonb_agg(v ORDER BY v),'[]'::jsonb)
-                            FROM jsonb_array_elements(COALESCE(d.envelope_payload->'named_reviewers','[]'::jsonb)) v)
+                            FROM jsonb_array_elements(COALESCE(workflow.current_document_envelope(d)->'named_reviewers','[]'::jsonb)) v)
                            = (SELECT COALESCE(jsonb_agg(r.account_id ORDER BY r.account_id),'[]'::jsonb)
                               FROM workflow.document_reviewers r WHERE r.snapshot_id=d.snapshot_id) AS reviewers_consistent
                     FROM workflow.documents d ORDER BY d.acquired_at,d.snapshot_id
@@ -421,11 +451,11 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                     SELECT d.snapshot_id, d.title, d.source_version AS version,
                            d.class, d.state, d.publication_eligibility,
                            d.source_sha256 AS sha256,
-                           d.envelope_payload->>'processing_blocker' AS processing_blocker,
-                           COALESCE(d.envelope_payload->'review_passes', '{}'::jsonb)<>'{}'::jsonb AS has_review_passes,
-                           jsonb_strip_nulls(jsonb_build_object('consumed_by', d.envelope_payload->'processing_recovery'->'consumed_by',
-                               'source_hash', d.envelope_payload->'processing_recovery'->'source_hash',
-                               'source_version', d.envelope_payload->'processing_recovery'->'source_version')) AS processing_recovery,
+                           workflow.current_document_envelope(d)->>'processing_blocker' AS processing_blocker,
+                           COALESCE(workflow.current_document_envelope(d)->'review_passes', '{}'::jsonb)<>'{}'::jsonb AS has_review_passes,
+                           jsonb_strip_nulls(jsonb_build_object('consumed_by', workflow.current_document_envelope(d)->'processing_recovery'->'consumed_by',
+                               'source_hash', workflow.current_document_envelope(d)->'processing_recovery'->'source_hash',
+                               'source_version', workflow.current_document_envelope(d)->'processing_recovery'->'source_version')) AS processing_recovery,
                            CASE WHEN d.processing_storage_version=1 THEN
                                COALESCE((SELECT jsonb_agg(p.payload-'diagnostic' ORDER BY p.started_at,p.attempt_id)
                                    FROM workflow.processing_attempts p WHERE p.snapshot_id=d.snapshot_id),'[]'::jsonb)
@@ -437,7 +467,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                                'limits', jsonb_strip_nulls(jsonb_build_object('max_attempts', a->'limits'->'max_attempts')),
                                'transport', jsonb_build_object('external_cancellation', a->'transport'->'external_cancellation')
                            ) ORDER BY n)
-                             FROM jsonb_array_elements(COALESCE(d.envelope_payload->'processing_attempts', '[]'::jsonb))
+                             FROM jsonb_array_elements(COALESCE(workflow.current_document_envelope(d)->'processing_attempts', '[]'::jsonb))
                                   WITH ORDINALITY AS attempts(a,n)), '[]'::jsonb) END AS processing_attempts,
                            ARRAY(SELECT r.account_id FROM workflow.document_reviewers r
                                  WHERE r.snapshot_id=d.snapshot_id ORDER BY r.account_id) AS named_reviewers
@@ -548,7 +578,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         try:
             with self._connect() as con:
                 row = con.execute(
-                    "SELECT d.snapshot_id,d.topic_id,d.envelope_payload,t.display_name "
+                    "SELECT d.snapshot_id,d.topic_id,workflow.current_document_envelope(d) AS envelope_payload,t.display_name "
                     "FROM workflow.documents d "
                     "LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id "
                     "WHERE d.snapshot_id=%s",
@@ -672,7 +702,11 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
     def objects_revision(self, snapshot_id: str) -> str:
         return self._revision(self.list_document_objects(snapshot_id))
 
-    def _write_envelope_locked(self, con: Any, envelope: Mapping[str, Any]) -> None:
+    def _write_envelope_locked(self, con: Any, envelope: Mapping[str, Any], *, document_storage_admission=False) -> None:
+        if document_storage_admission and "_document_inputs" in envelope:
+            raise WorkflowDocumentStoreError("document_inputs_existing_document_requires_explicit_preparation")
+        if self._write_operational_envelope_locked(con,envelope):
+            return
         topic = self._resolve_topic_locked(con, str(envelope.get("family") or ""))
         stored_envelope = deepcopy(dict(envelope))
         stored_envelope["topic_id"] = topic["topic_id"]
@@ -690,6 +724,8 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             "SELECT snapshot_id,envelope_payload,processing_storage_version FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
             (snapshot_id,),
         ).fetchone()
+        if document_storage_admission and existing is not None:
+            raise WorkflowDocumentStoreError('document_inputs_existing_document_requires_explicit_preparation')
         unchanged = bool(task_storage and existing is not None
             and self._payload(existing["envelope_payload"]) == stored_envelope
             and self._reviewers(con,snapshot_id) == sorted(set(stored_envelope.get("named_reviewers") or [])))
@@ -725,6 +761,8 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
             if existing is None or existing["processing_storage_version"] != 1:
                 con.execute("UPDATE workflow.documents SET processing_storage_version=1 WHERE snapshot_id=%s", (snapshot_id,))
             FormationTaskStore.save_attempts(con, snapshot_id, attempts)
+        if document_storage_admission:
+            self.admit_new_document_locked(con,snapshot_id)
 
     def write_bundle(
         self,
@@ -734,6 +772,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
         expected_revision: str | None = None,
         review_card_preparation=None,
         formation_activation_ref=None,
+        document_storage_admission=False,
     ) -> str:
         snapshot_id = str(envelope.get("snapshot_id") or "")
         if not snapshot_id:
@@ -758,7 +797,7 @@ class PostgresWorkflowDocumentRuntimeStore(PostgresWorkflowDocumentStore):
                     if objects is not None:
                         from src.workflows.formation_task_store_v1 import FormationTaskStore
                         FormationTaskStore.assert_activation(con,envelope,formation_activation_ref)
-                    self._write_envelope_locked(con, envelope)
+                    self._write_envelope_locked(con, envelope,document_storage_admission=document_storage_admission)
                     from src.workflows.review_card_inputs_postgres_v1 import publish_preparation
                     publish_preparation(self, con, snapshot_id, review_card_preparation)
                     next_objects = current_objects if objects is None else objects
@@ -890,7 +929,9 @@ class _PostgresWorkflowDocumentsMixin:
         if reads is not None:
             return [self._receipt(row) for row in self._scoped_envelopes(reads).values()]
         try:
-            return [self._receipt(row) for row in self.workflow_document_store.list_envelopes()]
+            return [self._receipt(self.workflow_document_store.get_envelope(row['snapshot_id'])
+                if row.get('_metadata_header_unprepared') else row)
+                for row in self.workflow_document_store.list_envelopes()]
         except WorkflowDocumentStoreError as exc:
             raise ConsoleError("workflow_document_unavailable", str(exc)) from exc
 
@@ -956,11 +997,11 @@ class _PostgresWorkflowDocumentsMixin:
         if command is not None:
             return deepcopy(command.envelope)
         reads = self._document_reads()
-        if reads is not None and snapshot_id in reads.envelopes:
+        if reads is not None and snapshot_id in reads.envelopes and not reads.envelopes[snapshot_id].get('_document_header_only'):
             from src.request_diagnostics_v1 import diagnostic_count
             diagnostic_count("document_snapshot_reused")
             return reads.envelopes[snapshot_id]
-        if reads is not None and reads.listed:
+        if reads is not None and reads.listed and snapshot_id not in reads.envelopes:
             raise ConsoleError("unknown_snapshot")
         try:
             envelope = self.workflow_document_store.get_envelope(snapshot_id)
@@ -1086,7 +1127,16 @@ class _PostgresWorkflowDocumentsMixin:
         payload = getattr(self, "_prepared_envelopes", None)
         source = self._envelopes if payload is None else payload
         try:
+            headers={h['snapshot_id']:h for h in self.workflow_document_store.list_envelopes()}
             for envelope in source.values():
+                if envelope==headers.get(envelope['snapshot_id']):
+                    continue
+                if envelope.get('_document_header_only'):
+                    current=self.workflow_document_store.get_envelope(envelope['snapshot_id'])
+                    if current is None:
+                        raise WorkflowDocumentStoreError('unknown_snapshot')
+                    current.update({k:v for k,v in envelope.items() if k!='_document_header_only'})
+                    envelope=current
                 self.workflow_document_store.write_bundle(envelope=envelope)
         except WorkflowDocumentStoreError as exc:
             raise ConsoleError("workflow_document_write_failed", str(exc)) from exc
@@ -1120,6 +1170,7 @@ class _PostgresWorkflowDocumentsMixin:
         snapshot_id: str | None = None,
         review_card_preparation=None,
         formation_activation_ref=None,
+        document_storage_admission=False,
     ) -> None:
         self._require_review_store_configured()
         if formation_activation_ref is not None and objects is None:
@@ -1153,6 +1204,8 @@ class _PostgresWorkflowDocumentsMixin:
             # Unchanged documents remain owned by the command's freshly loaded
             # map. Only the submitted snapshot crosses a mutation/copy boundary.
             target_envelopes = dict(self._envelopes)
+            if envelopes is None:
+                target_envelopes[sid]=self.workflow_document_store.get_envelope(sid)
             if envelopes is not None:
                 if sid in envelopes:
                     target_envelopes[sid] = deepcopy(envelopes[sid])
@@ -1186,6 +1239,7 @@ class _PostgresWorkflowDocumentsMixin:
                     expected_revision=pinned_revision if objects is not None else None,
                     review_card_preparation=review_card_preparation,
                     formation_activation_ref=formation_activation_ref,
+                    document_storage_admission=document_storage_admission,
                 )
                 canonical_envelope = self.workflow_document_store.get_envelope(sid)
                 if canonical_envelope is None:
@@ -1209,6 +1263,7 @@ class _PostgresWorkflowDocumentsMixin:
         self._require_review_store_configured()
         with self._store_write_lock():
             with workflow_transaction(self.workflow_document_store) as connection:
+                connection.execute("SELECT set_config('metis.document_storage_writer','v1',true)")
                 self.workflow_review_store._lock_authorizations(connection)
                 row = connection.execute(
                     "SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",

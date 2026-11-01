@@ -143,8 +143,10 @@ def _failed_readiness(snapshot_id: str, error: Exception) -> dict[str, Any]:
 class PublicationReadinessMixin:
     """Combine current authorities into the one total readiness projection."""
 
-    def _publication_readiness_inputs(self, snapshot_id: str) -> dict[str, Any]:
+    def _publication_readiness_inputs(self, snapshot_id: str, *, tree_input=None) -> dict[str, Any]:
         envelope = self._envelope(snapshot_id) if hasattr(self, "_envelope") else {}
+        if envelope.get("decision_graph") and hasattr(self,"_tree_envelope"):
+            envelope=self._tree_envelope(snapshot_id,envelope=envelope,prepared=tree_input)
         try:
             objects = self.snapshot_objects(  # type: ignore[attr-defined]
                 snapshot_id, envelope=envelope
@@ -185,21 +187,21 @@ class PublicationReadinessMixin:
             "review_path": review_path,
         }
 
-    def publication_readiness(self, snapshot_id: str) -> dict[str, Any]:
+    def publication_readiness(self, snapshot_id: str, *, tree_input=None) -> dict[str, Any]:
         """The outcome owns its read inputs, also when invoked without HTTP."""
         from contextlib import nullcontext
         from src.workflows.workflow_transaction_v1 import workflow_transaction_active
         scope = getattr(self, "document_read_operation", None)
         active = getattr(self, "_document_reads", lambda: None)()
         with scope() if scope is not None and active is None and not workflow_transaction_active() else nullcontext():
-            return PublicationReadinessMixin._read_publication_readiness(self, snapshot_id)
+            return PublicationReadinessMixin._read_publication_readiness(self, snapshot_id, tree_input=tree_input)
 
     @source_reconstruction_scope(reuse_existing=True)
-    def _read_publication_readiness(self, snapshot_id: str) -> dict[str, Any]:
+    def _read_publication_readiness(self, snapshot_id: str, *, tree_input=None) -> dict[str, Any]:
         """Derive readiness without actor identity, writes, or cached authority."""
         try:
             inputs = PublicationReadinessMixin._publication_readiness_inputs(
-                self, snapshot_id
+                self, snapshot_id, tree_input=tree_input
             )
             technical_projection = self.technical_publication_readiness(  # type: ignore[attr-defined]
                 snapshot_id=snapshot_id,
@@ -294,12 +296,12 @@ class PublicationReadinessMixin:
         considered["publish_allowed"] = publication_ready
         return considered
 
-    def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
+    def consider_publish(self, *, actor_id: str, snapshot_id: str, tree_input=None) -> dict[str, Any]:
         """Authorize the action boundary, then reuse the same current projection."""
         self._require_role(actor_id, "publisher")
-        return self.publication_readiness(snapshot_id)
+        return self.publication_readiness(snapshot_id,**({'tree_input':tree_input} if tree_input is not None else {}))
 
 
-def derive_publication_readiness(authority: Any, snapshot_id: str) -> dict[str, Any]:
+def derive_publication_readiness(authority: Any, snapshot_id: str, *, tree_input=None) -> dict[str, Any]:
     """Run the one total authority for lower-level compatibility callers."""
-    return PublicationReadinessMixin.publication_readiness(authority, snapshot_id)
+    return PublicationReadinessMixin.publication_readiness(authority, snapshot_id, tree_input=tree_input)

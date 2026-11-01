@@ -68,6 +68,7 @@ def locked(console, sid, attempt_id):
     store = FormationTaskStore(console.workflow_document_store)
     with store.documents._connect() as con:
         with con.transaction():
+            con.execute("SELECT set_config('metis.document_storage_writer','v1',true)")
             con.execute("SET LOCAL lock_timeout='5s'")
             document = con.execute('SELECT snapshot_id,source_sha256 AS sha256,source_version AS version,'
                 'object_generation,processing_storage_version FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE', (sid,)).fetchone()
@@ -119,10 +120,14 @@ def block(con, active, error):
 
 def native_attempt(console, sid, attempt_id=None):
     with console.workflow_document_store._connect() as con:
-        row = con.execute('SELECT a.payload FROM workflow.processing_attempts a JOIN workflow.documents d USING(snapshot_id) '
+        row = con.execute('SELECT CASE WHEN d.document_storage_version=1 THEN i.payload ELSE a.payload END AS payload '
+            'FROM workflow.processing_attempts a JOIN workflow.documents d USING(snapshot_id) '
+            'LEFT JOIN workflow.processing_attempt_inputs i ON i.attempt_id=a.attempt_id '
             'WHERE a.snapshot_id=%s AND d.processing_storage_version=1 '
             + ('AND a.attempt_id=%s ' if attempt_id else '') + 'ORDER BY a.started_at DESC LIMIT 1',
             (sid, attempt_id) if attempt_id else (sid,)).fetchone()
+    if row and row['payload'] is None:
+        raise ConsoleError('document_inputs_attempt_index_incomplete')
     return row['payload'] if row and leased(row['payload']) else None
 
 

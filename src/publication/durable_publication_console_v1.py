@@ -216,7 +216,7 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
                 return {**result, "projection_status": "pending"}
             return {**result, "projection_status": "current"}
 
-    def _publish_locked(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
+    def _publish_locked(self, *, actor_id: str, snapshot_id: str, tree_input=None) -> dict[str, Any]:
         store = self.canonical_publication_store
         self._require_role(actor_id, "publisher")
         existing = self._sync_snapshot_from_authority(snapshot_id)
@@ -236,7 +236,11 @@ class DurablePublicationConsole(DocumentStatusReadinessMixin, ReviewClosureConso
                     "local_projection": "reconciled",
                 }
             return {"status":"PASS","state":"published","snapshot_id":snapshot_id,"release_id":str(existing["release_id"]),"release_version":str(existing["release_version"]),"published_items":len(existing["objects"]),"g2":"PASS","cutover":True,"canonical_authority":"postgres","local_projection":"reconciled"}
-        considered = self.consider_publish(actor_id=actor_id, snapshot_id=snapshot_id); envelope = self._envelope(snapshot_id)
+        envelope=self._envelope(snapshot_id)
+        if tree_input is not None:
+            envelope=self._tree_envelope(snapshot_id,envelope=envelope,prepared=tree_input)
+        considered=self.consider_publish(actor_id=actor_id,snapshot_id=snapshot_id,
+            **({'tree_input':tree_input} if tree_input is not None else {}))
         # Capture the existing gate result under the existing publication lock.
         # Optional telemetry is never a commit or a second readiness authority.
         try: evidence_revision = self.objects_revision(snapshot_id)

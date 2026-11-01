@@ -87,7 +87,7 @@ def test_native_stall_reserves_before_call_and_recovers_same_source(workflow_pos
         try:
             assert call_ready.wait(5)
             restarted=_console(tmp_path/'reader',workflow_postgres)
-            envelope=restarted.list_envelopes()[0]
+            envelope=restarted._processing_history_envelope(restarted.list_envelopes()[0]['snapshot_id'])
             sid=envelope['snapshot_id']
             assert envelope['processing_attempts'][-1]['state']=='running'
             assert restarted.snapshot_objects(sid)==[]
@@ -144,7 +144,7 @@ def test_response_cannot_activate_after_concurrent_change(workflow_postgres,tmp_
     console,actor,reviewer=setup(tmp_path,workflow_postgres)
     def changed(payload):
         second=_console(tmp_path/'writer',workflow_postgres)
-        envelope=deepcopy(second.list_envelopes()[0])
+        envelope=deepcopy(second._processing_history_envelope(second.list_envelopes()[0]['snapshot_id']))
         if change=='expired':
             future=now()+timedelta(hours=1)
             monkeypatch.setattr('src.vorming.processing_retry_v1.now',lambda:future)
@@ -161,7 +161,7 @@ def test_response_cannot_activate_after_concurrent_change(workflow_postgres,tmp_
         bind(console,monkeypatch,url,slow=True)
         with pytest.raises(ConsoleError):console.ingest(**command(actor,reviewer))
     final=_console(tmp_path,workflow_postgres)
-    envelope=final.list_envelopes()[0]
+    envelope=final._processing_history_envelope(final.list_envelopes()[0]['snapshot_id'])
     assert final.snapshot_objects(envelope['snapshot_id'])==[]
     assert envelope['processing_attempts'][-1]['state']=='failed'
     assert envelope['publication_eligibility']==PRE_REVIEW_BLOCKED
@@ -245,7 +245,7 @@ def test_concurrent_initial_command_reserves_once_across_runtime_locks(workflow_
     assert len(results)==2 and all(isinstance(result,dict) for result in results),results
     assert len(calls)==1
     final=_console(tmp_path,workflow_postgres)
-    envelope=final.list_envelopes()[0]
+    envelope=final._processing_history_envelope(final.list_envelopes()[0]['snapshot_id'])
     assert len(envelope['processing_attempts'])==1
     assert envelope['processing_attempts'][0]['state']=='succeeded'
     assert final.snapshot_objects(envelope['snapshot_id'])
@@ -258,7 +258,7 @@ def test_initial_process_interruption_leaves_durable_recoverable_reservation(wor
     monkeypatch.setattr(console,'_fragments_and_spec',crash)
     with pytest.raises(KeyboardInterrupt):console.ingest(**command(actor,reviewer))
     final=_console(tmp_path,workflow_postgres)
-    envelope=final.list_envelopes()[0]
+    envelope=final._processing_history_envelope(final.list_envelopes()[0]['snapshot_id'])
     sid=envelope['snapshot_id']
     assert final.processing_status(sid)['state']=='running'
     future=now()+timedelta(hours=1)

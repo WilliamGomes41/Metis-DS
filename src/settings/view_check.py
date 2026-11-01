@@ -96,6 +96,7 @@ def authorize(state, actor, document):
 
 def context(state, actor, document, attempt=''):
     account, envelope = authorize(state, actor, document)
+    envelope = state._processing_history_envelope(document)
     attempts = envelope.get('processing_attempts') or []
     if attempt and not any(row['attempt_id'] == attempt for row in attempts):
         raise ValueError('unknown_attempt')

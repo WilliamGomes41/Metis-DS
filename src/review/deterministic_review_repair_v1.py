@@ -222,7 +222,8 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             from src.vorming.semantic_transform_generic_v1 import _fragment_ref
             fragments = self.review_source_fragments(snapshot_id)
             envelope = self._envelope(snapshot_id)
-            if fragments is None and envelope.get("decision_tree_formation"):
+            from src.vorming.decision_tree_route_v1 import has_recorded_route
+            if fragments is None and has_recorded_route(envelope):
                 # Decision-tree units are corrected through the same materialiser view.
                 source_path, _ = self._verified_source_bytes(envelope)
                 fragments = self._read_source_fragments(envelope, source_path)

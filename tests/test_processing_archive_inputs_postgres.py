@@ -87,7 +87,7 @@ def test_self_consistent_substitution_of_original_pending_findings_is_refused(in
     from src.workflows.processing_archives_v1 import source_binding
     header={'layout':1,'archive_id':ref['archive_id'],'payload_hash':ref['payload_hash'],
         'source':source_binding(envelope),'kind':'semantic_replay','manifest':[[r,k,o,h] for r,k,o,h,_ in changed],
-        'notice':{'provider_evidence':{'formation_incomplete':True}}}
+        'notice':{'provider_evidence':{'formation_incomplete':True}},'pending_rejection_count':1}
     with pytest.raises(psycopg.Error,match='processing_input_original_projection_changed'):
         with store.documents._connect() as con:
             con.execute('INSERT INTO workflow.processing_archive_inputs(archive_id,header,header_hash) VALUES(%s,%s::jsonb,%s)',
@@ -153,7 +153,7 @@ def test_sql_seal_refuses_self_consistent_numeric_substitution(indexed_system,or
         records.append((role,key,oid,digest(text),text))
     records.sort()
     header={'layout':1,'archive_id':ref['archive_id'],'payload_hash':ref['payload_hash'],
-        'source':source_binding(envelope),'kind':'quality_processing_run','manifest':[[r,k,o,h] for r,k,o,h,_ in records]}
+        'source':source_binding(envelope),'kind':'quality_processing_run','source_fragment_count':0,'manifest':[[r,k,o,h] for r,k,o,h,_ in records]}
     with pytest.raises(psycopg.Error,match='processing_input_original_projection_changed'):
         with store.documents._connect() as con:
             con.execute('INSERT INTO workflow.processing_archive_inputs(archive_id,header,header_hash) VALUES(%s,%s::jsonb,%s)',

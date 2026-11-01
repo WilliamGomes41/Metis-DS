@@ -582,10 +582,10 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             considered["disposition_conflict_object_ids"] = conflicts
         return considered
 
-    def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
+    def consider_publish(self, *, actor_id: str, snapshot_id: str, tree_input=None) -> dict[str, Any]:
         self._require_role(actor_id, "publisher")
         from src.publication.publication_readiness_v1 import derive_publication_readiness
-        return derive_publication_readiness(self, snapshot_id)
+        return derive_publication_readiness(self, snapshot_id,tree_input=tree_input)
 
     def select_for_question(self, *, family: str, asked_class: str) -> list[dict[str, Any]]:
         """Do not expose pending, revise or rejected objects to question selection."""

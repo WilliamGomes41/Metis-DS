@@ -72,6 +72,7 @@ class TaskCheckpointWriter:
             raise ConsoleError("processing_configuration_changed")
         with self.store.documents._connect() as con:
             with con.transaction():
+                con.execute("SELECT set_config('metis.document_storage_writer','v1',true)")
                 con.execute("SET LOCAL lock_timeout='5s'")
                 document = con.execute(
                     "SELECT snapshot_id,source_sha256 AS sha256,source_version AS version,document_id,"
@@ -256,13 +257,17 @@ class TaskCheckpointWriter:
             active.setdefault("diagnostic",{})["source_views_ref"]=reference
             if read_reference is not None:
                 pinned = con.execute("UPDATE workflow.documents SET review_source_ref=%s::jsonb,review_read_envelope=NULL WHERE snapshot_id=%s "
-                    "AND envelope_payload#>>'{prepared_source_extraction,record_hash}'=%s "
+                    "AND CASE WHEN document_storage_version=1 THEN "
+                    "(SELECT refs->>'extraction_hash' FROM workflow.document_inputs i WHERE i.snapshot_id=workflow.documents.snapshot_id) "
+                    "ELSE envelope_payload#>>'{prepared_source_extraction,record_hash}' END=%s "
                     + ("AND formation_evidence_id IS NULL" if evidence_available else ""),
                     (_json_text(read_reference),self.snapshot_id,read_reference['extraction_hash']))
                 if pinned.rowcount != 1:
-                    active_proof = con.execute('SELECT formation_evidence_id FROM workflow.documents WHERE snapshot_id=%s',
+                    active_proof = con.execute('SELECT formation_evidence_id,document_storage_version FROM workflow.documents WHERE snapshot_id=%s',
                         (self.snapshot_id,)).fetchone()
-                    if not active_proof or active_proof['formation_evidence_id'] is None:
+                    staged=(active.get('diagnostic') or {}).get('staged_extraction_hash')
+                    if not active_proof or (active_proof['formation_evidence_id'] is None and not (
+                            active_proof['document_storage_version']==1 and staged==read_reference['extraction_hash'])):
                         raise ConsoleError('processing_command_conflict')
                 active['diagnostic']['review_source_ref'] = read_reference
             self.store.checkpoint(con,self.attempt_id,"source_views_pinned",{"source_views_ref":reference})
@@ -277,9 +282,9 @@ class TaskCheckpointWriter:
         with self.store.documents._connect() as con:
             if not available(con):
                 return False
-            current = con.execute('SELECT formation_evidence_id FROM workflow.documents WHERE snapshot_id=%s',
+            current = con.execute('SELECT formation_evidence_id,document_storage_version FROM workflow.documents WHERE snapshot_id=%s',
                                   (self.snapshot_id,)).fetchone()
-        if not current or current['formation_evidence_id'] is None:
+        if not current or (current['formation_evidence_id'] is None and current['document_storage_version']==0):
             return False
         stored_extraction({**self.source_envelope, KEY:record})
         if workflow_transaction_active():
@@ -371,7 +376,7 @@ class TaskCheckpointWriter:
         with self.store.documents._connect() as con:
             if not available(con):
                 return
-        prior = self.console._envelope(self.snapshot_id).get('semantic_replay') or {}
+        prior = self.store.active_replay_input(self.console._envelope(self.snapshot_id))
         expected = call_sequence(prior.get('provider_evidence') or {}) if resuming else []
         expected += [row['evidence'] for row in self.task_results()]
         expected += [row['evidence'] for row in self.task_failures()]
@@ -503,6 +508,7 @@ def record_task_failure(console,snapshot_id,attempt_id,error,*,claim_token):
     enclosing_transaction = workflow_transaction_active()
     with store.documents._connect() as con:
         with con.transaction():
+            con.execute("SELECT set_config('metis.document_storage_writer','v1',true)")
             document = con.execute("SELECT processing_storage_version FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
                                    (snapshot_id,)).fetchone()
             if not document or document["processing_storage_version"] != 1:

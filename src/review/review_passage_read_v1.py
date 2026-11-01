@@ -48,7 +48,7 @@ def read_review_document(console, account, snapshot_id):
             if envelope['_review_check_formation']:
                 # Uncertain/open formation needs its complete captured evidence,
                 # not another envelope generation fetched during rendering.
-                envelope = store.get_envelope(snapshot_id)
+                envelope = store.formation_input(store.get_envelope(snapshot_id))
                 if envelope is None:
                     raise WorkflowDocumentStoreError('unknown_snapshot')
                 envelope['_review_check_formation'] = True

@@ -1164,7 +1164,7 @@ def bind_pre_review_semantic_processing(
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         if (formation_context or {}).get("resume_formation"):
             from src.vorming.source_selection_v1 import assert_resume_configuration
-            assert_resume_configuration(console, console._envelope(formation_context["snapshot_id"]))
+            assert_resume_configuration(console, console._processing_command_envelope(formation_context["snapshot_id"]))
 
         # Validated before any route, so a retired or unknown mode also stops decision trees.
         mode = active_passage_formation_mode()

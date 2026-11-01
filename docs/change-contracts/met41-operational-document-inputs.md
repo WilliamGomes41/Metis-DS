@@ -42,10 +42,10 @@ Explicit non-goals: Geen nieuwe closurepolicy/cache, geen tweede kandidaatmaker,
 ## Gronding en voortgang
 
 - [x] Ground: main `16bf47a`, tree `0381230`; #956 gemerged, CI/Docling/topologie/source/Bend success.
-- [ ] Sketch: de onderstaande synthese tegen alle concrete aanroepers toetsen.
+- [x] Sketch: de onderstaande synthese tegen alle concrete aanroepers toetsen.
 - [x] Agree: gebruiker vraagt expliciet het resterende MET-41 uit te voeren; geen aanvullende ontwerpstop gevraagd.
-- [ ] Implement: rode native grensproef, storage/read/write/triggerintegratie, variant-/herstel-/groeiacceptatie.
-- [ ] Scrap: obsolete generieke hydratatie en grote-JSON-triggerpaden uit de omgezette layout verwijderen; bij structurele tegenspraak synthese herzien.
+- [x] Implement: rode native grensproef, storage/read/write/triggerintegratie, variant-/herstel-/groeiacceptatie.
+- [x] Scrap: obsolete generieke hydratatie en grote-JSON-triggerpaden uit de omgezette layout verwijderen; bij structurele tegenspraak synthese herzien.
 
 Dit document is een uitvoeringscontract; geen bewijs dat implementatie of productieherstel al gereed is.
 
@@ -53,12 +53,12 @@ Dit document is een uitvoeringscontract; geen bewijs dat implementatie of produc
 
 ```python
 header = documents.get_envelope(sid)  # compact bij omgezette layout
-processing = tasks.current_processing_input(header, command_id=command_id)
-formation = tasks.active_formation_input(header)
+processing = documents.processing_command_input(header, command_id=command_id)
+formation = documents.formation_input(header)
 # De bestaande unresolved_rejections blijft beslissen met actuele objects/bindings/bron.
 quality = documents.review_command_quality_input(sid, object_ids)
 source = tasks.retained_extraction(header, required_contract=contract)
-history = tasks.processing_history(header)  # alleen expliciete diagnose/export
+history = documents.processing_history_input(sid)  # alleen expliciete diagnose/export
 ```
 
 Een actuele input is geen historische export. Een inputreferentie is geen afsluitstatus en geen bevoegdheid. Ontbrekend/corrupt/incompatibel input levert een expliciete weigering, nooit een lege closure.
@@ -113,25 +113,40 @@ We accepteren de expliciete extra record-/migratiegrens in ruil voor gepubliceer
 | Herstel | Worker-kill/nieuw proces, volledige backuprestore | Refs/layout/generaties exact; geen extra modelwerk of reactivatie |
 | Varianten | Native v1/v2/v3, historische semantiek en tree | Oorspronkelijke gate of expliciet unsupported vóór cutover; geen nieuw beleid uit ontbrekende data |
 
-## Open uitvoering
+## Geïmplementeerde overgang en compatibiliteit
 
-Implementatie en metingen volgen. Bestaande-data-productiecutover blijft MET-44; deze code mag die niet via GET/startup uitvoeren. MET-41 blijft open zolang de volledige operationele implementatie en haar native acceptatie ontbreken.
+Migratie 030 is geregistreerd. `METIS_DOCUMENT_INPUT_STORAGE=v1` kiest alleen voor nieuwe ontvangst de compacte representatie en vereist native `METIS_FORMATION_TASK_STORAGE=v1`. Lege waarde of `legacy` laat nieuwe ontvangst op de bestaande route; andere waarden weigeren. Uitgeschakelde admission zet reeds compacte documenten niet terug. Geen startup-, GET- of retryconversie van bestaande documenten.
 
-## Uitvoeringsnotitie 31 oktober 2026 — WIP, geen cutover
+`prepare_operational_inputs` maakt een servergebonden plan buiten de documentlock. Dat plan controleert de werkelijke oorspronkelijke envelope, volledige archiveleden, bronbinding en exacte attemptidentiteit. `activate_operational_inputs` vergelijkt revisie, objectgeneratie, bron/proofpins en attemptrecordversies onder dezelfde documentlock. Een gewijzigd plan of stale capture weigert. Een oude writer kan de oorspronkelijke envelope en nieuwe object/attemptstate niet stilzwijgend overschrijven. Legacy inlinepogingen worden alleen als exacte inactieve kopieën voorbereid; eigenaarconflicten weigeren. Niet-compatibele legacyproofs blijven expliciet onvoorbereid.
 
-De aparte adversariële review heeft de volgende keuzes aangescherpt:
+De gewone reader geeft actuele scalars en compacte metadata. Retry/status lezen geselecteerde laatste/lopende/gevraagde pogingen en scalar captellingen; de volledige historische diagnostiek wordt daarvoor niet opgehaald. Reviewkwaliteit leest alleen de laatste gepinde run en gevraagde kandidaatleden. Vormingscontrole krijgt de oorspronkelijke intrinsieke bevindingen zonder providerbodies; bestaande `unresolved_rejections` blijft beslissen. Expliciete worker-, bron- en diagnoselezers behouden volledige gekozen input. Diagnose kan de originele technische inlinevorm teruggeven; de actieve opslagmarker is geen historisch domeinbesluit.
 
-1. De operationele rij is onderdeel van dezelfde documentaggregate. Een wijziging moet dezelfde docrow vergrendelen, de documentrevision verhogen, alle betrokken projecties vernieuwen en de definitieve proof/sourcebinding controleren. De eerste databaseguards hiervoor zijn aanwezig; de volledige commandintegratie en CAS-proef ontbreken nog.
-2. Originele replaylineage blijft de bestaande archive-id/payloadhash. De normalisatie van alleen `formation_progress` heeft een afzonderlijke activatiehash. Native bewijs vereist de oorspronkelijke capture-ref of exact de bestaande activatiebody; bronbinding en verzegelde root blijven verplicht.
-3. Een compacte semantische variant zonder verplichte replayref wordt expliciet geweigerd. Tree, oorspronkelijke afwezigheid en legacy zijn geen impliciete semantische succesvariant. Hun volledige adapter/cutover is nog niet geïmplementeerd.
-4. Notice is uitsluitend een aan de verzegelde oorspronkelijke replay gebonden negatieve prefilter; geen menselijke afsluitstatus. De SQL-sealcontrole vergelijkt de complete verwachte leden met het werkelijke ownerarchive, ook bij een zelfconsistente vervalste manifest.
-5. Exacte getallen moeten behouden blijven. JSONB-gelijkheid alleen is onvoldoende (`1e20`, `1.0`, `1`, `true`). De prototypecontrole gebruikt de oorspronkelijke JSON-getalrepresentatie en controleert object-/arraystructuur recursief; de normale reader vereist canonieke membertekst en hash.
-6. Een bestaande compacte layout mag niet terug naar legacy, de oorspronkelijke envelope mag niet door een oude writer worden gewijzigd, en de operationele rij mag niet los worden getrunceerd/verplaatst.
+Beslisboombewijs heeft een eigen immutable archivevariant: oorspronkelijke inventory, constructie en vormingsherkomst. Graaf, besluiten en deelnamebeleid blijven mutable actuele documentgegevens. Commando's verifiëren de oorspronkelijke inventory vóór de transactielock en vergelijken dezelfde treepin opnieuw onder de bestaande fence. De kleine kaartinventory blijft uitsluitend weergaveinput. Een herhaalde gecommitte opdracht behoudt haar bestaande receiptlookup ook bij tijdelijke bronuitval.
 
-Aanwezig: geïndexeerde immutable replay-/kwaliteitsinputs bij FormationTaskStore, expliciete intrinsieke vormingsinvoer, behoud van oorspronkelijke onbekende bevindingen, gerichte kandidaatselectie met oorspronkelijke volgorde en hash, en native tegenproeven. Dit is **geen** vervanging van de bestaande closure-, autorisatie- of publicatieregel.
+Producenten bereiden grote inputs vooraf voor. De bestaande finale activatie bewaakt actuele claim/deadline, sourcepin en proofbinding; de compacte commit schrijft refs en kleine actuele metadata. De oorspronkelijke archive-id en payloadhash blijven behouden naast de bestaande genormaliseerde activatiehash. Een bronvoorbereiding voor B vervangt niet stilzwijgend actieve proof/bron A.
 
-Niet gereed: `prepare_operational_inputs` / atomische activatie, compacte generieke documentreader en writer, producer-/checkpointintegratie, actuele retry-/command-/capinvoer zonder historie, alle Review/publicatie/bron/tree/diagnoseconsumenten, volledige backup/restore, oudere-binary/objectwriterfence en groeiproeven. De end-to-endtest in `tests/test_operational_document_inputs_postgres.py` is bewust nog rood wegens ontbrekende cutover-API. Niet verbergen of als acceptatie tellen.
+Workflowbackupversie 9 / formationsectie 2 bevat compacte gegevens en verzegelde inputleden binnen de bestaande atomische workflowrestore. Oude backups krijgen alleen lege nieuwe tabellen, geen verzonnen bewijs. De attemptindex wordt uit de oorspronkelijke ownerrijen opgebouwd. Een oudere binary is geen rollbackreader voor geactiveerde layout; rollback vóór productiecutover vereist de bestaande geteste backup en compatibele binary. Productiecutover van bestaande gegevens blijft MET-44.
 
-Migratie 030 is een **niet geregistreerd prototype**; productie gebruikt MIGRATION_NAMES en krijgt deze wijziging dus nog niet. De PostgreSQL-testtemplate leest alle SQL-bestanden en toetst het prototype wel. Geen nieuwe runtime-admissionflag, automatische conversie, deployment of productie-/incidentherstel uitgevoerd. Geen PR of Done totdat de volledige belofte en normale verificatie slagen. Compositiediagram volgt binnen #950 vóór de uiteindelijke PR.
+## Adversariële review
 
-Verificatie van deze WIP-tussenstand: native PostgreSQL 16, beide bestaande lokale/Azure composities; `pytest -q tests/test_processing_archive_inputs_postgres.py tests/test_processing_archives_postgres.py tests/test_formation_evidence_postgres.py -x`: **96 passed**, 129,96 s. Architectuurinvarianten: **6 passed**. `compileall src`, architectuurgrenzen en change-contractvalidator slagen. De normale volledige verificatie is nog niet afgerond; de hierboven genoemde end-to-endtest faalt op de ontbrekende `prepare_operational_inputs`-API. Dit bewijs geldt uitsluitend voor de archive/inputprimitive en bestaande geteste proofroutes, niet voor de complete MET-41-belofte of voor productieperformance.
+De onafhankelijke read-only review onderzocht concrete bypasses. De implementatie weigert een semantische variant met ontbrekende replay, vervalste attemptindexscalars, gewijzigde membership en cross-aggregate legacyattemptidentiteit. Reviewkaartprojecties zijn niet als commandoauthority gebruikt. De oorspronkelijke base-route behoudt bronverificatie; idempotente graphretries behouden de gecommitte receipt. Stale bron/tree/proof-/revisiecaptures kunnen de winnaar niet vervangen.
+
+## Verificatie
+
+Native PostgreSQL 16, beide bestaande lokale/Azure broncomposities. Gerichte proeven omvatten incomplete vorming, expliciete omzetting, Reviewbron en objectbesluit zonder false closure, hervatten na nieuw proces, nieuwe ontvangst en admission uitzetten, stale CAS, index/variantvervalsing, volledige workflowbackup/restore met actuele metadata, beslisboombewijs en graafcommando, groei van 1 naar 25 grote kwaliteitsruns en gemeten JSONbytes/fysieke compacte rij. Definitieve commandresultaten worden bij de PR vastgelegd; deze sectie is geen productieperformancemeting.
+
+Compositie: [diagram](../architecture/operational-document-inputs-950.md), bereikbaar via Alles over Metis. Geen productiegegevens, deployment of bestaande-data-cutover uitgevoerd.
+
+### Native grensmetingen en tegenproeven (1 november)
+
+Synthetische historie groeit van 1.344.506 naar 31.229.993 ongecomprimeerde bytes. De compacte metadata/ref-rij blijft 2.120–2.126 bytes. Op beide composities blijven de gemeten metadataread/write/statusoperaties 50 SQL-executes en 46 fetches, grootste gedecodeerde JSON 13.208 bytes en totaal circa 216.5 KB. SQLtijd 0,081–0,125 s; grootste gemeten verbindings-/transactiescope (bovengrens voor de daarin gehouden lock) 0,019–0,033 s. Totale operatie 0,156–0,363 s. Geen productiebenchmark of vergelijking onder identieke belasting.
+
+Gerichte geïntegreerde suite: 56 passed; aanvullende bron-A/B-transitie op beide composities en beide opslagvormen: 4 passed. Dit omvat mislukte B-voorbereiding met actieve A ongewijzigd en latere atomische B-activatie. Voor/na-layoutpinning geïnjecteerde echte SQLfouten rollen de layout terug; dezelfde voorbereiding blijft herbruikbaar. Compacte Treevorming→menselijke passage-/graafreview→publicatie bewaart de exacte oorspronkelijke evidence en bereidt de archiveinput vóór de publicatielock; gecommitte retries houden dezelfde receipt. Bron- en proofpins worden onder de bestaande fence opnieuw gecontroleerd. Een extra legacybronproef bewaart de bestaande Doclingkeuze over latere classificatie-/foutruns, zonder provider-/kandidaatbodies te laden.
+
+De volledige regressiesuite wordt op het gecommitte kandidaat-tree uitgevoerd; de uiteindelijke PR vermeldt resultaat, exacte head/tree en eventuele beperkingen. Een afgebroken eerdere run is geen volledige acceptatie.
+
+### Volledige regressie en correcties
+
+De eerste volledige kandidaat (`19cdb417`, tree `fc3c722b`) voerde 6.719 tests uit: 6.656 passed, 37 failed, 26 optionele skips en nul PostgreSQL-skips. De 37 bevindingen zijn opgelost; de betrokken suites zijn integraal opnieuw uitgevoerd: 114 + 18 passed. De correcties behouden expliciete legacyhistorie binnen een reeds gecapturede readscope, halen de actuele ingestreceipt op bij een concurrente duplicate en behouden de bestaande readiness-aanroep wanneer geen treeinput wordt doorgegeven. Historietests en de volledige referentie-oracle lezen nu expliciet historie; de metadatareader wordt niet opnieuw gehydrateerd. De geïsoleerde SQLpariteitsfixture kent de nieuwe legacyreaderfunctie, en de expand-fixture toetst haar uitgestelde constraints vóór de volgende DDL. Alleen het werkelijk benodigde DELETE-recht voor inactieve voorbereidingsrecords is toegevoegd; immutable guards blijven gelden.
+
+Desktop/mobile, donker thema, toetsenbord en no-JS: native Chromiumbrowsertest passed; renders op 1440 en 390 px geïnspecteerd. Impeccable detector: geen bevindingen. De 26 optionele skips betroffen echte Doclingmodellen (12), Bend (11) en het reeds niet geïmplementeerde B23-scenario (3); dit vervangt hun aparte acceptatiejobs niet. De definitieve PR vermeldt afzonderlijk de eindrun op de gecorrigeerde kandidaat.

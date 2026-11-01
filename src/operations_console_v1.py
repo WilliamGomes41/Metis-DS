@@ -1367,6 +1367,29 @@ class OperationsConsole:
             if document is not None:
                 document.close()
 
+    def _ingest_operational(self, command):
+        # New full-ingest requests use the same durable receipt/reservation/
+        # worker lifecycle as HTTP; an old idempotent receipt stays untouched.
+        from src.integrity_kernel import stable_hash
+        store=getattr(self,'workflow_document_store',None)
+        if store is None:
+            raise ConsoleError('document_inputs_postgres_required')
+        existed=False
+        if command.get('command_id'):
+            identity=stable_hash({'actor_id':command['actor_id'],'command_id':command['command_id']})
+            sid=f'snap-{identity[:16]}-{identity[16:24]}'
+            with store._connect() as con:
+                existed=con.execute('SELECT 1 FROM workflow.documents WHERE snapshot_id=%s',(sid,)).fetchone() is not None
+        receipt=self.ingest(**command,_receive_only=True)
+        if existed:
+            return receipt
+        sid=receipt['snapshot_id']
+        attempt,fresh=self.reserve_source_selection(actor_id=command['actor_id'],snapshot_id=sid,
+            command_id='ingest-'+sid,expected_revision=store.revision_for_rows([]))
+        if fresh:
+            self.execute_source_selection(actor_id=command['actor_id'],snapshot_id=sid,attempt=attempt)
+        return self._receipt(self._envelope(sid))
+
     def ingest(
         self,
         *,
@@ -1394,6 +1417,15 @@ class OperationsConsole:
         _registration_guard: Any = None,
     ) -> dict[str, Any]:
         self._require_role(actor_id, "researcher")
+        from src.workflows.operational_document_inputs_v1 import admission_requested
+        operational_admission=admission_requested()
+        if operational_admission and not _receive_only:
+            return self._ingest_operational(dict(actor_id=actor_id,ingest_kind=ingest_kind,title=title,version=version,
+                date=date,live_url=live_url,class_=class_,family=family,named_reviewers=named_reviewers,
+                filename=filename,data=data,content_type=content_type,url=url,replaces_snapshot_id=replaces_snapshot_id,
+                review_policy=review_policy,review_choice=review_choice,source_status=source_status,
+                command_id=command_id,revision_reason=revision_reason,_registration_boundary=_registration_boundary,
+                _registration_guard=_registration_guard))
         if source_status not in {"unknown", "established", "draft"}:
             raise ConsoleError("invalid_source_status")
         if ingest_kind not in {"new", "new_version"}:
@@ -1606,6 +1638,8 @@ class OperationsConsole:
             # H2 2b-2: gedrag volgt de policy-mapping (H2-1); de herkomst MOET zichtbaar zijn.
             envelope["configuration_source"] = "legacy_policy_mapping"
         if _receive_only:
+            if operational_admission:
+                envelope["processing_storage"]="task-v1"
             # Durable receipt is a separate command. No extractor/provider has
             # run, and no attempt is implicitly authorized by receiving bytes.
             envelope["received_source"] = {"filename": filename, "bytes": len(data)}
@@ -1614,7 +1648,7 @@ class OperationsConsole:
             boundary = _registration_boundary or self._store_write_lock
             with boundary():
                 self._reload_store_locked()
-                prior = self._envelopes.get(snapshot_id)
+                prior = self._envelope(snapshot_id) if snapshot_id in self._envelopes else None
                 if prior is not None:
                     if ingest_command and prior.get("ingest_command") == ingest_command:
                         return self._durable_receipt(prior) if _receive_only else self._receipt(prior)
@@ -1624,10 +1658,10 @@ class OperationsConsole:
                     _registration_guard(envelope)
                 try:
                     self._commit_prepared_store(envelopes={snapshot_id: envelope}, objects=(snapshot_id, []),
-                                                expected_revision="", snapshot_id=snapshot_id)
+                                                expected_revision="", snapshot_id=snapshot_id,document_storage_admission=operational_admission)
                 except ConsoleError:
                     self._reload_store_locked()
-                    prior = self._envelopes.get(snapshot_id)
+                    prior = self._envelope(snapshot_id) if snapshot_id in self._envelopes else None
                     if ingest_command and prior and prior.get("ingest_command") == ingest_command:
                         return self._durable_receipt(prior) if _receive_only else self._receipt(prior)
                     raise
@@ -1642,7 +1676,7 @@ class OperationsConsole:
             attempt_deadline = time.monotonic() + limits.attempt
             with self._store_write_lock():
                 self._reload_store_locked()
-                prior = self._envelopes.get(snapshot_id)
+                prior = self._envelope(snapshot_id) if snapshot_id in self._envelopes else None
                 if prior is not None:
                     if ingest_command and prior.get("ingest_command") == ingest_command:
                         return self._durable_receipt(prior) if _receive_only else self._receipt(prior)
@@ -1664,7 +1698,7 @@ class OperationsConsole:
                                                 expected_revision="", snapshot_id=snapshot_id)
                 except ConsoleError:
                     self._reload_store_locked()
-                    prior = self._envelopes.get(snapshot_id)
+                    prior = self._envelope(snapshot_id) if snapshot_id in self._envelopes else None
                     if ingest_command and prior and prior.get("ingest_command") == ingest_command:
                         return self._durable_receipt(prior) if _receive_only else self._receipt(prior)
                     raise
@@ -1882,21 +1916,61 @@ class OperationsConsole:
             return False
         return kind in {"html", "pdf", "boom"}  # every supported source gets a model proposal
 
+    def _formation_envelope(self, snapshot_id, *, envelope=None):
+        header = self._envelope(snapshot_id) if envelope is None else envelope
+        if '_document_inputs' not in header:
+            return header
+        return self.workflow_document_store.formation_input(header)
+
+    def _tree_envelope(self,snapshot_id, *, envelope=None, prepared=None):
+        header=self._envelope(snapshot_id) if envelope is None else envelope
+        if prepared is not None and '_document_inputs' in header:
+            from src.workflows.processing_archives_v1 import source_binding
+            if (header['_document_inputs'].get('tree')!=(prepared.get('_document_inputs') or {}).get('tree')
+                    or source_binding(header)!=source_binding(prepared)):
+                raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+            return {**header,'decision_graph_evidence':prepared['decision_graph_evidence']}
+        if '_document_inputs' not in header or 'decision_graph_evidence' in header:
+            return header
+        from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+        try:
+            return self.workflow_document_store.tree_input(header)
+        except WorkflowDocumentStoreError as error:
+            raise ConsoleError('workflow_document_unavailable',str(error)) from error
+
+    def _processing_command_envelope(self, snapshot_id, *, command_id=None, attempt_id=None):
+        header=self._envelope(snapshot_id)
+        if '_document_inputs' not in header:
+            return header
+        return self.workflow_document_store.processing_command_input(header,command_id=command_id,attempt_id=attempt_id)
+
+    def _processing_history_envelope(self, snapshot_id):
+        header=self._envelope(snapshot_id)
+        if '_document_inputs' not in header:
+            return header
+        return self.workflow_document_store.processing_history_input(snapshot_id)
+
+    def _processing_envelope(self, snapshot_id, *, command_id=None, attempt_id=None):
+        header = self._formation_envelope(snapshot_id)
+        if '_document_inputs' not in header:
+            return header
+        return self.workflow_document_store.processing_command_input(header,command_id=command_id,attempt_id=attempt_id)
+
     @diagnostic_phase("processing_status")
     def processing_status(self, snapshot_id: str, *, actor_id: str | None = None,
                           formation_fragments=None) -> dict[str, Any]:
         """Actuele detailcontrole; compacte overzichten gebruiken eigen expliciete invoer."""
         from src.vorming.processing_retry_v1 import status
+        envelope=self._processing_envelope(snapshot_id)
         if actor_id is not None:
             from src.vorming.source_selection_v1 import authorize
-            authorize(self, actor_id, self._envelope(snapshot_id))
-        result = status(self._envelope(snapshot_id), policy=self._processing_limits())
+            authorize(self, actor_id, envelope)
+        result = status(envelope, policy=self._processing_limits())
         if (self.snapshot_is_published(snapshot_id)
                 or self._read_current_objects(snapshot_id)
-                or self.object_review_bindings(snapshot_id, objects=self._read_current_objects(snapshot_id)) or self._envelope(snapshot_id).get("review_passes")):
+                or self.object_review_bindings(snapshot_id, objects=self._read_current_objects(snapshot_id)) or envelope.get("review_passes")):
             result["retry_allowed"] = False
         from src.vorming.recoverable_formation_v1 import incomplete
-        envelope = self._envelope(snapshot_id)
         stored_incomplete = incomplete(envelope)
         if not stored_incomplete:
             # Zonder opgeslagen open vorming is de diepe controle identiek
@@ -1917,7 +1991,7 @@ class OperationsConsole:
                 bindings=self.object_review_bindings(snapshot_id, objects=objects),
                 fragments=formation_fragments)
             result["formation_checked"] = True
-        evidence = (self._envelope(snapshot_id).get("semantic_replay") or {}).get("provider_evidence") or {}
+        evidence = (envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
         result["formation_state"] = "pending" if result["formation_incomplete"] else "complete"
         if evidence.get("task_policy"):
             from src.vorming.bounded_formation_v1 import formation_progress as project_formation_progress
@@ -1939,7 +2013,7 @@ class OperationsConsole:
                 result["formation_state"] = "pending" if result["formation_incomplete"] else "complete"
                 result["formation_checked"] = bool(envelope.get("semantic_replay")) or not result["formation_incomplete"]
         from src.vorming.source_selection_v1 import resume_contract_current
-        result["resume_allowed"] = bool(self._can_resume_formation(snapshot_id)
+        result["resume_allowed"] = bool(self._can_resume_formation(snapshot_id,envelope=envelope)
             and resume_contract_current(envelope) and result["state"] != "running"
             and (result["retry_attempts_used"] < result["max_attempts"] or result["recovery_available"])
             and result["reason_code"] not in {"processing_retry_cooldown", "processing_structural_limit"})
@@ -1968,11 +2042,11 @@ class OperationsConsole:
                 self._load_objects(snapshot_id, remember=False), snapshot_id=snapshot_id)
         return reads.current_objects[snapshot_id]
 
-    def _can_resume_formation(self, snapshot_id):
+    def _can_resume_formation(self, snapshot_id, *, envelope=None):
         from src.vorming.recoverable_formation_v1 import incomplete, VERSION
         from src.vorming.bounded_formation_v1 import VERSION as TASK_VERSION
         from src.review.source_context_review_v1 import ROLE_KEY, LINKS_KEY
-        envelope = self._envelope(snapshot_id)
+        envelope = self._processing_envelope(snapshot_id) if envelope is None else envelope
         if envelope.get("processing_storage") == "task-v1" and any(
                 (a.get("diagnostic") or {}).get("validator_input_ref") for a in envelope.get("processing_attempts") or []):
             latest = next(reversed(envelope.get("processing_attempts") or []), {})
@@ -2001,7 +2075,7 @@ class OperationsConsole:
         limits = self._processing_limits()
         deadline = time.monotonic() + limits.attempt
         with self._reprocessing_transaction(snapshot_id):
-            envelope = deepcopy(self._envelope(snapshot_id))
+            envelope = deepcopy(self._processing_command_envelope(snapshot_id,command_id=command_id))
             from src.vorming.source_selection_v1 import authorize
             authorize(self, actor_id, envelope)
             duplicate = next((a for a in envelope.get("processing_attempts", []) if a["command_id"] == command_id), None)
@@ -2032,7 +2106,7 @@ class OperationsConsole:
         # production PostgreSQL overrides this with its existing row transaction.
         with self._store_write_lock():
             self._reload_store_locked()
-            self._envelope(snapshot_id)
+            self._processing_command_envelope(snapshot_id)
             yield
 
     def _diagnostic_writer(self, snapshot_id, attempt_id):
@@ -2048,7 +2122,7 @@ class OperationsConsole:
             from src.vorming.source_selection_v1 import authorize
             with self._reprocessing_transaction(snapshot_id):
                 # Command reads already own detached decoded JSON.
-                current = self._envelope(snapshot_id)
+                current = self._processing_command_envelope(snapshot_id)
                 active = assert_active(current, attempt_id, now())
                 authorize(self, active["actor_id"], current)
                 checkpoint(active, phase, values)
@@ -2071,7 +2145,7 @@ class OperationsConsole:
                 raise ConsoleError("not_authenticated")
             if "publisher" not in account["roles"]:
                 raise ConsoleError("publisher_role_required")
-            envelope = deepcopy(self._envelope(snapshot_id))
+            envelope = deepcopy(self._processing_command_envelope(snapshot_id))
             if actor_id not in envelope.get("named_reviewers", []) and actor_id != envelope.get("uploader_account_id"):
                 raise ConsoleError("reviewer_not_named_on_snapshot")
             if self.snapshot_is_published(snapshot_id):
@@ -2115,7 +2189,7 @@ class OperationsConsole:
         if not isinstance(note, str) or not 10 <= len(note.strip()) <= 500:
             raise ConsoleError("source_page_accounting_note_required")
         with self._reprocessing_transaction(snapshot_id):
-            envelope = deepcopy(self._envelope(snapshot_id))
+            envelope = deepcopy(self._processing_command_envelope(snapshot_id))
             authorize(self, actor_id, envelope)
             if self.snapshot_is_published(snapshot_id):
                 raise ConsoleError("published_objects_must_not_be_rewritten")
@@ -2149,7 +2223,7 @@ class OperationsConsole:
         if handled:
             return handled
         with self._reprocessing_transaction(snapshot_id):
-            current = deepcopy(self._envelope(snapshot_id))
+            current = deepcopy(self._processing_command_envelope(snapshot_id))
             active = next(a for a in current[KEY] if a["attempt_id"] == attempt_id)
             if active["state"] == "running":
                 finish(current, attempt_id, state="failed", error=error)
@@ -2182,7 +2256,7 @@ class OperationsConsole:
         # Denial precedes the failure recorder: a forged or revoked caller must
         # not claim/fail another actor's accepted attempt.
         with self._reprocessing_transaction(snapshot_id):
-            current = self._envelope(snapshot_id)
+            current = self._processing_command_envelope(snapshot_id)
             authorize(self, actor_id, current)
             stored = assert_active(current, attempt["attempt_id"], now())
             if (current.get("processing_storage") == "task-v1"
@@ -2202,7 +2276,7 @@ class OperationsConsole:
             return self.reextract_unpublished(actor_id=actor_id, snapshot_id=snapshot_id,
                  _attempt_id=attempt["attempt_id"], _attempt_deadline=deadline,
                  _claim_token=(attempt.get("dispatch") or {}).get("token"))
-        return self._receipt(self._envelope(snapshot_id))
+        return self._receipt(self._processing_command_envelope(snapshot_id))
 
     def retry_pre_review(self, *, actor_id: str, snapshot_id: str, command_id: str) -> dict[str, Any]:
         """Retry an empty blocked source without losing evidence or prior work."""
@@ -2210,7 +2284,7 @@ class OperationsConsole:
         limits = self._processing_limits()
         deadline = time.monotonic() + limits.attempt
         with self._reprocessing_transaction(snapshot_id):
-            envelope = deepcopy(self._envelope(snapshot_id))
+            envelope = deepcopy(self._processing_command_envelope(snapshot_id))
             from src.vorming.source_selection_v1 import authorize
             authorize(self, actor_id, envelope)
             if self.snapshot_is_published(snapshot_id):
@@ -2253,11 +2327,14 @@ class OperationsConsole:
         """
         from src.vorming.source_selection_v1 import authorize
         with self._reprocessing_transaction(snapshot_id):
-            envelope = deepcopy(self._envelope(snapshot_id))
+            envelope = deepcopy(self._processing_command_envelope(snapshot_id,attempt_id=_attempt_id))
             account = authorize(self, actor_id, envelope)
+        if '_document_inputs' in envelope:
+            envelope=self.workflow_document_store.processing_execution_input(envelope)
         if _attempt_id is None and envelope.get("publication_eligibility") == PRE_REVIEW_BLOCKED:
             return self.retry_pre_review(actor_id=actor_id, snapshot_id=snapshot_id, command_id=uuid.uuid4().hex)
-        if (envelope["class"] == "beslisboom" and not envelope.get("decision_tree_formation")
+        from src.vorming.decision_tree_route_v1 import has_recorded_route
+        if (envelope["class"] == "beslisboom" and not has_recorded_route(envelope)
                 and (envelope.get("decision_unit_contract") or "decision_graph" in envelope
                      or self.snapshot_objects(snapshot_id))):
             # Formed under the retired route: re-forming needs an explicit successor revision.
@@ -2296,7 +2373,7 @@ class OperationsConsole:
             with self._reprocessing_transaction(snapshot_id):
                 authorize(self, actor_id, self._envelope(snapshot_id))
                 self._assert_source_work_unchanged(envelope, expected_revision, "published_objects_must_not_be_rewritten")
-                reserved = deepcopy(envelope)
+                reserved = deepcopy(self._processing_command_envelope(snapshot_id))
                 from src.vorming.source_selection_v1 import active_configuration
                 active = active_configuration(self)
                 # #630 reconcile: reserve() reads the active configuration; the envelope keeps its own.
@@ -2403,11 +2480,33 @@ class OperationsConsole:
             from src.workflows.formation_task_store_v1 import FormationTaskStore
             prepared_envelope = FormationTaskStore(self.workflow_document_store).activation_envelope(prepared_envelope, _attempt_id)
         review_card_preparation = prepare_activation(getattr(self, 'workflow_document_store', None), prepared_envelope, objects, fragments)
+        # Full source/replay/quality preparation is finished before the outer
+        # document transaction. The commit receives only refs and observations.
+        from src.vorming.bounded_formation_v1 import formation_progress, pending_source_extent
+        before_provider=(envelope.get('semantic_replay') or {}).get('provider_evidence') or {}
+        after_provider=(prepared_envelope.get('semantic_replay') or {}).get('provider_evidence') or {}
+        before_progress=before_provider.get('formation_progress') or formation_progress(before_provider)
+        after_progress=after_provider.get('formation_progress') or formation_progress(after_provider)
+        before_extent=pending_source_extent(before_provider)
+        after_extent=pending_source_extent(after_provider)
+        progress_made=bool(after_progress.get('terminal_task_count',0)>before_progress.get('terminal_task_count',0)
+            or after_progress.get('pending_task_count',0)<before_progress.get('pending_task_count',0)
+            or after_extent['unknown_pending_count']<before_extent['unknown_pending_count']
+            or (after_extent['unknown_pending_count']==before_extent['unknown_pending_count']
+                and after_extent['pending_source_char_count']<before_extent['pending_source_char_count']))
+        replay_for_stop=prepared_envelope.get('semantic_replay') or {}
+        stop_input={'semantic_replay':{'identity':{'components':{'semantic_contract_version':
+            ((replay_for_stop.get('identity') or {}).get('components') or {}).get('semantic_contract_version')}},
+            'provider_evidence':{'formation_incomplete':after_provider.get('formation_incomplete'),
+                'supplementary_calls':[{'error_code':c.get('error_code')} for c in
+                    [after_provider,*(after_provider.get('supplementary_calls') or [])] if c.get('error_code')]}}}
+        if '_document_inputs' in prepared_envelope:
+            prepared_envelope=self.workflow_document_store.prepare_producer_inputs(prepared_envelope)
         with self._reprocessing_transaction(snapshot_id):
             self._reload_store_locked()
             if _attempt_id is not None:
                 from src.vorming.processing_retry_v1 import assert_active, now
-                active = assert_active(self._envelope(snapshot_id), _attempt_id, now())
+                active = assert_active(self._processing_command_envelope(snapshot_id,attempt_id=_attempt_id), _attempt_id, now())
                 if (envelope.get("processing_storage") == "task-v1"
                         and (active.get("dispatch") or {}).get("token") != (attempt.get("dispatch") or {}).get("token")):
                     raise ConsoleError("processing_command_conflict")
@@ -2426,30 +2525,15 @@ class OperationsConsole:
                 if attempt.get("processing_configuration") and attempt["processing_configuration"] != configuration(self):
                     raise ConsoleError("processing_configuration_changed")
                 from src.vorming.processing_retry_v1 import finish, attach_transport
-                assert_active(self._envelope(snapshot_id), _attempt_id, now())
+                assert_active(self._processing_command_envelope(snapshot_id,attempt_id=_attempt_id), _attempt_id, now())
                 if _attempt_deadline is not None and time.monotonic() >= _attempt_deadline:
                     raise ConsoleError("processing_attempt_expired")
                 from src.vorming.attempt_diagnostics_v1 import merge_diagnostics
-                merge_diagnostics(prepared_envelope, self._envelope(snapshot_id))
-                finish(prepared_envelope, _attempt_id, state="succeeded", budget_aware=True)
+                merge_diagnostics(prepared_envelope, self._processing_command_envelope(snapshot_id,attempt_id=_attempt_id))
+                finish(prepared_envelope, _attempt_id, state="succeeded", budget_aware=True,formation_input=stop_input)
                 stored = next(a for a in prepared_envelope["processing_attempts"] if a["attempt_id"] == _attempt_id)
                 if stored.get("kind") == "resume":
-                    from src.vorming.bounded_formation_v1 import formation_progress, pending_source_extent
-                    before_provider = (envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
-                    after_provider = (prepared_envelope.get("semantic_replay") or {}).get("provider_evidence") or {}
-                    before_progress = before_provider.get("formation_progress") or formation_progress(before_provider)
-                    after_progress = after_provider.get("formation_progress") or formation_progress(after_provider)
-                    before_extent = pending_source_extent(before_provider)
-                    after_extent = pending_source_extent(after_provider)
-                    stored["formation_progress_made"] = bool(
-                        after_progress.get("terminal_task_count", 0) > before_progress.get("terminal_task_count", 0)
-                        or after_progress.get("pending_task_count", 0) < before_progress.get("pending_task_count", 0)
-                        or after_extent["unknown_pending_count"] < before_extent["unknown_pending_count"]
-                        or (
-                            after_extent["unknown_pending_count"] == before_extent["unknown_pending_count"]
-                            and after_extent["pending_source_char_count"] < before_extent["pending_source_char_count"]
-                        )
-                    )
+                    stored['formation_progress_made']=progress_made
                 transport = (replay_record or {}).get("provider_evidence", {}).get("transport", {})
                 if (replay_record or {}).get("semantic_execution") == "replay":
                     stored["replayed_call_id"] = transport.get("call_id")
@@ -2646,7 +2730,8 @@ class OperationsConsole:
         if reads is not None and reads.retained_only:
             raise ConsoleError('retained_source_not_recorded')
         args = {"document_id": envelope["document_id"], "source_id": envelope["source_id"]}
-        if envelope.get("decision_tree_formation"):
+        from src.vorming.decision_tree_route_v1 import has_recorded_route
+        if has_recorded_route(envelope):
             # The recorded route owns its source representation.
             from src.vorming.decision_tree_route_v1 import source_fragments
             return source_fragments(envelope["content_kind"], path, path.read_bytes(), use_docling=False, **args)
@@ -2677,6 +2762,8 @@ class OperationsConsole:
         return fragments
 
     def _legacy_review_source_envelope(self, envelope):
+        if '_document_inputs' in envelope and not envelope.get('prepared_source_extraction'):
+            envelope=self.workflow_document_store.source_input(envelope)
         record = envelope.get('prepared_source_extraction')
         if record and 'fragments' not in record:
             # Explicit old-layout reader, bound to the same captured extraction.
@@ -2739,6 +2826,8 @@ class OperationsConsole:
         from src.workflows.workflow_documents_postgres_v1 import _json_text
         envelope = deepcopy(self._envelope(snapshot_id))
         authorize(self, actor_id, envelope)
+        if '_document_inputs' in envelope:
+            envelope=self.workflow_document_store.source_input(envelope)
         self._require_mutable_working_revision(snapshot_id)
         if not expected_revision or self.objects_revision(snapshot_id) != expected_revision:
             raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
@@ -2762,7 +2851,7 @@ class OperationsConsole:
                 from src.workflows.formation_evidence_v1 import assert_source_reference
                 assert_source_reference(con, snapshot_id, reference)
                 pinned = con.execute("UPDATE workflow.documents SET review_source_ref=%s::jsonb,review_read_envelope=NULL WHERE snapshot_id=%s "
-                    "AND envelope_payload#>>'{prepared_source_extraction,record_hash}'=%s",
+                    "AND CASE WHEN document_storage_version=1 THEN (SELECT refs->>'extraction_hash' FROM workflow.document_inputs i WHERE i.snapshot_id=workflow.documents.snapshot_id) ELSE envelope_payload#>>'{prepared_source_extraction,record_hash}' END=%s",
                     (_json_text(reference),snapshot_id,reference['extraction_hash']))
                 if pinned.rowcount != 1:
                     raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
@@ -3994,7 +4083,7 @@ class OperationsConsole:
             revised["object_type"] = "unclassified"
         revised.pop("confirmed_object_type", None)
         stamp_canonical_hashes(revised)
-        envelope = self._envelope(snapshot_id)
+        envelope = self._tree_envelope(snapshot_id)
         from src.vorming.decision_unit_construction_v1 import KEY as LEGACY_UNIT_KEY, _formed_by_route
         decision_tree_unit = review_path_for_klasse(envelope["class"]) == "boom" and _formed_by_route(target)
         if (target.get("metadata") or {}).get(LEGACY_UNIT_KEY):
@@ -4081,6 +4170,9 @@ class OperationsConsole:
             new_envelope = deepcopy(envelope)
             new_envelope["review_passes"] = {}
             new_envelope["clinical_rereview_required"] = True
+            if '_document_inputs' in new_envelope:
+                from src.workflows.processing_archives_v1 import TREE_FIELDS
+                new_envelope={k:v for k,v in new_envelope.items() if k not in TREE_FIELDS}
             new_envelopes[snapshot_id] = new_envelope
         new_bindings = deepcopy(review_bindings_view(self))
         new_bindings[snapshot_id] = invalidate_for_object(new_bindings.get(snapshot_id, []), object_id)
@@ -4238,7 +4330,9 @@ class OperationsConsole:
     ) -> dict[str, Any]:
         """Read the existing technical gates without action authorization."""
         context_supplied = objects is not None
-        envelope = envelope if envelope is not None else self._envelope(snapshot_id)
+        envelope = self._formation_envelope(snapshot_id,envelope=envelope)
+        if envelope.get('decision_graph'):
+            envelope=self._tree_envelope(snapshot_id,envelope=envelope)
         if self.snapshot_is_published(snapshot_id):
             return {
                 "snapshot_id": snapshot_id,
@@ -4460,13 +4554,18 @@ class OperationsConsole:
         }
 
 
-    def consider_publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
+    def consider_publish(self, *, actor_id: str, snapshot_id: str, tree_input=None) -> dict[str, Any]:
         """Authorize the publisher action boundary, then run total readiness."""
         self._require_role(actor_id, "publisher")
         from src.publication.publication_readiness_v1 import derive_publication_readiness
-        return derive_publication_readiness(self, snapshot_id)
+        return derive_publication_readiness(self, snapshot_id, tree_input=tree_input)
 
     def publish(self, *, actor_id: str, snapshot_id: str) -> dict[str, Any]:
+        self._require_role(actor_id,'publisher')
+        header=self._envelope(snapshot_id)
+        tree_input=(self._tree_envelope(snapshot_id,envelope=header)
+            if header.get('decision_graph') and '_document_inputs' in header
+            and not self.snapshot_is_published(snapshot_id) else None)
         with self._store_write_lock():
             documents = getattr(self, "workflow_document_store", None)
             reviews = getattr(self, "workflow_review_store", None)
@@ -4478,9 +4577,9 @@ class OperationsConsole:
                     connection.execute("SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
                                        (snapshot_id,))
                     self._reload_store_locked()
-                    return self._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id)
+                    return self._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id, tree_input=tree_input)
             self._reload_store_locked()
-            return self._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id)
+            return self._publish_locked(actor_id=actor_id, snapshot_id=snapshot_id, tree_input=tree_input)
 
     def live_snapshot(self, *, family: str, class_: str) -> dict[str, Any] | None:
         envelopes = self.list_document_cards()

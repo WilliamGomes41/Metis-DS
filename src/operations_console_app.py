@@ -2485,7 +2485,7 @@ def _review_route_objects(
 
 def _decision_paths_html(console: OperationsConsole, snapshot_id: str, obj: dict[str, Any], objects: list[dict[str, Any]]) -> str:
     from src.vorming.decision_graph_v1 import ordered_paths, publication_issues
-    envelope = console._envelope(snapshot_id)
+    envelope = console._tree_envelope(snapshot_id)
     if "decision_graph" not in envelope:
         return ""
     result = ordered_paths(envelope["decision_graph"], objects, envelope["decision_graph_evidence"], str(obj["object_id"]))
@@ -5374,6 +5374,7 @@ def create_console_app(
         envelope = state._envelope(document)
         if account["account_id"] not in (envelope.get("named_reviewers") or []):
             raise ConsoleError("reviewer_not_named_on_snapshot")
+        envelope=state._processing_history_envelope(document)
         attempt = next((a for a in envelope.get("processing_attempts", []) if a["attempt_id"] == attempt_id), None)
         if attempt is None:
             raise ConsoleError("processing_attempt_not_active")
@@ -5519,6 +5520,7 @@ def create_console_app(
         envelope = state._envelope(snapshot_id)
         if account["account_id"] not in (envelope.get("named_reviewers") or []):
             raise ConsoleError("reviewer_not_named_on_snapshot")
+        envelope=state._processing_history_envelope(snapshot_id)
         objects, revision = state.snapshot_objects_and_revision(snapshot_id)
         refusal_issues: list[str] = []
         task_evidence = {}
@@ -5548,6 +5550,7 @@ def create_console_app(
         envelope = state._envelope(snapshot_id)
         if account["account_id"] not in (envelope.get("named_reviewers") or []):
             raise ConsoleError("reviewer_not_named_on_snapshot")
+        envelope=state._processing_history_envelope(snapshot_id)
         objects = state.snapshot_objects(snapshot_id)
         pre_review_blocked = envelope.get("publication_eligibility") == PRE_REVIEW_BLOCKED
         processing = state.processing_status(snapshot_id, actor_id=account["account_id"])

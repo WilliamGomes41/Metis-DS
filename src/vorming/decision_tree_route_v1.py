@@ -53,6 +53,10 @@ EXPORT_PROMPT = (
 Proposer = Callable[[dict[str, Any]], tuple[dict[str, Any], str]]
 
 
+def has_recorded_route(envelope):
+    return bool(envelope.get(ENVELOPE_KEY) or envelope.get('tree_source_route'))
+
+
 def _error(code: str, detail: str = ""):
     from src.operations_console_v1 import ConsoleError
     return ConsoleError(code, detail) if detail else ConsoleError(code)

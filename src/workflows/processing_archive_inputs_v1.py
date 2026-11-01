@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from copy import deepcopy
 import json
 
-from src.workflows.processing_archives_v1 import encoded, digest, source_binding
+from src.workflows.processing_archives_v1 import encoded, digest, source_binding, TREE_FIELDS
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
 from src.workflows.workflow_transaction_v1 import workflow_transaction_active
 
@@ -29,6 +29,17 @@ class FormationAssessmentInput:
         object.__setattr__(self, 'source', freeze(deepcopy(self.source)))
 
 
+def tree_card_inventory(inventory):
+    if not isinstance(inventory,dict):
+        return {'source_sha256':None,'items':None}
+    items=inventory.get('items')
+    if isinstance(items,dict):
+        items={key:{**{k:value[k] for k in ('kind','bundle_id','bundle_role') if k in value},
+            'literal_text_hash':digest(value['text']) if isinstance(value.get('text'),str) else None}
+            for key,value in items.items()}
+    return {'source_sha256':inventory.get('source_sha256'),'items':items}
+
+
 def _parts(kind, value):
     if kind == 'semantic_replay':
         from src.vorming.semantic_replay_v1 import exact_replay_lookup, LOOKUP_HIT
@@ -46,16 +57,35 @@ def _parts(kind, value):
         return [('meta','0',None,meta), ('identity','0',None,value['identity']),
                 ('proposal','0',None,value['proposal']), ('provider','0',None,intrinsic)]
     if kind == 'quality_processing_run':
-        rows = [('meta','0',None,{k:value[k] for k in ('run_id',) if k in value})]
+        rows = [('meta','0',None,{k:value[k] for k in ('run_id','outcome','extractor_versions') if k in value})]
         for key in ('source_fragments','document_extraction'):
             if key in value:
                 rows.append((key,'0',None,value[key]))
         rows += [('candidate',str(i).zfill(10),c.get('object_id'),c) for i,c in enumerate(value.get('candidates') or [])]
         return rows
+    if kind=='tree_formation':
+        rows=[(key,'0',None,value[key]) for key in sorted(TREE_FIELDS) if key in value]
+        if 'decision_graph_evidence' in value:
+            rows.append(('tree_card','0',None,tree_card_inventory(value['decision_graph_evidence'])))
+        return rows
     fail('kind_unsupported')
 
 
 class ProcessingArchiveInputs:
+    def active_replay_input(self, envelope):
+        """Complete selected replay for explicit worker/proof preparation only."""
+        if workflow_transaction_active():
+            fail('requires_independent_transaction')
+        pins=envelope.get('_document_inputs')
+        if pins is None:
+            return envelope.get('semantic_replay') or {}
+        reference=pins.get('replay')
+        if reference is None:
+            if pins.get('formation_variant')=='semantic':
+                fail('required_replay_missing')
+            return {}
+        return self.read_processing_archive(reference,envelope=envelope)
+
     def prepare_archive_inputs(self, reference, *, envelope):
         if workflow_transaction_active():
             fail('requires_independent_transaction')
@@ -70,8 +100,13 @@ class ProcessingArchiveInputs:
                   'manifest':[[r,k,o,h] for r,k,o,h,_ in records]}
         if reference['kind'] == 'semantic_replay':
             header['activation_replay_hash'] = digest(encoded(activation_replay(value)))
+            header['pending_rejection_count']=len((value.get('provider_evidence') or {}).get('pending_rejections') or [])
             header['notice'] = {'provider_evidence': {
                 'formation_incomplete': (value.get('provider_evidence') or {}).get('formation_incomplete')}}
+        if reference['kind']=='tree_formation':
+            header['tree_route']=bool(value.get('decision_tree_formation'))
+        if reference['kind']=='quality_processing_run':
+            header['source_fragment_count']=len(value.get('source_fragments') or [])
         with self.documents._connect() as con:
             con.execute('INSERT INTO workflow.processing_archive_inputs(archive_id,header,header_hash) '
                 'VALUES(%s,%s::jsonb,%s) ON CONFLICT DO NOTHING',
