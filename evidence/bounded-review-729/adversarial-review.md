@@ -56,3 +56,20 @@ A further selector race was identified by the owner: a raw native0 edit of an un
 Reviewer added the authorized native test test_native0_unselected_raw_writer_uses_existing_document_serialization: an actual document FOR UPDATE protects captured adjacency; an independent native0 unselected-object UPDATE receives55P03 from fixture-only200ms lock_timeout and rolls back unchanged rows/counters/certificates/view; after boundary release the same edit commits and invalidates frontier/adjacency, preserving unrelated physical rows and native0 document counters. Syntax compilation passed; native execution remains with owner.
 
 At this later snapshot no unresolved code blocker from this review remains. This is conditional on the new negative tests and final affected suites passing against the exact tip. It is an assessment of the first bounded ordinary/single-source capability only. Existing-data preparation/restore, alternate ingress and final costs remain their separately named evidence requirements; this note grants no merge/deployment/publication approval.
+
+## Final authorization-lock narrowing review
+
+Inspected the concrete follow-up after the full6804-suite run exposed two processing revocation-fence regressions from globally replacing SHARE with KEY SHARE. Current code restores account_by_id(for_share=True) to FOR SHARE and adds a distinct for_key_share flag. Native _account/_require_role default key_share=False preserves every existing current=True caller's stronger behavior. Only execute_review_command opts current=True,key_share=True at protected reviewer authorization. Entra's FOR NO KEY UPDATE remains compatible with that bounded Review reader and conflicts with the restored processing SHARE fence.
+
+This is a coherent scope correction: no global weakening of processing/source-preparation/publication authorization is needed to make the explicitly approved D1 Review/signin behavior work. Searches found no other key_share=True call site. Processing source_selection.authorize, publication evidence and other current=True callers retain the stronger default. Simultaneously requesting for_share and for_key_share selects SHARE, so the low-level adapter cannot silently downgrade the stronger explicit request. Ordinary non-current reads retain their original path.
+
+The native mixin forwards the optional keyword through the updated OperationsConsole method; its base method forwards key_share to _account only when requested, preserving default compatible callers. No additional MRO override/signature bypass was found in the inspected source. Non-Postgres compatibility does not enter execute_review_command's native authority branch.
+
+D1 scope remains next-command refusal after retirement, not cancellation of every authorized in-flight ordinary Review. Some other source/repair/second-review callers may still legitimately take the original SHARE lock; the first bounded ordinary/single-source slice must not claim universal signin independence across those unconverted paths.
+
+No new blocking code finding from this narrowing. Approval remains conditional on the exact processing revocation, actual role-change/signin, retirement/session, migration and affected suite results; the running final-regression-repair log was not yet a complete result when inspected. No deployment/merge authorization is implied.
+
+
+## Owner execution after the review
+
+The reviewer-added native former-head BEFORE rewrite/suppression and exact numeric transition negatives passed in the35-node focused run. The additional native0 unselected serialization, actual archive/explicit preparation, source-context parity and MET-43 current-dependency tests passed:11 tests. Full-suite findings led to the explicit Review-only D1 narrowing above; the affected processing, Entra, retirement and migration suite passed84 tests. Final Review/source/current-dependency/storage/architecture tests passed35 tests. These results do not claim final-head full CI, ordinary250ms lock acceptance or production acceptance.

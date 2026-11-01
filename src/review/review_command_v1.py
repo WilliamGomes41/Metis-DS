@@ -173,7 +173,7 @@ def execute_review_command(console, submitted, invoke, *, completed_command=None
                     with diagnostic_phase('store_transaction'), workflow_transaction(reviews) as con:
                         reviews._lock_authorizations(con)
                         console._lock_document_row(con, sid)
-                        console._require_role(command['actor_id'], 'reviewer', current=True)
+                        console._require_role(command['actor_id'], 'reviewer', current=True, key_share=True)
                         current, counters = documents.review_document_input(sid, command=True)
                         if completed_command is not None and generation is None:
                             completed = completed_command(current)

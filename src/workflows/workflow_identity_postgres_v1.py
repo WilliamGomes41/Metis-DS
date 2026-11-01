@@ -141,12 +141,12 @@ class PostgresWorkflowIdentityStore:
         except Exception as exc:
             raise WorkflowIdentityStoreError("workflow_accounts_read_failed") from exc
 
-    def account_by_id(self, account_id: str, *, for_share: bool = False) -> dict[str, Any] | None:
+    def account_by_id(self, account_id: str, *, for_share: bool = False, for_key_share: bool = False) -> dict[str, Any] | None:
         try:
             with self._connect() as con:
                 row = con.execute(
                     "SELECT account_id,username,display_name,roles,password_salt,password_hash,created_at,to_jsonb(accounts)->'retirement' AS retirement "
-                    "FROM workflow.accounts WHERE account_id=%s" + (" FOR KEY SHARE" if for_share else ""),
+                    "FROM workflow.accounts WHERE account_id=%s" + (" FOR SHARE" if for_share else " FOR KEY SHARE" if for_key_share else ""),
                     (account_id,),
                 ).fetchone()
             return self._account(row) if row else None
@@ -304,9 +304,9 @@ class _PostgresIdentityMixin:
             **({"retirement": record["retirement"]} if record.get("retirement") else {}),
         }
 
-    def _account(self, account_id: str, *, current: bool = False) -> dict[str, Any]:
+    def _account(self, account_id: str, *, current: bool = False, key_share: bool = False) -> dict[str, Any]:
         try:
-            account = (self.workflow_identity_store.account_by_id(account_id, for_share=True)
+            account = (self.workflow_identity_store.account_by_id(account_id, for_share=not key_share, for_key_share=key_share)
                        if current else self.workflow_identity_store.account_by_id(account_id))
         except WorkflowIdentityStoreError as exc:
             raise ConsoleError("workflow_identity_unavailable", str(exc)) from exc
@@ -314,8 +314,8 @@ class _PostgresIdentityMixin:
             raise ConsoleError("unknown_account")
         return account
 
-    def _require_role(self, account_id: str, role: str, *, current: bool = False) -> dict[str, Any]:
-        account = super()._require_role(account_id, role, current=current)
+    def _require_role(self, account_id: str, role: str, *, current: bool = False, key_share: bool = False) -> dict[str, Any]:
+        account = super()._require_role(account_id, role, current=current, key_share=key_share)
         if account.get("retirement"):
             raise ConsoleError("not_authenticated")
         return account

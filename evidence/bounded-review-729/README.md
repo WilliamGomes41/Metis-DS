@@ -43,3 +43,12 @@ The SQL migration is additive identifier/index coverage. Existing snapshots need
 explicit `scripts/prepare_revision_frontiers.py --snapshot <id>` and `--check`
 after authorized migration/grant installation. Preparation changes derived input
 only. It is not ingest, model processing, review approval or publication.
+
+
+Full local suite:6804 collected;6754 passed,43 expected optional-profile skips,
+zero PostgreSQL skips, seven failures. The failures identified five outdated
+migration mocks and two real processing/admission lock regressions. These were
+fixed by restoring default FOR SHARE and explicitly opting only the bounded
+Review command into KEY SHARE. All84 affected processing/identity/migration tests
+then passed. Exact final-tip full CI remains required; the earlier full run is
+not all-green. The separate final Review/source regression result is in the PR.

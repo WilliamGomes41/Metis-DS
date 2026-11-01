@@ -887,8 +887,9 @@ class OperationsConsole:
                     continue
                 raise
 
-    def _require_role(self, account_id: str, role: str, *, current: bool = False) -> dict[str, Any]:
-        account = self._account(account_id, current=current)
+    def _require_role(self, account_id: str, role: str, *, current: bool = False, key_share: bool = False) -> dict[str, Any]:
+        account = (self._account(account_id, current=current, key_share=True) if key_share
+                   else self._account(account_id, current=current))
         if role not in account["roles"]:
             raise ConsoleError(f"{role}_role_required")
         return account

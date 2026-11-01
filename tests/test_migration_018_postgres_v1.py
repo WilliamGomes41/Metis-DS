@@ -153,7 +153,12 @@ class _SchemaCon:
         if 'information_schema.columns' in sql:
             return _Res(self.columns)
         if 'pg_constraint' in sql:
-            return _Res([self.constraint_row] if self.constraint else [])
+            return _Res(([self.constraint_row] if self.constraint else []) + [
+                {'conname': 'object_revision_frontiers_pkey', 'table_name': 'object_revision_frontiers',
+                 'contype': 'p', 'columns': ['snapshot_id', 'object_id']},
+                {'conname': 'workflow_object_revision_frontier_fk', 'table_name': 'document_objects',
+                 'contype': 'f', 'columns': ['snapshot_id', 'object_id']},
+            ])
         return _Res([{'count': 0}])
 
 

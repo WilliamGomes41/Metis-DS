@@ -67,7 +67,9 @@ unbounded and is not accepted as the normal prepared-path performance proof.
   exact captured head/source identity pins the result at commit. The original
   source representation owner supplies retained accepted fragments. No model,
   extraction or second source-role writer runs on the prepared single-command path.
-- D1 uses account KEY SHARE and sign-in NO KEY UPDATE. Retirement still refuses
+- D1 explicitly uses account KEY SHARE only in the bounded Review command and
+  sign-in NO KEY UPDATE. Processing/admission and other current callers retain
+  their original FOR SHARE fence through commit. Retirement still refuses
   the next command; this introduces no stronger in-flight cancellation promise.
 
 This is validation metadata over `document_objects`, not a second history,
@@ -227,3 +229,13 @@ physical-identity, SQLNULL CHECK, Python-numeric equality and actual written-row
 holes. All require concrete negative proof before PR review; no green-suite-only
 safety conclusion. Existing-data preparation and live original failing-URL proof
 remain MET-44 after authorized merge/deployment; no production action here.
+
+The full6804-node local suite executed:6754 passed,43 expected optional-profile
+skips (zero PostgreSQL skips), seven failures. Five were old migration-schema
+mocks missing the new required constraints; two exposed an overbroad D1 lock
+change that weakened the existing processing/admission revocation fence. The
+implementation was narrowed to an explicit Review-only KEY SHARE option; default
+current account reads retain FOR SHARE. After repair, all84 processing, Entra,
+retirement and migration tests passed. The independently reviewed narrowing
+preserves the different existing authorization contracts. Full-suite exact final
+CI remains required; this earlier full run is not reported as all-green.
