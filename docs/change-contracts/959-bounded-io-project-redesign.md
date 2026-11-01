@@ -1,10 +1,12 @@
 # Begrensd lezen en schrijven — projectontwerp en bewijsverdeling
 
-Change class: C (projectontwerp/documentatie; geen runtime- of governancewijziging).
+Change class: C
 Promise: Eén GitHub-projectcontract ordent begrensde domeinopdrachten, onderlinge blokkering en gedeeld acceptatiebewijs zonder dubbele werkpakketten.
 Proof: Wederzijdse links naar #959, #729, #942, #952, #953 en #931; overeenkomende Linear-indeling en expliciete fasecriteria.
-Touches lifecycle invariants: no (dit document); de beschreven implementatie blijft Class A / Rewrite risk high.
-Rewrite risk: none (dit document).
+Touches lifecycle invariants: no
+Rewrite risk: none
+Dit document wijzigt uitsluitend projectontwerp/documentatie; geen runtime of governance. De beschreven implementatie blijft Class A / Rewrite risk high.
+
 Status: ontwerp op gebruikersopdracht van 1 november 2026; geen productimplementatie, merge, deploy of productieacceptatie.
 
 ## 1. Gezag en besluit
@@ -22,6 +24,7 @@ GitHub bevat scope, domeincontracten, besluiten en bewijs. Linear vat voortgang 
 Codebasis: main 5a1ec16d08c60c7179952be4c643639d8c24da31.
 
 Vastgesteld in de broncode:
+
 - de generieke writer leest objecthistories ook bij metadata-only writes en gebruikt volledig factonderhoud bij een aangeboden objectset;
 - broncommands verrichten bronwerk, ledgerlezing en globale bindings-/documentreloads binnen de buitenste lock;
 - de storelock is runtimebreed; aanvullende PostgreSQL-autorisatie-/ledgerlocks hebben hun eigen bereik;
@@ -51,6 +54,7 @@ Reads en presentatie zijn stateless; mutaties en autorisatieovergangen stateful.
 Bestaande lifecycle-/revision-/publicatiecontracten blijven normatief. Zij vereisen bronbinding, actuele bevoegdheden volgens het bestaande autorisatiecontract, behoud van historie, atomaire mutaties en immutable releases.
 
 Het projectontwerp concretiseert de kostenbelofte:
+
 1. Een lokale mutatie schrijft uitsluitend gewijzigde object-/binding-/factrecords en vereiste audit/counters. Een technisch noodzakelijke bredere dependency moet expliciet bewezen worden.
 2. Zuivere metadata zonder objectsetpreconditie vraagt geen volledige objectpayloadlezing; oude compatibiliteitstokens behouden hun betekenis tot expliciete migratie.
 3. Onafhankelijke document-/event-/bindinggroei veroorzaakt geen onnodige volledige scan/copy in een lokale opdracht.
@@ -70,7 +74,7 @@ De bestaande validatie onder lock, revocationregels, idempotentievarianten, hers
 
 Start voor de bestaande MET-36-schaaleis met ten minste 1.500 objectversies, daarna gecontroleerd vergroten. Gebruik een bronbatch én losse bronopdracht; de gerichte losse review is een tegencontrole. Bron/modeltaakinhoud niet veranderen tussen voor/na-metingen.
 
-Meet per echte POST→commit→redirect→GET: SQL-/storecalls, opgehaalde/geschreven bytes, object-/binding-/factwrites, triggerwerk, bronwerk en duur. Meet buitenste lock hold en wait afzonderlijk en koppel wachtende verzoeken aan hun daadwerkelijke blocker. Processlot, advisoryslot en rijsloot zijn verschillende oorzaken.
+Meet per echte POST→commit→redirect→GET: SQL-/storecalls, opgehaalde/geschreven bytes, object-/binding-/factwrites, triggerwerk, bronwerk en duur. Meet buitenste lock hold en wait afzonderlijk en koppel wachtende verzoeken aan hun daadwerkelijke blocker. Processlot, advisoryslot en rijslot zijn verschillende oorzaken.
 
 Inclusieve geneste tijden overlappen en worden niet opgeteld tot één fictieve totale duur. Een korte innerlijke savepoint- of helperduur bewijst geen korte buitenste transactie.
 
