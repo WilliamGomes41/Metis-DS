@@ -309,7 +309,10 @@ def test_native_review_matrix(case, tmp_path, production_console, production_app
                     elapsed = (perf_counter() - start) * 1000
                     assert page.status_code == 200
                     warning = 'data-formation-incomplete' in page.text
-                    if name != 'overview':
+                    if params.get('object'):
+                        assert ('data-document-assessment="not_evaluated"' in page.text) == incomplete
+                        assert not warning
+                    elif name != 'overview':
                         assert warning == incomplete
                     batch_count = len(re.findall(r'name="object_ids" value="([^"]+)"', page.text))
                     if case == 'occupied_batch' and name == 'batch' and not incomplete:
@@ -493,7 +496,7 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
             assert durable(console, [sid]) == before
         page = request(client, 'passage', 'get', params=params)
         assert page.status_code == 200
-        assert ('data-formation-incomplete' in page.text) == incomplete
+        assert ('data-document-assessment="not_evaluated"' in page.text) == incomplete
         data = form(page)
         assert durable(console, [sid]) == before
         early = request(client, 'pretransaction_refusal', 'post',
@@ -765,7 +768,7 @@ def test_native_review_post_baseline(size, tmp_path, production_console, product
         before = durable(console, [sid])
         page = request(client, 'passage', 'get', params=params)
         assert page.status_code == 200
-        assert ('data-formation-incomplete' in page.text) == incomplete
+        assert ('data-document-assessment="not_evaluated"' in page.text) == incomplete
         data = form(page)
         assert durable(console, [sid]) == before
         # Real semantic refusal inside review_object, not an injected exception.

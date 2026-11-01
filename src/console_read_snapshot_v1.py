@@ -12,6 +12,7 @@ class ConsoleReadSnapshot:
     objects: dict[str, tuple[list[dict[str, Any]], str | None]] = field(default_factory=dict)
     current_objects: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     bindings: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    processing_inputs: dict[str, dict[str, Any]] = field(default_factory=dict)
     cards: list[dict[str, Any]] | None = None
     sources: dict[tuple, Any] = field(default_factory=dict)
     publication_summaries: dict[str, dict[str, Any]] = field(default_factory=dict)

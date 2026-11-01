@@ -36,6 +36,7 @@ MIGRATION_NAMES = (
     "028_processing_archives.sql",
     "029_formation_evidence.sql",
     "030_operational_document_inputs.sql",
+    "031_review_dependency_keys.sql",
 )
 REQUIRED_TABLES = frozenset(
     {
@@ -70,6 +71,7 @@ REQUIRED_CONSTRAINTS = frozenset({("publication_refusals", "publication_refusals
 REQUIRED_COLUMNS = frozenset(
     {
         ("documents", "document_storage_version"),
+        ("document_objects", "review_dependency_keys"),
         ("document_inputs", "refs"),
         ("processing_attempt_inputs", "record_version"),
         ("documents", "review_source_ref"),

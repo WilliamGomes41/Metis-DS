@@ -26,8 +26,8 @@ def execute_legacy_receipt(console, sid, author, command, monkeypatch):
                            (sid,)).fetchone()['formation_evidence_id'] is None
 
 
-def test_incomplete_passage_prepares_the_complete_source_once(tmp_path, production_console, monkeypatch):
-    """A bounded passage must not replace the full source used for closure."""
+def test_incomplete_passage_observes_without_evaluating_complete_document(tmp_path, production_console, monkeypatch):
+    """Opening a passage never substitutes its window for document closure."""
     from copy import deepcopy
     from fastapi.testclient import TestClient
     from src.operations_console_v1 import ConsoleError
@@ -72,16 +72,11 @@ def test_incomplete_passage_prepares_the_complete_source_once(tmp_path, producti
         monkeypatch.setattr(prepared, 'prepare', prepare)
         page = client.get('/review', params={'document': sid, 'object': obj['object_id']})
     assert page.status_code == 200
-    assert 'data-formation-incomplete' in page.text
+    assert 'data-document-assessment="not_evaluated"' in page.text
     assert not comparisons, 'full source must not be compared again for each validation'
     assert len(preparations) == 1, 'an exact complete passage carrier should not be prepared twice'
-    assert len(captured) == 1
-    fragments, actual_status = captured[0]
-    assert isinstance(fragments, SourceFragments)
-    assert list(fragments) == full_source
-    with pytest.raises(ConsoleError, match='source_views_carrier_immutable'):
-        fragments[0]['clean_text'] = 'not permitted'
-    assert actual_status == expected_status
+    assert captured == [], 'A passage never runs the document closure kernel'
+    assert original_status(sid) == expected_status
     assert (console.snapshot_objects(sid), console._envelope(sid),
             console.workflow_review_store.read_events(), console.workflow_review_store.read_bindings([sid])) == before
 
@@ -89,7 +84,7 @@ def test_incomplete_passage_prepares_the_complete_source_once(tmp_path, producti
 @pytest.mark.parametrize('layout', ['legacy', 'prepared'])
 @pytest.mark.parametrize('case', ['missing_extraction', 'corrupt_extraction', 'corrupt_replay',
                                 'missing_source', 'partial_window', 'carrier_error'])
-def test_incomplete_passage_keeps_existing_fail_closed_behavior(tmp_path, production_console, monkeypatch, case, layout):
+def test_incomplete_passage_preserves_unknown_document_assessment_and_fail_closed_owner(tmp_path, production_console, monkeypatch, case, layout):
     from copy import deepcopy
     from fastapi.testclient import TestClient
     from src.operations_console_v1 import ConsoleError
@@ -167,16 +162,11 @@ def test_incomplete_passage_keeps_existing_fail_closed_behavior(tmp_path, produc
                 raise ConsoleError('source_integrity_failed')
             monkeypatch.setattr(console, '_verified_source_bytes', missing)
         page = client.get('/review', params={'document': sid, 'object': obj['object_id']})
-    assert page.status_code == 200 and 'data-formation-incomplete' in page.text
-    assert len(results) == 1 and results[0][1] == expected
-    if case == 'partial_window':
-        assert list(results[0][0]) == full_source
-        assert len(results[0][0]) > len(window)
+    assert page.status_code == 200 and 'data-document-assessment="not_evaluated"' in page.text
+    assert results == [], 'Passagewindow does not cause a complete document assessment'
+    assert original_status(sid)['formation_incomplete'], 'Unknown/corrupt full input never becomes closed'
     if case in {'partial_window', 'carrier_error'}:
-        if layout == 'legacy':
-            assert len(calls) >= 2
-        else:
-            assert len(calls) == 1  # Existing checked carrier; no reconstruction.
+        assert len(calls) >= 1
     if case == 'missing_source':
         assert not calls
     assert (store.get_envelope(sid), console.snapshot_objects(sid),
@@ -185,7 +175,7 @@ def test_incomplete_passage_keeps_existing_fail_closed_behavior(tmp_path, produc
 
 @pytest.mark.parametrize('layout', ['legacy', 'prepared'])
 @pytest.mark.parametrize('change', ['extraction', 'source_identity'])
-def test_incomplete_passage_does_not_reuse_changed_extraction(tmp_path, production_console, monkeypatch, change, layout):
+def test_passage_notice_does_not_mix_a_new_document_generation_into_captured_input(tmp_path, production_console, monkeypatch, change, layout):
     from copy import deepcopy
     from dataclasses import replace
     from src.integrity_kernel import stable_hash
@@ -221,21 +211,17 @@ def test_incomplete_passage_does_not_reuse_changed_extraction(tmp_path, producti
     with console.document_read_operation(), monkeypatch.context() as changed_reads:
         inputs = read_review_passage(console, {'account_id': reviewer, 'roles': ['reviewer']}, sid, obj['object_id'])
         prior_carrier = inputs.fragments
+        captured_header = console._document_reads().envelopes[sid]
         if change == 'source_identity':
             inputs = replace(inputs, envelope={**inputs.envelope, 'version': 'earlier-version'})
         changed_reads.setattr(store, 'get_envelope', lambda snapshot_id: deepcopy(changed))
         changed_reads.setattr(console, 'processing_status', status)
         notice = _review_formation_notice(console, sid, inputs)
-        assert console._document_reads().envelopes[sid] is inputs.envelope
-    assert 'data-formation-incomplete' in notice
-    assert len(captured) == 1 and captured[0][1]['formation_incomplete']
-    assert captured[0][0] is not prior_carrier
-    if layout == 'prepared' and change == 'extraction':
-        # A new extraction with the old durable pin is unavailable, never rebuilt
-        # or silently treated as legacy. Its partial carrier proves no closure.
-        assert captured[0][0] is None
-    else:
-        assert captured[0][0].root.payload['fragments_hash'] == record['fragments_hash']
+        assert console._document_reads().envelopes[sid] is captured_header
+    assert 'data-document-assessment="not_evaluated"' in notice
+    assert captured == [], 'A stale/new full-source tuple is never used for passage closure'
+    assert inputs.fragments is prior_carrier
+    assert inputs.document_assessment == 'not_evaluated'
     assert store.get_envelope(sid) == before
 
 
@@ -279,7 +265,7 @@ def test_passage_capture_keeps_bindings_stable_when_writer_commits(tmp_path, pro
     with console.document_read_operation():
         inputs = read_review_passage(console, actor, sid, obj['object_id'])
         assert not any(row.get('test_after_capture') for row in inputs.bindings)
-        assert 'data-formation-incomplete' in _review_formation_notice(console, sid, inputs)
+        assert 'data-document-assessment="not_evaluated"' in _review_formation_notice(console, sid, inputs)
     with console.document_read_operation():
         fresh = read_review_passage(console, actor, sid, obj['object_id'])
     found = [row for row in fresh.bindings if row.get('test_after_capture')]
@@ -544,3 +530,56 @@ def test_dependencies_include_incoming_and_outgoing_relations_beyond_picker(revi
     for obj in (selected, incoming, outgoing):
         assert by_id[obj['object_id']] == obj
     assert len(by_id) < len(candidates)
+
+
+@pytest.mark.parametrize('review_client', ['large'], indirect=True)
+def test_picker_choices_do_not_pull_unrelated_dependency_components_into_passage(review_client):
+    from copy import deepcopy
+    from src.review.revision_workflow import revise_object
+    from src.knowledge_relations_v1 import build_knowledge_relation
+    from src.review.review_passage_read_v1 import read_review_passage, PassageContextChoice
+    console, _client, sid = review_client
+    rows = console._load_objects(sid)
+    candidates = [o for o in console.snapshot_objects(sid)
+                  if (o.get('metadata') or {}).get('semantic_passage', {}).get('spans')]
+    focal, incidental, remote = candidates[0], candidates[1], candidates[-1]
+    reviewer = console._envelope(sid)['named_reviewers'][0]
+    changed = deepcopy(incidental)
+    changed['proposed_knowledge_relations'] = [build_knowledge_relation(
+        source_object_id=incidental['object_id'], source_object_version=incidental['object_version'],
+        relation_type='supported_by', target_object_id=remote['object_id'],
+        target_object_version=remote['object_version'])]
+    successor = revise_object(incidental, changed, snapshot_id=sid,
+        reason='Independent picker component', actor=reviewer, force=True)
+    console._save_objects(sid, [*rows, successor])
+    account = {'account_id': reviewer, 'roles': ['reviewer']}
+    ordinary = read_review_passage(console, account, sid, focal['object_id'])
+    assert ordinary.context_choices == ()
+    picker = read_review_passage(console, account, sid, focal['object_id'], include_choices=True,
+                                choice_query=incidental['content']['clean_text'])
+    for package in [ordinary, picker]:
+        ids = {o['object_id'] for o in package.objects}
+        assert incidental['object_id'] not in ids and remote['object_id'] not in ids
+    choices = picker.context_choices
+    assert any(c.object_id == incidental['object_id'] for c in choices)
+    assert all(isinstance(c, PassageContextChoice) and not hasattr(c, 'object_version') for c in choices)
+    explicit = read_review_passage(console, account, sid, focal['object_id'], context_targets=[incidental['object_id']])
+    assert {incidental['object_id'], remote['object_id']} <= {o['object_id'] for o in explicit.objects}
+
+
+@pytest.mark.parametrize('review_client', ['large'], indirect=True)
+def test_picker_keeps_already_used_context_source_available_for_another_passage(review_client):
+    console, client, sid = review_client
+    candidates = [o for o in console.snapshot_objects(sid)
+                  if (o.get('metadata') or {}).get('semantic_passage', {}).get('spans')]
+    focal, target, source = candidates[0], candidates[40], candidates[50]
+    reviewer = console._envelope(sid)['named_reviewers'][0]
+    console.confirm_source_context(actor_id=reviewer, snapshot_id=sid,
+        source_object_id=source['object_id'], role='context', target_object_ids=[target['object_id']],
+        reason='Context geldt voor meerdere passages.', command_id='reusable-context',
+        expected_revision=console.objects_revision(sid))
+    response = client.get('/source-selection', params={'document': sid, 'object': focal['object_id'],
+        'context_q': source['content']['clean_text']})
+    assert response.status_code == 200
+    assert 'Kies deze tekst als context' in response.text
+    assert source['object_id'] in response.text and source['content']['clean_text'] in response.text

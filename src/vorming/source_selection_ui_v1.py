@@ -365,19 +365,12 @@ def render_context(console, account, document, object, *, context_target='', con
     from src import operations_console_app as ui
     from src.review.review_passage_read_v1 import read_review_passage
     from src.review.beslisboom_path_v1 import review_path_for_klasse
-    # Error rendering keeps the existing full-snapshot path: unsaved selected
-    # targets may be outside the bounded GET picker. Never silently drop them.
-    inputs = None
-    if context_draft is not None:
-        envelope = console._envelope(document)
-        if ('reviewer' not in account.get('roles', [])
-                or account['account_id'] not in envelope.get('named_reviewers', [])):
-            raise ConsoleError('reviewer_not_named_on_snapshot')
-        objects, revision = console.snapshot_objects_and_revision(document)
-    else:
-        inputs = read_review_passage(console, account, document, object,
-            context_target=context_target, choice_page=max(context_page, 0), choice_query=context_q)
-        envelope, objects, revision = inputs.envelope, inputs.objects, inputs.revision
+    # Draft targets are actual required context, not grounds for a full-corpus
+    # fallback. Keep every selected target even when it is outside the page.
+    inputs = read_review_passage(console, account, document, object,
+        context_target=context_target, choice_page=max(context_page, 0), choice_query=context_q,
+        include_choices=True, context_targets=(context_draft or {}).get('target_object_ids') or ())
+    envelope, objects, revision = inputs.envelope, inputs.objects, inputs.revision
     obj = next((row for row in objects if row['object_id'] == object), None)
     if obj is None:
         raise ConsoleError('unknown_object')
@@ -387,6 +380,7 @@ def render_context(console, account, document, object, *, context_target='', con
     panel = ui._source_context_panel(obj, objects, document, revision,
         context_target=context_target, source_mode=context_mode == 'source',
         draft=context_draft, error=context_error, projection=projection, editable=editable,
+        context_choices=inputs.context_choices if inputs is not None else None,
         choices_html=ui._passage_choices_html(document, obj, inputs,
             context_mode=context_mode, context_target=context_target) if editable else '')
     saved = ('<p class="banner ok" role="status">Het contextbesluit is opgeslagen. '
