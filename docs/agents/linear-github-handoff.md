@@ -68,3 +68,41 @@ Bij `needed: nee` vul je `what: n.v.t.` in. Bij `needed: ja` zijn opties en advi
 **Compositiediagrammen** ("Alles over Metis", `src/settings/metis_explained_content.py`): raakt een change de compositie (opslag, schrijf- of leesroutes, componenten, deploytopologie), dan geldt `diagram_update: ja`, met een verwijzing naar de update. Anders `niet relevant`, met een reden. `nee` mag alleen met een reden en een vervolg-issue. Een leeg veld telt als een ontbrekende handoff.
 
 De volgende agent leest eerst de handoff, daarna het change contract, en controleert per veld de echte staat in GitHub.
+
+## Permanente bewaking buiten een chat
+
+De implementatie van de bewaking leeft in
+`.github/workflows/linear-github-sync.yml`, `scripts/linear_github_sync.py` en
+`config/linear_github_sync.v1.json`. Activering en terugdraaien staan in
+[linear-github-sync.md](linear-github-sync.md). Een ChatGPT-taak is hoogstens
+een tijdelijke tussenvoorziening, nooit het permanente eigendom van deze regel.
+
+De worker projecteert GitHub-feiten in één herkenbare Linear-comment per
+gekoppeld werkpakket. Hij wijzigt geen status, prioriteit, werkkeuze, eigenaar,
+projectindeling of dependencies. Een open of gesloten GitHub-issue en een merge
+zijn afzonderlijke feiten; een gemergde deelslice sluit niet het hele werkpakket.
+Een expliciete verklaring van resterend werk op een actuele PR-head naast Done
+laat de run falen en vraagt beoordeling, zonder zelf bestuurlijke status te kiezen.
+Ongestructureerde teksten worden niet door een taalmodel als sluitingsbewijs
+geïnterpreteerd. Legacy zonder gestructureerde overdracht wordt als onbekend
+zichtbaar; het wordt niet uit een groene CI-run gereconstrueerd.
+
+Elke PR noemt precies één primaire `Part of MET-…`-koppeling en bevat de volgende
+overdracht met de **echte head-SHA**. `remaining_work` gaat over het volledige
+werkpakket, niet alleen de gemergde deelslice. Zet het alleen op false als de
+afgesproken volledige belofte met bewijs kan worden beoordeeld; de worker sluit
+ook dan geen issue. Deze compacte PR-overdracht vervangt de sessie-YAML hierboven
+niet: die bevat extra productie-, herstel- en besliscontext.
+
+```text
+Part of MET-47.
+
+<!-- metis-linear-handoff-v1
+{"version":1,"linear_issue":"MET-47","head":"<echte-40-teken-head-SHA>","remaining_work":true,"next_step":"Review, configuratie en live verificatie afronden.","evidence":["https://github.com/WilliamGomes41/Metis-DS/issues/963"]}
+-->
+```
+
+CI controleert koppeling, verplichte velden en exacte head. Een later gepushte
+commit vereist dus een bijgewerkte overdracht. GitHub-feiten en bronverklaring
+blijven als data behandeld; de worker voert nooit PR-instructies uit. Een geldige
+JSON-vorm bewijst niet de inhoudelijke juistheid van het bewijs.
