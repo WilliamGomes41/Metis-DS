@@ -183,7 +183,8 @@ def test_invalid_and_stale_submission_retains_draft_without_mutation(tmp_path, *
     assert stale.status_code == 409
     assert 'Je keuzes zijn niet opgeslagen' in stale.text
     retry = _payload(_link_form(stale))
-    assert retry['snapshot_revision'] == state.objects_revision(sid)
+    from src.review.review_passage_read_v1 import resolve_review_revision
+    assert resolve_review_revision(state, sid, retry['snapshot_revision']) == state.objects_revision(sid)
     assert retry['target_object_ids'] == [target['object_id']]
     assert state.snapshot_objects(sid) == before
 

@@ -216,28 +216,45 @@ class PostgresWorkflowDocumentRuntimeStore(OperationalDocumentInputs, PostgresWo
             raise WorkflowDocumentStoreError('workflow_document_objects_read_failed') from exc
 
     def review_neighbor_ids(self, snapshot_id: str, object_ids: list[str], block_ids: list[str]) -> list[str]:
-        """Incoming relations, context links and source-usage dependencies.
+        """Current incoming dependencies, from keys derived by the object owner.
 
-        SQL inspects only edge fields and returns identities. Full candidate
-        payloads cross the boundary only for actual dependencies.
+        Full histories are subsequently loaded for lineage validation. Old
+        edges cannot make unrelated current objects passage dependencies.
+        The lookup never detoasts unrelated candidate content.
         """
+        probes = [json.dumps({'objects': [oid]}) for oid in dict.fromkeys(object_ids)]
+        probes.extend(json.dumps({'blocks': [bid]}) for bid in dict.fromkeys(block_ids))
+        if not probes:
+            return []
         try:
-            probes = [json.dumps({key: [{'target_object_id': oid}]})
-                      for oid in object_ids for key in ('proposed_knowledge_relations',
-                      'confirmed_knowledge_relations', 'relations', 'confirmed_relations')]
-            probes.extend(json.dumps({'metadata': {'confirmed_source_context': [{'source_object_id': oid}]}})
-                          for oid in object_ids)
-            probes.extend(json.dumps({'metadata': {'source_bound_context': {'entries': [{'span': {'block_id': bid}}]}}})
-                          for bid in block_ids)
             with self._connect() as con:
                 rows = con.execute("""
-                    SELECT DISTINCT neighbor.object_id FROM unnest(%s::jsonb[]) AS wanted(probe)
-                    CROSS JOIN LATERAL (
-                      SELECT object_id FROM workflow.document_objects
-                      WHERE snapshot_id=%s AND payload @> wanted.probe OFFSET 0
-                    ) neighbor
-                    """, (probes, snapshot_id)).fetchall()
+                    SELECT DISTINCT d.object_id FROM workflow.document_objects d
+                    WHERE d.snapshot_id=%s AND d.review_dependency_keys @> ANY(%s::jsonb[])
+                      AND d.position=(SELECT max(latest.position)
+                          FROM workflow.document_objects latest
+                          WHERE latest.snapshot_id=d.snapshot_id AND latest.object_id=d.object_id)
+                    """, (snapshot_id, probes)).fetchall()
             return [str(row['object_id']) for row in rows]
+        except Exception as exc:
+            raise WorkflowDocumentStoreError('workflow_review_context_read_failed') from exc
+
+    def review_context_choices(self, snapshot_id, object_ids):
+        """Current display choices; never a substitute for lineage-checked input."""
+        if not object_ids:
+            return ()
+        from src.review.review_passage_read_v1 import PassageContextChoice
+        try:
+            with self._connect() as con:
+                rows = con.execute("""
+                    SELECT d.payload FROM workflow.document_objects d
+                    WHERE d.snapshot_id=%s AND d.object_id=ANY(%s)
+                      AND d.position=(SELECT max(latest.position)
+                          FROM workflow.document_objects latest
+                          WHERE latest.snapshot_id=d.snapshot_id AND latest.object_id=d.object_id)
+                    ORDER BY d.position
+                """, (snapshot_id, object_ids)).fetchall()
+            return tuple(PassageContextChoice.from_object(row['payload']) for row in rows)
         except Exception as exc:
             raise WorkflowDocumentStoreError('workflow_review_context_read_failed') from exc
 
@@ -293,16 +310,23 @@ class PostgresWorkflowDocumentRuntimeStore(OperationalDocumentInputs, PostgresWo
             with self._connect() as con:
                 self._verify_schema_connection(con)
                 rows = con.execute(
-                    "SELECT table_name,column_name FROM information_schema.columns "
+                    "SELECT table_name,column_name,is_generated,generation_expression FROM information_schema.columns "
                     "WHERE table_schema='workflow' AND "
                     "((table_name='documents' AND column_name IN ('envelope_payload','processing_storage_version','object_generation','document_storage_version')) OR "
-                    "(table_name='document_objects' AND column_name='position'))"
+                    "(table_name='document_objects' AND column_name IN ('position','review_dependency_keys')))"
                 ).fetchall()
                 present = {(str(row["table_name"]), str(row["column_name"])) for row in rows}
                 required = {("documents", "envelope_payload"), ("document_objects", "position"),
+                            ("document_objects", "review_dependency_keys"),
                             ("documents","processing_storage_version"),("documents","object_generation"),("documents","document_storage_version")}
                 if present != required:
                     raise WorkflowDocumentStoreError("workflow_document_cutover_schema_missing")
+                dependency = next(row for row in rows if row['table_name']=='document_objects'
+                                  and row['column_name']=='review_dependency_keys')
+                if (dependency.get('is_generated') != 'ALWAYS'
+                        or (dependency.get('generation_expression') or '').replace(' ', '').replace('workflow.', '')
+                        != 'review_dependency_keys(payload)'):
+                    raise WorkflowDocumentStoreError('workflow_review_dependency_schema_invalid')
                 task_tables = {str(r["tablename"]) for r in con.execute(
                     "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname='workflow'").fetchall()}
                 if not {"processing_attempts","processing_document_summaries","processing_checkpoints",

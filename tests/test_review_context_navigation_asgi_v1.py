@@ -133,9 +133,18 @@ def test_installed_source_mode_invalid_target_and_failed_posts(installed):
     retry = _payload(_link_form(stale))
     assert retry['target_object_ids'] == [tid]
     assert retry['return_object_id'] == tid
-    assert retry['snapshot_revision'] == state.objects_revision(sid)
+    from src.review.review_passage_read_v1 import resolve_review_revision
+    # The bounded error read uses the same generation precondition as an
+    # ordinary passage form. It must resolve to the current command revision.
+    assert resolve_review_revision(state, sid, retry['snapshot_revision']) == state.objects_revision(sid)
     assert data['reason'] in stale.text
     assert state.snapshot_objects(sid) == before
+    # Consume the actual recovered form, rather than accepting a token shape
+    # that the source-context command might be unable to submit.
+    recovered = client.post('/review/source-context', data=retry, follow_redirects=False)
+    assert recovered.status_code == 303
+    assert any(link['source_object_id'] == soid for link in links_of(
+        next(row for row in state.snapshot_objects(sid) if row['object_id'] == tid)))
 
 
 def test_installed_navigation_access_redirect_and_workboard_contract(installed):

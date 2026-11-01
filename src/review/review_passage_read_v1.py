@@ -1,5 +1,6 @@
 """A passage's temporary read inputs; PostgreSQL and review commands still own truth."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Literal
 import base64
 import json
 
@@ -13,7 +14,7 @@ PREFIX = 'review-generation-v1:'
 
 
 @dataclass(frozen=True)
-class ReviewDocumentInputs:
+class _ReviewInputs:
     envelope: dict
     objects: list
     bindings: list
@@ -22,11 +23,37 @@ class ReviewDocumentInputs:
 
 
 @dataclass(frozen=True)
-class ReviewPassageInputs(ReviewDocumentInputs):
+class ReviewDocumentInputs(_ReviewInputs):
+    scope: Literal['document'] = field(default='document', init=False)
+
+
+@dataclass(frozen=True)
+class PassageContextChoice:
+    """Display input, deliberately missing the fields of a reviewable object."""
+    object_id: str
+    text: str
+    section_path: tuple
+    object_type: str
+    has_role: bool
+    has_context_links: bool
+
+    @classmethod
+    def from_object(cls, obj):
+        from src.review.source_context_review_v1 import role_of, links_of
+        return cls(str(obj['object_id']), (obj.get('content') or {}).get('clean_text') or '',
+                   tuple((obj.get('structure') or {}).get('section_path') or []),
+                   obj.get('object_type') or '', bool(role_of(obj)), bool(links_of(obj)))
+
+
+@dataclass(frozen=True)
+class ReviewPassageInputs(_ReviewInputs):
     source_available: bool
     choice_page: int = 0
     choice_total: int = 0
     choice_query: str = ''
+    scope: Literal['passage'] = field(default='passage', init=False)
+    document_assessment: Literal['not_evaluated'] = field(default='not_evaluated', init=False)
+    context_choices: tuple[PassageContextChoice, ...] = ()
 
 
 @diagnostic_phase('review_capture')
@@ -39,21 +66,30 @@ def read_review_document(console, account, snapshot_id):
     """
     from src.review.revision_workflow import current_revisions
     store = console.workflow_document_store
+    reads = console._document_reads()
+    if reads is not None:
+        reads.processing_inputs.pop(snapshot_id, None)
     try:
         with workflow_read_transaction(store):
             envelope, _generation = store.review_document_input(snapshot_id)
             if ('reviewer' not in account.get('roles', [])
                     or account['account_id'] not in envelope.get('named_reviewers', [])):
                 raise ConsoleError('reviewer_not_named_on_snapshot')
-            if envelope['_review_check_formation']:
+            if envelope['_review_check_formation'] and '_document_inputs' not in envelope:
                 # Uncertain/open formation needs its complete captured evidence,
                 # not another envelope generation fetched during rendering.
                 envelope = store.formation_input(store.get_envelope(snapshot_id))
                 if envelope is None:
                     raise WorkflowDocumentStoreError('unknown_snapshot')
                 envelope['_review_check_formation'] = True
+            if envelope['_review_check_formation'] and '_document_inputs' in envelope:
+                envelope = store.processing_command_input(envelope)
             rows = store.list_document_objects(snapshot_id)
             bindings = console.workflow_review_store.read_bindings([snapshot_id]).get(snapshot_id, [])
+        if envelope['_review_check_formation'] and '_document_inputs' in envelope:
+            # Immutable references were captured with objects/bindings. Read and
+            # validate exactly those members outside the bounded SQL capture.
+            envelope = store.formation_input(envelope)
     except WorkflowDocumentStoreError as exc:
         if str(exc) == 'unknown_snapshot':
             raise ConsoleError('unknown_snapshot') from exc
@@ -66,6 +102,8 @@ def read_review_document(console, account, snapshot_id):
     reads = console._document_reads()
     if reads is not None:
         reads.envelopes[snapshot_id] = envelope
+        if envelope['_review_check_formation']:
+            reads.processing_inputs[snapshot_id] = envelope
         reads.objects[snapshot_id] = (rows, revision)
         reads.current_objects[snapshot_id] = objects
         reads.bindings[snapshot_id] = bindings
@@ -131,9 +169,12 @@ def _outgoing_ids(obj):
 
 
 def read_review_passage(console, account, snapshot_id, object_id, *, context_target='',
-                        choice_page=0, choice_query=''):
+                        choice_page=0, choice_query='', include_choices=False, context_targets=()):
     """Capture the required connected context; never infer review permission."""
     store = console.workflow_document_store
+    reads = console._document_reads()
+    if reads is not None:
+        reads.processing_inputs.pop(snapshot_id, None)
     try:
         with workflow_read_transaction(store):
             envelope, generation = store.review_document_input(snapshot_id)
@@ -141,11 +182,14 @@ def read_review_passage(console, account, snapshot_id, object_id, *, context_tar
                     or account['account_id'] not in envelope.get('named_reviewers', [])):
                 raise ConsoleError('reviewer_not_named_on_snapshot')
             pending = {object_id, *([context_target] if context_target else [])}
-            pending.update(store.review_heading_ids(snapshot_id))
-            choice_page = max(choice_page, 1)
-            choices, choice_total = store.review_choice_ids(snapshot_id, object_id,
-                query=choice_query, page=choice_page)
-            pending.update(choices)
+            pending.update(context_targets)
+            headings = set(store.review_heading_ids(snapshot_id))
+            context_choices, choice_total = (), 0
+            if include_choices:
+                choice_page = max(choice_page, 1)
+                choices, choice_total = store.review_choice_ids(snapshot_id, object_id,
+                    query=choice_query, page=choice_page)
+                context_choices = store.review_context_choices(snapshot_id, choices)
             seen, objects = set(), []
             while pending:
                 seen.update(pending)
@@ -157,6 +201,12 @@ def read_review_passage(console, account, snapshot_id, object_id, *, context_tar
                           if isinstance(span, dict) and 'block_id' in span]
                 outgoing = set().union(*(_outgoing_ids(obj) for obj in loaded)) if loaded else set()
                 pending = (outgoing | set(store.review_neighbor_ids(snapshot_id, sorted(pending), blocks))) - seen
+            # Parent/TOC disambiguation needs current headings. Merely offering
+            # a heading or picker row never expands its knowledge component.
+            display_headings = headings - seen
+            if display_headings:
+                objects.extend(store.review_object_histories(snapshot_id, sorted(display_headings)))
+                seen.update(display_headings)
             if not any(obj['object_id'] == object_id for obj in objects):
                 raise ConsoleError('unknown_object')
             bindings = console.workflow_review_store.read_bindings([snapshot_id], object_ids=sorted(seen)).get(snapshot_id, [])
@@ -192,4 +242,5 @@ def read_review_passage(console, account, snapshot_id, object_id, *, context_tar
     except (ConsoleError, OpenOriginalError):
         available = False
     return ReviewPassageInputs(envelope, objects, bindings, _revision(snapshot_id, generation), fragments,
-                              available, choice_page, choice_total, choice_query)
+                              available, choice_page, choice_total, choice_query,
+                              context_choices=context_choices)

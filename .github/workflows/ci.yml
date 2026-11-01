@@ -235,7 +235,8 @@ jobs:
 
   browser:
     needs: [preflight]
-    runs-on: ubuntu-latest
+    # Keep the OS compatible with the pinned Playwright in install-test-browser.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
       postgres:

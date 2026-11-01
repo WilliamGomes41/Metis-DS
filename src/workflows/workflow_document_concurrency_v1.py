@@ -156,29 +156,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         Position is only a candidate prefilter. The command subsequently loads
         complete histories of the selected identities and validates their lineage.
         """
-        if not object_ids:
-            return []
-        probes = [json.dumps({key: [{'target_object_id': oid}]})
-                  for oid in sorted(set(object_ids)) for key in (
-                      'proposed_knowledge_relations', 'confirmed_knowledge_relations',
-                      'relations', 'confirmed_relations')]
-        probes.extend(json.dumps({'metadata': {'confirmed_source_context': [{'source_object_id': oid}]}})
-                      for oid in sorted(set(object_ids)))
-        try:
-            with self._connect() as con:
-                rows = con.execute("""
-                    SELECT DISTINCT neighbor.object_id FROM unnest(%s::jsonb[]) AS wanted(probe)
-                    CROSS JOIN LATERAL (
-                      SELECT d.object_id FROM workflow.document_objects d
-                      WHERE d.snapshot_id=%s AND d.payload @> wanted.probe
-                        AND d.position=(SELECT max(latest.position) FROM workflow.document_objects latest
-                            WHERE latest.snapshot_id=d.snapshot_id AND latest.object_id=d.object_id)
-                      OFFSET 0
-                    ) neighbor
-                    """, (probes, snapshot_id)).fetchall()
-            return [str(row['object_id']) for row in rows]
-        except Exception as exc:
-            raise WorkflowDocumentStoreError('workflow_review_context_read_failed') from exc
+        return self.review_neighbor_ids(snapshot_id, object_ids, [])
 
     def apply_review_changes(
         self, snapshot_id: str, before_objects: list[dict[str, Any]],
