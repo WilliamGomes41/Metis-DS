@@ -154,6 +154,8 @@ class OperationalDocumentInputs:
                 'replay':None,'quality':None,'extraction_hash':None,'tree':None,'tree_route':False}
         records=[]
         replay=envelope.get('semantic_replay')
+        if replay is not None and not isinstance(replay,dict):
+            fail('replay_invalid')
         if replay:
             prepared=tasks.prepare_processing_archive(envelope,kind='semantic_replay',
                 record_key='operation-'+digest(encoded(capture))[:16]+'-'+digest(encoded(replay)),observed_revision=encoded(capture),payload=replay)
@@ -179,7 +181,7 @@ class OperationalDocumentInputs:
             records.append(('tree_formation',0,ref))
         extraction=envelope.get('prepared_source_extraction')
         extraction_header=None
-        if extraction:
+        if 'prepared_source_extraction' in envelope:
             from src.vorming.source_preparation_context_v1 import stored_extraction
             if stored_extraction(envelope) is None:
                 fail('extraction_incompatible')
@@ -414,6 +416,8 @@ class OperationalDocumentInputs:
                 envelope[key]=None
             elif shape=='absent':
                 envelope.pop(key,None)
+        if refs['shapes']['semantic_replay']=='value' and refs['replay'] is None:
+            envelope['semantic_replay']={}
         if refs['replay'] is not None:
             envelope['semantic_replay']=tasks.read_processing_archive(refs['replay'],envelope=envelope)
         if refs['shapes']['quality_processing_runs']=='value':

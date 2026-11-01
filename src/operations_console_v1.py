@@ -2436,6 +2436,10 @@ class OperationsConsole:
             )
         objects = apply_passage_register(objects)
         prepared_envelope = deepcopy(envelope)
+        if '_document_inputs' in envelope:
+            # Source-only legacy input is a read projection. Committed runs
+            # already belong to the archive; this producer emits only its run.
+            prepared_envelope.pop('quality_processing_runs',None)
         if envelope.get("review_policy"):
             from src.review.review_policy_v1 import project_policy
             project_policy(objects, envelope["review_policy"])

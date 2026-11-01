@@ -365,7 +365,7 @@ def test_explicit_legacy_source_input_keeps_latest_accepted_extraction(tmp_path,
     from tests.test_docling_contract_v1 import result
     from src.vorming.docling_contract_v1 import translate,stored_fragments
     from src.settings.quality_evidence_v1 import record_processing
-    console,sid,*_=received(tmp_path,production_console,monkeypatch)
+    console,sid,author,*_=received(tmp_path,production_console,monkeypatch)
     store=console.workflow_document_store
     envelope=store.get_envelope(sid)
     payload={**result(),'source_sha256':envelope['sha256']}
@@ -380,3 +380,36 @@ def test_explicit_legacy_source_input_keeps_latest_accepted_extraction(tmp_path,
     assert stored_fragments(source)==original==fragments
     assert len(source['quality_processing_runs'])==1
     assert 'candidates' not in source['quality_processing_runs'][0]
+    from tests.test_review_formation_problems import execute
+    before=deepcopy(store.processing_history_input(sid)['quality_processing_runs'])
+    execute(console,sid,author,'legacy-source-producer-boundary')
+    after=store.processing_history_input(sid)['quality_processing_runs']
+    assert after[:-1]==before, 'A source projection must not become another quality run'
+    assert len(after)==len(before)+1
+
+
+@pytest.mark.parametrize('record',[{},None])
+def test_cutover_refuses_corrupt_present_source_without_get_reconstruction(tmp_path,production_console,monkeypatch,record):
+    from tests.test_review_formation_problems import received
+    from src.operations_console_v1 import ConsoleError
+    console,sid,*_=received(tmp_path,production_console,monkeypatch)
+    store=console.workflow_document_store
+    envelope=store.get_envelope(sid)
+    envelope['prepared_source_extraction']=record
+    store.write_bundle(envelope=envelope)
+    with pytest.raises(ConsoleError,match='source_extraction_integrity_failed'):
+        store.prepare_operational_inputs(sid)
+    assert '_document_inputs' not in store.get_envelope(sid)
+    assert store.get_envelope(sid)['prepared_source_extraction']==record
+
+
+def test_absent_formation_keeps_original_empty_replay_shape_in_history(tmp_path,production_console,monkeypatch):
+    from tests.test_review_formation_problems import received
+    console,sid,*_=received(tmp_path,production_console,monkeypatch)
+    store=console.workflow_document_store
+    envelope=store.get_envelope(sid)
+    envelope['semantic_replay']={}
+    store.write_bundle(envelope=envelope)
+    store.activate_operational_inputs(store.prepare_operational_inputs(sid))
+    assert store.get_envelope(sid)['_document_inputs']['formation_variant']=='absent'
+    assert store.processing_history_input(sid)==envelope
