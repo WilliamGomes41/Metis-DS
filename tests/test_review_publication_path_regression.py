@@ -48,4 +48,3 @@ def test_large_review_get_post_redirect_reopen_preserves_unrelated_work(review_c
     assert timings['save'] <= 3, timings
     assert all(timings[name] <= 5 for name in ('open', 'redirect', 'reopen')), timings
     print(json.dumps({'proof': 'native_http_review_1100', 'seconds': timings}))
-
