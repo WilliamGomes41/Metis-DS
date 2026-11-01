@@ -2989,7 +2989,7 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
                           snapshot_revision: str, *, context_target: str = "",
                           source_mode: bool = False, draft: dict[str, Any] | None = None,
                           error: str = "", projection=None, choices_html: str = "",
-                          editable: bool = True) -> str:
+                          editable: bool = True, context_choices=None) -> str:
     """Present existing context decisions; navigation never confirms a relation."""
     if obj.get("object_type") in {"document", "heading", "path"}:
         return ""
@@ -3062,11 +3062,14 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
     if not is_source:
         if choices_html:
             parts.append(choices_html)
-        candidates = [row for row in objects if row["object_id"] != oid
-                      and row.get("object_type") not in {"document", "heading", "path"}
-                      and not links_of(row) and (row.get("content") or {}).get("clean_text")]
-        path = (obj.get("structure") or {}).get("section_path") or []
-        nearby = [row for row in candidates if path and (row.get("structure") or {}).get("section_path") == path]
+        from src.review.review_passage_read_v1 import PassageContextChoice
+        offered = (context_choices if context_choices is not None else
+                   tuple(PassageContextChoice.from_object(row) for row in objects))
+        candidates = [row for row in offered if row.object_id != oid
+                      and row.object_type not in {'document', 'heading', 'path'}
+                      and not row.has_context_links and row.text]
+        path = tuple((obj.get('structure') or {}).get('section_path') or [])
+        nearby = [row for row in candidates if path and row.section_path == path]
         other = [row for row in candidates if row not in nearby]
         parts.append('<details data-context-picker><summary>Context toevoegen uit de bron</summary>'
                      '<p>Kies eerst de volledige brontekst. Op het volgende scherm controleer je waarvoor die tekst geldt. '
@@ -3078,8 +3081,9 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
             parts.append(f'<details{" open" if opened else ""}><summary>{title} ({len(rows)})</summary>'
                          '<p>De plaats in het document helpt bij zoeken; controleer zelf of de tekst inhoudelijk bij de passage hoort.</p>')
             for row in rows:
-                parts.append('<div class="context-choice">' + full_text(row) + source_link(row) +
-                             f'<p><a class="btn-secondary" href="{review_url(str(row["object_id"]), pair_target=oid, edit_source=True)}">Kies deze tekst als context</a></p></div>')
+                parts.append('<div class="context-choice">' + f'<p class="context-literal">{_esc(row.text)}</p>'
+                             + source_link({'object_id': row.object_id})
+                             + f'<p><a class="btn-secondary" href="{review_url(row.object_id, pair_target=oid, edit_source=True)}">Kies deze tekst als context</a></p></div>')
             parts.append('</details>')
         if not candidates:
             parts.append('<p>Er zijn geen andere bruikbare bronfragmenten beschikbaar. Open de oorspronkelijke bron '
@@ -3102,16 +3106,23 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
     if role:
         role_label = {"label": "bronlabel", "context": "contextfragment", "excluded": "niet opnemen"}.get(role.get("role"), "bronfragment")
         parts.append(f'<p data-confirmed-source-role>Vastgelegd als {_esc(role_label)}: {_esc(role.get("reason"))}</p>')
-    choices = [row for row in objects if row["object_id"] != oid
-               and row.get("object_type") not in {"document", "heading", "path"} and not role_of(row)]
-    selected = set(current["target_object_ids"])
+    selected = set(current['target_object_ids'])
     if target:
         selected.add(context_target)
     if draft is not None:
-        selected = set(draft.get("target_object_ids") or [])
-    selected_role = str((draft or {}).get("role", role.get("role", "")))
-    reason = str((draft or {}).get("reason", role.get("reason", "")))
-    choices.sort(key=lambda row: str(row["object_id"]) not in selected)
+        selected = set(draft.get('target_object_ids') or [])
+    from src.review.review_passage_read_v1 import PassageContextChoice
+    offered = {row.object_id: row for row in (context_choices if context_choices is not None else
+               tuple(PassageContextChoice.from_object(row) for row in objects))}
+    # Selected targets are required context even when outside the current page.
+    for row in objects:
+        if row['object_id'] in selected:
+            offered[row['object_id']] = PassageContextChoice.from_object(row)
+    choices = [row for row in offered.values() if row.object_id != oid
+               and row.object_type not in {'document', 'heading', 'path'} and not row.has_role]
+    selected_role = str((draft or {}).get('role', role.get('role', '')))
+    reason = str((draft or {}).get('reason', role.get('reason', '')))
+    choices.sort(key=lambda row: row.object_id not in selected)
 
     def command_fields(command_role: str = "") -> str:
         return (f'<input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">'
@@ -3130,10 +3141,10 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
     parts.append('</fieldset><fieldset><legend>Selecteer de passages waarvoor deze tekst geldt</legend>'
                  '<p>De aangevinkte passages krijgen deze brontekst als context. Bestaande koppelingen zijn aangevinkt; '
                  'vink een passage uit om die koppeling te verwijderen.</p><div class="source-context-targets">')
-    selected_choices = [row for row in choices if str(row["object_id"]) in selected]
-    source_path = (obj.get("structure") or {}).get("section_path") or []
+    selected_choices = [row for row in choices if row.object_id in selected]
+    source_path = tuple((obj.get("structure") or {}).get("section_path") or [])
     nearby_choices = [row for row in choices if row not in selected_choices and source_path
-                      and (row.get("structure") or {}).get("section_path") == source_path]
+                      and row.section_path == source_path]
     other_choices = [row for row in choices if row not in selected_choices and row not in nearby_choices]
     for title, rows, opened in [("Geselecteerde passages", selected_choices, True),
                                 ("Andere passages uit hetzelfde brononderdeel", nearby_choices, not selected_choices),
@@ -3142,10 +3153,10 @@ def _source_context_panel(obj: dict[str, Any], objects: list[dict[str, Any]], sn
             continue
         parts.append(f'<details{" open" if opened else ""}><summary>{title} ({len(rows)})</summary>')
         for row in rows:
-            checked = ' checked' if str(row['object_id']) in selected else ''
+            checked = ' checked' if row.object_id in selected else ''
             parts.append(f'<div class="context-choice"><label class="check"><input type="checkbox" name="target_object_ids" '
-                         f'value="{_esc(row["object_id"])}"{checked}><span class="context-literal">{_esc((row.get("content") or {}).get("clean_text"))}</span></label>'
-                         + source_link(row) + '</div>')
+                         f'value="{_esc(row.object_id)}"{checked}><span class="context-literal">{_esc(row.text)}</span></label>'
+                         + source_link({'object_id': row.object_id}) + '</div>')
         parts.append('</details>')
     parts.append('</div></fieldset>'
                  f'<label>Waarom hoort deze brontekst bij de geselecteerde passages?<textarea name="reason" required maxlength="4000">{_esc(reason)}</textarea></label>'
@@ -3579,64 +3590,19 @@ def _review_document_source_inputs(console, snapshot_id, objects, read_inputs):
 
 
 def _review_formation_notice(console, snapshot_id, read_inputs, *, document_source=None):
-    """Use the complete formation authority when the passage cannot rule it out."""
+    """A passage observation never evaluates or implies document closure."""
+    from src.review.review_passage_read_v1 import ReviewPassageInputs
     if read_inputs is None:
         return _formation_incomplete_banner(console, snapshot_id)
     if not read_inputs.envelope['_review_check_formation']:
         return ''
-    from src.review.review_passage_read_v1 import ReviewPassageInputs
-    if not isinstance(read_inputs, ReviewPassageInputs):
-        return _formation_incomplete_banner(console, snapshot_id, formation_fragments=document_source)
-    reads = console._document_reads()
-    if reads is not None:
-        reads.envelopes.pop(snapshot_id, None)
-    try:
-        # A passage carrier is only a window. The formation check must use the
-        # complete, identity-verified extraction from the same full envelope
-        # that processing_status will read, never the passage's smaller view.
-        fragments = None
-        # The new immutable read layout can supply a complete prepared view
-        # without reconstructing blocks. A selected window is never closure.
-        envelope = console._envelope(snapshot_id)
-        full_prepared = console._prepared_review_source(envelope)
-        if full_prepared is not None:
-            return _formation_incomplete_banner(console, snapshot_id, formation_fragments=full_prepared)
-        if reads is not None and read_inputs.fragments is not None:
-            from src.vorming.recoverable_formation_v1 import incomplete
-            from src.vorming.source_preparation_context_v1 import KEY, stored_extraction
-            try:
-                envelope = console._envelope(snapshot_id)
-                raw = stored_extraction(envelope) if incomplete(envelope) else None
-            except ConsoleError:
-                raw = None
-            if raw is not None:
-                from src.vorming.prepared_source_views_v1 import SourceFragments, prepare
-                try:
-                    passage = read_inputs.fragments
-                    identity_fields = ('snapshot_id', 'source_id', 'document_id', 'sha256', 'version', 'content_kind')
-                    same_identity = all(read_inputs.envelope.get(key) == envelope.get(key) for key in identity_fields)
-                    if (isinstance(passage, SourceFragments) and passage.name == 'full'
-                            and getattr(passage.root, 'complete', True)
-                            and same_identity
-                            and passage.root.payload['fragments_hash'] == envelope[KEY]['fragments_hash']
-                            and passage.root.docling_record == getattr(raw, 'extraction_record', None)):
-                        # The existing passage carrier proves the entire exact
-                        # extraction, not merely a selected source window.
-                        fragments = passage
-                    else:
-                        fragments = prepare(raw).fragments
-                except (ConsoleError, KeyError, TypeError, ValueError):
-                    # Keep the original full-source validation path for legacy
-                    # inputs that cannot form a prepared carrier.
-                    fragments = None
-        return _formation_incomplete_banner(console, snapshot_id, formation_fragments=fragments)
-    except ConsoleError:
-        # Corrupt prepared evidence stays unavailable; the existing status owner
-        # still renders its fail-closed repair notice without rebuilding views.
-        return _formation_incomplete_banner(console, snapshot_id)
-    finally:
-        if reads is not None:
-            reads.envelopes[snapshot_id] = read_inputs.envelope
+    if isinstance(read_inputs, ReviewPassageInputs):
+        link = '/source-selection?' + urlencode({'document': snapshot_id})
+        return ('<div class="banner" role="status" data-document-assessment="not_evaluated">'
+                '<p>De vorming van dit document wordt apart beoordeeld. Je kunt hier deze passage beoordelen. '
+                'Bekijk bij Vorming of er nog bronwerk openstaat.</p>'
+                f'<p><a class="btn-secondary" href="{_esc(link)}">Bekijk documentbeoordeling</a></p></div>')
+    return _formation_incomplete_banner(console, snapshot_id, formation_fragments=document_source)
 
 
 def _review_detail_projection(console, account, snapshot_id, obj, objects, review_path, read_inputs):

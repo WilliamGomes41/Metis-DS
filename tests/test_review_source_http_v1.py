@@ -134,7 +134,7 @@ def test_partial_formation_reads_complete_prepared_evidence_without_rebuild(
                            follow_redirects=False).status_code == 303
         page = client.get('/review', params={'document':sid,'object':candidate['object_id']})
         assert page.status_code == 200
-        assert FIRST in page.text and 'data-formation-incomplete' in page.text
+        assert FIRST in page.text and 'data-document-assessment="not_evaluated"' in page.text
     assert physical_state(console, sid) == before
 
 

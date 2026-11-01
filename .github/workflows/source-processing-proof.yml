@@ -53,7 +53,8 @@ jobs:
           path: proof
           if-no-files-found: error
   native-and-browser:
-    runs-on: ubuntu-latest
+    # Playwright 1.58.2 supports this image; ubuntu-latest can change underneath it.
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:16

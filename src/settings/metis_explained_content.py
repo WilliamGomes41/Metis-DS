@@ -48,7 +48,7 @@ class Model:
 
 
 # References describe this inspected revision, never an inferred deployment.
-REFERENCE_REVISION = "e6e247056831352681c42b28af1e52e49bc05fa6"
+REFERENCE_REVISION = "2d0f1e426325329d7fad2a013efb6a5a0a6f8273"
 
 MODELS = (
     Model(
@@ -62,7 +62,8 @@ MODELS = (
         "De documentstore beheert actuele documentgegevens. De bestaande bewijs- en bronowners bewaken de oorspronkelijke inhoud; de bevoegde beoordelaar en publisher behouden hun eigen besluiten.",
         "Het compositiediagram en het wijzigingscontract leggen de leesgrenzen, opslagovergang en herstelvoorwaarden vast.",
         (Reference("Compositie van documentopslag", "docs/architecture/operational-document-inputs-950.md"),
-         Reference("Wijzigingscontract MET-41", "docs/change-contracts/met41-operational-document-inputs.md")),
+         Reference("Wijzigingscontract MET-41", "docs/change-contracts/met41-operational-document-inputs.md"),
+         Reference("Leesgrenzen van Review", "docs/architecture/review-input-scopes-951.md")),
         ("verwerkingspoging", "auditspoor", "versiegebonden-beoordeling"),
         ("operationele opslag", "verwerkingsarchief"),
     ),

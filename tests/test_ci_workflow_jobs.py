@@ -13,6 +13,27 @@ def workflow(name):
     return yaml.safe_load((ROOT/'.github/workflows'/name).read_text())
 
 
+def test_browser_proofs_use_a_supported_stable_image_for_pinned_playwright():
+    # Playwright 1.58.2 rejects Ubuntu 26.04 before any browser test can execute.
+    # A floating image must not silently change this test dependency contract.
+    for path in (ROOT/'.github/workflows').glob('*.yml'):
+        for name, job in yaml.safe_load(path.read_text()).get('jobs', {}).items():
+            if any(step.get('uses') == './.github/actions/install-test-browser'
+                   for step in job.get('steps', [])):
+                assert job['runs-on'] == 'ubuntu-24.04', (path.name, name)
+
+
+def test_bend_console_comparison_provisions_and_requires_native_postgres():
+    job = workflow('bend-proof.yml')['jobs']['proof']
+    assert job['services']['postgres']['image'] == 'postgres:16'
+    assert job['env']['METIS_TEST_POSTGRES_DSN']
+    commands = [s.get('run', '') for s in job['steps']]
+    preflight = next(i for i, cmd in enumerate(commands) if 'bash scripts/test_postgres.sh' in cmd)
+    console_proof = next(i for i, cmd in enumerate(commands) if 'tests/test_pr_d2_second_review_retirement.py' in cmd)
+    assert preflight < console_proof
+    assert any('root.iter(\'skipped\')' in cmd for cmd in commands)
+
+
 def test_browser_is_independent_and_existing_required_checks_gate_all_shards():
     jobs = workflow('ci.yml')['jobs']
     assert 'suite' in jobs and 'browser' in jobs

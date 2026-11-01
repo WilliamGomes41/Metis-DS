@@ -1951,6 +1951,10 @@ class OperationsConsole:
         return self.workflow_document_store.processing_history_input(snapshot_id)
 
     def _processing_envelope(self, snapshot_id, *, command_id=None, attempt_id=None):
+        reads = self._document_reads()
+        if (reads is not None and command_id is None and attempt_id is None
+                and snapshot_id in reads.processing_inputs):
+            return reads.processing_inputs[snapshot_id]
         header = self._formation_envelope(snapshot_id)
         if '_document_inputs' not in header:
             return header

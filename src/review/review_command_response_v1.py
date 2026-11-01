@@ -9,6 +9,7 @@ from src.review.revision_workflow import current_revisions
 def review_command_error(console, account, snapshot_id, object_id, revision, task, draft, error):
     from src.operations_console_app import (
         _esc, _nav, _page, _render_review_card, _review_conflict_html, _sanitize_review_draft,
+        _review_formation_notice,
     )
     from src.operations_console_v1 import SNAPSHOT_OBJECT_WRITE_CONFLICT
     from src.review.beslisboom_path_v1 import review_path_for_klasse
@@ -27,9 +28,7 @@ def review_command_error(console, account, snapshot_id, object_id, revision, tas
         content = _render_review_card(console, snapshot_id, obj, objects,
             review_path_for_klasse(inputs.envelope['class']), draft, '',
             snapshot_revision=revision, task=task, read_inputs=view)
-        if inputs.envelope.get('_review_check_formation'):
-            content = ('<p class="banner warn" data-formation-incomplete>'
-                'De bronvorming vraagt nog controle. Bekijk de documentpagina voor de volledige status.</p>') + content
+        content = _review_formation_notice(console, snapshot_id, view) + content
     else:
         # Stale input is retained without issuing a fresh mutation precondition.
         # The reviewer must open and inspect the current passage before saving.
