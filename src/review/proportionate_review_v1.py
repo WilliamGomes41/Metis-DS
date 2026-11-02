@@ -356,7 +356,9 @@ class ProportionateReviewConsole(OperationsConsole):
             )
             # _save_objects records this call's committed revision in thread-local
             # state. Never adopt a later writer's revision between batch members.
-            pin = self._objects_expected_revs()[snapshot_id]
+            from src.review.review_command_state_v1 import active_review_command
+            scoped = active_review_command(self, snapshot_id)
+            pin = scoped.revision if scoped is not None else self._objects_expected_revs()[snapshot_id]
             refreshed = next(row for row in rows if row["object_id"] == object_id)
             updated.append(refreshed)
         return updated
@@ -378,7 +380,9 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
         if not snapshot_revision.strip():
             raise ConsoleError("snapshot_revision_required")
         try:
-            current_rows = console.snapshot_objects(snapshot_id)
+            documents = getattr(console, 'workflow_document_store', None)
+            current_rows = (documents.review_command_current_heads(snapshot_id, raw)
+                            if documents is not None else console.snapshot_objects(snapshot_id))
             by_id = {
                 str(row.get("object_id") or ""): row
                 for row in current_rows
@@ -447,6 +451,11 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
                 ),
                 status_code=409,
             )
+        if getattr(console, '_metis_workflow_review_authority', False):
+            # Navigation reads belong to the following GET. A committed batch
+            # must not appear to fail because a global post-commit read failed.
+            return RedirectResponse('/review?' + urlencode({
+                'document':snapshot_id, 'task':'batch', 'after_batch':'1'}), status_code=303)
         envelope = console._envelope(snapshot_id)
         review_path = review_path_for_klasse(envelope["class"])
         remaining = normal_risk_batch_queue(

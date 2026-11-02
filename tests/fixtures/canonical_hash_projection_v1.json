@@ -1,0 +1,18 @@
+{
+  "source_commit": "c45f78c8b252c4a5e318d3f3b3577d94a48b26c6",
+  "hashes": {
+    "base": "1ff04482a9ddc49e812a65f6f431ec992bb64f78ca7fdf0f9eeab89df383f954",
+    "metadata_empty": "03abee0cb8a3c39518c422415245b863b8a2326c6752e29a387cf0524478ac09",
+    "metadata_null": "03abee0cb8a3c39518c422415245b863b8a2326c6752e29a387cf0524478ac09",
+    "metadata_derived_only": "03abee0cb8a3c39518c422415245b863b8a2326c6752e29a387cf0524478ac09",
+    "metadata_absent": "03abee0cb8a3c39518c422415245b863b8a2326c6752e29a387cf0524478ac09",
+    "float_measure": "2c9fb2b94790fa571a6036bed9d52aeebe752c7144d2b14a849b934612f7a38c",
+    "governance_only": "1ff04482a9ddc49e812a65f6f431ec992bb64f78ca7fdf0f9eeab89df383f954",
+    "derived_hash_only": "1ff04482a9ddc49e812a65f6f431ec992bb64f78ca7fdf0f9eeab89df383f954",
+    "admission_only": "1ff04482a9ddc49e812a65f6f431ec992bb64f78ca7fdf0f9eeab89df383f954",
+    "clinical_change": "0b504ce95c829e508baa10bc23253449e93b675546a91b605cc84553491d94c6",
+    "source_change": "3e3f3b6c9df03b7fd4326a6f1511284fa74530e7a94502a8da48e1fb390cfb1a",
+    "text_change": "259db45dc17c345a124b6248e0b948b69cfb9114109d0dd20ace48546215d8cd",
+    "fragment_change": "92b344923ab1fb0f7a18a933d165c461e469b35b899248545bb73a16dcaa62a7"
+  }
+}

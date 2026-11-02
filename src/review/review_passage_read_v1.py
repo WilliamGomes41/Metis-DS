@@ -57,7 +57,7 @@ class ReviewPassageInputs(_ReviewInputs):
 
 
 @diagnostic_phase('review_capture')
-def read_review_document(console, account, snapshot_id, *, current_only=False):
+def read_review_document(console, account, snapshot_id, *, current_only=False, prepare_source_views=True):
     """Capture exact document inputs, excluding unused processing archives.
 
     Queue membership needs all current objects. Capture history only once so
@@ -115,7 +115,9 @@ def read_review_document(console, account, snapshot_id, *, current_only=False):
     bindings = [{**row, 'valid': bool(by_id.get(row.get('object_id')))
                  and still_matches(row, by_id[row['object_id']])} for row in bindings]
     fragments = console.review_source_fragments(snapshot_id, envelope=envelope)
-    if fragments is not None:
+    # Structural navigation consumes the captured raw fragments, not content
+    # materialisation. Do not reconstruct unused blocks on a legacy source.
+    if fragments is not None and prepare_source_views:
         from src.vorming.prepared_source_views_v1 import prepare
         fragments = prepare(fragments).fragments
     return ReviewDocumentInputs(envelope, objects, bindings, revision, fragments)

@@ -369,6 +369,12 @@ class _PostgresWorkflowReviewMixin:
 
     @contextmanager
     def _heading_batch_mutation(self, snapshot_id: str) -> Iterator[None]:
+        from src.review.review_command_state_v1 import active_review_command
+        command = active_review_command(self, snapshot_id)
+        if command is not None:
+            with command.savepoint(), (nullcontext() if command.preparing else workflow_transaction(self.workflow_review_store)), buffer_events(self._ledger_path):
+                yield
+            return
         with self._store_write_lock():
             try:
                 with super()._heading_batch_mutation(snapshot_id):
@@ -386,7 +392,7 @@ class _PostgresWorkflowReviewMixin:
         from src.review.review_command_state_v1 import active_review_command
         command = active_review_command(self, snapshot_id)
         if command is not None:
-            with command.savepoint(), workflow_transaction(self.workflow_review_store), buffer_events(self._ledger_path):
+            with command.savepoint(), (nullcontext() if command.preparing else workflow_transaction(self.workflow_review_store)), buffer_events(self._ledger_path):
                 yield
             return
         if getattr(self._objects_tls, "heading_batch_snapshot", None) == snapshot_id:

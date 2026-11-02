@@ -70,6 +70,13 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
 
     def batch_review_normal_risk(self, **kwargs: Any) -> list[dict[str, Any]]:
         """Commit the selected decisions and their evidence as one command."""
+        from src.review.review_command_state_v1 import active_review_command
+        from src.workflows.store_command_v1 import owned_store_command
+        if (getattr(self, '_metis_workflow_review_authority', False)
+                and active_review_command(self) is None and owned_store_command(self) is None):
+            from src.review.review_command_v1 import execute_review_batch
+            return execute_review_batch(self, kwargs,
+                lambda command: super(ClosedLoopReviewConsole, self).batch_review_normal_risk(**command))
         with self._atomic_snapshot_mutation(str(kwargs.get("snapshot_id") or "")):
             return super().batch_review_normal_risk(**kwargs)
 

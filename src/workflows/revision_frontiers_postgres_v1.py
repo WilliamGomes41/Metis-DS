@@ -216,7 +216,7 @@ def seal_delta(store, con, sid, before, after, affected):
     visible = defaultdict(list)
     for obj in after:
         visible[obj['object_id']].append(obj)
-    positions = {}
+    positions, certificates = {}, {}
     for oid in ids:
         previous = old.get(oid)
         count = affected.get(oid, 0)
@@ -235,8 +235,36 @@ def seal_delta(store, con, sid, before, after, affected):
             cert = _certificate(head['payload'], snapshot_id=sid, epoch=epochs[oid], count=base_count + added,
                 first=first, position=head['position'], historical={key: value or bool((previous or {}).get(key))
                     for key, value in historical_revision_inputs(visible[oid][:-1]).items()})
-            _install(con, sid, oid, cert)
+            certificates[oid] = cert
         positions[oid] = {'n': cert['history_count'], 'first_position': cert['first_position'], 'positioned': True}
+    if certificates:
+        # All raw heads/epochs above have been checked under their original
+        # transaction. Install the exact derived set without one round trip per
+        # member, and independently verify the physical result.
+        written = con.execute("UPDATE workflow.object_revision_frontiers f SET certificate=v,"
+            "certificate_hash=encode(sha256(convert_to(v::text,'UTF8')),'hex') "
+            "FROM jsonb_array_elements(%s::jsonb) v WHERE f.snapshot_id=%s "
+            "AND f.object_id=v->>'object_id' AND f.mutation_epoch=(v->>'epoch')::bigint "
+            "RETURNING f.object_id,f.mutation_epoch,f.certificate,f.certificate_hash",
+            (_json_text(list(certificates.values())), sid))
+        rows = written.fetchall()
+        if (written.rowcount != len(certificates) or len(rows) != len(certificates)
+                or len({row['object_id'] for row in rows}) != len(certificates)
+                or any(row['object_id'] not in certificates
+                    or row['mutation_epoch'] != certificates[row['object_id']]['epoch']
+                    or _json_text(row['certificate']) != _json_text(certificates[row['object_id']])
+                    for row in rows)):
+            raise WorkflowDocumentStoreError(CONFLICT)
+        expected = {oid: certificates.get(oid, old.get(oid)) for oid in ids}
+        final = con.execute("SELECT object_id,mutation_epoch,certificate,certificate_hash IS NOT DISTINCT FROM "
+                "encode(sha256(convert_to(certificate::text,'UTF8')),'hex') AS intact "
+                "FROM workflow.object_revision_frontiers WHERE snapshot_id=%s AND object_id=ANY(%s)",
+                (sid, ids)).fetchall()
+        if (len(final) != len(expected) or any(not row['intact']
+                or row['mutation_epoch'] != expected[row['object_id']]['epoch']
+                or _json_text(row['certificate']) != _json_text(expected[row['object_id']])
+                for row in final)):
+            raise WorkflowDocumentStoreError(CONFLICT)
     return positions
 
 

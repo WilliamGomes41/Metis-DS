@@ -132,15 +132,19 @@ def _install(con, sid, records, source_identity, *, complete, revision_positions
     positions = revision_positions if revision_positions is not None else {row['object_id']: row for row in physical}
     if any(not row['positioned'] for row in positions.values()) or set(positions) != set(records):
         raise WorkflowDocumentStoreError('review_card_history_unprepared')
-    for oid, record in records.items():
-        record = {**record, 'source_identity': source_identity}
-        row = positions[oid]
+    values = [{'object_id':oid, 'n':positions[oid]['n'], 'first':positions[oid]['first_position'],
+               'record':{**record, 'source_identity':source_identity}} for oid,record in records.items()]
+    if values:
+        # One intrinsic fact set belongs to this transaction. The logical row
+        # values/hash and ON CONFLICT behavior remain identical per object.
         con.execute("INSERT INTO workflow.review_object_facts(snapshot_id,object_id,history_count,dirty,"
-            "current_version,object_order,record,record_hash) VALUES(%s,%s,%s,false,%s,%s,%s::jsonb,"
-            "encode(sha256(convert_to((%s::jsonb)::text,'UTF8')),'hex')) ON CONFLICT(snapshot_id,object_id) "
+            "current_version,object_order,record,record_hash) "
+            "SELECT %s,v->>'object_id',(v->>'n')::integer,false,v#>>'{record,fields,object_version}',"
+            "(v->>'first')::integer,v->'record',encode(sha256(convert_to((v->'record')::text,'UTF8')),'hex') "
+            "FROM jsonb_array_elements(%s::jsonb) v ON CONFLICT(snapshot_id,object_id) "
             "DO UPDATE SET history_count=EXCLUDED.history_count,dirty=false,current_version=EXCLUDED.current_version,"
             "object_order=EXCLUDED.object_order,record=EXCLUDED.record,record_hash=EXCLUDED.record_hash",
-            (sid, oid, row['n'], record['fields']['object_version'], row['first_position'], _json_text(record), _json_text(record)))
+            (sid, _json_text(values)))
     if complete:
         con.execute('UPDATE workflow.review_object_facts SET dirty=false,history_count=0,current_version=NULL,'
             'record=NULL,record_hash=NULL WHERE snapshot_id=%s AND NOT(object_id=ANY(%s))', (sid, ids))

@@ -44,7 +44,7 @@ class RevisionWindow(list):
 
     def frozen(self):
         from src.vorming.prepared_source_views_v1 import freeze
-        return _FrozenRevisionWindow([freeze(deepcopy(row)) for row in self],
+        return _FrozenRevisionWindow([freeze(row) for row in self],
             owner=self.owner, snapshot_id=self.snapshot_id, frontiers=self.frontiers)
 
 

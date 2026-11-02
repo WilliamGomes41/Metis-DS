@@ -330,3 +330,56 @@ frontiers. Original1100-history/25MB partial-formation HTTP and actual archive
 restore/preparation are re-run. Per-run results and limitations are recorded in
 evidence/bounded-review-729/adjustment-results.json. Exact-head CI and production
 acceptance remain separate; no current production improvement is claimed.
+
+
+## Prepared batch follow-up to merged PR965 (2 November 2026)
+
+Change class A, rewrite risk high remains in force; the authority/writer/topology,
+rollback and failure-blast-radius map above applies. The concrete transition is
+one existing normal-risk or heading batch: original source/role/selection/member
+kernel, current refusal or all decisions plus bindings/facts/frontiers/audit in
+one original native transaction. Existing meanings/lineage/candidate creation/
+publication requirements are unchanged.
+
+Explicit generation batches on prepared032 data capture source/actor/header/
+quality, raw heads/frontiers, complete dependencies and relevant/global-ID events.
+The original kernel then computes without workflow SQL, process write locks or a
+long read transaction. The document owner validates exact immutable ordered
+stages and issues an opaque single-use private write handle. At commit the
+existing auth/document/account locks protect a complete fresh recapture; source,
+policy, roster, actor identity/retirement, bindings, native0/new incoming context
+and canonical publication are checked again. Actual current heads and every
+SQL result remain independently guarded in storage.
+
+The ledger owner has an explicit sealed intent mode only for these kernels.
+Human decisions/semantic event fields are fixed during preparation; the actual
+ledger order and existing hashes are assigned once under its lock in the same
+write transaction. Independent audit advancement alone is harmless. Ordinary
+serial buffers keep strict chain equality. Wrong/tampered/reused preparations,
+foreign interaction IDs, current changes and real SQL/COMMIT failures refuse and
+roll back without a cleanup flush. No existing event is rewritten.
+
+The public generation precondition remains document-wide. m2, None, existing
+outer native transactions and their correctly owned event buffers keep original
+serial/join semantics; a buffer without the same creating transaction is refused
+before mutation; no scoped public revision token is introduced. Normal
+batch conflict selection recovery remains with its existing handler. This
+follow-up does not claim the separately proposed complete scoped-conflict UX or
+all graph/repair routes. MET36 and MET44 remain open.
+
+No new schema, durable intent authority, deployment configuration or paid
+infrastructure is added. Existing-data rollout still requires migration032 and
+explicit positive frontier/source/operational-input preparation as applicable;
+unsupported/unprepared compatibility is not claimed bounded. Rollback to the
+previous binary retains ordinary object/binding/event shapes. Pending handles
+are disposable; a restart reconstructs only committed PostgreSQL truth.
+
+Before merge: exact-head current/failure/native0/canonical crash-window/
+independent-document proofs, actual unchanged3s/250ms/500ms budgets, independent
+adversarial review, repository checks and CI. Deployment follows the existing
+container/digest/rollback protocol; original Smetten URL and save/reopen/stale/
+publication-refusal acceptance remain necessary on the real snapshot. No
+production or full-program completion is inferred from local batch proof.
+
+Follow-up measured results and remaining limits are recorded in
+`evidence/bounded-review-729/batch-results.json` and `batch-review.md`.

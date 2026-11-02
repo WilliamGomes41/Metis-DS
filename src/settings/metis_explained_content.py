@@ -55,7 +55,7 @@ MODELS = (
         "documentopslag", "Documentopslag en verwerkingsbewijs",
         "Hoe actueel reviewwerk verbonden blijft met het oorspronkelijke verwerkingsbewijs.",
         "Review moet bereikbaar blijven wanneer de verwerkingshistorie groeit.",
-        "De documentaggregate bewaart de actuele metadata en vaste verwijzingen naar bron en bewijs. Bronlezers, vormingscontroles en diagnose lezen elk hun eigen benodigde invoer. De volledige oorspronkelijke historie blijft afzonderlijk bewaard.",
+        "De documentaggregate bewaart de actuele metadata en vaste verwijzingen naar bron en bewijs. Bronlezers, vormingscontroles en diagnose lezen elk hun eigen benodigde invoer. Een reviewbatch wordt voorbereid zonder schrijflock; vóór opslag controleert de bestaande eigenaar opnieuw de actuele rechten, bron, afhankelijkheden en publicatiestatus. Besluiten en auditspoor worden samen opgeslagen of samen teruggedraaid. De volledige oorspronkelijke historie blijft afzonderlijk bewaard.",
         "Deze scheiding voorkomt dat iedere gewone documenthandeling alle eerdere provideruitvoer en kwaliteitsmetingen moet ophalen en herschrijven.",
         ("Een bewijsverwijzing is geen goedkeuring of publicatiebesluit.",
          "Bestaande documenten worden alleen via expliciete voorbereiding en versiecontrole omgezet. Deze uitleg bewijst geen productiecutover."),

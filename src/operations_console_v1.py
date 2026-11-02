@@ -828,9 +828,19 @@ class OperationsConsole:
             return
         self._save_objects(snapshot_id, rows, expected_revision=expected_revision)
 
-    def _require_mutable_working_revision(self, snapshot_id: str) -> None:
+    def _require_mutable_working_revision(self, snapshot_id: str, *, current=False) -> None:
         """Published work is historical input, never current review work."""
-        if snapshot_id and self.snapshot_is_published(snapshot_id):
+        command = active_review_command(self, snapshot_id)
+        if command is not None and command.preparing:
+            if command.inputs.unpublished is not True:
+                raise ConsoleError('review_preparation_publication_input_missing')
+            return
+        if current:
+            from src.publication.durable_publication_console_v1 import DurablePublicationConsole
+            published = DurablePublicationConsole.snapshot_is_published(self, snapshot_id)
+        else:
+            published = snapshot_id and self.snapshot_is_published(snapshot_id)
+        if published:
             raise ConsoleError("published_working_revision_immutable")
 
     @staticmethod
@@ -1338,8 +1348,7 @@ class OperationsConsole:
         try:
             command = active_review_command(self, snapshot_id)
             if command is not None and command.inputs.original_checks is not None:
-                target = next((row for row in self.snapshot_objects(snapshot_id)
-                               if row['object_id'] == object_id), None)
+                target = command.current_object(object_id)
                 if target is None:
                     raise ConsoleError('unknown_object')
                 return command.inputs.require_original(target)
@@ -2041,7 +2050,7 @@ class OperationsConsole:
         if command is not None:
             if envelope is not None and str(envelope.get('snapshot_id') or '') != snapshot_id:
                 raise ConsoleError('unknown_snapshot')
-            return current_revisions(deepcopy(command.histories), snapshot_id=snapshot_id)
+            return list(command.current_objects)
         if envelope is None:
             self._envelope(snapshot_id)
         elif str(envelope.get("snapshot_id") or "") != snapshot_id:
@@ -2885,6 +2894,19 @@ class OperationsConsole:
 
     def review_source_fragments(self, snapshot_id, *, envelope=None, objects=None):
         """Call-local authoritative extraction for content-duty readers."""
+        command = active_review_command(self, snapshot_id)
+        if command is not None:
+            # The outer command prepared these exact pinned source inputs
+            # before acquiring its write lock. Member readers must use the
+            # same extraction rather than open a new source snapshot.
+            captured = envelope if envelope is not None else command.envelope
+            if review_path_for_klasse(captured['class']) == 'boom':
+                return None
+            try:
+                self._verified_source_bytes(captured)
+                return command.inputs.fragments
+            except (ConsoleError, ValueError, OSError, KeyError):
+                return None
         envelope = envelope if envelope is not None else self._envelope(snapshot_id)
         if review_path_for_klasse(envelope["class"]) == "boom":
             return None
@@ -2972,6 +2994,14 @@ class OperationsConsole:
         for_update: bool = False,
         envelope: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
+        command = active_review_command(self, snapshot_id)
+        if command is not None:
+            # Public callers still own mutable detached JSON. Current heads
+            # were validated when this immutable stage version was installed;
+            # avoid thawing all histories and projecting them a second time.
+            if envelope is not None and str(envelope.get('snapshot_id') or '') != snapshot_id:
+                raise ConsoleError('unknown_snapshot')
+            return deepcopy(command.histories if include_blocked else list(command.current_objects))
         if envelope is None:
             envelope = self._envelope(snapshot_id)
         elif str(envelope.get("snapshot_id") or "") != snapshot_id:
@@ -3987,8 +4017,18 @@ class OperationsConsole:
         reclassified onto a high-risk type. Serving still requires confirmed
         closed types plus the published projection and G2 locator.
         """
+        object_ids = list(dict.fromkeys(str(oid).strip() for oid in object_ids if str(oid).strip()))
+        from src.workflows.store_command_v1 import owned_store_command
+        if (object_ids and getattr(self, '_metis_workflow_review_authority', False)
+                and active_review_command(self) is None and owned_store_command(self) is None):
+            from src.review.review_command_v1 import execute_review_batch
+            return execute_review_batch(self, {
+                'actor_id': actor_id, 'snapshot_id': snapshot_id, 'object_ids': object_ids,
+                'expected_revision': expected_revision, 'interaction_evidence': interaction_evidence},
+                lambda command: self.batch_confirm_headings(**command), headings=True)
         with self._heading_batch_mutation(snapshot_id):
-            self._require_role(actor_id, "reviewer", current=True)
+            self._require_role(actor_id, "reviewer", current=True,
+                               key_share=active_review_command(self, snapshot_id) is not None)
             ids = list(dict.fromkeys(str(object_id).strip() for object_id in object_ids if str(object_id).strip()))
             if not ids:
                 raise ConsoleError("fast_lane_heading_required")

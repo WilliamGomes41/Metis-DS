@@ -210,13 +210,14 @@ def hotpath(production_console,production_app,monkeypatch):
         def observe(*args,**kwargs):
             key=label+('_navigation' if kwargs.get('navigation_only') else '')
             calls[key]+=1
-            if label=='single_objects':single_reads.append(args[0])
+            if label in {'single_objects','current_window'}:single_reads.append(args[0])
             return real(*args,**kwargs)
         monkeypatch.setattr(owner,name,observe)
     for name,label in [('list_document_lifecycle_statuses','statuses'),('review_workboard_summaries','summaries'),
                        ('snapshot_objects_and_revision','snapshot_api'),('_published_snapshot_ids','publication_fallback')]:
         spy(console,name,label)
     spy(console.workflow_document_store,'list_document_objects','single_objects')
+    spy(console.workflow_document_store,'review_document_window','current_window')
     spy(console.workflow_document_store,'list_current_objects_batch','bulk_objects')
     def forbidden_readiness(*args,**kwargs):
         raise AssertionError('List presentation must not run full publication readiness')
@@ -268,7 +269,8 @@ def test_review_task_detail_keeps_one_bounded_selected_snapshot_read(hotpath):
     h=hotpath
     review=h.client.get('/review',params={'document':h.snapshots[1],'task':'headings'})
     assert review.status_code==200 and 'Unpublished fixture' in review.text
-    assert h.calls['statuses']==1 and h.calls['snapshot_api']==1,dict(h.calls)
+    assert h.calls['statuses']==1 and h.calls['current_window']==1,dict(h.calls)
+    assert h.calls['snapshot_api']==0 and h.calls['single_objects']==0,dict(h.calls)
     assert set(h.single_reads)=={h.snapshots[1]},h.single_reads
     assert len(h.single_reads)==1,h.single_reads
 

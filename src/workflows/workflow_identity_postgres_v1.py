@@ -12,6 +12,7 @@ from src.console_performance_v1 import connect_postgres
 import hashlib
 import secrets
 import uuid
+from copy import deepcopy
 from typing import Any, Iterable
 
 from azure.identity import DefaultAzureCredential
@@ -305,6 +306,13 @@ class _PostgresIdentityMixin:
         }
 
     def _account(self, account_id: str, *, current: bool = False, key_share: bool = False) -> dict[str, Any]:
+        from src.review.review_command_state_v1 import active_review_command
+        command = active_review_command(self)
+        if command is not None and command.preparing:
+            account = command.inputs.account
+            if account is None or account['account_id'] != account_id:
+                raise ConsoleError('review_preparation_uncaptured_account')
+            return deepcopy(account)
         try:
             account = (self.workflow_identity_store.account_by_id(account_id, for_share=not key_share, for_key_share=key_share)
                        if current else self.workflow_identity_store.account_by_id(account_id))

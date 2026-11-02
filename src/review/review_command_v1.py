@@ -9,6 +9,7 @@ import base64
 from copy import deepcopy
 from dataclasses import dataclass
 import json
+from contextlib import ExitStack
 
 from src.console_read_snapshot_v1 import detached_document_reads
 from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
@@ -77,15 +78,17 @@ def capture_histories(console, snapshot_id, object_id, command, *, admission_con
     """Mutation dependencies, never the GET picker or its recursive users."""
     store = console.workflow_document_store
     pending = {object_id}
+    focals = set(command.get('_focal_ids') or [object_id])
     pending.update(command.get('_dependency_ids') or [])
     if command.get('parent_choice'):
         pending.add(str(command['parent_choice']))
     # Parent inference uses the existing global heading/TOC disambiguation rule.
     # Explicit parent confirmation uses the same TOC/body rule. This dependency
     # is all current headings and therefore grows with structural head count.
-    if command.get('parent_choice') or command.get('documentpositie_action') == 'dit_klopt':
+    if (command.get('_all_headings') or command.get('parent_choice')
+            or command.get('documentpositie_action') == 'dit_klopt'):
         pending.update(store.review_command_heading_ids(snapshot_id))
-    pending.update(store.review_command_neighbor_ids(snapshot_id, [object_id]))
+    pending.update(store.review_command_neighbor_ids(snapshot_id, sorted(focals)))
     if admission_context:
         pending.update(store.review_command_neighbor_ids(snapshot_id, sorted(pending)))
         # Source group eligibility also consumes automatic context-by-span,
@@ -94,10 +97,13 @@ def capture_histories(console, snapshot_id, object_id, command, *, admission_con
         # still decides exact interval coverage and candidate eligibility.
         from src.vorming.source_accountability_v1 import evidence_of
         sources = store.review_command_current_heads(snapshot_id, sorted(pending))
-        blocks = sorted({span['block_id'] for obj in sources
-                         for span in (evidence_of(obj).get('spans') or [])
-                         if isinstance(span, dict) and isinstance(span.get('block_id'), str)})
-        pending.update(store.review_neighbor_ids(snapshot_id, [], blocks))
+        blocks = set()
+        for obj in sources:
+            spans = evidence_of(obj).get('spans')
+            if isinstance(spans, list):
+                blocks.update(span['block_id'] for span in spans if isinstance(span, dict)
+                              and isinstance(span.get('block_id'), str))
+        pending.update(store.review_neighbor_ids(snapshot_id, [], sorted(blocks)))
         neighbours = store.source_admission_neighbor_ids(snapshot_id, sorted(pending))
         if neighbours is None:
             # Explicit existing-data compatibility until complete preparation.
@@ -114,7 +120,7 @@ def capture_histories(console, snapshot_id, object_id, command, *, admission_con
         live = store.review_command_current_heads(snapshot_id, sorted(pending))
         outgoing = set()
         for obj in live:
-            outgoing.update(_outgoing(obj, children=obj['object_id'] == object_id))
+            outgoing.update(_outgoing(obj, children=obj['object_id'] in focals))
         pending = outgoing - seen
     histories = store.review_command_window(snapshot_id, sorted(seen))
     if histories is None:
@@ -125,7 +131,49 @@ def capture_histories(console, snapshot_id, object_id, command, *, admission_con
     return histories
 
 
-def execute_review_command(console, submitted, invoke, *, completed_command=None):
+def _prepare_review_source_inputs(console, envelope, original_ids):
+    sid = envelope["snapshot_id"]
+    documents = console.workflow_document_store
+    source_path = frozen = fragments = None
+    source_failure = None
+    with diagnostic_phase('review_source_prepare'):
+        try:
+            source_path, frozen = console._verified_source_bytes(envelope)
+            fragments = console._read_source_fragments(envelope, source_path)
+            from src.vorming.prepared_source_views_v1 import prepare
+            fragments = prepare(fragments).fragments
+        except ConsoleError as exc:
+            # Existing safe disposition/defer paths need no source. Keep
+            # their contract; the original kernel raises this pinned error
+            # if its chosen branch actually requires source validation.
+            source_failure = exc.code
+            fragments = None
+    original_checks = None
+    if original_ids is not None:
+        from src.integrity_kernel import stable_hash
+        original_checks = {}
+        if frozen is not None:
+            original_rows = documents.review_command_current_heads(sid, original_ids)
+            with console._open_original_reader(envelope, frozen) as require:
+                for obj in original_rows:
+                    try:
+                        original_checks[stable_hash(obj)] = {'opened': require(obj)}
+                    except ConsoleError as exc:
+                        original_checks[stable_hash(obj)] = {'error': exc.code}
+    if envelope.get('decision_graph'):
+        envelope=console._tree_envelope(sid,envelope=envelope)
+    return envelope, source_path, frozen, fragments, source_failure, original_checks
+
+
+def _command_envelope(documents, snapshot_id):
+    try:
+        return documents.review_document_input(snapshot_id, command=True)[0]
+    except WorkflowDocumentStoreError as exc:
+        code = 'unknown_snapshot' if str(exc) == 'unknown_snapshot' else 'workflow_document_unavailable'
+        raise ConsoleError(code) from exc
+
+
+def execute_review_command(console, submitted, invoke, *, completed_command=None, list_result_is_snapshot=True):
     """Enclose the entire existing MRO in one request-owned native command."""
     command = dict(submitted)
     compact = command.pop('_compact_result', False)
@@ -139,41 +187,19 @@ def execute_review_command(console, submitted, invoke, *, completed_command=None
     precondition = (GenerationPrecondition(sid, generation) if generation is not None else
         ObjectSetPrecondition(expected) if expected is not None else UnconditionalReview())
     documents, reviews = console.workflow_document_store, console.workflow_review_store
+    try:
+        reviews.require_command_transaction()
+    except WorkflowReviewStoreError as exc:
+        raise ConsoleError(str(exc)) from exc
     changes = None
     with detached_document_reads():
         console._require_role(command['actor_id'], 'reviewer')
-        envelope = console._envelope(sid)
+        envelope = _command_envelope(documents, sid)
         if command['actor_id'] not in envelope.get('named_reviewers', []):
             raise ConsoleError('reviewer_not_named_on_snapshot')
         console._require_mutable_working_revision(sid)
-        source_path = frozen = fragments = None
-        source_failure = None
-        with diagnostic_phase('review_source_prepare'):
-            try:
-                source_path, frozen = console._verified_source_bytes(envelope)
-                fragments = console._read_source_fragments(envelope, source_path)
-                from src.vorming.prepared_source_views_v1 import prepare
-                fragments = prepare(fragments).fragments
-            except ConsoleError as exc:
-                # Existing safe disposition/defer paths need no source. Keep
-                # their contract; the original kernel raises this pinned error
-                # if its chosen branch actually requires source validation.
-                source_failure = exc.code
-                fragments = None
-        original_checks = None
-        if original_ids is not None:
-            from src.integrity_kernel import stable_hash
-            original_checks = {}
-            if frozen is not None:
-                original_rows = documents.review_command_current_heads(sid, original_ids)
-                with console._open_original_reader(envelope, frozen) as require:
-                    for obj in original_rows:
-                        try:
-                            original_checks[stable_hash(obj)] = {'opened': require(obj)}
-                        except ConsoleError as exc:
-                            original_checks[stable_hash(obj)] = {'error': exc.code}
-        if envelope.get('decision_graph'):
-            envelope=console._tree_envelope(sid,envelope=envelope)
+        (envelope, source_path, frozen, fragments, source_failure, original_checks) = (
+            _prepare_review_source_inputs(console, envelope, original_ids))
         identity = _source_identity(envelope)
         try:
             with console._store_write_lock():
@@ -211,7 +237,7 @@ def execute_review_command(console, submitted, invoke, *, completed_command=None
                             if (current.get('_document_inputs') or {}).get('tree')!=(envelope.get('_document_inputs') or {}).get('tree'):
                                 raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
                             current['decision_graph_evidence']=envelope['decision_graph_evidence']
-                        current['quality_processing_runs'] = documents.review_command_quality_input(sid, object_ids)
+                        current['quality_processing_runs'] = documents.review_command_quality_input(sid, object_ids, envelope=current)
                         bindings = reviews.read_bindings([sid], object_ids=object_ids).get(sid, [])
                         inputs = ReviewCommandInputs(console, sid, current, histories, bindings,
                             fragments, frozen, source_path, oid, interaction_id, precondition, source_failure,
@@ -236,6 +262,8 @@ def execute_review_command(console, submitted, invoke, *, completed_command=None
                                     review_stage=str((duty or {}).get('stage') or 'first_review'),
                                     focal=focal, objects=live, review_path=path)
                             command.pop('_dependency_ids', None)
+                            command.pop('_focal_ids', None)
+                            command.pop('_all_headings', None)
                             try:
                                 result = invoke(command)
                             except ConsoleError as exc:
@@ -279,7 +307,148 @@ def execute_review_command(console, submitted, invoke, *, completed_command=None
         return ReviewCommandResult(sid, oid)
     # Legacy list results are a deliberate read adapter after the transaction,
     # rather than a reason to materialize unrelated histories inside the write.
-    if isinstance(result, list):
+    if list_result_is_snapshot and isinstance(result, list):
         with detached_document_reads():
             return console.snapshot_objects(sid)
     return result
+
+
+def execute_review_batch(console, submitted, invoke, *, headings=False):
+    """Supply one selected batch to its original member kernel, atomically."""
+    command = dict(submitted)
+    ids = list(dict.fromkeys(str(oid).strip() for oid in command['object_ids'] if str(oid).strip()))
+    command['object_ids'] = ids
+    command['interaction_evidence'] = deepcopy(command.get('interaction_evidence'))
+    if not ids:
+        # Original role/selection validation owns the empty-input error order.
+        return invoke(command)
+    if not headings:
+        from src.review.proportionate_review_v1 import NORMAL_RISK_BATCH_MAX
+        if len(ids) > NORMAL_RISK_BATCH_MAX:
+            return invoke(command)
+    captured = {'actor_id': command['actor_id'], 'snapshot_id': command['snapshot_id'],
+                'object_id': ids[0], 'expected_revision': command.get('expected_revision'),
+                '_dependency_ids': ids, '_focal_ids': ids, '_all_headings': headings,
+                '_original_ids': ids, 'interaction_evidence': command.get('interaction_evidence')}
+    # Preserve one exact original batch/structure interaction manifest for every
+    # member. Do not ask the executor to synthesize a singular contextual one.
+    def run(internal):
+        return invoke({**command, 'expected_revision': internal['expected_revision']})
+    if generation_precondition(command['snapshot_id'], command.get('expected_revision')) is not None:
+        return _execute_prepared_batch(console, captured, run)
+    return execute_review_command(console, captured, run, list_result_is_snapshot=False)
+
+
+def _batch_state(console, command, prepared_envelope, generation):
+    """Actual current dependencies; called in each owner's consistent SQL phase."""
+    sid, oid = command['snapshot_id'], command['object_id']
+    store, reviews = console.workflow_document_store, console.workflow_review_store
+    current, counters = store.review_document_input(sid, command=True)
+    if counters != generation or _source_identity(current) != _source_identity(prepared_envelope):
+        raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+    if command['actor_id'] not in current.get('named_reviewers', []):
+        raise ConsoleError('reviewer_not_named_on_snapshot')
+    if 'decision_graph_evidence' in prepared_envelope:
+        if (current.get('_document_inputs') or {}).get('tree') != (prepared_envelope.get('_document_inputs') or {}).get('tree'):
+            raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+        current['decision_graph_evidence'] = prepared_envelope['decision_graph_evidence']
+    histories = capture_histories(console, sid, oid, command, admission_context=True)
+    ids = sorted({row['object_id'] for row in histories})
+    current['quality_processing_runs'] = store.review_command_quality_input(sid, ids, envelope=current)
+    bindings = reviews.read_bindings([sid], object_ids=ids).get(sid, [])
+    interaction_id = str((command.get('interaction_evidence') or {}).get('interaction_id') or '')
+    events = reviews.read_review_command_events(sid, ids, interaction_id=interaction_id, include_pending=False)
+    return current, histories, bindings, events
+
+
+def _execute_prepared_batch(console, command, invoke):
+    """Original GEN batch kernel without SQL; short current-guarded native commit.
+
+    Public m2/None and receipt commands retain their serial implementation.
+    The pending buffer exits successfully ONLY inside the write transaction.
+    Any earlier exception discards it through normal exceptional unwinding.
+    """
+    from src.review.revision_window_v1 import RevisionWindow
+    from src.review.review_interaction_v1 import validate_review_interaction_identity
+    from src.workflows.workflow_transaction_v1 import workflow_read_transaction, without_workflow_io, workflow_transaction_active
+    from src.workflows.workflow_documents_postgres_v1 import _json_text
+    sid, oid = command['snapshot_id'], command['object_id']
+    generation = generation_precondition(sid, command.get('expected_revision'))
+    store, reviews = console.workflow_document_store, console.workflow_review_store
+    if reviews._buffer.get() is not None or workflow_transaction_active():
+        return execute_review_command(console, command, invoke, list_result_is_snapshot=False)
+    with detached_document_reads():
+        console._require_role(command['actor_id'], 'reviewer')
+        envelope = _command_envelope(store, sid)
+        if command['actor_id'] not in envelope.get('named_reviewers', []):
+            raise ConsoleError('reviewer_not_named_on_snapshot')
+        console._require_mutable_working_revision(sid, current=True)
+        envelope, path, frozen, fragments, source_error, originals = _prepare_review_source_inputs(
+            console, envelope, command.get('_original_ids'))
+        try:
+            with workflow_read_transaction(reviews):
+                current, histories, bindings, events = _batch_state(console, command, envelope, generation)
+                account = console._require_role(command['actor_id'], 'reviewer')
+                ledger_head = reviews._last_hash()
+            if not isinstance(histories, RevisionWindow):
+                # Explicit existing-data compatibility until its own preparation.
+                return execute_review_command(console, command, invoke, list_result_is_snapshot=False)
+            interaction_id = str((command.get('interaction_evidence') or {}).get('interaction_id') or '')
+            inputs = ReviewCommandInputs(console, sid, current, histories, bindings, fragments,
+                frozen, path, oid, interaction_id, GenerationPrecondition(sid, generation),
+                source_error, originals, console._public_account(account), events, ledger_head, True)
+            with ExitStack() as pending:
+                intent_buffer = pending.enter_context(reviews.prepared_batch_events(ledger_head))
+                with review_command_scope(inputs, preparing=True) as changes, without_workflow_io():
+                    internal = dict(command)
+                    internal['expected_revision'] = changes.revision
+                    try:
+                        result = invoke(internal)
+                    except ConsoleError as exc:
+                        exc.review_command_inputs = inputs
+                        raise
+                    plan = (store.prepare_review_changes(sid, inputs.histories, changes.histories,
+                        inputs.envelope, changes.envelope, changes.commit_count,
+                        transitions=changes.object_transitions) if changes.commit_count else None)
+                    intent_buffer.seal()
+                with console._store_write_lock():
+                    owner, token = open_store_command(console)
+                    owner.fresh = True
+                    try:
+                        with diagnostic_phase('store_transaction'), workflow_transaction(reviews) as con:
+                            reviews._lock_authorizations(con)
+                            console._lock_document_row(con, sid)
+                            live_actor = console._require_role(command['actor_id'], 'reviewer', current=True, key_share=True)
+                            console._require_mutable_working_revision(sid, current=True)
+                            # Ledger identity and append head stay serialized with
+                            # all ordinary appends; the ledger owner assigns the
+                            # final audit order after the current-input guards.
+                            reviews._lock_review_ledger(con)
+                            live = _batch_state(console, command, envelope, generation)
+                            before = (inputs.envelope, inputs.histories, inputs.bindings, inputs.events)
+                            if (not isinstance(live[1], RevisionWindow)
+                                    or any(_json_text(a) != _json_text(b) for a, b in zip(live, before))
+                                    or live[1].frontiers != inputs.histories.frontiers
+                                    or _json_text(console._public_account(live_actor)) != _json_text(inputs.account)):
+                                raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+                            if command.get('interaction_evidence') is not None:
+                                try:
+                                    validate_review_interaction_identity(command['interaction_evidence'], live[3])
+                                except ValueError as exc:
+                                    raise ConsoleError(str(exc)) from exc
+                            if changes.commit_count:
+                                reviews.apply_review_binding_delta(sid, inputs.bindings, changes.bindings)
+                                store.apply_prepared_review_changes(sid, plan)
+                            # A failed SQL COMMIT after this close still rolls
+                            # the buffered inserts back on this SAME connection.
+                            pending.close()
+                    finally:
+                        close_store_command(token)
+            return result
+        except WorkflowReviewStoreError as exc:
+            raise ConsoleError('workflow_review_write_failed') from exc
+        except WorkflowDocumentStoreError as exc:
+            code = str(exc)
+            if code not in {SNAPSHOT_OBJECT_WRITE_CONFLICT, 'published_working_revision_immutable'}:
+                code = 'workflow_document_write_failed'
+            raise ConsoleError(code) from exc

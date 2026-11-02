@@ -39,21 +39,14 @@ def stable_hash(value: Any) -> str:
     return sha256_bytes(canonical_json(value))
 
 
-def _provenance_for_hash(provenance: dict[str, Any]) -> dict[str, Any]:
-    p = deepcopy(provenance)
+def _provenance_for_hash(provenance: dict[str, Any], *, detached=True) -> dict[str, Any]:
     # Self-referential/derived hash fields never participate in their own hash.
-    p.pop("content_hash", None)
-    p.pop("canonical_object_hash", None)
-    return p
+    return {key: deepcopy(value) if detached else value for key, value in provenance.items()
+            if key not in {"content_hash", "canonical_object_hash"}}
 
 
-def canonical_object_payload(obj: dict[str, Any]) -> dict[str, Any]:
-    """Return the immutable/reviewable canonical payload.
-
-    Governance is excluded because review/publication state is mutable lifecycle
-    metadata. All clinical/technical content, source, structure, uncertainty,
-    relations, risk and transformation provenance are included.
-    """
+def _canonical_object_payload(obj: dict[str, Any], *, detached: bool) -> dict[str, Any]:
+    """One canonical field definition for detached callers and pure hashing."""
     required = [
         "object_id", "document_id", "object_version", "parent_object_id",
         "object_type", "source", "structure", "content", "logic", "relations",
@@ -62,9 +55,9 @@ def canonical_object_payload(obj: dict[str, Any]) -> dict[str, Any]:
     payload: dict[str, Any] = {}
     for key in required:
         if key == "provenance":
-            payload[key] = _provenance_for_hash(obj.get(key) or {})
+            payload[key] = _provenance_for_hash(obj.get(key) or {}, detached=detached)
         else:
-            payload[key] = deepcopy(obj.get(key))
+            payload[key] = deepcopy(obj.get(key)) if detached else obj.get(key)
     for extra in (
         "proposed_object_type",
         "confirmed_object_type",
@@ -81,19 +74,29 @@ def canonical_object_payload(obj: dict[str, Any]) -> dict[str, Any]:
         if extra not in obj:
             continue
         if extra == "metadata":
-            md = deepcopy(obj.get(extra) or {})
-            md.pop("admission", None)
-            md.pop("passage_register", None)
-            md.pop("candidate_eligibility", None)
+            md = {key: deepcopy(value) if detached else value
+                  for key, value in (obj.get(extra) or {}).items()
+                  if key not in {"admission", "passage_register", "candidate_eligibility"}}
             if md:
                 payload[extra] = md
             continue
-        payload[extra] = deepcopy(obj.get(extra))
+        payload[extra] = deepcopy(obj.get(extra)) if detached else obj.get(extra)
     return payload
 
 
+def canonical_object_payload(obj: dict[str, Any]) -> dict[str, Any]:
+    """Return a detached canonical payload; governance/derived fields excluded.
+
+    All clinical/technical content, source, structure, uncertainty, relations,
+    risk and transformation provenance retain the existing hash contract.
+    """
+    return _canonical_object_payload(obj, detached=True)
+
+
 def compute_canonical_object_hash(obj: dict[str, Any]) -> str:
-    return stable_hash(canonical_object_payload(obj))
+    # Synchronous serialization reads the same projection without cloning its
+    # nested JSON merely to discard the clone. No borrowed value escapes here.
+    return stable_hash(_canonical_object_payload(obj, detached=False))
 
 
 def exact_review_snapshot_hash(obj: dict[str, Any]) -> str:
