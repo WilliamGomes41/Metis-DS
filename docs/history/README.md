@@ -41,6 +41,12 @@ The completeness assessment for the v4.1 consolidation is recorded in `PROTOCOL_
 | `REPAIR45_REPORT.md` | Repair report |
 | `INTEGRITY_REPAIR_SPRINT_REPORT.md` | Repair sprint report |
 | `PRODUCT_API_V1_REPORT.md` | Product API report |
+| [DEAD_CODE_REMOVAL.md](DEAD_CODE_REMOVAL.md) | Completed code-removal evidence, October 2026 |
+| [WORKFLOW_POSTGRES_READINESS.md](WORKFLOW_POSTGRES_READINESS.md) | Historical step-8 migration readiness, September 2026 |
+| [availability-repair-report.md](availability-repair-report.md) | Initial availability repair; later verification remains in the linked follow-up |
+| [context-preservation-verification.md](context-preservation-verification.md) | Dated implementation and verification report |
+| [SOURCE_CONTEXT_ADVERSARIAL_REVIEW.md](SOURCE_CONTEXT_ADVERSARIAL_REVIEW.md) | Historical source-context review evidence |
+| [ROUTE_COMPARISON.md](ROUTE_COMPARISON.md) | Retired route-comparison contract; recorded legacy comparisons remain readable |
 
 Protocol v3 is bevroren in `protocol-v3/`. De classificatie van oude bestanden en nog actieve operatorpaden staat in `LEGACY_CLASSIFICATION_2026-09-27.md`.
 

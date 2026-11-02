@@ -42,8 +42,8 @@ Application versioning follows semantic versioning where practical:
 
 Protocol, schema and clinical knowledge versions remain independently versioned and must not be inferred from the application version.
 
-## Branch protection target
+## Repository and branch protection
 
-The authoritative remote is `WilliamGomes41/VENVN-DS`, with `main` as its default branch. Protocol v2.5 permits that remote to be public during a declared MVP period so GitHub branch protection can be enabled on the current free personal plan. After the MVP, public hosting is not the production baseline.
+The authoritative remote is [WilliamGomes41/Metis-DS](https://github.com/WilliamGomes41/Metis-DS), with `main` as its default branch.
 
-Until visibility is switched and protection is on, changes are handled procedurally through feature branches and pull requests. Gate G1 remains `BLOCKED` until `main` requires CI checks `test (3.12)` and `test (3.13)`, requires a pull request before merging, rejects force-pushes and cannot be deleted.
+Changes go through feature branches and pull requests. Gate G1 requires successful CI checks `test (3.12)` and `test (3.13)`, a pull request before merging, rejection of force-pushes and protection against branch deletion. Check the current repository ruleset when verifying enforcement; a historical MVP visibility exception is not evidence of current visibility, deployment or gate status.

@@ -1,5 +1,12 @@
 # Brongebonden veldbewijs v2 — additieve eerste slice (#455)
 
+> **Leeswijzer:** dit ADR bewaart het oorspronkelijke besluit en de oorspronkelijke
+> opt-in-/rollbackvoorwaarden van de eerste slice. Voor nieuw proza is
+> `semantic-source-bound-v2` inmiddels de standaard; V1 en V3 vereisen expliciete
+> configuratie. Actuele verwerkingsroutes en veiligheidsvoorwaarden staan in
+> [PROTOCOL.md §5](../../PROTOCOL.md#5-semantische-interpretatie-en-harde-invarianten).
+> De historische tekst hieronder is geen actuele activeringsinstructie.
+
 Change class: B. Rewrite risk: high. Status: implemented, opt-in; no production cutover.
 
 ## Besluit
