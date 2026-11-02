@@ -417,8 +417,13 @@ def render_source_accountability(console, account, document):
     envelope = console._envelope(document)
     if account['account_id'] not in envelope.get('named_reviewers', []):
         raise ConsoleError('reviewer_not_named_on_snapshot')
-    objects, revision = console.snapshot_objects_and_revision(document)
-    bindings = ui._review_bindings(console, document, objects=objects)
+    if getattr(console, 'workflow_document_store', None) is not None:
+        from src.review.review_passage_read_v1 import read_review_document
+        inputs = read_review_document(console, account, document, current_only=True)
+        envelope, objects, revision, bindings = inputs.envelope, inputs.objects, inputs.revision, inputs.bindings
+    else:
+        objects, revision = console.snapshot_objects_and_revision(document)
+        bindings = ui._review_bindings(console, document, objects=objects)
     panel = ui._review_inventory(document, objects,
         review_path=review_path_for_klasse(envelope['class']), bindings=bindings,
         reviewer_id=account['account_id'], task='inventory', snapshot_revision=revision,

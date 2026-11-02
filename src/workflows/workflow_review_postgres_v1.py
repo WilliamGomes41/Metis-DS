@@ -157,6 +157,18 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
             events.extend(deepcopy(list(level)))
         return events
 
+    def source_command_receipt(self, snapshot_id, event_type, command_id):
+        """Existing receipt semantics, scoped before precondition validation."""
+        try:
+            with self._connect() as con:
+                row = con.execute("SELECT event_payload FROM workflow.review_events WHERE "
+                    "event_payload#>>'{details,snapshot_id}'=%s AND event_type=%s "
+                    "AND event_payload#>>'{details,command_id}'=%s ORDER BY event_id LIMIT 1",
+                    (snapshot_id, event_type, command_id)).fetchone()
+            return self._event_payload(row['event_payload']) if row else None
+        except Exception as exc:
+            raise WorkflowReviewStoreError('workflow_review_events_read_failed') from exc
+
     def read_review_command_events(
         self, snapshot_id: str, object_ids: list[str], *, interaction_id: str = "",
     ) -> list[dict[str, Any]]:

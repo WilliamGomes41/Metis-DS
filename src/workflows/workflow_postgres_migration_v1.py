@@ -37,10 +37,12 @@ MIGRATION_NAMES = (
     "029_formation_evidence.sql",
     "030_operational_document_inputs.sql",
     "031_review_dependency_keys.sql",
+    "032_object_revision_frontiers.sql",
 )
 REQUIRED_TABLES = frozenset(
     {
         "document_inputs", "document_processing_records", "processing_archive_inputs",
+        "object_revision_frontiers",
         "processing_archive_input_members", "processing_attempt_inputs",
         "accounts",
         "sessions",
@@ -67,11 +69,18 @@ REFUSAL_COLUMNS = (
 # Named constraints the runtime depends on (ON CONFLICT (dedup_key) needs the UNIQUE).
 # (table, name, contype, columns): ON CONFLICT (dedup_key) needs UNIQUE(dedup_key) on exactly this
 # table; a same-named constraint elsewhere, a non-unique one or other columns MAG NIET pass (4291505169).
-REQUIRED_CONSTRAINTS = frozenset({("publication_refusals", "publication_refusals_dedup_key_uniq", "u", ("dedup_key",))})
+REQUIRED_CONSTRAINTS = frozenset({
+    ("publication_refusals", "publication_refusals_dedup_key_uniq", "u", ("dedup_key",)),
+    ("object_revision_frontiers", "object_revision_frontiers_pkey", "p", ("snapshot_id", "object_id")),
+    ("document_objects", "workflow_object_revision_frontier_fk", "f", ("snapshot_id", "object_id")),
+})
 REQUIRED_COLUMNS = frozenset(
     {
         ("documents", "document_storage_version"),
         ("document_objects", "review_dependency_keys"),
+        ("object_revision_frontiers", "mutation_epoch"),
+        ("object_revision_frontiers", "certificate"),
+        ("object_revision_frontiers", "certificate_hash"),
         ("document_inputs", "refs"),
         ("processing_attempt_inputs", "record_version"),
         ("documents", "review_source_ref"),
@@ -104,6 +113,7 @@ RUNTIME_TABLE_PRIVILEGES = {
     "topics": (_S, _I),
     "document_reviewers": (_S, _I, _D),
     "document_objects": (_S, _I, _U, _D),
+    "object_revision_frontiers": (_S, _I, _U),
     "review_events": (_S, _I, _U),
     "publish_authorizations": (_S, _I, _U, _D),
     "audit_records": (_S, _I, _U, _D),

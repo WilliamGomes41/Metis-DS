@@ -46,14 +46,29 @@ class ReviewCommandInputs:
     interaction_id: str = ''
     precondition: ReviewPrecondition = field(default_factory=UnconditionalReview)
     source_failure: str | None = None
+    original_checks: dict | None = None
 
     def __post_init__(self) -> None:
         # Frozen fields alone do not detach the mutable records from the caller.
         from src.vorming.prepared_source_views_v1 import freeze
-        for name in ('envelope', 'histories', 'bindings', 'fragments'):
+        for name in ('envelope', 'histories', 'bindings', 'fragments', 'original_checks'):
+            from src.review.revision_window_v1 import RevisionWindow
+            if name == 'histories' and isinstance(self.histories, RevisionWindow):
+                object.__setattr__(self, name, self.histories.frozen())
+                continue
             object.__setattr__(self, name, freeze(deepcopy(getattr(self, name))))
         if self.source_bytes is not None:
             object.__setattr__(self, 'source_bytes', bytes(self.source_bytes))
+
+    def require_original(self, obj):
+        from src.integrity_kernel import stable_hash
+        from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
+        check = (self.original_checks or {}).get(stable_hash(obj))
+        if check is None:
+            raise ConsoleError(self.source_failure or SNAPSHOT_OBJECT_WRITE_CONFLICT)
+        if check.get('error'):
+            raise ConsoleError(check['error'])
+        return deepcopy(check['opened'])
 
 
 class ReviewChangeSet:
@@ -100,8 +115,10 @@ class ReviewChangeSet:
             self.bindings = deepcopy(bindings.get(sid, []))
         if objects is not None:
             from src.review.revision_workflow import validate_revision_write
-            validate_revision_write(self.histories, objects[1], snapshot_id=sid)
-            self.histories = deepcopy(objects[1])
+            from src.review.revision_window_v1 import RevisionWindow
+            proposed = self.histories.replacing(objects[1]) if isinstance(self.histories, RevisionWindow) else objects[1]
+            validate_revision_write(self.histories, proposed, snapshot_id=sid)
+            self.histories = deepcopy(proposed)
             self.object_transitions.append(deepcopy(self.histories))
         if ledger_fn is not None:
             ledger_fn()

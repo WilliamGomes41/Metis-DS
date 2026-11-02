@@ -200,8 +200,6 @@ def projection(console, *, actor_id, snapshot_id, documents, observations=None, 
     # Reuse its disposable status instead of repeating the completeness checks.
     if processing is None:
         processing = console.processing_status(snapshot_id, actor_id=actor_id)
-    # Exact selected-document inputs; overviews use summary_projection.
-    objects = console._read_current_objects(snapshot_id)
     attempt = next(reversed(envelope.get("processing_attempts") or []), {})
     budget_stopped = attempt.get("state") == "incomplete_budget"
     succeeded = bool(attempt.get("state") == "succeeded" or (not attempt and envelope.get("quality_processing_runs")))
@@ -216,6 +214,14 @@ def projection(console, *, actor_id, snapshot_id, documents, observations=None, 
              else "voltooid" if complete else "nog niet gestart")
     if (attempt.get("dispatch") or {}).get("state") == "blocked":
         state = "geblokkeerd"
+    # Only an actual start form needs the legacy processing precondition.
+    # Capture its rows and token together, retaining the original CAS contract.
+    needs_revision = ((processing["retry_allowed"] or processing["resume_allowed"])
+                      and state not in {"bezig", "wacht op uitvoering", "voltooid", UNCHECKED})
+    if needs_revision:
+        objects, revision = console.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
+    else:
+        objects, revision = console._read_current_objects(snapshot_id), ""
     elapsed = _duration(attempt.get("started_at"), attempt.get("finished_at") or now().isoformat())
     timing = estimate({**envelope, "processing_configuration": configuration(console)}, documents,
                       observations=observations)
@@ -245,7 +251,8 @@ def projection(console, *, actor_id, snapshot_id, documents, observations=None, 
             "review_available": len(candidates) > blocked,
             "can_start": processing["retry_allowed"] or processing["resume_allowed"],
             "budget_stopped": budget_stopped,
-            "revision": console.objects_revision(snapshot_id), "progress": processing.get("formation_progress", {})}
+            "revision": revision,
+            "progress": processing.get("formation_progress", {})}
 
 
 def summary_projection(console, *, envelope, observations):

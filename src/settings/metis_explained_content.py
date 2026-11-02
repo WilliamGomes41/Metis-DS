@@ -48,7 +48,7 @@ class Model:
 
 
 # References describe this inspected revision, never an inferred deployment.
-REFERENCE_REVISION = "2d0f1e426325329d7fad2a013efb6a5a0a6f8273"
+REFERENCE_REVISION = "b1d4d982a633becbeee272e640a8543dbf47901a"
 
 MODELS = (
     Model(
@@ -63,7 +63,8 @@ MODELS = (
         "Het compositiediagram en het wijzigingscontract leggen de leesgrenzen, opslagovergang en herstelvoorwaarden vast.",
         (Reference("Compositie van documentopslag", "docs/architecture/operational-document-inputs-950.md"),
          Reference("Wijzigingscontract MET-41", "docs/change-contracts/met41-operational-document-inputs.md"),
-         Reference("Leesgrenzen van Review", "docs/architecture/review-input-scopes-951.md")),
+         Reference("Leesgrenzen van Review", "docs/architecture/review-input-scopes-951.md"),
+         Reference("Begrensde reviewbeslissingen", "docs/architecture/bounded-review-mutations-729.md")),
         ("verwerkingspoging", "auditspoor", "versiegebonden-beoordeling"),
         ("operationele opslag", "verwerkingsarchief"),
     ),

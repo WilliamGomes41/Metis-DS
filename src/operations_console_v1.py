@@ -887,8 +887,9 @@ class OperationsConsole:
                     continue
                 raise
 
-    def _require_role(self, account_id: str, role: str, *, current: bool = False) -> dict[str, Any]:
-        account = self._account(account_id, current=current)
+    def _require_role(self, account_id: str, role: str, *, current: bool = False, key_share: bool = False) -> dict[str, Any]:
+        account = (self._account(account_id, current=current, key_share=True) if key_share
+                   else self._account(account_id, current=current))
         if role not in account["roles"]:
             raise ConsoleError(f"{role}_role_required")
         return account
@@ -1335,6 +1336,13 @@ class OperationsConsole:
 
     def _require_open_original(self, snapshot_id: str, object_id: str) -> dict[str, Any]:
         try:
+            command = active_review_command(self, snapshot_id)
+            if command is not None and command.inputs.original_checks is not None:
+                target = next((row for row in self.snapshot_objects(snapshot_id)
+                               if row['object_id'] == object_id), None)
+                if target is None:
+                    raise ConsoleError('unknown_object')
+                return command.inputs.require_original(target)
             return self.open_source_passage(snapshot_id=snapshot_id, object_id=object_id)
         except ConsoleError as exc:
             if exc.code in OPEN_ORIGINAL_REQUIRED_CODES:
@@ -2039,11 +2047,21 @@ class OperationsConsole:
         elif str(envelope.get("snapshot_id") or "") != snapshot_id:
             raise ConsoleError("unknown_snapshot")
         reads = self._document_reads()
-        if reads is None:
+        def current():
+            documents = getattr(self, 'workflow_document_store', None)
+            if documents is not None and hasattr(documents, 'current_document_objects'):
+                try:
+                    return documents.current_document_objects(snapshot_id)
+                except Exception as exc:
+                    from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+                    if isinstance(exc, WorkflowDocumentStoreError):
+                        raise ConsoleError('workflow_document_unavailable') from exc
+                    raise
             return current_revisions(self._load_objects(snapshot_id, remember=False), snapshot_id=snapshot_id)
+        if reads is None:
+            return current()
         if snapshot_id not in reads.current_objects:
-            reads.current_objects[snapshot_id] = current_revisions(
-                self._load_objects(snapshot_id, remember=False), snapshot_id=snapshot_id)
+            reads.current_objects[snapshot_id] = current()
         return reads.current_objects[snapshot_id]
 
     def _can_resume_formation(self, snapshot_id, *, envelope=None):

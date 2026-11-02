@@ -202,7 +202,7 @@ class EntraIdentity:
             if row:
                 aid = row["account_id"]
                 # Role changes invalidate older sessions before publishing current rights.
-                old = con.execute("SELECT roles,to_jsonb(accounts)->'retirement' AS retirement FROM workflow.accounts WHERE account_id=%s FOR UPDATE", (aid,)).fetchone()
+                old = con.execute("SELECT roles,to_jsonb(accounts)->'retirement' AS retirement FROM workflow.accounts WHERE account_id=%s FOR NO KEY UPDATE", (aid,)).fetchone()
                 if old["retirement"] is not None:
                     raise ConsoleError("entra_access_denied")
                 if sorted(old["roles"]) != roles:

@@ -124,13 +124,13 @@ def _previous(con, sid, source_identity, *, object_ids=None):
     return {row['object_id']: row['record'] for row in rows}
 
 
-def _install(con, sid, records, source_identity, *, complete):
+def _install(con, sid, records, source_identity, *, complete, revision_positions=None):
     ids = list(records)
     physical = con.execute('SELECT object_id,min(position) AS first_position,count(*) AS n,'
         'bool_and(position IS NOT NULL) AS positioned FROM workflow.document_objects '
-        'WHERE snapshot_id=%s AND object_id=ANY(%s) GROUP BY object_id', (sid, ids)).fetchall() if ids else []
-    positions = {row['object_id']: row for row in physical}
-    if any(not row['positioned'] for row in physical) or set(positions) != set(records):
+        'WHERE snapshot_id=%s AND object_id=ANY(%s) GROUP BY object_id', (sid, ids)).fetchall() if ids and revision_positions is None else []
+    positions = revision_positions if revision_positions is not None else {row['object_id']: row for row in physical}
+    if any(not row['positioned'] for row in positions.values()) or set(positions) != set(records):
         raise WorkflowDocumentStoreError('review_card_history_unprepared')
     for oid, record in records.items():
         record = {**record, 'source_identity': source_identity}
@@ -154,7 +154,7 @@ def _install(con, sid, records, source_identity, *, complete):
         (sid, _json_text(source_identity)))
 
 
-def maintain(store, con, sid, histories, *, complete=False, preparation=None):
+def maintain(store, con, sid, histories, *, complete=False, preparation=None, revision_positions=None):
     """Seal only intrinsic inputs of already validated changed histories.
 
     Old/unprepared schema or retained-source records remain explicitly unavailable
@@ -177,7 +177,7 @@ def maintain(store, con, sid, histories, *, complete=False, preparation=None):
             con.execute('UPDATE workflow.review_fact_state SET initialized=false WHERE snapshot_id=%s', (sid,))
             return
         raise
-    _install(con, sid, records, identity, complete=complete)
+    _install(con, sid, records, identity, complete=complete, revision_positions=revision_positions)
 
 
 def prepare_review_cards(store, sid):

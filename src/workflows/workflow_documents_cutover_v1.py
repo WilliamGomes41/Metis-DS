@@ -664,67 +664,32 @@ class PostgresWorkflowDocumentRuntimeStore(OperationalDocumentInputs, PostgresWo
         return self._revision(rows)
 
     def _objects_locked(self, con: Any, snapshot_id: str) -> list[dict[str, Any]]:
-        rows = con.execute(
-            "SELECT position,payload FROM workflow.document_objects WHERE snapshot_id=%s "
-            "ORDER BY position FOR UPDATE",
-            (snapshot_id,),
-        ).fetchall()
-        if any(row["position"] is None for row in rows):
-            raise WorkflowDocumentStoreError("workflow_document_cutover_not_prepared")
-        return [
-            dict(row["payload"]) if isinstance(row["payload"], dict) else json.loads(row["payload"])
-            for row in rows
-        ]
+        from src.workflows.object_delta_postgres_v1 import capture
+        return capture(self, con, snapshot_id)
 
-    def _write_objects_locked(
-        self, con: Any, snapshot_id: str, current: list[dict[str, Any]], following: list[dict[str, Any]],
-    ) -> None:
-        """Store ``following`` as the snapshot's object list, writing only the difference.
-
-        The result equals deleting every row and inserting ``following`` at
-        positions 0..n-1, but unchanged rows are not touched, so the cost (and the
-        per-row ``advance_object_generation`` trigger) follows the change, not the
-        document size (MET-36). The caller holds the document row lock.
-        """
-        before = {(str(row["object_id"]), str(row["object_version"])): row for row in current}
-        stored = {
-            (row["object_id"], row["object_version"]): row["position"]
-            for row in con.execute(
-                "SELECT object_id,object_version,position FROM workflow.document_objects WHERE snapshot_id=%s",
-                (snapshot_id,),
-            ).fetchall()
-        }
-        kept = {(str(obj["object_id"]), str(obj["object_version"])) for obj in following}
-        for object_id, object_version in sorted(set(stored) - kept):
-            con.execute(
-                "DELETE FROM workflow.document_objects WHERE snapshot_id=%s AND object_id=%s AND object_version=%s",
-                (snapshot_id, object_id, object_version),
-            )
-        for position, obj in enumerate(following):
-            identity = (str(obj["object_id"]), str(obj["object_version"]))
-            if identity not in stored:
-                con.execute(
-                    "INSERT INTO workflow.document_objects(snapshot_id,object_id,object_version,payload,position) "
-                    "VALUES(%s,%s,%s,%s::jsonb,%s)",
-                    (snapshot_id, *identity, _json_text(obj), position),
-                )
-            # Compare the stored text, not Python equality: 1 == 1.0 in Python but
-            # not in the stored JSON or the revision hash.
-            elif identity not in before or _json_text(before[identity]) != _json_text(obj):
-                con.execute(
-                    "UPDATE workflow.document_objects SET payload=%s::jsonb,position=%s,revision=revision+1,"
-                    "updated_at=CURRENT_TIMESTAMP WHERE snapshot_id=%s AND object_id=%s AND object_version=%s",
-                    (_json_text(obj), position, snapshot_id, *identity),
-                )
-            elif stored[identity] != position:
-                con.execute(
-                    "UPDATE workflow.document_objects SET position=%s "
-                    "WHERE snapshot_id=%s AND object_id=%s AND object_version=%s",
-                    (position, snapshot_id, *identity),
-                )
+    def _write_objects_locked(self, con, snapshot_id, current, following):
+        from src.workflows.object_delta_postgres_v1 import PhysicalObjectHistory, capture, write
+        if not isinstance(current, PhysicalObjectHistory):
+            baseline = capture(self, con, snapshot_id)
+            if _json_text(list(baseline)) != _json_text(list(current)):
+                raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+            current = baseline
+        return write(self, con, snapshot_id, current, following)
 
     def objects_revision(self, snapshot_id: str) -> str:
         return self._revision(self.list_document_objects(snapshot_id))
+
+    def review_command_versions(self, snapshot_id, identities):
+        """Exact retained predecessor records named by an existing group receipt."""
+        if not identities:
+            return []
+        ids, versions = zip(*identities)
+        with self._connect() as con:
+            rows = con.execute('SELECT o.payload FROM unnest(%s::text[],%s::text[]) '
+                'wanted(object_id,object_version) JOIN workflow.document_objects o '
+                'ON o.snapshot_id=%s AND o.object_id=wanted.object_id '
+                'AND o.object_version=wanted.object_version', (list(ids), list(versions), snapshot_id)).fetchall()
+        return [self._payload(row['payload']) for row in rows]
 
     def _write_envelope_locked(self, con: Any, envelope: Mapping[str, Any], *, document_storage_admission=False) -> None:
         if document_storage_admission and "_document_inputs" in envelope:
@@ -832,10 +797,11 @@ class PostgresWorkflowDocumentRuntimeStore(OperationalDocumentInputs, PostgresWo
                     if any(not a or not b for a, b in identities) or len(set(identities)) != len(identities):
                         raise WorkflowDocumentStoreError("workflow_object_identity_invalid")
                     if objects is not None:
-                        validate_revision_write(current_objects, next_objects, snapshot_id=snapshot_id)
-                        self._write_objects_locked(con, snapshot_id, current_objects, next_objects)
+                        validated = validate_revision_write(current_objects, next_objects, snapshot_id=snapshot_id)
+                        written = self._write_objects_locked(con, snapshot_id, current_objects, next_objects)
                         from src.workflows.review_card_inputs_postgres_v1 import maintain
                         maintain(self, con, snapshot_id, next_objects, complete=True, preparation=review_card_preparation)
+                        written.seal(self, con, snapshot_id, validated)
             return self._revision(next_objects)
         except WorkflowDocumentStoreError:
             raise
