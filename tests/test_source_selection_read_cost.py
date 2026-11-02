@@ -105,7 +105,7 @@ def test_http_output_matches_unscoped_read_and_next_request_is_fresh(postgres_se
     assert actual.status_code == expected.status_code == 200
     assert actual.text == expected.text
     assert durable == before
-    assert calls['list_envelopes'] == 0 and calls['objects'] == 1
+    assert calls['list_envelopes'] == 0 and calls['objects'] <= 1
     assert calls['get_envelope'] == 1
     assert _durable(console, sid) == before
     durable['envelope']['title'] = 'Updated authoritative title'
@@ -174,7 +174,7 @@ def test_overlapping_http_reads_are_isolated_and_exceptions_clear_scope(postgres
 
 
 @pytest.mark.parametrize("postgres_selection", ["runtime", "concurrent"], indirect=True)
-def test_render_revision_stays_with_rows_and_stale_post_is_rejected(postgres_selection, monkeypatch, request):
+def test_no_start_form_skips_revision_and_stale_start_is_rejected(postgres_selection, monkeypatch, request):
     console, client, sid, durable, calls = postgres_selection
     durable['envelope']['semantic_replay']['provider_evidence']['diagnostic_fixture'] = []
     _persist(console, durable)
@@ -188,8 +188,11 @@ def test_render_revision_stays_with_rows_and_stale_post_is_rejected(postgres_sel
         captured.append(value)
         return value
     monkeypatch.setattr(console,'objects_revision',changed_during_read)
-    assert client.get('/source-selection', params={'document':sid}).status_code == 200
-    assert captured == [expected_revision]
+    response = client.get('/source-selection', params={'document':sid})
+    assert response.status_code == 200
+    assert 'action="/source-selection/start"' not in response.text
+    assert captured == []  # No unused whole-history precondition on progress GET.
+    changed_during_read(sid)
     monkeypatch.setattr(console,'objects_revision',original_revision)
     assert console.objects_revision(sid) != expected_revision
     before = deepcopy(durable)

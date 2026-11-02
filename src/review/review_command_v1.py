@@ -88,6 +88,16 @@ def capture_histories(console, snapshot_id, object_id, command, *, admission_con
     pending.update(store.review_command_neighbor_ids(snapshot_id, [object_id]))
     if admission_context:
         pending.update(store.review_command_neighbor_ids(snapshot_id, sorted(pending)))
+        # Source group eligibility also consumes automatic context-by-span,
+        # which has no object-ID edge and need not be an adjacent paragraph.
+        # Use the existing generated block index; the original partition owner
+        # still decides exact interval coverage and candidate eligibility.
+        from src.vorming.source_accountability_v1 import evidence_of
+        sources = store.review_command_current_heads(snapshot_id, sorted(pending))
+        blocks = sorted({span['block_id'] for obj in sources
+                         for span in (evidence_of(obj).get('spans') or [])
+                         if isinstance(span, dict) and isinstance(span.get('block_id'), str)})
+        pending.update(store.review_neighbor_ids(snapshot_id, [], blocks))
         neighbours = store.source_admission_neighbor_ids(snapshot_id, sorted(pending))
         if neighbours is None:
             # Explicit existing-data compatibility until complete preparation.

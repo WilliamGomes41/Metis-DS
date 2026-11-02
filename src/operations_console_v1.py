@@ -2047,11 +2047,21 @@ class OperationsConsole:
         elif str(envelope.get("snapshot_id") or "") != snapshot_id:
             raise ConsoleError("unknown_snapshot")
         reads = self._document_reads()
-        if reads is None:
+        def current():
+            documents = getattr(self, 'workflow_document_store', None)
+            if documents is not None and hasattr(documents, 'current_document_objects'):
+                try:
+                    return documents.current_document_objects(snapshot_id)
+                except Exception as exc:
+                    from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+                    if isinstance(exc, WorkflowDocumentStoreError):
+                        raise ConsoleError('workflow_document_unavailable') from exc
+                    raise
             return current_revisions(self._load_objects(snapshot_id, remember=False), snapshot_id=snapshot_id)
+        if reads is None:
+            return current()
         if snapshot_id not in reads.current_objects:
-            reads.current_objects[snapshot_id] = current_revisions(
-                self._load_objects(snapshot_id, remember=False), snapshot_id=snapshot_id)
+            reads.current_objects[snapshot_id] = current()
         return reads.current_objects[snapshot_id]
 
     def _can_resume_formation(self, snapshot_id, *, envelope=None):

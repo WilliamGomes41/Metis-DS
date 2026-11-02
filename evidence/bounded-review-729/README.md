@@ -52,3 +52,20 @@ fixed by restoring default FOR SHARE and explicitly opting only the bounded
 Review command into KEY SHARE. All84 affected processing/identity/migration tests
 then passed. Exact final-tip full CI remains required; the earlier full run is
 not all-green. The separate final Review/source regression result is in the PR.
+
+## Follow-up: remaining source batches and duplicate full seal
+
+The initial measurements above describe the first PR implementation, not the
+latest whole-project acceptance. The adjustment removes the duplicate full seal
+under the shared document owner, routes source exclusion/group/reset through the
+existing bounded command and supplies current-only reads/compact source forms.
+
+Same six-current-head/1500-history actual source HTTP:12.007s baseline versus
+0.127s using the token emitted by the updated UI; outer hold11.968s versus0.080s.
+Formation detail GET median about2s versus0.079s. Explicit old m2 remains1.034s
+because its whole-objectset equality contract is retained. These are individual
+local synthetic measurements, not production or p95 claims.
+
+See [results and runtime hashes](adjustment-results.json) and the
+[independent review and follow-up proof boundaries](adjustment-review.md).
+No production change, automatic merge or deployment GO is implied.

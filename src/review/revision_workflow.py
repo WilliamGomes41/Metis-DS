@@ -285,6 +285,7 @@ def validate_revision_write(previous, submitted, *, snapshot_id):
     appended = [row for row in submitted if (row["object_id"], row["object_version"]) not in old]
     if appended:
         current_revisions(previous + appended, snapshot_id=snapshot_id)
+    return list(new_current.values())
 
 if __name__=='__main__': raise SystemExit(main())
 

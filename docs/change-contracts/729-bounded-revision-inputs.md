@@ -239,3 +239,94 @@ current account reads retain FOR SHARE. After repair, all84 processing, Entra,
 retirement and migration tests passed. The independently reviewed narrowing
 preserves the different existing authorization contracts. Full-suite exact final
 CI remains required; this earlier full run is not reported as all-green.
+
+## Adjustment after system-wide verification (user GO: adjust PR965)
+
+Ground: the same six-head/1500-history source batch takes main11.10s versus
+PR13.11s; seal_complete itself adds2.00s. Targeted ordinary Review remains fast,
+but the legacy batch still reloads global maps/source/history under its lock.
+
+Usage: callers retain write_bundle and source exclusion/group operations. The
+existing store captures PhysicalObjectHistory from its actual locked SQL rows,
+validates the original transition once, verifies every intended SQL delta row,
+and receives a WrittenObjectDelta usable only on that store/connection/snapshot.
+After fact maintenance the receipt independently compares all document epochs and
+physical identities/positions, then seals final heads/counts/prefix facts already
+validated by the original revision owner. No second full-payload or lineage pass.
+
+Candidate A (selected, also independently proposed): deepen the shared actual-SQL
+owner with a detached physical baseline and verified write receipt. Every full
+writer uses the same operation; new and legacy/prepared writes keep valid derived
+frontiers. Generic full-list compatibility retains its original necessary check.
+Candidate B (rejected): stop generic resealing or let callers supply proof and
+prepare later. This either loses physical SQL validation or invalidates inputs
+and restores the22s ordinary Review fallback after another operation. Dirty-ID
+special cases alone leave the same duplicate work when the changed head has a
+long prefix. Correctness, shared ownership, unchanged caller API and no repeated
+prefix read favor A; no new persisted authority/schema is needed.
+
+The existing source-role writer remains the only rule owner. Exclusion/group
+commands capture selected/shown members and actual graph/context dependencies,
+prepare source outside the outer lock, check the original precondition variant
+and current role/roster/seal under protection, and stage object/binding/audit
+changes through execute_review_command. Legacy m2 keeps whole-objectset equality
+and receipt-first retry semantics; generation forms keep stale409 before replay.
+One invalid member or late write/audit failure rolls back the entire group.
+
+Proof before deployment: red native no-second-full-seal test; exact physical
+BEFORE rewrite/suppression/position and extra AFTER/same-connection mutations;
+prepared/unprepared generic write parity and positive frontiers after success;
+real1500-history source HTTP with scoped bindings/events and no original-source
+I/O under lock; unchanged source/group/idempotency/precondition/role/canonical
+and archive recovery tests. Preserve3s total,250ms outer hold and500ms transaction
+claims separately; legacy m2 cost is explicitly not a bounded generation claim.
+
+Formation/diagnostic GETs, provider scheduling, D2/V3 and live existing-data
+acceptance remain explicit remaining scope. No blanket performance or deployment
+GO follows from this adjustment. No timeout increase or guard removal.
+
+
+### Authorized implementation and verification
+
+The user explicitly authorized resolving the Review failures and slowness,
+including the shared storage and source transaction scope above. The earlier
+automatic-review rejections preceded that authorization; they are not an active
+implementation blocker. No merge, production migration or deployment follows
+from this code authorization.
+
+Implemented: store/connection/snapshot-bound physical baseline, exact SQL
+RETURNING checks, native epoch-map and final identity/order verification,
+detached final plan and original validator's current-head result. Generic writers
+keep a positive frontier after success without a second full history seal.
+Source exclusion/group/reset reuse execute_review_command and the existing
+source-role writer, scoped bindings/receipts, exact retained predecessor reads
+for reset and one atomic commit. Legacy m2 keeps receipt-first whole-objectset
+semantics; generation forms refuse stale submission before receipt replay.
+
+Group eligibility includes incoming automatic block/span context via the existing
+031 generated lookup, in addition to OID/manual context and adjacency. The
+original partition owner still checks exact interval coverage. Reset refuses any
+captured source/fragment failure before staging. These were independent review
+findings, both corrected with native regression tests.
+
+Current-only pure reads use the existing validated frontier within a consistent
+read transaction and retain the full legacy adapter when unprepared. Source
+accountability forms capture current objects, generation and bindings in one
+snapshot. Full-history processing tokens are generated only for an actual
+start/resume form, with its rows; the processing command CAS is unchanged.
+
+Measured same1500-history/six-current-head source HTTP: original12.007s, adjusted
+legacy-m2 adapter1.034s (0.894s outer hold); compact generation0.243s (0.203s outer
+hold). The old m2 equality is intentionally expensive; it is not the token emitted
+by the updated source accountability form. Formation detail GET median falls
+from about2s to0.079s in this fixture. Other-document/event/binding noise remains
+within the3s total budget without global reads. No timeout or lock budget changed.
+
+Native proofs include actual BEFORE rewrite/suppression/position errors,
+unexpected AFTER/same-connection history/new-ID writes, late deferred audit
+failure, wrong connection, legacy schema, metadata-only writes, distant automatic
+context, missing source fragments on reset, stale generation and preserved
+frontiers. Original1100-history/25MB partial-formation HTTP and actual archive
+restore/preparation are re-run. Per-run results and limitations are recorded in
+evidence/bounded-review-729/adjustment-results.json. Exact-head CI and production
+acceptance remain separate; no current production improvement is claimed.

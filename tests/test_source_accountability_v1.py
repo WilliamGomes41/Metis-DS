@@ -158,10 +158,10 @@ def test_http_source_batch_requires_named_reviewer_and_explicit_confirmation(tmp
         calls.clear()
         owner = client.get('/source-selection', params={'document': sid, 'task': 'disposition'})
         assert owner.status_code == 200 and '<h1>Vorming</h1>' in owner.text
-        assert calls.get('snapshot_objects_and_revision') == 1
+        assert calls.get('snapshot_objects_and_revision', 0) == 0
         # Review now captures below the old snapshot helper. Count actual native
         # payload reads on both routes rather than comparing unlike API calls.
-        assert calls.get('native_object_reads') == 1
+        assert calls.get('native_object_reads', 0) == 0
         assert state.snapshot_objects(sid) == before
         assert state.workflow_review_store.read_events() == events
         form = next(f for f in Forms(owner.text).forms if f['attrs'].get('action') == '/review/source-exclusions')
@@ -169,7 +169,7 @@ def test_http_source_batch_requires_named_reviewer_and_explicit_confirmation(tmp
         assert set(selected) == set(command['source_object_ids'])
         data = {f['name']: f.get('value', '') for f in form['inputs'] if f.get('type') == 'hidden'}
         data.update(source_object_ids=selected, reason=command['reason'])
-        assert data['snapshot_revision'] == command['expected_revision']
+        assert data['snapshot_revision'].startswith('review-generation-v1:')
         with monkeypatch.context() as published:
             published.setattr(state, 'snapshot_is_published', lambda _: True)
             frozen = client.get('/source-selection', params={'document': sid, 'task': 'disposition'})
@@ -200,7 +200,7 @@ def test_http_source_batch_requires_named_reviewer_and_explicit_confirmation(tmp
         assert all(row['metadata']['passage_register']['status'] == 'excluded_with_reason'
                    for row in current if row['object_id'] in selected)
         assert all(row in current for row in before if row['object_id'] not in selected)
-        assert client.post('/review/source-exclusions', data={**data, 'source_checked': '1'}, follow_redirects=False).status_code == 303
+        assert client.post('/review/source-exclusions', data={**data, 'source_checked': '1'}, follow_redirects=False).status_code == 409
         assert state.snapshot_objects(sid) == current
         restarted = production_console(root=tmp_path, source_store=tmp_path/'sources', runtime=tmp_path/'runtime', processing_binder=lambda console: None)
         assert restarted.snapshot_objects(sid) == current

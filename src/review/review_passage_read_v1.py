@@ -57,7 +57,7 @@ class ReviewPassageInputs(_ReviewInputs):
 
 
 @diagnostic_phase('review_capture')
-def read_review_document(console, account, snapshot_id):
+def read_review_document(console, account, snapshot_id, *, current_only=False):
     """Capture exact document inputs, excluding unused processing archives.
 
     Queue membership needs all current objects. Capture history only once so
@@ -71,7 +71,7 @@ def read_review_document(console, account, snapshot_id):
         reads.processing_inputs.pop(snapshot_id, None)
     try:
         with workflow_read_transaction(store):
-            envelope, _generation = store.review_document_input(snapshot_id)
+            envelope, generation = store.review_document_input(snapshot_id)
             if ('reviewer' not in account.get('roles', [])
                     or account['account_id'] not in envelope.get('named_reviewers', [])):
                 raise ConsoleError('reviewer_not_named_on_snapshot')
@@ -84,7 +84,9 @@ def read_review_document(console, account, snapshot_id):
                 envelope['_review_check_formation'] = True
             if envelope['_review_check_formation'] and '_document_inputs' in envelope:
                 envelope = store.processing_command_input(envelope)
-            rows = store.list_document_objects(snapshot_id)
+            rows = store.review_document_window(snapshot_id) if current_only else None
+            if rows is None:
+                rows = store.list_document_objects(snapshot_id)
             bindings = console.workflow_review_store.read_bindings([snapshot_id]).get(snapshot_id, [])
         if envelope['_review_check_formation'] and '_document_inputs' in envelope:
             # Immutable references were captured with objects/bindings. Read and
@@ -98,13 +100,14 @@ def read_review_document(console, account, snapshot_id):
         raise ConsoleError('workflow_review_unavailable') from exc
     objects = current_revisions(rows, snapshot_id=snapshot_id)
     with diagnostic_phase('review_revision'):
-        revision = store.revision_for_rows(rows)
+        revision = _revision(snapshot_id, generation) if current_only else store.revision_for_rows(rows)
     reads = console._document_reads()
     if reads is not None:
         reads.envelopes[snapshot_id] = envelope
         if envelope['_review_check_formation']:
             reads.processing_inputs[snapshot_id] = envelope
-        reads.objects[snapshot_id] = (rows, revision)
+        if not current_only:
+            reads.objects[snapshot_id] = (rows, revision)
         reads.current_objects[snapshot_id] = objects
         reads.bindings[snapshot_id] = bindings
     from src.publication.publish_authorization_v1 import still_matches

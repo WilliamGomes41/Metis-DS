@@ -161,6 +161,34 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         with self._connect() as con:
             return capture(self, con, snapshot_id, object_ids)
 
+    def review_document_window(self, snapshot_id):
+        """All current heads with complete physical coverage, in a caller snapshot."""
+        from src.workflows.workflow_transaction_v1 import workflow_transaction_active
+        from src.workflows.revision_frontiers_postgres_v1 import capture, supported
+        if not workflow_transaction_active():
+            raise WorkflowDocumentStoreError('review_document_snapshot_required')
+        with self._connect() as con:
+            if not supported(self, con):
+                return None
+            ids = [row['object_id'] for row in con.execute(
+                'SELECT f.object_id FROM workflow.object_revision_frontiers f WHERE f.snapshot_id=%s '
+                'AND EXISTS(SELECT 1 FROM workflow.document_objects o WHERE o.snapshot_id=f.snapshot_id '
+                'AND o.object_id=f.object_id)', (snapshot_id,)).fetchall()]
+            return capture(self, con, snapshot_id, ids)
+
+    def current_document_objects(self, snapshot_id):
+        """Pure current-state reads reuse validated prefixes, never pin a write."""
+        from src.workflows.workflow_transaction_v1 import workflow_transaction_active, workflow_read_transaction
+        # Existing write/legacy read callers retain their original full adapter.
+        # This method never changes the isolation of an enclosing transaction.
+        if workflow_transaction_active():
+            return current_revisions(self.list_document_objects(snapshot_id), snapshot_id=snapshot_id)
+        with workflow_read_transaction(self):
+            rows = self.review_document_window(snapshot_id)
+        if rows is None:
+            rows = self.list_document_objects(snapshot_id)
+        return current_revisions(rows, snapshot_id=snapshot_id)
+
     def source_admission_neighbor_ids(self, snapshot_id, object_ids):
         from src.workflows.revision_frontiers_postgres_v1 import admission_neighbors
         with self._connect() as con:
@@ -607,12 +635,11 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                             submitted=objects,
                             expected_revision=None if existing is None and expected_revision == "" else expected_revision,
                         )
-                        validate_revision_write(current_objects, next_objects, snapshot_id=snapshot_id)
-                        self._write_objects_locked(con, snapshot_id, current_objects, next_objects)
+                        validated = validate_revision_write(current_objects, next_objects, snapshot_id=snapshot_id)
+                        written = self._write_objects_locked(con, snapshot_id, current_objects, next_objects)
                         from src.workflows.review_card_inputs_postgres_v1 import maintain
                         maintain(self, con, snapshot_id, next_objects, complete=True, preparation=review_card_preparation)
-                        from src.workflows.revision_frontiers_postgres_v1 import seal_complete
-                        seal_complete(self, con, snapshot_id, next_objects)
+                        written.seal(self, con, snapshot_id, validated)
             return self._revision_token(next_objects)
         except WorkflowDocumentStoreError:
             raise

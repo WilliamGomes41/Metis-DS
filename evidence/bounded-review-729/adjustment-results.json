@@ -1,0 +1,96 @@
+{
+  "baseline_head": "3d147427f152183c839b42b0a7b8261e4ae67fc6",
+  "environment": "Local synthetic native PostgreSQL16.15, Python3.12, real production HTTP composition; no production actions",
+  "runtime_sha256": {
+    "src/operations_console_app.py": "5730a6fc09ab6cc6802a2f34d29fe72c196a4b1c8834757e275410ecd89a0f00",
+    "src/operations_console_v1.py": "b98a462a77dbbca22e34f6400cad903fc2cb8a32a233c11030c822e3473e317b",
+    "src/review/review_command_v1.py": "1e44d54ca3fd825c8cccbf14b8ca7f19dba553f236ad5a90a70492685b3d92c7",
+    "src/review/review_passage_read_v1.py": "5e3df478748f65f8e8eebf8128e8884307e8491aa6379dbfd7b349ebcf0e3286",
+    "src/review/revision_workflow.py": "e3103c9216137eb12c2a87efa504f54e03efe27a731ac36c3fdca7a869182117",
+    "src/review/source_context_review_v1.py": "34ae0fc68efcf784c5a498ffd2512d826baece7566ba2cf161fa8edade5f1037",
+    "src/vorming/source_selection_ui_v1.py": "9cdb91b4e9cf3569ee288500526bea0fb4045bf7b416b6a27de32f7a4e77873a",
+    "src/vorming/source_selection_v1.py": "921923cef0fa5acfedb5e4ab92a1ebe33e6972345a9f7c0507c6e67ecae0e5f7",
+    "src/workflows/object_delta_postgres_v1.py": "6bdfa5dba97e623ae848d673c62b05a92eff155fd7739c6a73b12726e2520f4f",
+    "src/workflows/workflow_document_concurrency_v1.py": "a63e5c8e449519257e9a9c1ab8cee15ced5c9cc959056e49615fe29ad67f6857",
+    "src/workflows/workflow_documents_cutover_v1.py": "d7e374a38cba0549fc34afb35dc11f1b7b4438135a86205ec8c7294f1b5a8ce6"
+  },
+  "baseline": {
+    "source_http_seconds": 12.007258505007485,
+    "source_outer_hold_seconds": 11.967578220996074,
+    "formation_detail_get_median_seconds": 2.005
+  },
+  "adjusted": {
+    "legacy_m2_source_http_seconds": 1.0340231190057239,
+    "legacy_m2_outer_hold_seconds": 0.8935440920031397,
+    "generation_actual_ui_http_seconds": 0.1274630099942442,
+    "generation_actual_ui_outer_hold_seconds": 0.07986386198899709,
+    "formation_detail_get_seconds": [
+      0.09045510200667195,
+      0.07111508899834007,
+      0.07920459599699825
+    ],
+    "noise_legacy_m2_http_seconds": 1.100932768007624,
+    "noise_formation_detail_get_seconds": [
+      0.08043368200014811,
+      0.07163274199410807,
+      0.06914400300593115
+    ],
+    "global_binding_reads": 0,
+    "global_event_reads": 0,
+    "original_source_io_inside_lock": 0,
+    "second_full_history_seals": 0
+  },
+  "workload": {
+    "retained_rows": 1500,
+    "current_heads": 6,
+    "noise_other_documents": 24,
+    "noise_other_events": 1000,
+    "noise_other_bindings": 1000
+  },
+  "budget_seconds": {
+    "http_post": 3,
+    "outer_lock_hold": 0.25,
+    "transaction": 0.5,
+    "read": 5
+  },
+  "checks": [
+    {
+      "name": "source/group/read/precondition regression",
+      "passed": 39,
+      "log": "source-final-regression.log"
+    },
+    {
+      "name": "actual source UI +1500 history, status/summary",
+      "passed": 16,
+      "log": "exact-source-ui-proof.log"
+    },
+    {
+      "name": "physical SQL, late audit and source-failure adversarial fixes",
+      "passed": 13,
+      "log": "adversarial-fixes.log"
+    },
+    {
+      "name": "original heavy Review, frontier/recovery, immutable publication and bounded HTTP",
+      "passed": 39,
+      "log": "release-native-regression.log"
+    },
+    {
+      "name": "unchanged selected group member proof",
+      "passed": 1,
+      "log": "unchecked-member-proof.log"
+    },
+    {
+      "name": "matched system HTTP/noise audit",
+      "passed": 2,
+      "log": "system-treatment.log"
+    }
+  ],
+  "limits": [
+    "Selected per-run counts overlap and must not be added as unique test coverage.",
+    "Native performance timings are individual matched synthetic runs, not production latency or p95.",
+    "Explicit old m2 whole-objectset equality remains historical work; updated source forms emit compact generations.",
+    "Generic full-list writes retain necessary full-history domain validation; only duplicate physical reseal was removed.",
+    "Preparation/cutover of existing production data, other batch/graph paths, exact-head CI and live acceptance remain independently required.",
+    "Provider/model duration is not established by these DB/HTTP synthetic measurements."
+  ]
+}

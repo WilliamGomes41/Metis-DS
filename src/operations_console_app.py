@@ -3963,6 +3963,12 @@ def create_console_app(
         except ConsoleError:
             return identity_unavailable_response(_page)
         status = 401 if exc.code in {"not_authenticated", "invalid_credentials"} else 403 if "role_required" in exc.code or exc.code in {"entra_access_denied", "entra_local_auth_disabled"} else 400
+        if (exc.code == SNAPSHOT_OBJECT_WRITE_CONFLICT and _request.url.path in {
+                '/review/source-exclusions', '/review/source-group', '/review/source-group/reset'}):
+            from src.review.review_passage_read_v1 import PREFIX
+            form = await _request.form()
+            if str(form.get('snapshot_revision') or '').startswith(PREFIX):
+                status = 409
         message = ERROR_COPY.get(exc.code, "Metis kon deze actie niet afronden. Controleer de huidige status voordat je opnieuw probeert. Blijft dit gebeuren? Meld het bij de beheerder.")
         filename_error = exc.code == "invalid_store_path" and _request.url.path == "/ingest"
         hint = f'<p class="field-help">{_esc(FILENAME_HINT)}</p>' if filename_error else ""

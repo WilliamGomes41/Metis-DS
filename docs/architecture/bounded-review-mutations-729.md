@@ -61,3 +61,25 @@ bestaande canonieke owner.
 Zie [het wijzigingscontract](../change-contracts/729-bounded-revision-inputs.md)
 voor de exacte bewijsgrenzen en gemeten lokale kosten. Dit diagram beschrijft
 code en is geen bevestiging van productieherstel.
+
+## Source batches and full-writer physical proof
+
+Source exclusion, group confirmation and reset now enter the same Review command
+boundary. The shown member set is captured with its OID and automatic block/span
+context dependencies. The original source partition and role writer retain their
+rules. Reset reads only the exact retained predecessors named by the immutable
+group receipt. Source verification precedes protected writes; objects, bindings,
+facts, frontier certificates and audit commit or roll back together.
+
+Generic full writers retain their necessary full-history domain validation.
+Their store-owned physical baseline and verified SQL delta replace a second full
+payload reread/revalidation. Every changed/deleted row returns its exact identity,
+position and raw JSON; the complete native epoch map and final physical identity
+order detect additional writes before certificates are installed. This is
+transaction-local execution evidence, not a caller-issued or persisted authority.
+
+Prepared current-only readers reuse that same validated history. Source forms
+capture their compact generation with current heads/bindings in one read
+snapshot. Legacy m2 callers retain their whole-objectset comparison and receipt
+semantics. Processing start/resume still uses its original row-bound m2 CAS;
+polling without a start form no longer computes an unused historical token.
