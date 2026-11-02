@@ -15,6 +15,25 @@ from src.workflows.workflow_documents_cutover_v1 import PostgresWorkflowDocument
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError, _json_text
 
 
+from dataclasses import dataclass
+
+
+class _PreparedReviewWrite:
+    pass
+
+
+@dataclass(frozen=True)
+class _PreparedReviewData:
+    snapshot_id: str
+    before: Any
+    after: Any
+    envelope_before: Any
+    envelope_after: Any
+    commit_count: int
+    transitions: tuple
+    shape: tuple
+
+
 PUBLISHED_WORKING_REVISION_IMMUTABLE = "published_working_revision_immutable"
 _PUBLICATION_PROJECTION_FIELDS = frozenset(
     {
@@ -137,6 +156,18 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                   for kind in ('heading', 'path')]
         try:
             with self._connect() as con:
+                from src.workflows.revision_frontiers_postgres_v1 import supported
+                if supported(self, con):
+                    # FK coverage enumerates current OIDs, including native0.
+                    # Probe one raw head per OID before testing its type. A
+                    # latest-history GROUP BY join can otherwise filter/detoast
+                    # every retained payload before the planner joins heads.
+                    rows = con.execute("SELECT f.object_id FROM workflow.object_revision_frontiers f "
+                        "CROSS JOIN LATERAL (SELECT payload FROM workflow.document_objects "
+                        "WHERE snapshot_id=f.snapshot_id AND object_id=f.object_id "
+                        "ORDER BY position DESC LIMIT 1) head WHERE f.snapshot_id=%s "
+                        "AND head.payload @> ANY(%s::jsonb[])", (snapshot_id,probes)).fetchall()
+                    return [str(row['object_id']) for row in rows]
                 rows = con.execute("""
                     WITH latest AS MATERIALIZED (
                       SELECT object_id,max(position) AS position
@@ -196,20 +227,52 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         """
         return self.review_neighbor_ids(snapshot_id, object_ids, [])
 
-    def apply_review_changes(
-        self, snapshot_id: str, before_objects: list[dict[str, Any]],
-        after_objects: list[dict[str, Any]], envelope_before: dict[str, Any],
-        envelope_after: dict[str, Any], commit_count: int = 1, *,
-        transitions: list[list[dict[str, Any]]] | None = None,
-    ) -> None:
-        """Commit validated object/envelope deltas without replacing unrelated rows.
+    def apply_review_changes(self, snapshot_id, before_objects, after_objects,
+                             envelope_before, envelope_after, commit_count=1, *, transitions=None):
+        return self._apply_review_changes(snapshot_id, before_objects, after_objects,
+            envelope_before, envelope_after, commit_count, transitions=transitions)
 
-        The caller owns review semantics and its precondition. This storage
-        boundary independently protects sealing, captured history, append order
-        and the only supported envelope delta (review-pass evidence).
+    def prepare_review_changes(self, snapshot_id, before_objects, after_objects,
+                               envelope_before, envelope_after, commit_count=1, *, transitions=None):
+        """Issue one private immutable write after the original ordered validators.
+
+        This performs no I/O and grants no permission. A later guarded commit
+        must still verify actual current rows/frontiers and every physical write.
         """
-        from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+        from src.review.revision_window_v1 import RevisionWindow
+        from src.vorming.prepared_source_views_v1 import freeze
+        from weakref import WeakKeyDictionary
+        if (not isinstance(before_objects, RevisionWindow) or before_objects.owner is not self
+                or before_objects.snapshot_id != snapshot_id):
+            raise WorkflowDocumentStoreError('revision_window_mismatch')
+        before = before_objects.frozen()
+        after = before.replacing(after_objects).frozen()
+        first, following = freeze(envelope_before), freeze(envelope_after)
+        stages = tuple(before.replacing(stage).frozen() for stage in
+                       (transitions if transitions is not None else [after]))
+        shape = self._review_change_shape(snapshot_id, before, after, first, following, commit_count)
+        previous = before
+        for stage in stages:
+            validate_revision_write(previous, stage, snapshot_id=snapshot_id)
+            previous = stage
+        if (_json_text(list(previous)) != _json_text(list(after))
+                or transitions is not None and len(stages) > commit_count):
+            raise WorkflowDocumentStoreError('workflow_review_transition_chain_invalid')
+        handle = _PreparedReviewWrite()
+        registry = self.__dict__.setdefault('_prepared_review_writes', WeakKeyDictionary())
+        registry[handle] = _PreparedReviewData(snapshot_id, before, after,
+            first, following, commit_count, stages, shape)
+        return handle
 
+    def apply_prepared_review_changes(self, snapshot_id, handle):
+        data = getattr(self, '_prepared_review_writes', {}).pop(handle, None)
+        if data is None or data.snapshot_id != snapshot_id:
+            raise WorkflowDocumentStoreError('workflow_review_preparation_invalid')
+        return self._apply_review_changes(snapshot_id, data.before, data.after,
+            data.envelope_before, data.envelope_after, data.commit_count,
+            transitions=data.transitions, _validated=data)
+
+    def _review_change_shape(self, snapshot_id, before_objects, after_objects, envelope_before, envelope_after, commit_count):
         if (not snapshot_id or envelope_before.get("snapshot_id") != snapshot_id
                 or envelope_after.get("snapshot_id") != snapshot_id):
             raise WorkflowDocumentStoreError("workflow_document_metadata_incomplete")
@@ -230,6 +293,25 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         if after_ids[:len(before_ids)] != before_ids:
             raise WorkflowDocumentStoreError("workflow_review_history_removal_or_reorder")
         object_ids = sorted({identity[0] for identity in [*before_ids, *after_ids]})
+        return changed_fields, before_ids, after_ids, before_set, object_ids
+
+    def _apply_review_changes(
+        self, snapshot_id: str, before_objects: list[dict[str, Any]],
+        after_objects: list[dict[str, Any]], envelope_before: dict[str, Any],
+        envelope_after: dict[str, Any], commit_count: int = 1, *,
+        transitions: list[list[dict[str, Any]]] | None = None, _validated=None,
+    ) -> None:
+        """Commit validated object/envelope deltas without replacing unrelated rows.
+
+        The caller owns review semantics and its precondition. This storage
+        boundary independently protects sealing, captured history, append order
+        and the only supported envelope delta (review-pass evidence).
+        """
+        from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+
+        (changed_fields, before_ids, after_ids, before_set, object_ids) = (
+            _validated.shape if _validated is not None else self._review_change_shape(
+                snapshot_id, before_objects, after_objects, envelope_before, envelope_after, commit_count))
         try:
             with self._connect() as con:
                 with con.transaction():
@@ -269,14 +351,15 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                     # then append a successor in the SAME outer transaction.
                     # Validate their full transition sequence, never waive the
                     # immutable-history guard on a flattened final diff.
-                    previous = current
-                    for proposed in transitions if transitions is not None else [after_objects]:
-                        if bounded:
-                            proposed = current.replacing(proposed)
-                        validate_revision_write(previous, proposed, snapshot_id=snapshot_id)
-                        previous = proposed
-                    if _json_text(list(previous)) != _json_text(list(after_objects)) or (transitions is not None and len(transitions) > commit_count):
-                        raise WorkflowDocumentStoreError('workflow_review_transition_chain_invalid')
+                    if _validated is None:
+                        previous = current
+                        for proposed in transitions if transitions is not None else [after_objects]:
+                            if bounded:
+                                proposed = current.replacing(proposed)
+                            validate_revision_write(previous, proposed, snapshot_id=snapshot_id)
+                            previous = proposed
+                        if _json_text(list(previous)) != _json_text(list(after_objects)) or (transitions is not None and len(transitions) > commit_count):
+                            raise WorkflowDocumentStoreError('workflow_review_transition_chain_invalid')
                     before_map = {self._object_identity(row): row for row in current}
                     affected = defaultdict(int)
                     def verify_written(cursor, obj, position):
@@ -287,33 +370,75 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                                 or row['position'] != position
                                 or _json_text(row['payload']) != _json_text(obj)):
                             raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
-                    for obj in after_objects:
-                        identity = self._object_identity(obj)
-                        if identity in before_set and self._object_hash(before_map[identity]) != self._object_hash(obj):
+                    def verify_many(cursor, planned):
+                        returned = cursor.fetchall()
+                        seen = set()
+                        if cursor.rowcount != len(planned) or len(returned) != len(planned):
+                            raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+                        for row in returned:
+                            identity = (row['object_id'],row['object_version'])
+                            if identity not in planned or identity in seen:
+                                raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+                            obj,position = planned[identity]
+                            if (row['snapshot_id'] != snapshot_id or row['position'] != position
+                                    or _json_text(row['payload']) != _json_text(obj)):
+                                raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+                            seen.add(identity)
+                            affected[obj['object_id']] += 1
+                    if _validated is not None:
+                        updates = [obj for obj in after_objects if self._object_identity(obj) in before_set
+                                   and self._object_hash(before_map[self._object_identity(obj)]) != self._object_hash(obj)]
+                        if updates:
                             changed = con.execute(
-                                "UPDATE workflow.document_objects SET payload=%s::jsonb,revision=revision+1,"
-                                "updated_at=CURRENT_TIMESTAMP WHERE snapshot_id=%s AND object_id=%s AND object_version=%s "
-                                "RETURNING snapshot_id,object_id,object_version,position,payload",
-                                (_json_text(obj), snapshot_id, *identity),
-                            )
-                            position = before_objects.frontiers[obj['object_id']]['head_position'] if bounded else next(
-                                row['position'] for row in rows if self._object_identity(row['payload']) == identity)
-                            verify_written(changed, obj, position)
-                            affected[obj['object_id']] += changed.rowcount
+                                "UPDATE workflow.document_objects o SET payload=wanted->'payload',revision=o.revision+1,"
+                                "updated_at=CURRENT_TIMESTAMP FROM jsonb_array_elements(%s::jsonb) wanted "
+                                "WHERE o.snapshot_id=%s AND o.object_id=wanted->>'object_id' "
+                                "AND o.object_version=wanted->>'object_version' "
+                                "RETURNING o.snapshot_id,o.object_id,o.object_version,o.position,o.payload",
+                                (_json_text([{'object_id':obj['object_id'],'object_version':obj['object_version'],
+                                             'payload':obj} for obj in updates]), snapshot_id))
+                            verify_many(changed, {self._object_identity(obj):
+                                (obj,before_objects.frontiers[obj['object_id']]['head_position']) for obj in updates})
+                    else:
+                        for obj in after_objects:
+                            identity = self._object_identity(obj)
+                            if identity in before_set and self._object_hash(before_map[identity]) != self._object_hash(obj):
+                                changed = con.execute(
+                                    "UPDATE workflow.document_objects SET payload=%s::jsonb,revision=revision+1,"
+                                    "updated_at=CURRENT_TIMESTAMP WHERE snapshot_id=%s AND object_id=%s AND object_version=%s "
+                                    "RETURNING snapshot_id,object_id,object_version,position,payload",
+                                    (_json_text(obj), snapshot_id, *identity),
+                                )
+                                position = before_objects.frontiers[obj['object_id']]['head_position'] if bounded else next(
+                                    row['position'] for row in rows if self._object_identity(row['payload']) == identity)
+                                verify_written(changed, obj, position)
+                                affected[obj['object_id']] += changed.rowcount
                     additions = [obj for obj in after_objects if self._object_identity(obj) not in before_set]
                     if additions:
                         tail = con.execute(
                             "SELECT COALESCE(max(position),-1) AS position FROM workflow.document_objects "
                             "WHERE snapshot_id=%s", (snapshot_id,),
                         ).fetchone()["position"]
-                        for offset, obj in enumerate(additions, 1):
+                        if _validated is not None:
+                            planned = {self._object_identity(obj):(obj, tail+offset)
+                                       for offset,obj in enumerate(additions,1)}
                             changed = con.execute(
                                 "INSERT INTO workflow.document_objects(snapshot_id,object_id,object_version,payload,position) "
-                                "VALUES(%s,%s,%s,%s::jsonb,%s) RETURNING snapshot_id,object_id,object_version,position,payload",
-                                (snapshot_id, obj["object_id"], obj["object_version"], _json_text(obj), tail + offset),
-                            )
-                            verify_written(changed, obj, tail + offset)
-                            affected[obj['object_id']] += changed.rowcount
+                                "SELECT %s,v->>'object_id',v->>'object_version',v->'payload',%s+ordinal "
+                                "FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY AS wanted(v,ordinal) "
+                                "ORDER BY ordinal RETURNING snapshot_id,object_id,object_version,position,payload",
+                                (snapshot_id,tail,_json_text([{'object_id':obj['object_id'],
+                                    'object_version':obj['object_version'],'payload':obj} for obj in additions])))
+                            verify_many(changed, planned)
+                        else:
+                            for offset, obj in enumerate(additions, 1):
+                                changed = con.execute(
+                                    "INSERT INTO workflow.document_objects(snapshot_id,object_id,object_version,payload,position) "
+                                    "VALUES(%s,%s,%s,%s::jsonb,%s) RETURNING snapshot_id,object_id,object_version,position,payload",
+                                    (snapshot_id, obj["object_id"], obj["object_version"], _json_text(obj), tail + offset),
+                                )
+                                verify_written(changed, obj, tail + offset)
+                                affected[obj['object_id']] += changed.rowcount
                     if "review_passes" in changed_fields:
                         previous = envelope_before.get("review_passes") or {}
                         following = envelope_after.get("review_passes") or {}

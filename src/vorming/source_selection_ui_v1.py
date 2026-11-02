@@ -421,13 +421,15 @@ def render_source_accountability(console, account, document):
         from src.review.review_passage_read_v1 import read_review_document
         inputs = read_review_document(console, account, document, current_only=True)
         envelope, objects, revision, bindings = inputs.envelope, inputs.objects, inputs.revision, inputs.bindings
+        fragments = inputs.fragments
     else:
         objects, revision = console.snapshot_objects_and_revision(document)
         bindings = ui._review_bindings(console, document, objects=objects)
+        fragments = console.review_source_fragments(document)
     panel = ui._review_inventory(document, objects,
         review_path=review_path_for_klasse(envelope['class']), bindings=bindings,
         reviewer_id=account['account_id'], task='inventory', snapshot_revision=revision,
-        fragments=console.review_source_fragments(document), source_only=True,
+        fragments=fragments, source_only=True,
         edit_exclusions=not console.snapshot_is_published(document))
     overview = '/source-selection?' + urlencode({'document': document})
     review = '/review?' + urlencode({'document': document})
@@ -450,11 +452,21 @@ def render_structure(console, account, document, *, conflict=False, q='', page=1
     review_path = review_path_for_klasse(envelope['class'])
     if review_path == 'boom':
         return RedirectResponse('/review?' + urlencode({'document': document, 'task': 'structure'}), status_code=303)
-    objects, revision = console.snapshot_objects_and_revision(document)
-    bindings = ui._review_bindings(console, document, objects=objects)
+    if getattr(console, 'workflow_document_store', None) is not None:
+        from src.review.review_passage_read_v1 import read_review_document
+        inputs = read_review_document(console, account, document, current_only=True)
+        envelope, objects, revision, bindings = inputs.envelope, inputs.objects, inputs.revision, inputs.bindings
+        review_path = review_path_for_klasse(envelope['class'])
+        if review_path == 'boom':
+            return RedirectResponse('/review?' + urlencode({'document': document, 'task': 'structure'}), status_code=303)
+        fragments = inputs.fragments
+    else:
+        objects, revision = console.snapshot_objects_and_revision(document)
+        bindings = ui._review_bindings(console, document, objects=objects)
+        fragments = console.review_source_fragments(document)
     headings = ui._review_route_objects(objects, review_path=review_path,
         bindings=bindings, reviewer_id=account['account_id'], canonical_task='structure',
-        fragments=console.review_source_fragments(document))
+        fragments=fragments)
     copy = ui._review_lane_copy(review_path, headings)
     editable = not console.snapshot_is_published(document)
     rows = ''.join(ui._review_index_item(obj, document, checkbox=editable, task='structure') for obj in headings)

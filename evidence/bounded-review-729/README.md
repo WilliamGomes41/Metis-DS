@@ -69,3 +69,16 @@ local synthetic measurements, not production or p95 claims.
 See [results and runtime hashes](adjustment-results.json) and the
 [independent review and follow-up proof boundaries](adjustment-review.md).
 No production change, automatic merge or deployment GO is implied.
+
+## Follow-up: prepared normal-risk and heading batches
+
+The subsequent batch work has its own [results and runtime hashes](batch-results.json)
+and [independent review](batch-review.md). It moves the existing member kernel
+outside protected writes, then revalidates actual current input and applies one
+atomic object/binding/fact/frontier/audit delta. It also removes a remaining
+full-envelope quality-input load. Public GEN stays document-wide; legacy m2/None
+and unprepared-data compatibility retain their original cost contract.
+
+The earlier ordinary282-ms result above is historical evidence, not the final
+batch result. The new report records red intermediate runs as well as final
+proof. Live existing-data acceptance is still a separate requirement.

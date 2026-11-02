@@ -699,6 +699,7 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         queue_page: int = 1,
         review_revision: str = "",
         after: str = "",
+        after_batch: bool = False,
     ) -> str:
         account = _current_account(console, request)
         from src.review.review_participation_ui_v1 import overview, require_overview
@@ -724,7 +725,7 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             # POST commits one passage only. Navigation uses a fresh authorized
             # GET capture, sharing its prepared source across the queue scan.
             from src.review.review_passage_read_v1 import read_review_document
-            navigation = read_review_document(console, account, document)
+            navigation = read_review_document(console, account, document, current_only=True)
             if not chosen_task:
                 from src.review.review_cockpit_v1 import ordinary_review_queue
                 queue = ordinary_review_queue(navigation.objects,
@@ -766,7 +767,7 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         elif document and chosen_task and chosen_task not in {'history', 'structure'}:
             from src.review.review_passage_read_v1 import read_review_document
             try:
-                read_inputs = read_review_document(console, account, document)
+                read_inputs = read_review_document(console, account, document, current_only=chosen_task == 'batch')
             except ConsoleError as exc:
                 if exc.code == 'reviewer_not_named_on_snapshot':
                     return RedirectResponse('/review/trajectory?' + urlencode({'document': document}), status_code=303)
@@ -786,6 +787,13 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             return RedirectResponse('/source-selection?' + urlencode(params), status_code=303)
         chosen = document.strip()
         chosen_task = normalize_review_task(task)
+        if after_batch and chosen_task == 'batch' and read_inputs is not None:
+            from src.review.proportionate_review_v1 import normal_risk_batch_queue
+            remaining = normal_risk_batch_queue(read_inputs.objects,
+                review_path=review_path_for_klasse(read_inputs.envelope['class']),
+                bindings=read_inputs.bindings, fragments=read_inputs.fragments)
+            if not remaining:
+                return RedirectResponse('/review?' + urlencode({'document':document}), status_code=303)
         if not chosen or (not object.strip() and not chosen_task):
             return _workboard_page(console, account=account, snapshot_id=chosen, q=q, page=page, theme=theme)
         rendered = _render_review_room(

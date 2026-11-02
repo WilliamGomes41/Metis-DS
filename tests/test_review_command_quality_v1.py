@@ -40,7 +40,11 @@ def test_bounded_http_quality_audit_matches_full_authoritative_envelope(
     documents.write_bundle(envelope=envelope, objects=documents.list_document_objects(sid))
     authoritative = documents.get_envelope(sid)
 
-    projected = documents.review_command_quality_input(sid, [focal['object_id']])
+    def no_full_envelope(*args, **kwargs):
+        raise AssertionError('quality projection loaded full replay/source/runs envelope')
+    with monkeypatch.context() as guard:
+        guard.setattr(documents, 'get_envelope', no_full_envelope)
+        projected = documents.review_command_quality_input(sid, [focal['object_id']])
     assert projected == [{'run_id': latest['run_id'], 'candidates': [first, duplicate]}]
     assert 'source_fragments' not in projected[0]
     assert 'document_extraction' not in projected[0]
@@ -50,7 +54,8 @@ def test_bounded_http_quality_audit_matches_full_authoritative_envelope(
                            follow_redirects=False).status_code == 303
         page = client.get('/review', params={'document': sid, 'object': focal['object_id']})
         assert page.status_code == 200
-        with bounded_post_only(console, sid, monkeypatch):
+        with bounded_post_only(console, sid, monkeypatch), monkeypatch.context() as guard:
+            guard.setattr(documents, 'get_envelope', no_full_envelope)
             saved = client.post('/review', data=submission(page, sid, focal), follow_redirects=False)
         assert saved.status_code == 303
 

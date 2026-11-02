@@ -1,0 +1,141 @@
+{
+  "contract": "prepared-review-batch-proof-v1",
+  "date": "2026-11-02",
+  "base_commit": "a4ce51d89e42fa48153e371c9f1712079ecd339a",
+  "production_verified": false,
+  "fixture": "Native PostgreSQL16.15 synthetic source/history; actual compact HTTP max20 form and 1500-retained/six-current-head heading batch",
+  "budgets_seconds": {
+    "http": 3,
+    "actual_outer_write_lock": 0.25,
+    "actual_write_transaction": 0.5
+  },
+  "measurement_scope": "Local synthetic individual wall-clock measurements, not production/p95. Baseline is inherited pre-follow-up WIP on main911, not clean merged main.",
+  "earlier_measurements": [
+    {
+      "log": "batch-phase2-baseline.log",
+      "measurements": [
+        {
+          "normal_batch_members": 20,
+          "http_seconds": 1.8787001599848736,
+          "outer_hold_seconds": 1.7758764489844907
+        }
+      ]
+    },
+    {
+      "log": "batch-phase2-final-cost4.log",
+      "measurements": [
+        {
+          "normal_batch_members": 20,
+          "http_seconds": 1.5581221570027992,
+          "outer_hold_seconds": 0.2285504530009348,
+          "write_transaction_seconds": 0.228521949989954
+        }
+      ]
+    },
+    {
+      "log": "batch-phase2-final-cost5.log",
+      "measurements": [
+        {
+          "normal_batch_members": 20,
+          "http_seconds": 1.3740131340164226,
+          "outer_hold_seconds": 0.1830180679971818,
+          "write_transaction_seconds": 0.18299078699783422
+        }
+      ]
+    },
+    {
+      "log": "batch-final-timing.log",
+      "measurements": [
+        {
+          "normal_batch_members": 20,
+          "http_seconds": 1.7668609420070425,
+          "outer_hold_seconds": 0.2617057829920668,
+          "write_transaction_seconds": 0.26152657900820486
+        }
+      ]
+    }
+  ],
+  "latest_status": "PASS local final native timing and fault proofs; exact-head CI required separately",
+  "checks": [
+    {
+      "scope": "broad native selected regression before final set writes",
+      "passed": 227,
+      "failed": 1,
+      "reason": "New boom test selected actual type path only; fixture stores proposed type path. Corrected selector focused rerun passed. This cohort is not all-green final-tip proof."
+    },
+    {
+      "scope": "native prepared/frontier suite after initial set writes",
+      "passed": 79,
+      "failed": 0,
+      "log": "batch-set-write-proof.log"
+    },
+    {
+      "scope": "canonical hashes and immutable command workspace",
+      "passed": 21,
+      "failed": 0,
+      "log": "batch-phase2-pure.log"
+    },
+    {
+      "scope": "negative mutation control",
+      "result": "Intended test fails when frozen owner input is replaced with alias; isolated runner, no product-source mutation persisted."
+    },
+    {
+      "scope": "final native prepared batch guards, set audit writes and faults",
+      "passed": 61,
+      "failed": 0,
+      "log": "batch-set-final-proof.log"
+    },
+    {
+      "scope": "final timing + unchanged dependency late-DML regression",
+      "passed": 6,
+      "failed": 0,
+      "log": "batch-set-final-timing.log"
+    }
+  ],
+  "proof_boundaries": [
+    "Current role/retirement, roster, source, policy, quality, complete incoming/outgoing/adjacency, bindings, foreign interaction IDs and canonical publication are freshly revalidated before commit.",
+    "Original member kernel runs without workflow SQL, native transaction or process write lock; single-use store-issued immutable write validated outside protected commit.",
+    "Objects, bindings, derived facts/frontiers and ordered audit append commit or roll back together, including actual deferred COMMIT failure.",
+    "Public GEN remains document-wide. Same-document concurrent changes still conflict. Old m2/None and existing correctly-owned native transactions retain serial compatibility; those cost paths are not claimed bounded.",
+    "No new migration. Existing032 frontier/source/operational preparation as applicable remains required before existing-data bounded acceptance. No re-ingest.",
+    "MET36 and existing-data/live MET44 remain open. This evidence is not deployment/publication GO. No deployment or merge performed."
+  ],
+  "runtime_sha256": {
+    "src/integrity_kernel.py": "eff435ae7b778e115547937fc261d6dd3d48cf261b4411e8b5e3e6d63b11312e",
+    "src/operations_console_app.py": "122c60c0edb93eb249734e0d778b0ec9bc68c1a01997620a016d987bce6eb5cb",
+    "src/operations_console_v1.py": "f550c9a769655daecaa9b186432417fd024c0a335a104be7343d0333c88c6efc",
+    "src/review/closed_review_loop_v1.py": "5dcffa00b322f6c72890eb426d1da24e565dedd086e4b6e4fe155b64685dd6a7",
+    "src/review/proportionate_review_v1.py": "69a36d1c2c2ea051e2fd2677b7f8fdcfa80e4eaa5e741ed5e78fc015faa8d829",
+    "src/review/review_command_state_v1.py": "bc7b4847ab6ebd1efb454c44d99c243b6cb5821a46ab767040979ce5e60a5f2c",
+    "src/review/review_command_v1.py": "16057637b041e242ae8509afd271d7133888720fd965add37a89079859ff17ee",
+    "src/review/review_workboard_v1.py": "db2a37fa9e1eb840cf983f98517bbf558eb04a7b3467335047880c8417ef05a4",
+    "src/review/revision_window_v1.py": "e906aba4c225aa21fd04178135b8e905496b06c91b8b88365930d16f08f8b276",
+    "src/settings/metis_explained_content.py": "d45c82b8a6c31ca0354ce6469c21ab762e7b6e0c0ec36385d8fba2f6a82cf33b",
+    "src/vorming/source_selection_ui_v1.py": "510457b9e5e323121df76f7f07e767fe1b67395ed2a77a8aead2784d9e95c85d",
+    "src/workflows/review_card_inputs_postgres_v1.py": "a38cd6cd1750904c91c394aa7b9779a079204932744413793ef0a3ca0306e0c0",
+    "src/workflows/revision_frontiers_postgres_v1.py": "870176d7f97176b793a3b9d717f5543839dcb518723e7f28944a7a9e8a32b42f",
+    "src/workflows/workflow_document_concurrency_v1.py": "d875ec9473012a5c3bc8e319d243ec3703ef46f75444c12d0df6e0f2b56c5901",
+    "src/workflows/workflow_documents_cutover_v1.py": "e64a9d1aa7430e36378a86a60c9406bada253d7e17d4f3ddab59bf433b8b2bd6",
+    "src/workflows/workflow_identity_postgres_v1.py": "150c2700244f1b95a087c331eb54deb9fdbd18ae8ab8d857e14e04b6a36c34c7",
+    "src/workflows/workflow_review_cutover_v1.py": "e04ccd64ce4b4223d69b402924e295a2a794ef35e187340a75845ce15ed1bf5c",
+    "src/workflows/workflow_review_postgres_v1.py": "0f0006924e1ef422353654bcb0802b75234ca111703eec743c944c961550312d",
+    "src/workflows/workflow_transaction_v1.py": "aec284ff72f580f914c32da73b1905fd5fb8f68f2136b7b76db1822699e28bba"
+  },
+  "final_measurements": {
+    "log": "batch-set-final-timing.log",
+    "result": "6 passed, including final unchanged-dependency rollback proof",
+    "records": [
+      {
+        "heading_batch_history": 1500,
+        "seconds": 0.1946277360257227,
+        "outer_hold_seconds": 0.09557939600199461
+      },
+      {
+        "normal_batch_members": 20,
+        "http_seconds": 1.5321798950026277,
+        "outer_hold_seconds": 0.185664705990348,
+        "write_transaction_seconds": 0.18562905897852033
+      }
+    ]
+  }
+}

@@ -50,7 +50,7 @@ def test_document_tasks_use_compact_inputs_and_prepared_source(review_client, mo
     assert not counts['source_comparisons'], counts
     assert not counts['deep_status'], counts
     assert not counts['full_envelope'], counts
-    assert counts['objectset'] == 1, counts
+    assert counts['objectset'] == (0 if task == 'batch' else 1), counts
     assert console.snapshot_objects(sid) == before
     assert console._envelope(sid) == envelope_before
 
@@ -111,7 +111,10 @@ def test_batch_pages_keep_every_candidate_and_the_existing_form_pin(review_clien
         assert not seen & ids
         seen.update(ids)
         assert f'pagina {page} van 3' in response.text
-        assert f'name="snapshot_revision" value="{before}"' in response.text
+        from src.review.review_passage_read_v1 import resolve_review_revision
+        pin = re.search(r'name="snapshot_revision" value="([^"]+)"', response.text)[1]
+        assert pin.startswith('review-generation-v1:')
+        assert resolve_review_revision(console, sid, pin) == before
     assert seen == candidates
 
 

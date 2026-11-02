@@ -76,14 +76,17 @@ from src.workflows.operational_document_inputs_v1 import OperationalDocumentInpu
 class PostgresWorkflowDocumentRuntimeStore(OperationalDocumentInputs, PostgresWorkflowDocumentStore):
     """Runtime operations added on top of the migration-only document store."""
 
-    def review_command_quality_input(self, snapshot_id: str, object_ids: list[str]) -> list[dict[str, Any]]:
+    def review_command_quality_input(self, snapshot_id: str, object_ids: list[str], *, envelope=None) -> list[dict[str, Any]]:
         """Existing review-evidence context, without other runs or candidates.
 
         review_evidence uses the latest run and the first matching candidate.
         Keep that order and its original fingerprint/origin; source fragments
         and processing history are not command inputs.
         """
-        envelope=self.get_envelope(snapshot_id)
+        if envelope is None:
+            envelope,_ = self.review_document_input(snapshot_id, command=True)
+        if envelope.get('snapshot_id') != snapshot_id:
+            raise WorkflowDocumentStoreError('workflow_document_metadata_incomplete')
         if envelope is not None and '_document_inputs' in envelope:
             ref=envelope['_document_inputs']['quality']
             if ref is None:
@@ -1031,6 +1034,11 @@ class _PostgresWorkflowDocumentsMixin:
         include_blocked: bool = False,
     ) -> tuple[list[dict[str, Any]], str]:
         """Read authoritative PostgreSQL objects once and derive their revision."""
+        from src.review.review_command_state_v1 import active_review_command
+        command = active_review_command(self, snapshot_id)
+        if command is not None:
+            rows = command.histories if include_blocked else list(command.current_objects)
+            return deepcopy(rows), command.revision
         self._envelope(snapshot_id)
         rows = self._load_objects(snapshot_id, remember=False)
         reads = self._document_reads()

@@ -82,3 +82,78 @@ def test_scope_rejects_foreign_snapshot_and_stale_staging():
         with pytest.raises(ConsoleError, match='snapshot_object_write_conflict'):
             state.stage(objects=('snapshot', state.histories), expected_revision='stale')
         assert state.commit_count == 0
+
+
+def test_stage_versions_are_immutable_detached_and_getters_can_thaw():
+    captured = inputs()
+    with review_command_scope(captured) as state:
+        rows = deepcopy(state.histories)
+        rows[0]['governance'] = {'validation_status':'approved'}
+        envelope = {'snapshot_id':'snapshot', 'review_passes':{'actor':{'valid':True}}}
+        bindings = [{'object_id':'target', 'valid':True}]
+        state.stage(objects=('snapshot', rows), envelopes={'snapshot':envelope},
+                    bindings={'snapshot':bindings}, expected_revision=state.revision)
+        revision = state.revision
+        rows[0]['content']['clean_text'] = 'Caller mutation'
+        envelope['review_passes']['actor']['valid'] = False
+        bindings[0]['valid'] = False
+        assert state.histories[0]['content']['clean_text'] == 'Exact source.'
+        assert state.envelope['review_passes']['actor']['valid'] is True
+        assert state.bindings[0]['valid'] is True
+        for value in (state.histories[0], state.object_transitions[0][0], state.bindings[0]):
+            with pytest.raises(ConsoleError, match='source_views_carrier_immutable'):
+                value['in_place_mutation'] = True
+        with pytest.raises(AttributeError):
+            state.histories = []
+        thawed = deepcopy(state.histories)
+        thawed[0]['content']['clean_text'] = 'Disposable kernel copy'
+        assert state.revision == revision
+        assert state.histories[0]['content']['clean_text'] == 'Exact source.'
+
+
+def test_nested_version_rollback_restores_token_and_transition_chain_before_next_stage():
+    captured = inputs()
+    with review_command_scope(captured) as state:
+        def stage(label):
+            rows = deepcopy(state.histories)
+            rows[0]['governance'] = {'validation_status':label}
+            state.stage(objects=('snapshot', rows), expected_revision=state.revision,
+                envelopes={'snapshot':{'snapshot_id':'snapshot','review_passes':{label:True}}},
+                bindings={'snapshot':[{'object_id':'target','state':label}]})
+        stage('A')
+        a = deepcopy((state.histories, state.envelope, state.bindings))
+        token = state.revision
+        with pytest.raises(RuntimeError, match='discard B'):
+            with state.savepoint():
+                stage('B')
+                with state.savepoint():
+                    stage('inner')
+                raise RuntimeError('discard B')
+        assert (state.histories, state.envelope, state.bindings) == tuple(a)
+        assert state.revision == token and state.commit_count == 1
+        assert len(state.object_transitions) == 1
+        stage('C')
+        assert state.revision != token and state.commit_count == 2
+        assert [rows[0]['governance']['validation_status'] for rows in state.object_transitions] == ['A','C']
+
+
+@pytest.mark.parametrize('klasse,public_source', [('richtlijn', True), ('beslisboom', False)])
+def test_scoped_source_readers_keep_content_and_tree_contracts(klasse, public_source):
+    from dataclasses import replace
+    from src.operations_console_v1 import OperationsConsole
+    captured = inputs()
+    captured = replace(captured, envelope={'snapshot_id':'snapshot', 'class':klasse},
+                       fragments=[{'fragment_id':'source-1'}])
+    console = captured.owner
+    console._verified_source_bytes = lambda envelope: OperationsConsole._verified_source_bytes(console, envelope)
+    with review_command_scope(captured):
+        # Low-level source/graph validation always receives pinned fragments.
+        assert OperationsConsole._read_source_fragments(console, captured.envelope, None) is captured.fragments
+        actual = OperationsConsole.review_source_fragments(console, 'snapshot')
+        assert actual is (captured.fragments if public_source else None)
+        if public_source:
+            assert OperationsConsole.review_source_fragments(console, 'snapshot',
+                envelope={**deepcopy(captured.envelope), 'sha256':'different-source'}) is None
+            with pytest.raises(ConsoleError, match='source_lineage_unavailable'):
+                OperationsConsole._read_source_fragments(console,
+                    {**deepcopy(captured.envelope), 'sha256':'different-source'}, None)

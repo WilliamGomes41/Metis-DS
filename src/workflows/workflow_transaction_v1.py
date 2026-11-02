@@ -17,11 +17,32 @@ _ACTIVE_CONNECTION: ContextVar[Any | None] = ContextVar(
 )
 _BOUND_MARKER = "_metis_workflow_transaction_bound"
 _ORIGINAL_CONNECT = "_metis_workflow_original_connect"
+_FORBID_IO: ContextVar[bool] = ContextVar('workflow_preparation_forbid_io', default=False)
+
+
+@contextmanager
+def without_workflow_io():
+    """Pure captured preparation must never acquire an accidental SQL lock."""
+    token = _FORBID_IO.set(True)
+    try:
+        yield
+    finally:
+        _FORBID_IO.reset(token)
+
+
+def _require_io():
+    if _FORBID_IO.get():
+        raise WorkflowTransactionError('workflow_io_during_review_preparation')
 
 
 def workflow_transaction_active() -> bool:
     """Whether a caller owns an outer transaction that has not committed yet."""
     return _ACTIVE_CONNECTION.get() is not None
+
+
+def workflow_transaction_connection():
+    """Identity of the native transaction owner, for nested audit ownership."""
+    return _ACTIVE_CONNECTION.get()
 
 
 class WorkflowTransactionError(RuntimeError):
@@ -72,6 +93,7 @@ def bind_workflow_stores(*stores: Any) -> None:
         original = store._connect
 
         def connect(_original: Any = original) -> Any:
+            _require_io()
             shared = _ACTIVE_CONNECTION.get()
             if shared is None:
                 return _original()
@@ -85,6 +107,7 @@ def bind_workflow_stores(*stores: Any) -> None:
 @contextmanager
 def workflow_transaction(owner: Any) -> Iterator[Any]:
     """Run all bound workflow-store writes in one outer PostgreSQL transaction."""
+    _require_io()
     if not getattr(owner, _BOUND_MARKER, False):
         bind_workflow_stores(owner)
 

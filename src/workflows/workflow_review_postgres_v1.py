@@ -33,6 +33,8 @@ class _EventBuffer(list):
     def __init__(self, parent: "_EventBuffer | None") -> None:
         super().__init__()
         self.parent = parent
+        from src.workflows.workflow_transaction_v1 import workflow_transaction_connection
+        self.transaction = workflow_transaction_connection()
 
     def last_hash(self) -> str | None:
         """Hash of the newest buffered event on this level or any parent."""
@@ -42,6 +44,33 @@ class _EventBuffer(list):
                 return str(level[-1]["event_hash"])
             level = level.parent
         return None
+
+
+def _check_event_chain(events, previous):
+    for event in events:
+        body = dict(event)
+        got = body.pop('event_hash', None)
+        if event.get('previous_event_hash') != previous:
+            raise WorkflowReviewStoreError('workflow_review_buffer_chain_invalid')
+        if stable_hash(body) != got:
+            raise WorkflowReviewStoreError('workflow_review_event_hash_invalid')
+        previous = str(got)
+
+
+class _PreparedBatchEvents(_EventBuffer):
+    """Uncommitted semantic intents; the ledger owner assigns commit order."""
+    def __init__(self, owner, base_head):
+        super().__init__(None)
+        self.owner, self.base_head = owner, base_head
+        self._sealed = None
+        self._consumed = False
+
+    def seal(self):
+        from src.vorming.prepared_source_views_v1 import freeze
+        if self._sealed is not None:
+            raise WorkflowReviewStoreError('workflow_review_intents_already_sealed')
+        _check_event_chain(self, self.base_head)
+        self._sealed = tuple(freeze(deepcopy(event)) for event in self)
 
 
 class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
@@ -55,6 +84,7 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
         self._buffer: ContextVar[_EventBuffer | None] = ContextVar(
             "workflow_review_event_buffer", default=None
         )
+        self._event_projection_ids = ContextVar('review_flush_relational_ids', default=None)
 
 
     def verify_review_schema(self) -> None:
@@ -154,8 +184,32 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
             levels.append(level)
             level = level.parent
         for level in reversed(levels):
-            events.extend(deepcopy(list(level)))
+            events.extend(self._pending_projection(event) for event in level)
         return events
+
+    def _prepared_event_buffer(self):
+        level = self._buffer.get()
+        while level is not None and level.parent is not None:
+            level = level.parent
+        return level if isinstance(level, _PreparedBatchEvents) else None
+
+    def require_command_transaction(self):
+        """A caller-owned audit buffer must flush before the command's COMMIT."""
+        from src.workflows.workflow_transaction_v1 import workflow_transaction_connection
+        root = self._buffer.get()
+        if root is None:
+            return
+        while root.parent is not None:
+            root = root.parent
+        current = workflow_transaction_connection()
+        if current is None or root.transaction is not current:
+            raise WorkflowReviewStoreError('workflow_review_outer_transaction_required')
+
+    def _pending_projection(self, event):
+        # A prepared intent has no durable hash yet. Future callers requiring
+        # that hash must stay serial rather than persist a provisional value.
+        return deepcopy({k:v for k,v in event.items() if k not in {'event_hash','previous_event_hash'}}
+                        if self._prepared_event_buffer() is not None else event)
 
     def source_command_receipt(self, snapshot_id, event_type, command_id):
         """Existing receipt semantics, scoped before precondition validation."""
@@ -170,7 +224,7 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
             raise WorkflowReviewStoreError('workflow_review_events_read_failed') from exc
 
     def read_review_command_events(
-        self, snapshot_id: str, object_ids: list[str], *, interaction_id: str = "",
+        self, snapshot_id: str, object_ids: list[str], *, interaction_id: str = "", include_pending=True,
     ) -> list[dict[str, Any]]:
         """Scoped evidence plus the global interaction-identity history.
 
@@ -190,7 +244,16 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                 conditions.append("event_payload#>>'{details,review_interaction,interaction_id}'=%s")
                 params.append(interaction_id)
             events = []
-            if conditions:
+            from src.review.review_command_state_v1 import review_command_for_store
+            # A pure batch preparation uses the exact event snapshot captured
+            # with its objects. Pending levels are merged below as usual.
+            command = review_command_for_store(self)
+            prepared = command is not None and command.preparing
+            if prepared:
+                if command.inputs.events is None:
+                    raise WorkflowReviewStoreError('review_preparation_events_missing')
+                events = deepcopy(command.inputs.events)
+            elif conditions:
                 with self._connect() as con:
                     rows = con.execute(
                         "SELECT event_payload FROM workflow.review_events WHERE "
@@ -198,7 +261,7 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                     ).fetchall()
                 events = [self._event_payload(row["event_payload"]) for row in rows]
             levels = []
-            level = self._buffer.get()
+            level = self._buffer.get() if include_pending else None
             while level is not None:
                 levels.append(level)
                 level = level.parent
@@ -209,7 +272,7 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                     interaction = details.get("review_interaction") or {}
                     if ((details.get("snapshot_id") == snapshot_id and event.get("object_id") in wanted)
                             or (interaction_id and interaction.get("interaction_id") == interaction_id)):
-                        events.append(deepcopy(event))
+                        events.append(self._pending_projection(event))
             return events
         except WorkflowReviewStoreError:
             raise
@@ -300,7 +363,8 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
         if buffered is not None:
             previous = buffered.last_hash()
             if previous is None:
-                previous = self._last_hash()
+                prepared = self._prepared_event_buffer()
+                previous = prepared.base_head if prepared is not None else self._last_hash()
             event = self._new_event(
                 event_type=event_type,
                 object_id=object_id,
@@ -310,7 +374,7 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                 previous_event_hash=previous,
             )
             buffered.append(event)
-            return deepcopy(event)
+            return self._pending_projection(event)
         try:
             with self._connect() as con:
                 with con.transaction():
@@ -354,17 +418,33 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
         return str(row["account_id"]) if row else None
 
     def _insert_event(self, con: Any, event: Mapping[str, Any]) -> None:
-        con.execute(
+        # One native flush maps equal actor/snapshot names to equal relational
+        # IDs. Reuse only this transaction's resolution, never permissions or
+        # an event payload, and reset it before leaving the flush.
+        cache = self._event_projection_ids.get()
+        def resolve(kind, key, read):
+            if cache is None:
+                return read()
+            identity = (kind, key)
+            if identity not in cache:
+                cache[identity] = read()
+            return cache[identity]
+        snapshot_id = resolve('snapshot', str((event.get('details') or {}).get('snapshot_id') or ''),
+                              lambda: self._resolved_snapshot_id(con, event))
+        actor_id = resolve('actor', str(event.get('actor') or ''),
+                           lambda: self._resolved_actor_id(con, str(event.get('actor') or '')))
+        written = con.execute(
             "INSERT INTO workflow.review_events("
             "snapshot_id,object_id,object_version,event_type,actor_account_id,actor_text,"
             "occurred_at,details,previous_event_hash,event_hash,event_payload) "
-            "VALUES(%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s::jsonb)",
+            "VALUES(%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s::jsonb) "
+            "RETURNING event_hash,event_payload",
             (
-                self._resolved_snapshot_id(con, event),
+                snapshot_id,
                 str(event.get("object_id") or ""),
                 str(event.get("object_version") or ""),
                 str(event.get("event_type") or ""),
-                self._resolved_actor_id(con, str(event.get("actor") or "")),
+                actor_id,
                 str(event.get("actor") or ""),
                 str(event.get("occurred_at") or ""),
                 _json_text(event.get("details") or {}),
@@ -373,6 +453,10 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                 _json_text(dict(event)),
             ),
         )
+        row = written.fetchone()
+        if (written.rowcount != 1 or row is None or row['event_hash'] != event.get('event_hash')
+                or _json_text(row['event_payload']) != _json_text(dict(event))):
+            raise WorkflowReviewStoreError('workflow_review_event_write_conflict')
 
     @contextmanager
     def buffered(self) -> Iterator[None]:
@@ -392,7 +476,99 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
         finally:
             self._buffer.reset(token)
 
+    @contextmanager
+    def prepared_batch_events(self, base_head):
+        """Seal pending intent fields, append them only in the guarded commit.
+
+        Unlike ordinary serial buffers, an independently prepared batch does
+        not reserve the GLOBAL ledger head while its pure kernel computes.
+        No committed event is changed; final chain fields are assigned once
+        by this ledger owner under its existing lock.
+        """
+        if self._buffer.get() is not None:
+            raise WorkflowReviewStoreError('workflow_review_intents_require_outer_owner')
+        level = _PreparedBatchEvents(self, base_head)
+        token = self._buffer.set(level)
+        try:
+            yield level
+            self._flush_prepared_batch(level)
+        finally:
+            self._buffer.reset(token)
+
+    def _flush_prepared_batch(self, level):
+        from src.workflows.workflow_transaction_v1 import workflow_transaction_active
+        if (not isinstance(level, _PreparedBatchEvents) or level.owner is not self
+                or self._buffer.get() is not level or level._consumed or level._sealed is None
+                or not workflow_transaction_active()):
+            raise WorkflowReviewStoreError('workflow_review_intents_invalid')
+        if _json_text(list(level)) != _json_text(list(level._sealed)):
+            raise WorkflowReviewStoreError('workflow_review_intents_changed')
+        _check_event_chain(level._sealed, level.base_head)
+        level._consumed = True
+        if not level:
+            return
+        projection = self._event_projection_ids.set({})
+        try:
+            with self._connect() as con:
+                with con.transaction():
+                    self._lock_review_ledger(con)
+                    row = con.execute('SELECT event_hash FROM workflow.review_events '
+                        'ORDER BY event_id DESC LIMIT 1 FOR UPDATE').fetchone()
+                    previous = str(row['event_hash']) if row else None
+                    events = []
+                    for intent in level._sealed:
+                        body = deepcopy({k:v for k,v in intent.items()
+                                         if k not in {'event_hash','previous_event_hash'}})
+                        body['previous_event_hash'] = previous
+                        body['event_hash'] = stable_hash(body)
+                        events.append(body)
+                        previous = body['event_hash']
+                    self._insert_prepared_events(con, events)
+        except WorkflowReviewStoreError:
+            raise
+        except Exception as exc:
+            raise WorkflowReviewStoreError('workflow_review_event_write_failed') from exc
+        finally:
+            self._event_projection_ids.reset(projection)
+
+    def _insert_prepared_events(self, con, events):
+        """Append one ordered, already guarded intent set in the native TX."""
+        actors, snapshots, values = {}, {}, []
+        for event in events:
+            actor = str(event.get('actor') or '')
+            sid = str((event.get('details') or {}).get('snapshot_id') or '')
+            if actor not in actors:
+                actors[actor] = self._resolved_actor_id(con, actor)
+            if sid not in snapshots:
+                snapshots[sid] = self._resolved_snapshot_id(con, event)
+            values.append({'snapshot_id': snapshots[sid], 'actor_id': actors[actor], 'event':event})
+        inserted = con.execute("INSERT INTO workflow.review_events("
+            "snapshot_id,object_id,object_version,event_type,actor_account_id,actor_text,"
+            "occurred_at,details,previous_event_hash,event_hash,event_payload) "
+            "SELECT v->>'snapshot_id',v#>>'{event,object_id}',v#>>'{event,object_version}',"
+            "v#>>'{event,event_type}',v->>'actor_id',v#>>'{event,actor}',"
+            "(v#>>'{event,occurred_at}')::timestamptz,v#>'{event,details}',"
+            "v#>>'{event,previous_event_hash}',v#>>'{event,event_hash}',v->'event' "
+            "FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY input(v,n) ORDER BY n "
+            "RETURNING event_id,event_hash,event_payload,snapshot_id,actor_account_id,object_id,"
+            "object_version,event_type,actor_text,occurred_at,details,previous_event_hash",
+            (_json_text(values),))
+        rows = sorted(inserted.fetchall(), key=lambda row: row['event_id'])
+        if (inserted.rowcount != len(values) or len(rows) != len(values)
+                or any(row['event_hash'] != value['event']['event_hash']
+                    or _json_text(row['event_payload']) != _json_text(value['event'])
+                    or row['snapshot_id'] != value['snapshot_id']
+                    or row['actor_account_id'] != value['actor_id']
+                    or any(row[key] != value['event'][key] for key in
+                           ('object_id','object_version','event_type','previous_event_hash'))
+                    or row['actor_text'] != value['event']['actor']
+                    or row['occurred_at'] != datetime.fromisoformat(value['event']['occurred_at'])
+                    or _json_text(row['details']) != _json_text(value['event']['details'])
+                    for row,value in zip(rows, values))):
+            raise WorkflowReviewStoreError('workflow_review_event_write_conflict')
+
     def _flush_buffer(self, events: list[dict[str, Any]]) -> None:
+        projection = self._event_projection_ids.set({})
         try:
             with self._connect() as con:
                 with con.transaction():
@@ -404,20 +580,15 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                     current = str(row["event_hash"]) if row else None
                     if events[0].get("previous_event_hash") != current:
                         raise WorkflowReviewStoreError("workflow_review_chain_conflict")
-                    previous = current
+                    _check_event_chain(events, current)
                     for event in events:
-                        if event.get("previous_event_hash") != previous:
-                            raise WorkflowReviewStoreError("workflow_review_buffer_chain_invalid")
-                        body = dict(event)
-                        got = body.pop("event_hash", None)
-                        if stable_hash(body) != got:
-                            raise WorkflowReviewStoreError("workflow_review_event_hash_invalid")
                         self._insert_event(con, event)
-                        previous = str(got)
         except WorkflowReviewStoreError:
             raise
         except Exception as exc:
             raise WorkflowReviewStoreError("workflow_review_event_write_failed") from exc
+        finally:
+            self._event_projection_ids.reset(projection)
 
 
     def read_bindings(self, snapshot_ids: list[str] | None = None, *,
@@ -612,36 +783,54 @@ class PostgresWorkflowReviewStore(PostgresWorkflowDocumentStore):
                         if self._binding_projection(binding) != projection:
                             raise WorkflowReviewStoreError("workflow_publish_authorization_payload_invalid")
                         current.append(binding)
-                    if current != before:
+                    if _json_text(current) != _json_text(list(before)):
                         raise WorkflowReviewStoreError("snapshot_object_write_conflict")
                     for row, previous, following in zip(rows, before, after):
-                        if previous != following:
-                            con.execute(
+                        if _json_text(previous) != _json_text(following):
+                            renewed = con.execute(
                                 "UPDATE workflow.publish_authorizations SET reviewer_display_name=%s,valid=%s,"
-                                "authorization_payload=%s::jsonb WHERE authorization_id=%s",
+                                "authorization_payload=%s::jsonb WHERE authorization_id=%s "
+                                "RETURNING snapshot_id,object_id,object_version,canonical_object_hash,confirmed_object_type,"
+                                "reviewer_account_id,reviewer_display_name,decision,valid,position,authorization_payload",
                                 (following["reviewer"], bool(following.get("valid")), _json_text(following),
                                  row["authorization_id"]),
                             )
+                            actual = renewed.fetchone()
+                            if (renewed.rowcount != 1 or actual is None or actual['snapshot_id'] != snapshot_id
+                                    or actual['position'] != row['position']
+                                    or self._binding_projection(actual) != self._binding_projection(following)
+                                    or _json_text(actual['authorization_payload']) != _json_text(following)):
+                                raise WorkflowReviewStoreError('workflow_review_binding_write_conflict')
                     additions = after[len(before):]
                     if additions:
                         tail = con.execute(
                             "SELECT position FROM workflow.publish_authorizations WHERE snapshot_id=%s "
                             "ORDER BY position DESC LIMIT 1", (snapshot_id,),
                         ).fetchone()
-                        for offset, row in enumerate(additions, 1):
-                            # NULL-position legacy rows sort last by authorization_id.
-                            # Appending another NULL retains that established order.
-                            position = None if tail is not None and tail["position"] is None else (
-                                tail["position"] if tail is not None else -1) + offset
-                            con.execute(
-                                "INSERT INTO workflow.publish_authorizations("
-                                "snapshot_id,object_id,object_version,canonical_object_hash,confirmed_object_type,"
-                                "reviewer_account_id,reviewer_display_name,decision,valid,position,authorization_payload) "
-                                "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)",
-                                (snapshot_id, row["object_id"], row["object_version"], row["canonical_object_hash"],
-                                 row["confirmed_object_type"], row["reviewer_id"], row["reviewer"], row["decision"],
-                                 bool(row.get("valid")), position, _json_text(row)),
-                            )
+                        from collections import Counter
+                        payloads = [{'position':None if tail is not None and tail['position'] is None else
+                                    (tail['position'] if tail is not None else -1)+offset,
+                                    'valid':bool(row.get('valid')), 'row':row}
+                                   for offset,row in enumerate(additions,1)]
+                        written = con.execute(
+                            "INSERT INTO workflow.publish_authorizations("
+                            "snapshot_id,object_id,object_version,canonical_object_hash,confirmed_object_type,"
+                            "reviewer_account_id,reviewer_display_name,decision,valid,position,authorization_payload) "
+                            "SELECT %s,v#>>'{row,object_id}',v#>>'{row,object_version}',v#>>'{row,canonical_object_hash}',"
+                            "v#>>'{row,confirmed_object_type}',v#>>'{row,reviewer_id}',v#>>'{row,reviewer}',"
+                            "v#>>'{row,decision}',(v->>'valid')::boolean,(v->>'position')::integer,v->'row' "
+                            "FROM jsonb_array_elements(%s::jsonb) WITH ORDINALITY AS wanted(v,ordinal) "
+                            "ORDER BY ordinal RETURNING snapshot_id,object_id,object_version,canonical_object_hash,"
+                            "confirmed_object_type,reviewer_account_id,reviewer_display_name,decision,valid,position,authorization_payload",
+                            (snapshot_id,_json_text(payloads)))
+                        actual = written.fetchall()
+                        if (written.rowcount != len(additions) or len(actual) != len(additions)
+                                or any(row['snapshot_id'] != snapshot_id or
+                                    self._binding_projection(row) != self._binding_projection(row['authorization_payload'])
+                                    for row in actual)
+                                or Counter((row['position'],_json_text(row['authorization_payload'])) for row in actual)
+                                    != Counter((v['position'],_json_text(v['row'])) for v in payloads)):
+                            raise WorkflowReviewStoreError('workflow_review_binding_write_conflict')
         except WorkflowReviewStoreError:
             raise
         except Exception as exc:

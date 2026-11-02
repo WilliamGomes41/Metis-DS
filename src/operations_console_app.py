@@ -6037,7 +6037,9 @@ def create_console_app(
         account = _require(request)
         raw = [object_ids] if isinstance(object_ids, str) else list(object_ids or [])
         try:
-            current_rows = state.snapshot_objects(snapshot_id)
+            documents = getattr(state, 'workflow_document_store', None)
+            current_rows = (documents.review_command_current_heads(snapshot_id, raw)
+                            if documents is not None else state.snapshot_objects(snapshot_id))
             by_id = {
                 str(row.get("object_id") or ""): row
                 for row in current_rows
@@ -6078,6 +6080,9 @@ def create_console_app(
                 ),
                 status_code=409,
             )
+        if getattr(state, '_metis_workflow_review_authority', False):
+            return RedirectResponse('/source-selection?' + urlencode({
+                'document':snapshot_id, 'task':'structure'}), status_code=303)
         if review_path_for_klasse(state._envelope(snapshot_id)["class"]) != "boom":
             return RedirectResponse('/source-selection?' + urlencode({'document': snapshot_id, 'task': 'structure'}), status_code=303)
         return RedirectResponse(_review_location(state, snapshot_id, task="structure"), status_code=303)

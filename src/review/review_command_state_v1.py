@@ -47,11 +47,15 @@ class ReviewCommandInputs:
     precondition: ReviewPrecondition = field(default_factory=UnconditionalReview)
     source_failure: str | None = None
     original_checks: dict | None = None
+    account: dict | None = None
+    events: list | None = None
+    ledger_head: str | None = None
+    unpublished: bool | None = None
 
     def __post_init__(self) -> None:
         # Frozen fields alone do not detach the mutable records from the caller.
         from src.vorming.prepared_source_views_v1 import freeze
-        for name in ('envelope', 'histories', 'bindings', 'fragments', 'original_checks'):
+        for name in ('envelope', 'histories', 'bindings', 'fragments', 'original_checks', 'account', 'events'):
             from src.review.revision_window_v1 import RevisionWindow
             if name == 'histories' and isinstance(self.histories, RevisionWindow):
                 object.__setattr__(self, name, self.histories.frozen())
@@ -76,11 +80,35 @@ class ReviewChangeSet:
 
     def __init__(self, inputs: ReviewCommandInputs) -> None:
         self.inputs = inputs
-        self.envelope = deepcopy(inputs.envelope)
-        self.histories = deepcopy(inputs.histories)
-        self.bindings = deepcopy(inputs.bindings)
+        self.preparing = False
+        self._envelope = inputs.envelope
+        self._histories = inputs.histories
+        self._bindings = inputs.bindings
+        self._revision = None
+        from src.review.revision_workflow import current_revisions
+        self._current_objects = tuple(current_revisions(self.histories, snapshot_id=inputs.snapshot_id))
+        self._current_by_id = {row['object_id']: row for row in self._current_objects}
         self.commit_count = 0
         self.object_transitions = []
+
+    @property
+    def envelope(self):
+        return self._envelope
+
+    @property
+    def histories(self):
+        return self._histories
+
+    @property
+    def bindings(self):
+        return self._bindings
+
+    @property
+    def current_objects(self):
+        return self._current_objects
+
+    def current_object(self, object_id):
+        return self._current_by_id.get(object_id)
 
     @property
     def snapshot_id(self) -> str:
@@ -94,11 +122,14 @@ class ReviewChangeSet:
     def revision(self) -> str:
         # This scoped token is internal to the staged command. The outer owner
         # independently validates the caller's original generation/m2 contract.
-        return self.inputs.owner.workflow_document_store.revision_for_rows(self.histories)
+        if self._revision is None:
+            self._revision = self.inputs.owner.workflow_document_store.revision_for_rows(self.histories)
+        return self._revision
 
     def stage(self, *, envelopes=None, bindings=None, objects=None,
               expected_revision=None, ledger_fn=None, snapshot_id=None) -> None:
         from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
+        from src.vorming.prepared_source_views_v1 import freeze
 
         sid = snapshot_id or (objects[0] if objects is not None else self.snapshot_id)
         if sid != self.snapshot_id or (objects is not None and objects[0] != sid):
@@ -108,18 +139,22 @@ class ReviewChangeSet:
         if envelopes is not None:
             if set(envelopes) - {sid} or sid not in envelopes:
                 raise ConsoleError('review_command_snapshot_mismatch')
-            self.envelope = deepcopy(envelopes[sid])
+            self._envelope = freeze(envelopes[sid])
         if bindings is not None:
             if set(bindings) - {sid}:
                 raise ConsoleError('review_command_snapshot_mismatch')
-            self.bindings = deepcopy(bindings.get(sid, []))
+            self._bindings = freeze(bindings.get(sid, []))
         if objects is not None:
             from src.review.revision_workflow import validate_revision_write
             from src.review.revision_window_v1 import RevisionWindow
             proposed = self.histories.replacing(objects[1]) if isinstance(self.histories, RevisionWindow) else objects[1]
-            validate_revision_write(self.histories, proposed, snapshot_id=sid)
-            self.histories = deepcopy(proposed)
-            self.object_transitions.append(deepcopy(self.histories))
+            current = validate_revision_write(self.histories, proposed, snapshot_id=sid)
+            self._histories = proposed.frozen() if isinstance(proposed, RevisionWindow) else freeze(proposed)
+            by_identity = {(row['object_id'], row['object_version']):row for row in self.histories}
+            self._current_objects = tuple(by_identity[(row['object_id'], row['object_version'])] for row in current)
+            self._current_by_id = {row['object_id']:row for row in self._current_objects}
+            self._revision = None
+            self.object_transitions.append(self.histories)
         if ledger_fn is not None:
             ledger_fn()
         # Even an unchanged explicit "later" commit changes form freshness.
@@ -128,11 +163,19 @@ class ReviewChangeSet:
 
     @contextmanager
     def savepoint(self) -> Iterator[None]:
-        saved = deepcopy((self.envelope, self.histories, self.bindings, self.commit_count, self.object_transitions))
+        # Stage versions are detached immutable JSON; only stage() replaces
+        # them. Preserve exact values without copying every prior transition
+        # again at each nested member's savepoint.
+        saved = (self.envelope, self.histories, self.bindings, self._revision,
+                 self._current_objects, self._current_by_id,
+                 self.commit_count, tuple(self.object_transitions))
         try:
             yield
         except BaseException:
-            self.envelope, self.histories, self.bindings, self.commit_count, self.object_transitions = saved
+            (self._envelope, self._histories, self._bindings, self._revision,
+             self._current_objects, self._current_by_id,
+             self.commit_count, transitions) = saved
+            self.object_transitions = list(transitions)
             raise
 
 
@@ -156,6 +199,11 @@ def review_command_for_ledger(path: Path) -> ReviewChangeSet | None:
     return None
 
 
+def review_command_for_store(store):
+    state = _ACTIVE.get()
+    return state if state is not None and getattr(state.inputs.owner, 'workflow_review_store', None) is store else None
+
+
 def review_bindings_view(owner: Any) -> dict[str, list[dict[str, Any]]]:
     state = active_review_command(owner)
     return {state.snapshot_id: state.bindings} if state is not None else owner._bindings
@@ -167,11 +215,12 @@ def review_envelopes_view(owner: Any) -> dict[str, dict[str, Any]]:
 
 
 @contextmanager
-def review_command_scope(inputs: ReviewCommandInputs) -> Iterator[ReviewChangeSet]:
+def review_command_scope(inputs: ReviewCommandInputs, *, preparing=False) -> Iterator[ReviewChangeSet]:
     if _ACTIVE.get() is not None:
         from src.operations_console_v1 import ConsoleError
         raise ConsoleError('review_command_scope_already_active')
     state = ReviewChangeSet(inputs)
+    state.preparing = preparing
     token = _ACTIVE.set(state)
     try:
         yield state
