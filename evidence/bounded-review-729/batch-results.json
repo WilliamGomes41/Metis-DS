@@ -123,6 +123,17 @@
       "passed": 1,
       "failed": 0,
       "log": "batch-heading-ui-treatment.log"
+    },
+    {
+      "scope": "remaining first-head full-suite adapter findings: hotpath old full-reader count and workspace double current_only signature",
+      "result": "Retargeted to one actual selected-snapshot window and zero full reads; explicit contextual/batch current_onlyFalse/True with original selected document/render/navigation guards. No runtime change.",
+      "passed": 21,
+      "failed": 0,
+      "log": "batch-ci-final-adapter-proof.log",
+      "old_jobs": [
+        "https://github.com/WilliamGomes41/Metis-DS/actions/runs/41443319811/job/125270665762",
+        "https://github.com/WilliamGomes41/Metis-DS/actions/runs/41443319811/job/125270665667"
+      ]
     }
   ],
   "proof_boundaries": [

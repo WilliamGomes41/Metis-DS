@@ -84,3 +84,13 @@ simulation supplies both cached presentation and the current canonical-owner
 read; real canonical-commit/projection-failure refusal is proved separately by
 the native prepared-batch test. This UI test passes. No production publication
 claim follows from its simulation. Final CI is tied to the follow-up head.
+
+The remaining first-head full-suite logs exposed two more old test seams. The
+hotpath test now counts one real current-window read for only the selected
+snapshot and explicitly zero full API/object reads, preserving the same read
+ceiling. The direct-workspace test double explicitly accepts current_only and
+checks False for contextual / True for batch, retaining exact document, input,
+render and backlink assertions. Both full modules21 pass. Independent inspection
+found no weakened behavior. This final adapter repair changes no runtime code;
+the20 final runtime hashes and measured batch budgets remain unchanged. New
+exact-head CI still owns the full-suite outcome.
