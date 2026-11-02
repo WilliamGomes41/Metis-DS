@@ -39,7 +39,6 @@
     "tests/test_attempt_diagnostics_postgres.py": 2.922,
     "tests/test_attempt_diagnostics_v1.py": 3.724,
     "tests/test_audit_archive_store_v1.py": 0.005,
-    "tests/test_audit_progress_documentation.py": 0.009,
     "tests/test_audit_retention_v1.py": 0.021,
     "tests/test_audit_semantic_safety_v1.py": 0.019,
     "tests/test_availability_repair.py": 12.054,

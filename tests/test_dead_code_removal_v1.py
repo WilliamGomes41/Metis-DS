@@ -40,7 +40,7 @@ REMOVED = {
 }
 NAMES = sorted(name for names in REMOVED.values() for name in names)
 # This file and the evidence report name the functions on purpose.
-NAMING_FILES = {Path(__file__).resolve(), ROOT / "DEAD_CODE_REMOVAL.md"}
+NAMING_FILES = {Path(__file__).resolve(), ROOT / "docs/history/DEAD_CODE_REMOVAL.md"}
 SEARCHED = ("src", "scripts", "tests", "config", "db", "docs", ".github")
 
 

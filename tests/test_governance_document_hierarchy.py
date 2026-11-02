@@ -105,3 +105,21 @@ def test_repository_root_is_operating_surface_not_historical_reports() -> None:
     assert "docs/history/" in _read("docs/REPOSITORY_CONVENTIONS.md")
     assert (ROOT / "docs/history/STEP2_README.md").is_file()
     assert (ROOT / "docs/history/FULL_TECHNICAL_AUDIT_2026-08-19.md").is_file()
+
+
+def test_audit_ids_still_resolve_to_their_registered_github_issues() -> None:
+    """Retiring the status UI must retain the identity lookup promised by active docs."""
+    import re
+
+    index = _read("docs/audit/README.md")
+    rows = re.findall(
+        r"\|\s*(A\d{2})\s*\|\s*\[#(\d+)\]"
+        r"\(https://github.com/WilliamGomes41/Metis-DS/issues/(\d+)\)\s*\|",
+        index,
+    )
+    expected = {f"A{i:02}": 550 + i for i in range(1, 28)}
+    assert len(rows) == len(expected)
+    assert {audit_id: int(issue) for audit_id, issue, _ in rows} == expected
+    assert all(label == target for _, label, target in rows)
+    for document in ("README.md", "ROADMAP.md"):
+        assert "](docs/audit/README.md)" in _read(document)

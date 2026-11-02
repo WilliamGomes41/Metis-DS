@@ -1,4 +1,4 @@
-> Historisch verslag van de eerste reparatie. Voor de actuele GitHub/native/browser-verificatie en Azure-architectuur zie [het vervolgverslag](availability-azure-followup.md) en [concept-PR #578](https://github.com/WilliamGomes41/Metis-DS/pull/578).
+> Historisch verslag van de eerste reparatie. Voor de actuele GitHub/native/browser-verificatie en Azure-architectuur zie [het vervolgverslag](../availability-azure-followup.md) en [concept-PR #578](https://github.com/WilliamGomes41/Metis-DS/pull/578).
 
 # Beschikbaarheidsreparatie A26, A04/A05 en A02
 

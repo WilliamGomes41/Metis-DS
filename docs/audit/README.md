@@ -1,56 +1,47 @@
-# Codeaudit: voortgang A01–A27
+# Auditbewijs
 
-Open [het HTML-overzicht](metis-codeaudit-voortgang.html) lokaal in een browser.
-GitHub toont een HTML-bestand als broncode; download het om de weergave te openen.
-De HTML bevat een gedateerde momentopname. Iedere rij linkt naar de actuele
-GitHub-issuebeschrijving, de enige bron voor de voortgang.
+Deze map bevat gedateerd technisch bewijs. Actuele voortgang staat in de
+[GitHub-issues](https://github.com/WilliamGomes41/Metis-DS/issues); productregels
+staan in het [protocol](../../PROTOCOL.md) en open werk in de [roadmap](../../ROADMAP.md).
 
-Het volledige interne auditrapport blijft afzonderlijk beschikbaar bij de eigenaar.
-Dit repositoryoverzicht bevat uitsluitend ID's en voortgang; technische
-kwetsbaarheidsdetails en productiegegevens zijn niet opgenomen.
+- [Bronherstel na cacheverlies](a10-source-repair-code-acceptance.md).
+- [Vervanging van de beslisboomroute](decision-tree-route-replacement.md).
+- [Afstemming van protocol en code](protocol-code-alignment-2026-11-01.md).
 
-## Voortgang aanpassen
+Het sluiten van een issue of mergen van een PR bewijst geen productieacceptatie;
+bekijk de gekoppelde tests, uitrol- en gebruikersverificatie bij het issue.
 
-1. Open bij het betreffende ID **Voortgang aanpassen in GitHub**.
-2. Vink in de issuebeschrijving de stappen in volgorde af en voeg bewijs toe.
-3. Sluit het issue pas als de oorspronkelijke gebruikershandeling in productie is
-   geverifieerd. Het sluiten van een code-PR maakt het audit-ID niet automatisch klaar.
+## Audit-ID naar GitHub-issue
 
-| Status | Betekenis |
+Deze vaste koppelingen bevatten geen voortgangsstatus. Open het issue voor de
+actuele stand en het bijbehorende bewijs.
+
+| Audit-ID | GitHub-issue |
 | --- | --- |
-| Open | Nog geen voortgang bevestigd; de huidige code moet bij triage worden gecontroleerd. |
-| In uitvoering | Reparatie wordt uitgevoerd. |
-| Code geverifieerd | Oorspronkelijke foutproef en relevante controles slagen; PR/commit gekoppeld. |
-| Gedeployed | De reparatie zit aantoonbaar in de draaiende productieversie. |
-| Afgerond | Oorspronkelijke gebruikershandeling werkt aantoonbaar in productie. |
-| Status controleren | Vakjes ontbreken, staan niet in volgorde of de bronstatus is onbekend. |
-| Gesloten zonder acceptatie | Het issue is gesloten zonder alle acceptatiestappen. Geen claim van herstel. |
-
-De vakjes registreren menselijke bewijsbeoordeling; de synchronisatie verifieert
-niet zelfstandig tests, draaiende versies of productiehandelingen.
-Publiceer geen interne logs, broninhoud, persoonsgegevens of volledige diagnostiek
-als bewijs. Gebruik een niet-gevoelige samenvatting en PR/commitverwijzingen.
-
-## HTML bijwerken
-
-Vereisten: Python 3 en een geïnstalleerde, aangemelde GitHub CLI (`gh`) met
-leestoegang tot deze repository. Vanuit de repository:
-
-```bash
-python docs/audit/sync_progress.py
-```
-
-Het commando leest de 27 issues, valideert hun ID's en schrijft pas na volledige
-succesvolle uitlezing een nieuwe HTML-momentopname. Het wijzigt geen issues en
-start geen reparatie, deployment of Metis-verwerking. Bij een leesfout blijft het
-vorige HTML-bestand intact. Commit de gewijzigde momentopname wanneer deze ook
-voor anderen in de repository beschikbaar moet zijn; downloaden alleen geeft
-geen automatische synchronisatie.
-
-Hetzelfde commando kan met `--html /pad/naar/volledig-rapport.html` een intern
-rapport met dezelfde statusvelden bijwerken. Upload dat volledige rapport niet
-naar GitHub zonder expliciete toestemming voor de inhoud.
-
-Documentatietaak: #550. Audit-ID's zijn historische bevindingen, geen automatisch
-toegewezen implementatietickets. Productcode, infrastructuur en governance blijven
-ongewijzigd.
+| A01 | [#551](https://github.com/WilliamGomes41/Metis-DS/issues/551) |
+| A02 | [#552](https://github.com/WilliamGomes41/Metis-DS/issues/552) |
+| A03 | [#553](https://github.com/WilliamGomes41/Metis-DS/issues/553) |
+| A04 | [#554](https://github.com/WilliamGomes41/Metis-DS/issues/554) |
+| A05 | [#555](https://github.com/WilliamGomes41/Metis-DS/issues/555) |
+| A06 | [#556](https://github.com/WilliamGomes41/Metis-DS/issues/556) |
+| A07 | [#557](https://github.com/WilliamGomes41/Metis-DS/issues/557) |
+| A08 | [#558](https://github.com/WilliamGomes41/Metis-DS/issues/558) |
+| A09 | [#559](https://github.com/WilliamGomes41/Metis-DS/issues/559) |
+| A10 | [#560](https://github.com/WilliamGomes41/Metis-DS/issues/560) |
+| A11 | [#561](https://github.com/WilliamGomes41/Metis-DS/issues/561) |
+| A12 | [#562](https://github.com/WilliamGomes41/Metis-DS/issues/562) |
+| A13 | [#563](https://github.com/WilliamGomes41/Metis-DS/issues/563) |
+| A14 | [#564](https://github.com/WilliamGomes41/Metis-DS/issues/564) |
+| A15 | [#565](https://github.com/WilliamGomes41/Metis-DS/issues/565) |
+| A16 | [#566](https://github.com/WilliamGomes41/Metis-DS/issues/566) |
+| A17 | [#567](https://github.com/WilliamGomes41/Metis-DS/issues/567) |
+| A18 | [#568](https://github.com/WilliamGomes41/Metis-DS/issues/568) |
+| A19 | [#569](https://github.com/WilliamGomes41/Metis-DS/issues/569) |
+| A20 | [#570](https://github.com/WilliamGomes41/Metis-DS/issues/570) |
+| A21 | [#571](https://github.com/WilliamGomes41/Metis-DS/issues/571) |
+| A22 | [#572](https://github.com/WilliamGomes41/Metis-DS/issues/572) |
+| A23 | [#573](https://github.com/WilliamGomes41/Metis-DS/issues/573) |
+| A24 | [#574](https://github.com/WilliamGomes41/Metis-DS/issues/574) |
+| A25 | [#575](https://github.com/WilliamGomes41/Metis-DS/issues/575) |
+| A26 | [#576](https://github.com/WilliamGomes41/Metis-DS/issues/576) |
+| A27 | [#577](https://github.com/WilliamGomes41/Metis-DS/issues/577) |
