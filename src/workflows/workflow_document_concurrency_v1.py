@@ -6,6 +6,7 @@ from src.review.revision_workflow import current_revisions, validate_revision_wr
 import base64
 import hashlib
 import json
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
@@ -150,6 +151,43 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         except Exception as exc:
             raise WorkflowDocumentStoreError('workflow_review_context_read_failed') from exc
 
+    def review_command_current_heads(self, snapshot_id, object_ids):
+        from src.workflows.revision_frontiers_postgres_v1 import heads
+        with self._connect() as con:
+            return [row['payload'] for row in heads(con, snapshot_id, object_ids)]
+
+    def review_command_window(self, snapshot_id, object_ids):
+        from src.workflows.revision_frontiers_postgres_v1 import capture
+        with self._connect() as con:
+            return capture(self, con, snapshot_id, object_ids)
+
+    def review_document_window(self, snapshot_id):
+        """All current heads with complete physical coverage, in a caller snapshot."""
+        from src.workflows.workflow_transaction_v1 import workflow_transaction_active
+        from src.workflows.revision_frontiers_postgres_v1 import capture
+        if not workflow_transaction_active():
+            raise WorkflowDocumentStoreError('review_document_snapshot_required')
+        with self._connect() as con:
+            return capture(self, con, snapshot_id, None)
+
+    def current_document_objects(self, snapshot_id):
+        """Pure current-state reads reuse validated prefixes, never pin a write."""
+        from src.workflows.workflow_transaction_v1 import workflow_transaction_active, workflow_read_transaction
+        # Existing write/legacy read callers retain their original full adapter.
+        # This method never changes the isolation of an enclosing transaction.
+        if workflow_transaction_active():
+            return current_revisions(self.list_document_objects(snapshot_id), snapshot_id=snapshot_id)
+        with workflow_read_transaction(self):
+            rows = self.review_document_window(snapshot_id)
+        if rows is None:
+            rows = self.list_document_objects(snapshot_id)
+        return current_revisions(rows, snapshot_id=snapshot_id)
+
+    def source_admission_neighbor_ids(self, snapshot_id, object_ids):
+        from src.workflows.revision_frontiers_postgres_v1 import admission_neighbors
+        with self._connect() as con:
+            return admission_neighbors(self, con, snapshot_id, object_ids)
+
     def review_command_neighbor_ids(self, snapshot_id: str, object_ids: list[str]) -> list[str]:
         """Current incoming dependencies, excluding superseded historical edges.
 
@@ -179,10 +217,10 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
             raise WorkflowDocumentStoreError("workflow_review_commit_count_invalid")
         changed_fields = {key for key in set(envelope_before) | set(envelope_after)
                           if (key in envelope_before) != (key in envelope_after)
-                          or envelope_before.get(key) != envelope_after.get(key)}
+                          or _json_text(envelope_before.get(key)) != _json_text(envelope_after.get(key))}
         if changed_fields - {"review_passes"}:
             raise WorkflowDocumentStoreError("workflow_review_envelope_delta_unsupported")
-        if commit_count == 0 and (before_objects != after_objects or changed_fields):
+        if commit_count == 0 and (_json_text(list(before_objects)) != _json_text(list(after_objects)) or changed_fields):
             raise WorkflowDocumentStoreError("workflow_review_commit_count_invalid")
         self._validate_rows(before_objects)
         self._validate_rows(after_objects)
@@ -208,14 +246,24 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                     if (document["state"] in PUBLISHED_ENVELOPE_STATES
                             or self._release_history_locked(con, snapshot_id) is not None):
                         raise WorkflowDocumentStoreError(PUBLISHED_WORKING_REVISION_IMMUTABLE)
-                    rows = con.execute(
-                        "SELECT position,payload FROM workflow.document_objects WHERE snapshot_id=%s "
-                        "AND object_id=ANY(%s) ORDER BY position FOR UPDATE", (snapshot_id, object_ids),
-                    ).fetchall() if object_ids else []
-                    if any(row["position"] is None for row in rows):
-                        raise WorkflowDocumentStoreError("workflow_document_cutover_not_prepared")
-                    current = [self._payload(row["payload"]) for row in rows]
-                    if current != before_objects:
+                    from src.review.revision_window_v1 import RevisionWindow
+                    from src.workflows.revision_frontiers_postgres_v1 import check_current, seal_delta, seal_complete
+                    bounded = isinstance(before_objects, RevisionWindow)
+                    if bounded:
+                        current = check_current(self, con, snapshot_id, before_objects)
+                        new_ids = sorted(set(object_ids) - set(before_objects.frontiers))
+                        if new_ids and con.execute('SELECT 1 FROM workflow.document_objects WHERE snapshot_id=%s '
+                            'AND object_id=ANY(%s) LIMIT 1', (snapshot_id, new_ids)).fetchone():
+                            raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+                    else:
+                        rows = con.execute(
+                            "SELECT position,payload FROM workflow.document_objects WHERE snapshot_id=%s "
+                            "AND object_id=ANY(%s) ORDER BY position FOR UPDATE", (snapshot_id, object_ids),
+                        ).fetchall() if object_ids else []
+                        if any(row["position"] is None for row in rows):
+                            raise WorkflowDocumentStoreError("workflow_document_cutover_not_prepared")
+                        current = [self._payload(row["payload"]) for row in rows]
+                    if _json_text(list(current)) != _json_text(list(before_objects)):
                         raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
                     # Existing mixins can legally update current governance and
                     # then append a successor in the SAME outer transaction.
@@ -223,19 +271,35 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                     # immutable-history guard on a flattened final diff.
                     previous = current
                     for proposed in transitions if transitions is not None else [after_objects]:
+                        if bounded:
+                            proposed = current.replacing(proposed)
                         validate_revision_write(previous, proposed, snapshot_id=snapshot_id)
                         previous = proposed
-                    if previous != after_objects or (transitions is not None and len(transitions) > commit_count):
+                    if _json_text(list(previous)) != _json_text(list(after_objects)) or (transitions is not None and len(transitions) > commit_count):
                         raise WorkflowDocumentStoreError('workflow_review_transition_chain_invalid')
                     before_map = {self._object_identity(row): row for row in current}
+                    affected = defaultdict(int)
+                    def verify_written(cursor, obj, position):
+                        row = cursor.fetchone()
+                        if (cursor.rowcount != 1 or row is None
+                                or (row['snapshot_id'], row['object_id'], row['object_version']) !=
+                                   (snapshot_id, obj['object_id'], obj['object_version'])
+                                or row['position'] != position
+                                or _json_text(row['payload']) != _json_text(obj)):
+                            raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
                     for obj in after_objects:
                         identity = self._object_identity(obj)
-                        if identity in before_set and before_map[identity] != obj:
-                            con.execute(
+                        if identity in before_set and self._object_hash(before_map[identity]) != self._object_hash(obj):
+                            changed = con.execute(
                                 "UPDATE workflow.document_objects SET payload=%s::jsonb,revision=revision+1,"
-                                "updated_at=CURRENT_TIMESTAMP WHERE snapshot_id=%s AND object_id=%s AND object_version=%s",
+                                "updated_at=CURRENT_TIMESTAMP WHERE snapshot_id=%s AND object_id=%s AND object_version=%s "
+                                "RETURNING snapshot_id,object_id,object_version,position,payload",
                                 (_json_text(obj), snapshot_id, *identity),
                             )
+                            position = before_objects.frontiers[obj['object_id']]['head_position'] if bounded else next(
+                                row['position'] for row in rows if self._object_identity(row['payload']) == identity)
+                            verify_written(changed, obj, position)
+                            affected[obj['object_id']] += changed.rowcount
                     additions = [obj for obj in after_objects if self._object_identity(obj) not in before_set]
                     if additions:
                         tail = con.execute(
@@ -243,11 +307,13 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                             "WHERE snapshot_id=%s", (snapshot_id,),
                         ).fetchone()["position"]
                         for offset, obj in enumerate(additions, 1):
-                            con.execute(
+                            changed = con.execute(
                                 "INSERT INTO workflow.document_objects(snapshot_id,object_id,object_version,payload,position) "
-                                "VALUES(%s,%s,%s,%s::jsonb,%s)",
+                                "VALUES(%s,%s,%s,%s::jsonb,%s) RETURNING snapshot_id,object_id,object_version,position,payload",
                                 (snapshot_id, obj["object_id"], obj["object_version"], _json_text(obj), tail + offset),
                             )
+                            verify_written(changed, obj, tail + offset)
+                            affected[obj['object_id']] += changed.rowcount
                     if "review_passes" in changed_fields:
                         previous = envelope_before.get("review_passes") or {}
                         following = envelope_after.get("review_passes") or {}
@@ -282,7 +348,12 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                             "WHERE snapshot_id=%s", (commit_count, snapshot_id),
                         )
                     from src.workflows.review_card_inputs_postgres_v1 import maintain
-                    maintain(self, con, snapshot_id, after_objects)
+                    if bounded:
+                        positions = seal_delta(self, con, snapshot_id, before_objects, after_objects, affected)
+                        maintain(self, con, snapshot_id, after_objects, revision_positions=positions)
+                    else:
+                        maintain(self, con, snapshot_id, after_objects)
+                        seal_complete(self, con, snapshot_id, after_objects)
         except WorkflowDocumentStoreError:
             raise
         except Exception as exc:
@@ -558,10 +629,11 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                             submitted=objects,
                             expected_revision=None if existing is None and expected_revision == "" else expected_revision,
                         )
-                        validate_revision_write(current_objects, next_objects, snapshot_id=snapshot_id)
-                        self._write_objects_locked(con, snapshot_id, current_objects, next_objects)
+                        validated = validate_revision_write(current_objects, next_objects, snapshot_id=snapshot_id)
+                        written = self._write_objects_locked(con, snapshot_id, current_objects, next_objects)
                         from src.workflows.review_card_inputs_postgres_v1 import maintain
                         maintain(self, con, snapshot_id, next_objects, complete=True, preparation=review_card_preparation)
+                        written.seal(self, con, snapshot_id, validated)
             return self._revision_token(next_objects)
         except WorkflowDocumentStoreError:
             raise

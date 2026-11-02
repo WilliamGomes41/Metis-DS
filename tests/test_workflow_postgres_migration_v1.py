@@ -41,7 +41,11 @@ class FakeConnection:
             return Rows([{"table_name": table, "column_name": column} for table, column in REQUIRED_COLUMNS])
         if query.startswith("SELECT c.conname"):  # #636: named constraints are part of verification
             return Rows([{"conname": "publication_refusals_dedup_key_uniq", "table_name": "publication_refusals",
-                         "contype": "u", "columns": ["dedup_key"]}])
+                         "contype": "u", "columns": ["dedup_key"]},
+                         {"conname": "object_revision_frontiers_pkey", "table_name": "object_revision_frontiers",
+                          "contype": "p", "columns": ["snapshot_id", "object_id"]},
+                         {"conname": "workflow_object_revision_frontier_fk", "table_name": "document_objects",
+                          "contype": "f", "columns": ["snapshot_id", "object_id"]}])
         if query.startswith("SELECT count"):
             return Rows([{"count": 0}])
         self.applied.append(query)
@@ -62,7 +66,7 @@ class Rows:
 def test_plan_digest_binds_exact_ordered_migration_bytes() -> None:
     paths = migration_paths(ROOT)
     assert tuple(path.name for path in paths) == MIGRATION_NAMES
-    assert MIGRATION_NAMES[-21:] == (
+    assert MIGRATION_NAMES[-22:] == (
         "008_workflow_lifecycle_identity.sql",
         "009_console_hotpath_indexes.sql",
         "011_workflow_audit_retention.sql",
@@ -84,6 +88,7 @@ def test_plan_digest_binds_exact_ordered_migration_bytes() -> None:
         "029_formation_evidence.sql",
         "030_operational_document_inputs.sql",
         "031_review_dependency_keys.sql",
+        "032_object_revision_frontiers.sql",
     )
     digest = migration_digest(paths)
     assert len(digest) == 64

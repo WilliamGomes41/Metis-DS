@@ -1,0 +1,249 @@
+{
+  "environment": {
+    "python": "3.12.14",
+    "postgres": 160015,
+    "kind": "local synthetic native PostgreSQL and production HTTP composition",
+    "production_actions": "none"
+  },
+  "base": "3cc653bc26fd61748bd9f0b402c012b846dc0d27",
+  "red_test_commit": "877e0bbde65780e0f8fa88901e26876ce8918c93",
+  "main_integrated": "04672482b0d0e6806b1bd40a32b30ce25720afa0",
+  "baseline_save_seconds": 22.654491829,
+  "red_tests": 2,
+  "final_focused_tests": {
+    "passed": 35,
+    "failed": 0,
+    "seconds": 84.09
+  },
+  "measurements": [
+    {
+      "elapsed_ms": 359.97,
+      "phases": {
+        "db_connect": {
+          "calls": 9,
+          "inclusive_ms": 29.283,
+          "exclusive_ms": 29.283
+        },
+        "db_execute": {
+          "calls": 67,
+          "inclusive_ms": 212.908,
+          "exclusive_ms": 212.908
+        },
+        "db_fetch": {
+          "calls": 45,
+          "inclusive_ms": 7.154,
+          "exclusive_ms": 7.154
+        },
+        "document_load": {
+          "calls": 6,
+          "inclusive_ms": 17.204,
+          "exclusive_ms": 2.155
+        },
+        "source_verify": {
+          "calls": 6,
+          "inclusive_ms": 0.434,
+          "exclusive_ms": 0.434
+        },
+        "source_views_validate": {
+          "calls": 7,
+          "inclusive_ms": 3.354,
+          "exclusive_ms": 3.354
+        },
+        "source_views_hydrate": {
+          "calls": 1,
+          "inclusive_ms": 2.93,
+          "exclusive_ms": 1.819
+        },
+        "source_views_read_records": {
+          "calls": 1,
+          "inclusive_ms": 17.113,
+          "exclusive_ms": 1.345
+        },
+        "source_read": {
+          "calls": 3,
+          "inclusive_ms": 17.319,
+          "exclusive_ms": 0.202
+        },
+        "source_prepare": {
+          "calls": 1,
+          "inclusive_ms": 0.083,
+          "exclusive_ms": 0.083
+        },
+        "store_lock_wait": {
+          "calls": 1,
+          "inclusive_ms": 0.03,
+          "exclusive_ms": 0.03
+        },
+        "payload_copy": {
+          "calls": 2,
+          "inclusive_ms": 4.598,
+          "exclusive_ms": 4.598
+        },
+        "objects_read": {
+          "calls": 2,
+          "inclusive_ms": 6.272,
+          "exclusive_ms": 1.24
+        },
+        "review_bindings": {
+          "calls": 1,
+          "inclusive_ms": 2.165,
+          "exclusive_ms": 1.938
+        },
+        "source_reconstruction": {
+          "calls": 4,
+          "inclusive_ms": 0.012,
+          "exclusive_ms": 0.012
+        },
+        "store_transaction": {
+          "calls": 1,
+          "inclusive_ms": 282.363,
+          "exclusive_ms": 80.3
+        },
+        "store_lock_hold": {
+          "calls": 1,
+          "inclusive_ms": 282.394,
+          "exclusive_ms": 0.0
+        }
+      },
+      "db": {
+        "db_connections": 9,
+        "db_queries": 67,
+        "db_json_bytes": 424399,
+        "db_connect_ms": 29.409,
+        "db_query_ms": 213.862,
+        "badge_ms": 0.0
+      }
+    },
+    {
+      "proof": "native_combined_history_partial_http",
+      "layout": "compact",
+      "seconds": {
+        "open": 1.3422594349976862,
+        "save": 0.362527509991196,
+        "redirect": 3.1919616239902098,
+        "reopen": 1.359059405993321,
+        "stale": 0.06304389699653257
+      }
+    },
+    {
+      "proof": "native_source_command_three_axes",
+      "timings": [
+        {
+          "workload": "small",
+          "post_seconds": 0.12047511999844573,
+          "outer_lock_seconds": 0.07769975000701379
+        },
+        {
+          "workload": "1500-retained-revisions",
+          "post_seconds": 0.16411045999848284,
+          "outer_lock_seconds": 0.11144242199952714
+        },
+        {
+          "workload": "1500-revisions-and-independent-documents-events-bindings",
+          "post_seconds": 0.1508162620011717,
+          "outer_lock_seconds": 0.10781836899695918
+        }
+      ]
+    }
+  ],
+  "ordinary_outer_lock_250ms": "NOT MET: latest 282.394ms; no waiver",
+  "source_outer_lock_250ms": "met in focused 3-axis run",
+  "unlinked_condition_mutation_control": "removing admission neighbours fails assertion DOEN != original condition",
+  "proof_source": "MET-43 36112a6f1559601e77d96ab098a682e20f3727dd; 8 native current dependency/rollback tests passed",
+  "restore_preparation": "actual archive lifecycle with unprepared-derived-state and explicit preparation, authoritative export unchanged: passed",
+  "source_file_sha256": {
+    "db/migrations/032_object_revision_frontiers.sql": "9451b82f35b2a01c2585c7d8ae5596a7b63cf219947f33d6a73355e6ec2fcccc",
+    "scripts/prepare_revision_frontiers.py": "1a1204d58c10195af89911b9ee69dd630bf4ad2924dcdd3f8bbfa751004b25fe",
+    "src/console_entra_v1.py": "a372c971a382503f7bf3a3b3787acff18bd44d7b87e5e867857b3d2bed5d6585",
+    "src/operations_console_app.py": "07b731bf410d75609662787cd75aa6bda0ab48cda5e96ff464c51c59aa5867ee",
+    "src/operations_console_v1.py": "0585f5fc5f7e4d9434f809302a2d92144de76ff93f01f65ab2beec01b528b9c5",
+    "src/review/review_command_state_v1.py": "ad8e717ca9449f20bcea2fcb803d2204fe19b5ba6fdcf67bbcdc1e0733940cb3",
+    "src/review/review_command_v1.py": "fdcb9201003d485c601d5caec8269231bdb9afe210789e457d7e53f9c806af36",
+    "src/review/revision_window_v1.py": "cdf5db690a9559136b078aaf6585a364a5ff0d7f11b904c7ebf6e97482deb47b",
+    "src/review/revision_workflow.py": "044a3ebf3bac9d80cf1bb0f7e11a05832ccc1a4fc132a1a957d8a202428e3c73",
+    "src/review/source_context_review_v1.py": "e269e11f8c99ad8bf84ae9f1826afde0290120a39ddfef1947da6710871176f3",
+    "src/settings/metis_explained_content.py": "d5b8ecb1947a6800c08a21b294913f5d172383f6a300c10699dedd13fbc1fe87",
+    "src/workflows/review_card_inputs_postgres_v1.py": "8ed4986f69b6d504ece26cc57bc6962af18d211198fdb3b16bf9f3271cfa4f3c",
+    "src/workflows/revision_frontiers_postgres_v1.py": "9b60595830f640f31147843d0babe18055d549eeb0980cce20f38add61f51df5",
+    "src/workflows/workflow_document_concurrency_v1.py": "1bd5f15a310d0f3ab2c6bf68b15978579d150cedad0eead8e94ac7710624d961",
+    "src/workflows/workflow_documents_cutover_v1.py": "cb15e50da96a1ec00c29c2cbc1e63ae2bf085ca831deee4e7d996c41da0c4650",
+    "src/workflows/workflow_identity_postgres_v1.py": "670bb87208d8a8971aea1f54faf8e5dc93ea21d56b83df1f47aa63be1d205b4d",
+    "src/workflows/workflow_postgres_migration_v1.py": "36209f9fc9a281f8c6d3066c1505a51d4f91d9b9810b20c9dcabfb2ebf53f2c5",
+    "src/workflows/workflow_review_postgres_v1.py": "ac3ed414dbd3c8499c26305219a1908eaf65b59f753ac0931f76cdf45f52c5e1",
+    "tests/test_959_bounded_io_project_contract.py": "3e1c057c36b03d451b6ca5699cbe05d59292398c7b5ad28efb0477e7749930d1",
+    "tests/test_met36_native_signin.py": "002bc03d23bdbabdc934e07783030003f6f1459e9884f75de7f8aeb38c3a2f5e",
+    "tests/test_met36_source_admission_context.py": "aef608d5ac058a20fcc6315ad7eb1c62ae720e62ad5362759d25563c30d7d849",
+    "tests/test_met36_source_command_scaling.py": "3e9ec400395a26bce31b25f7fbbab79c30f74082a4eb41cfc629f3d21699c2df",
+    "tests/test_review_command_dependencies_v1.py": "ccb0fa031290aea5422afaf040a600d4893ec485706d94f223ecdadc089cf7dc",
+    "tests/test_review_command_freshness_v1.py": "9e94103dc4ac9d152328261bfbee94f0467d81d964137af8adba413f094624ec",
+    "tests/test_review_command_storage_v1.py": "53105305dbe404de22939bfea89f07714d7f360a8cc2811ba117d75a9926b3a3",
+    "tests/test_revision_frontier_migration_v1.py": "c5d1bd0e513f871aefdfb79f9767107fac846a7fcd4d4c754e1e6d4c693c6049",
+    "tests/test_revision_frontier_recovery_v1.py": "a5932d67e15d9a634dc3466442b3b3df40a8178d2485783782953d6e6e0a1822",
+    "tests/test_revision_frontier_store_v1.py": "da06444f28e4037252a88dc228d805e7f80a9780bda9ac739acf53ffb4a70a5e",
+    "tests/test_source_context_review_v1.py": "14a2a49dda293955faee05ba11bf5cbe085c46f0542aab6a619bb297be07e109",
+    "tests/test_vsa_publish_document_v1.py": "806cbf5cdd6f6fe1ba69974612a65b2ecefa0fbdc9ecbb0e6c78aaa2922bd24d",
+    "tests/test_workflow_postgres_migration_v1.py": "d0ed179cd0258c76e017275a3a3dfaa08e3596e6040a4c9bc588b6e16a5f0cab",
+    "tests/test_migration_018_postgres_v1.py": "6dcd7b5a3dbb047bb21fd948cc0a50dd1b3ef273518fd6a93523f0a764c2606c"
+  },
+  "full_suite": {
+    "collected": 6804,
+    "passed": 6754,
+    "failures": 7,
+    "skipped": 43,
+    "postgres_skips": 0,
+    "shards": [
+      {
+        "shard_index": 0,
+        "tests": 1396,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 23,
+        "postgres_skips": [],
+        "seconds": 1454.914
+      },
+      {
+        "shard_index": 1,
+        "tests": 2167,
+        "failures": 5,
+        "errors": 0,
+        "skipped": 2,
+        "postgres_skips": [],
+        "seconds": 1282.047
+      },
+      {
+        "shard_index": 2,
+        "tests": 1576,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 16,
+        "postgres_skips": [],
+        "seconds": 1880.486
+      },
+      {
+        "shard_index": 3,
+        "tests": 1665,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 2,
+        "postgres_skips": [],
+        "seconds": 1352.825
+      }
+    ],
+    "findings": "5 migration-mock expectations and 2 processing-admission lock regressions",
+    "repair": "all84 affected processing, Entra, retirement and migration tests passed after explicit Review-only KEY SHARE narrowing",
+    "final_tip_full_CI": "required; previous full suite is not all-green"
+  },
+  "production_acceptance": "not performed; no live latency or publication claim",
+  "additional_native_proof": {
+    "tests": 11,
+    "failed": 0,
+    "seconds": 43.94,
+    "scope": "native0 unselected serialization, unlinked admission context, MET-43 current dependencies, actual backup/restore and explicit preparation"
+  },
+  "final_review_source_regression": {
+    "passed": 35,
+    "failed": 0,
+    "seconds": 36.94,
+    "scope": "MET43 current dependencies, Review/source/storage, explanation references and architecture invariants"
+  }
+}

@@ -37,13 +37,13 @@ def _bind_semantic_fixture(state):
         post_json=provider_fixture)
 
 
-def _system(tmp_path, console=None, *, production_console=None):
+def _system(tmp_path, console=None, *, production_console=None, source_html=None):
     state = console or production_console(processing_binder=lambda console: None, root=tmp_path, source_store=tmp_path / 'sources', runtime=tmp_path / 'runtime')
     researcher = state.create_account(username='anne', password='anne-secret', roles=('researcher',))
     reviewer = state.create_account(username='bert', password='bert-secret', roles=('reviewer',))
     _bind_semantic_fixture(state)
     receipt = state.ingest(actor_id=researcher['account_id'], filename='labels.html', content_type='text/html',
-        data=b'<html><body><h1>Zorg</h1><h2>1 Ondersteuning</h2><p>DOEN</p><p>De verpleegkundige bespreekt passende ondersteuning met de client.</p><p>Een observatie is een systematische waarneming van gedrag.</p></body></html>',
+        data=source_html or b'<html><body><h1>Zorg</h1><h2>1 Ondersteuning</h2><p>DOEN</p><p>De verpleegkundige bespreekt passende ondersteuning met de client.</p><p>Een observatie is een systematische waarneming van gedrag.</p></body></html>',
         ingest_kind='new', title='Zorg', version='1.0', date='2026-09-11', live_url='',
         class_='richtlijn', family='zorg', named_reviewers=[reviewer['account_id']])
     sid = receipt['snapshot_id']
