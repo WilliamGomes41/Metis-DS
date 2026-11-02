@@ -1,8 +1,8 @@
 # Metis governance
 
-**Status:** actief onder Protocol v4.3.0 — enige vigerende protocolnorm
+**Status:** actief onder Protocol v4.3.1 — enige vigerende protocolnorm
 
-**Datum:** 2026-10-18
+**Datum:** 2026-11-01 (afstemming met bestaande code; protocolversie 4.3.1)
 
 Dit bestand is het compacte operationele governance-register. Het is geen tweede protocol, geen geschiedenislog en geen vijfde stuurlaag.
 
@@ -35,6 +35,10 @@ Protocol-v2-delta's, oude roadmaps, approval-manifests en de pre-v3 governance b
 Historische protocolbestanden staan met ongewijzigde bytes onder `docs/history/`. Relatieve compatibiliteitslinks op de oude V2-paden houden padgebonden approval-manifests en historische verwijzingen leesbaar. De approval-manifests blijven ongewijzigd. Dat behoudt reproduceerbaarheid zonder een aanvullende actuele stuurlaag te maken.
 
 Historische V2-regressietests mogen de bevroren pre-v3 rootdocumenten toetsen. V3-regressietests toetsen uitsluitend de actuele rootnorm en actuele roadmap.
+
+## Afstemming en bewijs
+
+De [afstemmingsnotitie van 2026-11-01](audit/protocol-code-alignment-2026-11-01.md) koppelt de gecontroleerde protocolregels aan code en tests. Zij is bewijs, geen aanvullende norm of verklaring van productieacceptatie. Open routevastlegging en inhoudelijke acceptatie blijven onder `ROADMAP.md` §R4.6.
 
 ## Actuele open besluiten
 

@@ -1,9 +1,13 @@
-# V&VN Data Services — Protocol v4.3
+# V&VN Data Services — Protocol v4.3.1
 
 **Status:** Vigerend — enige actuele protocolnorm
 
-**Versie:** 4.3.0  
-**Datum:** 2026-10-22 (v4.2.0: 2026-10-18; v4.1.0: 2026-10-18; v4.0.0: 2026-09-27)  
+**Versie:** 4.3.1
+
+**Datum:** 2026-11-01 (v4.3.0: 2026-10-22; v4.2.0: 2026-10-18; v4.1.0: 2026-10-18; v4.0.0: 2026-09-27)
+
+**Wijziging 4.3.1:** afstemming met bestaande code en het vier-ogenbesluit van 2026-10-23 (§6.3), idempotente herhaling van publicatie (§7.3), de huidige consolebenaming (§11.1), verplichte PostgreSQL-workflowautoriteit (§13) en expliciete bewijsgrenzen (§§1, 5.4, 14, 15). Codeverwijzingen, bewijsgrenzen en resterende afwijkingen staan in [de afstemmingsnotitie](docs/audit/protocol-code-alignment-2026-11-01.md).
+
 **Wijziging 4.3.0:** semantische vorming is de enige vormingsroute voor alle nieuwe bronverwerking; `deterministic-v1` en de deterministische exportvoorstellen zijn vervallen (§5.2, §5.4)  
 **Wijziging 4.2.0:** één brongebonden vormingsroute voor beslisbomen (§5.2, §5.4 strategie C)  
 **Wijziging 4.1.0:** vormingskader en bronsoortstrategieën (§5.4)
@@ -15,11 +19,13 @@ Metis wordt gestuurd in deze volgorde:
 
 `PROTOCOL.md → ROADMAP.md → acceptatietests → code`
 
-`PROTOCOL.md` bevat blijvende product-, veiligheids- en governance-invarianten. `ROADMAP.md` bevat alleen actieve veranderopgaven, beslispoorten en stopvoorwaarden. Tests bewijzen de norm; code, configuratie en infrastructuur implementeren haar.
+`PROTOCOL.md` bevat blijvende product-, veiligheids- en governance-invarianten. `ROADMAP.md` bevat alleen actieve veranderopgaven, beslispoorten en stopvoorwaarden. Tests leveren bewijs voor de getoetste delen van de norm; code, configuratie en infrastructuur implementeren haar.
 
 Bij strijdigheid wint de hogere laag. Een tijdelijke workaround, deploymentvolgorde, incidentroute, experiment of implementatiegolf wordt niet automatisch protocol.
 
 Historische protocollen, delta's, roadmaps, approvals en auditrapporten zijn niet sturend voor nieuwe implementatie.
+
+Een geldende norm is geen verklaring dat alle implementatie- en acceptatiebewijzen al geleverd zijn. Een vastgestelde afwijking blijft expliciet open in `ROADMAP.md`, met verwijzing naar code en ontbrekend bewijs; bestaand gedrag verlaagt de norm niet. Aanwezigheid van code of geslaagde lokale tests bewijst geen activatie of inhoudelijke acceptatie in productie.
 
 ## 2. Productgrens
 
@@ -107,6 +113,8 @@ De expliciet geconfigureerde V3-route gebruikt versiegebonden isolatie van produ
 
 Metis vormt kennis via één vast vormingskader, aangevuld met een inhoudelijke strategie per bronsoort. Het kader is voor iedere bronsoort gelijk. Een strategie bepaalt alleen de inhoudelijke vorming en mag het kader niet wijzigen of versoepelen.
 
+Het onderstaande kader is de norm voor routevastlegging. De implementatiegraad en het resterende werk staan in `ROADMAP.md` §R4.6; opgeslagen pogingconfiguratie en afwijzing van incompatibel hervatten zijn op zichzelf geen bewijs dat routekeuze al volledig per bron wordt beheerd.
+
 **Het vormingskader (geldt altijd):**
 
 1. Bronsoort en vormingsroute worden bij de start van de verwerking vastgelegd op de bronversie en de verwerkingspoging, met ten minste de policyversie, actor en reden. De vastlegging is documenttoestand en auditbewijs, geen runtime-instelling.
@@ -152,7 +160,11 @@ Review is proportioneel aan risico en disposition. Structurele/contextuele passa
 
 ### 6.3 Four-eyes
 
-Historische reviewpolicies behouden de onafhankelijke tweede beoordeling voor high-risk inhoud. Onder de expliciet gekozen, versiegebonden `explicit-review-v1`-policy bepaalt uitsluitend de primaire reviewer plus optional/required assignments de vereiste deelname. Iedere required deelnemer beoordeelt onafhankelijk de exacte actuele objectversies en, bij beslisbomen, de graaf. Risicosignalen blijven zichtbaar en auditeerbaar maar voegen onder deze policy geen verborgen reviewplicht toe. Een extra reviewer vervangt nooit ontbrekend bronbewijs. Vaststellingsstatus is een bronverklaring met herkomst, geen universele aanname en geen vervanging van transformatie-review.
+Inhoudsgebonden vier ogen geldt onder iedere actuele reviewpolicy en reviewconfiguratie: een object met hoog risico, een bevestigd exception-type of een aanwezig risicoveld vereist twee onafhankelijke menselijke goedkeuringen op de exacte actuele objectversie. Een policy of configuratie mag deze eis verhogen, maar nooit uitschakelen. Ook een optionele deelnemer kan de tweede goedkeuring leveren wanneer die persoon daartoe bevoegd is; dezelfde persoon telt niet tweemaal en een AI of lezer telt niet mee.
+
+`explicit-review-v1` en `managed-review-v2` leggen de primaire reviewer en optional/required assignments vast. Iedere vereiste deelnemer moet onafhankelijk de exacte actuele objectversies en, bij beslisbomen, de graaf beoordelen; een optionele deelnemer vervangt geen ontbrekende required deelnemer. Bij een expliciet gekozen `review-configuration-v1` of `review-configuration-v2` bepaalt de versiegebonden configuratie wie mag beoordelen en hoeveel goedkeuringen nodig zijn, met behoud van de inhoudsgebonden vier-ogeneis. Onvoldoende bevoegde onafhankelijke reviewers blokkeert publicatie.
+
+Historische releases worden uitsluitend hergeverifieerd volgens hun vastgelegde reviewcontract; de historische regel waarbij een policy de inhoudsgebonden vier-ogeneis verving is geen route voor nieuwe publicaties. Een extra reviewer vervangt nooit ontbrekend bronbewijs. Vaststellingsstatus is een bronverklaring met herkomst, geen universele aanname en geen vervanging van transformatie-review.
 
 ### 6.4 Correcties
 
@@ -192,7 +204,7 @@ Een succesvolle publicatie:
 
 Bij een fout vóór de gezaghebbende commit blijft de vorige actieve serving-set behouden. Een fout bij een afgeleide lokale kopie na de commit mag de gezaghebbende release niet terugdraaien of een andere serving-authority creëren; herstel reconcilieert die kopie vanuit PostgreSQL. Een incompleet release-manifest of onterechte lokale `release_published`-gebeurtenis mag niet als gezaghebbend bewijs dienen.
 
-Herpublicatie van een reeds gepubliceerde snapshot faalt gesloten. Canonieke objecten en bronbytes worden niet stilzwijgend herschreven.
+Een bevoegde herhaling voor dezelfde nog actieve gepubliceerde snapshot mag idempotent de bestaande release teruggeven en afgeleide toestand reconciliëren; zij maakt geen nieuwe release en herschrijft geen canonieke objecten of bronbytes. Een ingetrokken of opgevolgde release mag hierdoor niet opnieuw actief worden; die poging faalt gesloten.
 
 Reviewgoedkeuring alleen publiceert niets. Het Publiceren-oppervlak mag onderscheid maken tussen blocked, ready en published.
 
@@ -233,7 +245,7 @@ Voor onverifieerbare toevoegingen die als brongebonden kennis zouden kunnen door
 
 ### 11.1 Console
 
-De operations console is het menselijke werkoppervlak voor ingest, bronselectie, review, documentbeheer, audit en gecontroleerde publicatiehandelingen. De primaire werkvolgorde is **Inleveren → Bronselectie → Review → Publicatie → Documenten**. Inleveren legt de bron vast; Bronselectie is de plek om verwerking te starten of te hervatten. Deze stappen verlenen geen review- of publicatierechten.
+De operations console is het menselijke werkoppervlak voor ingest, bronselectie, review, documentbeheer, audit en gecontroleerde publicatiehandelingen. De primaire werkvolgorde is **Inleveren → Vorming → Review → Publicatie → Documenten**. Inleveren legt de bron vast; Vorming (de bronselectie- en verwerkingsruimte op `/source-selection`) is de plek om verwerking te starten of te hervatten en bronstructuur, bronafhandeling en brongebonden correcties voor te bereiden. Deze stappen verlenen geen review- of publicatierechten.
 
 Bij `METIS_CONSOLE_AUTH=entra` bepaalt Microsoft Entra de identiteit en app-rollen; PostgreSQL bewaart de stabiele Metis-accountbinding, sessies en lokale blokkering. Een e-mailadres of weergavenaam is geen bewijs voor koppeling aan een bestaand account. Bestaande revieweridentiteit mag bij een gecontroleerde omschakeling niet verloren gaan. De lokale authenticatieroute is alleen toegestaan wanneer zij expliciet als configuratiemodus is gekozen. De code voor Entra is geen bewijs dat de omgeving al is geconfigureerd of uitgerold.
 
@@ -273,7 +285,7 @@ Alle Metis-LLM-capabilities delen één deployment-owned providercredential en m
 
 Productie- en testomgevingen, credentials en opslagrechten zijn zodanig gescheiden dat een fout in een niet-productieroute geen impliciete productierechten oplevert.
 
-De standaardtopologie is één Gunicorn-worker op één instance met sequentiële writes. Twee workers op diezelfde instance zijn uitsluitend ondersteund wanneer alle door de topologiepoort vereiste mutable authorities in PostgreSQL en de immutable source store in Azure zijn geconfigureerd; een process-shared commit lock en PostgreSQL-concurrency bewaken de writes. Meer dan twee workers, meer dan één instance of een andere write mode vallen buiten de ondersteunde grens en falen gesloten. Een schaalwijziging mag niet stilzwijgend de consistentie- of reviewgaranties veranderen.
+PostgreSQL is voor iedere ondersteunde console de enige workflowautoriteit, ook bij één worker; een console zonder de complete PostgreSQL-workflowautoriteit wordt geweigerd. De standaardtopologie is één Gunicorn-worker op één instance met sequentiële writes. Twee workers op diezelfde instance zijn uitsluitend ondersteund wanneer daarnaast de immutable source store in Azure is geconfigureerd; een process-shared commit lock en PostgreSQL-concurrency bewaken de writes. Meer dan twee workers, meer dan één instance of een andere write mode vallen buiten de ondersteunde grens en falen gesloten. Een schaalwijziging mag niet stilzwijgend de consistentie- of reviewgaranties veranderen.
 
 Deployment gebeurt vanaf een identificeerbare gecontroleerde commit en met een reproduceerbaar pakket. Deployment mag runtime-data niet wissen en mag geen publicatierechten openen doordat applicatiecode of configuratie aanwezig is.
 
@@ -283,7 +295,7 @@ De normale deploymentroute en noodprocedure staan buiten het protocol in de actu
 
 Een technisch afdwingbare protocolinvariant wordt waar mogelijk met een gedrags-, integratie- of invarianttest bewezen.
 
-Tests bewijzen primair gedrag en veiligheidsgrenzen. Tests die uitsluitend historische formuleringen, deltatekst of supersessiezinnen in actuele stuurdocumenten afdwingen zijn geen geldige blijvende governancevorm.
+Tests bewijzen primair gedrag en veiligheidsgrenzen. Documentcontroles mogen actuele versie-identiteit, verwijzingen en de integriteit van historische artefacten bewaken; zij vervangen geen gedragsbewijs voor bronbinding, bevoegdheden, review, publicatie of herstel. Een afstemmingsnotitie benoemt per getoetste regel de code, relevante tests, werkelijk uitgevoerde verificatie en resterende bewijsgrens. Tests die uitsluitend historische formuleringen, deltatekst of supersessiezinnen in actuele stuurdocumenten afdwingen zijn geen geldige blijvende governancevorm.
 
 Historische protocoltests mogen historische artefacten en approval-manifests blijven verifiëren, maar mogen niet vereisen dat V2-tekst in `PROTOCOL.md` of `ROADMAP.md` blijft staan.
 
@@ -299,6 +311,8 @@ Een blijvende wijziging in product- of veiligheidsinvarianten volgt deze route:
 4. de vorige protocolstand als onveranderde historische snapshot bewaren;
 5. actieve vervolgstappen in `ROADMAP.md` bijwerken.
 
+Een implementatie die afwijkt van deze wijzigingsroute wordt als afwijking verantwoord met het oorspronkelijke besluit, beschikbaar bewijs en open acceptatie. Achteraf documenteren levert geen ontbrekend experimentbewijs en verleent geen publicatie- of uitroltoestemming.
+
 Implementatiegeschiedenis, incidentdetails, tijdelijke volgordes en uitgevoerde golven horen in changelog, auditrapport of `docs/history/`, niet in het actuele protocol.
 
 ## 16. Eerdere protocolversies zijn historie
@@ -310,3 +324,5 @@ De volledige pre-V3 rootstanden en de afzonderlijke V2-protocollen zijn bewaard 
 Om te bepalen wat Metis nu moet doen, hoeft de V2-deltaketen niet meer te worden gelezen.
 
 De ongewijzigde V3-stand vóór deze wijziging is bewaard onder `docs/history/protocol-v3/`. De stand van Protocol v4.0.0 vóór de wijziging naar 4.1.0 is bewaard onder `docs/history/protocol-v4.0/`. De stand van Protocol v4.1.0 vóór de wijziging naar 4.2.0 is bewaard onder `docs/history/protocol-v4.1/`. De stand van Protocol v4.2.0 vóór de wijziging naar 4.3.0 is bewaard onder `docs/history/protocol-v4.2/`. Versienummers in bestaande releases en historische fixtures worden nooit achteraf herschreven; nieuwe releases registreren de geldende publicatieprotocolversie.
+
+De tekst van Protocol v4.3.0 vóór de afstemming naar v4.3.1 op 2026-11-01 is bytegelijk bewaard in [de v4.3-snapshot](docs/history/protocol-v4.3/PROTOCOL_BEFORE_ALIGNMENT_2026-11-01.md).

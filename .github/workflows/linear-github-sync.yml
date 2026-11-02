@@ -1,0 +1,59 @@
+name: GitHub Linear sync
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, closed, ready_for_review]
+  issues:
+    types: [opened, edited, closed, reopened]
+  issue_comment:
+    types: [created, edited, deleted]
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  handoff-contract:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install pytest==9.0.2 PyYAML==6.0.3
+      - name: Prove sync boundaries
+        run: python -m pytest --noconftest -q tests/test_linear_github_sync.py
+      - name: Require exact-head handoff
+        run: python scripts/linear_github_sync.py --validate-event "$GITHUB_EVENT_PATH"
+
+  reconcile:
+    if: github.event_name != 'pull_request' && github.repository == 'WilliamGomes41/Metis-DS'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    concurrency:
+      group: github-linear-sync-MET
+      cancel-in-progress: false
+    steps:
+      # Privileged events never check out or execute code from a PR branch.
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Synchronize facts, preserving all issue authority
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+        run: python scripts/linear_github_sync.py --apply

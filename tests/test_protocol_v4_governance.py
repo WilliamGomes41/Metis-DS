@@ -21,12 +21,12 @@ def read(path: str) -> str:
 def test_v4_is_current_and_v3_is_frozen() -> None:
     current, old = read("PROTOCOL.md"), read("docs/history/protocol-v3/PROTOCOL.md")
     assert current.startswith("# V&VN Data Services — Protocol v4")
-    assert "**Versie:** 4.3.0" in current
+    assert "**Versie:** 4.3.1" in current
     assert old.startswith("# V&VN Data Services — Protocol v3")
     assert "**Versie:** 3.0.0" in old
     assert read("ROADMAP.md").startswith("# Metis — Roadmap v4")
     assert read("docs/history/protocol-v3/ROADMAP.md").startswith("# Metis — Roadmap v3")
-    assert "Protocol v4.3.0" in read("docs/GOVERNANCE.md")
+    assert "Protocol v4.3.1" in read("docs/GOVERNANCE.md")
 
 def test_v4_retains_safety_and_describes_actual_modes() -> None:
     protocol = read("PROTOCOL.md")
@@ -41,9 +41,10 @@ def test_v4_retains_safety_and_describes_actual_modes() -> None:
     ):
         assert required in protocol
 
-def test_new_release_records_current_protocol() -> None:
+def test_runtime_declares_current_protocol() -> None:
     from src.operations_console_v1 import PUBLICATION_PROTOCOL_VERSION
-    assert PUBLICATION_PROTOCOL_VERSION == "4.3.0"
+    assert PUBLICATION_PROTOCOL_VERSION == "4.3.1"
+    assert f"(v{PUBLICATION_PROTOCOL_VERSION})" in read("docs/history/README.md")
 
 
 def test_documented_formation_roles_match_existing_policy() -> None:
@@ -69,7 +70,7 @@ def test_documented_formation_roles_match_existing_policy() -> None:
     }).eligible
     assert "Een deterministisch typelabel vormt op zichzelf geen toegelaten kenniskandidaat" in protocol
     assert "Een geslaagde controle bewijst geen semantische of klinische volledigheid" in protocol
-    assert "Inleveren → Bronselectie → Review → Publicatie → Documenten" in protocol
+    assert "Inleveren → Vorming → Review → Publicatie → Documenten" in protocol
 
 
 def test_v4_0_snapshot_is_frozen_and_formation_frame_is_current() -> None:
@@ -107,13 +108,13 @@ def test_previous_protocols_are_archived_without_breaking_approval_evidence() ->
 
 def test_v4_3_is_vigerend_while_implementation_gaps_remain_explicit() -> None:
     protocol = read("PROTOCOL.md")
-    assert protocol.startswith("# V&VN Data Services — Protocol v4.3\n")
+    assert protocol.startswith("# V&VN Data Services — Protocol v4.3.1\n")
     assert "**Status:** Vigerend — enige actuele protocolnorm" in protocol
-    assert "**Versie:** 4.3.0" in protocol
+    assert "**Versie:** 4.3.1" in protocol
     assert "## R4.6 Vormingskader per bron invoeren" in read("ROADMAP.md")
     assert "norm vastgelegd; implementatie open" in read("ROADMAP.md")
     workflow = read("docs/DEVELOPMENT_WORKFLOW.md")
-    assert "product- en veiligheidsregels staan uitsluitend in `PROTOCOL.md` (v4.3.0)" in workflow
+    assert "product- en veiligheidsregels staan uitsluitend in `PROTOCOL.md` (v4.3.1)" in workflow
     assert "Alle v2.6–v2.11-regels blijven van kracht" not in workflow
     assert "Alle v2.6–v2.11-regels blijven van kracht" in read(
         "docs/history/protocol-v2/DEVELOPMENT_WORKFLOW_PRE_V4_1_2026-10-18.md"
@@ -141,3 +142,20 @@ def test_v4_2_snapshot_is_frozen_and_semantic_formation_is_the_only_route() -> N
     assert "er bestaat geen deterministische vormingsroute meer" in protocol
     assert "Operationele rollback is uitsluitend een gecontroleerde softwareterugzetting." in protocol
     assert "faalt gesloten)" in protocol
+
+
+def test_alignment_versions_current_norm_and_preserves_prior_protocol_bytes() -> None:
+    """The current norm and runtime identifier agree; the prior protocol stays frozen."""
+    import re
+    from src.operations_console_v1 import PUBLICATION_PROTOCOL_VERSION
+
+    previous_path = "docs/history/protocol-v4.3/PROTOCOL_BEFORE_ALIGNMENT_2026-11-01.md"
+    previous_bytes = (ROOT / previous_path).read_bytes()
+    assert hashlib.sha256(previous_bytes).hexdigest() == (
+        "1eaeae0da519c90c09375eb67809bdac5f73d000a790d3e740308b51f1ca003d"
+    )
+    current_version = re.search(r"^\*\*Versie:\*\* (\S+)", read("PROTOCOL.md"), re.MULTILINE)
+    assert current_version is not None
+    assert current_version.group(1) == PUBLICATION_PROTOCOL_VERSION == "4.3.1"
+    assert "**Versie:** 4.3.0" in previous_bytes.decode("utf-8")
+    assert previous_path in read("PROTOCOL.md")

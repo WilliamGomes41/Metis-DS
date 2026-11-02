@@ -273,3 +273,33 @@ def _domain_state(console):
     from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter
     state = PostgresWorkflowRecoveryAdapter(console.canonical_publication_store).export_state()
     return {key: value for key, value in state.items() if key.endswith('tables') or key == 'entra_identities'}
+
+
+def test_repeat_publish_reuses_active_release_and_cannot_reactivate_withdrawal(tmp_path, *, production_console):
+    """Protocol 4.3.1 describes existing repeat semantics without a second cutover."""
+    from tests.production_support import restart_production
+
+    console, accounts, receipt = _ready_console(tmp_path, production_console=production_console)
+    publisher = accounts['publisher']['account_id']
+    sid = receipt['snapshot_id']
+    first = console.publish(actor_id=publisher, snapshot_id=sid)
+    assert first['status'] == 'PASS'
+    release_before = collect_publication(console, actor_id=publisher, snapshot_id=sid)['release']
+    objects_before = deepcopy(console.snapshot_objects(sid))
+
+    restarted = restart_production(console)
+    repeated = restarted.publish(actor_id=publisher, snapshot_id=sid)
+    assert repeated['status'] == 'PASS'
+    assert repeated['release_id'] == first['release_id']
+    assert _release_count(restarted.canonical_publication_store) == 1
+    assert collect_publication(restarted, actor_id=publisher, snapshot_id=sid)['release'] == release_before
+    assert restarted.snapshot_objects(sid) == objects_before
+
+    restarted.withdraw_document(actor_id=publisher, snapshot_id=sid,
+                                expected_release_id=first['release_id'], reason='Protocol alignment test')
+    after_withdrawal = restart_production(restarted)
+    refused = after_withdrawal.publish(actor_id=publisher, snapshot_id=sid)
+    assert refused['status'] == 'BLOCKED'
+    assert 'release_withdrawn' in refused['blockers']
+    assert _release_count(after_withdrawal.canonical_publication_store) == 1
+    assert not after_withdrawal.canonical_publication_store.active_release_items(first['release_id'])

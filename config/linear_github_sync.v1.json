@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "repository": "WilliamGomes41/Metis-DS",
+  "team_id": "2766ee91-9cc4-449b-92db-12ce6593d76a",
+  "bindings": [
+    {
+      "github_issue": 878,
+      "linear_issue": "MET-5"
+    },
+    {
+      "github_issue": 880,
+      "linear_issue": "MET-6"
+    },
+    {
+      "github_issue": 530,
+      "linear_issue": "MET-7"
+    },
+    {
+      "github_issue": 881,
+      "linear_issue": "MET-8"
+    },
+    {
+      "github_issue": 879,
+      "linear_issue": "MET-13"
+    },
+    {
+      "github_issue": 885,
+      "linear_issue": "MET-14"
+    },
+    {
+      "github_issue": 886,
+      "linear_issue": "MET-15"
+    },
+    {
+      "github_issue": 887,
+      "linear_issue": "MET-16"
+    },
+    {
+      "github_issue": 888,
+      "linear_issue": "MET-17"
+    },
+    {
+      "github_issue": 891,
+      "linear_issue": "MET-18"
+    },
+    {
+      "github_issue": 892,
+      "linear_issue": "MET-19"
+    },
+    {
+      "github_issue": 893,
+      "linear_issue": "MET-20"
+    },
+    {
+      "github_issue": 894,
+      "linear_issue": "MET-21"
+    },
+    {
+      "github_issue": 895,
+      "linear_issue": "MET-22"
+    },
+    {
+      "github_issue": 902,
+      "linear_issue": "MET-23"
+    },
+    {
+      "github_issue": 903,
+      "linear_issue": "MET-24"
+    },
+    {
+      "github_issue": 904,
+      "linear_issue": "MET-25"
+    },
+    {
+      "github_issue": 905,
+      "linear_issue": "MET-26"
+    },
+    {
+      "github_issue": 910,
+      "linear_issue": "MET-27"
+    },
+    {
+      "github_issue": 911,
+      "linear_issue": "MET-28"
+    },
+    {
+      "github_issue": 915,
+      "linear_issue": "MET-29"
+    },
+    {
+      "github_issue": 930,
+      "linear_issue": "MET-30"
+    },
+    {
+      "github_issue": 931,
+      "linear_issue": "MET-31"
+    },
+    {
+      "github_issue": 932,
+      "linear_issue": "MET-32"
+    },
+    {
+      "github_issue": 933,
+      "linear_issue": "MET-33"
+    },
+    {
+      "github_issue": 940,
+      "linear_issue": "MET-34"
+    },
+    {
+      "github_issue": 942,
+      "linear_issue": "MET-35"
+    },
+    {
+      "github_issue": 729,
+      "linear_issue": "MET-36"
+    },
+    {
+      "github_issue": 948,
+      "linear_issue": "MET-39"
+    },
+    {
+      "github_issue": 949,
+      "linear_issue": "MET-40"
+    },
+    {
+      "github_issue": 950,
+      "linear_issue": "MET-41"
+    },
+    {
+      "github_issue": 951,
+      "linear_issue": "MET-42"
+    },
+    {
+      "github_issue": 952,
+      "linear_issue": "MET-43"
+    },
+    {
+      "github_issue": 953,
+      "linear_issue": "MET-44"
+    },
+    {
+      "github_issue": 959,
+      "linear_issue": "MET-45"
+    },
+    {
+      "github_issue": 863,
+      "linear_issue": "MET-46"
+    },
+    {
+      "github_issue": 963,
+      "linear_issue": "MET-47"
+    }
+  ]
+}

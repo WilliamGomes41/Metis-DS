@@ -3,6 +3,8 @@
 **Status:** actief  
 **Peildatum:** 2026-10-22
 
+**Gerichte afstemming:** 2026-11-01 op `0bbd58f2aa2b1f4a9e6dff288458ec76b4809c56`, uitsluitend protocol/code (§R4.6); onderstaande voortgangsmomentopname en uitrolstatus zijn niet opnieuw vastgesteld. Zie [bewijs en afwijkingen](docs/audit/protocol-code-alignment-2026-11-01.md).
+
 **Gecontroleerde main:** [`8f0e2692216ad44afa13e2e357c05f32e66fb3db`](https://github.com/WilliamGomes41/Metis-DS/commit/8f0e2692216ad44afa13e2e357c05f32e66fb3db) (merge van #735).
 
 **Functie:** actieve veranderopgaven en bewijspoorten. Uitgevoerde geschiedenis hoort in changelog of `docs/history/`.
@@ -53,6 +55,8 @@ GitHub-issues blijven de voortgangsbron; dit is alleen een overdrachtsoverzicht 
 
 T9–T12 centraliseren review, bronafhandeling, revisieopvolging en publicatiegereedheid. De [lifecycle-/withdrawalproef](tests/test_lifecycle_withdrawal_recovery_v1.py) en [successor-cutoverproeven](tests/test_successor_release_cutover_v1.py) gebruiken native PostgreSQL; de [historische audit](scripts/historical_lifecycle_audit.py) is alleen-lezen. [CI is geslaagd](https://github.com/WilliamGomes41/Metis-DS/actions/runs/38084894082); de werkelijke gegevens en runtime moeten nog afzonderlijk worden getoetst.
 
+**Open protocolafstemming (§7.2):** `PUBLICATION_PROTOCOL_VERSION` is als constante aanwezig, maar het huidige duurzame publicatiepad geeft geen protocolversie door aan `persist_published_release` en de store-interface heeft daarvoor geen veld. Duurzame vastlegging per nieuwe release en behoud bij herstart/herstel moeten afzonderlijk worden geïmplementeerd en bewezen. Geen achteraf verzonnen versies voor historische releases.
+
 1. Historical Lifecycle Audit — read-only: controleer bestaande data op ontbrekende `logical_document_id`, dubbele actieve releases, conflicterende lineage en actieve registry-rows na intrekking.
 2. Legacy lineage repair alleen bij eenduidige herleiding; ambiguïteit blokkeert.
 3. REAL Product API lifecycle proof — proof-only: R1 actief → R2 actief/R1 weg → withdrawal niets actief → gecorrigeerde R3 actief, vanuit dezelfde PostgreSQL-authority.
@@ -94,10 +98,10 @@ Een proof-slice wordt pas een nieuwe repair bij een reproduceerbare invariantbre
 
 ## R4.6 Vormingskader per bron invoeren (Protocol v4.3 §5.4)
 
-**Status:** norm vastgelegd; implementatie open voor prozaroutes. De prozaroute wordt nog deploymentbreed gekozen via `METIS_PASSAGE_FORMATION_MODE` en niet als documenttoestand vastgelegd. Beslisbomen zijn omgezet naar hun enige route `decision-tree-source-bound-v1` (Protocol 4.2.0); de oude structurele vorming is verwijderd.
+**Status:** norm vastgelegd; implementatie open voor de volledige routekeuze per prozabron. De prozaroute wordt nog deploymentbreed gekozen via `METIS_PASSAGE_FORMATION_MODE`. Bij reservering worden mode, model, Docling-keuze en deploymentidentiteit al als `processing_configuration` in document/poging opgeslagen. Uitvoering onder gewijzigde pogingconfiguratie en incompatibel hervatten van een V3-checkpoint worden geweigerd. Dit is een bestaande veiligheidsgrens, maar nog geen expliciet per bron gekozen route met policyversie, actor en reden volgens §5.4. De router blijft de actieve deploymentconfiguratie lezen en hervat alleen bij compatibiliteit; hij kiest de opgeslagen route niet zelfstandig. Beslisbomen zijn omgezet naar hun enige route `decision-tree-source-bound-v1` (Protocol 4.2.0); de oude structurele vorming is verwijderd.
 
 - Class A, `Rewrite risk: high`: de routekeuze raakt persistente verwerkingsidentiteit, retry en herstel. Volg de lifecycle-VSA met black-box-bewijs voor ingest, retry na routewissel in de omgeving, herstart en opvolger.
-- Leg bronsoort en route vast bij de start in Bronselectie. De omgevingsvariabele wordt alleen standaardroute en uitsluitingsschakelaar.
+- Leg bronsoort en route vast bij de start in Vorming (`/source-selection`). De omgevingsvariabele wordt alleen standaardroute en uitsluitingsschakelaar.
 - Bestaande snapshots: geen backfill. Hun route blijft de afgeleide, vastgelegde verwerkingsidentiteit.
 - Besluit William 2026-10-18: geen dubbele vormingsroutes naast elkaar. Beslisbomen (PDF en JSON-export) zijn omgezet zonder voorafgaand §10-experiment; de oude route is in dezelfde wijziging verwijderd. Status, verwijderingsinventaris en bewijs: [vervangingsinventaris](docs/audit/decision-tree-route-replacement.md).
 - Open voor beslisbomen: inhoudelijke acceptatie van de route op een bevroren corpus met onafhankelijke menselijke referentie en vooraf vastgelegde grenswaarden ([preregistratie](data/audit/decision_tree_route_experiment_v1.json)); tot die tijd is menselijke graafreview per document de enige bevestiging. Gerichte validatoruitbreiding voor brongebonden paginaovergangen en reviewgebonden contextbindingen. Echte provider-uitvoer op productieachtige PDF's.
@@ -106,7 +110,7 @@ Een proof-slice wordt pas een nieuwe repair bij een reproduceerbare invariantbre
 - Besluit William 2026-10-22: een klassewijziging van of naar een beslisboom verloopt uitsluitend via een opvolgende werkrevisie (Review → Nieuwe werkrevisie); het in-place herextractiepad is verwijderd (T11 blijft ongewijzigd).
 - Besluit William 2026-10-22: de deterministische vergelijkingsarm wordt vervangen door 'Rapporteer een discrepantie' op de reviewkaart (optioneel, vier vaste soorten, blokkeert ongewijzigd goedkeuren) en de telling daarvan in Kwaliteit & werkproces (definitie 1.1.0).
 - Open na 4.3.0: inhoudelijke acceptatie (G4 uit `docs/METIS_SOURCE_BOUND_IMPLEMENTATION_PLAN.md`) van semantische vorming per bronsegment, met gemelde discrepanties als waarneming maar zonder foutpercentage (melden is optioneel); echte provider-uitvoer op productieachtige exports en PDF's; extra modelafhankelijkheid en kosten voor exports.
-- Nieuwe releases registreren `PUBLICATION_PROTOCOL_VERSION` 4.3.0. Bestaande releases behouden hun vastgelegde versie.
+- De actuele protocolidentiteit in code is `PUBLICATION_PROTOCOL_VERSION` 4.3.1. Dit is geen bewijs van duurzame vastlegging per release; de opslagkloof staat onder R4.2. Bestaande releases worden niet herschreven.
 
 **Klaar wanneer:** een routewissel in de omgeving aantoonbaar geen invloed heeft op vastgelegde of lopende verwerking, retry en herstel de vastgelegde route gebruiken, en beide strategieën hun huidige standaardroute behouden.
 

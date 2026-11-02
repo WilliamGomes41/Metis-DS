@@ -156,7 +156,7 @@ def stored_processing_blocked(envelope):
 PRE_REVIEW_BLOCKED = "blocked_pending_pre_review"
 PUBLISHED_ENVELOPE_STATES = frozenset({"published", "superseded", "withdrawn"})
 UNPUBLISHED_DELETE_EVENT = "unpublished_snapshot_deleted"
-PUBLICATION_PROTOCOL_VERSION = "4.3.0"
+PUBLICATION_PROTOCOL_VERSION = "4.3.1"
 ALLOWED_DELETE_NEXT = frozenset({"/ingest", "/review", "/tree"})
 ALLOWED_ROLES = frozenset({"researcher", "reviewer", "publisher"})
 ALLOWED_CLASSES = CLOSED_KLASSEN
