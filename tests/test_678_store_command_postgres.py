@@ -1,6 +1,7 @@
 """#678 Storeopdracht: one owner per durable command in the R+ review topology.
 
-U1: only the owner reloads (one reload per approve, constant in a batch).
+U1: bounded commands never reload shared maps; one captured batch workspace is
+    reused by every member (constant in batch size for the legacy m2 command).
 U2: a nested level joins with a savepoint; a caught nested fault leaves no
     phantom ledger line and no mirror written inside the open transaction.
 U3 (B1): disk mirrors are written only after the commit or rollback.
@@ -91,15 +92,37 @@ def test_u1_bounded_approve_has_no_shared_map_reload(workflow_postgres, tmp_path
     assert reloads == [], 'A bounded Review command must not reload shared document maps'
 
 
-def test_u1_batch_reloads_constant_in_k(workflow_postgres, tmp_path, monkeypatch):
+@pytest.mark.parametrize('batch_size', [1, 2])
+def test_u1_batch_reloads_constant_in_k(workflow_postgres, tmp_path, monkeypatch, batch_size):
     console, rid, sid, queue = _setup(tmp_path, workflow_postgres)
+    selected = queue[:batch_size]
     reloads = _count_reloads(monkeypatch, console)
-    console.batch_review_normal_risk(
-        actor_id=rid, snapshot_id=sid, object_ids=[obj["object_id"] for obj in queue],
+    store = console.workflow_document_store
+    selected_ids = {obj['object_id'] for obj in selected}
+    before_unselected = {obj['object_id']: obj for obj in
+        store.review_command_current_heads(sid, [obj['object_id'] for obj in queue])
+        if obj['object_id'] not in selected_ids}
+    captures, original = [], store.review_command_window
+    def capture(snapshot_id, object_ids):
+        assert workflow_transaction_active(), 'Legacy batch capture must use its actual command transaction'
+        captures.append((snapshot_id, set(object_ids)))
+        return original(snapshot_id, object_ids)
+    monkeypatch.setattr(store, 'review_command_window', capture)
+    result = console.batch_review_normal_risk(
+        actor_id=rid, snapshot_id=sid, object_ids=[obj["object_id"] for obj in selected],
         expected_revision=console.objects_revision(sid),
     )
-    print("U1_BATCH_RELOADS", len(reloads), "k", len(queue))
-    assert len(reloads) == 1, f"a batch of {len(queue)} MOET reload once: {len(reloads)} reloads"
+    print("U1_BATCH_RELOADS", len(reloads), "CAPTURES", len(captures), "k", len(selected))
+    assert reloads == [], 'A bounded batch must not reload shared document maps'
+    assert len(captures) == 1, 'Every member must reuse one captured legacy command workspace'
+    assert captures[0][0] == sid
+    assert {obj['object_id'] for obj in selected} <= captures[0][1]
+    assert {obj['object_id'] for obj in result} == {obj['object_id'] for obj in selected}
+    assert all(obj['governance']['validation_status'] == 'approved' for obj in result)
+    persisted = store.review_command_current_heads(sid, [obj['object_id'] for obj in queue])
+    assert {obj['object_id']: obj for obj in persisted if obj['object_id'] not in selected_ids} == before_unselected
+    assert all(obj['governance']['validation_status'] == 'approved' for obj in persisted
+               if obj['object_id'] in selected_ids)
     _assert_review_authority_without_mirrors(console)
     _assert_document_authority_without_mirrors(console, sid)
 

@@ -44,9 +44,16 @@ def test_heading_form_post_refresh_native_restart_and_old_workplace(tmp_path, mo
     assert 'name="eindoordeel" value="goedkeuren"' not in detail.text
     assert 'name="eindoordeel" value="afwijzen"' in detail.text  # distinct C1 action retained
     calls.clear()
+    captures = []
+    document_window = state.workflow_document_store.review_document_window
+    def captured(snapshot_id):
+        captures.append(snapshot_id)
+        return document_window(snapshot_id)
+    monkeypatch.setattr(state.workflow_document_store, 'review_document_window', captured)
     page = client.get('/source-selection', params={'document': sid, 'task': 'structure'})
     assert page.status_code == 200 and 'data-formation-structure' in page.text
-    assert calls.get('snapshot_objects_and_revision') == 1
+    assert calls.get('snapshot_objects_and_revision', 0) == 0
+    assert captures == [sid], 'Heading form must use one actual current-window capture'
     assert all(calls.get(name, 0) <= baseline.get(name, 0) for name in calls)
     form = _form(page.text)
     choices = [i for i in form['inputs'] if i.get('name') == 'object_ids']
@@ -54,7 +61,9 @@ def test_heading_form_post_refresh_native_restart_and_old_workplace(tmp_path, mo
     assert all('checked' not in i for i in choices)
     data = {i['name']: i.get('value', '') for i in form['inputs'] if i.get('type') == 'hidden'}
     data['object_ids'] = [ids[0]]
-    assert data['snapshot_revision'] == before[3]
+    from src.review.review_passage_read_v1 import resolve_review_revision
+    assert data['snapshot_revision'].startswith('review-generation-v1:')
+    assert resolve_review_revision(state, sid, data['snapshot_revision']) == before[3]
     assert _state(state, sid) == before  # navigation and source/detail reads do not write
     stale = client.post('/review/headings/batch-confirm', data={**data, 'snapshot_revision': 'stale'}, follow_redirects=False)
     assert stale.status_code == 409 and 'data-formation-structure' in stale.text
@@ -69,7 +78,12 @@ def test_heading_form_post_refresh_native_restart_and_old_workplace(tmp_path, mo
     assert outsider.post('/review/headings/batch-confirm', data=data, follow_redirects=False).status_code == 400
     assert _state(state, sid) == before
     with monkeypatch.context() as published:
+        from src.publication.durable_publication_console_v1 import DurablePublicationConsole
+        # Exercise both presentation and the fresh canonical-owner boundary.
+        # Real canonical commits/projection failure are covered by the native
+        # prepared-batch publication regression, not this UI simulation.
         published.setattr(state, 'snapshot_is_published', lambda _: True)
+        published.setattr(DurablePublicationConsole, 'snapshot_is_published', lambda self, _: True)
         frozen = client.get('/source-selection', params={'document': sid, 'task': 'structure'})
         assert frozen.status_code == 200 and '/review/headings/batch-confirm' not in frozen.text
         assert not any(i.get('name') == 'object_ids' for f in Forms(frozen.text).forms for i in f['inputs'])

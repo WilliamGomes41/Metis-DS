@@ -56,3 +56,31 @@ retained; the separately proposed full conflict UX is outside this slice.
 The runtime/source hashes bind these results to inspectable code. Exact-head CI
 and real existing-data open/save/reopen/stale/publication-refusal proof remain
 separate. No automatic merge, production preparation or deployment is performed.
+
+## First-head CI findings and correction
+
+The first head's topology run passed464 cases and failed an obsolete assertion
+requiring exactly one global envelope reload. The retarget now requires **zero**
+global reloads, exactly one actual command-window capture at both k1/k2 inside
+the native transaction, durable selected approvals and unchanged unselected
+objects. All12 original command-owner cases pass, including native authority,
+no-mirror, nested failure and recovery contracts.
+
+Full CI also found a real legacy-source GET regression: current-only heading
+rendering unnecessarily prepared three source views. The structure caller now
+opts out of content-view materialisation while retaining verified raw fragments,
+current objects/bindings/GEN and the original eligibility owner. Every other
+caller retains the original default. The existing zero-reconstruction and exact
+HTML assertions are unchanged. Complete source-render/reuse and final batch
+measurement36 pass; max20 HTTP1.596s/hold171.996ms/TX171.965ms, heading1500
+181.329ms/hold76.236ms. No budget changed.
+
+The heading UI test still expected its old full capture/m2 token. It now asserts
+one actual current-window capture, no old full reader, and GEN resolving to the
+same captured legacy revision. Original selected membership, stale refusal,
+outsider denial, immutable publication presentation/command simulation, submit,
+refresh and independent process-restart assertions remain. The publication UI
+simulation supplies both cached presentation and the current canonical-owner
+read; real canonical-commit/projection-failure refusal is proved separately by
+the native prepared-batch test. This UI test passes. No production publication
+claim follows from its simulation. Final CI is tied to the follow-up head.

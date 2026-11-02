@@ -454,7 +454,8 @@ def render_structure(console, account, document, *, conflict=False, q='', page=1
         return RedirectResponse('/review?' + urlencode({'document': document, 'task': 'structure'}), status_code=303)
     if getattr(console, 'workflow_document_store', None) is not None:
         from src.review.review_passage_read_v1 import read_review_document
-        inputs = read_review_document(console, account, document, current_only=True)
+        inputs = read_review_document(console, account, document, current_only=True,
+                                      prepare_source_views=False)
         envelope, objects, revision, bindings = inputs.envelope, inputs.objects, inputs.revision, inputs.bindings
         review_path = review_path_for_klasse(envelope['class'])
         if review_path == 'boom':
