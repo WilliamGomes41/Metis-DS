@@ -164,17 +164,11 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
     def review_document_window(self, snapshot_id):
         """All current heads with complete physical coverage, in a caller snapshot."""
         from src.workflows.workflow_transaction_v1 import workflow_transaction_active
-        from src.workflows.revision_frontiers_postgres_v1 import capture, supported
+        from src.workflows.revision_frontiers_postgres_v1 import capture
         if not workflow_transaction_active():
             raise WorkflowDocumentStoreError('review_document_snapshot_required')
         with self._connect() as con:
-            if not supported(self, con):
-                return None
-            ids = [row['object_id'] for row in con.execute(
-                'SELECT f.object_id FROM workflow.object_revision_frontiers f WHERE f.snapshot_id=%s '
-                'AND EXISTS(SELECT 1 FROM workflow.document_objects o WHERE o.snapshot_id=f.snapshot_id '
-                'AND o.object_id=f.object_id)', (snapshot_id,)).fetchall()]
-            return capture(self, con, snapshot_id, ids)
+            return capture(self, con, snapshot_id, None)
 
     def current_document_objects(self, snapshot_id):
         """Pure current-state reads reuse validated prefixes, never pin a write."""

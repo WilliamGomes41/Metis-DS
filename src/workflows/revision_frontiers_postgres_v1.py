@@ -49,13 +49,16 @@ def heads(con, sid, ids):
 def capture(store, con, sid, ids):
     if not supported(store, con):
         return None
+    wanted = ('(SELECT f.object_id FROM workflow.object_revision_frontiers f WHERE f.snapshot_id=%s '
+              'AND EXISTS(SELECT 1 FROM workflow.document_objects o WHERE o.snapshot_id=f.snapshot_id '
+              'AND o.object_id=f.object_id))' if ids is None else 'unnest(%s::text[])')
     records = con.execute("SELECT wanted.object_id,o.object_version,f.mutation_epoch,f.certificate,"
         "f.certificate_hash=encode(sha256(convert_to(f.certificate::text,'UTF8')),'hex') AS intact,o.position,o.payload "
-        'FROM unnest(%s::text[]) wanted(object_id) LEFT JOIN LATERAL '
+        'FROM ' + wanted + ' wanted(object_id) LEFT JOIN LATERAL '
         '(SELECT object_version,position,payload FROM workflow.document_objects WHERE snapshot_id=%s '
         'AND object_id=wanted.object_id ORDER BY position DESC LIMIT 1) o ON true '
         'LEFT JOIN workflow.object_revision_frontiers f ON f.snapshot_id=%s AND f.object_id=wanted.object_id',
-        (sorted(set(ids)), sid, sid)).fetchall()
+        (sid if ids is None else sorted(set(ids)), sid, sid)).fetchall()
     certs = {}
     for record in records:
         if record['payload'] is None and record['mutation_epoch'] is None:
