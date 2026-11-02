@@ -25,7 +25,7 @@ Onderzoekers, reviewers en publishers werken in de Metis-webomgeving, ieder met 
 - [Protocol](PROTOCOL.md) — productafspraken en blijvende eisen.
 - [Roadmap](ROADMAP.md) — veranderopgaven en acceptatievoorwaarden.
 - [GitHub Issues](https://github.com/WilliamGomes41/Metis-DS/issues) — actuele werkzaamheden en voortgang.
-- [Codeaudit](docs/audit/README.md) — voortgang van de auditbevindingen A01–A27.
+- [Codeaudit](docs/audit/README.md) — vaste ID-koppelingen en bewijs bij de auditbevindingen A01–A27.
 - [Repositoryafspraken](docs/REPOSITORY_CONVENTIONS.md) en [werkinstructies voor agents](AGENTS.md) — voor ontwikkelaars.
 
 De code op `main` laat zien wat is gemerged. Of een wijziging ook in de liveomgeving draait en daar is geaccepteerd, moet afzonderlijk worden vastgesteld. Historische rapporten staan in [docs/history](docs/history/).
