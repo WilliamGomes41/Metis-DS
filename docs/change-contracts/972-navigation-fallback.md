@@ -78,6 +78,12 @@ Dezelfde HTTP-vervolgpassage leest lokaal 299381 → 156094 DB-JSON bytes met
 latency-observaties zijn geen acceptatiecriterium; de tests bewaken bytes,
 bereikbaarheid en integriteit, zonder budgets te verhogen.
 
+Repositorypreflight, architectuurgrenzen, release-control op de acht gewijzigde
+paden, change-contract, compilatie, readerhashcontrole en diffcontrole: PASS.
+De eerste release-controlcontrole vond verkeerd gecombineerde bewijsmarkers;
+na het scheiden van die metadataregels slaagt dezelfde controle. Er zijn geen
+tests, categorieën of vereisten uitgezet.
+
 Volledige bronlezing en alle huidige objecten kunnen bij onvoorbereide kaarten
 nog steeds nodig zijn. De gewone POST/databaseafstand en het einde-queue-
 overzicht blijven expliciete vervolgpunten onder #729; MET-43/#952 en
