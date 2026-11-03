@@ -4,6 +4,9 @@ All notable technical changes to V&VN Data Services are recorded here.
 
 ## [Unreleased]
 
+### Performance
+- Issue #972: next-passage navigation with unprepared review cards captures current authorized objects, bindings and source without loading historical formation/processing archives. Queue qualification, selected-passage checks and complete explicit document assessment keep their existing owners. No GET preparation or production data conversion.
+
 ### Added
 - Issue #516: Versioned V3 formation retains independently exact-validated proposals when other producer proposals fail. Rejected proposals and unresolved source ranges remain accountable; publication remains blocked until existing final dispositions resolve formation. Guarded targeted recovery preserves unchanged candidates, refuses reviewed/published work, and uses existing transactions, revision checks and attempt limits. Processing evidence export v8 exposes formation findings. Recorded Smetten replay retains 17 proposals (13 admitted, 4 blocked), 639 source records and 12 unresolved conflicting reselections; this is not clinical completeness or deployment proof.
 - Issue #445: Instellingen → Kwaliteit & werkproces derives proposal usability, recorded review burden, repair signals and open work from existing workflow evidence. Actual deterministic/semantic/remainder provenance remains attached to processing runs; incomplete history is explicit. Versioned reports preserve input boundaries and retry history, with document-scoped access and additive PostgreSQL migration 013. No live deployment or production migration performed.

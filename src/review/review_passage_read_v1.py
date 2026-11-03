@@ -68,8 +68,8 @@ class ReviewNavigationInputs:
 def read_review_navigation(console, account, snapshot_id):
     """Use the existing verified card owner; qualify with the original rules.
 
-    Optional/unprepared cards retain the complete legacy read. Never prepare
-    storage during GET or turn unavailable input into an empty queue.
+    Optional/unprepared cards retain complete current navigation inputs. Never
+    prepare storage during GET or turn unavailable input into an empty queue.
     """
     from src.workflows.review_card_inputs_postgres_v1 import capture_review_cards
     store = console.workflow_document_store
@@ -89,8 +89,45 @@ def read_review_navigation(console, account, snapshot_id):
             raise ConsoleError('workflow_document_unavailable') from exc
     except WorkflowReviewStoreError as exc:
         raise ConsoleError('workflow_review_unavailable') from exc
-    legacy = read_review_document(console, account, snapshot_id, current_only=True)
-    return ReviewNavigationInputs(legacy.envelope, legacy.objects, legacy.bindings, legacy.fragments)
+    return _read_review_navigation_fallback(console, account, snapshot_id)
+
+
+@diagnostic_phase('review_capture')
+def _read_review_navigation_fallback(console, account, snapshot_id):
+    """Complete candidate inputs, without evaluating document formation.
+
+    Card absence does not require loading historical processing evidence. The
+    existing queue rules still qualify every current object against its exact
+    bindings and source; the chosen passage gets its own authorized capture.
+    """
+    from src.review.revision_workflow import current_revisions
+    from src.publication.publish_authorization_v1 import still_matches
+    store = console.workflow_document_store
+    try:
+        with workflow_read_transaction(store):
+            envelope, _generation = store.review_document_input(snapshot_id)
+            if ('reviewer' not in account.get('roles', [])
+                    or account['account_id'] not in envelope.get('named_reviewers', [])):
+                raise ConsoleError('reviewer_not_named_on_snapshot')
+            rows = store.review_document_window(snapshot_id)
+            if rows is None:
+                rows = store.list_document_objects(snapshot_id)
+            bindings = console.workflow_review_store.read_bindings([snapshot_id]).get(snapshot_id, [])
+    except WorkflowDocumentStoreError as exc:
+        if str(exc) == 'unknown_snapshot':
+            raise ConsoleError('unknown_snapshot') from exc
+        raise ConsoleError('workflow_document_unavailable') from exc
+    except WorkflowReviewStoreError as exc:
+        raise ConsoleError('workflow_review_unavailable') from exc
+    objects = current_revisions(rows, snapshot_id=snapshot_id)
+    by_id = {obj['object_id']: obj for obj in objects}
+    bindings = [{**row, 'valid': bool(by_id.get(row.get('object_id')))
+                 and still_matches(row, by_id[row['object_id']])} for row in bindings]
+    fragments = console.review_source_fragments(snapshot_id, envelope=envelope)
+    if fragments is not None:
+        from src.vorming.prepared_source_views_v1 import prepare
+        fragments = prepare(fragments).fragments
+    return ReviewNavigationInputs(envelope, objects, bindings, fragments)
 
 
 @diagnostic_phase('review_capture')

@@ -1,0 +1,34 @@
+{
+  "fixture": "three synthetic source recommendations, two admitted, incomplete formation, unprepared cards",
+  "runtime": "authenticated ASGI and native PostgreSQL 16",
+  "source_sha256": "78ae641615ce09e9447b06d6a1cb333c66d5d8430982f19710a87bd2f9b3921b",
+  "baseline": "existing document reader used by the previous navigation fallback",
+  "production_replay": false,
+  "end_of_queue": false,
+  "samples": {
+    "old_fallback": {
+      "status": 200,
+      "elapsed_ms": 123.595,
+      "db": {
+        "db_connections": 9,
+        "db_queries": 39,
+        "db_json_bytes": 299381,
+        "db_connect_ms": 29.04,
+        "db_query_ms": 57.17,
+        "badge_ms": 0.0
+      }
+    },
+    "navigation_capture": {
+      "status": 200,
+      "elapsed_ms": 96.588,
+      "db": {
+        "db_connections": 9,
+        "db_queries": 36,
+        "db_json_bytes": 156094,
+        "db_connect_ms": 28.08,
+        "db_query_ms": 43.634,
+        "badge_ms": 0.0
+      }
+    }
+  }
+}

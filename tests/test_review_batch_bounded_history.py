@@ -6,6 +6,7 @@
 from copy import deepcopy
 from contextlib import contextmanager
 from time import perf_counter
+import gc
 import pytest
 
 from src.review.revision_workflow import revise_object
@@ -126,6 +127,9 @@ from tests.test_review_render_source_reuse import review_client  # noqa: F401
 def test_twenty_member_batch_uses_actual_compact_http_form(review_client, monkeypatch):
     from tests.test_source_context_review_ui_v1 import Forms
     console, client, sid = review_client
+    # Collect unreachable ASGI/console cycles from preceding fixtures before
+    # the normal GET/POST flow; automatic GC and command budgets stay unchanged.
+    gc.collect()
     page = client.get('/review', params={'document':sid, 'task':'batch'})
     assert page.status_code == 200
     form = next(row for row in Forms(page.text).forms
