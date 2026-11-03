@@ -53,7 +53,7 @@ def test_content_task_excludes_source_handling_and_preserves_duty_ground(tmp_pat
     # The deterministic rest row is source handling too, so the label is not "bronpassages".
     assert open_source == 3
     assert "Bronafhandeling open" not in html
-    assert 'data-open-work-ratio' not in html and 'task=history' in html
+    assert 'data-open-work-ratio' not in html and 'task=history' not in html
 
 
 def test_workboard_counters_name_the_existing_version_and_observation_time(tmp_path, *, production_console):

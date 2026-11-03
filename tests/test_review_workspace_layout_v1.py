@@ -45,7 +45,7 @@ def test_no_current_personal_work_does_not_imply_publication_readiness():
     assert 'Geen open beoordeling voor jou.' in html
     assert 'Klaar voor publicatie' not in html
     assert 'data-personal-review-action' not in html
-    assert 'task=history' in html
+    assert 'task=history' not in html
 
 
 def test_workboard_still_requires_reviewer_role():

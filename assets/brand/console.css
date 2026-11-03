@@ -610,122 +610,6 @@ textarea:focus-visible {
   margin: 16px 0 0;
 }
 
-.review-progress-overview {
-  margin: 0 0 24px;
-  padding: 18px 20px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--wit);
-}
-
-.review-progress-overview .review-task-heading {
-  margin: 0 0 12px;
-}
-
-.review-progress-overview progress {
-  display: block;
-  width: 100%;
-  height: 14px;
-  margin: 10px 0 12px;
-  accent-color: var(--paars);
-}
-
-.review-decision-history .object-index {
-  list-style: none;
-  padding-left: 0;
-}
-
-.review-decision-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 14px 24px;
-  align-items: start;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.review-decision-row > div:last-child {
-  display: flex;
-  min-width: 11rem;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.review-decision-row .btn-secondary {
-  margin: 0;
-}
-
-.review-object-history {
-  margin-top: 18px;
-}
-
-.review-version-diff,
-.review-object-history > section {
-  margin-top: 20px;
-  padding: 18px 20px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--wit);
-}
-
-.review-version-diff dl {
-  margin: 14px 0 0;
-}
-
-.review-version-change {
-  padding: 12px 0;
-  border-top: 1px solid var(--line);
-}
-
-.review-version-change:first-child {
-  border-top: 0;
-}
-
-.review-version-change dt {
-  margin-bottom: 6px;
-  font-weight: 700;
-}
-
-.review-version-change dd {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
-  margin: 0;
-}
-
-.review-version-before,
-.review-version-after {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--water-light);
-  white-space: pre-wrap;
-}
-
-.review-history-timeline {
-  margin: 14px 0 0;
-  padding-left: 1.4rem;
-}
-
-.review-history-event {
-  padding: 10px 0 16px;
-}
-
-.review-history-event-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-
-.review-history-current {
-  padding: 2px 8px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 700;
-}
 .review-task-heading h2,
 .review-task-workspace h2 {
   margin-bottom: 6px;
@@ -1442,22 +1326,9 @@ mark.broncontext-marked {
   letter-spacing: 0.045em;
   text-transform: uppercase;
 }
-.review-progress-overview {
-  max-width: 72rem;
-  background: var(--surface-soft);
-}
-.review-progress-number { font-size: 3rem; font-weight: 750; line-height: 1.1; letter-spacing: -0.04em; color: var(--text); }
-.review-progress-number span { font-size: 1.25rem; margin-left: 3px; letter-spacing: 0; color: var(--muted); }
-.review-progress-counts { margin: 20px 0 12px; font-size: 0.875rem; }
-.review-progress-counts > div { display: flex; justify-content: space-between; gap: 16px; margin: 9px 0; }
-.review-progress-counts dt { color: var(--muted); }
-.review-progress-counts dd { margin: 0; font-weight: 700; }
-.review-progress-extra { font-size: 0.875rem; color: var(--muted); }
 .review-progress-help { margin: 16px 0; font-size: 0.8125rem; color: var(--muted); line-height: 1.5; }
 .review-progress-help summary { cursor: pointer; padding: 8px 0; }
-.review-history-link { display: flex; justify-content: space-between; gap: 12px; padding: 16px 0 0; border-top: 1px solid var(--line); font-weight: 700; font-size: 0.875rem; text-decoration: none; }
-.review-history-link:hover { text-decoration: underline; }
-.review-history-link:focus-visible, .review-progress-help summary:focus-visible,
+.review-progress-help summary:focus-visible,
 .review-burden summary:focus-visible { outline: 3px solid var(--rood); outline-offset: 3px; }
 .review-management {
   align-items: center;
