@@ -52,18 +52,37 @@ def test_ordinary_http_kernel_runs_without_write_lock_or_workflow_io(review_syst
     assert any(b['object_id'] == ids[0] and b['reviewer_id'] == actor for b in console.object_review_bindings(sid))
 
 
-def test_live_app_keeps_its_command_ledger_owner_after_same_path_restart(review_system):
+def test_live_app_keeps_its_command_ledger_owner_after_same_path_restart(review_system, monkeypatch):
     from tests.production_support import restart_production
+    from src.review.review_command_state_v1 import active_review_command
+    from src.review.review_ledger import _backend, read_events
     console, client, sid, _actor, ids = review_system
     data = form(client, sid, ids[0])
     peer = restart_production(console)
     assert peer.workflow_review_store is not console.workflow_review_store
     assert peer._ledger_path == console._ledger_path
+    assert _backend(console._ledger_path) is peer.workflow_review_store
+    original = console.review_object
+    reads = []
+    def inspect(*args, **kwargs):
+        if active_review_command(console) is not None:
+            assert _backend(console._ledger_path) is console.workflow_review_store
+            reads.append(read_events(console._ledger_path))
+        return original(*args, **kwargs)
+    monkeypatch.setattr(console, 'review_object', inspect)
     saved = client.post('/review', data=data, follow_redirects=False)
     assert saved.status_code == 303, saved.text
+    assert reads
+    assert _backend(console._ledger_path) is peer.workflow_review_store
     current = next(o for o in peer.snapshot_objects(sid) if o['object_id'] == ids[0])
     assert current['governance']['validation_status'] == 'approved'
     assert peer.object_review_bindings(sid)
+    assert any(event.get('object_id') == ids[0] and event.get('details', {}).get('snapshot_id') == sid
+               for event in peer.workflow_review_store.read_events())
+    invalid = {**form(client, sid, ids[1]), 'source_discrepancy': 'context_ontbreekt'}
+    assert client.post('/review', data=invalid, follow_redirects=False).status_code == 400
+    assert active_review_command(console) is None
+    assert _backend(console._ledger_path) is peer.workflow_review_store
 
 
 @pytest.mark.parametrize('task', ['', 'contextual'])

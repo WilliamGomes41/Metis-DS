@@ -54,3 +54,15 @@ An early full-suite attempt lacked `psql` on PATH and was stopped; the environme
 was corrected. A partial earlier collection was stopped when the measured
 retained-prefix overread required another implementation change. Neither is a
 successful full-suite run. No PostgreSQL skip is treated as a pass.
+
+The broad run found a real classification-repair/approval regression: after
+same-path runtime reconstruction, the still-live original app resolved ledger
+events through the peer's process-global registration. Main passed that test;
+the first prepared ordinary implementation refused with forbidden preparation
+I/O. The active matching command now supplies its own bound review store for
+ledger reads, buffers and appends; outside the scope registry lookup is unchanged.
+The new minimal HTTP regression was red before correction. After correction72
+current-dependency, prepared-batch and actual classification/live-app tests passed.
+The independent reviewer inspected this landed correction and found no blocker.
+The actor-identity race additionally commits its winning change from a distinct
+OS process before the original command's commit guard; the native proof passes.
