@@ -1,8 +1,14 @@
 # MET-36: bounded revision inputs under the document owner
 
+Change class: A
+Promise: ordinary generation-form save, next passage and reopen preserve the exact durable decision while pure work leaves the write lock and navigation avoids full closure when verified cards are available.
+Proof: native HTTP red/green chain, current-dependency races, rollback/restart and unchanged existing Review/batch/publication regressions; measurements and limits below.
+Touches lifecycle invariants: yes
+Rewrite risk: high
+
 ## Ordinary save and next-passage slice — 3 November 2026
 
-Change class: A. Rewrite risk: high. Base: `19a83d1cc5908b69e4b764f82c919c1b3f7eb270`.
+Base: `19a83d1cc5908b69e4b764f82c919c1b3f7eb270`.
 William explicitly authorized implementation despite the unverifiable tracker
 label in this session. No merge, deployment or data conversion is authorized.
 This slice extends the lifecycle transition and mitigation map below; it does

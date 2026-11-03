@@ -722,10 +722,10 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
                                     status_code=303)
         chosen_task = normalize_review_task(task)
         if document and after:
-            # POST commits one passage only. Navigation uses a fresh authorized
-            # GET capture, sharing its prepared source across the queue scan.
-            from src.review.review_passage_read_v1 import read_review_document
-            navigation = read_review_document(console, account, document, current_only=True)
+            # Select candidates from current verified card inputs, then open
+            # the actual passage with its own authorized raw/source capture.
+            from src.review.review_passage_read_v1 import read_review_navigation
+            navigation = read_review_navigation(console, account, document)
             if not chosen_task:
                 from src.review.review_cockpit_v1 import ordinary_review_queue
                 queue = ordinary_review_queue(navigation.objects,

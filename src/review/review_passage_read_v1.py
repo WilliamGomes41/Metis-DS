@@ -56,6 +56,43 @@ class ReviewPassageInputs(_ReviewInputs):
     context_choices: tuple[PassageContextChoice, ...] = ()
 
 
+@dataclass(frozen=True)
+class ReviewNavigationInputs:
+    """Candidate selection only; no mutation token or document assessment."""
+    envelope: dict
+    objects: list
+    bindings: list
+    fragments: object
+
+
+def read_review_navigation(console, account, snapshot_id):
+    """Use the existing verified card owner; qualify with the original rules.
+
+    Optional/unprepared cards retain the complete legacy read. Never prepare
+    storage during GET or turn unavailable input into an empty queue.
+    """
+    from src.workflows.review_card_inputs_postgres_v1 import capture_review_cards
+    store = console.workflow_document_store
+    try:
+        with workflow_read_transaction(store) as con:
+            captured = capture_review_cards(store, con, [snapshot_id])[snapshot_id]
+            if 'unavailable' not in captured:
+                envelope = captured['envelope']
+                if ('reviewer' not in account.get('roles', [])
+                        or account['account_id'] not in captured['reviewers']
+                        or account['account_id'] not in envelope.get('named_reviewers', [])):
+                    raise ConsoleError('reviewer_not_named_on_snapshot')
+                bindings = console.workflow_review_store.read_bindings([snapshot_id]).get(snapshot_id, [])
+                return ReviewNavigationInputs(envelope, captured['objects'], bindings, captured['sources'])
+    except WorkflowDocumentStoreError as exc:
+        if str(exc) != 'review_card_schema_unprepared':
+            raise ConsoleError('workflow_document_unavailable') from exc
+    except WorkflowReviewStoreError as exc:
+        raise ConsoleError('workflow_review_unavailable') from exc
+    legacy = read_review_document(console, account, snapshot_id, current_only=True)
+    return ReviewNavigationInputs(legacy.envelope, legacy.objects, legacy.bindings, legacy.fragments)
+
+
 @diagnostic_phase('review_capture')
 def read_review_document(console, account, snapshot_id, *, current_only=False, prepare_source_views=True):
     """Capture exact document inputs, excluding unused processing archives.
