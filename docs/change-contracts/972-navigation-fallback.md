@@ -117,3 +117,50 @@ van de CI-uitschieter is uit die run niet vastgesteld. De 250 ms lock-,
 uitvoeringspad of CI-eis is uitgezet. De nieuwe volledige CI moet diezelfde
 proeven op de bijgewerkte exacte head opnieuw uitvoeren. De bredere
 performanceacceptatie blijft apart onder #729 staan.
+
+
+## Diagnose en benchmarkisolatie
+
+De originele test is in de volledige Python 3.13-shard opnieuw rood gemeten:
+768.296 ms locktijd, met een automatische generatie-2-GC van 463.786 ms
+binnen die lock. De ASGI/console-objectcycli van eerdere function-scoped
+fixtures bleven als onbereikbare cycli achter totdat de collector tijdens
+JSON-resultaatuitlezing opruimde. Dit past bij de CI-trace: 82.250 ms SQL-uitvoering tegenover
+376.624 ms uitlezen binnen een 529.335 ms transactie, bij dezelfde 72 queries
+en 2537433 DB-JSON bytes als de losse proef.
+
+De reparatie is Class C, rewrite risk none: benchmarksetup, zonder runtime-
+wijziging. De test ruimt onbereikbare eerdere fixture-objecten op vóór de
+bestaande GET/POST-flow. De GET blijft de werkelijke form laden en de bestaande
+warmup geven; de POST houdt zijn volledige eigen kosten. Automatische GC,
+perf_counter, echte formulierdata, bron-/SQL-guards, één transactie, alle
+state-asserties en de 250/500/3000 ms budgets blijven ongewijzigd. Dit meet een
+command vanuit een gecontroleerde heap, geen productie-tailgarantie.
+
+Ground en twee afzonderlijke architectuurrunners hebben CPU- en SQL-opties
+onderzocht. Verwachte JSON vooraf serialiseren scheelt slechts circa 10 ms;
+bindingswrites zijn al gebatcht en kostten circa 8 ms. Die kernel-/SQL-ingrepen
+pakken de gemeten 464 ms collector-pauze niet aan en zijn niet opgenomen. Er
+zijn geen nieuwe typen, API's, caches, schema's, autoriteiten of migraties nodig.
+De keuze is voorafgaande fixture-opruiming met behoud van de bestaande flow.
+Implementatie volgt de bestaande opdracht; de aanvankelijke aanname dat de
+mutatiekernel moest veranderen is na de GC-meting verworpen.
+
+De relevante callers blijven ongewijzigd:
+- `python -m pytest -q tests/test_review_batch_bounded_history.py`
+- `python -m pytest -q tests/test_prepared_review_batches.py`
+- `python -m pytest -p scripts.ci_test_shards --metis-shard-index=1 --metis-shard-count=4 --metis-shard-manifest=/tmp/batch-shard.json -q tests`
+
+De volledige oude shard is na de gemeten targetfailure onderbroken; daarvoor
+wordt geen volledige suitepass geclaimd. De compacte observatie wordt onder
+`evidence/review-navigation-972/batch-gc-observation.json` vastgelegd. Nieuwe
+verificatie moet de bestaande native proeven en de volledige exacte CI opnieuw
+uitvoeren. De productie-tailacceptatie blijft afzonderlijk onder #729.
+
+Na de definitieve plaatsing vóór de GET: het oorspronkelijke batchbestand
+slaagt met 5 tests op Python 3.13 en 5 tests op Python 3.12, native PostgreSQL
+16. De 20-member lock meet respectievelijk 226.444 en 223.122 ms, zonder
+aangepaste budgets. Repositorypreflight, architectuurgrenzen, change-contract,
+release-control, compilatie en diffcontrole zijn geslaagd. Alle onderzochte
+wijzigingen in productie-command- en storagecode zijn vóór deze oplevering
+teruggenomen; de reparatie wijzigt alleen de testopzet en bewijsdocumentatie.

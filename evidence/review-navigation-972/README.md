@@ -47,3 +47,9 @@ De lokale uitvoering gebruikte Python 3.12 en een tijdelijke PostgreSQL
 16-container via een Unix-socket. Er zijn geen PostgreSQL-tests overgeslagen.
 Volledige suite, exacte CI, productie-readback en live acceptatie zijn hiermee
 niet bewezen. Publicatievoorwaarden en mutatie-/herstelowners zijn ongewijzigd.
+
+De CI-opvolging na de main-merge staat in `batch-gc-observation.json` en het
+change contract. Deze observatie scheidt de generatie-2-GC van eerdere
+ASGI-fixtures van het gemeten GET/POST-scenario. De test houdt automatische GC,
+de oorspronkelijke HTTP-flow en alle tijd-/integriteitsgrenzen. Dit is bewijs
+voor een benchmark met gecontroleerde heap, geen productie-tailacceptatie.

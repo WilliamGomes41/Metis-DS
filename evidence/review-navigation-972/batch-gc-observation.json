@@ -1,0 +1,63 @@
+{
+  "baseline_commit": "11872c81603d31258c7827362e91c5b2459fde7a",
+  "python": "3.13.5",
+  "postgres_major": 16,
+  "scenario": "original test after its complete shard prefix; observational GC callback, no forced collection",
+  "original_test_sha256": "d0b607c72d16ff7e8ee5ad04ec6f6a8d380eef3f9ddef48100d32bd389e0a0dc",
+  "original_lock": [
+    {
+      "wall": 0.7682962039980339,
+      "cpu": 0.623880472
+    }
+  ],
+  "original_gc_inside_lock": [
+    {
+      "generation": 0,
+      "wall": 0.0007634509966010228,
+      "locked": true
+    },
+    {
+      "generation": 1,
+      "wall": 0.002002229000936495,
+      "locked": true
+    },
+    {
+      "generation": 2,
+      "wall": 0.4637863749994722,
+      "locked": true
+    },
+    {
+      "generation": 0,
+      "wall": 0.00026618400079314597,
+      "locked": true
+    }
+  ],
+  "ci_failure": {
+    "run": 41714601224,
+    "lock_ms": 529.357,
+    "transaction_ms": 529.335,
+    "in_transaction_sql_execute_ms": 82.25,
+    "in_transaction_fetch_ms": 376.624,
+    "queries": 72,
+    "db_json_bytes": 2537433
+  },
+  "fixed_test_sha256": "f497f52f5bbf585306c5df9a0549e4df70435928474cd76ec57c8f478ab4524d",
+  "budgets_seconds": {
+    "outer_lock": 0.25,
+    "transaction": 0.5,
+    "http": 3
+  },
+  "limitation": "controlled-heap command benchmark; no production steady-state tail claim; original shard stopped after target observation",
+  "fixed_native_python313": {
+    "normal_batch_members": 20,
+    "http_seconds": 1.6746462640003301,
+    "outer_hold_seconds": 0.22644396999749006,
+    "write_transaction_seconds": 0.22640597200006596
+  },
+  "fixed_native_python312": {
+    "normal_batch_members": 20,
+    "http_seconds": 1.6975419920017885,
+    "outer_hold_seconds": 0.22312208799849031,
+    "write_transaction_seconds": 0.2230924209980003
+  }
+}
