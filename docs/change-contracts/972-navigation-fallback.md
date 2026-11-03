@@ -88,3 +88,32 @@ Volledige bronlezing en alle huidige objecten kunnen bij onvoorbereide kaarten
 nog steeds nodig zijn. De gewone POST/databaseafstand en het einde-queue-
 overzicht blijven expliciete vervolgpunten onder #729; MET-43/#952 en
 MET-44/#953 blijven open.
+
+## CI-opvolging na samenvoegen met main
+
+Na merge van main `23d11ca7` werd de PR-head `3d229a6a`. De PR-overdracht
+verwees nog naar `f9ff2d6f`, waardoor de exacte-headcontrole terecht faalde.
+Bij deze opvolging wordt de overdracht vóór de push bijgewerkt. De eerdere
+CI op f9ff2d6f is historisch bewijs, geen groene verklaring voor een latere head.
+
+CI-run `41708202053` had bovendien één timingfailure in de bestaande echte
+20-member HTTP-batchproef op Python 3.13: buitenste lock 638.128 ms,
+transactie 638.101 ms, HTTP 1.437 s. Dezelfde batchcommandcode en timingtest
+zijn niet gewijzigd door deze PR of de main-merge. De twee afsluitende
+Python-checks faalden daarna door hun gedeelde upstream-resultaat.
+
+De oorspronkelijke native proeven zijn lokaal uitgevoerd met PostgreSQL 16:
+
+- Python 3.12: het hele batchbestand 5 passed; lock 205.704 ms. Een losse
+  herhaling mat 197.618 ms. Een volgende herhaling faalde met 337.335 ms.
+- Python 3.13: hetzelfde batchbestand 5 passed; lock 193.516 ms.
+- Ongewijzigde main 23d11ca7, Python 3.13: de oorspronkelijke 20-member
+  HTTP-proef 1 passed; lock 198.914 ms.
+
+Dit toont timingvariatie en vergelijkbaar gedrag op main en de PR, niet een
+bewezen blijvende oplossing voor host-/databaselatency. De specifieke oorzaak
+van de CI-uitschieter is uit die run niet vastgesteld. De 250 ms lock-,
+500 ms transactie- en 3 s HTTP-grenzen blijven ongewijzigd; geen test,
+uitvoeringspad of CI-eis is uitgezet. De nieuwe volledige CI moet diezelfde
+proeven op de bijgewerkte exacte head opnieuw uitvoeren. De bredere
+performanceacceptatie blijft apart onder #729 staan.
