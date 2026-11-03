@@ -87,6 +87,20 @@ polling without a start form no longer computes an unused historical token.
 
 ## Batch preparation before protected writes
 
+The same prepared executor also handles ordinary compact generation forms.
+Their original single-object kernel runs without workflow I/O or the outer
+write lock. Source/original checks are pinned beforehand; the protected commit
+recaptures current dependencies, bindings, scoped events and actor before
+applying the existing prepared delta and audit intents atomically. Old m2/None,
+nested and unprepared-history commands keep the explicit serial adapter.
+
+After POST, candidate navigation reads the existing verified current card/fact
+owner and current bindings in one authorized capture. Original queue/route
+rules choose a candidate; the selected real passage then gets its own scoped
+raw/source capture. Card projections provide neither a command token nor
+document/publication closure. Unavailable cards retain the existing complete
+navigation reader; GET never installs preparation or silently truncates work.
+
 Ground: actual20-member HTTP1.879s, process/document/auth write hold1.776s
 with no retained-history/global reads. The original member kernel still repeats
 CPU work inside the write boundary. Existing raw writer triggers in032 also

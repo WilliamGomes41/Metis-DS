@@ -42,6 +42,13 @@ def unregister_backend(path: Path) -> None:
 
 
 def _backend(path: Path) -> ReviewLedgerBackend | None:
+    # A new runtime may register the same ledger path while an older app is
+    # still live. Command reads, nested buffers and appends must retain the
+    # captured transaction owner instead of borrowing that newer registration.
+    from src.review.review_command_state_v1 import review_command_for_ledger
+    command = review_command_for_ledger(path)
+    if command is not None:
+        return command.inputs.owner.workflow_review_store
     return _BACKENDS.get(_key(path))
 
 

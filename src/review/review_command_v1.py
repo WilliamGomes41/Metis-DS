@@ -173,7 +173,46 @@ def _command_envelope(documents, snapshot_id):
         raise ConsoleError(code) from exc
 
 
-def execute_review_command(console, submitted, invoke, *, completed_command=None, list_result_is_snapshot=True):
+def _invoke_review_kernel(console, command, invoke, inputs, changes, *, compact=False):
+    """Invoke the original kernel with its private workspace precondition."""
+    internal = dict(command)
+    internal['expected_revision'] = changes.revision if command.get('expected_revision') is not None else None
+    if (inputs.interaction_id and internal.get('decision') != 'later'
+            and internal.get('interaction_evidence') is None):
+        from src.review.beslisboom_path_v1 import review_path_for_klasse
+        from src.review.review_duty_v1 import review_duty_for
+        from src.review.review_interaction_v1 import build_review_interaction_evidence
+        live = current_revisions(inputs.histories, snapshot_id=inputs.snapshot_id)
+        focal = next(row for row in live if row['object_id'] == inputs.target_object_id)
+        duty = review_duty_for(focal, review_path=review_path_for_klasse(inputs.envelope['class']),
+                              bindings=inputs.bindings, fragments=inputs.fragments)
+        internal['interaction_evidence'] = build_review_interaction_evidence(
+            interaction_id=inputs.interaction_id, interaction_kind='contextual',
+            reviewer_account_id=internal['actor_id'], snapshot_id=inputs.snapshot_id,
+            review_stage=str((duty or {}).get('stage') or 'first_review'), focal=focal,
+            objects=live, review_path=review_path_for_klasse(inputs.envelope['class']))
+    for key in ('_dependency_ids', '_focal_ids', '_all_headings', '_original_ids', '_interaction_id'):
+        internal.pop(key, None)
+    try:
+        return invoke(internal)
+    except ConsoleError as exc:
+        from src.review.deterministic_review_repair_v1 import StructuredRepairRequired
+        if isinstance(exc, StructuredRepairRequired):
+            exc.submission['expected_revision'] = str(command.get('expected_revision') or '')
+        exc.review_command_inputs = inputs
+        exc.review_source_available = False
+        if compact:
+            try:
+                console._require_open_original(inputs.snapshot_id, inputs.target_object_id)
+                exc.review_source_available = True
+            except Exception:
+                # Best-effort presentation must never mask the domain error.
+                pass
+        raise
+
+
+def execute_review_command(console, submitted, invoke, *, completed_command=None,
+                           list_result_is_snapshot=True, prepare=True):
     """Enclose the entire existing MRO in one request-owned native command."""
     command = dict(submitted)
     compact = command.pop('_compact_result', False)
@@ -186,6 +225,10 @@ def execute_review_command(console, submitted, invoke, *, completed_command=None
     generation = generation_precondition(sid, expected)
     precondition = (GenerationPrecondition(sid, generation) if generation is not None else
         ObjectSetPrecondition(expected) if expected is not None else UnconditionalReview())
+    if prepare and compact and generation is not None and completed_command is None:
+        return _execute_prepared_command(console,
+            {**command, '_interaction_id': interaction_id, '_original_ids': original_ids or [oid]},
+            invoke, compact=True, admission_context=False)
     documents, reviews = console.workflow_document_store, console.workflow_review_store
     try:
         reviews.require_command_transaction()
@@ -246,47 +289,7 @@ def execute_review_command(console, submitted, invoke, *, completed_command=None
                             # The original precondition has just been checked in
                             # its own contract. Nested existing validators use
                             # the captured workspace's internal revision.
-                            command['expected_revision'] = changes.revision if expected is not None else None
-                            if (interaction_id and command.get('decision') != 'later'
-                                    and command.get('interaction_evidence') is None):
-                                from src.review.beslisboom_path_v1 import review_path_for_klasse
-                                from src.review.review_duty_v1 import review_duty_for
-                                from src.review.review_interaction_v1 import build_review_interaction_evidence
-                                live = current_revisions(histories, snapshot_id=sid)
-                                focal = next(row for row in live if row['object_id'] == oid)
-                                path = review_path_for_klasse(current['class'])
-                                duty = review_duty_for(focal, review_path=path, bindings=bindings, fragments=fragments)
-                                command['interaction_evidence'] = build_review_interaction_evidence(
-                                    interaction_id=interaction_id, interaction_kind='contextual',
-                                    reviewer_account_id=command['actor_id'], snapshot_id=sid,
-                                    review_stage=str((duty or {}).get('stage') or 'first_review'),
-                                    focal=focal, objects=live, review_path=path)
-                            command.pop('_dependency_ids', None)
-                            command.pop('_focal_ids', None)
-                            command.pop('_all_headings', None)
-                            try:
-                                result = invoke(command)
-                            except ConsoleError as exc:
-                                from src.review.deterministic_review_repair_v1 import StructuredRepairRequired
-                                if isinstance(exc, StructuredRepairRequired):
-                                    # The scoped revision is private to this
-                                    # workspace. The next repair command must
-                                    # receive the caller's original contract.
-                                    exc.submission['expected_revision'] = str(expected or '')
-                                # Detached baseline for the bounded error view;
-                                # no failed staged mutation becomes presentation truth.
-                                exc.review_command_inputs = inputs
-                                exc.review_source_available = False
-                                if compact:
-                                    try:
-                                        console._require_open_original(sid, oid)
-                                        exc.review_source_available = True
-                                    except Exception:
-                                        # A best-effort presentation probe must
-                                        # never mask the original domain error,
-                                        # including malformed legacy locators.
-                                        pass
-                                raise
+                            result = _invoke_review_kernel(console, command, invoke, inputs, changes, compact=compact)
                             if changes.commit_count:
                                 reviews.apply_review_binding_delta(sid, inputs.bindings, changes.bindings)
                                 documents.apply_review_changes(sid, inputs.histories, changes.histories,
@@ -335,11 +338,11 @@ def execute_review_batch(console, submitted, invoke, *, headings=False):
     def run(internal):
         return invoke({**command, 'expected_revision': internal['expected_revision']})
     if generation_precondition(command['snapshot_id'], command.get('expected_revision')) is not None:
-        return _execute_prepared_batch(console, captured, run)
+        return _execute_prepared_command(console, captured, run)
     return execute_review_command(console, captured, run, list_result_is_snapshot=False)
 
 
-def _batch_state(console, command, prepared_envelope, generation):
+def _batch_state(console, command, prepared_envelope, generation, *, admission_context=True):
     """Actual current dependencies; called in each owner's consistent SQL phase."""
     sid, oid = command['snapshot_id'], command['object_id']
     store, reviews = console.workflow_document_store, console.workflow_review_store
@@ -352,17 +355,17 @@ def _batch_state(console, command, prepared_envelope, generation):
         if (current.get('_document_inputs') or {}).get('tree') != (prepared_envelope.get('_document_inputs') or {}).get('tree'):
             raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
         current['decision_graph_evidence'] = prepared_envelope['decision_graph_evidence']
-    histories = capture_histories(console, sid, oid, command, admission_context=True)
+    histories = capture_histories(console, sid, oid, command, admission_context=admission_context)
     ids = sorted({row['object_id'] for row in histories})
     current['quality_processing_runs'] = store.review_command_quality_input(sid, ids, envelope=current)
     bindings = reviews.read_bindings([sid], object_ids=ids).get(sid, [])
-    interaction_id = str((command.get('interaction_evidence') or {}).get('interaction_id') or '')
+    interaction_id = str(command.get('_interaction_id') or (command.get('interaction_evidence') or {}).get('interaction_id') or '')
     events = reviews.read_review_command_events(sid, ids, interaction_id=interaction_id, include_pending=False)
     return current, histories, bindings, events
 
 
-def _execute_prepared_batch(console, command, invoke):
-    """Original GEN batch kernel without SQL; short current-guarded native commit.
+def _execute_prepared_command(console, command, invoke, *, compact=False, admission_context=True):
+    """Original GEN kernel without SQL; short current-guarded native commit.
 
     Public m2/None and receipt commands retain their serial implementation.
     The pending buffer exits successfully ONLY inside the write transaction.
@@ -375,8 +378,11 @@ def _execute_prepared_batch(console, command, invoke):
     sid, oid = command['snapshot_id'], command['object_id']
     generation = generation_precondition(sid, command.get('expected_revision'))
     store, reviews = console.workflow_document_store, console.workflow_review_store
+    def serial():
+        return execute_review_command(console, {**command, '_compact_result': compact}, invoke,
+                                      list_result_is_snapshot=False, prepare=False)
     if reviews._buffer.get() is not None or workflow_transaction_active():
-        return execute_review_command(console, command, invoke, list_result_is_snapshot=False)
+        return serial()
     with detached_document_reads():
         console._require_role(command['actor_id'], 'reviewer')
         envelope = _command_envelope(store, sid)
@@ -387,26 +393,21 @@ def _execute_prepared_batch(console, command, invoke):
             console, envelope, command.get('_original_ids'))
         try:
             with workflow_read_transaction(reviews):
-                current, histories, bindings, events = _batch_state(console, command, envelope, generation)
+                current, histories, bindings, events = _batch_state(console, command, envelope, generation,
+                    admission_context=admission_context)
                 account = console._require_role(command['actor_id'], 'reviewer')
                 ledger_head = reviews._last_hash()
             if not isinstance(histories, RevisionWindow):
                 # Explicit existing-data compatibility until its own preparation.
-                return execute_review_command(console, command, invoke, list_result_is_snapshot=False)
-            interaction_id = str((command.get('interaction_evidence') or {}).get('interaction_id') or '')
+                return serial()
+            interaction_id = str(command.get('_interaction_id') or (command.get('interaction_evidence') or {}).get('interaction_id') or '')
             inputs = ReviewCommandInputs(console, sid, current, histories, bindings, fragments,
                 frozen, path, oid, interaction_id, GenerationPrecondition(sid, generation),
                 source_error, originals, console._public_account(account), events, ledger_head, True)
             with ExitStack() as pending:
                 intent_buffer = pending.enter_context(reviews.prepared_batch_events(ledger_head))
                 with review_command_scope(inputs, preparing=True) as changes, without_workflow_io():
-                    internal = dict(command)
-                    internal['expected_revision'] = changes.revision
-                    try:
-                        result = invoke(internal)
-                    except ConsoleError as exc:
-                        exc.review_command_inputs = inputs
-                        raise
+                    result = _invoke_review_kernel(console, command, invoke, inputs, changes, compact=compact)
                     plan = (store.prepare_review_changes(sid, inputs.histories, changes.histories,
                         inputs.envelope, changes.envelope, changes.commit_count,
                         transitions=changes.object_transitions) if changes.commit_count else None)
@@ -424,7 +425,8 @@ def _execute_prepared_batch(console, command, invoke):
                             # all ordinary appends; the ledger owner assigns the
                             # final audit order after the current-input guards.
                             reviews._lock_review_ledger(con)
-                            live = _batch_state(console, command, envelope, generation)
+                            live = _batch_state(console, command, envelope, generation,
+                                admission_context=admission_context)
                             before = (inputs.envelope, inputs.histories, inputs.bindings, inputs.events)
                             if (not isinstance(live[1], RevisionWindow)
                                     or any(_json_text(a) != _json_text(b) for a, b in zip(live, before))
@@ -444,7 +446,7 @@ def _execute_prepared_batch(console, command, invoke):
                             pending.close()
                     finally:
                         close_store_command(token)
-            return result
+            return ReviewCommandResult(sid, oid) if compact else result
         except WorkflowReviewStoreError as exc:
             raise ConsoleError('workflow_review_write_failed') from exc
         except WorkflowDocumentStoreError as exc:

@@ -1,0 +1,113 @@
+{
+  "runtime_commit": "6858a589586ffe129b3d0aafeda303693e516fce",
+  "base": "19a83d1cc5908b69e4b764f82c919c1b3f7eb270",
+  "environment": "isolated local PostgreSQL 17, Python 3.13.5; synthetic fixtures; no Azure latency or live acceptance claim",
+  "baseline_seconds": {
+    "open": 0.5222363769989897,
+    "save": 0.1722211519991106,
+    "redirect": 0.6170132229999581,
+    "reopen": 0.6756998719993135,
+    "stale": 0.07744862399886188
+  },
+  "baseline_limit": "One local run before edits, no concurrent full suite; not a statistically controlled latency comparison.",
+  "baseline_selected_prefix_bytes": 3969244,
+  "final_run_limit": "Same existing heavy HTTP probe; four complete-suite partitions running concurrently.",
+  "proofs": [
+    {
+      "proof": "native_combined_history_partial_http",
+      "layout": "compact",
+      "seconds": {
+        "open": 0.12618187299995043,
+        "save": 0.2182717200012121,
+        "redirect": 0.5855751130002318,
+        "reopen": 0.16041362599935383,
+        "stale": 0.12059982500068145
+      }
+    },
+    {
+      "proof": "selected_passage_retained_prefix",
+      "retained_successors": 512,
+      "json_bytes": 8407,
+      "queries": 4
+    }
+  ],
+  "requests": [
+    {
+      "method": "GET",
+      "status": 200,
+      "milliseconds": 123.587,
+      "json_bytes": 108582,
+      "queries": 21,
+      "outer_lock_ms": null,
+      "transaction_ms": null
+    },
+    {
+      "method": "POST",
+      "status": 303,
+      "milliseconds": 215.946,
+      "json_bytes": 558549,
+      "queries": 72,
+      "outer_lock_ms": 91.038,
+      "transaction_ms": 91.001
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "milliseconds": 578.679,
+      "json_bytes": 14598212,
+      "queries": 22,
+      "outer_lock_ms": null,
+      "transaction_ms": null
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "milliseconds": 157.848,
+      "json_bytes": 110308,
+      "queries": 23,
+      "outer_lock_ms": null,
+      "transaction_ms": null
+    },
+    {
+      "method": "POST",
+      "status": 409,
+      "milliseconds": 116.777,
+      "json_bytes": 137550,
+      "queries": 16,
+      "outer_lock_ms": null,
+      "transaction_ms": null
+    }
+  ],
+  "runtime_sha256": {
+    "src/review/review_command_v1.py": "3c35c7bf2f3d25ec90b2e40c9398eb07d8fa033f15dbb74a29880c5736ee5305",
+    "src/review/review_passage_read_v1.py": "1e65a0a8032ff6bd0d9f0ac5190e481adc8aec6021f7be34619556081e8ac856",
+    "src/review/review_workboard_v1.py": "928189df76436835cc8bee0754087e10343d2b2feca70fbf671e96f54f886211",
+    "src/workflows/workflow_document_concurrency_v1.py": "4caeda68ccb2f3f5e99b3e90049f5942fc778966c8c512b927da9fd9b57f2426",
+    "src/review/review_ledger.py": "4e5e09912d42e1fd892f30c21de7896aa06adbdfb98ed5d526c52b84acd8a34b"
+  },
+  "adversarial_review": {
+    "kind": "independent read-only code review",
+    "blocking_defects": 0,
+    "independent_tests": false,
+    "includes_landed_ledger_owner_fix": true
+  },
+  "guard_mutation": {
+    "isolated_copy": true,
+    "actor_identity_guard_removed": "native test failed with DID NOT RAISE ConsoleError",
+    "restored": "native test passed",
+    "binding_guard_removed": "test still passed because independent binding CAS refused; not counted as detection by the removed guard"
+  },
+  "remaining": [
+    "Production latency and real user acceptance",
+    "72 ordinary POST query calls in this trace; database-distance cost remains",
+    "Full document-overview redirect still 14.6 MB; other pages remain MET-36 scope",
+    "MET-16 and subsequent ordered slices; MET-43/44 remain open"
+  ],
+  "targeted_final_tests": {
+    "new_chain_and_safety": 15,
+    "owner_fix_classification_freshness_and_batches": 72,
+    "last_heavy_chain_and_byte_budget": 2,
+    "postgres_skips": 0
+  },
+  "two_os_processes": "Separate Python process committed an actor identity change after capture; original command refused without overwriting winner."
+}

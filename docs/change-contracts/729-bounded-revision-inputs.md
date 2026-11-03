@@ -1,6 +1,116 @@
 # MET-36: bounded revision inputs under the document owner
 
 Change class: A
+Promise: ordinary generation-form save, next passage and reopen preserve the exact durable decision while pure work leaves the write lock and navigation avoids full closure when verified cards are available.
+Proof: native HTTP red/green chain, current-dependency races, rollback/restart and unchanged existing Review/batch/publication regressions; measurements and limits below.
+Touches lifecycle invariants: yes
+Rewrite risk: high
+
+## Ordinary save and next-passage slice — 3 November 2026
+
+Base: `19a83d1cc5908b69e4b764f82c919c1b3f7eb270`.
+William explicitly authorized implementation despite the unverifiable tracker
+label in this session. No merge, deployment or data conversion is authorized.
+This slice extends the lifecycle transition and mitigation map below; it does
+not change review, publication, identity, precondition or retry semantics.
+
+Promise: ordinary generation-form POST → 303 → next passage → reopen retains
+the exact durable decision while pure review work leaves the outer write lock
+and navigation uses current verified card inputs instead of document closure.
+Legacy m2/None, nested commands and unprepared histories retain their explicit
+serial compatibility path. No GET preparation or migration is introduced.
+
+Usage remains HTTP `/review`, and `review_object` remains the domain operation.
+Ordinary compact generation forms reuse the existing prepared batch executor;
+the original single-object kernel still decides. The returned object IDs and
+303 destination stay unchanged. The next GET derives candidates through the
+existing `ordinary_review_queue` / `reviewer_route_for`, then reads the selected
+real passage through `read_review_passage`. Card DTOs never enter a command or
+substitute for passage source verification. Missing/dirty/unavailable card inputs
+use the existing complete navigation reader, never an empty/truncated queue.
+
+| Context | Producer/owner and lifetime | Preparation consumer | Current commit guard / stale result |
+|---|---|---|---|
+| Source hash, version, extraction pin, original locator | immutable source owner; exact document input | existing source preparation/original reader | same source identity and exact selected raw head; conflict on change |
+| Histories/frontiers and dependency membership | document store; one repeatable-read capture | original kernel and prepared write handle | recapture same graph/current heads/frontiers under document lock, including native0 invalidation |
+| Policy/roster/quality/tree input | existing document/policy owners; one capture | original kernel | compare complete captured command envelope/quality/tree at commit |
+| Actor roles, retirement and identity | identity store; current operation | captured public actor | existing KEY SHARE and current public-actor equality; denial/conflict |
+| Bindings and scoped interaction events | review store; one capture | original approval/interaction validators | current exact binding/event comparison under authorization and ledger locks |
+| Audit intents, object/binding/fact delta | existing prepared event buffer and document write handle; one request | pure staged kernel | same native transaction/rollback; buffer closes only within transaction |
+| Candidate navigation | card/fact owner and current bindings; one GET capture | existing queue/route projections | no mutation authority; selected passage gets fresh authorized scoped capture |
+
+Lifecycle fields below remain applicable: an authorized curator decision mutates
+only the unpublished WorkingRevision; source/history/release/serving identity and
+authority remain unchanged. Failure or late COMMIT rolls all workflow state back;
+fresh runtime sees the same decision or unchanged winner. Duplicate generation
+forms retain stale409; m2/None retain their separate legacy rules. No blanket
+exactly-once or stronger D1 in-flight revocation claim.
+
+Two alternatives, assessed by the same implementer (not independent review):
+A keeps pure work inside the ordinary lock and only combines SQL. B reuses the
+existing prepared executor and current-input guards for ordinary generation
+forms, with verified navigation cards. Select B for shared ownership, existing
+atomicity proofs and separation of pure work; A cannot remove in-lock CPU work.
+SQL distance remains measurable separately: recapture is still necessary, and
+local low-latency timings are not production performance evidence.
+
+Persisted-state impact: none; no schema, content backfill or new authority.
+Compatibility/migration: additive ingress selection; unprepared/native legacy
+keeps the original path. Rollback: revert binary, ordinary rows remain readable;
+no down-migration or data repair. Cutover: exact-head native HTTP/safety tests,
+adversarial review and separate human merge/deploy GO. Cleanup: one prepared
+executor and one kernel-invocation/error adapter, no copied command authority.
+Failure blast radius: ordinary compact generation forms and post-save candidate
+navigation; batches must retain existing behavior. No unrelated source/viewer
+or formation work is absorbed.
+
+Before implementation, baseline full-chain native compact probe passed locally:
+open0.522s,save0.172s,redirect0.617s,reopen0.676s,stale0.077s. This does not
+reproduce production latency. New red-capable tests assert the real ordinary
+HTTP kernel has no outer write/SQL transaction and next navigation performs no
+full-document/formation read when verified cards are available. Preserve their
+initial failing result before changing product code. Extend with current-input
+races, 400/409 draft preservation, late commit rollback and fresh-runtime readback.
+Budgets remain detail5s,POST3s,outer lock250ms,transaction500ms; whole-user-action
+measurements and production acceptance remain explicit MET-44 work.
+
+The same slice's reopen measurement exposed retained-prefix downloads: one
+selected identity with512 retained successors downloaded3,969,244 JSON bytes.
+Add a red native byte-budget proof before changing that reader. The existing
+`review_object_histories` read API will reuse the document owner's certified
+`review_command_window` and original `current_revisions` validation under the
+existing consistent capture. No certificate means the original full independent
+lineage validation; direct/history corruption must invalidate reuse and refuse
+the malformed chain. This affects only raw selected-object reads in the complete
+PostgreSQL store, not command/publication authority, persisted state or policy.
+Its callers still receive actual current objects, not cards or lossy projections.
+
+Implementation sequence: reuse existing scaffolding; no dead-code removal or new
+framework is needed. Ground and sketch are above; implementation is already
+authorized (no extra design approval checkpoint). First the red HTTP proofs, then
+executor reuse and navigation, then native safety/chain regressions and review.
+
+Executed evidence for this slice is retained in
+[review-save-chain-729](../../evidence/review-save-chain-729/README.md), including
+runtime file hashes and normalized synthetic metrics. New and existing passage
+proofs:62 passed. Final selected-prefix read8,407 bytes (red3,969,244); corrupted
+historical evidence still refuses. The heavy chain passed with actual outer
+lock91.038ms/TX91.001ms after the owner correction. Independent read-only adversarial code review found no
+concrete blocker; this is not independent test execution or a merge/deploy GO.
+Current-actor-identity guard removal in an isolated copy made its native race
+test fail; restored code passed. Final complete-suite/CI results belong to the PR.
+
+The broader run exposed one additional owner-boundary requirement: constructing
+a new console for the same runtime path replaces the process-global ledger
+backend registration. A still-live original app must keep reads, pending buffers
+and appends on its captured command's review store. Resolving the active matching
+command owner before the global registry preserves that existing transaction
+boundary; outside commands registry lookup stays unchanged. The actual formation
+classification-repair/approval sequence passes main and reproduced a forbidden
+SQL read during pure preparation on this slice. Add a minimal restart/live-app
+HTTP regression before this correction and retain original error/rollback rules.
+
+Change class: A
 Rewrite risk: high
 Promise: ordinary review/source decisions validate the current transition without
 reloading a retained historical prefix on every decision; atomicity, lineage,

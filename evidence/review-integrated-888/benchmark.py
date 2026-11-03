@@ -507,7 +507,13 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
         refused = request(client, 'semantic_refusal', 'post',
                           data={**data, 'source_discrepancy': 'context_ontbreekt'})
         assert refused.status_code == 400 and 'synthetic task-v1 draft' in refused.text
-        assert result['samples'][-1]['diagnostics']['phases']['store_transaction']['inclusive_ms'] > 0
+        # Ordinary generation forms now run their original semantic kernel
+        # against a prepared capture. A semantic refusal must not acquire the
+        # protected write merely to render its preserved draft.
+        refusal_phases = result['samples'][-1]['diagnostics']['phases']
+        assert 'store_transaction' not in refusal_phases
+        assert 'store_lock_hold' not in refusal_phases
+        assert refusal_phases['source_prepare']['inclusive_ms'] > 0
         assert durable(console, [sid]) == before
         if size > 2:
             for repeat in range(2):
