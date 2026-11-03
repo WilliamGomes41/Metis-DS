@@ -98,8 +98,23 @@ After POST, candidate navigation reads the existing verified current card/fact
 owner and current bindings in one authorized capture. Original queue/route
 rules choose a candidate; the selected real passage then gets its own scoped
 raw/source capture. Card projections provide neither a command token nor
-document/publication closure. Unavailable cards retain the existing complete
-navigation reader; GET never installs preparation or silently truncates work.
+document/publication closure. With unavailable cards, navigation captures the
+complete current object/binding/source inputs under the existing read snapshot,
+without expanding historical processing/formation evidence. Explicit document
+assessment retains the full document reader. GET never installs preparation or
+silently truncates work. See [the navigation contract](../change-contracts/972-navigation-fallback.md).
+
+```mermaid
+flowchart TD
+    NAV[Next passage] --> CARD[Existing verified card capture]
+    CARD -->|Ready| FACTS[Current facts and bindings]
+    CARD -->|Unavailable| RAWNAV[Authorized current objects, bindings and exact source]
+    FACTS --> QUEUE[Original queue and route rules]
+    RAWNAV --> QUEUE
+    QUEUE --> PASSAGE[Selected real passage: fresh authorized raw and source capture]
+    PASSAGE --> FORM[Existing review form and generation precondition]
+    ASSESS[Explicit document assessment] --> COMPLETE[Full document and formation evidence]
+```
 
 Ground: actual20-member HTTP1.879s, process/document/auth write hold1.776s
 with no retained-history/global reads. The original member kernel still repeats
