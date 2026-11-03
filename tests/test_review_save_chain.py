@@ -168,3 +168,24 @@ def test_ordinary_late_commit_failure_rolls_back_decision_bindings_facts_and_aud
     assert any('ordinary_deferred_commit_failure' in value for value in failures(refused.value))
     assert durable(restart_production(console), sid) == before
     assert console.workflow_review_store._buffer.get() is None
+
+
+def test_passage_read_keeps_lineage_without_downloading_retained_prefix(review_system):
+    from copy import deepcopy
+    from src.review.revision_workflow import revise_object
+    from src.workflows.workflow_transaction_v1 import workflow_read_transaction
+    from src.console_performance_v1 import performance_scope
+    console, _client, sid, actor, ids = review_system
+    rows = console._load_objects(sid)
+    previous = next(o for o in rows if o['object_id'] == ids[0])
+    for _ in range(512):
+        previous = revise_object(previous, deepcopy(previous), snapshot_id=sid,
+                                 reason='Retained synthetic review history', actor=actor, force=True)
+        rows.append(previous)
+    console._save_objects(sid, rows, expected_revision=console.objects_revision(sid))
+    store = console.workflow_document_store
+    with performance_scope() as metrics:
+        with workflow_read_transaction(store):
+            selected = store.review_object_histories(sid, [ids[0]])
+    assert selected == [previous]
+    assert metrics.json_bytes < 128_000, f'one passage downloaded {metrics.json_bytes} JSON bytes'

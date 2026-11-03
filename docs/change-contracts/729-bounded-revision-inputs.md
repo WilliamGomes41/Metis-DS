@@ -74,6 +74,17 @@ races, 400/409 draft preservation, late commit rollback and fresh-runtime readba
 Budgets remain detail5s,POST3s,outer lock250ms,transaction500ms; whole-user-action
 measurements and production acceptance remain explicit MET-44 work.
 
+The same slice's reopen measurement exposed retained-prefix downloads: one
+selected identity with512 retained successors downloaded3,969,244 JSON bytes.
+Add a red native byte-budget proof before changing that reader. The existing
+`review_object_histories` read API will reuse the document owner's certified
+`review_command_window` and original `current_revisions` validation under the
+existing consistent capture. No certificate means the original full independent
+lineage validation; direct/history corruption must invalidate reuse and refuse
+the malformed chain. This affects only raw selected-object reads in the complete
+PostgreSQL store, not command/publication authority, persisted state or policy.
+Its callers still receive actual current objects, not cards or lossy projections.
+
 Implementation sequence: reuse existing scaffolding; no dead-code removal or new
 framework is needed. Ground and sketch are above; implementation is already
 authorized (no extra design approval checkpoint). First the red HTTP proofs, then
