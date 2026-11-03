@@ -90,6 +90,16 @@ framework is needed. Ground and sketch are above; implementation is already
 authorized (no extra design approval checkpoint). First the red HTTP proofs, then
 executor reuse and navigation, then native safety/chain regressions and review.
 
+Executed evidence for this slice is retained in
+[review-save-chain-729](../../evidence/review-save-chain-729/README.md), including
+runtime file hashes and normalized synthetic metrics. New and existing passage
+proofs:62 passed. Final selected-prefix read8,407 bytes (red3,969,244); corrupted
+historical evidence still refuses. The heavy chain passed with actual outer
+lock163.387ms/TX163.356ms. Independent read-only adversarial code review found no
+concrete blocker; this is not independent test execution or a merge/deploy GO.
+Current-actor-identity guard removal in an isolated copy made its native race
+test fail; restored code passed. Final complete-suite/CI results belong to the PR.
+
 Change class: A
 Rewrite risk: high
 Promise: ordinary review/source decisions validate the current transition without
