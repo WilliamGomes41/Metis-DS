@@ -192,6 +192,27 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         with self._connect() as con:
             return capture(self, con, snapshot_id, object_ids)
 
+    def review_object_histories(self, snapshot_id, object_ids):
+        """Actual current objects with the existing validated lineage boundary.
+
+        A missing/invalidated frontier retains the full independent legacy
+        check. Never substitute a raw head or a card for historical validation.
+        """
+        from contextlib import nullcontext
+        from src.workflows.workflow_transaction_v1 import workflow_transaction_active, workflow_read_transaction
+        if not object_ids:
+            return []
+        try:
+            with nullcontext() if workflow_transaction_active() else workflow_read_transaction(self):
+                rows = self.review_command_window(snapshot_id, object_ids)
+                if rows is None:
+                    return super().review_object_histories(snapshot_id, object_ids)
+                return current_revisions(rows, snapshot_id=snapshot_id)
+        except WorkflowDocumentStoreError:
+            raise
+        except Exception as exc:
+            raise WorkflowDocumentStoreError('workflow_document_objects_read_failed') from exc
+
     def review_document_window(self, snapshot_id):
         """All current heads with complete physical coverage, in a caller snapshot."""
         from src.workflows.workflow_transaction_v1 import workflow_transaction_active

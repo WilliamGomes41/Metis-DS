@@ -188,4 +188,17 @@ def test_passage_read_keeps_lineage_without_downloading_retained_prefix(review_s
         with workflow_read_transaction(store):
             selected = store.review_object_histories(sid, [ids[0]])
     assert selected == [previous]
+    print(json.dumps({'proof': 'selected_passage_retained_prefix', 'retained_successors': 512,
+                      'json_bytes': metrics.json_bytes, 'queries': metrics.queries}))
     assert metrics.json_bytes < 128_000, f'one passage downloaded {metrics.json_bytes} JSON bytes'
+    # A native edit of retained history must invalidate reuse. The complete
+    # original lineage check then refuses the inconsistent predecessor chain.
+    from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+    first_successor = rows[-512]
+    with store._connect() as con:
+        con.execute("UPDATE workflow.document_objects SET payload=jsonb_set(payload,'{content,clean_text}',"
+                    "'\"Tampered historical text\"'::jsonb,true) WHERE snapshot_id=%s AND object_id=%s AND object_version=%s",
+                    (sid, ids[0], first_successor['object_version']))
+    with pytest.raises(WorkflowDocumentStoreError):
+        with workflow_read_transaction(store):
+            store.review_object_histories(sid, [ids[0]])
