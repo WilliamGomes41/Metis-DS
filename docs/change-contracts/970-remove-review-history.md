@@ -64,3 +64,31 @@ Uitgevoerd op Python 3.12 en een tijdelijke native PostgreSQL 16-container:
 Geen volledige suite, browserrender of live acceptatie geclaimd. De
 Impeccable-engine kon niet worden geladen; de vendored skill, bestaande
 interface en HTML-karakterisatie zijn gebruikt. Exact-head CI blijft vereist.
+
+### Herstel na de eerste CI-run
+
+De eerste CI faalde op beide Python-versies door vier verouderde verwachtingen:
+het brede CSS-baselinehash (twee rollen), de inventarislink en de PDF-teruglink.
+Deze vier failures zijn lokaal gereproduceerd. De 23 CSS-regelblokken met
+`.home-*`-selectors zijn gelijk aan deploymentbaseline `60e70b25`; alleen de
+baselinehash voor de bedoelde verwijdering is vernieuwd. De behouden bronproef
+gebruikt nu `task=inventory` en controleert nog steeds beide PDF-pagina's en de
+markering. De inventarisproef eist de volledige bestaande bron-URL.
+
+De CI-mutatiebaseline verwees bovendien nog naar de drie verwijderde
+historietests. Alleen die cases zijn eruit gehaald: 21 van 24 overgebleven
+gevallen worden rood door de bestaande tijdelijke mutatie, met exitcode 1;
+`check_evidence.py mutation` accepteert de exacte set. Geen goldens opnieuw
+opgenomen en geen controle versoepeld.
+
+De review vond ook de oude `/review/bronpassage?task=history|decisions`-route.
+De native guardproef faalde vóór herstel op de verboden bronread. Deze route
+redirect nu na authenticatie en overzichtstoegang, vóór `open_source_passage`.
+Beide oude routes worden getest met verboden document/source/auditreads,
+ongewijzigde objecthistorie/bindings/ledger en geweigerde niet-ingelogde toegang.
+
+Hercontrole op Python 3.12/PostgreSQL 16: 66 tests geslaagd (de vier geraakte
+regressiebestanden plus alle karakterisatiegevallen), de laatste 8
+bookmark-/authenticatieproeven opnieuw geslaagd en de mutatiecontrole PASS.
+Repositorypreflight, architectuur, release-control, change-contract, compilatie
+en diffcontrole zijn opnieuw PASS. Exact-head GitHub CI blijft vereist.

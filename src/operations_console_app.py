@@ -5203,6 +5203,12 @@ def create_console_app(
     @app.get("/review/bronpassage", response_class=HTMLResponse)
     def review_bronpassage(request: Request, document: str = "", object: str = "", task: str = "") -> str:
         account = _require(request)
+        if task.strip() in {"history", "decisions"}:
+            from src.review.review_participation_ui_v1 import require_overview
+            require_overview(account)
+            params = {"document": document} if document else {}
+            return RedirectResponse('/review' + ('?' + urlencode(params) if params else ''),
+                                    status_code=303)
         chosen = document.strip()
         object_id = object.strip()
         safe_task = normalize_review_task(task)

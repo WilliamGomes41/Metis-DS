@@ -38,7 +38,8 @@ def test_history_bookmarks_still_require_authentication(task):
     assert response.status_code == 403
 
 
-def test_native_retired_page_does_not_read_or_mutate_review_evidence(review_client, monkeypatch):
+@pytest.mark.parametrize('route', ['/review', '/review/bronpassage'])
+def test_native_retired_page_does_not_read_or_mutate_review_evidence(review_client, monkeypatch, route):
     from src.review.review_ledger import read_events
     console, browser, sid = review_client
     before = deepcopy(console.snapshot_objects(sid))
@@ -49,17 +50,22 @@ def test_native_retired_page_does_not_read_or_mutate_review_evidence(review_clie
         raise AssertionError('retired page captured objects, source or audit')
 
     with monkeypatch.context() as patch:
-        for name in ('snapshot_objects_and_revision', 'audit_review_signals', '_envelope'):
+        for name in ('snapshot_objects_and_revision', 'audit_review_signals', '_envelope', 'open_source_passage'):
             patch.setattr(console, name, forbidden)
         import src.review.review_passage_read_v1 as reads
         for name in ('read_review_document', 'read_review_passage', 'read_review_navigation'):
             patch.setattr(reads, name, forbidden)
         for task in ('history', 'decisions'):
-            response = browser.get('/review', params={
+            response = browser.get(route, params={
                 'document': sid, 'task': task, 'object': before[-1]['object_id'],
             }, follow_redirects=False)
             assert response.status_code == 303
             assert response.headers['location'] == '/review?document=' + sid
+        browser.cookies.clear()
+        response = browser.get(route, params={
+            'document': sid, 'task': 'history', 'object': before[-1]['object_id'],
+        }, follow_redirects=False)
+        assert response.status_code == 401
     assert console.snapshot_objects(sid) == before
     assert console.object_review_bindings(sid) == bindings
     assert read_events(console._ledger_path) == events

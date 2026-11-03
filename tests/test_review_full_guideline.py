@@ -85,11 +85,11 @@ def test_full_pdf_preserves_every_page_and_uses_located_page(tmp_path, *, produc
     data = doc.tobytes()
     doc.close()
     console, client, snapshot, target, query = setup_source(tmp_path, data, "pdf", production_app=production_app, production_console=production_console)
-    response = client.get(f"/review/bronpassage?{query}&task=history")
+    response = client.get(f"/review/bronpassage?{query}&task=inventory")
     assert response.status_code == 200
     assert 'type="application/pdf"' in response.text
     assert "#page=1" in response.text
-    assert "task=history" in response.text
+    assert "task=inventory" in response.text
     original = client.get(f"/review/brondocument?{query}")
     assert original.content != data  # Disposable marked display copy
     assert original.headers["content-type"] == "application/pdf"
