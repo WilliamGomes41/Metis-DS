@@ -1,0 +1,79 @@
+{
+  "runtime_commit": "56cac319108d0dc8e2d4f3c2c5519c77fce0dc33",
+  "test_stack": "local PostgreSQL17/Python3.13.5",
+  "collection": 6931,
+  "all_selected_nodes_finished_once": true,
+  "passed": 6876,
+  "failed": 12,
+  "errors": 0,
+  "postgres_skips": [],
+  "failures": [
+    {
+      "node": "tests.test_formation_repair_workplace::test_complete_existing_repair_runs_only_on_formation[classification]",
+      "resolution": "Same-runtime ledger registration displaced active command owner. Fixed with command-local backend resolution; classification/live-app/stale retry and owner/freshness/batch regressions rerun successfully."
+    },
+    {
+      "node": "tests.test_review_batch_bounded_history::test_twenty_member_batch_uses_actual_compact_http_form[batch-large]",
+      "resolution": "Outer hold254.648ms under four simultaneous suite processes vs unchanged250ms limit; focused repeat passed. Final isolated measurement recorded separately."
+    },
+    {
+      "node": "tests.test_review_post_baseline_postgres::test_native_task_v1_post[False]",
+      "resolution": "Old harness required semantic refusal inside store_transaction; final harness now requires no protected transaction/lock, source preparation and unchanged durable state. All affected POST harness/stale routes rerun:23 passed."
+    },
+    {
+      "node": "tests.test_review_post_baseline_postgres::test_native_task_v1_post[True]",
+      "resolution": "Old harness required semantic refusal inside store_transaction; final harness now requires no protected transaction/lock, source preparation and unchanged durable state. All affected POST harness/stale routes rerun:23 passed."
+    },
+    {
+      "node": "tests.test_review_post_baseline_postgres::test_native_task_v1_rollback[binding]",
+      "resolution": "Old harness required semantic refusal inside store_transaction; final harness now requires no protected transaction/lock, source preparation and unchanged durable state. All affected POST harness/stale routes rerun:23 passed."
+    },
+    {
+      "node": "tests.test_review_post_baseline_postgres::test_native_task_v1_rollback[commit]",
+      "resolution": "Old harness required semantic refusal inside store_transaction; final harness now requires no protected transaction/lock, source preparation and unchanged durable state. All affected POST harness/stale routes rerun:23 passed."
+    },
+    {
+      "node": "tests.test_review_post_baseline_postgres::test_native_task_v1_dependencies[role]",
+      "resolution": "Old harness required semantic refusal inside store_transaction; final harness now requires no protected transaction/lock, source preparation and unchanged durable state. All affected POST harness/stale routes rerun:23 passed."
+    },
+    {
+      "node": "tests.test_review_post_baseline_postgres::test_native_task_v1_dependencies[context]",
+      "resolution": "Old harness required semantic refusal inside store_transaction; final harness now requires no protected transaction/lock, source preparation and unchanged durable state. All affected POST harness/stale routes rerun:23 passed."
+    },
+    {
+      "node": "tests.test_review_post_baseline_postgres::test_native_task_v1_scale[32]",
+      "resolution": "Old harness required semantic refusal inside store_transaction; final harness now requires no protected transaction/lock, source preparation and unchanged durable state. All affected POST harness/stale routes rerun:23 passed."
+    },
+    {
+      "node": "tests.test_review_post_baseline_postgres::test_native_task_v1_scale[128]",
+      "resolution": "Old harness required semantic refusal inside store_transaction; final harness now requires no protected transaction/lock, source preparation and unchanged durable state. All affected POST harness/stale routes rerun:23 passed."
+    },
+    {
+      "node": "tests.test_stale_write_ux::test_stale_review_save_retry_applies_input_after_fresh_revision",
+      "resolution": "Same-runtime ledger registration displaced active command owner. Fixed with command-local backend resolution; classification/live-app/stale retry and owner/freshness/batch regressions rerun successfully."
+    },
+    {
+      "node": "tests.test_stale_write_ux::test_stale_review_conflicts_preserve_special_characters_exactly",
+      "resolution": "Same-runtime ledger registration displaced active command owner. Fixed with command-local backend resolution; classification/live-app/stale retry and owner/freshness/batch regressions rerun successfully."
+    }
+  ],
+  "later_proofs": {
+    "new_chain_and_safety": 15,
+    "owner_fix_classification_freshness_prepared_batch": 72,
+    "complete_post_harness_and_stale_retry": 23,
+    "final_original_http_and_byte_budget": 2
+  },
+  "limits": "This full attempt is not all-green and predates the final owner correction/harness assertions. Later focused proofs are separate, overlapping runs, not a second full-suite run. Exact final CI on PostgreSQL16 and both Python versions remains required.",
+  "skipped": 43,
+  "existing_skip_reasons": {
+    "Real Docling/models acceptance environment required; not proven by unit tests": 12,
+    "Configure Playwright and Chromium for the authenticated browser proof": 1,
+    "Chromium browser verification is opt-in": 12,
+    "Required browser acceptance job supplies Chromium": 2,
+    "Chromium must be supplied for browser verification": 1,
+    "B23 nog niet ge\u00efmplementeerd op main (Forge)": 3,
+    "Optional Bend toolchain is not installed": 4,
+    "Browser proof runs in the required GitHub acceptance job": 1,
+    "Bend is optional outside its dedicated CI job": 7
+  }
+}

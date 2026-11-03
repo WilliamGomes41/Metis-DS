@@ -66,3 +66,20 @@ current-dependency, prepared-batch and actual classification/live-app tests pass
 The independent reviewer inspected this landed correction and found no blocker.
 The actor-identity race additionally commits its winning change from a distinct
 OS process before the original command's commit guard; the native proof passes.
+
+The complete four-part local run executed all6,931 selected nodes exactly once:
+6,876 passed,43 existing profile/legacy skips,12 initial failures, zero PostgreSQL skips/errors.
+[Normalized accounting](full-suite-attempt.json) preserves those failures instead
+of relabeling the run green. Three were the corrected same-path owner regression;
+eight were the old semantic-refusal-in-write-transaction assertion. The harness
+now more strictly requires refusal outside the write lock/transaction, prepared
+source and unchanged durable state. All23 affected original POST-harness/stale
+cases passed after these corrections. One batch hold measured254.648ms under
+four-way suite load against the unchanged250ms limit; the focused repeat passed.
+Final exact-head CI remains required; these overlapping targeted reruns are not
+misrepresented as another all-green complete collection.
+
+The43 existing skips include three already-unimplemented B23 cases; the other
+skips require browser, real Docling/models or optional Bend tooling. Reasons are
+retained in the normalized report. The final isolated20-member batch rerun passed
+the original3s/250ms/500ms limits (see PR for its measured values).
