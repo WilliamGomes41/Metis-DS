@@ -137,7 +137,8 @@ def test_legacy_task_names_only_normalize_to_canonical_tasks() -> None:
     assert normalize_review_task("individual") == "contextual"
     assert normalize_review_task("together") == "batch"
     assert normalize_review_task("control") == "repair"
-    assert normalize_review_task("decisions") == "history"
+    assert normalize_review_task("decisions") == ""
+    assert normalize_review_task("history") == ""
     assert normalize_review_task("closure") == "disposition"
     assert normalize_review_task("second_review") == "second_review"
     for canonical in (
@@ -146,7 +147,6 @@ def test_legacy_task_names_only_normalize_to_canonical_tasks() -> None:
         "batch",
         "second_review",
         "repair",
-        "history",
         "disposition",
     ):
         assert normalize_review_task(canonical) == canonical

@@ -21,8 +21,7 @@ from tests.semantic_fixture_support import install_fixture_history
 
 from .support import ACTOR, OTHER, REVIEWER, command, console_at, select_literal
 
-CASES = ["empty", "documents", "unknown_document", "index", "proportionate_index", "history_index", "history_no_reader",
-         "history_detail", "batch", "batch_selected", "provided_snapshot", "unknown_object", "heading",
+CASES = ["empty", "documents", "unknown_document", "index", "proportionate_index", "batch", "batch_selected", "provided_snapshot", "unknown_object", "heading",
          "content", "outsider", "non_reviewer", "published", "context_source", "context_saved",
          "source_conflict", "source_conflict_empty_draft", "partial_one", "partial_many",
          "second_actionable", "second_same_reviewer", "explicit_second_without_duty", "legacy_bindings"]
@@ -46,14 +45,6 @@ def test_review_room_golden(case, tmp_path, monkeypatch, golden, production_cons
             args.pop("document")
         if case == "unknown_document":
             args["document"] = "missing-document"
-        if case.startswith("history"):
-            args["task"] = "history"
-            if case == "history_detail":
-                args["object"] = content["object_id"]
-            if case == "history_no_reader":
-                monkeypatch.setattr(console, "audit_review_signals", None, raising=False)
-            else:
-                monkeypatch.setattr(console, "audit_review_signals", lambda: [], raising=False)
         if case.startswith("batch"):
             args["task"] = "batch"
             if case == "batch_selected":

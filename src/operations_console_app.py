@@ -140,7 +140,6 @@ CANONICAL_REVIEW_TASKS = frozenset({
     "batch",
     "second_review",
     "repair",
-    "history",
     "disposition",
     "inventory",
     "waiting",
@@ -150,7 +149,6 @@ LEGACY_REVIEW_TASK_ALIASES = {
     "individual": "contextual",
     "together": "batch",
     "control": "repair",
-    "decisions": "history",
     "closure": "disposition",
 }
 REVIEW_TASKS = frozenset({
@@ -1931,333 +1929,6 @@ def _review_progress_summary(objects: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
-def _review_decision_label(obj: dict[str, Any]) -> str:
-    if _review_was_revised(obj):
-        return "Herzien na correctie"
-    disposition = definitive_review_disposition(obj)
-    review_status = str(disposition.get("review_status") or "")
-    outcome = str(disposition.get("outcome") or "")
-    if review_status == "rejected":
-        return "Afgewezen"
-    labels = {
-        "approved": "Goedgekeurd",
-        "linked_as_support": "Alleen onderbouwing",
-        "used_as_context": "Context",
-        "excluded_with_reason": "Niet opgenomen",
-        "superseded": "Vervangen",
-    }
-    return labels.get(outcome, review_row_status(obj))
-
-
-def _review_signals_for_object(
-    audit_signals: list[dict[str, Any]],
-    *,
-    snapshot_id: str,
-    object_id: str,
-) -> list[dict[str, Any]]:
-    return [
-        event
-        for event in audit_signals
-        if str(event.get("object_id") or "") == object_id
-        and str(
-            (event.get("details") if isinstance(event.get("details"), dict) else {}).get(
-                "snapshot_id"
-            )
-            or ""
-        )
-        == snapshot_id
-    ]
-
-
-def _review_signal_for_object(
-    audit_signals: list[dict[str, Any]],
-    *,
-    snapshot_id: str,
-    object_id: str,
-) -> dict[str, Any] | None:
-    signals = _review_signals_for_object(
-        audit_signals,
-        snapshot_id=snapshot_id,
-        object_id=object_id,
-    )
-    return signals[0] if signals else None
-
-
-def _current_review_objects(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    current: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        object_id = str(row.get("object_id") or "")
-        if object_id:
-            current[object_id] = row
-    return list(current.values())
-
-
-def _review_object_versions(
-    rows: list[dict[str, Any]],
-    object_id: str,
-) -> list[dict[str, Any]]:
-    return [row for row in rows if str(row.get("object_id") or "") == object_id]
-
-
-def _review_history_status(obj: dict[str, Any]) -> str:
-    status = str((obj.get("governance") or {}).get("validation_status") or "")
-    return {
-        "needs_review": "Te beoordelen",
-        "approved": "Goedgekeurd",
-        "rejected": "Afgewezen",
-        "revise": "Correctie gevraagd",
-        "superseded": "Vervangen",
-        "draft": "Concept",
-    }.get(status, status.replace("_", " ") or "Onbekend")
-
-
-def _review_version_changes(
-    previous: dict[str, Any],
-    current: dict[str, Any],
-) -> list[tuple[str, str, str]]:
-    def text(obj: dict[str, Any]) -> str:
-        content = obj.get("content") if isinstance(obj.get("content"), dict) else {}
-        return str(content.get("clean_text") or content.get("raw_text") or "").strip()
-
-    def object_type(obj: dict[str, Any]) -> str:
-        return str(obj.get("confirmed_object_type") or obj.get("object_type") or "").strip()
-
-    def status(obj: dict[str, Any]) -> str:
-        return _review_history_status(obj)
-
-    def section(obj: dict[str, Any]) -> str:
-        structure = obj.get("structure") if isinstance(obj.get("structure"), dict) else {}
-        return " › ".join(str(part) for part in structure.get("section_path") or [])
-
-    fields = (
-        ("Passagetekst", text),
-        ("Type", object_type),
-        ("Reviewstatus", status),
-        ("Bronpositie", section),
-    )
-    return [
-        (label, before, after)
-        for label, getter in fields
-        if (before := getter(previous)) != (after := getter(current))
-    ]
-
-
-def _review_object_history(
-    snapshot_id: str,
-    obj: dict[str, Any],
-    all_rows: list[dict[str, Any]],
-    audit_signals: list[dict[str, Any]],
-) -> str:
-    object_id = str(obj.get("object_id") or "")
-    versions = _review_object_versions(all_rows, object_id)
-    by_version = {
-        str(row.get("object_version") or ""): row
-        for row in versions
-        if str(row.get("object_version") or "")
-    }
-    provenance = obj.get("provenance") if isinstance(obj.get("provenance"), dict) else {}
-    previous_version = str(provenance.get("previous_object_version") or "")
-    previous = by_version.get(previous_version)
-    if previous is None and len(versions) > 1:
-        previous = versions[-2]
-
-    changes = _review_version_changes(previous, obj) if previous is not None else []
-    if changes:
-        change_html = "".join(
-            f'<div class="review-version-change"><dt>{_esc(label)}</dt>'
-            f'<dd><span class="review-version-before">{_esc(before or "—")}</span>'
-            f'<span aria-hidden="true">→</span>'
-            f'<span class="review-version-after">{_esc(after or "—")}</span></dd></div>'
-            for label, before, after in changes
-        )
-        diff_html = f"""
-          <section class="review-version-diff" aria-labelledby="review-version-diff-title">
-            <h3 id="review-version-diff-title">Verschil met vorige versie</h3>
-            <p class="muted">Alleen velden die aantoonbaar tussen de opgeslagen versies verschillen worden getoond.</p>
-            <dl>{change_html}</dl>
-          </section>
-        """
-    else:
-        diff_html = """
-          <section class="review-version-diff">
-            <h3>Verschil met vorige versie</h3>
-            <p class="muted">Voor deze versie is geen eerdere opgeslagen objectversie met aantoonbare verschillen beschikbaar.</p>
-          </section>
-        """
-
-    signals = _review_signals_for_object(
-        audit_signals,
-        snapshot_id=snapshot_id,
-        object_id=object_id,
-    )
-    signals_by_version: dict[str, list[dict[str, Any]]] = {}
-    for signal in signals:
-        signals_by_version.setdefault(str(signal.get("object_version") or ""), []).append(signal)
-
-    timeline = []
-    current_version = str(obj.get("object_version") or "")
-    for version in versions:
-        version_id = str(version.get("object_version") or "")
-        governance = version.get("governance") if isinstance(version.get("governance"), dict) else {}
-        version_provenance = (
-            version.get("provenance") if isinstance(version.get("provenance"), dict) else {}
-        )
-        version_signals = signals_by_version.get(version_id) or []
-        signal = version_signals[0] if version_signals else None
-        details = (
-            (signal or {}).get("details")
-            if isinstance((signal or {}).get("details"), dict)
-            else {}
-        )
-        actor = str(
-            (signal or {}).get("actor") or governance.get("validated_by") or ""
-        ).strip()
-        occurred_at = str(
-            (signal or {}).get("occurred_at") or governance.get("validation_date") or ""
-        ).strip()
-        reason = str(
-            details.get("comment") or version_provenance.get("revision_reason") or ""
-        ).strip()
-        metadata = []
-        if actor:
-            metadata.append(actor)
-        if occurred_at:
-            metadata.append(occurred_at)
-        meta_html = (
-            f'<p class="muted">{" · ".join(_esc(item) for item in metadata)}</p>'
-            if metadata
-            else ""
-        )
-        reason_html = f'<p>{_esc(reason)}</p>' if reason else ""
-        current_badge = (
-            '<span class="review-history-current">huidige versie</span>'
-            if version_id == current_version
-            else ""
-        )
-        timeline.append(
-            f"""
-            <li class="review-history-event">
-              <div class="review-history-event-heading">
-                <strong>Versie {_esc(version_id)}</strong>
-                <span class="review-row-status">{_esc(_review_history_status(version))}</span>
-                {current_badge}
-              </div>
-              {reason_html}
-              {meta_html}
-            </li>
-            """
-        )
-
-    return f"""
-      {_review_task_header(snapshot_id, "Objecthistorie", "Bekijk opgeslagen versies en reviewbesluiten zonder de reviewstatus te wijzigen")}
-      <section class="review-object-history" data-review-object-history="{_esc(object_id)}">
-        <h3>{_esc(review_row_title(obj))}</h3>
-        <p class="muted">Object {_esc(object_id)} · huidige versie {_esc(current_version)}</p>
-        {diff_html}
-        <section aria-labelledby="review-history-timeline-title">
-          <h3 id="review-history-timeline-title">Versiehistorie</h3>
-          <ol class="review-history-timeline">{"".join(timeline)}</ol>
-        </section>
-      </section>
-    """
-
-
-def _review_decision_row(
-    obj: dict[str, Any],
-    snapshot_id: str,
-    audit_signals: list[dict[str, Any]],
-) -> str:
-    signal = _review_signal_for_object(
-        audit_signals,
-        snapshot_id=snapshot_id,
-        object_id=str(obj.get("object_id") or ""),
-    )
-    details = (signal or {}).get("details") if isinstance((signal or {}).get("details"), dict) else {}
-    provenance = obj.get("provenance") if isinstance(obj.get("provenance"), dict) else {}
-    governance = obj.get("governance") if isinstance(obj.get("governance"), dict) else {}
-    comment = str(
-        details.get("comment")
-        or provenance.get("revision_reason")
-        or ""
-    ).strip()
-    actor = str((signal or {}).get("actor") or governance.get("validated_by") or "").strip()
-    occurred_at = str((signal or {}).get("occurred_at") or governance.get("validation_date") or "").strip()
-    previous = str(provenance.get("previous_object_version") or "").strip()
-    current_version = str(obj.get("object_version") or "").strip()
-    meta = []
-    if actor:
-        meta.append(actor)
-    if occurred_at:
-        meta.append(occurred_at)
-    if previous:
-        meta.append(f"vorige versie {previous}")
-    if current_version:
-        meta.append(f"versie {current_version}")
-    meta_html = f'<span class="muted">{" · ".join(_esc(item) for item in meta)}</span>' if meta else ""
-    comment_html = f'<p class="muted">{_esc(comment)}</p>' if comment else ""
-    object_id = str(obj.get("object_id") or "")
-    source_href = (
-        f"/review/bronpassage?document={quote(snapshot_id, safe='')}"
-        f"&amp;object={quote(object_id, safe='')}"
-        "&amp;task=history"
-    )
-    history_href = (
-        f"/review?document={quote(snapshot_id, safe='')}"
-        f"&amp;object={quote(object_id, safe='')}"
-        "&amp;task=history"
-    )
-    return f"""
-      <li class="review-row review-decision-row">
-        <div>
-          <span class="review-row-title">{_esc(review_row_title(obj))}</span>
-          {comment_html}
-          {meta_html}
-        </div>
-        <div>
-          <span class="review-row-status">{_esc(_review_decision_label(obj))}</span>
-          <a class="btn-secondary" href="{history_href}">Bekijk historie</a>
-          <a class="btn-secondary" href="{source_href}">Bekijk bron</a>
-        </div>
-      </li>
-    """
-
-
-def _review_progress_overview(
-    snapshot_id: str,
-    progress: dict[str, int],
-) -> str:
-    total = int(progress["total"])
-    done = int(progress["done"])
-    percent = round((done / total) * 100) if total else 100
-    extras = []
-    if progress["context"]:
-        extras.append(f'<strong>{progress["context"]}</strong> context')
-    if progress["support"]:
-        extras.append(f'<strong>{progress["support"]}</strong> onderbouwing')
-    if progress["superseded"]:
-        extras.append(f'<strong>{progress["superseded"]}</strong> vervangen')
-    if progress["revised"]:
-        extras.append(f'<strong>{progress["revised"]}</strong> herzien na correctie')
-    extras_html = '<p class="review-progress-extra">' + " · ".join(extras) + '</p>' if extras else ""
-    return f"""
-      <section class="review-progress-overview" aria-labelledby="review-progress-title">
-        <div class="review-task-heading">
-          <h2 id="review-progress-title">Reviewvoortgang</h2>
-          <p class="review-progress-number">{percent}<span>%</span></p>
-          <p>{done} van {total} bronpassages afgehandeld</p>
-        </div>
-        <progress aria-label="Afgehandelde bronpassages" value="{done}" max="{max(total, 1)}">{percent}%</progress>
-        <dl class="review-progress-counts">
-          <div><dt>Nog te beoordelen</dt><dd>{progress["open"]}</dd></div>
-          <div><dt>Goedgekeurd</dt><dd>{progress["approved"]}</dd></div>
-          <div><dt>Afgewezen</dt><dd>{progress["rejected"]}</dd></div>
-          <div><dt>Niet opgenomen</dt><dd>{progress["not_included"]}</dd></div>
-        </dl>
-        {extras_html}
-        <a class="review-history-link" href="/review?document={_esc(snapshot_id)}&amp;task=history">Besluiten en historie <span aria-hidden="true">→</span></a>
-      </section>
-    """
-
 
 def knowledge_open_count(
     objects: list[dict[str, Any]],
@@ -2688,8 +2359,6 @@ def _source_category_tiles(source_usage: dict[str, dict[str, Any]]) -> str:
             + '</ul>')
 
 
-
-
 def _review_inventory(
     snapshot_id: str,
     objects: list[dict[str, Any]],
@@ -2720,7 +2389,7 @@ def _review_inventory(
         "structure": "Documentindeling controleren", "contextual": "Passage afzonderlijk beoordelen",
         "batch": "Passages selecteren en bevestigen", "second_review": "Tweede beoordeling",
         "waiting": "Wacht op andere reviewer", "repair": "Passages corrigeren",
-        "disposition": "Gebruik van bronpassage bepalen", "history": "Status en historie",
+        "disposition": "Gebruik van bronpassage bepalen", "handled": "Afgehandeld",
     }
     outcomes = {
         "not_yet_assessed": "Nog niet afgehandeld", "candidate_review_open": "Kandidaat nog te beoordelen",
@@ -2759,7 +2428,7 @@ def _review_inventory(
         object_id = str(obj.get("object_id") or "")
         disposition = definitive_review_disposition(obj)
         category = ("repair" if object_id in repair_ids or followup_tasks.get(object_id) == "repair" else
-                    route_task or followup_tasks.get(object_id) or "history")
+                    route_task or followup_tasks.get(object_id) or "handled")
         if task != "inventory" and category != task:
             continue
         selected.append((obj, category, disposition))
@@ -2851,8 +2520,9 @@ def _review_inventory(
             next_action = "Een andere bevoegde reviewer moet deze versie onafhankelijk beoordelen."
         elif category == "repair":
             next_action = "Controleer de bron en herstel het verwerkingsprobleem voordat je goedkeurt."
-        elif category == "history":
-            next_action = "Bekijk het vastgelegde besluit; dit is geen nieuwe beoordelingsopdracht."
+        elif category == "handled":
+            target_task = "inventory"
+            next_action = "Bekijk de bronpassage bij de huidige afhandeling."
         elif category == "disposition":
             if not disposition.get("valid"):
                 next_action = "De opgeslagen afhandeling is ongeldig. Open de passage om het conflict te onderzoeken; keur niet automatisch goed."
@@ -2866,7 +2536,8 @@ def _review_inventory(
         if source_role:
             role_label = {"label": "Bevestigd bronlabel", "context": "Bevestigd contextfragment", "excluded": "Niet opgenomen met reden"}.get(source_role.get("role"), "Bronrol controleren")
             hint_html += f'<p data-confirmed-source-role>{_esc(role_label)} · {_esc(source_role.get("reason"))}</p>'
-        workplace = "/source-selection" if target_task == "repair" else "/review"
+        workplace = ("/review/bronpassage" if category == "handled" else
+                     "/source-selection" if target_task == "repair" else "/review")
         items.append(
             f'<li data-passage-id="{_esc(object_id)}" data-passage-category="{_esc(category)}">'
             f'<a class="review-row-title" href="{workplace}?document={_esc(snapshot_id)}&amp;object={_esc(object_id)}&amp;task={_esc(target_task)}">{_esc(review_card_sentence(obj))}</a>'
@@ -2970,7 +2641,7 @@ def _review_inventory(
     return (
         f'<section class="{panel_class}">'
         + _review_task_header(snapshot_id, title, "Beoordelingswerk en bronafhandeling zijn afzonderlijke controles; de aantallen mogen overlappen")
-        + f'<p>{"Op deze pagina: " if navigation else ""}{len(items)} beoordelings- of historieregels; {len(metadata_items) + len(source_items) + sum(len(g) for g in source_groups.values())} bronregels.</p>'
+        + f'<p>{"Op deze pagina: " if navigation else ""}{len(items)} overige passages; {len(metadata_items) + len(source_items) + sum(len(g) for g in source_groups.values())} bronregels.</p>'
         + f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p>'
         + (f'<nav class="review-filter" data-review-filter aria-label="Filter bronafhandeling">'
            f'<a{" aria-current=\"page\"" if task == "disposition" else ""} '
@@ -3192,7 +2863,6 @@ def _render_review_index(
     review_path: str,
     snapshot_revision: str = "",
     task: str = "",
-    audit_signals: list[dict[str, Any]] | None = None,
     bindings: list[dict[str, Any]] | None = None,
     reviewer_id: str = "",
     fragments=None,
@@ -3238,27 +2908,7 @@ def _render_review_index(
         content = ''.join(panels) or '<p class="review-task-empty">Geen inhoudelijke beoordeling voor jou beschikbaar. Je eigen werk is klaar of wacht op een andere reviewer.</p>'
         return (_review_task_header(snapshot_id, "Kennisvoorstellen beoordelen", "") +
             '<section data-content-review-workplace>' + content +
-            f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a> · '
-            f'<a href="/review?document={_esc(snapshot_id)}&amp;task=history">Besluiten en historie</a></p></section>')
-    if task == "history":
-        progress = _review_progress_summary(snapshot_objects)
-        decision_rows = [
-            obj
-            for obj in snapshot_objects
-            if obj.get("object_type") != "document"
-            and (_review_is_final(obj) or _review_was_revised(obj))
-        ]
-        decision_rows, navigation = _review_queue_page(decision_rows, snapshot_id, task, page)
-        return navigation + f'''
-          {_review_task_header(snapshot_id, "Besluiten en historie", "Bekijk read-only welke passages zijn afgehandeld en welke na correctie opnieuw ter beoordeling staan")}
-          {_review_progress_overview(snapshot_id, progress)}
-          <section class="review-decision-history">
-            <ol class="object-index">
-              {"".join(_review_decision_row(obj, snapshot_id, audit_signals or []) for obj in decision_rows) if decision_rows else '<li class="review-task-empty">Nog geen besluiten of correcties vastgelegd.</li>'}
-            </ol>
-          </section>
-        '''
-
+            f'<p><a href="/review?document={_esc(snapshot_id)}&amp;task=inventory">Alle passages bekijken</a></p></section>')
     koppen = _review_route_objects(snapshot_objects, review_path=review_path,
         bindings=bindings, reviewer_id=reviewer_id, canonical_task="structure", fragments=fragments)
     copy = _review_lane_copy(review_path, koppen)
@@ -3682,30 +3332,15 @@ def _render_review_room(
             f'{_document_card_heading({**chosen_row, "status": chosen_row["state"]})}'
             "</div>"
         )
-        history_enabled = chosen_task == "history"
-        if history_enabled:
-            loaded_objects, snapshot_revision = console.snapshot_objects_and_revision(
-                chosen,
-                include_blocked=True,
-            )
-            all_object_versions = loaded_objects
-            snapshot_objects = _current_review_objects(loaded_objects)
-        else:
-            snapshot_objects, snapshot_revision = (
-                (read_inputs.objects, read_inputs.revision) if read_inputs is not None else
-                snapshot if snapshot is not None else console.snapshot_objects_and_revision(chosen))
-            all_object_versions = []
+        snapshot_objects, snapshot_revision = (
+            (read_inputs.objects, read_inputs.revision) if read_inputs is not None else
+            snapshot if snapshot is not None else console.snapshot_objects_and_revision(chosen))
         review_path = review_path_for_klasse(chosen_row["class"])
         fragments = None
         bindings = None
-        if not chosen_object_id and not history_enabled:
+        if not chosen_object_id:
             bindings, fragments = _review_document_source_inputs(console, chosen, snapshot_objects, read_inputs)
         objects_html += _review_formation_notice(console, chosen, read_inputs, document_source=fragments)
-        audit_signals: list[dict[str, Any]] = []
-        if history_enabled:
-            audit_reader = getattr(console, "audit_review_signals", None)
-            if callable(audit_reader):
-                audit_signals = list(audit_reader())
         if not chosen_object_id:
             objects_html += _render_review_index(
                 chosen,
@@ -3713,7 +3348,6 @@ def _render_review_room(
                 review_path,
                 snapshot_revision,
                 task=chosen_task,
-                audit_signals=audit_signals,
                 bindings=bindings,
                 reviewer_id=reviewer_id, fragments=fragments,
                 page=queue_page, console=console, batch_selection=batch_selection,
@@ -3722,59 +3356,35 @@ def _render_review_room(
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
             if obj is None:
                 raise ConsoleError("unknown_object")
-            if history_enabled:
-                objects_html += _review_object_history(
-                    chosen,
-                    obj,
-                    all_object_versions,
-                    audit_signals,
-                )
-            else:
-                objects_html += '<h2>Kennisvoorstellen beoordelen</h2>'
-                if review_revision and review_revision != snapshot_revision:
-                    objects_html += '<p class="banner warn" data-review-return-changed>De revisie is gewijzigd sinds je naar Vorming ging. Controleer het huidige voorstel en beoordeel deze versie opnieuw.</p>'
-                detail_projection, route = _review_detail_projection(
-                    console, account, chosen, obj, snapshot_objects, review_path, read_inputs)
-                context_html = ""
-                if ('reviewer' in (account.get('roles') or [])
-                        and reviewer_id in chosen_row.get('named_reviewers', [])
-                        and not console.snapshot_is_published(chosen)):
-                    context_html = _source_context_panel(obj, snapshot_objects, chosen, snapshot_revision,
-                        context_target=context_target, source_mode=context_mode == "source",
-                        draft=context_draft, error=context_error, projection=detail_projection,
-                        editable=False)
-                if context_saved:
-                    objects_html += '<p class="banner ok" role="status">Het contextbesluit is opgeslagen. Beoordeel de betrokken passages opnieuw.</p>'
-                conflict_html = _review_conflict_html(conflict, current=obj, draft=draft)
-                source_card = _source_context_card(console, chosen, obj, context_html,
-                    context_target=context_target, context_mode=context_mode, task=chosen_task,
-                    read_inputs=read_inputs)
-                if source_card:
-                    objects_html += conflict_html + source_card
-                    if conflict:
-                        for field, label in (("comment", "Niet opgeslagen toelichting"),
-                                             ("proposed_correction", "Niet opgeslagen correctie")):
-                            if draft.get(field):
-                                objects_html += (f'<aside data-unsaved-review-draft><h3>{label}</h3>'
-                                                 f'<p>{_esc(draft[field])}</p></aside>')
-                elif route and route.get("canonical_task") == "second_review":
-                    if route.get("actionable"):
-                        objects_html += _render_second_review_card(
-                            console,
-                            chosen,
-                            obj,
-                            snapshot_objects,
-                            review_path,
-                            reviewer_id=reviewer_id,
-                            snapshot_revision=snapshot_revision,
-                            read_inputs=read_inputs,
-                        )
-                    else:
-                        objects_html += f"""
-                          <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">← Terug naar kennisvoorstellen</a></p>
-                          <div class="banner warn">Deze tweede beoordeling moet door een andere onafhankelijke reviewer worden uitgevoerd.</div>
-                        """
-                elif chosen_task == "second_review":
+            objects_html += '<h2>Kennisvoorstellen beoordelen</h2>'
+            if review_revision and review_revision != snapshot_revision:
+                objects_html += '<p class="banner warn" data-review-return-changed>De revisie is gewijzigd sinds je naar Vorming ging. Controleer het huidige voorstel en beoordeel deze versie opnieuw.</p>'
+            detail_projection, route = _review_detail_projection(
+                console, account, chosen, obj, snapshot_objects, review_path, read_inputs)
+            context_html = ""
+            if ('reviewer' in (account.get('roles') or [])
+                    and reviewer_id in chosen_row.get('named_reviewers', [])
+                    and not console.snapshot_is_published(chosen)):
+                context_html = _source_context_panel(obj, snapshot_objects, chosen, snapshot_revision,
+                    context_target=context_target, source_mode=context_mode == "source",
+                    draft=context_draft, error=context_error, projection=detail_projection,
+                    editable=False)
+            if context_saved:
+                objects_html += '<p class="banner ok" role="status">Het contextbesluit is opgeslagen. Beoordeel de betrokken passages opnieuw.</p>'
+            conflict_html = _review_conflict_html(conflict, current=obj, draft=draft)
+            source_card = _source_context_card(console, chosen, obj, context_html,
+                context_target=context_target, context_mode=context_mode, task=chosen_task,
+                read_inputs=read_inputs)
+            if source_card:
+                objects_html += conflict_html + source_card
+                if conflict:
+                    for field, label in (("comment", "Niet opgeslagen toelichting"),
+                                         ("proposed_correction", "Niet opgeslagen correctie")):
+                        if draft.get(field):
+                            objects_html += (f'<aside data-unsaved-review-draft><h3>{label}</h3>'
+                                             f'<p>{_esc(draft[field])}</p></aside>')
+            elif route and route.get("canonical_task") == "second_review":
+                if route.get("actionable"):
                     objects_html += _render_second_review_card(
                         console,
                         chosen,
@@ -3786,19 +3396,35 @@ def _render_review_room(
                         read_inputs=read_inputs,
                     )
                 else:
-                    objects_html += _render_review_card(
-                        console,
-                        chosen,
-                        obj,
-                        snapshot_objects,
-                        review_path,
-                        draft,
-                        conflict_html,
-                        snapshot_revision,
-                        chosen_task,
-                        context_html=context_html,
-                        read_inputs=read_inputs,
-                    )
+                    objects_html += f"""
+                      <p><a class="btn-secondary" href="/review?document={_esc(chosen)}">← Terug naar kennisvoorstellen</a></p>
+                      <div class="banner warn">Deze tweede beoordeling moet door een andere onafhankelijke reviewer worden uitgevoerd.</div>
+                    """
+            elif chosen_task == "second_review":
+                objects_html += _render_second_review_card(
+                    console,
+                    chosen,
+                    obj,
+                    snapshot_objects,
+                    review_path,
+                    reviewer_id=reviewer_id,
+                    snapshot_revision=snapshot_revision,
+                    read_inputs=read_inputs,
+                )
+            else:
+                objects_html += _render_review_card(
+                    console,
+                    chosen,
+                    obj,
+                    snapshot_objects,
+                    review_path,
+                    draft,
+                    conflict_html,
+                    snapshot_revision,
+                    chosen_task,
+                    context_html=context_html,
+                    read_inputs=read_inputs,
+                )
 
     if chosen_object_id and snapshot_revision:
         # Lossy navigation evidence only. Never use an incoming origin token as CAS.
@@ -5577,6 +5203,12 @@ def create_console_app(
     @app.get("/review/bronpassage", response_class=HTMLResponse)
     def review_bronpassage(request: Request, document: str = "", object: str = "", task: str = "") -> str:
         account = _require(request)
+        if task.strip() in {"history", "decisions"}:
+            from src.review.review_participation_ui_v1 import require_overview
+            require_overview(account)
+            params = {"document": document} if document else {}
+            return RedirectResponse('/review' + ('?' + urlencode(params) if params else ''),
+                                    status_code=303)
         chosen = document.strip()
         object_id = object.strip()
         safe_task = normalize_review_task(task)

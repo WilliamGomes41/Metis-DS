@@ -93,7 +93,7 @@ def test_heading_form_post_refresh_native_restart_and_old_workplace(tmp_path, mo
     assert response.status_code == 303, response.text
     assert response.headers['location'] == f'/source-selection?document={sid}&task=structure'
     after = _state(state, sid)
-    current = ui._current_review_objects(state.workflow_document_store.list_document_objects(sid))
+    current = state.snapshot_objects(sid)
     selected = next(r for r in current if r['object_id'] == ids[0])
     assert selected['governance']['validation_status'] == 'approved'
     assert all(r in current for r in original_rows if r['object_id'] != ids[0])

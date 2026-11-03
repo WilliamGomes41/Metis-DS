@@ -540,8 +540,8 @@ def _workboard_card(item: dict[str, Any], *, started: bool = False,
         return ('<article class="doc-card" data-workboard-document="' + _esc(item['snapshot_id']) +
                 '" data-personal-state="unavailable"><h2>' + _esc(envelope.get('title') or 'Document') +
                 '</h2><p>De actuele kaartgegevens zijn niet beschikbaar. Het aantal open beoordelingen is onbekend.</p>'
-                '<p><a href="/review?' + _esc(urlencode({'document':item['snapshot_id'],'task':'history'})) +
-                '">Beoordelingen inzien</a></p></article>')
+                '<p><a href="/review?' + _esc(urlencode({'document':item['snapshot_id'],'task':'inventory'})) +
+                '">Alle passages bekijken</a></p></article>')
     envelope, lifecycle = item['envelope'], item['lifecycle_status']
     view = _personal_review_view(item)
     sid = str(item['snapshot_id'])
@@ -550,7 +550,7 @@ def _workboard_card(item: dict[str, Any], *, started: bool = False,
         title = 'Verder beoordelen' if started else 'Beginnen'
         action = f'<a class="btn-primary" data-personal-review-action href="{_esc(href)}">{title}</a>'
     else:
-        action = '<a href="/review?' + _esc(urlencode({'document': sid, 'task': 'history'})) + '">Beoordelingen inzien</a>'
+        action = '<a href="/review?' + _esc(urlencode({'document': sid, 'task': 'inventory'})) + '">Alle passages bekijken</a>'
     if view['state'] == 'waiting':
         summary = '<p class="lead">Wachten op een andere reviewer.</p>'
     elif view['state'] == 'complete':
@@ -704,6 +704,11 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         account = _current_account(console, request)
         from src.review.review_participation_ui_v1 import overview, require_overview
         require_overview(account)
+        if task.strip() in {"history", "decisions"}:
+            # Retired page bookmarks navigate before any document/source/audit capture.
+            params = {"document": document} if document else {}
+            return RedirectResponse('/review' + ('?' + urlencode(params) if params else ''),
+                                    status_code=303)
         if work not in {"mine", "all"}:
             raise ConsoleError("invalid_review_filter")
         if not document and (work == "all" or "reviewer" not in account["roles"]):
@@ -754,7 +759,7 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
                     params[field] = value
             return RedirectResponse('/source-selection?' + urlencode(params), status_code=303)
         read_inputs = None
-        if document and object.strip() and chosen_task != 'history':
+        if document and object.strip():
             from src.review.review_passage_read_v1 import read_review_passage
             try:
                 read_inputs = read_review_passage(console, account, document, object.strip(),
@@ -764,7 +769,7 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
                     return RedirectResponse('/review/trajectory?' + urlencode({'document': document}), status_code=303)
                 raise
             selected = read_inputs.envelope
-        elif document and chosen_task and chosen_task not in {'history', 'structure'}:
+        elif document and chosen_task and chosen_task != 'structure':
             from src.review.review_passage_read_v1 import read_review_document
             try:
                 read_inputs = read_review_document(console, account, document, current_only=chosen_task == 'batch')
