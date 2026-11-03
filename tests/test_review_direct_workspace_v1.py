@@ -126,18 +126,18 @@ def test_multiple_documents_group_personal_work_without_leaking_assignments():
     assert waiting.status_code == 200
     assert 'Wachten op anderen' in waiting.text
     assert 'data-personal-state="waiting"' in waiting.text
-    assert 'task=history' in waiting.text
+    assert 'task=inventory' in waiting.text and 'task=history' not in waiting.text
     readonly = browser.get('/review?document=private', follow_redirects=False)
     assert readonly.status_code == 303
     assert readonly.headers['location'] == '/review/trajectory?document=private'
 
 
-def test_closed_document_with_stale_duties_has_history_not_continuation():
+def test_closed_document_with_stale_duties_has_inventory_not_continuation():
     response = client(Console(documents=[('old', document('Old', closed=True))])).get('/review')
     assert response.status_code == 200
     assert 'data-workflow-status="closed"' in response.text
     assert 'Geen open beoordeling voor jou.' in response.text
-    assert 'task=history' in response.text
+    assert 'task=inventory' in response.text and 'task=history' not in response.text
     assert 'Ga verder' not in response.text
     assert 'task=structure' not in response.text
 
@@ -200,10 +200,12 @@ def test_queue_navigation_does_not_backtrack_over_incomplete_hrefs():
         from tests.test_review_direct_workspace_v1 import Console, client, document
 
         rendered = 'href="/review?' + 'queue_page=' * 50000
-        console = Console(documents=[('one', document('One'))])
+        item = document('One')
+        item['envelope']['class'] = 'beslisboom'
+        console = Console(documents=[('one', item)])
         with patch('src.review.review_workboard_v1._render_review_room', return_value=rendered):
             response = client(console).get('/review', params={
-                'document': 'one', 'task': 'history', 'q': 'keep', 'page': 2})
+                'document': 'one', 'task': 'structure', 'q': 'keep', 'page': 2})
         assert response.status_code == 200
         assert response.text == rendered
     ''')
@@ -220,9 +222,11 @@ def test_queue_navigation_only_updates_complete_queue_links(monkeypatch):
     queue = '<a href="/review?document=one&amp;queue_page=2">Volgende</a>'
     monkeypatch.setattr('src.review.review_workboard_v1._render_review_room',
                         lambda *args, **kwargs: ordinary + queue)
-    console = Console(documents=[('one', document('One'))])
+    item = document('One')
+    item['envelope']['class'] = 'beslisboom'
+    console = Console(documents=[('one', item)])
     response = client(console).get('/review', params={
-        'document': 'one', 'task': 'history', 'q': 'zorg & huid',
+        'document': 'one', 'task': 'structure', 'q': 'zorg & huid',
         'page': 3, 'theme': 'huid'})
     assert response.status_code == 200
     assert response.text.startswith(ordinary)

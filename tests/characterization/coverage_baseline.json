@@ -999,8 +999,8 @@
       "failed_cases": []
     },
     "review-mutation": {
-      "tests": 27,
-      "failures": 24,
+      "tests": 24,
+      "failures": 21,
       "errors": 0,
       "skipped": 0,
       "failed_cases": [
@@ -1009,9 +1009,6 @@
         "tests.characterization.test_review_room::test_review_room_golden[unknown_document]",
         "tests.characterization.test_review_room::test_review_room_golden[index]",
         "tests.characterization.test_review_room::test_review_room_golden[proportionate_index]",
-        "tests.characterization.test_review_room::test_review_room_golden[history_index]",
-        "tests.characterization.test_review_room::test_review_room_golden[history_no_reader]",
-        "tests.characterization.test_review_room::test_review_room_golden[history_detail]",
         "tests.characterization.test_review_room::test_review_room_golden[batch]",
         "tests.characterization.test_review_room::test_review_room_golden[batch_selected]",
         "tests.characterization.test_review_room::test_review_room_golden[provided_snapshot]",

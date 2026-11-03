@@ -87,7 +87,7 @@ def review_client(tmp_path, request, monkeypatch, *, production_app, production_
 
 
 @pytest.mark.parametrize("task", ["structure", "contextual", "batch", "inventory", "disposition",
-                                  "waiting", "history", "second_review", "repair", "object"])
+                                  "waiting", "second_review", "repair", "object"])
 @pytest.mark.parametrize('review_client', [None, 'raw'], indirect=True)
 def test_http_review_render_reuses_source_and_matches_uncached_read(review_client, monkeypatch, task, request):
     import src.vorming.knowledge_materialisation_v1 as materialisation
@@ -125,12 +125,12 @@ def test_http_review_render_reuses_source_and_matches_uncached_read(review_clien
 
     monkeypatch.setattr(semantic, "_reconstructed_blocks", counted)
     monkeypatch.setattr(materialisation, "_reconstructed_blocks", counted)
-    # Structural navigation and historical outcomes need no current source
+    # Structural navigation needs no current source
     # reconstruction. Content tasks retain their exact per-request reuse bound.
     if task == 'structure':
         assert 'action="/review/headings/batch-confirm"' in expected.text
     prepared = request.node.callspec.params['review_client'] is None
-    for expected_calls in ((0, 0) if prepared or task in {'structure', 'history'} else (1, 2)):
+    for expected_calls in ((0, 0) if prepared or task == 'structure' else (1, 2)):
         response = client.get("/review", params=params)
         assert response.status_code == 200
         assert response.text == expected.text

@@ -187,7 +187,7 @@ def _assert_review_projection(console, client, snapshot_id):
     expected = {obj["object_id"] for obj in before if obj.get("object_type") != "document"}
     assert len(rows) == len(expected)
     assert {oid for oid, _ in rows} == expected
-    assert all(category in {"structure", "contextual", "batch", "second_review", "waiting", "repair", "disposition", "history"} for _, category in rows)
+    assert all(category in {"structure", "contextual", "batch", "second_review", "waiting", "repair", "disposition", "handled"} for _, category in rows)
     assert console.snapshot_objects(snapshot_id) == before
     assert console.object_review_bindings(snapshot_id) == bindings
     return sorted(rows)

@@ -82,7 +82,8 @@ def test_followup_counts_lists_and_final_blocked_history_are_disjoint():
     assert 'task=disposition' not in dashboard and 'task=repair' not in dashboard
     inventory = _render_review_index("snap", objects, "tekst", task="inventory", bindings=[], fragments=_allowed_source())
     assert set(_inventory_ids(inventory)) == {"blocked", "excluded", "unknown"}
-    assert 'object=excluded&amp;task=history' in inventory
+    assert '/review/bronpassage?document=snap&amp;object=excluded&amp;task=inventory' in inventory
+    assert 'task=history' not in inventory
 
 
 def test_open_second_review_is_not_reclassified_as_missing_disposition():
