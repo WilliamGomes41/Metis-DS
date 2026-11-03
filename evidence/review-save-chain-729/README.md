@@ -14,8 +14,8 @@ original complete lineage check. No certificate is fabricated or repaired on GET
 
 The same existing1100-row/partial-formation HTTP chain observes persisted approval,
 the retained decision on another passage, stale409 without writes, and continued
-publication refusal. Final timings: open0.132s,save0.335s,next/overview0.696s,
-reopen0.153s,stale0.125s. Actual outer lock163.387ms/TX163.356ms; unchanged
+publication refusal. Final timings: open0.126s,save0.218s,next/overview0.586s,
+reopen0.160s,stale0.121s. Actual outer lock91.038ms/TX91.001ms; unchanged
 budgets3s/5s/250ms/500ms. This final run overlapped the full-suite partitions;
 the baseline did not. Claim reduced selected-prefix bytes and removed in-lock
 pure kernel work, not a statistically established POST speedup or Azure SLO.
