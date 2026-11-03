@@ -1,5 +1,78 @@
 # MET-36: bounded revision inputs under the document owner
 
+## Ordinary save and next-passage slice — 3 November 2026
+
+Change class: A. Rewrite risk: high. Base: `19a83d1cc5908b69e4b764f82c919c1b3f7eb270`.
+William explicitly authorized implementation despite the unverifiable tracker
+label in this session. No merge, deployment or data conversion is authorized.
+This slice extends the lifecycle transition and mitigation map below; it does
+not change review, publication, identity, precondition or retry semantics.
+
+Promise: ordinary generation-form POST → 303 → next passage → reopen retains
+the exact durable decision while pure review work leaves the outer write lock
+and navigation uses current verified card inputs instead of document closure.
+Legacy m2/None, nested commands and unprepared histories retain their explicit
+serial compatibility path. No GET preparation or migration is introduced.
+
+Usage remains HTTP `/review`, and `review_object` remains the domain operation.
+Ordinary compact generation forms reuse the existing prepared batch executor;
+the original single-object kernel still decides. The returned object IDs and
+303 destination stay unchanged. The next GET derives candidates through the
+existing `ordinary_review_queue` / `reviewer_route_for`, then reads the selected
+real passage through `read_review_passage`. Card DTOs never enter a command or
+substitute for passage source verification. Missing/dirty/unavailable card inputs
+use the existing complete navigation reader, never an empty/truncated queue.
+
+| Context | Producer/owner and lifetime | Preparation consumer | Current commit guard / stale result |
+|---|---|---|---|
+| Source hash, version, extraction pin, original locator | immutable source owner; exact document input | existing source preparation/original reader | same source identity and exact selected raw head; conflict on change |
+| Histories/frontiers and dependency membership | document store; one repeatable-read capture | original kernel and prepared write handle | recapture same graph/current heads/frontiers under document lock, including native0 invalidation |
+| Policy/roster/quality/tree input | existing document/policy owners; one capture | original kernel | compare complete captured command envelope/quality/tree at commit |
+| Actor roles, retirement and identity | identity store; current operation | captured public actor | existing KEY SHARE and current public-actor equality; denial/conflict |
+| Bindings and scoped interaction events | review store; one capture | original approval/interaction validators | current exact binding/event comparison under authorization and ledger locks |
+| Audit intents, object/binding/fact delta | existing prepared event buffer and document write handle; one request | pure staged kernel | same native transaction/rollback; buffer closes only within transaction |
+| Candidate navigation | card/fact owner and current bindings; one GET capture | existing queue/route projections | no mutation authority; selected passage gets fresh authorized scoped capture |
+
+Lifecycle fields below remain applicable: an authorized curator decision mutates
+only the unpublished WorkingRevision; source/history/release/serving identity and
+authority remain unchanged. Failure or late COMMIT rolls all workflow state back;
+fresh runtime sees the same decision or unchanged winner. Duplicate generation
+forms retain stale409; m2/None retain their separate legacy rules. No blanket
+exactly-once or stronger D1 in-flight revocation claim.
+
+Two alternatives, assessed by the same implementer (not independent review):
+A keeps pure work inside the ordinary lock and only combines SQL. B reuses the
+existing prepared executor and current-input guards for ordinary generation
+forms, with verified navigation cards. Select B for shared ownership, existing
+atomicity proofs and separation of pure work; A cannot remove in-lock CPU work.
+SQL distance remains measurable separately: recapture is still necessary, and
+local low-latency timings are not production performance evidence.
+
+Persisted-state impact: none; no schema, content backfill or new authority.
+Compatibility/migration: additive ingress selection; unprepared/native legacy
+keeps the original path. Rollback: revert binary, ordinary rows remain readable;
+no down-migration or data repair. Cutover: exact-head native HTTP/safety tests,
+adversarial review and separate human merge/deploy GO. Cleanup: one prepared
+executor and one kernel-invocation/error adapter, no copied command authority.
+Failure blast radius: ordinary compact generation forms and post-save candidate
+navigation; batches must retain existing behavior. No unrelated source/viewer
+or formation work is absorbed.
+
+Before implementation, baseline full-chain native compact probe passed locally:
+open0.522s,save0.172s,redirect0.617s,reopen0.676s,stale0.077s. This does not
+reproduce production latency. New red-capable tests assert the real ordinary
+HTTP kernel has no outer write/SQL transaction and next navigation performs no
+full-document/formation read when verified cards are available. Preserve their
+initial failing result before changing product code. Extend with current-input
+races, 400/409 draft preservation, late commit rollback and fresh-runtime readback.
+Budgets remain detail5s,POST3s,outer lock250ms,transaction500ms; whole-user-action
+measurements and production acceptance remain explicit MET-44 work.
+
+Implementation sequence: reuse existing scaffolding; no dead-code removal or new
+framework is needed. Ground and sketch are above; implementation is already
+authorized (no extra design approval checkpoint). First the red HTTP proofs, then
+executor reuse and navigation, then native safety/chain regressions and review.
+
 Change class: A
 Rewrite risk: high
 Promise: ordinary review/source decisions validate the current transition without
