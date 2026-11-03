@@ -100,6 +100,16 @@ concrete blocker; this is not independent test execution or a merge/deploy GO.
 Current-actor-identity guard removal in an isolated copy made its native race
 test fail; restored code passed. Final complete-suite/CI results belong to the PR.
 
+The broader run exposed one additional owner-boundary requirement: constructing
+a new console for the same runtime path replaces the process-global ledger
+backend registration. A still-live original app must keep reads, pending buffers
+and appends on its captured command's review store. Resolving the active matching
+command owner before the global registry preserves that existing transaction
+boundary; outside commands registry lookup stays unchanged. The actual formation
+classification-repair/approval sequence passes main and reproduced a forbidden
+SQL read during pure preparation on this slice. Add a minimal restart/live-app
+HTTP regression before this correction and retain original error/rollback rules.
+
 Change class: A
 Rewrite risk: high
 Promise: ordinary review/source decisions validate the current transition without

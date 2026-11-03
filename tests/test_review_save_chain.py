@@ -52,6 +52,20 @@ def test_ordinary_http_kernel_runs_without_write_lock_or_workflow_io(review_syst
     assert any(b['object_id'] == ids[0] and b['reviewer_id'] == actor for b in console.object_review_bindings(sid))
 
 
+def test_live_app_keeps_its_command_ledger_owner_after_same_path_restart(review_system):
+    from tests.production_support import restart_production
+    console, client, sid, _actor, ids = review_system
+    data = form(client, sid, ids[0])
+    peer = restart_production(console)
+    assert peer.workflow_review_store is not console.workflow_review_store
+    assert peer._ledger_path == console._ledger_path
+    saved = client.post('/review', data=data, follow_redirects=False)
+    assert saved.status_code == 303, saved.text
+    current = next(o for o in peer.snapshot_objects(sid) if o['object_id'] == ids[0])
+    assert current['governance']['validation_status'] == 'approved'
+    assert peer.object_review_bindings(sid)
+
+
 @pytest.mark.parametrize('task', ['', 'contextual'])
 def test_next_passage_uses_verified_cards_then_real_passage(tmp_path, production_console, monkeypatch, task):
     from fastapi.testclient import TestClient
@@ -106,11 +120,25 @@ def test_ordinary_prepared_save_rechecks_current_dependencies(review_system, mon
     winner = []
 
     def mutation():
+        if change == 'identity':
+            # A distinct OS process wins after capture, not merely another
+            # Python object/context sharing the command runtime's caches.
+            import os
+            import subprocess
+            import sys
+            result = subprocess.run([sys.executable, '-c',
+                "import os, psycopg; "
+                "con=psycopg.connect(os.environ['METIS_TEST_POSTGRES_DSN']); "
+                "con.execute(\"UPDATE workflow.accounts SET display_name='Changed reviewer' WHERE account_id=%s\", "
+                "(os.environ['METIS_TEST_ACTOR'],)); con.commit(); con.close(); print(os.getpid())"],
+                env={**os.environ, 'METIS_TEST_POSTGRES_DSN': store.config.dsn, 'METIS_TEST_ACTOR': actor},
+                capture_output=True, text=True, check=True)
+            assert int(result.stdout.strip()) != os.getpid()
+            winner.append(durable(console, sid))
+            return
         with store._connect() as con:
             if change == 'role':
                 con.execute("UPDATE workflow.accounts SET roles=ARRAY['researcher']::text[] WHERE account_id=%s", (actor,))
-            elif change == 'identity':
-                con.execute("UPDATE workflow.accounts SET display_name='Changed reviewer' WHERE account_id=%s", (actor,))
             elif change == 'native0':
                 con.execute('UPDATE workflow.documents SET processing_storage_version=0 WHERE snapshot_id=%s', (sid,))
                 con.execute('UPDATE workflow.document_objects SET payload=payload WHERE snapshot_id=%s AND object_id=%s', (sid, ids[0]))
