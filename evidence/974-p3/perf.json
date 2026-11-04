@@ -1,0 +1,193 @@
+{
+  "baseline_note": "trunk mode = head with only review_command_v1._refuse_static_disposition disabled; confirmed by a run on a real trunk checkout of both changed src files (trunk_checkout)",
+  "fixture": {
+    "interleaved": true,
+    "paragraphs": 2000,
+    "runs_per_mode": 10
+  },
+  "head_commit": "0a78aa1",
+  "metric": "elapsed_ms and db_queries of request_finished for a conflicting POST /review (geen_kenniseenheid + approve)",
+  "prepared_path": {
+    "head": {
+      "any_source_preparation": false,
+      "any_store_transaction": false,
+      "db_queries": [
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9
+      ],
+      "elapsed_ms": [
+        95.332,
+        90.443,
+        89.217,
+        95.13,
+        98.576,
+        110.757,
+        97.384,
+        117.517,
+        98.996,
+        95.807
+      ],
+      "error_codes": [
+        "review_disposition_conflict"
+      ],
+      "median_db_queries": 9.0,
+      "median_elapsed_ms": 96.5955,
+      "review_events_delta": 0,
+      "statuses": [
+        400
+      ]
+    },
+    "trunk": {
+      "any_source_preparation": true,
+      "any_store_transaction": false,
+      "db_queries": [
+        26,
+        26,
+        26,
+        26,
+        26,
+        26,
+        26,
+        26,
+        26,
+        26
+      ],
+      "elapsed_ms": [
+        712.439,
+        745.923,
+        936.329,
+        775.973,
+        707.181,
+        746.833,
+        1052.838,
+        925.444,
+        987.122,
+        1154.419
+      ],
+      "error_codes": [
+        "review_disposition_conflict"
+      ],
+      "median_db_queries": 26.0,
+      "median_elapsed_ms": 850.7085,
+      "review_events_delta": 0,
+      "statuses": [
+        400
+      ]
+    }
+  },
+  "rule": {
+    "pass": true,
+    "prepared_head_queries_strictly_lower": true,
+    "serial_head_max_elapsed_le_300ms": true,
+    "serial_head_no_source_preparation": true,
+    "serial_head_no_store_transaction": true
+  },
+  "serial_path": {
+    "head": {
+      "any_source_preparation": false,
+      "any_store_transaction": false,
+      "db_queries": [
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9,
+        9
+      ],
+      "elapsed_ms": [
+        95.578,
+        109.325,
+        99.051,
+        83.597,
+        85.987,
+        89.221,
+        112.089,
+        107.413,
+        87.752,
+        123.493
+      ],
+      "error_codes": [
+        "review_disposition_conflict"
+      ],
+      "median_db_queries": 9.0,
+      "median_elapsed_ms": 97.31450000000001,
+      "review_events_delta": 0,
+      "statuses": [
+        400
+      ]
+    },
+    "note": "review_command_window forced to None (existing-data compatibility branch)",
+    "trunk": {
+      "any_source_preparation": true,
+      "any_store_transaction": true,
+      "db_queries": [
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48,
+        48
+      ],
+      "elapsed_ms": [
+        1301.185,
+        1526.677,
+        1742.749,
+        1504.461,
+        1811.145,
+        1383.782,
+        1717.246,
+        1351.782,
+        1574.346,
+        1644.864
+      ],
+      "error_codes": [
+        "review_disposition_conflict"
+      ],
+      "median_db_queries": 48.0,
+      "median_elapsed_ms": 1550.5115,
+      "review_events_delta": 0,
+      "statuses": [
+        400
+      ]
+    }
+  },
+  "sources": {
+    "src/review/closed_review_loop_v1.py": "12bc3c04d77caba10c65e8b459c08a6e9253905e5fe801140f8bfdff7c8c3844",
+    "src/review/review_command_v1.py": "f345bb545ed8dedf871f760c9e52cb7a4099fd10eb694b6d8b1096c4db9384c7"
+  },
+  "trunk_checkout": {
+    "prepared": {
+      "any_source_preparation": true,
+      "any_store_transaction": false,
+      "median_db_queries": 26.0,
+      "median_elapsed_ms": 730.982
+    },
+    "serial": {
+      "any_source_preparation": true,
+      "any_store_transaction": true,
+      "median_db_queries": 48.0,
+      "median_elapsed_ms": 1574.0555
+    }
+  },
+  "trunk_commit": "1f9deea",
+  "trunk_sources": {
+    "src/review/closed_review_loop_v1.py": "5dcffa00b322f6c72890eb426d1da24e565dedd086e4b6e4fe155b64685dd6a7",
+    "src/review/review_command_v1.py": "3c35c7bf2f3d25ec90b2e40c9398eb07d8fa033f15dbb74a29880c5736ee5305"
+  }
+}
