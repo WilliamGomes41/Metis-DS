@@ -137,3 +137,20 @@ def test_source_selection_detail_reads_source_once(formation_document, productio
     assert counters.get("source_reconstruction_built", 0) <= 2, counters
     assert counters.get("source_input_compared", 0) <= 2, counters
     assert counters.get("source_reconstruction_reused", 0) >= SELECTED, counters
+
+
+@pytest.mark.parametrize("route", ["docling-retained-pdf", "decision-boom", "legacy-html"])
+def test_real_extraction_routes_keep_their_report(route, tmp_path, complete_postgres, monkeypatch):
+    import src.vorming.formation_problems_v1 as problems
+    from src.vorming.source_preparation_context_v1 import stored_extraction
+    from tests.test_a10_source_cache_repair import seed
+    _, console, reviewer, sid, _, _ = seed(tmp_path, "postgres", route, monkeypatch)
+    stored = stored_extraction(console._processing_history_envelope(sid))
+    if route.startswith("docling"):
+        assert stored.extraction_record
+        assert problems.freeze_extraction(stored).extraction_record == stored.extraction_record
+    elif route.startswith("legacy"):
+        assert stored is None
+    actual = problems.collect(console, actor_id=reviewer["account_id"], snapshot_id=sid)
+    monkeypatch.setattr(problems, "freeze_extraction", lambda fragments: fragments)
+    assert actual == problems.collect(console, actor_id=reviewer["account_id"], snapshot_id=sid)
