@@ -1,4 +1,9 @@
-"""#974: the save-outcome check reads review events in a window and discloses no ids."""
+"""#974: candidate events cannot establish one request's commit/rollback outcome.
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
+"""
 from __future__ import annotations
 
 import json
@@ -16,9 +21,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "check_review_save_outcome.py"
 
 
-def _run(dsn, *args):
+def _run(dsn, *args, script=SCRIPT):
     env = {**os.environ, "METIS_CANONICAL_DB_DSN": dsn}
-    return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True,
+    return subprocess.run([sys.executable, str(script), *args], capture_output=True, text=True,
                           env=env, cwd=ROOT, timeout=90)
 
 
@@ -51,6 +56,8 @@ def test_reports_only_events_inside_the_window_without_ids_or_details(complete_p
     assert report["review_events_in_window"] == 1
     assert report["events"][0]["event_type"] == "review_decision"
     assert report["events"][0]["object_ref"].startswith("o_")
+    assert report["save_outcome"] == "not_determined"
+    assert report["events_truncated"] is False
     for secret in (snapshot_id, "object-secret", "acct-974", "private text"):
         assert secret not in result.stdout
 
@@ -61,6 +68,46 @@ def test_unknown_document_is_reported_not_guessed(complete_postgres):
     assert result.returncode == 1
     assert json.loads(result.stdout) == {"status": "document_not_resolved", "doc_ref": "d_" + "0" * 16,
                                          "matches": 0}
+
+
+def test_empty_window_does_not_claim_rollback(complete_postgres):
+    snapshot_id = _seed(complete_postgres.dsn)
+    result = _run(complete_postgres.dsn, "--doc-ref", doc_ref(snapshot_id),
+                  "--start", "2026-11-04T09:30:00Z")
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["review_events_in_window"] == 0
+    assert report["save_outcome"] == "not_determined"
+
+
+def test_large_window_is_explicitly_truncated(complete_postgres):
+    snapshot_id = _seed(complete_postgres.dsn)
+    store = PostgresWorkflowDocumentRuntimeStore(PostgresCanonicalConfig(dsn=complete_postgres.dsn))
+    with store._connect() as con:
+        con.execute(
+            "INSERT INTO workflow.review_events(snapshot_id,object_id,object_version,event_type,"
+            "actor_account_id,occurred_at,details,event_hash) "
+            "SELECT %s,'private-' || n,'1','review_decision','acct-974','2026-11-04T09:12:20Z',"
+            "'{}'::jsonb,'bulk-' || n FROM generate_series(1,1001) AS n", (snapshot_id,))
+    result = _run(complete_postgres.dsn, "--doc-ref", doc_ref(snapshot_id),
+                  "--start", "2026-11-04T09:12:03Z")
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["events_truncated"] is True
+    assert report["review_events_in_window"] is None
+    assert report["reported_events"] == len(report["events"]) == 1000
+    assert report["save_outcome"] == "not_determined"
+
+
+def test_copy_outside_deployed_checkout_can_use_app_imports(complete_postgres, tmp_path, monkeypatch):
+    snapshot_id = _seed(complete_postgres.dsn)
+    copied = tmp_path / "diagnostic.py"
+    copied.write_bytes(SCRIPT.read_bytes())
+    monkeypatch.setenv("METIS_DIAGNOSTIC_APP_ROOT", str(ROOT))
+    result = _run(complete_postgres.dsn, "--doc-ref", doc_ref(snapshot_id),
+                  "--start", "2026-11-04T09:12:03Z", script=copied)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["review_events_in_window"] == 1
 
 
 def test_rejects_malformed_input_before_connecting(complete_postgres):

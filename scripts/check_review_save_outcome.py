@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
-"""Issue #974: was an aborted Review save committed? Read-only, bounded, no content.
+"""Issue #974: collect candidate evidence for an aborted save, never infer its outcome.
 
 Maps the pseudonymous telemetry ``doc_ref`` to its document and lists the review
 events recorded in the window after the aborted request started. Only counts,
 event types, timestamps and hashed object references are printed; never
 document ids, object ids, actors, comments or event details.
 
-Run in App Service SSH (same vendored packages and credentials as the app):
+Copy the reviewed script to /tmp in App Service SSH and use the app's interpreter:
 
-    python /home/site/wwwroot/scripts/check_review_save_outcome.py \
+    METIS_DIAGNOSTIC_APP_ROOT=/app python /tmp/check_review_save_outcome.py \
         --doc-ref d_0123456789abcdef --start 2026-11-04T09:12:03Z --seconds 60
 
-Interpretation: an event matching the reviewer's action between request_started
-and the worker's last line means the save was committed before the worker
-stopped, so the user saw an error for a stored decision. No event in that window
-means the transaction rolled back. Other saves on the same document may also
-fall in the window; compare times before concluding.
+Interpretation: these are candidate events, not request-correlated outcomes.
+Events may belong to another save, or have been timestamped before a delayed
+commit. No event in the window does not prove rollback. The outcome remains
+not_determined until the exact command/interaction and stored decision agree.
 The script only observes. It never repeats, repairs or deletes a decision.
 """
 from __future__ import annotations
@@ -23,16 +22,18 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import signal
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.environ.get("METIS_DIAGNOSTIC_APP_ROOT", Path(__file__).resolve().parents[1])).resolve()
 sys.path[:0] = [str(ROOT / ".python_packages"), str(ROOT)]
 
 LIMIT_SECONDS = 60
 MAX_WINDOW_SECONDS = 600
+MAX_EVENTS = 1000
 
 
 def _object_ref(object_id: str) -> str:
@@ -83,17 +84,19 @@ def main() -> int:
         rows = con.execute(
             "SELECT object_id, event_type, occurred_at FROM workflow.review_events "
             "WHERE snapshot_id=%s AND occurred_at >= %s AND occurred_at < %s "
-            "ORDER BY occurred_at, event_id",
-            (matches[0], args.start, end),
+            "ORDER BY occurred_at, event_id LIMIT %s",
+            (matches[0], args.start, end, MAX_EVENTS + 1),
         ).fetchall()
+    truncated = len(rows) > MAX_EVENTS
     events = [{"occurred_at": row["occurred_at"].isoformat(), "event_type": row["event_type"],
-               "object_ref": _object_ref(str(row["object_id"]))} for row in rows]
+               "object_ref": _object_ref(str(row["object_id"]))} for row in rows[:MAX_EVENTS]]
     print(json.dumps({
         "status": "ok", "doc_ref": args.doc_ref,
         "window": {"start": args.start.isoformat(), "end": end.isoformat()},
-        # Other saves on the same document can fall inside the window; compare
-        # timestamps and event types with the aborted request before concluding.
-        "review_events_in_window": len(events),
+        "save_outcome": "not_determined",
+        "review_events_in_window": None if truncated else len(events),
+        "events_truncated": truncated,
+        "reported_events": len(events),
         "events": events,
     }, indent=2))
     return 0

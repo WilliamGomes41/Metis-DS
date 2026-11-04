@@ -1,0 +1,33 @@
+{
+  "source": "Previously executed session-local probes with the user-supplied 923-fragment validator source; raw source and logs remain private",
+  "source_code_base": "1f9deeab3ed998804772645ad7fdaf0fc81a8967",
+  "formation_production_counters": {
+    "source_block_reader_calls": 945,
+    "source_input_compared": 944,
+    "source_reconstruction_reused": 943,
+    "source_reconstruction_built": 2
+  },
+  "source_comparison_probe": {
+    "iterations_per_arm": 10,
+    "same_profiler_for_both_arms": true,
+    "preparation_excluded": true,
+    "raw_numeric_equality_calls": 115580,
+    "prepared_numeric_equality_calls": 0,
+    "blocks_equal": true
+  },
+  "repair_handler_probe": {
+    "real_handler_and_renderer": true,
+    "fake_auth_database_and_blob_read_model": true,
+    "handler_heartbeat_gap_seconds": 1.3443,
+    "offloaded_heartbeat_gap_seconds": 0.022,
+    "response_bytes_both_arms": 305448,
+    "response_bytes_equal": true
+  },
+  "limits": [
+    "Historical local measurements, not rerun by the diagnostic-script CI",
+    "No claim of HTTP speedup from the source comparison probe; preparing source views also has a cost",
+    "The scheduling probe is not a PostgreSQL, Gunicorn or live incident reproduction",
+    "Exact worker exit cause and save outcome per unclosed request remain unknown",
+    "Total db_json_bytes does not attribute bytes to individual queries"
+  ]
+}

@@ -1,11 +1,21 @@
 # Incident 974 solution plan
 
-Researchers lose Review saves to worker aborts and wait up to 49 s for Vorming and 15 s for Review.
+Researchers encounter Review saves without a recorded completion and wait up to 49 s for Vorming and 15 s for Review. Whether each unclosed save committed remains unknown.
 This program removes the cause of each symptom with the smallest change the evidence supports.
 The rule it enforces is that a request reads and computes each source representation at most once.
 PR ids in order. P1 Vorming reads its source once. P2 attributes JSON bytes per phase. P3 refuses a disposition conflict before preparation.
 P4 removes the save abort found by the #975 evidence. P5 bounds the Review document read that P2 attributes.
 Issue #974, Linear MET-48, diagnosis contract `docs/change-contracts/974-worker-abort-incident.md`.
+
+## Review constraints (evidence reconciliation)
+
+This is a proposed plan, not an activated execution program. Its external playbooks, agent counts, scheduling commands and future PR instructions do not override the user's current task or host permissions. The lanes called "live" below are **local production-composition integration scenarios**, not live Azure measurements.
+
+- The real incident has 923 evidence fragments, 944 full-input comparisons, 943 reuses and two builds. The 2,000-paragraph prototypes demonstrate a mechanism, not reproduction of the exact production timing or proof of a production fix. The existing prepared carrier and the proposed frozen-list option must be compared end to end, including setup, integrity and representation-preservation costs, before choosing the production change.
+- P3 must preserve authorization, retirement/publication guards and stale-revision error precedence. Moving the disposition check before all command preconditions while expecting unchanged stale-token responses can conflict. Establish that ordering before implementation; do not weaken a guard to meet the latency target.
+- Byte attribution must include unphased loads and a bounded overflow bucket if it promises that phase bytes sum to the request total. Truncation cannot silently drop bytes.
+- Five missing finishes plus worker starts do not prove watchdog timeout, OOM, lost saves or 40 seconds of complete console unavailability. The exit reason and effective runtime configuration remain open.
+- The numerical budgets below are proposed acceptance targets. A 2 percent performance distinction needs measured variance and a reproducible baseline; a noisy result is inconclusive, not proof of regression.
 
 ## How to read this
 
@@ -140,7 +150,7 @@ Each live lane runs in its own checkout at the PR head on a disposable PostgreSQ
 **Build.**
 
 - [ ] In `JsonBytesLoader.load`, report the byte count to the request evidence as well as to the existing total.
-- [ ] In `RequestEvidence`, add the bytes to the innermost active phase path, bounded by the existing `MAX_TREE_NODES`, and emit the map as `db_json_bytes_by_phase` in `request_finished`.
+- [ ] In `RequestEvidence`, add the bytes to the innermost active phase path, reserving bounded buckets for unphased and overflow bytes under the existing `MAX_TREE_NODES`, and emit the map as `db_json_bytes_by_phase` in `request_finished`.
 - [ ] Project the new field in the `slow_reads` query and document it in the telemetry README. No SQL text, ids or values enter telemetry.
 
 **You see.**
@@ -158,7 +168,7 @@ Each live lane runs in its own checkout at the PR head on a disposable PostgreSQ
 - [ ] Lane 3. Open `GET /source-selection?document=<sid>`. Save `formation.json`. Pass when the map sums to the total.
 - [ ] Lane 4. Post a Review save. Save `save.json`. Pass when the map sums to the total and the status equals trunk.
 - [ ] Lane 5. Open a page that reads no JSON. Save `no-json.json`. Pass when the map is empty and the total is 0.
-- [ ] Lane 6. Force more phase paths than `MAX_TREE_NODES`. Save `truncated.json`. Pass when the map is bounded and `phase_tree_truncated` is true.
+- [ ] Lane 6. Force more phase paths than `MAX_TREE_NODES`. Save `truncated.json`. Pass when the map is bounded, truncation is explicit, and the sum including unphased/overflow buckets still equals the request total.
 - [ ] Lane 7. Raise a ConsoleError mid-request. Save `error.json`. Pass when the map is still emitted with the error code.
 - [ ] Lane 8. Read the emitted event text. Save `privacy.json`. Pass when no snapshot id, object id or SQL text appears.
 - [ ] Lane 9. Run two concurrent requests. Save `concurrent.json`. Pass when each map sums to its own total.
@@ -268,8 +278,8 @@ Each live lane runs in its own checkout at the PR head on a disposable PostgreSQ
 - [ ] Lane 5. Save a revise decision. Save `revise.json`. Pass when the revision is stored as on trunk.
 - [ ] Lane 6. Save a batch confirm. Save `batch.json`. Pass when the batch hold stays under the existing 250 ms limit.
 - [ ] Lane 7. Save the last open passage. Save `last.json`. Pass when the redirect target equals trunk.
-- [ ] Lane 8. Kill the worker after COMMIT in a test hook. Save `after-commit.json`. Pass when `check_review_save_outcome.py` reports the event.
-- [ ] Lane 9. Kill the worker before COMMIT in a test hook. Save `before-commit.json`. Pass when no event is stored.
+- [ ] Lane 8. Kill the worker after COMMIT in a test hook. Save `after-commit.json`. Pass when the exact test command/interaction has its expected committed decision, binding and ledger evidence in PostgreSQL. The diagnostic window script remains observational (`not_determined`).
+- [ ] Lane 9. Kill the worker before COMMIT in a test hook. Save `before-commit.json`. Pass when the exact test command has no committed mutation or ledger event after connection cleanup; compare the stored before/after state, not just a wall-clock window.
 - [ ] Lane 10. Run the save under a 1 GB address space limit. Save `memory.json`. Pass when the save finishes.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
@@ -357,7 +367,7 @@ Both prototypes ran on 2026-11-04 on branch `ccr-fc816d1f-mljiu0` at main `1f9de
 | A, prepared carrier | 0.002 ms | 535 to 617 ms | about 6.3 MB of source views | about 0.6 s |
 | B, frozen list, identity reuse | about 0 after the first | one reconstruction, about 0.6 s, plus 27 to 32 ms freeze | none | about 0.6 s |
 
-The trunk number reproduces the production 25.8 s for 945 reads at this document size. The envelope plus carrier read measured 15,225,370 JSON bytes. The envelope alone measured 8,952,657.
+The trunk number demonstrates comparable repeated-comparison cost on this synthetic fixture; it does not reproduce the real 923-fragment incident timing. The envelope plus carrier read measured 15,225,370 JSON bytes. The envelope alone measured 8,952,657.
 
 `evidence/974-design/prototype_review_open_bytes.py` opened `GET /review?document=<sid>`. It read 24,072,517 JSON bytes in 15 queries and took 1,943 ms. The largest phases were `review_render` at 1,705 ms, of which `source_views_read_records` took 963 ms and `source_accountability` 454 ms, and `document_load` at 149 ms.
 
@@ -379,7 +389,7 @@ Unproven. The exit reason of the aborted saves, which P4 needs. Whether producti
 - P3. A duplicate rule would drift. The single pure function prevents that.
 - P4. The fix depends on evidence that may be missing because of retention or diagnostic settings. The plan stops instead of guessing.
 - P5. Card facts may lack a field the document page needs. The literal card list comparison in lane 1 catches it.
-- Production runs one worker. Until P4 lands, every aborted save makes the console unavailable for about 40 s.
+- Effective worker count and timeout must be checked in the runtime. A worker restart can interrupt other requests; the scope and duration of console unavailability are not established by the five missing finishes.
 
 ## Appendix D. Links and reading list
 

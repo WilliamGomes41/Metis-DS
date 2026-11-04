@@ -24,6 +24,17 @@ usage() {
 START="$1"; END="$2"; OUT="$3"
 iso='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2})?Z$'
 [[ "$START" =~ $iso && "$END" =~ $iso ]] || { echo "start/end must be UTC ISO-8601 like 2026-11-03T08:00:00Z" >&2; exit 2; }
+python3 - "$START" "$END" <<'PY'
+from datetime import datetime
+import sys
+try:
+    start, end = (datetime.fromisoformat(value.replace('Z', '+00:00')) for value in sys.argv[1:])
+    if start >= end:
+        raise ValueError()
+except ValueError:
+    print('start/end must be valid dates with start before end', file=sys.stderr)
+    sys.exit(2)
+PY
 
 for name in METIS_SUBSCRIPTION_ID METIS_RESOURCE_GROUP METIS_WEBAPP METIS_LOG_WORKSPACE; do
   [ -n "${!name:-}" ] || { echo "missing environment variable: $name" >&2; exit 2; }
@@ -36,7 +47,8 @@ KQL="$ROOT/docs/diagnostics/worker-abort-incident.kql"
 [ -f "$KQL" ] || { echo "query file not found: $KQL" >&2; exit 2; }
 
 # Evidence never lands in the repository and is never overwritten.
-case "$(cd "$(dirname "$OUT")" 2>/dev/null && pwd)/" in
+OUT="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve())' "$OUT")"
+case "$OUT/" in
   "$ROOT"/*) echo "output directory must be outside the repository" >&2; exit 2;;
 esac
 [ ! -e "$OUT" ] || { echo "output directory already exists: $OUT" >&2; exit 2; }
@@ -52,8 +64,8 @@ workspace_id="$(az monitor log-analytics workspace show \
   --workspace-name "$METIS_LOG_WORKSPACE" --query customerId -o tsv)"
 [ -n "$workspace_id" ] || { echo "workspace not found" >&2; exit 1; }
 
-mkdir -p "$OUT"
-chmod 700 "$OUT"
+umask 077
+mkdir -m 700 "$OUT"
 sections="$(grep -oE '^// ==== [a-z_]+ ====$' "$KQL" | sed -E 's#^// ==== ([a-z_]+) ====$#\1#')"
 status=0
 {
@@ -88,9 +100,11 @@ Evidence written to $OUT (private; do not commit, contains pseudonymous doc_ref 
 Read next:
   aborted_review_saves.json  -> Started/LastSeen/Heartbeats/LastPhase/Pid per aborted save
   worker_lifecycle.json      -> WORKER TIMEOUT + faulthandler stack, or SIGKILL/out of memory
-  worker_pids.json           -> replacement worker after each aborted save
-Then check whether each save was committed (App Service SSH):
-  python /home/site/wwwroot/scripts/check_review_save_outcome.py --doc-ref <DocRef> --start <Started> --seconds 60
+  worker_pids.json           -> correlate worker starts with the exit lines
+Then collect candidate save events (App Service SSH):
+  METIS_DIAGNOSTIC_APP_ROOT=/app python /tmp/check_review_save_outcome.py --doc-ref <DocRef> --start <Started> --seconds 60
+Copy the reviewed script to /tmp first; it is not installed in the current image.
+The database script reports candidate events, not a request's commit/rollback outcome.
 A zero-row section is missing evidence, not proof: check diagnostic settings and ingestion.
 EOF
 exit "$status"

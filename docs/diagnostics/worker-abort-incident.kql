@@ -9,7 +9,7 @@
 // ==== aborted_review_saves ====
 // POST /review requests without request_finished, including their last heartbeat.
 // A heartbeat (request_running) comes from the event loop every 15 s. Few or no
-// heartbeats after request_started means the loop was blocked (gunicorn timeout).
+// heartbeats are a clue only: missing telemetry does not prove a blocked loop.
 AppServiceConsoleLogs
 | where TimeGenerated between (datetime({START}) .. datetime({END}))
 | where _ResourceId endswith strcat("/sites/", "{SITE}")
@@ -22,18 +22,20 @@ AppServiceConsoleLogs
             LastSeen = max(TimeGenerated),
             Finished = countif(Event == "request_finished"),
             Heartbeats = countif(Event == "request_running"),
-            LastPhase = take_anyif(tostring(d.phase), Event == "request_running"),
+            arg_max(TimeGenerated, d),
             LastElapsedMs = max(todouble(d.elapsed_ms)),
             Route = take_any(tostring(d.route)), Pid = take_any(tostring(d.pid)),
             Version = take_any(tostring(d.version)), Instance = take_any(tostring(d.instance)),
             DocRef = take_any(tostring(d.doc_ref)) by RequestId
-| where Finished == 0
+| where Finished == 0 and isnotnull(Started)
+| extend LastPhase = tostring(d.phase)
+| project-away d, TimeGenerated
 | order by Started asc
 
 // ==== worker_lifecycle ====
 // Gunicorn arbiter and faulthandler lines on stderr. Determines the exit reason:
 //   "WORKER TIMEOUT (pid:N)" + "Fatal Python error: Aborted" -> heartbeat timeout (SIGABRT);
-//   "was sent SIGKILL! Perhaps out of memory?"               -> hard kill / OOM;
+//   "was sent SIGKILL! Perhaps out of memory?"               -> hard kill; OOM needs corroboration;
 //   "Booting worker with pid"                                -> replacement worker.
 // Faulthandler frames contain only file, function and line, no values.
 AppServiceConsoleLogs
@@ -43,13 +45,13 @@ AppServiceConsoleLogs
         "Fatal Python error", "Current thread", "Thread 0x", "Handling signal", "Shutting down",
         "Perhaps out of memory", "worker_abort", "Worker (pid")
      or ResultDescription matches regex @'^\s+File ".*", line \d+ in '
-| project TimeGenerated, Level, Host, ResultDescription
+| project TimeGenerated, Level, Host = tostring(column_ifexists("Host", "")), ResultDescription
 | order by TimeGenerated asc
 | take 5000
 
 // ==== worker_pids ====
 // Per worker process: first and last diagnostic line. A new pid shortly after
-// an aborted request is the replacement worker; telemetry_ready marks its start.
+// an unclosed request may be a replacement; correlate instance and exit logs.
 AppServiceConsoleLogs
 | where TimeGenerated between (datetime({START}) .. datetime({END}))
 | where _ResourceId endswith strcat("/sites/", "{SITE}")
@@ -66,7 +68,10 @@ AppServiceConsoleLogs
 AppServicePlatformLogs
 | where TimeGenerated between (datetime({START}) .. datetime({END}))
 | where _ResourceId endswith strcat("/sites/", "{SITE}")
-| project TimeGenerated, Level, OperationName, ContainerId, Message
+| project TimeGenerated, Level,
+          OperationName = tostring(column_ifexists("OperationName", "")),
+          ContainerId = tostring(column_ifexists("ContainerId", "")),
+          Message = tostring(column_ifexists("Message", column_ifexists("ResultDescription", "")))
 | order by TimeGenerated asc
 | take 2000
 
@@ -74,7 +79,7 @@ AppServicePlatformLogs
 // Finished Vorming/Review reads over 5 s, with counters, db metrics and the phase tree.
 // For Vorming: source_reconstruction_reused ~ source_input_compared and a low
 // source_reconstruction_built confirm the full-input comparison per object (#974 §2).
-// For Review: the phase_tree locates the phase that carried db_json_bytes (#974 §3).
+// For Review: phase_tree locates elapsed work; db_json_bytes is only a request total.
 AppServiceConsoleLogs
 | where TimeGenerated between (datetime({START}) .. datetime({END}))
 | where _ResourceId endswith strcat("/sites/", "{SITE}")

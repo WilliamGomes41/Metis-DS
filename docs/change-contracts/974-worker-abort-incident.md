@@ -1,56 +1,63 @@
-# Incident #974: Review opslaan breekt worker af; Vorming en Review openen traag
+# Incident #974: Review opslaan zonder afronding; Vorming en Review openen traag
 
 Issue: #974
 Change class: C
 Rewrite risk: none
-Promise: De projectlead kan met één alleen-lezen commando de Azure-telemetrie verzamelen. Daarmee zijn de exitreden van de afgebroken Review-opslag en de kosten van de trage Vorming- en Review-reads per verzoek vast te stellen. Een tweede alleen-lezen commando stelt per afgebroken opslag vast of de beslissing is vastgelegd.
-Proof: `tests/test_check_review_save_outcome_postgres.py` (PostgreSQL 16, read-only uitkomst zonder ids of details); droge run van `scripts/collect_worker_abort_evidence.sh` met een nagebootste `az` (zes secties volledig ingevuld; weigert een verkeerde subscription, een ongeldige tijd en uitvoer in de repo).
+Promise: De projectlead kan alleen-lezen Azure-bewijs verzamelen voor de exitreden van onafgesloten Review-verzoeken en de kosten van trage reads. Een tweede commando verzamelt mogelijke opgeslagen review-events in een tijdvenster; het bepaalt zonder exacte commandokoppeling geen commit of rollback.
+Proof: `tests/test_check_review_save_outcome_postgres.py` (PostgreSQL 16, begrensde alleen-lezen uitvoer zonder ids/details, onbekende uitkomst bij zowel lege als gevulde vensters); `tests/test_collect_worker_abort_evidence.py` (nagebootste az; invoergrenzen en alle zes secties). Historische lokale bron- en schedulingproeven: `evidence/worker-abort-974/diagnosis-summary.json`; dit zijn geen live Azure- of HTTP-reproducties.
 Touches lifecycle invariants: no
 
-Deze slice voegt alleen diagnose toe. Er verandert geen productiegedrag, schema, autorisatie of lifecycle. De fixes volgen als aparte PR's per onderdeel. Een fix kan een andere klasse krijgen: het Vorming-leespad is Class B.
+Deze slice voegt diagnose toe. Productiegedrag, schema, autorisatie en lifecycle veranderen niet. Fixes volgen apart; het Vorming-leespad is Class B.
 
-## Waarneming (telemetrie, projectlead, 2026-11-04)
+## Waarneming (aangeleverde telemetrie, 2026-11-04)
 
 | Onderdeel | Vastgesteld |
 |---|---|
-| Review opslaan | 5 × `POST /review` zonder `request_finished`; telkens een nieuw workerproces na circa 39–43 s |
-| Vorming openen | tot 49 s; één verzoek: 945 × `source_reconstruction`, samen 25,8 s |
+| Review opslaan | 5 × `POST /review` zonder `request_finished`; telkens 39–43 s later een nieuw workerproces |
+| Vorming openen | tot 49 s; één verzoek: 945 aanroepen van de bronbloklezer, 25,8 s fasetijd |
 | Review openen | tot 14,9 s; één documentverzoek: 31,4 MB `db_json_bytes` |
-| `review_disposition_conflict` | HTTP 400 na 3,87 s |
+| `review_disposition_conflict` | HTTP 400 na 3,87 s; de formulierkeuzes ontbreken in de capture |
 
-## Oorzaakanalyse (code op `main` 1f9deea)
+## Oorzaakanalyse (codebasis `main` 1f9deea)
 
-### 1. Review opslaan: hypothese, nog niet bewezen
-- `scripts/azure_console_startup.sh` start gunicorn zonder `--timeout`, dus met de standaard van 30 s. Productie draait met `WEB_CONCURRENCY=1`.
-- De arbiter stuurt SIGABRT als de uvicorn-worker meer dan 30 s geen hartslag geeft. Die hartslag komt uit de event loop.
-- Een vaste 30 s plus de opstarttijd van de worker verklaart de herhaalde 39–43 s beter dan een OOM-kill met wisselende duur.
-- Voorbehoud: `review_post` is een synchrone handler in de threadpool. Alleen een lange C-aanroep die de GIL vasthoudt, of blokkerend werk op de event loop, laat de hartslag wegvallen.
-- **Beslissend bewijs:** het verloop van de `request_running`-heartbeats, de `WORKER TIMEOUT`- of `SIGKILL`-regel en de faulthandler-dump van alle threads. Dit staat in `worker_lifecycle.json`.
-- **Schrijfgrens:** de beslissing wordt in één PG-transactie geschreven (`src/review/review_command_v1.py`). Een afbraak vóór de COMMIT betekent een rollback. Een afbraak erna betekent dat de beslissing bewaard is maar de gebruiker een fout zag. Het systeem laat de flock en de advisory locks vrij wanneer het proces eindigt.
+### 1. Review opslaan: exitreden nog onbekend
 
-### 2. Vorming openen: bevestigd
-- `formation_problems_v1.collect` leest de bron via `stored_extraction(envelope)`. Dat geeft een gewone lijst terug, niet de voorbereide `SourceFragments`-drager die Review gebruikt.
-- Daardoor vergelijkt elke `_read_source_blocks`-aanroep per object, ook bij een cache-hit, de volledige fragmentenlijst met de bewaarde kopie. Getallen zitten daarin in `_SourceNumber`, dus de vergelijking loopt via Python-`__eq__`.
-- De fase `source_reconstruction` telt deze aanroepen mee.
-- Micro-benchmark (lokaal, synthetisch): 7 ms per hit bij 1.000 fragmenten en 20 ms bij 3.000. Bij circa 4.000 fragmenten geeft 945 aanroepen ongeveer 25 s.
-- Telemetrische bevestiging in `slow_reads.json`: `source_reconstruction_reused` ongeveer gelijk aan `source_input_compared`, terwijl `source_reconstruction_built` laag blijft.
+De startup zet geen `--timeout`; Gunicorn gebruikt normaal 30 s, tenzij runtimeconfiguratie zoals `GUNICORN_CMD_ARGS` dit wijzigt. Het werkelijk ingestelde timeout- en workeraantal moet uit de runtime blijken. Een nieuwe worker na 39–43 s past bij een watchdog en opstarttijd, maar bewijst dit niet en sluit OOM of een andere stopreden niet uit.
 
-### 3. Review openen: query nog niet toegewezen
-- `db_json_bytes` is alleen een totaal per verzoek.
-- Kandidaten: `console._envelope` (de volledige envelope, zie MET-38), de overzichtsredirect aan het eind van de wachtrij (14,6 MB) en `read_review_participation_events`.
-- De `phase_tree` in `slow_reads.json` bepaalt welke het is.
+`review_post` is synchroon en draait in een threadpool. Er bestaat echter ook een direct blokkerend pad: bij 'Goedkeuren na correctie' kan `StructuredRepairRequired` leiden naar de **async** `structured_repair_handler` in `src/review/deterministic_review_repair_v1.py`. Die roept `account_for` en `render_repair` synchroon aan; dit omvat bron- en databasewerk op de eventloop.
+
+Dat schedulingprobleem is lokaal gereproduceerd met de echte handler/renderer en 923 bronfragmenten, maar een fake auth/DB/Blob-readmodel: heartbeatgat 1,3443 s; hetzelfde werk buiten de hoofdloop 0,0220 s; HTML byte voor byte gelijk. Dit bewijst de blokkade van dat codepad, **niet** dat de vijf productie-POSTs die route namen of door Gunicorn werden gestopt.
+
+Ontbrekende `request_running`-heartbeats zijn aanwijzingen, geen bewijs van eventloopblokkade of timeout. Nodig: de daadwerkelijke exitregel, runtime-instellingen en zo mogelijk de stack van de betrokken worker. `WORKER TIMEOUT` bewijst een watchdog-ingreep; `SIGKILL ... Perhaps out of memory?` bewijst een harde stop, niet zelfstandig OOM. Ook logdekking, meetvenster en ingestievertraging controleren.
+
+De reviewmutatie wordt atomair gecommit binnen de bestaande PostgreSQL-transactie. Een processtop vóór commit laat die transactie terugrollen; na commit blijft de beslissing bewaard. Een tijdvenster met of zonder review-events identificeert de betrokken opdracht niet. Controleer exact command/interaction, objectversie, bindings en opgeslagen beslissing voordat een individuele actie als opgeslagen of teruggedraaid wordt aangemerkt.
+
+### 2. Vorming openen: vergelijkingswerk bevestigd met de echte bron
+
+`formation_problems_v1.collect` gebruikt `stored_extraction(envelope)`: een gewone fragmentlijst in plaats van de bestaande voorbereide `SourceFragments`-drager. Daardoor vergelijkt `_read_source_blocks` bij een cache-hit opnieuw de volledige geneste bron. Getallen worden via `_SourceNumber.__eq__` vergeleken.
+
+Het echte document heeft **923 evidence-fragmenten**. De productie-counters zijn: **944 invoervergelijkingen, 943 hergebruikte reconstructies, twee opgebouwde weergaven**. De 945 faseregistraties betekenen geen 945 volledige reconstructies. Een synthetische extrapolatie naar circa 4.000 fragmenten is niet nodig om dit incident te onderbouwen.
+
+Lokale differentiële proef: 10 warme toegangen met dezelfde profiler geven 115.580 numerieke vergelijkingen op de gewone lijst en nul via de voorbereide blokindex; de bronblokken blijven gelijk. Voorbereiding heeft zelf kosten; dit is geen volledige HTTP- of Azure-snelheidsmeting.
+
+### 3. Review openen: breed bron-/documentpad aangetoond
+
+`db_json_bytes` is een requesttotaal en wijst bytes niet aan een query toe. De faseboom is wel al onderzocht: in het documentverzoek van 14,89 s valt **5,26 s binnen `source_views_read_records`** en **4,22 s binnen `processing_status`**. Inclusieve fasetijden niet optellen bij bovenliggende fasen.
+
+`read_review_document` haalt brongegevens zonder objectselectie op; de recordlezer kiest dan alle bronblokken, fragmenten en lidmaatschappen. Bij open vorming wordt bovendien de bestaande vormingsinvoer gecontroleerd. De opslagvoorbereiding leest eveneens brongegevens zonder objectselectie. Een passage-GET gebruikt wel een afhankelijkheidsvenster. Dit verklaart een concreet duur pad; welke query welk deel van de 31,4 MB levert blijft open.
 
 ### `review_disposition_conflict`
-- Terechte weigering volgens `ALLOWED_FINAL_BY_SUITABILITY`.
-- De statische invoercontrole draait pas na de volledige commandovoorbereiding (`review_closure_v1.review_object` → `execute_review_command`). Daar komen de 3,87 s vandaan.
 
-## Gegevensregels
-Uitvoer blijft privé, buiten de repo, met modus 700. Naar GitHub of Linear gaan alleen tellingen, foutcodes, pids, tijdstippen en SHA's. `check_review_save_outcome.py` toont nooit document-ids, object-ids, actoren of eventdetails.
+Dit is de domeinweigering van een ongeldige combinatie volgens `ALLOWED_FINAL_BY_SUITABILITY`. De daadwerkelijke formulierwaarden zijn niet bekend. Het gemeten verzoek eindigt na 3,87 s met HTTP 400; bronrecords lezen/valideren/hydrateren neemt circa 2,94 s daarvan in. Dat verklaart een groot deel van de wachttijd vóór de weigering. De generieke melding ontstaat doordat deze foutcode geen eigen gebruikersmelding heeft. Dit verzoek staat los van de vijf onafgesloten POSTs.
 
-## Vervolg (aparte PR's, na het bewijs)
+## Gegevensregels en beperkingen
 
-Het uitgewerkte oplossingsontwerp met prototypebewijs staat in [974-solution-plan.md](974-solution-plan.md).
+Ruwe uitvoer blijft privé, buiten de repo, in een nieuwe map met modus 700 en bestanden onder umask 077. Alleen beoordeelde technische samenvattingen worden overgedragen; geen bronteksten, ruwe provider-uitvoer, secrets of persoonsgegevens. De databasecontrole toont geen document-/object-ids, actoren of eventdetails. Live KQL-validatie blijft open. Het ontbreken van een logtabel of resultaat is ontbrekend bewijs, geen vastgestelde oorzaak.
 
-1. Review opslaan: blokkade of geheugen wegnemen in het aangewezen frame. Een expliciete `--timeout` is géén fix, maar maskeert alleen.
-2. Vorming: de voorbereide bronweergave één keer per verzoek doorgeven (Class B, met een gate voor de programmastructuur).
-3. Review openen: bytes per query toewijzen en daarna de envelope-read begrenzen.
+## Vervolg
+
+Het toegevoegde oplossingsontwerp met synthetische prototypes staat in [974-solution-plan.md](974-solution-plan.md). Het is geen geactiveerd uitvoeringsprogramma; de hieronder genoemde bewijsgrenzen blijven leidend.
+
+1. Exitreden, betrokken handeling en opslagresultaat van de vijf POSTs vaststellen. Timeout verhogen vervangt dit onderzoek niet.
+2. De bestaande voorbereide bronrepresentatie doorgeven aan Vorming, met behoud van alle integriteitscontroles en context (aparte Class B-fix).
+3. Brede Review-bron-/documentreads begrenzen vanuit het gemeten pad. Aanvullende byte-attributie per query alleen waar die nog een keuze bepaalt.
