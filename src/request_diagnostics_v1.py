@@ -40,6 +40,10 @@ COUNTERS = frozenset({'document_snapshot_reused', 'source_reconstruction_built',
 HEARTBEAT_SECONDS = 15
 MAX_PHASE_EVENTS = 40
 MAX_TREE_NODES = 64
+# Database JSON bytes read outside every phase.
+NO_PHASE = '<none>'
+# Driver instrumentation wraps every read; the reader is the phase around it.
+_DRIVER_PHASES = frozenset({'db_connect', 'db_execute', 'db_fetch'})
 DEPLOYED_COMMIT_MARKER = Path(__file__).resolve().parents[1] / 'config' / 'deployed_commit.txt'
 _COMMIT_RE = re.compile(r'[0-9a-f]{40}')
 _TRACEPARENT_RE = re.compile(rb'00-([0-9a-f]{32})-[0-9a-f]{16}-[0-9a-f]{2}')
@@ -73,6 +77,10 @@ class RequestEvidence:
     doc_ref: str | None = None
     error: dict | None = None
     db: dict | None = None
+    json_bytes: dict = field(default_factory=dict)
+    json_bytes_truncated: bool = False
+    # (stack, path): one attribute, so a reader never pairs a stack with another path.
+    json_path: tuple = ((), NO_PHASE)
 
     def report(self, event, **fields):
         payload = {'event': event, 'request_id': self.request_id,
@@ -108,6 +116,31 @@ def diagnostic_count(name, amount=1):
     if evidence is None or name not in COUNTERS:
         return
     evidence.counters[name] = evidence.counters.get(name, 0) + amount
+
+
+def diagnostic_json_bytes(amount):
+    """Attribute database JSON bytes to the innermost reading phase path.
+
+    A no-op outside diagnosed requests. Keys are fixed phase names only and are
+    bounded like the phase tree.
+    """
+    evidence = _CURRENT.get()
+    if evidence is None:
+        return
+    stack = evidence.stack
+    cached_stack, path = evidence.json_path
+    if cached_stack is not stack:
+        # Every JSON load runs once per row; build the path once per phase change.
+        names = [entry[0] for entry in stack]
+        while names and names[-1] in _DRIVER_PHASES:
+            names.pop()
+        path = '/'.join(names) or NO_PHASE
+        evidence.json_path = (stack, path)
+    table = evidence.json_bytes
+    if path in table or len(table) < MAX_TREE_NODES:
+        table[path] = table.get(path, 0) + amount
+    else:
+        evidence.json_bytes_truncated = True
 
 
 def note_handled_error(code):
@@ -495,6 +528,9 @@ class RequestDiagnostics:
                     return {k: {'calls': v['calls'], 'inclusive_ms': round(v['inclusive_ms'], 3),
                                 'exclusive_ms': round(v['exclusive_ms'], 3)} for k, v in table.items()}
                 extra = {'phase_tree_truncated': True} if evidence.tree_truncated else {}
+                extra['db_json_bytes_by_phase'] = dict(evidence.json_bytes)
+                if evidence.json_bytes_truncated:
+                    extra['db_json_bytes_by_phase_truncated'] = True
                 if not evidence.tree_truncated:
                     # Root phases may overlap. Their sum is therefore an upper
                     # bound on covered time, making this only a lower bound on

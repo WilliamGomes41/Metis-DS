@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Iterator
 
-from src.request_diagnostics_v1 import diagnostic_phase
+from src.request_diagnostics_v1 import diagnostic_json_bytes, diagnostic_phase
 
 
 @dataclass
@@ -118,7 +118,9 @@ def connect_postgres(psycopg: Any, *args: Any, **kwargs: Any) -> Any:
                         def load(self, data):
                             # The driver already owns these bytes. Keep its exact
                             # decoder/customization; no encoding or extra JSON pass.
-                            metrics.json_bytes += len(data)
+                            size = len(data)
+                            metrics.json_bytes += size
+                            diagnostic_json_bytes(size)
                             return super().load(data)
                     return JsonBytesLoader
                 for oid in (114, 3802):  # PostgreSQL json / jsonb, both wire formats

@@ -44,6 +44,7 @@ Document-id's, gebruikers-id's, querystrings, SQL, broninhoud en foutteksten wor
 | Afgehandelde fout | `request_finished.error.handled` | ConsoleError-code, zonder tekst |
 | Database | `request_finished.db` en fasen `db_connect`/`db_execute`/`db_fetch` | aantal verbindingen en queries, tijden |
 | JSON-ophaalvolume | `request_finished.db.db_json_bytes` | native JSON/JSONB-veldbytes, zonder hercoderen; exclusief overige kolommen en protocoloverhead |
+| JSON-ophaalvolume per fase | `request_finished.db_json_bytes_by_phase` | dezelfde bytes per fasepad van de lezer, in de notatie van de fasenboom (`review_render/source_views_read_records`); de stuurprogrammafasen `db_*` tellen niet als lezer; bytes buiten elke fase staan onder `<none>`; hoogstens 64 paden, daarna `db_json_bytes_by_phase_truncated: true`. Zonder afkapping is de som gelijk aan `db.db_json_bytes`. Alleen vaste fasenamen en aantallen; geen SQL, id's of waarden |
 | Kopieën / hergebruik | fase `payload_copy`, teller `document_snapshot_reused` | noodzakelijke uitgaande kopieën en logische hergebruiktreffers; een `document_load`-aanroep is niet automatisch een fysieke store-read |
 | Store-lock | fasen `store_lock_wait`, `store_lock_hold` | wachttijd tot de lock; hoe lang de lock vastzat |
 | Storeopdracht (#678) | fase `store_transaction` | transactietijd van de eigenaar; PG gebruikt geen schijfspiegels |
