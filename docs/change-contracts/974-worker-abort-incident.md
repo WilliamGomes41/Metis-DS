@@ -48,6 +48,9 @@ Deze slice voegt alleen diagnose toe. Er verandert geen productiegedrag, schema,
 Uitvoer blijft privé, buiten de repo, met modus 700. Naar GitHub of Linear gaan alleen tellingen, foutcodes, pids, tijdstippen en SHA's. `check_review_save_outcome.py` toont nooit document-ids, object-ids, actoren of eventdetails.
 
 ## Vervolg (aparte PR's, na het bewijs)
+
+Het uitgewerkte oplossingsontwerp met prototypebewijs staat in [974-solution-plan.md](974-solution-plan.md).
+
 1. Review opslaan: blokkade of geheugen wegnemen in het aangewezen frame. Een expliciete `--timeout` is géén fix, maar maskeert alleen.
 2. Vorming: de voorbereide bronweergave één keer per verzoek doorgeven (Class B, met een gate voor de programmastructuur).
 3. Review openen: bytes per query toewijzen en daarna de envelope-read begrenzen.
