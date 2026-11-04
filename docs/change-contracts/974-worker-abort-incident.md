@@ -7,6 +7,8 @@ Promise: De projectlead kan alleen-lezen Azure-bewijs verzamelen voor de exitred
 Proof: `tests/test_check_review_save_outcome_postgres.py` (PostgreSQL 16, begrensde alleen-lezen uitvoer zonder ids/details, onbekende uitkomst bij zowel lege als gevulde vensters); `tests/test_collect_worker_abort_evidence.py` (nagebootste az; invoergrenzen en alle zes secties). Historische lokale bron- en schedulingproeven: `evidence/worker-abort-974/diagnosis-summary.json`; dit zijn geen live Azure- of HTTP-reproducties.
 Touches lifecycle invariants: no
 
+De bestaande GitHub/Linear-synchronisatieconfig krijgt de ontbrekende identiteitskoppeling #974 ↔ MET-48. `tests/test_linear_github_sync.py` reproduceert de afgewezen MET-48-overdracht vóór de toevoeging en valideert daarna dezelfde overdracht. Dit wijzigt geen status- of werkkeuzeautoriteit. De automatische projectie voor MET-48 wordt pas actief als de configuratie op main staat.
+
 Deze slice voegt diagnose toe. Productiegedrag, schema, autorisatie en lifecycle veranderen niet. Fixes volgen apart; het Vorming-leespad is Class B.
 
 ## Waarneming (aangeleverde telemetrie, 2026-11-04)
