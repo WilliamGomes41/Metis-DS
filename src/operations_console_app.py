@@ -21,6 +21,7 @@ from urllib.parse import quote, urlencode, urlsplit
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from src.documents.document_status_v1 import DOCUMENT_STATUS_LABELS
 from src.review.four_eyes_v1 import requires_four_eyes
@@ -3575,6 +3576,16 @@ def create_console_app(
 
     @app.exception_handler(ConsoleError)
     async def console_errors(_request: Request, exc: ConsoleError) -> HTMLResponse:
+        # Only the body read is async; the session lookup and page rendering
+        # are synchronous and must not hold the single worker's event loop.
+        submitted_revision = None
+        if (exc.code == SNAPSHOT_OBJECT_WRITE_CONFLICT and _request.url.path in {
+                '/review/source-exclusions', '/review/source-group', '/review/source-group/reset'}):
+            form = await _request.form()
+            submitted_revision = str(form.get('snapshot_revision') or '')
+        return await run_in_threadpool(_console_error_page, _request, exc, submitted_revision)
+
+    def _console_error_page(_request: Request, exc: ConsoleError, submitted_revision: str | None) -> HTMLResponse:
         from src.console_entra_routes_v1 import identity_unavailable_response
         from src.request_diagnostics_v1 import current_request_id, note_handled_error
         if exc.code == "workflow_document_unavailable":
@@ -3589,11 +3600,9 @@ def create_console_app(
         except ConsoleError:
             return identity_unavailable_response(_page)
         status = 401 if exc.code in {"not_authenticated", "invalid_credentials"} else 403 if "role_required" in exc.code or exc.code in {"entra_access_denied", "entra_local_auth_disabled"} else 400
-        if (exc.code == SNAPSHOT_OBJECT_WRITE_CONFLICT and _request.url.path in {
-                '/review/source-exclusions', '/review/source-group', '/review/source-group/reset'}):
+        if submitted_revision is not None:
             from src.review.review_passage_read_v1 import PREFIX
-            form = await _request.form()
-            if str(form.get('snapshot_revision') or '').startswith(PREFIX):
+            if submitted_revision.startswith(PREFIX):
                 status = 409
         message = ERROR_COPY.get(exc.code, "Metis kon deze actie niet afronden. Controleer de huidige status voordat je opnieuw probeert. Blijft dit gebeuren? Meld het bij de beheerder.")
         filename_error = exc.code == "invalid_store_path" and _request.url.path == "/ingest"
