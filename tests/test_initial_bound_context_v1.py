@@ -3,8 +3,12 @@
 Synthetic source examples exercise the real producer/materialiser/Admission
 chain. They are regression evidence, not a clinical quality acceptance set.
 
-# release-control-evidence: scope/belofte kwaliteit opslag beschikbaarheid
-# release-control-evidence: slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: kwaliteit
+# release-control-evidence: opslag concurrent stale recovery
+# release-control-evidence: beschikbaarheid
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 import json
 

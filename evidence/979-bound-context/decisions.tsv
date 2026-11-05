@@ -1,0 +1,7 @@
+ts	phase	decision	why	evidence	result
+2026-11-05	ground	Fix repeated selection of already bound source context	Initial queued ranges differ from recovery source-use accounting	tests/test_initial_bound_context_v1.py	Before repair two failures and two passing negative controls
+2026-11-05	sketch	Use an attempt-local exact interval index	Read only affected blocks rather than revalidate growing document prefixes	docs/change-contracts/979-initial-bound-context.md	Preserve pinned plan, source identity and sole candidate creator
+2026-11-05	sketch	Skip covered tasks without invented TaskResults	Source use does not imply an additional model request	tests/test_initial_bound_context_postgres.py	Retain two real results for three covered source tasks
+2026-11-05	implement	Keep unresolved assessments available to existing recovery	Assessment source accounting differs between supported preparation paths	tests/test_initial_context_assessments_v1.py	Only accepted candidate and resolved context spans narrow later tasks
+2026-11-05	review	Correlate source progress with the exact completed attempt	An older activated replay can survive a later budget failure	src/workflows/formation_task_store_v1.py	Use existing accounted checkpoint or current SQL counters
+2026-11-05	scope	Keep module context and clinical acceptance open	Regression fixtures prove one execution defect, not clinical completeness	MET-7 and issue #530	No production deployment or historical reprocessing

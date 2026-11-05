@@ -119,7 +119,7 @@ def formation_progress(evidence):
     """
     history = list(evidence.get("tasks", []))
     initial = [row for row in history if row.get("phase") == "initial"]
-    basis = initial or history
+    basis = (evidence.get("task_plan") or {}).get("tasks") or initial or history
     planned = []
     seen = set()
     for row in basis:
@@ -258,7 +258,7 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
         if pending and all(r.get("spans") for r in pending):
             targets = [r for r in targets if any(s["block_id"] == r["span"]["block_id"] and
                 max(s["start"], r["span"]["start"]) < min(s["end"], r["span"]["end"]) for s in scope)]
-    from src.vorming.recommendation_task_plan_v1 import build_plan, remaining_tasks, report
+    from src.vorming.recommendation_task_plan_v1 import build_plan, remaining_tasks, narrow_task, report
     plan = checkpoint.load_task_plan() if durable else evidence.get("task_plan")
     if plan is None:
         # Full original source partition, independent of attempt or current
@@ -268,6 +268,7 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
         if durable:
             plan = checkpoint.retain_task_plan(plan)
     evidence["task_plan"] = plan
+    source_use = _SourceUse(proposal)
     plan_positions = {task["source_order"]:index for index,task in enumerate(plan["tasks"])}
     phases = ["recovery"] if resuming else ["initial", "recovery"]
     budget_exhausted = False
@@ -296,6 +297,11 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                 continue
             if durable and checkpoint.skip_task(phase, plan_positions[task["source_order"]]):
                 continue
+            task = narrow_task(task, source_use.remaining(task["target_spans"]))
+            if task is None:
+                continue
+            if sum(len(b["text"]) for b in task["evidence_blocks"]) > MAX_CONTEXT_CHARS:
+                task = {**task, "error_code": "source_task_context_limit_exceeded"}
             result = None
             task_record = {key: deepcopy(task[key]) for key in ("task_id", "section_path", "target_spans", "priority", "source_order")}
             task_record["phase"] = phase
@@ -314,6 +320,9 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                 # then return control to the caller immediately.
                 pending_calls = []
                 for offset, pending_task in enumerate(phase_tasks[index:], start=index + 1):
+                    pending_task = narrow_task(pending_task, source_use.remaining(pending_task["target_spans"]))
+                    if pending_task is None:
+                        continue
                     timings.append({"task_id": pending_task["task_id"], "phase": phase, "index": offset,
                                     "planned": len(phase_tasks), "status": "not_started"})
                     pending_record = {key: deepcopy(pending_task[key])
@@ -334,7 +343,7 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                 budget_exhausted = True
                 if checkpoint:
                     timed_checkpoint("budget_exhausted" if durable else "proposal_received",
-                        {"remaining_task_count": len(phase_tasks) - index, "formation_calls": pending_calls} if durable else {"provider_evidence": evidence,
+                        {"remaining_task_count": len(pending_calls), "formation_calls": pending_calls} if durable else {"provider_evidence": evidence,
                          "resolved_proposal": proposal, "resolved_proposal_hash": stable_json_hash(proposal)})
                 break
 
@@ -413,6 +422,8 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
                 else:
                     timing["checkpoint_after_seconds"] = timed_checkpoint("proposal_received", {"provider_evidence": evidence,
                         "resolved_proposal": proposal, "resolved_proposal_hash": stable_json_hash(proposal)})
+            if result is not None and task_record["status"] in {"completed", "partial"}:
+                source_use.include(result)
         if durable:
             proposal = _merge_task_proposals([proposal, *deltas])
         if budget_exhausted:
@@ -446,34 +457,64 @@ def _merge_task_proposals(proposals):
     return result
 
 
-def _durable_targets(blocks, proposal):
-    """Coverage planning without materialising/validating the whole proposal.
+def _source_use_spans(proposal):
+    for obj in proposal["objects"]:
+        yield from obj["spans"]
+        yield from (entry["span"] for entry in obj.get("context_evidence", [])
+                    if entry.get("span") and not entry.get("unresolved_reason"))
 
-    Only exact selected ranges are subtracted. Interpretation and cross-task
-    relationships remain the responsibility of the final joint validator.
-    """
-    by_block = {}
-    refs = [s for obj in proposal["objects"] for s in obj["spans"]]
-    refs.extend(row["span"] for row in proposal["source_assessments"])
-    # Bound context is already source use on its candidate. Preserve the
-    # existing recovery rule: it is not another candidate-search target.
-    refs.extend(entry["span"] for obj in proposal["objects"] for entry in obj.get("context_evidence", [])
-                if entry.get("span") and not entry.get("unresolved_reason"))
-    for span in refs:
-        by_block.setdefault(span["block_id"], []).append((span["start"],span["end"]))
+
+class _SourceUse:
+    """Attempt-local exact source use, incremented only by accepted task deltas."""
+
+    def __init__(self, proposal):
+        self.by_block = {}
+        self.include(proposal)
+
+    def include(self, proposal):
+        self.include_spans(_source_use_spans(proposal))
+
+    def include_spans(self, spans):
+        changed = set()
+        for span in spans:
+            self.by_block.setdefault(span["block_id"], []).append((span["start"], span["end"]))
+            changed.add(span["block_id"])
+        for block_id in changed:
+            merged = []
+            for start, end in sorted(self.by_block[block_id]):
+                if merged and start <= merged[-1][1]:
+                    merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+                else:
+                    merged.append((start, end))
+            self.by_block[block_id] = merged
+
+    def remaining(self, spans):
+        result = []
+        for span in spans:
+            cursor, end = span["start"], span["end"]
+            for lo, hi in self.by_block.get(span["block_id"], []):
+                if hi <= cursor:
+                    continue
+                if lo >= end:
+                    break
+                if lo > cursor:
+                    result.append({**span, "start": cursor, "end": lo})
+                cursor = max(cursor, hi)
+            if cursor < end:
+                result.append({**span, "start": cursor})
+        return result
+
+
+def _durable_targets(blocks, proposal):
+    """Plan exact unused source without materialising the growing proposal."""
+    source_use = _SourceUse(proposal)
+    source_use.include_spans(row["span"] for row in proposal["source_assessments"])
     result = []
     for block in blocks:
         if metadata_reason(block["text"]):
             continue
-        cursor = 0
-        for start,end in sorted(by_block.get(block["block_id"], [])):
-            if start > cursor:
-                result.append({"span":{"block_id":block["block_id"],"start":cursor,"end":start},
-                               "text":block["text"][cursor:start]})
-            cursor = max(cursor,end)
-        if cursor < len(block["text"]):
-            result.append({"span":{"block_id":block["block_id"],"start":cursor,"end":len(block["text"])},
-                           "text":block["text"][cursor:]})
-    # Source coverage already omits empty visible prose. Preserve exact source
-    # offsets, but do not spend model calls on whitespace between selections.
-    return [row for row in result if row["text"].strip()]
+        for span in source_use.remaining([full_span(block)]):
+            text = block["text"][span["start"]:span["end"]]
+            if text.strip():
+                result.append({"span": span, "text": text})
+    return result
