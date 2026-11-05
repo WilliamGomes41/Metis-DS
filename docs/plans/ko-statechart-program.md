@@ -121,7 +121,7 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `grok-4.7-xhigh-fast` at the PR head, per the boot recipe.
 
 - [ ] Lane 1. Regression lane against trunk. Approve one fixture KO through the review card at trunk and head. Trunk lacks the derivation, so record that and gate that the head card and the stored payload are byte-identical to trunk and the inventory reports Goedgekeurd. Save `ko1-regression.png`. Pass when the payload hashes match and the inventory line reads `Goedgekeurd=1`.
-- [ ] Lane 2. Ingest the knowledge-context fixture and run the inventory. Save `ko1-ingest.png`. Pass when every object is in Kandidaat, Context open or Samengesteld and `ko_state_unclassified=0`.
+- [ ] Lane 2. Ingest the knowledge-context fixture and run the inventory. Save `ko1-ingest.png`. Pass when every object is in Kandidaat, Context open, Bewijs open, Samengesteld or In review and `ko_state_unclassified=0`.
 - [ ] Lane 3. Choose "mist context" on a card. Save `ko1-context.png`. Pass when the inventory moves that object to Context open.
 - [ ] Lane 4. Approve a high-risk object once. Save `ko1-second-review.png`. Pass when the inventory reports Tweede review for it.
 - [ ] Lane 5. Complete the second review. Save `ko1-approved.png`. Pass when the inventory reports Goedgekeurd.
@@ -289,7 +289,7 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 
 **Build.**
 
-- [ ] Define `TRANSITIONS`, a table of `(from_state, event, to_state, guard)` that matches the statechart in the KO statechart document. Correction is an event that creates a new revision in Samengesteld, never a stored `revise`.
+- [ ] Define `TRANSITIONS`, a table of `(from_state, event, to_state, guard)` that matches the statechart in the KO statechart document. Correction is an event that creates a new revision that starts as Kandidaat, never a stored `revise`. The derived state of that revision then follows the guards.
 - [ ] Add `apply_ko_event(console, object_id, event, payload)` that derives the current state, checks the table and the guard, then calls the existing writer. It raises one refusal type with the state and event in Dutch.
 - [ ] Route `review_object`, `approve_second_review`, `correct_object`, `confirm_object_type`, `resolve_support_relation`, `_supersede_merge_targets` and the source-context commands through `apply_ko_event`.
 - [ ] Express `ALLOWED_FINAL_BY_SUITABILITY`, `require_allowed_review_disposition` and `without_closed_follow_up` as guards in the table and delete their ad-hoc call sites.
@@ -299,7 +299,7 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 **You see.**
 
 - [ ] An approve on a KO in Bewijs open is refused with "Dit kennisobject heeft nog geen onderbouwing" and no event or binding is written.
-- [ ] A correction shows the new revision in Samengesteld and the old revision as history.
+- [ ] A correction shows the new revision in its derived state, never Goedgekeurd, and the old revision as history.
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
@@ -312,12 +312,12 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 - [ ] Lane 1. Regression lane against trunk. Run the review disposition browser check at trunk and head. Save `ko4-regression.png`. Pass when the offered choices per suitability are identical.
 - [ ] Lane 2. Try to approve a recommendation without evidence. Save `ko4-bewijs-open.png`. Pass when the refusal text shows and `/browser-review-events` count is unchanged.
 - [ ] Lane 3. Link evidence, then approve. Save `ko4-bewijs-closed.png`. Pass when the state moves to Goedgekeurd or Tweede review per risk.
-- [ ] Lane 4. Choose "goedkeuren na correctie". Save `ko4-correction.png`. Pass when a new revision exists in Samengesteld and no row has `revise`.
+- [ ] Lane 4. Choose "goedkeuren na correctie". Save `ko4-correction.png`. Pass when a new revision exists in an open state before review and no row has `revise`.
 - [ ] Lane 5. Post a forged approve for a "geen kenniseenheid" suitability with curl. Save `ko4-forged.png`. Pass when the response is a refusal and nothing is written.
 - [ ] Lane 6. Submit two approvals for the same KO from two browser contexts at once. Save `ko4-concurrent.png`. Pass when exactly one binding is written and the other gets the stale-revision message.
 - [ ] Lane 7. Run a second review as the same reviewer. Save `ko4-four-eyes.png`. Pass when it is refused.
 - [ ] Lane 8. Merge two candidates. Save `ko4-merge.png`. Pass when the target is Vervangen with `superseded_by` set.
-- [ ] Lane 9. Confirm source context that rejects a source. Save `ko4-source-context.png`. Pass when dependants return to Samengesteld and their bindings are invalid.
+- [ ] Lane 9. Confirm source context that rejects a source. Save `ko4-source-context.png`. Pass when dependants return to an open state before review and their bindings are invalid.
 - [ ] Lane 10. Kill the worker in the middle of an approve and restart. Save `ko4-restart.png`. Pass when the KO is either fully approved or untouched, never half.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
@@ -377,7 +377,7 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 - [ ] Lane 3. Open the second-review workboard. Save `ko5-second-board.png`. Pass when the list equals the bindings-derived Tweede review set.
 - [ ] Lane 4. Open document status for a published document. Save `ko5-doc-status.png`. Pass when it shows the PostgreSQL registry status.
 - [ ] Lane 5. Open badge counts. Save `ko5-badges.png`. Pass when they equal the inventory.
-- [ ] Lane 6. Reextract an unpublished document. Save `ko5-reextract.png`. Pass when removed candidates are Vervangen and the rest Samengesteld.
+- [ ] Lane 6. Reextract an unpublished document. Save `ko5-reextract.png`. Pass when removed candidates are Vervangen and the rest are in an open state before review.
 - [ ] Lane 7. Query the MCP read tools for approved objects. Save `ko5-mcp.png`. Pass when the result set equals Goedgekeurd plus Gepubliceerd.
 - [ ] Lane 8. Query the product API. Save `ko5-api.png`. Pass when only Gepubliceerd objects are served.
 - [ ] Lane 9. Restart with two workers. Save `ko5-two-workers.png`. Pass when both serve identical states.
