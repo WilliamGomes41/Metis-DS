@@ -155,17 +155,17 @@ def _lanes(capture, console, app, client, sid, accounts):
     with capture.guard:
         events = list(capture.events)
     text = json.dumps(events)
-    secrets = {"snapshot_id": [sid, save_sid], "object_id": [o["object_id"] for o in objects if o.get("object_id")],
+    forbidden_values = {"snapshot_id": [sid, save_sid], "object_id": [o["object_id"] for o in objects if o.get("object_id")],
                "sql": ["SELECT ", " FROM ", "INSERT ", "UPDATE "]}
     request_events = [e for e in events if str(e.get("event", "")).startswith(("request_", "phase_", "response_"))]
     request_text = json.dumps(request_events)
     lanes["privacy"] = {"events": len(events), "request_events": len(request_events),
-                        "hits": {kind: sum(value in text for value in values) for kind, values in secrets.items()},
+                        "hits": {kind: sum(value in text for value in values) for kind, values in forbidden_values.items()},
                         "request_event_hits": {kind: sum(value in request_text for value in values)
-                                               for kind, values in secrets.items()},
+                                               for kind, values in forbidden_values.items()},
                         # Producers outside request diagnostics; the hub maps their ids to doc_ref.
                         "events_with_snapshot_id": sorted({e.get("event") for e in events if sid in json.dumps(e) or save_sid in json.dumps(e)}),
-                        "checked_values": {kind: len(values) for kind, values in secrets.items()}}
+                        "checked_values": {kind: len(values) for kind, values in forbidden_values.items()}}
     return lanes
 
 
