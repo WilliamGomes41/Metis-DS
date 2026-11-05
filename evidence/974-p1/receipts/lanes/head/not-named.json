@@ -1,0 +1,35 @@
+{
+ "lane": 5,
+ "source_selection": {
+  "counters": {},
+  "elapsed_ms": 44.478,
+  "error": {
+   "code": "reviewer_not_named_on_snapshot",
+   "handled": true,
+   "type": "ConsoleError"
+  },
+  "location": null,
+  "outcome": "completed",
+  "page": {
+   "content_sha256": "43f92de88a8bac3de19525b95684ffc2bf2d3a27427b7ebbd50e5a8f7e806752",
+   "hrefs": [
+    "/brand/console.css?v=400b38134f582d54",
+    "/",
+    "/ingest",
+    "/source-selection",
+    "/review",
+    "/publish",
+    "/tree",
+    "/settings",
+    "/",
+    "/wat-is-nieuw"
+   ],
+   "problem_ids": [],
+   "progress_line": [],
+   "progress_refresh": false,
+   "sha256": "f494b3a79cb24414892fdc45bb1bbfdaacf21e3db409e098fd45dfee22c8b92e"
+  },
+  "source_reconstruction": null,
+  "status": 400
+ }
+}
