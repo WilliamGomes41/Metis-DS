@@ -353,10 +353,10 @@ def test_json_bytes_are_attributed_to_the_reading_phase(events, postgres_templat
     finished = _finished_for(events, '/review')
     by_phase = finished['db_json_bytes_by_phase']
     assert by_phase == {'review_render/source_views_read_records': 1_000_000,
-                        'document_load': len('{"k": 1}'), '<none>': len('[1, 2]')}
+                        'document_load': len('{"k": 1}'), '_none': len('[1, 2]')}
     assert sum(by_phase.values()) == finished['db']['db_json_bytes']
     # Every phase key names a node of the request's own phase tree.
-    assert set(by_phase) - {'<none>'} <= set(finished['phase_tree'])
+    assert set(by_phase) - {'_none'} <= set(finished['phase_tree'])
     assert 'db_json_bytes_by_phase_truncated' not in finished
     serialized = json.dumps(events)
     assert 'private' not in serialized and 'SELECT' not in serialized
@@ -402,8 +402,8 @@ def test_json_byte_map_is_bounded_like_the_phase_tree(events, postgres_template)
     by_phase = finished['db_json_bytes_by_phase']
     # Both reserved buckets fit inside the bound; overflow is explicit, never dropped.
     assert len(by_phase) == MAX_TREE_NODES
-    assert by_phase['<none>'] == 2
-    assert by_phase['<overflow>'] == len(pairs) - (MAX_TREE_NODES - 2)
+    assert by_phase['_none'] == 2
+    assert by_phase['_overflow'] == len(pairs) - (MAX_TREE_NODES - 2)
     assert finished['db_json_bytes_by_phase_truncated'] is True
     assert finished['phase_tree_truncated'] is True
     assert sum(by_phase.values()) == finished['db']['db_json_bytes'] == len(pairs) + 2
@@ -416,14 +416,46 @@ def test_json_byte_map_survives_a_failing_request_and_the_hub(events, postgres_t
 
     @app.get('/review')
     def review():
-        with db.connect() as connection, diagnostic_phase('document_load'):
-            db.read(connection, '{"k": 1}')
-            raise ValueError('private failure')
+        with db.connect() as connection:
+            db.read(connection, '[1, 2]')  # outside every phase: the reserved bucket
+            with diagnostic_phase('document_load'):
+                db.read(connection, '{"k": 1}')
+                raise ValueError('private failure')
 
     with TestClient(app, raise_server_exceptions=False) as client:
         assert client.get('/review').status_code == 500
     finished = _finished_for(events, '/review')
     assert finished['outcome'] == 'exception' and finished['error']['type'] == 'ValueError'
-    assert finished['db_json_bytes_by_phase'] == {'document_load': len('{"k": 1}')}
+    assert finished['db_json_bytes_by_phase'] == {'document_load': len('{"k": 1}'), '_none': len('[1, 2]')}
+    # The hub keeps every key, reserved buckets included, so the stored map still sums to the total.
     assert _clean(finished)['db_json_bytes_by_phase'] == finished['db_json_bytes_by_phase']
+    assert sum(_clean(finished)['db_json_bytes_by_phase'].values()) == finished['db']['db_json_bytes']
     assert 'private' not in json.dumps(events)
+
+
+def test_json_byte_keys_longer_than_the_hub_allows_go_to_overflow(events, postgres_template):
+    from contextlib import ExitStack
+    from src.request_diagnostics_v1 import PHASES
+    from src.telemetry.hub import _KEY, _clean
+    db = _JsonReads(postgres_template[0])
+    app = _measured_app()
+    names = sorted(PHASES - {'db_connect', 'db_execute', 'db_fetch'}, key=len, reverse=True)[:8]
+    assert len('/'.join(names)) > 121
+
+    @app.get('/review')
+    def review():
+        with db.connect() as connection, ExitStack() as stack:
+            for name in names:
+                stack.enter_context(diagnostic_phase(name))
+            db.read(connection, '{"k": 1}')
+        return 'ok'
+
+    with TestClient(app) as client:
+        assert client.get('/review').status_code == 200
+    finished = _finished_for(events, '/review')
+    by_phase = finished['db_json_bytes_by_phase']
+    assert all(_KEY.fullmatch(key) for key in by_phase)
+    assert by_phase == {'_overflow': len('{"k": 1}')}
+    assert finished['db_json_bytes_by_phase_truncated'] is True
+    cleaned = _clean(finished)['db_json_bytes_by_phase']
+    assert sum(cleaned.values()) == finished['db']['db_json_bytes']

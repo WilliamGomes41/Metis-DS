@@ -41,8 +41,9 @@ HEARTBEAT_SECONDS = 15
 MAX_PHASE_EVENTS = 40
 MAX_TREE_NODES = 64
 # Reserved JSON byte buckets: read outside every phase, and phase paths past the bound.
-NO_PHASE = '<none>'
-OVERFLOW = '<overflow>'
+# Both must be keys the telemetry hub keeps (src/telemetry/hub.py _KEY), or the sum breaks.
+NO_PHASE = '_none'
+OVERFLOW = '_overflow'
 # Driver instrumentation wraps every read; the reader is the phase around it.
 _DRIVER_PHASES = frozenset({'db_connect', 'db_execute', 'db_fetch'})
 DEPLOYED_COMMIT_MARKER = Path(__file__).resolve().parents[1] / 'config' / 'deployed_commit.txt'
@@ -137,9 +138,15 @@ def diagnostic_json_bytes(amount):
         while names and names[-1] in _DRIVER_PHASES:
             names.pop()
         path = '/'.join(names) or NO_PHASE
+        from src.telemetry.hub import _KEY
+        if not _KEY.fullmatch(path):
+            # The hub drops keys it cannot store; keep those bytes in the overflow bucket.
+            path = OVERFLOW
         evidence.json_path = (stack, path)
     table = evidence.json_bytes
-    if path != NO_PHASE and path not in table:
+    if path == OVERFLOW:
+        evidence.json_bytes_truncated = True
+    elif path != NO_PHASE and path not in table:
         phase_keys = len(table) - (NO_PHASE in table) - (OVERFLOW in table)
         if phase_keys >= MAX_TREE_NODES - 2:
             path = OVERFLOW

@@ -12,14 +12,14 @@ bronbestanden van `main` teruggezet, zodat alleen deze wijziging verschilt.
 [lanes/review-document.json](lanes/review-document.json)):
 
 ```json
-{"<none>": 4, "authorization": 4, "document_load": 8928649,
+{"_none": 4, "authorization": 4, "document_load": 8928649,
  "review_render": 8626491, "review_render/source_views_read_records": 6460749}
 ```
 
 Som 24.015.897 = `db.db_json_bytes`. Dit verzoek doet 15 queries en 2.018
 JSON-loads ([load-count.json](load-count.json)). Ruim een derde van de bytes leest
 `review_render` zelf, buiten `source_views_read_records`; dat is de eerste
-aanwijzing voor P5. Bij `/source-selection` staat 9.959.568 bytes onder `<none>`:
+aanwijzing voor P5. Bij `/source-selection` staat 9.959.568 bytes onder `_none`:
 een ongefaseerde read ([lanes/formation.json](lanes/formation.json)).
 
 ## Prestatie
@@ -54,7 +54,7 @@ samenvattingen per boom staan in `lanes/raw/`.
 | 3 Vorming | `formation.json` | pass: som = totaal |
 | 4 Review-save | `save.json` | pass: 303 op trunk en head, som = totaal (apart klein document; de grote fixture heeft geen reviewbaar object) |
 | 5 geen JSON | `no-json.json` | pass: `GET /login`, map `{}`, totaal 0 |
-| 6 afkapping | `truncated.json` | pass: 81 geforceerde fasepaden op een gemeten app met de echte loader op dezelfde PostgreSQL. 64 sleutels, `<overflow>` 19, `<none>` 2, beide truncatievlaggen, som = totaal 83. Geen productieroute heeft meer dan 64 paden |
+| 6 afkapping | `truncated.json` | pass: 81 geforceerde fasepaden op een gemeten app met de echte loader op dezelfde PostgreSQL. 64 sleutels, `_overflow` 19, `_none` 2, beide truncatievlaggen, som = totaal 83. Geen productieroute heeft meer dan 64 paden |
 | 7 fout | `error.json` | pass: `unknown_snapshot` (ConsoleError, afgehandeld) met de map. De Review-POST-fouten in dezelfde bon (409/400) leggen zelf geen foutcode vast; dat is al zo op trunk |
 | 8 privacy | `privacy.json` | pass: request-events bevatten geen snapshot-id, object-id (2.006 gecontroleerd) of SQL. `processing_checkpoint` bevat al op trunk het snapshot-id; de hub zet dat om naar `doc_ref` |
 | 9 gelijktijdig | `concurrent.json` | pass: `/review` en `/source-selection` tegelijk, elke map = eigen totaal |
