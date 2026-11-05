@@ -1,0 +1,1142 @@
+{
+ "get_repair": {
+  "measured": {
+   "calls": {
+    "_current_object": 2,
+    "_envelope": 8,
+    "_read_source_blocks": 2,
+    "_read_source_fragments": 1,
+    "_verified_source_bytes": 3,
+    "read_review_source": 1,
+    "render": {
+     "_current_object": 2,
+     "_envelope": 8,
+     "_read_source_blocks": 2,
+     "_read_source_fragments": 1,
+     "_verified_source_bytes": 3,
+     "read_review_source": 1,
+     "review_source_fragments": 1,
+     "snapshot_objects_and_revision": 1,
+     "source_fragment_catalog": 1,
+     "source_units": 1
+    },
+    "render_db_json_bytes": [
+     18988421
+    ],
+    "render_db_queries": [
+     11
+    ],
+    "render_ms": [
+     1337.6
+    ],
+    "review_source_fragments": 1,
+    "snapshot_objects_and_revision": 1,
+    "source_fragment_catalog": 1,
+    "source_units": 1
+   },
+   "counters": {
+    "document_snapshot_reused": 7
+   },
+   "db": {
+    "badge_ms": 0.0,
+    "db_connect_ms": 29.477,
+    "db_connections": 7,
+    "db_json_bytes": 18988425,
+    "db_queries": 12,
+    "db_query_ms": 362.849
+   },
+   "elapsed_ms": 1353.867,
+   "options": 1846,
+   "page_sha256": "84dc5e0c2bf087c5727f93b232b818212579ad7b705095b33b6f85d6c5e2e51e",
+   "phases": {
+    "authorization": {
+     "calls": 1,
+     "exclusive_ms": 0.959,
+     "inclusive_ms": 7.483
+    },
+    "db_connect": {
+     "calls": 7,
+     "exclusive_ms": 29.357,
+     "inclusive_ms": 29.357
+    },
+    "db_execute": {
+     "calls": 12,
+     "exclusive_ms": 362.583,
+     "inclusive_ms": 362.583
+    },
+    "db_fetch": {
+     "calls": 9,
+     "exclusive_ms": 223.042,
+     "inclusive_ms": 223.042
+    },
+    "document_load": {
+     "calls": 8,
+     "exclusive_ms": 2.38,
+     "inclusive_ms": 83.162
+    },
+    "objects_read": {
+     "calls": 1,
+     "exclusive_ms": 293.729,
+     "inclusive_ms": 409.918
+    },
+    "source_read": {
+     "calls": 1,
+     "exclusive_ms": 0.066,
+     "inclusive_ms": 0.066
+    },
+    "source_reconstruction": {
+     "calls": 2,
+     "exclusive_ms": 0.012,
+     "inclusive_ms": 0.012
+    },
+    "source_verify": {
+     "calls": 3,
+     "exclusive_ms": 0.721,
+     "inclusive_ms": 0.721
+    },
+    "source_views_hydrate": {
+     "calls": 1,
+     "exclusive_ms": 61.416,
+     "inclusive_ms": 75.723
+    },
+    "source_views_read_records": {
+     "calls": 1,
+     "exclusive_ms": 11.992,
+     "inclusive_ms": 461.434
+    },
+    "source_views_validate": {
+     "calls": 7,
+     "exclusive_ms": 154.642,
+     "inclusive_ms": 154.642
+    }
+   },
+   "repair_page": true,
+   "status": 200,
+   "tree": {
+    "authorization": {
+     "calls": 1,
+     "exclusive_ms": 0.959,
+     "inclusive_ms": 7.483
+    },
+    "authorization/db_connect": {
+     "calls": 1,
+     "exclusive_ms": 4.197,
+     "inclusive_ms": 4.197
+    },
+    "authorization/db_execute": {
+     "calls": 1,
+     "exclusive_ms": 2.107,
+     "inclusive_ms": 2.107
+    },
+    "authorization/db_fetch": {
+     "calls": 1,
+     "exclusive_ms": 0.22,
+     "inclusive_ms": 0.22
+    },
+    "db_connect": {
+     "calls": 3,
+     "exclusive_ms": 13.048,
+     "inclusive_ms": 13.048
+    },
+    "db_execute": {
+     "calls": 6,
+     "exclusive_ms": 86.046,
+     "inclusive_ms": 86.046
+    },
+    "db_fetch": {
+     "calls": 3,
+     "exclusive_ms": 79.079,
+     "inclusive_ms": 79.079
+    },
+    "document_load": {
+     "calls": 7,
+     "exclusive_ms": 2.311,
+     "inclusive_ms": 83.093
+    },
+    "document_load/db_connect": {
+     "calls": 1,
+     "exclusive_ms": 4.009,
+     "inclusive_ms": 4.009
+    },
+    "document_load/db_execute": {
+     "calls": 2,
+     "exclusive_ms": 49.584,
+     "inclusive_ms": 49.584
+    },
+    "document_load/db_fetch": {
+     "calls": 2,
+     "exclusive_ms": 27.189,
+     "inclusive_ms": 27.189
+    },
+    "objects_read": {
+     "calls": 1,
+     "exclusive_ms": 293.729,
+     "inclusive_ms": 409.918
+    },
+    "objects_read/db_connect": {
+     "calls": 1,
+     "exclusive_ms": 4.1,
+     "inclusive_ms": 4.1
+    },
+    "objects_read/db_execute": {
+     "calls": 1,
+     "exclusive_ms": 53.57,
+     "inclusive_ms": 53.57
+    },
+    "objects_read/db_fetch": {
+     "calls": 1,
+     "exclusive_ms": 58.45,
+     "inclusive_ms": 58.45
+    },
+    "objects_read/document_load": {
+     "calls": 1,
+     "exclusive_ms": 0.069,
+     "inclusive_ms": 0.069
+    },
+    "source_read": {
+     "calls": 1,
+     "exclusive_ms": 0.066,
+     "inclusive_ms": 0.066
+    },
+    "source_reconstruction": {
+     "calls": 2,
+     "exclusive_ms": 0.012,
+     "inclusive_ms": 0.012
+    },
+    "source_verify": {
+     "calls": 3,
+     "exclusive_ms": 0.721,
+     "inclusive_ms": 0.721
+    },
+    "source_views_read_records": {
+     "calls": 1,
+     "exclusive_ms": 11.992,
+     "inclusive_ms": 461.434
+    },
+    "source_views_read_records/db_connect": {
+     "calls": 1,
+     "exclusive_ms": 4.003,
+     "inclusive_ms": 4.003
+    },
+    "source_views_read_records/db_execute": {
+     "calls": 2,
+     "exclusive_ms": 171.276,
+     "inclusive_ms": 171.276
+    },
+    "source_views_read_records/db_fetch": {
+     "calls": 2,
+     "exclusive_ms": 58.104,
+     "inclusive_ms": 58.104
+    },
+    "source_views_read_records/source_views_hydrate": {
+     "calls": 1,
+     "exclusive_ms": 61.416,
+     "inclusive_ms": 75.723
+    },
+    "source_views_read_records/source_views_hydrate/source_views_validate": {
+     "calls": 6,
+     "exclusive_ms": 14.307,
+     "inclusive_ms": 14.307
+    },
+    "source_views_read_records/source_views_validate": {
+     "calls": 1,
+     "exclusive_ms": 140.335,
+     "inclusive_ms": 140.335
+    }
+   },
+   "wall_ms": 1358.3
+  },
+  "warm": {
+   "calls": {
+    "_current_object": 2,
+    "_envelope": 8,
+    "_read_source_blocks": 2,
+    "_read_source_fragments": 1,
+    "_verified_source_bytes": 3,
+    "read_review_source": 1,
+    "render": {
+     "_current_object": 2,
+     "_envelope": 8,
+     "_read_source_blocks": 2,
+     "_read_source_fragments": 1,
+     "_verified_source_bytes": 3,
+     "read_review_source": 1,
+     "review_source_fragments": 1,
+     "snapshot_objects_and_revision": 1,
+     "source_fragment_catalog": 1,
+     "source_units": 1
+    },
+    "render_db_json_bytes": [
+     18988421
+    ],
+    "render_db_queries": [
+     11
+    ],
+    "render_ms": [
+     1474.4
+    ],
+    "review_source_fragments": 1,
+    "snapshot_objects_and_revision": 1,
+    "source_fragment_catalog": 1,
+    "source_units": 1
+   },
+   "counters": {
+    "document_snapshot_reused": 7
+   },
+   "db": {
+    "badge_ms": 0.0,
+    "db_connect_ms": 27.595,
+    "db_connections": 7,
+    "db_json_bytes": 18988425,
+    "db_queries": 12,
+    "db_query_ms": 337.705
+   },
+   "elapsed_ms": 1489.821,
+   "options": 1846,
+   "page_sha256": "84dc5e0c2bf087c5727f93b232b818212579ad7b705095b33b6f85d6c5e2e51e",
+   "phases": {
+    "authorization": {
+     "calls": 1,
+     "exclusive_ms": 0.633,
+     "inclusive_ms": 7.067
+    },
+    "db_connect": {
+     "calls": 7,
+     "exclusive_ms": 27.479,
+     "inclusive_ms": 27.479
+    },
+    "db_execute": {
+     "calls": 12,
+     "exclusive_ms": 337.462,
+     "inclusive_ms": 337.462
+    },
+    "db_fetch": {
+     "calls": 9,
+     "exclusive_ms": 419.097,
+     "inclusive_ms": 419.097
+    },
+    "document_load": {
+     "calls": 8,
+     "exclusive_ms": 2.49,
+     "inclusive_ms": 88.384
+    },
+    "objects_read": {
+     "calls": 1,
+     "exclusive_ms": 226.154,
+     "inclusive_ms": 321.486
+    },
+    "source_read": {
+     "calls": 1,
+     "exclusive_ms": 0.092,
+     "inclusive_ms": 0.092
+    },
+    "source_reconstruction": {
+     "calls": 2,
+     "exclusive_ms": 0.017,
+     "inclusive_ms": 0.017
+    },
+    "source_verify": {
+     "calls": 3,
+     "exclusive_ms": 0.911,
+     "inclusive_ms": 0.911
+    },
+    "source_views_hydrate": {
+     "calls": 1,
+     "exclusive_ms": 102.386,
+     "inclusive_ms": 124.24
+    },
+    "source_views_read_records": {
+     "calls": 1,
+     "exclusive_ms": 14.702,
+     "inclusive_ms": 530.235
+    },
+    "source_views_validate": {
+     "calls": 7,
+     "exclusive_ms": 171.869,
+     "inclusive_ms": 171.869
+    }
+   },
+   "repair_page": true,
+   "status": 200,
+   "tree": {
+    "authorization": {
+     "calls": 1,
+     "exclusive_ms": 0.633,
+     "inclusive_ms": 7.067
+    },
+    "authorization/db_connect": {
+     "calls": 1,
+     "exclusive_ms": 4.131,
+     "inclusive_ms": 4.131
+    },
+    "authorization/db_execute": {
+     "calls": 1,
+     "exclusive_ms": 2.115,
+     "inclusive_ms": 2.115
+    },
+    "authorization/db_fetch": {
+     "calls": 1,
+     "exclusive_ms": 0.188,
+     "inclusive_ms": 0.188
+    },
+    "db_connect": {
+     "calls": 3,
+     "exclusive_ms": 11.616,
+     "inclusive_ms": 11.616
+    },
+    "db_execute": {
+     "calls": 6,
+     "exclusive_ms": 68.697,
+     "inclusive_ms": 68.697
+    },
+    "db_fetch": {
+     "calls": 3,
+     "exclusive_ms": 274.854,
+     "inclusive_ms": 274.854
+    },
+    "document_load": {
+     "calls": 7,
+     "exclusive_ms": 2.423,
+     "inclusive_ms": 88.317
+    },
+    "document_load/db_connect": {
+     "calls": 1,
+     "exclusive_ms": 3.46,
+     "inclusive_ms": 3.46
+    },
+    "document_load/db_execute": {
+     "calls": 2,
+     "exclusive_ms": 49.462,
+     "inclusive_ms": 49.462
+    },
+    "document_load/db_fetch": {
+     "calls": 2,
+     "exclusive_ms": 32.972,
+     "inclusive_ms": 32.972
+    },
+    "objects_read": {
+     "calls": 1,
+     "exclusive_ms": 226.154,
+     "inclusive_ms": 321.486
+    },
+    "objects_read/db_connect": {
+     "calls": 1,
+     "exclusive_ms": 3.333,
+     "inclusive_ms": 3.333
+    },
+    "objects_read/db_execute": {
+     "calls": 1,
+     "exclusive_ms": 46.74,
+     "inclusive_ms": 46.74
+    },
+    "objects_read/db_fetch": {
+     "calls": 1,
+     "exclusive_ms": 45.192,
+     "inclusive_ms": 45.192
+    },
+    "objects_read/document_load": {
+     "calls": 1,
+     "exclusive_ms": 0.067,
+     "inclusive_ms": 0.067
+    },
+    "source_read": {
+     "calls": 1,
+     "exclusive_ms": 0.092,
+     "inclusive_ms": 0.092
+    },
+    "source_reconstruction": {
+     "calls": 2,
+     "exclusive_ms": 0.017,
+     "inclusive_ms": 0.017
+    },
+    "source_verify": {
+     "calls": 3,
+     "exclusive_ms": 0.911,
+     "inclusive_ms": 0.911
+    },
+    "source_views_read_records": {
+     "calls": 1,
+     "exclusive_ms": 14.702,
+     "inclusive_ms": 530.235
+    },
+    "source_views_read_records/db_connect": {
+     "calls": 1,
+     "exclusive_ms": 4.939,
+     "inclusive_ms": 4.939
+    },
+    "source_views_read_records/db_execute": {
+     "calls": 2,
+     "exclusive_ms": 170.448,
+     "inclusive_ms": 170.448
+    },
+    "source_views_read_records/db_fetch": {
+     "calls": 2,
+     "exclusive_ms": 65.89,
+     "inclusive_ms": 65.89
+    },
+    "source_views_read_records/source_views_hydrate": {
+     "calls": 1,
+     "exclusive_ms": 102.386,
+     "inclusive_ms": 124.24
+    },
+    "source_views_read_records/source_views_hydrate/source_views_validate": {
+     "calls": 6,
+     "exclusive_ms": 21.854,
+     "inclusive_ms": 21.854
+    },
+    "source_views_read_records/source_views_validate": {
+     "calls": 1,
+     "exclusive_ms": 150.015,
+     "inclusive_ms": 150.015
+    }
+   },
+   "wall_ms": 1494.2
+  }
+ },
+ "objects": 925,
+ "post_review": {
+  "measured": {
+   "calls": {
+    "_current_object": 3,
+    "_envelope": 10,
+    "_read_source_blocks": 2,
+    "_read_source_fragments": 2,
+    "_verified_source_bytes": 5,
+    "read_review_source": 2,
+    "render": {
+     "_current_object": 2,
+     "_envelope": 8,
+     "_read_source_blocks": 2,
+     "_read_source_fragments": 1,
+     "_verified_source_bytes": 3,
+     "read_review_source": 1,
+     "review_source_fragments": 1,
+     "snapshot_objects_and_revision": 1,
+     "source_fragment_catalog": 1,
+     "source_units": 1
+    },
+    "render_db_json_bytes": [
+     18988421
+    ],
+    "render_db_queries": [
+     10
+    ],
+    "render_ms": [
+     1196.9
+    ],
+    "review_source_fragments": 1,
+    "snapshot_objects_and_revision": 1,
+    "source_fragment_catalog": 1,
+    "source_units": 1
+   },
+   "counters": {
+    "document_snapshot_reused": 7
+   },
+   "db": {
+    "badge_ms": 0.0,
+    "db_connect_ms": 59.113,
+    "db_connections": 15,
+    "db_json_bytes": 28484995,
+    "db_queries": 34,
+    "db_query_ms": 639.59
+   },
+   "elapsed_ms": 1985.781,
+   "options": 1846,
+   "page_sha256": "ef0c8ecfeb05ff26ccf45504d03b082f9ab93063726ed00c25b45ba15e2a6c2c",
+   "phases": {
+    "db_connect": {
+     "calls": 15,
+     "exclusive_ms": 58.819,
+     "inclusive_ms": 58.819
+    },
+    "db_execute": {
+     "calls": 34,
+     "exclusive_ms": 638.877,
+     "inclusive_ms": 638.877
+    },
+    "db_fetch": {
+     "calls": 30,
+     "exclusive_ms": 416.663,
+     "inclusive_ms": 416.663
+    },
+    "document_load": {
+     "calls": 10,
+     "exclusive_ms": 0.924,
+     "inclusive_ms": 75.996
+    },
+    "objects_read": {
+     "calls": 1,
+     "exclusive_ms": 204.234,
+     "inclusive_ms": 472.002
+    },
+    "source_prepare": {
+     "calls": 1,
+     "exclusive_ms": 0.175,
+     "inclusive_ms": 0.175
+    },
+    "source_read": {
+     "calls": 2,
+     "exclusive_ms": 0.368,
+     "inclusive_ms": 393.207
+    },
+    "source_reconstruction": {
+     "calls": 2,
+     "exclusive_ms": 0.018,
+     "inclusive_ms": 0.018
+    },
+    "source_verify": {
+     "calls": 5,
+     "exclusive_ms": 1.432,
+     "inclusive_ms": 1.432
+    },
+    "source_views_hydrate": {
+     "calls": 2,
+     "exclusive_ms": 137.725,
+     "inclusive_ms": 174.56
+    },
+    "source_views_read_records": {
+     "calls": 2,
+     "exclusive_ms": 22.463,
+     "inclusive_ms": 771.282
+    },
+    "source_views_validate": {
+     "calls": 14,
+     "exclusive_ms": 231.528,
+     "inclusive_ms": 231.528
+    },
+    "store_lock_hold": {
+     "calls": 1,
+     "exclusive_ms": 0.0,
+     "inclusive_ms": 304.181
+    },
+    "store_lock_wait": {
+     "calls": 1,
+     "exclusive_ms": 0.038,
+     "inclusive_ms": 0.038
+    },
+    "store_transaction": {
+     "calls": 1,
+     "exclusive_ms": 95.527,
+     "inclusive_ms": 304.139
+    }
+   },
+   "repair_page": true,
+   "status": 200,
+   "tree": {
+    "db_connect": {
+     "calls": 9,
+     "exclusive_ms": 32.425,
+     "inclusive_ms": 32.425
+    },
+    "db_execute": {
+     "calls": 13,
+     "exclusive_ms": 103.623,
+     "inclusive_ms": 103.623
+    },
+    "db_fetch": {
+     "calls": 10,
+     "exclusive_ms": 47.5,
+     "inclusive_ms": 47.5
+    },
+    "document_load": {
+     "calls": 7,
+     "exclusive_ms": 0.729,
+     "inclusive_ms": 75.8
+    },
+    "document_load/db_connect": {
+     "calls": 1,
+     "exclusive_ms": 2.737,
+     "inclusive_ms": 2.737
+    },
+    "document_load/db_execute": {
+     "calls": 2,
+     "exclusive_ms": 34.763,
+     "inclusive_ms": 34.763
+    },
+    "document_load/db_fetch": {
+     "calls": 2,
+     "exclusive_ms": 37.572,
+     "inclusive_ms": 37.572
+    },
+    "objects_read": {
+     "calls": 1,
+     "exclusive_ms": 204.234,
+     "inclusive_ms": 472.002
+    },
+    "objects_read/db_connect": {
+     "calls": 1,
+     "exclusive_ms": 3.941,
+     "inclusive_ms": 3.941
+    },
+    "objects_read/db_execute": {
+     "calls": 1,
+     "exclusive_ms": 50.94,
+     "inclusive_ms": 50.94
+    },
+    "objects_read/db_fetch": {
+     "calls": 1,
+     "exclusive_ms": 212.878,
+     "inclusive_ms": 212.878
+    },
+    "objects_read/document_load": {
+     "calls": 1,
+     "exclusive_ms": 0.009,
+     "inclusive_ms": 0.009
+    },
+    "source_prepare": {
+     "calls": 1,
+     "exclusive_ms": 0.175,
+     "inclusive_ms": 0.175
+    },
+    "source_read": {
+     "calls": 2,
+     "exclusive_ms": 0.368,
+     "inclusive_ms": 393.207
+    },
+    "source_read/source_views_read_records": {
+     "calls": 1,
+     "exclusive_ms": 11.576,
+     "inclusive_ms": 392.839
+    },
+    "source_read/source_views_read_records/db_connect": {
+     "calls": 1,
+     "exclusive_ms": 5.015,
+     "inclusive_ms": 5.015
+    },
+    "source_read/source_views_read_records/db_execute": {
+     "calls": 2,
+     "exclusive_ms": 157.344,
+     "inclusive_ms": 157.344
+    },
+    "source_read/source_views_read_records/db_fetch": {
+     "calls": 2,
+     "exclusive_ms": 45.462,
+     "inclusive_ms": 45.462
+    },
+    "source_read/source_views_read_records/source_views_hydrate": {
+     "calls": 1,
+     "exclusive_ms": 67.518,
+     "inclusive_ms": 84.561
+    },
+    "source_read/source_views_read_records/source_views_hydrate/source_views_validate": {
+     "calls": 6,
+     "exclusive_ms": 17.043,
+     "inclusive_ms": 17.043
+    },
+    "source_read/source_views_read_records/source_views_validate": {
+     "calls": 1,
+     "exclusive_ms": 88.881,
+     "inclusive_ms": 88.881
+    },
+    "source_reconstruction": {
+     "calls": 2,
+     "exclusive_ms": 0.018,
+     "inclusive_ms": 0.018
+    },
+    "source_verify": {
+     "calls": 4,
+     "exclusive_ms": 1.42,
+     "inclusive_ms": 1.42
+    },
+    "source_views_read_records": {
+     "calls": 1,
+     "exclusive_ms": 10.887,
+     "inclusive_ms": 378.443
+    },
+    "source_views_read_records/db_connect": {
+     "calls": 1,
+     "exclusive_ms": 4.322,
+     "inclusive_ms": 4.322
+    },
+    "source_views_read_records/db_execute": {
+     "calls": 2,
+     "exclusive_ms": 132.347,
+     "inclusive_ms": 132.347
+    },
+    "source_views_read_records/db_fetch": {
+     "calls": 2,
+     "exclusive_ms": 35.077,
+     "inclusive_ms": 35.077
+    },
+    "source_views_read_records/source_views_hydrate": {
+     "calls": 1,
+     "exclusive_ms": 70.207,
+     "inclusive_ms": 89.999
+    },
+    "source_views_read_records/source_views_hydrate/source_views_validate": {
+     "calls": 6,
+     "exclusive_ms": 19.793,
+     "inclusive_ms": 19.793
+    },
+    "source_views_read_records/source_views_validate": {
+     "calls": 1,
+     "exclusive_ms": 105.811,
+     "inclusive_ms": 105.811
+    },
+    "store_lock_hold": {
+     "calls": 1,
+     "exclusive_ms": 0.0,
+     "inclusive_ms": 304.181
+    },
+    "store_lock_wait": {
+     "calls": 1,
+     "exclusive_ms": 0.038,
+     "inclusive_ms": 0.038
+    },
+    "store_transaction": {
+     "calls": 1,
+     "exclusive_ms": 95.527,
+     "inclusive_ms": 304.139
+    },
+    "store_transaction/db_connect": {
+     "calls": 2,
+     "exclusive_ms": 10.379,
+     "inclusive_ms": 10.379
+    },
+    "store_transaction/db_execute": {
+     "calls": 14,
+     "exclusive_ms": 159.86,
+     "inclusive_ms": 159.86
+    },
+    "store_transaction/db_fetch": {
+     "calls": 13,
+     "exclusive_ms": 38.174,
+     "inclusive_ms": 38.174
+    },
+    "store_transaction/document_load": {
+     "calls": 2,
+     "exclusive_ms": 0.187,
+     "inclusive_ms": 0.187
+    },
+    "store_transaction/source_verify": {
+     "calls": 1,
+     "exclusive_ms": 0.012,
+     "inclusive_ms": 0.012
+    }
+   },
+   "wall_ms": 1992.5
+  },
+  "warm": {
+   "calls": {
+    "_current_object": 3,
+    "_envelope": 10,
+    "_read_source_blocks": 2,
+    "_read_source_fragments": 2,
+    "_verified_source_bytes": 5,
+    "read_review_source": 2,
+    "render": {
+     "_current_object": 2,
+     "_envelope": 8,
+     "_read_source_blocks": 2,
+     "_read_source_fragments": 1,
+     "_verified_source_bytes": 3,
+     "read_review_source": 1,
+     "review_source_fragments": 1,
+     "snapshot_objects_and_revision": 1,
+     "source_fragment_catalog": 1,
+     "source_units": 1
+    },
+    "render_db_json_bytes": [
+     18988421
+    ],
+    "render_db_queries": [
+     10
+    ],
+    "render_ms": [
+     1407.3
+    ],
+    "review_source_fragments": 1,
+    "snapshot_objects_and_revision": 1,
+    "source_fragment_catalog": 1,
+    "source_units": 1
+   },
+   "counters": {
+    "document_snapshot_reused": 7
+   },
+   "db": {
+    "badge_ms": 0.0,
+    "db_connect_ms": 57.561,
+    "db_connections": 15,
+    "db_json_bytes": 28484995,
+    "db_queries": 34,
+    "db_query_ms": 727.342
+   },
+   "elapsed_ms": 2401.446,
+   "options": 1846,
+   "page_sha256": "ef0c8ecfeb05ff26ccf45504d03b082f9ab93063726ed00c25b45ba15e2a6c2c",
+   "phases": {
+    "db_connect": {
+     "calls": 15,
+     "exclusive_ms": 57.277,
+     "inclusive_ms": 57.277
+    },
+    "db_execute": {
+     "calls": 34,
+     "exclusive_ms": 726.636,
+     "inclusive_ms": 726.636
+    },
+    "db_fetch": {
+     "calls": 30,
+     "exclusive_ms": 427.741,
+     "inclusive_ms": 427.741
+    },
+    "document_load": {
+     "calls": 10,
+     "exclusive_ms": 2.854,
+     "inclusive_ms": 88.068
+    },
+    "objects_read": {
+     "calls": 1,
+     "exclusive_ms": 249.653,
+     "inclusive_ms": 471.947
+    },
+    "source_prepare": {
+     "calls": 1,
+     "exclusive_ms": 0.196,
+     "inclusive_ms": 0.196
+    },
+    "source_read": {
+     "calls": 2,
+     "exclusive_ms": 0.427,
+     "inclusive_ms": 571.595
+    },
+    "source_reconstruction": {
+     "calls": 2,
+     "exclusive_ms": 0.017,
+     "inclusive_ms": 0.017
+    },
+    "source_verify": {
+     "calls": 5,
+     "exclusive_ms": 1.53,
+     "inclusive_ms": 1.53
+    },
+    "source_views_hydrate": {
+     "calls": 2,
+     "exclusive_ms": 212.999,
+     "inclusive_ms": 266.293
+    },
+    "source_views_read_records": {
+     "calls": 2,
+     "exclusive_ms": 60.169,
+     "inclusive_ms": 1061.566
+    },
+    "source_views_validate": {
+     "calls": 14,
+     "exclusive_ms": 322.562,
+     "inclusive_ms": 322.562
+    },
+    "store_lock_hold": {
+     "calls": 1,
+     "exclusive_ms": 0.0,
+     "inclusive_ms": 301.223
+    },
+    "store_lock_wait": {
+     "calls": 1,
+     "exclusive_ms": 0.047,
+     "inclusive_ms": 0.047
+    },
+    "store_transaction": {
+     "calls": 1,
+     "exclusive_ms": 98.166,
+     "inclusive_ms": 301.17
+    }
+   },
+   "repair_page": true,
+   "status": 200,
+   "tree": {
+    "db_connect": {
+     "calls": 9,
+     "exclusive_ms": 35.235,
+     "inclusive_ms": 35.235
+    },
+    "db_execute": {
+     "calls": 13,
+     "exclusive_ms": 124.615,
+     "inclusive_ms": 124.615
+    },
+    "db_fetch": {
+     "calls": 10,
+     "exclusive_ms": 75.597,
+     "inclusive_ms": 75.597
+    },
+    "document_load": {
+     "calls": 7,
+     "exclusive_ms": 2.722,
+     "inclusive_ms": 87.936
+    },
+    "document_load/db_connect": {
+     "calls": 1,
+     "exclusive_ms": 2.885,
+     "inclusive_ms": 2.885
+    },
+    "document_load/db_execute": {
+     "calls": 2,
+     "exclusive_ms": 41.224,
+     "inclusive_ms": 41.224
+    },
+    "document_load/db_fetch": {
+     "calls": 2,
+     "exclusive_ms": 41.105,
+     "inclusive_ms": 41.105
+    },
+    "objects_read": {
+     "calls": 1,
+     "exclusive_ms": 249.653,
+     "inclusive_ms": 471.947
+    },
+    "objects_read/db_connect": {
+     "calls": 1,
+     "exclusive_ms": 3.7,
+     "inclusive_ms": 3.7
+    },
+    "objects_read/db_execute": {
+     "calls": 1,
+     "exclusive_ms": 47.64,
+     "inclusive_ms": 47.64
+    },
+    "objects_read/db_fetch": {
+     "calls": 1,
+     "exclusive_ms": 170.939,
+     "inclusive_ms": 170.939
+    },
+    "objects_read/document_load": {
+     "calls": 1,
+     "exclusive_ms": 0.014,
+     "inclusive_ms": 0.014
+    },
+    "source_prepare": {
+     "calls": 1,
+     "exclusive_ms": 0.196,
+     "inclusive_ms": 0.196
+    },
+    "source_read": {
+     "calls": 2,
+     "exclusive_ms": 0.427,
+     "inclusive_ms": 571.595
+    },
+    "source_read/source_views_read_records": {
+     "calls": 1,
+     "exclusive_ms": 47.351,
+     "inclusive_ms": 571.168
+    },
+    "source_read/source_views_read_records/db_connect": {
+     "calls": 1,
+     "exclusive_ms": 3.717,
+     "inclusive_ms": 3.717
+    },
+    "source_read/source_views_read_records/db_execute": {
+     "calls": 2,
+     "exclusive_ms": 183.195,
+     "inclusive_ms": 183.195
+    },
+    "source_read/source_views_read_records/db_fetch": {
+     "calls": 2,
+     "exclusive_ms": 57.215,
+     "inclusive_ms": 57.215
+    },
+    "source_read/source_views_read_records/source_views_hydrate": {
+     "calls": 1,
+     "exclusive_ms": 111.18,
+     "inclusive_ms": 138.275
+    },
+    "source_read/source_views_read_records/source_views_hydrate/source_views_validate": {
+     "calls": 6,
+     "exclusive_ms": 27.096,
+     "inclusive_ms": 27.096
+    },
+    "source_read/source_views_read_records/source_views_validate": {
+     "calls": 1,
+     "exclusive_ms": 141.415,
+     "inclusive_ms": 141.415
+    },
+    "source_reconstruction": {
+     "calls": 2,
+     "exclusive_ms": 0.017,
+     "inclusive_ms": 0.017
+    },
+    "source_verify": {
+     "calls": 4,
+     "exclusive_ms": 1.521,
+     "inclusive_ms": 1.521
+    },
+    "source_views_read_records": {
+     "calls": 1,
+     "exclusive_ms": 12.818,
+     "inclusive_ms": 490.398
+    },
+    "source_views_read_records/db_connect": {
+     "calls": 1,
+     "exclusive_ms": 4.32,
+     "inclusive_ms": 4.32
+    },
+    "source_views_read_records/db_execute": {
+     "calls": 2,
+     "exclusive_ms": 170.77,
+     "inclusive_ms": 170.77
+    },
+    "source_views_read_records/db_fetch": {
+     "calls": 2,
+     "exclusive_ms": 46.619,
+     "inclusive_ms": 46.619
+    },
+    "source_views_read_records/source_views_hydrate": {
+     "calls": 1,
+     "exclusive_ms": 101.82,
+     "inclusive_ms": 128.017
+    },
+    "source_views_read_records/source_views_hydrate/source_views_validate": {
+     "calls": 6,
+     "exclusive_ms": 26.198,
+     "inclusive_ms": 26.198
+    },
+    "source_views_read_records/source_views_validate": {
+     "calls": 1,
+     "exclusive_ms": 127.854,
+     "inclusive_ms": 127.854
+    },
+    "store_lock_hold": {
+     "calls": 1,
+     "exclusive_ms": 0.0,
+     "inclusive_ms": 301.223
+    },
+    "store_lock_wait": {
+     "calls": 1,
+     "exclusive_ms": 0.047,
+     "inclusive_ms": 0.047
+    },
+    "store_transaction": {
+     "calls": 1,
+     "exclusive_ms": 98.166,
+     "inclusive_ms": 301.17
+    },
+    "store_transaction/db_connect": {
+     "calls": 2,
+     "exclusive_ms": 7.419,
+     "inclusive_ms": 7.419
+    },
+    "store_transaction/db_execute": {
+     "calls": 14,
+     "exclusive_ms": 159.193,
+     "inclusive_ms": 159.193
+    },
+    "store_transaction/db_fetch": {
+     "calls": 13,
+     "exclusive_ms": 36.266,
+     "inclusive_ms": 36.266
+    },
+    "store_transaction/document_load": {
+     "calls": 2,
+     "exclusive_ms": 0.118,
+     "inclusive_ms": 0.118
+    },
+    "store_transaction/source_verify": {
+     "calls": 1,
+     "exclusive_ms": 0.009,
+     "inclusive_ms": 0.009
+    }
+   },
+   "wall_ms": 2409.8
+  }
+ },
+ "run": "2"
+}

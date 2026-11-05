@@ -1,0 +1,150 @@
+{
+ "head": {
+  "get_repair": {
+   "options": [
+    1846
+   ],
+   "page_sha256": [
+    "84dc5e0c2bf087c5727f93b232b818212579ad7b705095b33b6f85d6c5e2e51e"
+   ],
+   "payload_copy_calls": [
+    0
+   ],
+   "render_calls": [
+    "{\"_current_object\": 2, \"_envelope\": 8, \"_read_source_blocks\": 2, \"_read_source_fragments\": 1, \"_verified_source_bytes\": 3, \"read_review_source\": 1, \"review_source_fragments\": 1, \"snapshot_objects_and_revision\": 1, \"source_fragment_catalog\": 1, \"source_units\": 1}"
+   ],
+   "render_db_json_bytes": [
+    18988421
+   ],
+   "render_db_queries": [
+    11
+   ],
+   "render_ms": {
+    "max": 1337.6,
+    "median": 1009.9,
+    "min": 960.9,
+    "runs": 5
+   },
+   "request_db_queries": [
+    12
+   ],
+   "request_elapsed_ms": {
+    "max": 1353.9,
+    "median": 1024.2,
+    "min": 977.1,
+    "runs": 5
+   }
+  },
+  "post_review": {
+   "options": [
+    1846
+   ],
+   "page_sha256": [
+    "ef0c8ecfeb05ff26ccf45504d03b082f9ab93063726ed00c25b45ba15e2a6c2c"
+   ],
+   "payload_copy_calls": [
+    0
+   ],
+   "render_calls": [
+    "{\"_current_object\": 2, \"_envelope\": 8, \"_read_source_blocks\": 2, \"_read_source_fragments\": 1, \"_verified_source_bytes\": 3, \"read_review_source\": 1, \"review_source_fragments\": 1, \"snapshot_objects_and_revision\": 1, \"source_fragment_catalog\": 1, \"source_units\": 1}"
+   ],
+   "render_db_json_bytes": [
+    18988421
+   ],
+   "render_db_queries": [
+    10
+   ],
+   "render_ms": {
+    "max": 1363.8,
+    "median": 1240.9,
+    "min": 1034.5,
+    "runs": 5
+   },
+   "request_db_queries": [
+    34
+   ],
+   "request_elapsed_ms": {
+    "max": 2198.2,
+    "median": 2088.6,
+    "min": 1898.5,
+    "runs": 5
+   }
+  }
+ },
+ "page_identical": {
+  "get_repair": true,
+  "post_review": true
+ },
+ "trunk": {
+  "get_repair": {
+   "options": [
+    1846
+   ],
+   "page_sha256": [
+    "84dc5e0c2bf087c5727f93b232b818212579ad7b705095b33b6f85d6c5e2e51e"
+   ],
+   "payload_copy_calls": [
+    3
+   ],
+   "render_calls": [
+    "{\"_current_object\": 2, \"_envelope\": 9, \"_read_source_blocks\": 2, \"_read_source_fragments\": 1, \"_verified_source_bytes\": 3, \"read_review_source\": 1, \"review_source_fragments\": 1, \"snapshot_objects_and_revision\": 1, \"source_fragment_catalog\": 1, \"source_units\": 1}"
+   ],
+   "render_db_json_bytes": [
+    18988421
+   ],
+   "render_db_queries": [
+    11
+   ],
+   "render_ms": {
+    "max": 1687.2,
+    "median": 1512.5,
+    "min": 1356.7,
+    "runs": 5
+   },
+   "request_db_queries": [
+    12
+   ],
+   "request_elapsed_ms": {
+    "max": 1721.1,
+    "median": 1544.0,
+    "min": 1387.3,
+    "runs": 5
+   }
+  },
+  "post_review": {
+   "options": [
+    1846
+   ],
+   "page_sha256": [
+    "ef0c8ecfeb05ff26ccf45504d03b082f9ab93063726ed00c25b45ba15e2a6c2c"
+   ],
+   "payload_copy_calls": [
+    3
+   ],
+   "render_calls": [
+    "{\"_current_object\": 2, \"_envelope\": 9, \"_read_source_blocks\": 2, \"_read_source_fragments\": 1, \"_verified_source_bytes\": 3, \"read_review_source\": 2, \"review_source_fragments\": 1, \"snapshot_objects_and_revision\": 1, \"source_fragment_catalog\": 1, \"source_units\": 1}"
+   ],
+   "render_db_json_bytes": [
+    71828744
+   ],
+   "render_db_queries": [
+    36
+   ],
+   "render_ms": {
+    "max": 3390.3,
+    "median": 3052.4,
+    "min": 2944.2,
+    "runs": 5
+   },
+   "request_db_queries": [
+    60
+   ],
+   "request_elapsed_ms": {
+    "max": 4344.5,
+    "median": 3894.3,
+    "min": 3636.7,
+    "runs": 5
+   }
+  }
+ }
+}
