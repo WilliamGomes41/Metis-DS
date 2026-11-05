@@ -205,6 +205,30 @@ def test_repository_workflow_uses_only_main_with_credentials_and_has_no_chat_hos
     assert "LINEAR_API_KEY" in str(job["steps"])
 
 
+def test_event_runs_only_request_the_serialized_sync_on_main():
+    """#974: a pending reconcile cancelled by the shared queue must not mark a PR red.
+
+    PR, issue and comment events start the serialized reconcile on main through
+    workflow_dispatch; only that small job may dispatch, and it runs no repository code.
+    """
+    import yaml
+    root = Path(__file__).resolve().parents[1]
+    workflow = yaml.safe_load((root / ".github/workflows/linear-github-sync.yml").read_text())
+    reconcile, request = workflow["jobs"]["reconcile"], workflow["jobs"]["request-sync"]
+    for event in ("pull_request_target", "issues", "issue_comment"):
+        assert f"'{event}'" in request["if"] and f"'{event}'" not in reconcile["if"]
+    for event in ("schedule", "workflow_dispatch"):
+        assert f"'{event}'" in reconcile["if"]
+    assert "github.repository == 'WilliamGomes41/Metis-DS'" in request["if"]
+    assert request["permissions"] == {"actions": "write"}
+    assert "concurrency" not in request
+    assert not any("uses" in step for step in request["steps"])
+    run = " ".join(step.get("run", "") for step in request["steps"])
+    assert "gh workflow run linear-github-sync.yml" in run and "--ref main" in run
+    assert "github.event." not in run
+    assert reconcile["concurrency"] == {"group": "github-linear-sync-MET", "cancel-in-progress": False}
+
+
 def test_github_pagination_reads_beyond_first_hundred():
     class Api:
         def __init__(self):
