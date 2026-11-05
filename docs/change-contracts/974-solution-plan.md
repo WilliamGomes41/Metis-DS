@@ -123,8 +123,8 @@ Each live lane runs in its own checkout at the PR head on a disposable PostgreSQ
 
 - [ ] Metric. Inclusive ms of the phase `source_reconstruction` and total `elapsed_ms` for `GET /source-selection?document=<sid>` on the 2,000 paragraph fixture.
 - [ ] Probe. Five interleaved runs at trunk and head with `evidence/974-design/prototype_source_reads.py` adapted to the HTTP route, vetted with the benchmark-checklist skill.
-- [ ] Baseline. Record the trunk value first. The prototype measured 26 to 29 ms per validator read, about 25 s for 945 reads.
-- [ ] Rule. Head `source_reconstruction` must be at most 1,000 ms and at most 10 percent of trunk. A head value above either number fails.
+- [ ] Baseline. Record the trunk value first. The P1 run measured `source_reconstruction` at 1,569 ms on trunk with 400 comparisons, about 0.8 ms per HTML hit and 10.6 to 13.9 ms per PDF-shaped hit (`evidence/974-p1/` in PR #977).
+- [ ] Rule. Head reports `source_input_compared` of 0, a per-hit cost of at most 0.01 ms on PDF-shaped rows, and `source_reconstruction` no higher than trunk. A miss on any of the three fails. This replaces the earlier 1,000 ms and 10 percent rule, which rested on the prototype error in Appendix A and is pending the operator's confirmation.
 
 **Review gate.** None. P1 is not review-gated.
 
@@ -363,11 +363,11 @@ Both prototypes ran on 2026-11-04 on branch `ccr-fc816d1f-mljiu0` at main `1f9de
 
 | Variant | Per read | One-time cost | Extra JSON read | 945 reads |
 |---|---|---|---|---|
-| Trunk, mutable list | 26 to 29 ms | none | none | about 25 to 27 s |
+| Trunk, mutable list | 26 to 29 ms, mostly build time (see correction) | none | none | not derivable from this run |
 | A, prepared carrier | 0.002 ms | 535 to 617 ms | about 6.3 MB of source views | about 0.6 s |
 | B, frozen list, identity reuse | about 0 after the first | one reconstruction, about 0.6 s, plus 27 to 32 ms freeze | none | about 0.6 s |
 
-The trunk number demonstrates comparable repeated-comparison cost on this synthetic fixture; it does not reproduce the real 923-fragment incident timing. The envelope plus carrier read measured 15,225,370 JSON bytes. The envelope alone measured 8,952,657.
+The trunk number demonstrates comparable repeated-comparison cost on this synthetic fixture; it does not reproduce the real 923-fragment incident timing. Correction. The trunk per-read figure averaged 20 reads and included the one-time build of about 580 ms, so it is mostly build time. P1 (PR #977) measured the real trunk hit at about 0.8 ms on HTML rows and 10.6 to 13.9 ms on PDF-shaped rows at 2,000 fragments, and 0.003 to 0.006 ms at head. The incident's 944 comparisons over 923 fragments average about 27 ms each, so its rows are heavier than either fixture. How much of the 25.8 s P1 removes stays unproven until a production measurement. The envelope plus carrier read measured 15,225,370 JSON bytes. The envelope alone measured 8,952,657.
 
 `evidence/974-design/prototype_review_open_bytes.py` opened `GET /review?document=<sid>`. It read 24,072,517 JSON bytes in 15 queries and took 1,943 ms. The largest phases were `review_render` at 1,705 ms, of which `source_views_read_records` took 963 ms and `source_accountability` 454 ms, and `document_load` at 149 ms.
 
