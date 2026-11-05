@@ -1,0 +1,123 @@
+// Issue #974. Read-only evidence for aborted Review saves and slow Vorming/Review reads.
+// Workspace: metis-log-analytics (AppServiceConsoleLogs / AppServicePlatformLogs).
+// scripts/collect_worker_abort_evidence.sh runs every section below. Each section
+// starts with a "// ==== <name> ====" line and ends before the next one.
+// The placeholders {START}, {END} (ISO-8601 UTC) and {SITE} are substituted by the script;
+// in the portal, replace them by hand. A zero-row result is missing evidence,
+// not proof of absence: check the resource, window, ingestion and diagnostic settings.
+
+// ==== aborted_review_saves ====
+// POST /review requests without request_finished, including their last heartbeat.
+// A heartbeat (request_running) comes from the event loop every 15 s. Few or no
+// heartbeats are a clue only: missing telemetry does not prove a blocked loop.
+AppServiceConsoleLogs
+| where TimeGenerated between (datetime({START}) .. datetime({END}))
+| where _ResourceId endswith strcat("/sites/", "{SITE}")
+| where ResultDescription startswith "metis_diagnostic "
+| extend d = parse_json(substring(ResultDescription, strlen("metis_diagnostic ")))
+| where tostring(d.method) == "POST" and tostring(d.route) startswith "/review"
+| extend RequestId = tostring(d.request_id), Event = tostring(d.event)
+| where isnotempty(RequestId)
+| summarize Started = minif(TimeGenerated, Event == "request_started"),
+            LastSeen = max(TimeGenerated),
+            Finished = countif(Event == "request_finished"),
+            Heartbeats = countif(Event == "request_running"),
+            arg_max(TimeGenerated, d),
+            LastElapsedMs = max(todouble(d.elapsed_ms)),
+            Route = take_any(tostring(d.route)), Pid = take_any(tostring(d.pid)),
+            Version = take_any(tostring(d.version)), Instance = take_any(tostring(d.instance)),
+            DocRef = take_any(tostring(d.doc_ref)) by RequestId
+| where Finished == 0 and isnotnull(Started)
+| extend LastPhase = tostring(d.phase)
+| project-away d, TimeGenerated
+| order by Started asc
+
+// ==== worker_lifecycle ====
+// Gunicorn arbiter and faulthandler lines on stderr. Determines the exit reason:
+//   "WORKER TIMEOUT (pid:N)" + "Fatal Python error: Aborted" -> heartbeat timeout (SIGABRT);
+//   "was sent SIGKILL! Perhaps out of memory?"               -> hard kill; OOM needs corroboration;
+//   "Booting worker with pid"                                -> replacement worker.
+// Faulthandler frames contain only file, function and line, no values.
+AppServiceConsoleLogs
+| where TimeGenerated between (datetime({START}) .. datetime({END}))
+| where _ResourceId endswith strcat("/sites/", "{SITE}")
+// has_any matches whole terms only; these are phrases and partial tokens (SIG -> SIGKILL).
+| where ResultDescription contains "WORKER TIMEOUT"
+     or ResultDescription contains "was sent SIG"
+     or ResultDescription contains "Booting worker"
+     or ResultDescription contains "Worker exiting"
+     or ResultDescription contains "Fatal Python error"
+     or ResultDescription contains "Current thread"
+     or ResultDescription contains "Thread 0x"
+     or ResultDescription contains "Handling signal"
+     or ResultDescription contains "Shutting down"
+     or ResultDescription contains "Perhaps out of memory"
+     or ResultDescription contains "worker_abort"
+     or ResultDescription contains "Worker (pid"
+     or ResultDescription matches regex @'^\s+File ".*", line \d+ in '
+| project TimeGenerated, Level, Host = tostring(column_ifexists("Host", "")), ResultDescription
+| order by TimeGenerated asc
+| take 5000
+
+// ==== worker_pids ====
+// Per worker process: first and last diagnostic line. A new pid shortly after
+// an unclosed request may be a replacement; correlate instance and exit logs.
+AppServiceConsoleLogs
+| where TimeGenerated between (datetime({START}) .. datetime({END}))
+| where _ResourceId endswith strcat("/sites/", "{SITE}")
+| where ResultDescription startswith "metis_diagnostic "
+| extend d = parse_json(substring(ResultDescription, strlen("metis_diagnostic ")))
+| summarize FirstSeen = min(TimeGenerated), LastSeen = max(TimeGenerated),
+            Ready = countif(tostring(d.event) in ("telemetry_ready", "telemetry_not_configured", "telemetry_unavailable")),
+            Requests = dcount(tostring(d.request_id)), Version = take_any(tostring(d.version))
+            by Pid = tostring(d.pid), Instance = tostring(d.instance)
+| order by FirstSeen asc
+
+// ==== platform_events ====
+// Container start/stop, restarts and memory signals from the platform.
+AppServicePlatformLogs
+| where TimeGenerated between (datetime({START}) .. datetime({END}))
+| where _ResourceId endswith strcat("/sites/", "{SITE}")
+| project TimeGenerated, Level,
+          OperationName = tostring(column_ifexists("OperationName", "")),
+          ContainerId = tostring(column_ifexists("ContainerId", "")),
+          Message = tostring(column_ifexists("Message", column_ifexists("ResultDescription", "")))
+| order by TimeGenerated asc
+| take 2000
+
+// ==== slow_reads ====
+// Finished Vorming/Review reads over 5 s, with counters, db metrics and the phase tree.
+// For Vorming: source_reconstruction_reused ~ source_input_compared and a low
+// source_reconstruction_built confirm the full-input comparison per object (#974 §2).
+// For Review: phase_tree locates elapsed work; db_json_bytes_by_phase (runtimes with PR #978)
+// names the phase that read the JSON bytes and is empty on older runtimes.
+AppServiceConsoleLogs
+| where TimeGenerated between (datetime({START}) .. datetime({END}))
+| where _ResourceId endswith strcat("/sites/", "{SITE}")
+| where ResultDescription startswith "metis_diagnostic "
+| extend d = parse_json(substring(ResultDescription, strlen("metis_diagnostic ")))
+| where tostring(d.event) == "request_finished" and tostring(d.method) == "GET"
+| where tostring(d.route) in ("/source-selection", "/review")
+| where todouble(d.elapsed_ms) > 5000
+| project TimeGenerated, RequestId = tostring(d.request_id), Route = tostring(d.route),
+          Status = toint(d.status), ElapsedMs = todouble(d.elapsed_ms), DocRef = tostring(d.doc_ref),
+          Counters = d.counters, Db = d.db, DbJsonBytesByPhase = d.db_json_bytes_by_phase, Phases = d.phases, PhaseTree = d.phase_tree,
+          Version = tostring(d.version)
+| order by ElapsedMs desc
+| take 200
+
+// ==== review_save_finished ====
+// Finished Review saves, including handled errors such as review_disposition_conflict.
+// Shows how long rejected saves spend in preparation before refusal.
+AppServiceConsoleLogs
+| where TimeGenerated between (datetime({START}) .. datetime({END}))
+| where _ResourceId endswith strcat("/sites/", "{SITE}")
+| where ResultDescription startswith "metis_diagnostic "
+| extend d = parse_json(substring(ResultDescription, strlen("metis_diagnostic ")))
+| where tostring(d.event) == "request_finished" and tostring(d.method) == "POST"
+| where tostring(d.route) startswith "/review"
+| project TimeGenerated, RequestId = tostring(d.request_id), Route = tostring(d.route),
+          Status = toint(d.status), Outcome = tostring(d.outcome), ElapsedMs = todouble(d.elapsed_ms),
+          ErrorCode = tostring(d.error.code), DocRef = tostring(d.doc_ref), Db = d.db, Phases = d.phases
+| order by TimeGenerated asc
+| take 1000
