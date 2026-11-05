@@ -2,6 +2,10 @@
 
 The suitability/decision table is trunk's ``ALLOWED_FINAL_BY_SUITABILITY``
 written out literally, so a drift of the owner function fails here.
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 import json
 import logging
