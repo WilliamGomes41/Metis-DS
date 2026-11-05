@@ -79,7 +79,8 @@ AppServicePlatformLogs
 // Finished Vorming/Review reads over 5 s, with counters, db metrics and the phase tree.
 // For Vorming: source_reconstruction_reused ~ source_input_compared and a low
 // source_reconstruction_built confirm the full-input comparison per object (#974 §2).
-// For Review: phase_tree locates elapsed work; db_json_bytes is only a request total.
+// For Review: phase_tree locates elapsed work; db_json_bytes_by_phase (runtimes with PR #978)
+// names the phase that read the JSON bytes and is empty on older runtimes.
 AppServiceConsoleLogs
 | where TimeGenerated between (datetime({START}) .. datetime({END}))
 | where _ResourceId endswith strcat("/sites/", "{SITE}")
@@ -90,7 +91,7 @@ AppServiceConsoleLogs
 | where todouble(d.elapsed_ms) > 5000
 | project TimeGenerated, RequestId = tostring(d.request_id), Route = tostring(d.route),
           Status = toint(d.status), ElapsedMs = todouble(d.elapsed_ms), DocRef = tostring(d.doc_ref),
-          Counters = d.counters, Db = d.db, Phases = d.phases, PhaseTree = d.phase_tree,
+          Counters = d.counters, Db = d.db, DbJsonBytesByPhase = d.db_json_bytes_by_phase, Phases = d.phases, PhaseTree = d.phase_tree,
           Version = tostring(d.version)
 | order by ElapsedMs desc
 | take 200
