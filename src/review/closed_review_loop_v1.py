@@ -81,6 +81,39 @@ def require_allowed_review_disposition(submission: dict[str, Any]) -> None:
         raise ReviewDispositionConflict(suitability, decision)
 
 
+# Steps of the review card that only matter for one kind of final decision.
+APPROVAL_ONLY_FIELDS = (
+    "confirmed_object_type", "recommendation_strength", "recommendation_direction",
+    "recommendation_strength_level", "documentpositie_action", "parent_choice", "type_action",
+)
+
+
+def suitabilities_allowing(decision: str) -> tuple[str, ...]:
+    """Suitabilities whose follow-up steps for ``decision`` stay open, in form order."""
+    from src.review.review_cockpit_v1 import SUITABILITY_VALUES
+    return tuple(s for s in SUITABILITY_VALUES if decision in ALLOWED_FINAL_BY_SUITABILITY.get(s, ()))
+
+
+def without_closed_follow_up(submission: dict[str, Any]) -> dict[str, Any]:
+    """Drop answers to steps the stated suitability closes.
+
+    Heading, type, strength and relations only confirm an approval; a source
+    discrepancy only matters while a correction is possible. A form without
+    JavaScript can still send such answers from hidden steps.
+    """
+    allowed = ALLOWED_FINAL_BY_SUITABILITY.get(str(submission.get("suitability") or "").strip())
+    if allowed is None:
+        return dict(submission)
+    kept = dict(submission)
+    if "approve" not in allowed:
+        kept.update(dict.fromkeys(APPROVAL_ONLY_FIELDS))
+        kept["relation_choices"] = None
+        kept["relation_review_ack"] = False
+    if "revise" not in allowed:
+        kept["source_discrepancy"] = None
+    return kept
+
+
 def _norm(value: str) -> str:
     return " ".join(str(value or "").split())
 
@@ -267,6 +300,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                 deferred["decision"] = "later"
                 return super().review_object(**deferred)
             require_allowed_review_disposition(kwargs)
+            kwargs = without_closed_follow_up(kwargs)
             if (
                 decision == "approve"
                 and original_suitability == "alleen_onderbouwing"

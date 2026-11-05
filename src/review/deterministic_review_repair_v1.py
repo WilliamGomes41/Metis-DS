@@ -112,6 +112,10 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         suitability = str(kwargs.get("suitability") or "").strip()
         if decision != "revise" or not suitability:
             return super().review_object(**kwargs)
+        from src.review.closed_review_loop_v1 import (
+            require_allowed_review_disposition, without_closed_follow_up,
+        )
+        kwargs = without_closed_follow_up(kwargs)
         submission = {
             "actor_id": str(kwargs.get("actor_id") or ""),
             "snapshot_id": str(kwargs.get("snapshot_id") or ""),
@@ -130,6 +134,9 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             "source_discrepancy": normalize_discrepancy(kwargs.get("source_discrepancy")),
         }
         self._preflight_structured_repair(submission)
+        # After the role checks, as on every other path: the rule that refuses
+        # a correction the suitability never permits also governs the repair.
+        require_allowed_review_disposition(submission)
         raise StructuredRepairRequired(submission)
 
     def accept_source_continuation(self, **kwargs: Any) -> dict[str, Any]:
