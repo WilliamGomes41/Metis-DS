@@ -6,6 +6,7 @@ the combination and the judgements that do fit. Expected sets and copy are
 literal, so a drift of the rule or of the rendering fails here.
 
 # release-control-evidence: scope/belofte
+# release-control-evidence: toegang no route or auth change; the conflict copy renders only after sign-in and reviewer checks (test_authorization_still_precedes_the_disposition_rule)
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
