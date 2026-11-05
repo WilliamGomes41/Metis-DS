@@ -81,3 +81,12 @@ Het telscript drukt alleen tellingen af. Exitcode 2 betekent dat een kennisobjec
 Na een verse ingest van de continentie-fixture is de verdeling: Kandidaat 1, Bewijs open 2, en de rest 0.
 
 Zonder gekoppelde onderbouwing staat dus het merendeel in Bewijs open. Draai daarom eerst dit telscript in productie, en beslis daarna of bestaande objecten onder de oude regel vallen, voordat KO-4 de wachter afdwingt.
+
+## Regressie
+
+De regressie draaide over de 76 testbestanden die `console_asgi`, `build_app`, de reviewplicht, de "finaal"-sets, `candidate_lifecycle` of `definitive_review_disposition` raken. Uitslag: 1412 geslaagd, 19 overgeslagen, 3 gefaald.
+
+| Gefaalde test | Oorzaak | Stand |
+|---|---|---|
+| `test_dead_code_removal_v1` | Een redencode droeg de naam van een verwijderde functie | Hersteld in 43c12ad; slaagt nu |
+| Twee `test_wave_c_deploy_packaging`-gevallen | Lokale kloon mist de volledige geschiedenis; het pakketscript weigert dan bewust met `console_build_requires_full_history` | CI heeft de volledige geschiedenis |
