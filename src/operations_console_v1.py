@@ -1326,9 +1326,12 @@ class OperationsConsole:
         self, *, snapshot_id: str, object_id: str, include_document: bool = False,
     ) -> dict[str, Any]:
         envelope = self._envelope(snapshot_id)
-        target = next((row for row in self.snapshot_objects(snapshot_id) if row["object_id"] == object_id), None)
+        # Borrow the current rows and copy only the one this passage opens.
+        target = next((row for row in self._read_current_objects(snapshot_id, envelope=envelope)
+                       if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
+        target = deepcopy(target)
         _, freeze_bytes = self._verified_source_bytes(envelope)
         try:
             opened = open_source_passage(
