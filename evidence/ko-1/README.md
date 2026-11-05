@@ -24,6 +24,8 @@ De regels worden van boven naar beneden gelezen. De eerste regel die past, geeft
 | 5 | `approved` en de tweede review is open | Tweede review |
 | 6 | `approved` en de release van het document is `published`, `superseded` of `withdrawn` | Gepubliceerd, Vervangen of Ingetrokken |
 | 7 | `approved` | Goedgekeurd |
+
+Bij elke `approved`-rij wordt de exacte huidige binding apart gecontroleerd, ook als er geen open reviewstap is, bijvoorbeeld omdat de bronverwijzing niet meer klopt. Zonder binding volgt `approved_without_current_binding`, wat de toestand ook is.
 | 8 | `candidate_lifecycle = materialisation_failed` | Kandidaat |
 | 9 | Toelating noemt `context_necessary_unresolved` | Context open |
 | 10 | Toelating geblokkeerd om een andere reden | Kandidaat |

@@ -159,10 +159,14 @@ def derive_ko_state(
             invalid.append("approved_with_passage_not_assessed")
         second = governance.get("second_review")
         mirror_done = isinstance(second, dict) and second.get("status") == "approved"
-        # Each check reads the bindings and the mirror on its own, not via the stage alone.
-        if stage == FIRST_REVIEW:
-            invalid.append("approved_mirror_with_open_first_review"
-                           if exact_current_approver_ids(obj, own) else "approved_without_current_binding")
+        # Each check reads the bindings and the mirror on its own, not via the stage alone:
+        # review_stage is None when lineage no longer resolves, yet an approval still needs
+        # an exact current binding.
+        approvers = exact_current_approver_ids(obj, own)
+        if not approvers:
+            invalid.append("approved_without_current_binding")
+        elif stage == FIRST_REVIEW:
+            invalid.append("approved_mirror_with_open_first_review")
         if mirror_done and stage in (FIRST_REVIEW, SECOND_REVIEW):
             invalid.append("second_review_mirror_disagrees")
         if stage == FIRST_REVIEW:

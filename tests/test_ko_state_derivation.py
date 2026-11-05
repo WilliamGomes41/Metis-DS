@@ -42,6 +42,8 @@ def fixed(monkeypatch):
     def apply(stage=None, lifecycle="admitted"):
         monkeypatch.setattr(ko, "review_stage", lambda *a, **k: stage)
         monkeypatch.setattr(ko, "candidate_lifecycle", lambda obj: lifecycle)
+        # One exact current approver unless a case says otherwise.
+        monkeypatch.setattr(ko, "exact_current_approver_ids", lambda obj, bindings: ("reviewer",))
     return apply
 
 
@@ -68,8 +70,8 @@ CASES = [
     ("published", _obj("approved"), None, "admitted", "published", ko.GEPUBLICEERD, []),
     ("release superseded", _obj("approved"), None, "admitted", "superseded", ko.VERVANGEN, []),
     ("withdrawn", _obj("approved"), None, "admitted", "withdrawn", ko.INGETROKKEN, []),
-    ("approved without binding", _obj("approved"), FIRST_REVIEW, "admitted", "none", ko.IN_REVIEW,
-     ["approved_without_current_binding"]),
+    ("approved mirror with open first review", _obj("approved"), FIRST_REVIEW, "admitted", "none", ko.IN_REVIEW,
+     ["approved_mirror_with_open_first_review"]),
     ("approved, passage not assessed", _obj("approved", register="not_yet_assessed"), None, "admitted", "none",
      ko.GOEDGEKEURD, ["approved_with_passage_not_assessed"]),
     ("second-review mirror says done", _obj("approved", second={"required": True, "status": "approved"}),
@@ -191,3 +193,15 @@ def test_replaced_primary_keeps_the_other_binding_and_reports_the_mirror(fixed, 
     assert result["invalid"] == ["approved_mirror_with_open_first_review", "second_review_mirror_disagrees"]
     monkeypatch.setattr(ko, "exact_current_approver_ids", lambda obj, bindings: ())
     assert "approved_without_current_binding" in _state(obj)["invalid"]
+
+
+def test_approved_without_binding_is_invalid_even_without_an_open_stage(fixed, monkeypatch):
+    # Codex on #996: review_stage returns None when lineage no longer resolves; the binding
+    # check must not depend on an open stage.
+    fixed(None)
+    monkeypatch.setattr(ko, "exact_current_approver_ids", lambda obj, bindings: ())
+    result = _state(_obj("approved"))
+    assert result["state"] == ko.GOEDGEKEURD
+    assert result["invalid"] == ["approved_without_current_binding"]
+    monkeypatch.setattr(ko, "exact_current_approver_ids", lambda obj, bindings: ("reviewer",))
+    assert _state(_obj("approved"))["invalid"] == []
