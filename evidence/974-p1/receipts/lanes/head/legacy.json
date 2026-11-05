@@ -1,0 +1,46 @@
+{
+ "lane": 7,
+ "source_selection": {
+  "counters": {
+   "document_snapshot_reused": 9
+  },
+  "elapsed_ms": 84.133,
+  "error": null,
+  "location": null,
+  "outcome": "completed",
+  "page": {
+   "content_sha256": "ebea417667ffa4a705d809c9c0bfc1ac3efbfd2989048ebf7929f3187d7c4313",
+   "hrefs": [
+    "/brand/console.css?v=400b38134f582d54",
+    "/",
+    "/ingest",
+    "/source-selection",
+    "/review",
+    "/publish",
+    "/tree",
+    "/settings",
+    "/inzicht/document?document=<id0>",
+    "/source-selection?document=<id0>&amp;task=disposition",
+    "/source-selection?document=<id0>&amp;task=structure",
+    "/source-selection?document=<id0>&amp;object=console-fixture-a10-synthetic-1-0-b7f34641-sem-f37a012477b9827c&amp;task=repair",
+    "/source-selection?document=<id0>&amp;object=console-fixture-a10-synthetic-1-0-b7f34641-sem-f37a012477b9827c&amp;task=repair",
+    "/source-selection?document=<id0>&amp;object=console-fixture-a10-synthetic-1-0-b7f34641-sem-e7ea38f6a6614497&amp;task=repair",
+    "/source-selection?document=<id0>&amp;object=console-fixture-a10-synthetic-1-0-b7f34641-sem-f37a012477b9827c&amp;task=repair",
+    "/source-selection?document=<id0>&amp;object=console-fixture-a10-synthetic-1-0-b7f34641-sem-e7ea38f6a6614497&amp;task=repair",
+    "/wat-is-nieuw"
+   ],
+   "problem_ids": [
+    "<id1>",
+    "<id2>",
+    "<id3>",
+    "<id4>",
+    "<id5>"
+   ],
+   "progress_line": [],
+   "progress_refresh": false,
+   "sha256": "0c3fec49c493dfd0911a8b7f4360dceb2098dbac6f261e11d142846c8b28316a"
+  },
+  "source_reconstruction": null,
+  "status": 200
+ }
+}

@@ -6,7 +6,7 @@ returns decisions. It does not assign object identity or canonical text.
 from __future__ import annotations
 
 from src.request_diagnostics_v1 import diagnostic_count, diagnostic_phase
-from src.vorming.prepared_source_views_v1 import preserve_fragments, stored_index, fragment_index
+from src.vorming.prepared_source_views_v1 import FrozenList, preserve_fragments, stored_index, fragment_index
 
 import hashlib
 import math
@@ -98,20 +98,29 @@ def _read_source_blocks(fragments, *, include_headings=False):
     # the retained copy before serializing the entire document again. Equality
     # (not object identity) still detects in-place edits to nested fragments.
     # Counters are request-local evidence only; they never select a branch.
-    entry = scope.get("last_source")
-    if entry is not None:
-        diagnostic_count("source_input_compared")
-    if entry is None or fragments != entry["fragments"]:
-        from src.integrity_kernel import stable_hash
-        diagnostic_count("source_input_hashed")
-        key = stable_hash(fragments)
-        entry = scope.get(key)
+    # A FrozenList cannot change in place, so the same object needs only its
+    # first comparison. The scope holds that object, so its id stays unique.
+    frozen = isinstance(fragments, FrozenList)
+    held = scope.get(("frozen_input", id(fragments))) if frozen else None
+    if held is not None:
+        entry = held[1]
+    else:
+        entry = scope.get("last_source")
         if entry is not None:
             diagnostic_count("source_input_compared")
         if entry is None or fragments != entry["fragments"]:
-            entry = {"fragments": _source_input_snapshot(fragments), "blocks": {}}
-            scope[key] = entry
-        scope["last_source"] = entry
+            from src.integrity_kernel import stable_hash
+            diagnostic_count("source_input_hashed")
+            key = stable_hash(fragments)
+            entry = scope.get(key)
+            if entry is not None:
+                diagnostic_count("source_input_compared")
+            if entry is None or fragments != entry["fragments"]:
+                entry = {"fragments": _source_input_snapshot(fragments), "blocks": {}}
+                scope[key] = entry
+        if frozen:
+            scope[("frozen_input", id(fragments))] = (fragments, entry)
+    scope["last_source"] = entry
     if include_headings not in entry["blocks"]:
         diagnostic_count("source_reconstruction_built")
         entry["blocks"][include_headings] = reconstruct()

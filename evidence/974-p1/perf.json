@@ -1,0 +1,165 @@
+{
+ "elapsed_ms": {
+  "head": {
+   "max": 3702.107,
+   "median": 3114.723,
+   "min": 2713.933,
+   "runs": 5
+  },
+  "trunk": {
+   "max": 3691.003,
+   "median": 3379.394,
+   "min": 3163.925,
+   "runs": 5
+  }
+ },
+ "head_vs_trunk_ratio": 0.8367551461067835,
+ "metric": "GET /source-selection?document=<sid>, second open in a fresh process; inclusive ms of phase source_reconstruction and request elapsed_ms",
+ "rule": "head source_reconstruction <= 1000 ms and <= 10% of trunk",
+ "runs": {
+  "head": [
+   {
+    "counters": {
+     "document_snapshot_reused": 9,
+     "source_input_hashed": 1,
+     "source_reconstruction_built": 2,
+     "source_reconstruction_reused": 399
+    },
+    "elapsed_ms": 2713.933,
+    "run": "perf-1",
+    "source_reconstruction_calls": 401,
+    "source_reconstruction_ms": 1070.084
+   },
+   {
+    "counters": {
+     "document_snapshot_reused": 9,
+     "source_input_hashed": 1,
+     "source_reconstruction_built": 2,
+     "source_reconstruction_reused": 399
+    },
+    "elapsed_ms": 3702.107,
+    "run": "perf-2",
+    "source_reconstruction_calls": 401,
+    "source_reconstruction_ms": 1413.345
+   },
+   {
+    "counters": {
+     "document_snapshot_reused": 9,
+     "source_input_hashed": 1,
+     "source_reconstruction_built": 2,
+     "source_reconstruction_reused": 399
+    },
+    "elapsed_ms": 2815.292,
+    "run": "perf-3",
+    "source_reconstruction_calls": 401,
+    "source_reconstruction_ms": 1081.861
+   },
+   {
+    "counters": {
+     "document_snapshot_reused": 9,
+     "source_input_hashed": 1,
+     "source_reconstruction_built": 2,
+     "source_reconstruction_reused": 399
+    },
+    "elapsed_ms": 3114.723,
+    "run": "perf-4",
+    "source_reconstruction_calls": 401,
+    "source_reconstruction_ms": 1312.545
+   },
+   {
+    "counters": {
+     "document_snapshot_reused": 9,
+     "source_input_hashed": 1,
+     "source_reconstruction_built": 2,
+     "source_reconstruction_reused": 399
+    },
+    "elapsed_ms": 3538.88,
+    "run": "perf-5",
+    "source_reconstruction_calls": 401,
+    "source_reconstruction_ms": 1316.244
+   }
+  ],
+  "trunk": [
+   {
+    "counters": {
+     "document_snapshot_reused": 9,
+     "source_input_compared": 400,
+     "source_input_hashed": 1,
+     "source_reconstruction_built": 2,
+     "source_reconstruction_reused": 399
+    },
+    "elapsed_ms": 3691.003,
+    "run": "perf-1",
+    "source_reconstruction_calls": 401,
+    "source_reconstruction_ms": 1785.261
+   },
+   {
+    "counters": {
+     "document_snapshot_reused": 9,
+     "source_input_compared": 400,
+     "source_input_hashed": 1,
+     "source_reconstruction_built": 2,
+     "source_reconstruction_reused": 399
+    },
+    "elapsed_ms": 3375.104,
+    "run": "perf-2",
+    "source_reconstruction_calls": 401,
+    "source_reconstruction_ms": 1568.613
+   },
+   {
+    "counters": {
+     "document_snapshot_reused": 9,
+     "source_input_compared": 400,
+     "source_input_hashed": 1,
+     "source_reconstruction_built": 2,
+     "source_reconstruction_reused": 399
+    },
+    "elapsed_ms": 3400.672,
+    "run": "perf-3",
+    "source_reconstruction_calls": 401,
+    "source_reconstruction_ms": 1567.86
+   },
+   {
+    "counters": {
+     "document_snapshot_reused": 9,
+     "source_input_compared": 400,
+     "source_input_hashed": 1,
+     "source_reconstruction_built": 2,
+     "source_reconstruction_reused": 399
+    },
+    "elapsed_ms": 3379.394,
+    "run": "perf-4",
+    "source_reconstruction_calls": 401,
+    "source_reconstruction_ms": 1625.314
+   },
+   {
+    "counters": {
+     "document_snapshot_reused": 9,
+     "source_input_compared": 400,
+     "source_input_hashed": 1,
+     "source_reconstruction_built": 2,
+     "source_reconstruction_reused": 399
+    },
+    "elapsed_ms": 3163.925,
+    "run": "perf-5",
+    "source_reconstruction_calls": 401,
+    "source_reconstruction_ms": 1529.765
+   }
+  ]
+ },
+ "source_reconstruction_ms": {
+  "head": {
+   "max": 1413.345,
+   "median": 1312.545,
+   "min": 1070.084,
+   "runs": 5
+  },
+  "trunk": {
+   "max": 1785.261,
+   "median": 1568.613,
+   "min": 1529.765,
+   "runs": 5
+  }
+ },
+ "verdict": "FAIL"
+}

@@ -1,0 +1,17 @@
+{
+ "script": "microbench_hits.py",
+ "runs": 1,
+ "fragments": 2000,
+ "hits_per_case": 20,
+ "note": "Single run; build times vary 470-830 ms between cases and are not a frozen-vs-plain comparison.",
+ "results_ms": [
+  {"case": "plain", "include_headings": false, "build": 833.2, "hit": 0.829},
+  {"case": "plain", "include_headings": true, "build": 508.3, "hit": 0.867},
+  {"case": "frozen", "include_headings": false, "build": 613.9, "hit": 0.003},
+  {"case": "frozen", "include_headings": true, "build": 481.6, "hit": 0.003},
+  {"case": "pdfish-plain", "include_headings": false, "build": 636.2, "hit": 13.923},
+  {"case": "pdfish-plain", "include_headings": true, "build": 662.9, "hit": 10.576},
+  {"case": "pdfish-frozen", "include_headings": false, "build": 761.6, "hit": 0.006},
+  {"case": "pdfish-frozen", "include_headings": true, "build": 775.1, "hit": 0.003}
+ ]
+}

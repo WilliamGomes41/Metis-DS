@@ -1,0 +1,65 @@
+{
+ "formation_problems": {
+  "counters": {},
+  "elapsed_ms": 7.974,
+  "error": null,
+  "location": "/source-selection?document=snap-68170bc101859fdc-7cbd40be",
+  "outcome": "completed",
+  "page": {
+   "content_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "hrefs": [],
+   "problem_ids": [],
+   "progress_line": [],
+   "progress_refresh": false,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "source_reconstruction": null,
+  "status": 303
+ },
+ "lane": 2,
+ "source_selection": {
+  "counters": {
+   "document_snapshot_reused": 14,
+   "source_input_compared": 8,
+   "source_input_hashed": 1,
+   "source_reconstruction_built": 2,
+   "source_reconstruction_reused": 7
+  },
+  "elapsed_ms": 94.682,
+  "error": null,
+  "location": null,
+  "outcome": "completed",
+  "page": {
+   "content_sha256": "4d0015d073463f9f725253c453496043ffde6749b64247c08cf11528d3077c23",
+   "hrefs": [
+    "/brand/console.css?v=400b38134f582d54",
+    "/",
+    "/ingest",
+    "/source-selection",
+    "/review",
+    "/publish",
+    "/tree",
+    "/settings",
+    "/review?document=<id0>",
+    "/inzicht/document?document=<id0>",
+    "/source-selection?document=<id0>&amp;task=disposition",
+    "/source-selection?document=<id0>&amp;task=structure",
+    "/source-selection?document=<id0>&amp;object=console-fixture-smetten-patroon-1-68170bc1-semcov-39c14c726029c27f&amp;task=disposition",
+    "/wat-is-nieuw"
+   ],
+   "problem_ids": [
+    "<id2>",
+    "<id3>"
+   ],
+   "progress_line": [],
+   "progress_refresh": false,
+   "sha256": "ff9c2d8ee35b389bfa16929857111ab424079e17d142b333c18cb2bf4e129130"
+  },
+  "source_reconstruction": {
+   "calls": 9,
+   "exclusive_ms": 0.722,
+   "inclusive_ms": 0.722
+  },
+  "status": 200
+ }
+}
