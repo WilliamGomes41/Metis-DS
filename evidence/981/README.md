@@ -52,12 +52,13 @@ blijft de onafhankelijke referentiemeting in #530.
 
 ## Moduleniveau in de meting (Codex-review)
 
-`measure_context.py` vergelijkt modules op hetzelfde niveau dat de productiecode detecteert (`_module_depth`), niet langer vast op het eerste padniveau. De meting is twee keer gedraaid.
+`measure_context.py` vergelijkt modules op hetzelfde niveau dat de productiecode bepaalt (`module_depth`), niet langer vast op het eerste padniveau. De documentwortel komt alleen uit takken op het hoogste niveau met een mogelijke aanbeveling. De meting is drie keer gedraaid.
 
 | Run | Gevonden moduleniveau | Resultaat |
 |---|---|---|
 | Echte Smetten-export (15 modules op het eerste niveau, geen titel) | 1 | Ongewijzigd: vreemde koppen 5, Rationale 7 van 8, overwegingen 5 van 8, totaal 350.565 tekens, maximaal 40.511 |
 | Dezelfde blokken met de titel "Smetten" vooraan in elk pad | 2 | Identiek aan de run hierboven |
+| Idem, plus een bijlage `[Bijlagen]` op het hoogste niveau | 2 | Identiek; 147 taken, waarvan de bijlage er één is zonder modulecontext |
 
 ## Bekende grens: één module zonder titel
 

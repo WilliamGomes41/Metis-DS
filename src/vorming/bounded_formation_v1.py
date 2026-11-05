@@ -58,6 +58,20 @@ def _module_depth(blocks, root):
     return len(root) + 1
 
 
+def module_depth(blocks, evidence_blocks, possible):
+    """Path depth of the module level for this source.
+
+    The document root comes from the top-level branches that hold a possible
+    recommendation. Unsectioned blocks (content before the first heading) and
+    top-level peers without recommendations, such as an appendix, must not
+    erase it: modules are only ever needed where recommendations live.
+    """
+    sectioned = [b for b in (*blocks, *evidence_blocks) if _path(b)]
+    branches = {_path(b)[0] for b in blocks if b["block_id"] in possible and _path(b)}
+    root = _shared_root([b for b in sectioned if _path(b)[0] in branches] or sectioned)
+    return _module_depth(sectioned, root)
+
+
 def _in_context(block, section, module):
     """Context by structure only: never by a heading text alone (#981)."""
     path = _path(block)
@@ -81,11 +95,7 @@ def tasks_for(blocks, evidence_blocks, targets=None):
     target_spans = [t["span"] for t in targets] if targets is not None else [full_span(b) for b in blocks]
     selected_ids = {s["block_id"] for s in target_spans}
     possible = {row["span"]["block_id"] for row in inventory(blocks, recommendation_sections_only=False)}
-    # Unsectioned blocks (content before the first heading) belong to no module
-    # and must not erase the shared root.
-    sectioned = [b for b in (*blocks, *evidence_blocks) if _path(b)]
-    root = _shared_root(sectioned)
-    depth = _module_depth(sectioned, root)
+    depth = module_depth(blocks, evidence_blocks, possible)
     groups, group, size, path = [], [], 0, None
     for block in blocks:
         if block["block_id"] not in selected_ids:

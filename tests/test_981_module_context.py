@@ -150,3 +150,13 @@ def test_titled_document_with_only_flat_modules_does_not_leak():
               block("m2-rec", "Houd de huidplooien droog.", ["Smetten", m2])]
     context = _context(_task(tasks_for(blocks, blocks), "m1-rec"))
     assert not {"m2", "m2-rec"} & context
+
+
+def test_top_level_appendix_peer_does_not_erase_the_title_root():
+    # Codex on #994: [Guideline, Module ...] plus a sectioned top-level [Bijlagen] peer.
+    blocks = [dict(b, section_path=["Smetten", *b["section_path"]]) for b in guideline()]
+    blocks += [block("bijl", "Bijlage 1. Zoekverantwoording", ["Bijlagen"], heading="Bijlagen"),
+               block("bijl-txt", "De zoekactie liep tot 2024.", ["Bijlagen"])]
+    context = _context(_task(tasks_for(blocks, blocks), "m1-rec"))
+    assert {"m1-rat", "m1-ow"} <= context
+    assert not {"m2", "m2-rec", "m2-rat", "bijl", "bijl-txt"} & context

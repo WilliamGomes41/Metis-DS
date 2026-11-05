@@ -6,12 +6,12 @@ heading, position). The script prints aggregates only, never source text.
 """
 import json, sys, subprocess
 sys.path.insert(0, '.')
-from src.vorming.bounded_formation_v1 import tasks_for, MAX_CONTEXT_CHARS, _module_depth, _shared_root, _path
+from src.vorming.bounded_formation_v1 import tasks_for, MAX_CONTEXT_CHARS, module_depth
+from src.vorming.recommendation_coverage_v1 import inventory
 blocks = json.load(open(sys.argv[1]))
 tasks = tasks_for(blocks, blocks)
 # Module key at the same depth the production code detects (below a title, if any).
-_sectioned = [b for b in blocks if _path(b)]
-DEPTH = _module_depth(_sectioned, _shared_root(_sectioned))
+DEPTH = module_depth(blocks, blocks, {r['span']['block_id'] for r in inventory(blocks, recommendation_sections_only=False)})
 def module(path):
     return tuple(path[:DEPTH])
 sizes = [sum(len(b['text']) for b in t['evidence_blocks']) for t in tasks]
