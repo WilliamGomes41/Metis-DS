@@ -122,3 +122,16 @@ def test_unsectioned_preface_does_not_erase_the_document_root():
     context = _context(_task(tasks_for(blocks, blocks), "m1-rec"))
     assert {"m1-rat", "m1-ow"} <= context
     assert not {"m2-rat", "m2-rec"} & context
+
+
+def test_titled_module_without_subsections_still_separates_modules():
+    # Codex on #994: one module with subsections, another with text directly under its heading.
+    m1, m2 = "Module 1: Risicofactoren", "Module 2: Preventieve maatregelen"
+    blocks = [dict(b, section_path=["Smetten", *b["section_path"]]) for b in guideline()
+              if b["section_path"][0] == m1]
+    blocks += [block("m2", m2, ["Smetten", m2], heading=m2),
+               block("m2-rec", "Houd de huidplooien droog.", ["Smetten", m2]),
+               block("m2-txt", "Vocht verhoogt het risico.", ["Smetten", m2])]
+    context = _context(_task(tasks_for(blocks, blocks), "m1-rec"))
+    assert {"m1-rat", "m1-ow"} <= context
+    assert not {"m2", "m2-rec", "m2-txt"} & context

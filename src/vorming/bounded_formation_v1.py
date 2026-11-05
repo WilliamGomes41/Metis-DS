@@ -46,12 +46,17 @@ def _shared_root(blocks):
 
 
 def _module_depth(blocks, root):
-    """Depth of the module level: one below the shared root when that level holds
-    two or more sections with their own subsections (several modules, possibly
-    under a document title); otherwise the shared root is the only module."""
+    """Depth of the module level.
+
+    One below the shared root as soon as any section at that level has its own
+    subsections: several modules, possibly under a document title, even when
+    some modules hold text directly under their heading. Only a document whose
+    second level has no subsections at all is a single module, the shared root.
+    When in doubt the module is the narrower level, so context never leaks
+    across modules; at worst a task sees its own section only.
+    """
     depth = len(root) + 1
-    parents = {_path(b)[:depth] for b in blocks if len(_path(b)) > depth}
-    return depth if len(parents) >= 2 else len(root)
+    return depth if any(len(_path(b)) > depth for b in blocks) else len(root)
 
 
 def _in_context(block, section, module):
