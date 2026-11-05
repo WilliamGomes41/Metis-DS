@@ -54,6 +54,7 @@ CONTEXT_UNRESOLVED = "context_necessary_unresolved"
 INVALID_CODES = (
     "approved_without_current_binding",
     "approved_mirror_with_open_first_review",
+    "approved_provenance_unresolved",
     "approved_with_passage_not_assessed",
     "legacy_revise_persisted",
     "second_review_mirror_disagrees",
@@ -180,8 +181,11 @@ def derive_ko_state(
             invalid.append("approved_without_current_binding")
         elif stage == FIRST_REVIEW:
             invalid.append("approved_mirror_with_open_first_review")
-        if mirror_done and stage in (FIRST_REVIEW, SECOND_REVIEW):
+        # A completed second review needs two exact current approvers, open stage or not.
+        if mirror_done and (stage in (FIRST_REVIEW, SECOND_REVIEW) or len(approvers) < 2):
             invalid.append("second_review_mirror_disagrees")
+        if not provenance_resolves(obj, fragments):
+            invalid.append("approved_provenance_unresolved")
         if stage == FIRST_REVIEW:
             return result(IN_REVIEW, "review_stage_first")
         if stage == SECOND_REVIEW:

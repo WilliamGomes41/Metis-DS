@@ -45,9 +45,10 @@ De uitweg "niet van toepassing" bestaat nog niet. KO-4 voegt die toe als vastgel
 |---|---|
 | `approved_without_current_binding` | De spiegel zegt `approved`, maar er is geen geldige binding op deze exacte revisie |
 | `approved_mirror_with_open_first_review` | De spiegel zegt `approved` en er is nog een geldige binding, maar de eerste review is weer open, bijvoorbeeld na het vervangen van de eerste reviewer |
+| `approved_provenance_unresolved` | Goedgekeurd met een geldige binding, terwijl de herkomst (spans of bronlijn) niet meer oplost |
 | `approved_with_passage_not_assessed` | Goedgekeurd terwijl de passage nog `not_yet_assessed` is |
 | `legacy_revise_persisted` | Er staat een opgeslagen `revise` |
-| `second_review_mirror_disagrees` | De spiegel `governance.second_review` zegt klaar, maar de bindingen niet |
+| `second_review_mirror_disagrees` | De spiegel `governance.second_review` zegt klaar, maar er is nog een reviewstap open of er zijn minder dan twee exacte huidige goedkeurders |
 | `approval_outside_suitability` | Een goedkeuring bij een geschiktheid die goedkeuren uitsluit |
 | `register_disagrees_with_review` | De passage-registratie wijkt af van de beoordeelde geschiktheid |
 | `disposition_invalid` | `definitive_review_disposition` is ongeldig |

@@ -230,3 +230,22 @@ def test_prepared_source_carrier_is_passed_through_unchanged(fixed, monkeypatch)
     monkeypatch.setattr(ko, "review_stage", lambda *a, **k: seen.append(k.get("fragments")) or FIRST_REVIEW)
     assert _state(_obj(), fragments=carrier)["state"] == ko.IN_REVIEW
     assert seen == [carrier]
+
+
+def test_second_review_mirror_is_checked_against_exact_approvers(fixed, monkeypatch):
+    # Codex on #996: with no open stage, an approved mirror backed by one approver disagrees.
+    fixed(None)
+    monkeypatch.setattr(ko, "exact_current_approver_ids", lambda obj, bindings: ("first",))
+    obj = _obj("approved", second={"required": True, "status": "approved"})
+    assert _state(obj)["invalid"] == ["second_review_mirror_disagrees"]
+    monkeypatch.setattr(ko, "exact_current_approver_ids", lambda obj, bindings: ("first", "second"))
+    assert _state(obj)["invalid"] == []
+
+
+def test_approved_object_with_unresolved_provenance_is_invalid(fixed, monkeypatch):
+    # Codex on #996: a current binding does not make a provenance-broken approval clean.
+    fixed(None)
+    monkeypatch.setattr(ko, "provenance_resolves", lambda obj, fragments: False)
+    result = _state(_obj("approved"))
+    assert result["state"] == ko.GOEDGEKEURD
+    assert result["invalid"] == ["approved_provenance_unresolved"]
