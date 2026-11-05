@@ -101,6 +101,6 @@ Opnieuw draaien:
 ## Bekend, niet gewijzigd
 
 `geen_kenniseenheid` + `goedkeuren_na_correctie` via een zelfgemaakt verzoek
-leidt nog steeds naar het gestructureerde herstel in plaats van naar
-`review_disposition_conflict` (P3-gedrag, `test_revise_keeps_the_structured_repair_flow`).
-Het formulier biedt die combinatie niet meer aan.
+leidde naar het gestructureerde herstel in plaats van naar
+`review_disposition_conflict` (P3-gedrag). Opgelost in P4d (#987); zie
+`evidence/974-p4d/README.md`.

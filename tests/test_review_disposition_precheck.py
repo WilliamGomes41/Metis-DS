@@ -200,9 +200,11 @@ def test_authorization_still_precedes_the_disposition_rule(review_system):
 
 
 def test_revise_keeps_the_structured_repair_flow(review_system):
+    # A suitability that permits a correction still opens the structured repair.
+    # One that never does is refused (test_review_disposition_choices, #987).
     from src.review.deterministic_review_repair_v1 import StructuredRepairRequired
     console, client, sid, actor, ids = review_system
     token = _review_form(client, sid, ids[0])["snapshot_revision"]
     with pytest.raises(StructuredRepairRequired):
         console.review_object(actor_id=actor, snapshot_id=sid, object_id=ids[0], decision="revise",
-                              suitability="geen_kenniseenheid", comment="c", expected_revision=token)
+                              suitability="mist_context", comment="c", expected_revision=token)
