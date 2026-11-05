@@ -13,7 +13,7 @@ from src.vorming.semantic_passage_v1 import semantic_units_from_proposal, Semant
 from src.vorming.source_accountability_v1 import supplementary_targets
 from src.vorming.source_containers_v1 import metadata_reason, _covers
 from src.vorming.recoverable_formation_v1 import restrict_supplement, pending_rejections
-from src.vorming.recommendation_coverage_v1 import merge_proposals, assess
+from src.vorming.recommendation_coverage_v1 import merge_proposals, assess, inventory
 
 VERSION = "bounded-formation-v1"
 MAX_CANDIDATE_CHARS = 12_000
@@ -27,14 +27,75 @@ def full_span(block):
     return {"block_id": block["block_id"], "start": 0, "end": len(block["text"])}
 
 
+def _path(block):
+    return tuple(block.get("section_path") or [])
+
+
+def _shared_root(blocks):
+    """Longest section-path prefix shared by every block, e.g. a document title."""
+    paths = [_path(b) for b in blocks]
+    if not paths:
+        return ()
+    root = paths[0]
+    for path in paths[1:]:
+        n = 0
+        while n < min(len(root), len(path)) and root[n] == path[n]:
+            n += 1
+        root = root[:n]
+    return root
+
+
+def _module_depth(blocks, root):
+    """Depth of the module level: always one below the shared root.
+
+    A titled document with flat modules ([title, module]) and an untitled
+    single module with flat subsections ([module, Aanbevelingen]) have the same
+    shape, so no structural rule can tell them apart. Leaking context across
+    modules is the worse error, so the narrower level always wins: an untitled
+    single-module document keeps the trunk behaviour (own section and ancestor
+    headings) instead of receiving its sibling sections.
+    """
+    return len(root) + 1
+
+
+def module_depth(blocks, evidence_blocks, possible):
+    """Path depth of the module level for this source.
+
+    The document root comes from the top-level branches that hold a possible
+    recommendation. Unsectioned blocks (content before the first heading) and
+    top-level peers without recommendations, such as an appendix, must not
+    erase it: modules are only ever needed where recommendations live.
+    """
+    sectioned = [b for b in (*blocks, *evidence_blocks) if _path(b)]
+    branches = {_path(b)[0] for b in blocks if b["block_id"] in possible and _path(b)}
+    root = _shared_root([b for b in sectioned if _path(b)[0] in branches] or sectioned)
+    return _module_depth(sectioned, root)
+
+
+def _in_context(block, section, module):
+    """Context by structure only: never by a heading text alone (#981)."""
+    path = _path(block)
+    if path == section or (module and path[:len(module)] == module):
+        return True
+    # A heading of an enclosing section: its own path is a prefix of this one.
+    return bool(block.get("heading")) and bool(path) and path == section[:len(path)]
+
+
 def tasks_for(blocks, evidence_blocks, targets=None):
     """Keep section runs together; headings/referenced sections are context only.
+
+    A task with a possible recommendation also consults its whole source
+    module (the level below the shared document root), so supporting text
+    such as Rationale or considerations in a sibling section is available.
+    Other tasks keep their own section, which bounds the request size.
 
     No truncation of source or references: oversized tasks remain explicit open
     work. Canonical block ids/offsets are never rewritten for chunking.
     """
     target_spans = [t["span"] for t in targets] if targets is not None else [full_span(b) for b in blocks]
     selected_ids = {s["block_id"] for s in target_spans}
+    possible = {row["span"]["block_id"] for row in inventory(blocks, recommendation_sections_only=False)}
+    depth = module_depth(blocks, evidence_blocks, possible)
     groups, group, size, path = [], [], 0, None
     for block in blocks:
         if block["block_id"] not in selected_ids:
@@ -49,9 +110,9 @@ def tasks_for(blocks, evidence_blocks, targets=None):
     for group in groups:
         ids = {b["block_id"] for b in group}
         section = tuple(group[0].get("section_path") or [])
-        contexts = {b["block_id"]: b for b in evidence_blocks
-                    if tuple(b.get("section_path") or []) == section
-                    or b.get("heading") in section}
+        module = (section[:depth]
+                  if depth and len(section) >= depth and any(b["block_id"] in possible for b in group) else None)
+        contexts = {b["block_id"]: b for b in evidence_blocks if _in_context(b, section, module)}
         # Reference closure includes the complete referenced section, not just
         # the table caption. If it does not fit, this task fails explicitly.
         references = {m.group().casefold() for b in [*group, *contexts.values()] for m in _REFERENCE.finditer(b["text"])}
