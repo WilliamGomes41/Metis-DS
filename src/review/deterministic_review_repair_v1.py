@@ -879,7 +879,17 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
 
 
 def render_repair(console, request: Request, submission: dict[str, Any], *, repair_kind="", error="", saved=False) -> str:
-    """One Vorming presentation of the complete existing atomic repair command."""
+    """One Vorming presentation of the complete existing atomic repair command.
+
+    The page owns one read snapshot: its envelope, objects and prepared source
+    are read once, also from the exception handler and the POST error path,
+    which run outside the GET read operation.
+    """
+    with console.document_read_operation():
+        return _render_repair(console, request, submission, repair_kind=repair_kind, error=error, saved=saved)
+
+
+def _render_repair(console, request: Request, submission: dict[str, Any], *, repair_kind, error, saved) -> str:
     from src import operations_console_app as ui
     from src.review.review_passage_read_v1 import read_review_passage
     account = console.session_account(request.cookies.get("console_session"))
