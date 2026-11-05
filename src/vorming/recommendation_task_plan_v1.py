@@ -38,6 +38,24 @@ def overlaps(left, right):
     return left['block_id'] == right['block_id'] and max(left['start'],right['start']) < min(left['end'],right['end'])
 
 
+def narrow_task(task, refs):
+    """Retain exact pending ranges; consumed source remains context-only."""
+    by_id = {b['block_id']: b for b in task['source_blocks']}
+    refs = [ref for ref in refs if by_id[ref['block_id']]['text'][ref['start']:ref['end']].strip()]
+    if not refs:
+        return None
+    if refs == task['target_spans']:
+        return task
+    selectable = {ref['block_id'] for ref in refs}
+    context = [*task['evidence_blocks'],
+               *(b for b in task['source_blocks'] if b['block_id'] not in selectable)]
+    context.sort(key=lambda b: b.get('position', 0))
+    return {**task, 'target_spans': refs,
+            'task_id': stable_json_hash({'version': 'bounded-formation-v1', 'spans': refs}),
+            'source_blocks': [b for b in task['source_blocks'] if b['block_id'] in selectable],
+            'evidence_blocks': context}
+
+
 def remaining_tasks(plan, blocks, evidence_blocks, targets):
     """Keep pinned task boundaries/context; subtract only proven source use.
 
@@ -73,9 +91,9 @@ def remaining_tasks(plan, blocks, evidence_blocks, targets):
                     'evidence_blocks':[b for b in evidence_blocks if b['block_id'] in context_ids]}
         except KeyError as error:
             raise ConsoleError('formation_task_plan_source_mismatch') from error
-        if refs != recorded['target_spans']:
-            task['task_id'] = stable_json_hash({'version':'bounded-formation-v1','spans':refs})
-        tasks.append(task)
+        task = narrow_task({**task, 'target_spans': recorded['target_spans']}, refs)
+        if task is not None:
+            tasks.append(task)
     # Every requested range must belong to the pinned source partition. A
     # corrupted/incompatible plan cannot silently make pending work disappear.
     from src.vorming.source_containers_v1 import _covers

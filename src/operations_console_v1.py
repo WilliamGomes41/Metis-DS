@@ -2026,7 +2026,7 @@ class OperationsConsole:
             reference = (latest.get("diagnostic") or {}).get("validator_input_ref")
             if reference:
                 from src.workflows.formation_task_store_v1 import FormationTaskStore
-                result["formation_progress"] = FormationTaskStore(self.workflow_document_store).progress(reference["context_id"])
+                result["formation_progress"] = FormationTaskStore(self.workflow_document_store).progress(reference["context_id"], attempt=latest)
                 # A successful activation can contain independent review work
                 # and unresolved source findings. Attempt success is not closure.
                 activated = bool(envelope.get("semantic_replay")) and latest.get("state") in {"succeeded", "incomplete_budget"}

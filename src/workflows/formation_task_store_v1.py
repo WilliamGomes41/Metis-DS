@@ -394,10 +394,9 @@ class FormationTaskStore(ReviewSourceRecords, ProcessingArchiveInputs, Processin
             summary["processing_attempts"][0]["diagnostic"] = {"phase": (latest.get("diagnostic") or {}).get("phase")}
             reference = (latest.get("diagnostic") or {}).get("validator_input_ref")
             if reference:
-                progress = con.execute("SELECT planned_task_count,completed_task_count FROM workflow.formation_contexts WHERE context_id=%s",
-                                       (reference["context_id"],)).fetchone()
+                progress = FormationTaskStore._attempt_progress(con, reference["context_id"], latest)
                 if progress:
-                    summary["formation_progress"] = FormationTaskStore._progress(progress)
+                    summary["formation_progress"] = progress
             con.execute("INSERT INTO workflow.processing_document_summaries(snapshot_id,payload) VALUES(%s,%s::jsonb) "
                         "ON CONFLICT(snapshot_id) DO UPDATE SET payload=EXCLUDED.payload",
                         (snapshot_id,_json_text(summary)))
@@ -425,13 +424,28 @@ class FormationTaskStore(ReviewSourceRecords, ProcessingArchiveInputs, Processin
         completed = min(planned,row["completed_task_count"])
         return {"planned_task_count":planned,"terminal_task_count":completed,"pending_task_count":planned-completed}
 
-    def progress(self, context_id):
-        with self.documents._connect() as con:
-            row = con.execute("SELECT planned_task_count,completed_task_count FROM workflow.formation_contexts WHERE context_id=%s",
-                              (context_id,)).fetchone()
+    @staticmethod
+    def _attempt_progress(con, context_id, attempt=None):
+        row = con.execute("SELECT planned_task_count,completed_task_count FROM workflow.formation_contexts WHERE context_id=%s",
+                          (context_id,)).fetchone()
         if not row:
+            return None
+        reference = ((attempt or {}).get("diagnostic") or {}).get("validator_input_ref") or {}
+        if (attempt and attempt.get("state") in {"succeeded", "incomplete_budget"}
+                and reference.get("context_id") == context_id):
+            accounted = con.execute("SELECT payload#>'{provider_evidence,formation_progress}' AS progress "
+                "FROM workflow.processing_checkpoints WHERE attempt_id=%s AND phase='formation_accounted' "
+                "ORDER BY checkpoint_id DESC LIMIT 1", (attempt["attempt_id"],)).fetchone()
+            if accounted and isinstance(accounted["progress"], dict):
+                return accounted["progress"]
+        return FormationTaskStore._progress(row)
+
+    def progress(self, context_id, *, attempt=None):
+        with self.documents._connect() as con:
+            progress = self._attempt_progress(con, context_id, attempt)
+        if progress is None:
             raise WorkflowDocumentStoreError("formation_context_missing")
-        return self._progress(row)
+        return progress
 
     def diagnostic(self, attempt):
         """Explicit evidence read; task history is assembled only on demand."""
