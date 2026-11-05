@@ -36,8 +36,30 @@ jobs:
       - name: Require exact-head handoff
         run: python scripts/linear_github_sync.py --validate-event "$GITHUB_EVENT_PATH"
 
+  # PR, issue and comment events only ask main to run the serialized reconcile.
+  # A concurrency group keeps one pending run and cancels the older pending one.
+  # Run from the event itself, that cancellation showed as a failed check on the
+  # PR. Every reconcile is a full, idempotent sync, so a replaced run loses nothing.
+  request-sync:
+    if: >-
+      github.repository == 'WilliamGomes41/Metis-DS' &&
+      (github.event_name == 'pull_request_target' || github.event_name == 'issues' ||
+       github.event_name == 'issue_comment')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      # No checkout: nothing from a PR branch runs with this token.
+      - name: Start the serialized sync on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run linear-github-sync.yml --repo "$GITHUB_REPOSITORY" --ref main
+
   reconcile:
-    if: github.event_name != 'pull_request' && github.repository == 'WilliamGomes41/Metis-DS'
+    if: >-
+      github.repository == 'WilliamGomes41/Metis-DS' &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     concurrency:
