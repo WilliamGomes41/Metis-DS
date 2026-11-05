@@ -45,6 +45,15 @@ def _shared_root(blocks):
     return root
 
 
+def _module_depth(blocks, root):
+    """Depth of the module level: one below the shared root when that level holds
+    two or more sections with their own subsections (several modules, possibly
+    under a document title); otherwise the shared root is the only module."""
+    depth = len(root) + 1
+    parents = {_path(b)[:depth] for b in blocks if len(_path(b)) > depth}
+    return depth if len(parents) >= 2 else len(root)
+
+
 def _in_context(block, section, module):
     """Context by structure only: never by a heading text alone (#981)."""
     path = _path(block)
@@ -69,6 +78,7 @@ def tasks_for(blocks, evidence_blocks, targets=None):
     selected_ids = {s["block_id"] for s in target_spans}
     possible = {row["span"]["block_id"] for row in inventory(blocks, recommendation_sections_only=False)}
     root = _shared_root([*blocks, *evidence_blocks])
+    depth = _module_depth([*blocks, *evidence_blocks], root)
     groups, group, size, path = [], [], 0, None
     for block in blocks:
         if block["block_id"] not in selected_ids:
@@ -83,8 +93,8 @@ def tasks_for(blocks, evidence_blocks, targets=None):
     for group in groups:
         ids = {b["block_id"] for b in group}
         section = tuple(group[0].get("section_path") or [])
-        module = (section[:len(root) + 1]
-                  if len(section) > len(root) and any(b["block_id"] in possible for b in group) else None)
+        module = (section[:depth]
+                  if depth and len(section) >= depth and any(b["block_id"] in possible for b in group) else None)
         contexts = {b["block_id"]: b for b in evidence_blocks if _in_context(b, section, module)}
         # Reference closure includes the complete referenced section, not just
         # the table caption. If it does not fit, this task fails explicitly.

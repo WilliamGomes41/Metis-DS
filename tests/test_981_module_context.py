@@ -98,3 +98,18 @@ def test_oversized_module_context_is_an_explicit_error_without_truncation():
     task = _task(tasks_for(blocks, blocks), "m1-rec")
     assert task["error_code"] == "source_task_context_limit_exceeded"
     assert next(b for b in task["evidence_blocks"] if b["block_id"] == "m1-rat")["text"] == long
+
+
+def test_single_module_document_without_title_is_its_own_module():
+    # Codex on #994: every path starts with the only module, so the shared root is the module.
+    blocks = [b for b in guideline() if b["section_path"][0].startswith("Module 1")]
+    context = _context(_task(tasks_for(blocks, blocks), "m1-rec"))
+    assert {"m1-rat", "m1-ow"} <= context
+
+
+def test_recommendation_directly_under_a_titled_module_stays_in_that_module():
+    blocks = [dict(b, section_path=["Smetten", *b["section_path"]]) for b in guideline()]
+    blocks.append(block("m1-direct", "Overweeg altijd de huidplooien.", ["Smetten", "Module 1: Risicofactoren"]))
+    context = _context(_task(tasks_for(blocks, blocks), "m1-direct"))
+    assert "m1-rat" in context
+    assert not {"m2-rat", "m2-rec"} & context
