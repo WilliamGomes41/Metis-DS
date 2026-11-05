@@ -1,0 +1,278 @@
+{
+  "concurrent": [
+    {
+      "by_phase_sum": 24082837,
+      "db_json_bytes": 24082837,
+      "db_json_bytes_by_phase": {
+        "<none>": 4,
+        "authorization": 4,
+        "document_load": 8928649,
+        "review_render": 8670668,
+        "review_render/source_views_read_records": 6483512
+      },
+      "db_json_bytes_by_phase_truncated": false,
+      "db_queries": 19,
+      "elapsed_ms": 3275.875,
+      "error": null,
+      "method": "GET",
+      "outcome": "completed",
+      "phase_tree_truncated": false,
+      "route": "/review",
+      "status": 200
+    },
+    {
+      "by_phase_sum": 18890155,
+      "db_json_bytes": 18890155,
+      "db_json_bytes_by_phase": {
+        "<none>": 9959568,
+        "authorization": 4,
+        "document_list": 1926,
+        "document_list/document_load": 8928649,
+        "processing_status": 4,
+        "selection_projection": 4
+      },
+      "db_json_bytes_by_phase_truncated": false,
+      "db_queries": 17,
+      "elapsed_ms": 4564.006,
+      "error": null,
+      "method": "GET",
+      "outcome": "completed",
+      "phase_tree_truncated": false,
+      "route": "/source-selection",
+      "status": 200
+    }
+  ],
+  "conflict": {
+    "by_phase_sum": 52416,
+    "db_json_bytes": 52416,
+    "db_json_bytes_by_phase": {
+      "<none>": 3296,
+      "source_read/source_views_read_records": 22763,
+      "store_transaction": 26357
+    },
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 15,
+    "elapsed_ms": 105.77,
+    "error": null,
+    "method": "POST",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 409
+  },
+  "error": {
+    "by_phase_sum": 12,
+    "db_json_bytes": 12,
+    "db_json_bytes_by_phase": {
+      "<none>": 8,
+      "authorization": 4
+    },
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 6,
+    "elapsed_ms": 77.93,
+    "error": {
+      "code": "unknown_snapshot",
+      "handled": true,
+      "type": "ConsoleError"
+    },
+    "method": "GET",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 400
+  },
+  "error-form": {
+    "by_phase_sum": 149682,
+    "db_json_bytes": 149682,
+    "db_json_bytes_by_phase": {
+      "<none>": 44995,
+      "document_load": 81924,
+      "source_read/source_views_read_records": 22763
+    },
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 29,
+    "elapsed_ms": 135.057,
+    "error": null,
+    "method": "POST",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 400
+  },
+  "formation": {
+    "by_phase_sum": 18889194,
+    "db_json_bytes": 18889194,
+    "db_json_bytes_by_phase": {
+      "<none>": 9959568,
+      "authorization": 4,
+      "document_list": 965,
+      "document_list/document_load": 8928649,
+      "processing_status": 4,
+      "selection_projection": 4
+    },
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 17,
+    "elapsed_ms": 3486.059,
+    "error": null,
+    "method": "GET",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/source-selection",
+    "status": 200
+  },
+  "no-json": {
+    "by_phase_sum": 0,
+    "db_json_bytes": 0,
+    "db_json_bytes_by_phase": {},
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 0,
+    "elapsed_ms": 4.029,
+    "error": null,
+    "method": "GET",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/login",
+    "status": 200
+  },
+  "privacy": {
+    "checked_values": {
+      "object_id": 2006,
+      "snapshot_id": 2,
+      "sql": 4
+    },
+    "events": 501,
+    "events_with_snapshot_id": [
+      "processing_checkpoint"
+    ],
+    "hits": {
+      "object_id": 0,
+      "snapshot_id": 2,
+      "sql": 0
+    },
+    "request_event_hits": {
+      "object_id": 0,
+      "snapshot_id": 0,
+      "sql": 0
+    },
+    "request_events": 477
+  },
+  "review-document": {
+    "by_phase_sum": 24015897,
+    "db_json_bytes": 24015897,
+    "db_json_bytes_by_phase": {
+      "<none>": 4,
+      "authorization": 4,
+      "document_load": 8928649,
+      "review_render": 8626491,
+      "review_render/source_views_read_records": 6460749
+    },
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 15,
+    "elapsed_ms": 1353.803,
+    "error": null,
+    "method": "GET",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 200
+  },
+  "save": {
+    "by_phase_sum": 171079,
+    "db_json_bytes": 171079,
+    "db_json_bytes_by_phase": {
+      "<none>": 44995,
+      "source_read/source_views_read_records": 22763,
+      "store_transaction": 103321
+    },
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 68,
+    "elapsed_ms": 210.603,
+    "error": null,
+    "method": "POST",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 303
+  },
+  "truncated": {
+    "by_phase_sum": 83,
+    "db_json_bytes": 83,
+    "db_json_bytes_by_phase": {
+      "<none>": 2,
+      "<overflow>": 19,
+      "authorization/review_bindings": 1,
+      "authorization/review_capture": 1,
+      "authorization/review_index": 1,
+      "authorization/review_projection": 1,
+      "authorization/review_render": 1,
+      "authorization/review_revision": 1,
+      "authorization/review_work_items": 1,
+      "authorization/selection_projection": 1,
+      "authorization/source_accountability": 1,
+      "document_list/review_bindings": 1,
+      "document_list/review_capture": 1,
+      "document_list/review_index": 1,
+      "document_list/review_projection": 1,
+      "document_list/review_render": 1,
+      "document_list/review_revision": 1,
+      "document_list/review_work_items": 1,
+      "document_list/selection_projection": 1,
+      "document_list/source_accountability": 1,
+      "document_load/review_bindings": 1,
+      "document_load/review_capture": 1,
+      "document_load/review_index": 1,
+      "document_load/review_projection": 1,
+      "document_load/review_render": 1,
+      "document_load/review_revision": 1,
+      "document_load/review_work_items": 1,
+      "document_load/selection_projection": 1,
+      "document_load/source_accountability": 1,
+      "document_store_read/review_bindings": 1,
+      "document_store_read/review_capture": 1,
+      "document_store_read/review_index": 1,
+      "document_store_read/review_projection": 1,
+      "document_store_read/review_render": 1,
+      "document_store_read/review_revision": 1,
+      "document_store_read/review_work_items": 1,
+      "document_store_read/selection_projection": 1,
+      "document_store_read/source_accountability": 1,
+      "document_summary/review_bindings": 1,
+      "document_summary/review_capture": 1,
+      "document_summary/review_index": 1,
+      "document_summary/review_projection": 1,
+      "document_summary/review_render": 1,
+      "document_summary/review_revision": 1,
+      "document_summary/review_work_items": 1,
+      "document_summary/selection_projection": 1,
+      "document_summary/source_accountability": 1,
+      "formation_replay/review_bindings": 1,
+      "formation_replay/review_capture": 1,
+      "formation_replay/review_index": 1,
+      "formation_replay/review_projection": 1,
+      "formation_replay/review_render": 1,
+      "formation_replay/review_revision": 1,
+      "formation_replay/review_work_items": 1,
+      "formation_replay/selection_projection": 1,
+      "formation_replay/source_accountability": 1,
+      "objects_read/review_bindings": 1,
+      "objects_read/review_capture": 1,
+      "objects_read/review_index": 1,
+      "objects_read/review_projection": 1,
+      "objects_read/review_render": 1,
+      "objects_read/review_revision": 1,
+      "objects_read/review_work_items": 1,
+      "objects_read/selection_projection": 1
+    },
+    "db_json_bytes_by_phase_truncated": true,
+    "db_queries": 82,
+    "elapsed_ms": 27.545,
+    "error": null,
+    "forced_phase_paths": 81,
+    "max_tree_nodes": 64,
+    "method": "GET",
+    "outcome": "completed",
+    "phase_tree_truncated": true,
+    "route": "/tree",
+    "status": 200
+  }
+}

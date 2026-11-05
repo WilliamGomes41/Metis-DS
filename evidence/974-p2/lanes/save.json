@@ -1,0 +1,35 @@
+{
+  "head": {
+    "by_phase_sum": 171079,
+    "db_json_bytes": 171079,
+    "db_json_bytes_by_phase": {
+      "<none>": 44995,
+      "source_read/source_views_read_records": 22763,
+      "store_transaction": 103321
+    },
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 68,
+    "elapsed_ms": 210.603,
+    "error": null,
+    "method": "POST",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 303
+  },
+  "pass": true,
+  "trunk": {
+    "by_phase_sum": null,
+    "db_json_bytes": 171079,
+    "db_json_bytes_by_phase": null,
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 68,
+    "elapsed_ms": 193.133,
+    "error": null,
+    "method": "POST",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 303
+  }
+}

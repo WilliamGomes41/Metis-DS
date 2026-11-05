@@ -1,0 +1,23 @@
+{
+  "head": {
+    "by_phase_sum": 24015897,
+    "db_json_bytes": 24015897,
+    "db_json_bytes_by_phase": {
+      "<none>": 4,
+      "authorization": 4,
+      "document_load": 8928649,
+      "review_render": 8626491,
+      "review_render/source_views_read_records": 6460749
+    },
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 15,
+    "elapsed_ms": 1353.803,
+    "error": null,
+    "method": "GET",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 200
+  },
+  "pass": true
+}

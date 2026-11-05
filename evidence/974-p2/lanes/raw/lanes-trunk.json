@@ -1,0 +1,172 @@
+{
+  "concurrent": [
+    {
+      "by_phase_sum": null,
+      "db_json_bytes": 24082837,
+      "db_json_bytes_by_phase": null,
+      "db_json_bytes_by_phase_truncated": false,
+      "db_queries": 19,
+      "elapsed_ms": 3187.501,
+      "error": null,
+      "method": "GET",
+      "outcome": "completed",
+      "phase_tree_truncated": false,
+      "route": "/review",
+      "status": 200
+    },
+    {
+      "by_phase_sum": null,
+      "db_json_bytes": 18890155,
+      "db_json_bytes_by_phase": null,
+      "db_json_bytes_by_phase_truncated": false,
+      "db_queries": 17,
+      "elapsed_ms": 4893.908,
+      "error": null,
+      "method": "GET",
+      "outcome": "completed",
+      "phase_tree_truncated": false,
+      "route": "/source-selection",
+      "status": 200
+    }
+  ],
+  "conflict": {
+    "by_phase_sum": null,
+    "db_json_bytes": 52416,
+    "db_json_bytes_by_phase": null,
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 15,
+    "elapsed_ms": 113.167,
+    "error": null,
+    "method": "POST",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 409
+  },
+  "error": {
+    "by_phase_sum": null,
+    "db_json_bytes": 12,
+    "db_json_bytes_by_phase": null,
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 6,
+    "elapsed_ms": 82.926,
+    "error": {
+      "code": "unknown_snapshot",
+      "handled": true,
+      "type": "ConsoleError"
+    },
+    "method": "GET",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 400
+  },
+  "error-form": {
+    "by_phase_sum": null,
+    "db_json_bytes": 149682,
+    "db_json_bytes_by_phase": null,
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 29,
+    "elapsed_ms": 162.567,
+    "error": null,
+    "method": "POST",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 400
+  },
+  "formation": {
+    "by_phase_sum": null,
+    "db_json_bytes": 18889194,
+    "db_json_bytes_by_phase": null,
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 17,
+    "elapsed_ms": 3549.88,
+    "error": null,
+    "method": "GET",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/source-selection",
+    "status": 200
+  },
+  "no-json": {
+    "by_phase_sum": null,
+    "db_json_bytes": 0,
+    "db_json_bytes_by_phase": null,
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 0,
+    "elapsed_ms": 4.035,
+    "error": null,
+    "method": "GET",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/login",
+    "status": 200
+  },
+  "privacy": {
+    "checked_values": {
+      "object_id": 2006,
+      "snapshot_id": 2,
+      "sql": 4
+    },
+    "events": 501,
+    "events_with_snapshot_id": [
+      "processing_checkpoint"
+    ],
+    "hits": {
+      "object_id": 0,
+      "snapshot_id": 2,
+      "sql": 0
+    },
+    "request_event_hits": {
+      "object_id": 0,
+      "snapshot_id": 0,
+      "sql": 0
+    },
+    "request_events": 477
+  },
+  "review-document": {
+    "by_phase_sum": null,
+    "db_json_bytes": 24015897,
+    "db_json_bytes_by_phase": null,
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 15,
+    "elapsed_ms": 1392.741,
+    "error": null,
+    "method": "GET",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 200
+  },
+  "save": {
+    "by_phase_sum": null,
+    "db_json_bytes": 171079,
+    "db_json_bytes_by_phase": null,
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 68,
+    "elapsed_ms": 193.133,
+    "error": null,
+    "method": "POST",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 303
+  },
+  "truncated": {
+    "by_phase_sum": null,
+    "db_json_bytes": 83,
+    "db_json_bytes_by_phase": null,
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 82,
+    "elapsed_ms": 21.439,
+    "error": null,
+    "forced_phase_paths": 81,
+    "max_tree_nodes": 64,
+    "method": "GET",
+    "outcome": "completed",
+    "phase_tree_truncated": true,
+    "route": "/tree",
+    "status": 200
+  }
+}
