@@ -3,6 +3,10 @@
 The formation problem report stays identical; only repeated deep comparison of
 the same immutable source input disappears. Mutable inputs keep their
 mutation detection.
+
+# release-control-evidence: scope/belofte
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 import json
 import logging
