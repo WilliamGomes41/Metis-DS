@@ -102,7 +102,7 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 
 - [ ] Add `KO_STATES`, the eleven states Kandidaat, Context open, Bewijs open, Samengesteld, In review, Tweede review, Goedgekeurd, Gepubliceerd, Vervangen, Ingetrokken and Afgewezen, as a closed tuple in `knowledge_object_state_v1.py`.
 - [ ] Add `derive_ko_state(obj, *, bindings, duty, accountability, release)` that returns `{"state", "reasons", "invalid"}` and never writes. It reads `admission_of`, `passage_register_of`, `review_passage`, `review_stage`, `object_review_bindings`, `definitive_review_disposition` and `document_release_serving_status`, the existing classifiers listed in Appendix D.
-- [ ] Add `INVALID_COMBINATIONS`, each a named predicate with a code. Start with approved without a valid binding, approved with register `not_yet_assessed`, published while not approved, persisted legacy `revise`, second-review mirror approved without a second binding, `superseded` without `superseded_by`, and an eindoordeel outside `ALLOWED_FINAL_BY_SUITABILITY`.
+- [ ] Add `INVALID_CODES`, one code per forbidden combination. Start with approved without a valid binding, approved with register `not_yet_assessed`, persisted legacy `revise`, second-review mirror approved without a second binding, an approval outside `ALLOWED_FINAL_BY_SUITABILITY`, a register that disagrees with the reviewed suitability, and an invalid disposition. `superseded` without `superseded_by` is not invalid, because same-source reprocessing retires a removed candidate that way by design. Published while not approved needs the per-object registry and lands in KO-3.
 - [ ] Add `FINAL_VALIDATION_STATUSES` and `RETIRED_VALIDATION_STATUSES` as the single definition of the duplicated sets in `operations_console_app.py`, `review_duty_v1.py`, `source_containers_v1.py`, `deterministic_review_repair_v1.py` and `workflow_badge_counts_postgres_v1.py`. Do not migrate those callers yet.
 - [ ] Add `scripts/ko_state_inventory.py`, a read-only PostgreSQL script that prints counts per state and per invalid code. It prints no object ids, titles or text.
 - [ ] Document the field-to-state table in `evidence/ko-1/README.md`, one row per state with the guard expression.
@@ -228,6 +228,7 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 
 - [ ] Compute `REVIEW_WORK_INCOMPLETE`, `SOURCE_PASSAGE_REVIEW_INCOMPLETE`, `REVIEW_REPAIR_INCOMPLETE` and `REVIEW_DISPOSITION_INCONSISTENT` from `derive_ko_state` per object. The blocker codes and the publish refusal audit stay unchanged.
 - [ ] Make `retrieval_projection_v2.publication_errors` include only KOs in Goedgekeurd and read nothing else.
+- [ ] Add the invalid code `published_not_approved` to `knowledge_object_state_v1.INVALID_CODES`, read from the per-object registry.
 - [ ] Replace the SQL copy of the final set in `workflow_badge_counts_postgres_v1.py` with a value generated from `FINAL_VALIDATION_STATUSES`, and pin equality with a test.
 - [ ] Show per object on the readiness page which state blocks it, per the per-object decision. If the operator chose per document, show the same list without a per-object publish action.
 

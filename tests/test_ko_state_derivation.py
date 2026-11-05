@@ -160,3 +160,12 @@ def test_duplicated_final_sets_agree_with_the_single_definition():
         obj = {"governance": {"validation_status": status}}
         assert _review_is_final(obj) is (status in ko.FINAL_VALIDATION_STATUSES)
         assert _terminal_without_open_review(obj) is (status in ko.RETIRED_VALIDATION_STATUSES)
+
+
+def test_reprocess_retirement_without_successor_is_vervangen_and_valid(fixed):
+    # revision_workflow.reprocessed_history retires a removed candidate as superseded
+    # without superseded_by; that supported flow is not a malformed record.
+    fixed(None)
+    result = _state(_obj("superseded"))
+    assert result["state"] == ko.VERVANGEN
+    assert result["invalid"] == []
