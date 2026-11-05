@@ -4,13 +4,19 @@ A revise decision on ``POST /review`` renders the repair page in the
 structured-repair exception handler. The page must read the document
 envelope, its current objects and the prepared review source at most once,
 as the ``GET /source-selection?task=repair`` page does, and its HTML must not
-change.
+change. The snapshot is request-local: a later render sees a write made in
+between (no stale state), and concurrent renders each own their reads.
 
 # release-control-evidence: scope/belofte
+# release-control-evidence: opslag concurrent stale
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+import html
+import re
+import threading
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext
 
 import pytest
@@ -46,11 +52,15 @@ def repair_document(tmp_path, production_console, production_app):
     )["snapshot_id"]
     obj = next(row for row in console.snapshot_objects(sid)
                if (row.get("content") or {}).get("clean_text") == _text(0))
-    client = TestClient(production_app(console), base_url="https://testserver")
+    return console, _signed_in(production_app(console)), sid, obj
+
+
+def _signed_in(app):
+    client = TestClient(app, base_url="https://testserver")
     login = client.post("/login", data={"username": "reviewer", "password": "fixture-only"},
                         headers={"origin": "https://testserver"}, follow_redirects=False)
     assert login.status_code in (302, 303)
-    return console, client, sid, obj
+    return client
 
 
 def _revise(console, sid, obj):
@@ -65,14 +75,14 @@ def render_reads(monkeypatch, console):
     """Count authoritative store reads made while the repair page renders."""
     from src.review import deterministic_review_repair_v1 as repair
     from src.workflows.formation_task_store_v1 import FormationTaskStore
-    reads, rendering = [], []
+    reads, rendering = [], set()
     store = type(console.workflow_document_store)
 
     def counted(owner, name):
         original = getattr(owner, name)
 
         def call(*args, **kwargs):
-            if rendering:
+            if threading.get_ident() in rendering:
                 reads.append(name)
             return original(*args, **kwargs)
         monkeypatch.setattr(owner, name, call)
@@ -83,11 +93,11 @@ def render_reads(monkeypatch, console):
     render = repair.render_repair
 
     def observed(*args, **kwargs):
-        rendering.append(True)
+        rendering.add(threading.get_ident())
         try:
             return render(*args, **kwargs)
         finally:
-            rendering.pop()
+            rendering.discard(threading.get_ident())
     monkeypatch.setattr(repair, "render_repair", observed)
     yield reads
 
@@ -138,3 +148,39 @@ def test_current_object_stays_a_detached_copy_inside_a_read_snapshot(repair_docu
     assert again["content"]["clean_text"] == listed["content"]["clean_text"] == _text(0)
     assert again["governance"]["validation_status"] == listed["governance"]["validation_status"] == "needs_review"
     assert again is not mine
+
+
+def _hidden(page, name):
+    return html.unescape(re.search(f'<input type="hidden" name="{name}" value="([^"]*)">', page).group(1))
+
+
+def test_next_render_sees_a_repair_saved_after_the_previous_render(repair_document):
+    """No state outlives a render: the page after a saved repair shows the new passage and revision."""
+    console, client, sid, obj = repair_document
+    path = f"/source-selection?document={sid}&object={obj['object_id']}&task=repair"
+    before = client.get(path).text
+    first_sentence = "Begrip 0 is een beschrijving van een afzonderlijke waarneming in de zorg."
+    unit = re.search(r'<option value="([^"]*)" >Richtlijn — ' + re.escape(first_sentence) + "</option>", before).group(1)
+    saved = client.post("/review/resolve", headers={"origin": "https://testserver"}, follow_redirects=False, data={
+        "snapshot_id": sid, "object_id": obj["object_id"], "snapshot_revision": _hidden(before, "snapshot_revision"),
+        "suitability": "mist_context", "comment": "Alleen de eerste bronzin.", "repair_kind": "source_units",
+        "source_unit_ids": [html.unescape(unit)]})
+    assert saved.status_code == 303, saved.text[:300]
+    after = client.get(path).text
+    assert f"<p><b>Huidige passage:</b> {_text(0)}</p>" in before
+    assert f"<p><b>Huidige passage:</b> {first_sentence}</p>" in after
+    assert _hidden(after, "snapshot_revision") == console.objects_revision(sid)
+    assert _hidden(after, "snapshot_revision") != _hidden(before, "snapshot_revision")
+
+
+def test_concurrent_renders_each_read_once_and_agree(repair_document, production_app, monkeypatch):
+    console, client, sid, obj = repair_document
+    clients = [client, _signed_in(production_app(console))]
+    payload = _revise(console, sid, obj)
+    with render_reads(monkeypatch, console) as reads, ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(pool.map(
+            lambda c: c.post("/review", data=payload, headers={"origin": "https://testserver"}), clients))
+    assert [r.status_code for r in responses] == [200, 200]
+    assert responses[0].text == responses[1].text
+    assert f"<p><b>Huidige passage:</b> {_text(0)}</p>" in responses[0].text
+    assert dict(Counter(reads)) == {name: 2 * count for name, count in ONCE.items()}
