@@ -162,3 +162,17 @@ def test_only_build_app_bootstraps_accounts(tmp_path, complete_postgres, monkeyp
     app = console_asgi.build_app()
     kernel = app.state.operations_kernel
     assert kernel.workflow_identity_store.account_by_username("beheer.ko1") is not None
+
+
+def test_inventory_reads_bindings_per_snapshot_not_the_whole_table(ready, monkeypatch):
+    # Codex on #996: outside a read operation the PostgreSQL override reads every binding.
+    console, _accounts, snapshot_id, _ = ready
+    store = console.workflow_review_store
+    calls = []
+    original = store.read_bindings
+    def spy(snapshot_ids=None):
+        calls.append(snapshot_ids)
+        return original(snapshot_ids) if snapshot_ids is not None else original()
+    monkeypatch.setattr(store, "read_bindings", spy)
+    ko.snapshot_ko_states(console, console._envelope(snapshot_id))
+    assert calls and all(ids == [snapshot_id] for ids in calls)

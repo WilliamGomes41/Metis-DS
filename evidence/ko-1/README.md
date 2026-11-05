@@ -16,11 +16,11 @@ De regels worden van boven naar beneden gelezen. De eerste regel die past, geeft
 
 | # | Voorwaarde | Toestand |
 |---|---|---|
-| 0 | Document, kop of bronrecord (`candidate_lifecycle` is `structure` of `source`) | geen kennisobject |
+| 0 | Document, kop, bronrecord (`candidate_lifecycle` is `structure` of `source`) of een `path` in een beslisboom | geen kennisobject |
 | 1 | `validation_status = superseded` | Vervangen |
 | 2 | `validation_status = rejected` | Afgewezen |
 | 3 | `validation_status = revise` (oude werkwijze) | Kandidaat, plus `legacy_revise_persisted` |
-| 4 | `approved` en de eerste review is nog open | In review, plus `approved_without_current_binding` |
+| 4 | `approved` en de eerste review is nog open | In review, plus `approved_without_current_binding` (geen geldige binding) of `approved_mirror_with_open_first_review` (wel een) |
 | 5 | `approved` en de tweede review is open | Tweede review |
 | 6 | `approved` en de release van het document is `published`, `superseded` of `withdrawn` | Gepubliceerd, Vervangen of Ingetrokken |
 | 7 | `approved` | Goedgekeurd |
@@ -41,6 +41,7 @@ De uitweg "niet van toepassing" bestaat nog niet. KO-4 voegt die toe als vastgel
 | Code | Betekenis |
 |---|---|
 | `approved_without_current_binding` | De spiegel zegt `approved`, maar er is geen geldige binding op deze exacte revisie |
+| `approved_mirror_with_open_first_review` | De spiegel zegt `approved` en er is nog een geldige binding, maar de eerste review is weer open, bijvoorbeeld na het vervangen van de eerste reviewer |
 | `approved_with_passage_not_assessed` | Goedgekeurd terwijl de passage nog `not_yet_assessed` is |
 | `legacy_revise_persisted` | Er staat een opgeslagen `revise` |
 | `second_review_mirror_disagrees` | De spiegel `governance.second_review` zegt klaar, maar de bindingen niet |

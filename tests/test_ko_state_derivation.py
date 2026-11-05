@@ -169,3 +169,25 @@ def test_reprocess_retirement_without_successor_is_vervangen_and_valid(fixed):
     result = _state(_obj("superseded"))
     assert result["state"] == ko.VERVANGEN
     assert result["invalid"] == []
+
+
+def test_boom_path_is_structure_not_a_knowledge_object(fixed):
+    # Codex on #996: on the boom path, `path` is structure (operations_console_v1.review_lane).
+    fixed(None)
+    path_obj = dict(_obj(), object_type="path", confirmed_object_type="path")
+    assert ko.derive_ko_state(path_obj, review_path="boom")["state"] is None
+    node = dict(_obj(), object_type="node")
+    assert ko.derive_ko_state(node, review_path="boom")["state"] is not None
+
+
+def test_replaced_primary_keeps_the_other_binding_and_reports_the_mirror(fixed, monkeypatch):
+    # Codex on #996: a still-valid second binding is not "no current binding", and the
+    # second-review mirror is checked independently of the open stage.
+    fixed(FIRST_REVIEW)
+    monkeypatch.setattr(ko, "exact_current_approver_ids", lambda obj, bindings: ("secondary",))
+    obj = _obj("approved", second={"required": True, "status": "approved"})
+    result = _state(obj)
+    assert result["state"] == ko.IN_REVIEW
+    assert result["invalid"] == ["approved_mirror_with_open_first_review", "second_review_mirror_disagrees"]
+    monkeypatch.setattr(ko, "exact_current_approver_ids", lambda obj, bindings: ())
+    assert "approved_without_current_binding" in _state(obj)["invalid"]

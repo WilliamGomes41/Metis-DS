@@ -19,7 +19,9 @@ from src.knowledge_relations_v1 import (
 )
 from src.review.knowledge_path_v1 import candidate_lifecycle
 from src.review.review_disposition_v1 import definitive_review_disposition
-from src.review.review_duty_v1 import FIRST_REVIEW, SECOND_REVIEW, review_stage
+from src.review.review_duty_v1 import (
+    FIRST_REVIEW, SECOND_REVIEW, authoritative_review_type, exact_current_approver_ids, review_stage,
+)
 from src.vorming.admission_gate_v1 import GATE_BLOCKED, admission_of
 from src.vorming.passage_register_v1 import passage_register_of, register_status_from_suitability
 
@@ -51,6 +53,7 @@ CONTEXT_UNRESOLVED = "context_necessary_unresolved"
 
 INVALID_CODES = (
     "approved_without_current_binding",
+    "approved_mirror_with_open_first_review",
     "approved_with_passage_not_assessed",
     "legacy_revise_persisted",
     "second_review_mirror_disagrees",
@@ -64,9 +67,12 @@ INVALID_CODES = (
 _RELEASE_STATE = {"published": GEPUBLICEERD, "superseded": VERVANGEN, "withdrawn": INGETROKKEN}
 
 
-def is_knowledge_object(obj: dict[str, Any]) -> bool:
-    """Documents, headings and source records are not knowledge objects."""
+def is_knowledge_object(obj: dict[str, Any], review_path: str | None = None) -> bool:
+    """Documents, headings, boom paths and source records are not knowledge objects."""
     if str(obj.get("object_type") or "") == "document":
+        return False
+    # On the boom path a ``path`` is structure, never advice (review_lane).
+    if review_path == "boom" and authoritative_review_type(obj) == "path":
         return False
     return candidate_lifecycle(obj) not in {"structure", "source"}
 
@@ -124,7 +130,7 @@ def derive_ko_state(
     ``state`` is ``None`` for an object that is not a knowledge object. Every
     knowledge object gets exactly one state from ``KO_STATES``.
     """
-    if not is_knowledge_object(obj):
+    if not is_knowledge_object(obj, review_path):
         return {"state": None, "reasons": ["not_knowledge_object"], "invalid": []}
     fragments = list(fragments) if fragments is not None else None
     own = _own_bindings(obj, bindings)
@@ -153,12 +159,15 @@ def derive_ko_state(
             invalid.append("approved_with_passage_not_assessed")
         second = governance.get("second_review")
         mirror_done = isinstance(second, dict) and second.get("status") == "approved"
+        # Each check reads the bindings and the mirror on its own, not via the stage alone.
         if stage == FIRST_REVIEW:
-            invalid.append("approved_without_current_binding")
+            invalid.append("approved_mirror_with_open_first_review"
+                           if exact_current_approver_ids(obj, own) else "approved_without_current_binding")
+        if mirror_done and stage in (FIRST_REVIEW, SECOND_REVIEW):
+            invalid.append("second_review_mirror_disagrees")
+        if stage == FIRST_REVIEW:
             return result(IN_REVIEW, "review_stage_first")
         if stage == SECOND_REVIEW:
-            if mirror_done:
-                invalid.append("second_review_mirror_disagrees")
             return result(TWEEDE_REVIEW, "review_stage_second")
         released = _RELEASE_STATE.get(release_status)
         if released:
@@ -185,10 +194,12 @@ def snapshot_ko_states(console: Any, envelope: dict[str, Any]) -> list[dict[str,
     """Derive every current object's state in one snapshot through the console's own reads."""
     from src.review.beslisboom_path_v1 import review_path_for_klasse
     snapshot_id = str(envelope["snapshot_id"])
-    objects = console.snapshot_objects(snapshot_id, envelope=envelope)
-    bindings = console.object_review_bindings(snapshot_id, objects=objects)
-    fragments = console.review_source_fragments(snapshot_id, envelope=envelope, objects=objects)
-    release = console.document_release_serving_status(snapshot_id, envelope=envelope)
+    # One read operation per snapshot: bindings are read for this snapshot only.
+    with console.document_read_operation():
+        objects = console.snapshot_objects(snapshot_id, envelope=envelope)
+        bindings = console.object_review_bindings(snapshot_id, objects=objects)
+        fragments = console.review_source_fragments(snapshot_id, envelope=envelope, objects=objects)
+        release = console.document_release_serving_status(snapshot_id, envelope=envelope)
     path = review_path_for_klasse(str(envelope.get("class") or ""))
     return [
         derive_ko_state(obj, review_path=path, bindings=bindings, fragments=fragments,
