@@ -22,6 +22,13 @@ def handoff(**changes):
     return "<!-- metis-linear-handoff-v1\n" + json.dumps(value) + "\n-->"
 
 
+def test_incident_pr_handoff_is_supported_by_repository_bindings():
+    bindings = sync.load_bindings()
+    body = "Part of MET-48.\n" + handoff(linear_issue="MET-48")
+    sync.validate_pr_handoff(body, SHA, bindings)
+    assert sync.Binding(974, "MET-48") in bindings
+
+
 class GitHub:
     def __init__(self):
         self.issue = {"number": 729, "state": "open", "html_url": sync.REPO_URL + "/issues/729", "body": ""}
