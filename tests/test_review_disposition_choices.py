@@ -237,3 +237,16 @@ def test_no_knowledge_with_correction_is_refused_with_the_explanation(review_sys
         "‘Later beoordelen’. Je beoordeling is niet opgeslagen. Ga terug naar de passage en kies een "
         "besluit dat past.")
     assert _review_event_count(console) == before
+
+
+@pytest.mark.parametrize("legacy", [False, True], ids=["prepared", "serial"])
+def test_no_knowledge_deferral_ignores_a_stale_discrepancy(review_system, monkeypatch, legacy):
+    # Without JavaScript a discrepancy ticked before choosing "no knowledge unit" is still posted.
+    console, client, sid, _actor, ids = review_system
+    if legacy:
+        _legacy_review_window(monkeypatch, console)
+    data = _review_form(client, sid, ids[0], suitability="geen_kenniseenheid",
+                        eindoordeel="later_beoordelen", decision="", comment="",
+                        source_discrepancy=["context_ontbreekt"])
+    response = client.post("/review", data=data, follow_redirects=False)
+    assert response.status_code == 303, response.text[:300]
