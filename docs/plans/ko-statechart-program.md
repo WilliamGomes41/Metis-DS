@@ -275,7 +275,7 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 
 ## Route every KO change through one transition table (KO-4)
 
-**Depends on.** KO-2, KO-3 and the operator's answer on mandatory evidence.
+**Depends on.** KO-2, KO-3, the operator's answer on mandatory evidence (given), and #942 for the source-context commands.
 
 **Files.**
 
@@ -491,6 +491,15 @@ Measured facts this plan relies on come from the read-only map of 5 November 202
 - KO-6. The migration is destructive. Only the operator runs it, after a backup and a restore drill.
 - Program. The swarm worker model and `control-ui` are not available in this cloud session. Lanes then run as Playwright scripts beside `tests/browser_review_disposition_check.cjs`, each still saving its screenshot and stating its pass predicate.
 - Program. The statechart skill is absent from the pinned plugins fork. Installing it follows `docs/agents/statechart-integration.md` as its own Class C change and is not a dependency of KO-1.
+
+Work that runs beside this program, so no PR builds a second way.
+
+- #990 is the product acceptance for the review card. KO-2 builds its state header and receipt, and KO-4 builds its three questions as transition guards. Nobody changes the review card for #990 outside KO-2 and KO-4.
+- #991 owns the per-object publish action and its contract. KO-3 only derives readiness per object and adds no publish action.
+- #992 measures the Athena package, which stays derived on read.
+- #942 owns the single writer for source roles. KO-4 routes the source-context commands through `apply_ko_event` only on top of that writer, so the source-context part of KO-4 waits for #942.
+- #952 owns the evidence and transaction boundary for review and publication decisions. KO-4 calls the existing writers inside that boundary and adds no transaction of its own.
+- #986 records the definition and the review measure. Its open items do not block KO-1 to KO-3.
 
 Product decisions recorded by the operator.
 
