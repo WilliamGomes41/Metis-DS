@@ -6,6 +6,7 @@ counts only.
 
 # release-control-evidence: scope/belofte een afgeleide toestand per kennisobject
 # release-control-evidence: opslag postgres read-only inventaris, herstart stale recovery
+# release-control-evidence: toegang bootstrap-account alleen via build_app, niet via compose_console
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
@@ -26,6 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 pytestmark = [
     pytest.mark.release_control_opslag,
+    pytest.mark.release_control_toegang,
     pytest.mark.release_control_scope_belofte,
     pytest.mark.release_control_slop,
     pytest.mark.release_control_releasebewijs,
@@ -148,3 +150,15 @@ def test_fresh_ingest_is_before_approval_and_approval_moves_one_object(tmp_path,
     assert after[target]["invalid"] == []
     assert {oid: row for oid, row in after.items() if oid != target} == {
         oid: row for oid, row in before.items() if oid != target}
+
+
+def test_only_build_app_bootstraps_accounts(tmp_path, complete_postgres, monkeypatch):
+    from src import console_asgi
+    configure_production(monkeypatch, tmp_path, complete_postgres)
+    monkeypatch.setenv("CONSOLE_BOOTSTRAP_USERNAME", "beheer.ko1")
+    monkeypatch.setenv("CONSOLE_BOOTSTRAP_PASSWORD", "ko1-" + "x" * 16)
+    composed, _ = console_asgi.compose_console()
+    assert composed.workflow_identity_store.account_by_username("beheer.ko1") is None
+    app = console_asgi.build_app()
+    kernel = app.state.operations_kernel
+    assert kernel.workflow_identity_store.account_by_username("beheer.ko1") is not None
