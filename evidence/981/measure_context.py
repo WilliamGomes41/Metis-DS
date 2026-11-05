@@ -6,18 +6,23 @@ heading, position). The script prints aggregates only, never source text.
 """
 import json, sys, subprocess
 sys.path.insert(0, '.')
-from src.vorming.bounded_formation_v1 import tasks_for, MAX_CONTEXT_CHARS
+from src.vorming.bounded_formation_v1 import tasks_for, MAX_CONTEXT_CHARS, _module_depth, _shared_root, _path
 blocks = json.load(open(sys.argv[1]))
 tasks = tasks_for(blocks, blocks)
+# Module key at the same depth the production code detects (below a title, if any).
+_sectioned = [b for b in blocks if _path(b)]
+DEPTH = _module_depth(_sectioned, _shared_root(_sectioned))
+def module(path):
+    return tuple(path[:DEPTH])
 sizes = [sum(len(b['text']) for b in t['evidence_blocks']) for t in tasks]
 rec = [t for t in tasks if 'Aanbevelingen' in t['section_path']]
 def has(t, name):
-    return any(b['section_path'][:1] == t['section_path'][:1] and name in b['section_path'] for b in t['evidence_blocks'])
-foreign = sum(any(b.get('heading') and b['section_path'][:1] != t['section_path'][:1] for b in t['evidence_blocks']) for t in tasks)
+    return any(module(b['section_path']) == module(t['section_path']) and name in b['section_path'] for b in t['evidence_blocks'])
+foreign = sum(any(b.get('heading') and module(b['section_path']) != module(t['section_path']) for b in t['evidence_blocks']) for t in tasks)
 s = sorted(sizes)
 print(json.dumps({"tasks": len(tasks), "context_chars_total": sum(sizes), "context_chars_median": s[len(s)//2],
   "context_chars_max": max(sizes), "over_limit": sum(x > MAX_CONTEXT_CHARS for x in sizes),
   "tasks_with_foreign_module_heading": foreign, "recommendation_section_tasks": len(rec),
   "with_rationale": sum(has(t, 'Rationale') for t in rec),
   "with_considerations": sum(has(t, 'Van bewijs naar aanbeveling (overwegingen)') for t in rec),
-  "module_context_tasks": sum(x > 0 and len(t['evidence_blocks']) > 0 and any(b['section_path'] != t['section_path'] and not b.get('heading') for b in t['evidence_blocks']) for t, x in zip(tasks, sizes))}))
+  "module_depth": DEPTH, "module_context_tasks": sum(x > 0 and len(t['evidence_blocks']) > 0 and any(b['section_path'] != t['section_path'] and not b.get('heading') for b in t['evidence_blocks']) for t, x in zip(tasks, sizes))}))
