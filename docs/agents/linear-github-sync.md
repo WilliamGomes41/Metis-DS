@@ -35,7 +35,9 @@ nodig. De worker bevat geen issueUpdate-/projectmutaties.
    repositorysecret `LINEAR_API_KEY` in GitHub **Settings → Secrets and variables
    → Actions**. Niet in chat, issues, bestanden of workflowlogs plakken.
 3. Controleer GitHub Actions-toegang. Het ingebouwde `GITHUB_TOKEN` heeft alleen
-   `contents: read`, `issues: read` en `pull-requests: read`; GitHub-write of
+   `contents: read`, `issues: read` en `pull-requests: read`. Eén uitzondering:
+   job `request-sync` krijgt alleen `actions: write` om de sync op main te
+   starten; die job checkt geen code uit. Andere GitHub-write of
    productiesleutels zijn niet nodig. Het token voor ChatGPT's connector is niet
    beschikbaar in GitHub Actions en wordt niet geëxporteerd.
 4. Open **Actions → GitHub Linear sync → Run workflow**, op main. Bij ontbrekende
@@ -55,7 +57,12 @@ nodig. De worker bevat geen issueUpdate-/projectmutaties.
    afhankelijkheid van een chat. Publiceer geen geheime sleutel als bewijs.
 
 De workflow reageert op PR-/issue-/commentgebeurtenissen en heeft een herstelrun
-op minuut 17 van ieder uur. GitHub bepaalt uitvoering en wachtrijen; dit is geen
+op minuut 17 van ieder uur. Een gebeurtenis start via job `request-sync` een
+handmatige run (`workflow_dispatch`) op main; alleen die run en de uurrun
+voeren `reconcile` uit, één tegelijk. Een wachtende run die door een nieuwere
+wordt vervangen, mist niets, want elke run synchroniseert alle koppelingen. Zo'n
+vervanging en een Linear-storing staan daardoor niet meer als falende check op
+een PR. Bekijk ze in de Actions-runhistorie. GitHub bepaalt uitvoering en wachtrijen; dit is geen
 realtime- of ononderbroken-servicegarantie. Bekijk Actions-notificaties en
 runhistorie voor falen of uitgeschakelde schedules.
 
