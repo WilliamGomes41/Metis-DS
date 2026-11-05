@@ -155,11 +155,11 @@ def derive_ko_state(
         mirror_done = isinstance(second, dict) and second.get("status") == "approved"
         if stage == FIRST_REVIEW:
             invalid.append("approved_without_current_binding")
-            return result(IN_REVIEW, "first_review_open")
+            return result(IN_REVIEW, "review_stage_first")
         if stage == SECOND_REVIEW:
             if mirror_done:
                 invalid.append("second_review_mirror_disagrees")
-            return result(TWEEDE_REVIEW, "second_review_open")
+            return result(TWEEDE_REVIEW, "review_stage_second")
         released = _RELEASE_STATE.get(release_status)
         if released:
             return result(released, f"release_{release_status}")
@@ -175,9 +175,9 @@ def derive_ko_state(
     if not has_evidence(obj):
         return result(BEWIJS_OPEN, "no_supporting_evidence")
     if stage == FIRST_REVIEW:
-        return result(IN_REVIEW, "first_review_open")
+        return result(IN_REVIEW, "review_stage_first")
     if stage == SECOND_REVIEW:
-        return result(TWEEDE_REVIEW, "second_review_open")
+        return result(TWEEDE_REVIEW, "review_stage_second")
     return result(SAMENGESTELD, "package_complete_no_open_review")
 
 
