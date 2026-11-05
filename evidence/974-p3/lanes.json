@@ -1,0 +1,483 @@
+{
+  "head_commit": "0a78aa1",
+  "lane_7_restated": "stale token plus conflict returns a 4xx refusal and the review event count is unchanged (trunk 409 write-conflict re-render, head 400 review_disposition_conflict)",
+  "lanes": {
+    "1_regression": {
+      "head": {
+        "db_queries": 9,
+        "elapsed_ms": 113.131,
+        "error_code": "review_disposition_conflict",
+        "location": null,
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": false,
+        "status": 400,
+        "store_transaction": false
+      },
+      "trunk": {
+        "db_queries": 48,
+        "elapsed_ms": 1624.828,
+        "error_code": "review_disposition_conflict",
+        "location": null,
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch",
+          "source_prepare",
+          "source_read",
+          "source_verify",
+          "source_views_hydrate",
+          "source_views_read_records",
+          "source_views_validate",
+          "store_lock_hold",
+          "store_lock_wait",
+          "store_transaction"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": true,
+        "status": 400,
+        "store_transaction": true
+      }
+    },
+    "1_regression_prepared": {
+      "head": {
+        "db_queries": 9,
+        "elapsed_ms": 104.24,
+        "error_code": "review_disposition_conflict",
+        "location": null,
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": false,
+        "status": 400,
+        "store_transaction": false
+      },
+      "trunk": {
+        "db_queries": 26,
+        "elapsed_ms": 741.007,
+        "error_code": "review_disposition_conflict",
+        "location": null,
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch",
+          "source_prepare",
+          "source_read",
+          "source_verify",
+          "source_views_hydrate",
+          "source_views_read_records",
+          "source_views_validate"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": true,
+        "status": 400,
+        "store_transaction": false
+      }
+    },
+    "2_mist_context": {
+      "head": {
+        "db_queries": 9,
+        "elapsed_ms": 99.871,
+        "error_code": "review_disposition_conflict",
+        "location": null,
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": false,
+        "status": 400,
+        "store_transaction": false
+      },
+      "trunk": {
+        "db_queries": 48,
+        "elapsed_ms": 1596.334,
+        "error_code": "review_disposition_conflict",
+        "location": null,
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch",
+          "source_prepare",
+          "source_read",
+          "source_verify",
+          "source_views_hydrate",
+          "source_views_read_records",
+          "source_views_validate",
+          "store_lock_hold",
+          "store_lock_wait",
+          "store_transaction"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": true,
+        "status": 400,
+        "store_transaction": true
+      }
+    },
+    "3_allowed": {
+      "head": {
+        "db_queries": 83,
+        "elapsed_ms": 1635.545,
+        "error_code": null,
+        "location": "/review?document=snap-57fdc21e214ae873-2569589c&after=console-probe-probe-974-p3-1-0-57fdc21e-sem-4671d7f080cb2947",
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch",
+          "document_load",
+          "objects_read",
+          "review_bindings",
+          "source_prepare",
+          "source_read",
+          "source_reconstruction",
+          "source_verify",
+          "source_views_hydrate",
+          "source_views_read_records",
+          "source_views_validate",
+          "store_lock_hold",
+          "store_lock_wait",
+          "store_transaction"
+        ],
+        "review_events_delta": 1,
+        "source_preparation": true,
+        "status": 303,
+        "store_transaction": true
+      },
+      "trunk": {
+        "db_queries": 83,
+        "elapsed_ms": 2105.374,
+        "error_code": null,
+        "location": "/review?document=snap-57fdc21e214ae873-2569589c&after=console-probe-probe-974-p3-1-0-57fdc21e-sem-5ae0d60892b863b7",
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch",
+          "document_load",
+          "objects_read",
+          "review_bindings",
+          "source_prepare",
+          "source_read",
+          "source_reconstruction",
+          "source_verify",
+          "source_views_hydrate",
+          "source_views_read_records",
+          "source_views_validate",
+          "store_lock_hold",
+          "store_lock_wait",
+          "store_transaction"
+        ],
+        "review_events_delta": 1,
+        "source_preparation": true,
+        "status": 303,
+        "store_transaction": true
+      }
+    },
+    "4_support": {
+      "head": {
+        "db_queries": 48,
+        "elapsed_ms": 1537.199,
+        "error_code": "support_relation_required",
+        "location": null,
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch",
+          "objects_read",
+          "source_prepare",
+          "source_read",
+          "source_verify",
+          "source_views_hydrate",
+          "source_views_read_records",
+          "source_views_validate",
+          "store_lock_hold",
+          "store_lock_wait",
+          "store_transaction"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": true,
+        "status": 400,
+        "store_transaction": true
+      },
+      "trunk": {
+        "db_queries": 48,
+        "elapsed_ms": 1788.56,
+        "error_code": "support_relation_required",
+        "location": null,
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch",
+          "objects_read",
+          "source_prepare",
+          "source_read",
+          "source_verify",
+          "source_views_hydrate",
+          "source_views_read_records",
+          "source_views_validate",
+          "store_lock_hold",
+          "store_lock_wait",
+          "store_transaction"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": true,
+        "status": 400,
+        "store_transaction": true
+      }
+    },
+    "5_later": {
+      "head": {
+        "db_queries": 70,
+        "elapsed_ms": 2066.234,
+        "error_code": null,
+        "location": "/review?document=snap-57fdc21e214ae873-2569589c&after=console-probe-probe-974-p3-1-0-57fdc21e-sem-ce48de90761a0e6b",
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch",
+          "document_load",
+          "objects_read",
+          "review_bindings",
+          "source_prepare",
+          "source_read",
+          "source_reconstruction",
+          "source_verify",
+          "source_views_hydrate",
+          "source_views_read_records",
+          "source_views_validate",
+          "store_lock_hold",
+          "store_lock_wait",
+          "store_transaction"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": true,
+        "status": 303,
+        "store_transaction": true
+      },
+      "trunk": {
+        "db_queries": 73,
+        "elapsed_ms": 1544.964,
+        "error_code": null,
+        "location": "/review?document=snap-57fdc21e214ae873-2569589c&after=console-probe-probe-974-p3-1-0-57fdc21e-sem-feb4ee1ea11a2250",
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch",
+          "document_load",
+          "objects_read",
+          "review_bindings",
+          "source_prepare",
+          "source_read",
+          "source_reconstruction",
+          "source_verify",
+          "source_views_hydrate",
+          "source_views_read_records",
+          "source_views_validate",
+          "store_lock_hold",
+          "store_lock_wait",
+          "store_transaction"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": true,
+        "status": 303,
+        "store_transaction": true
+      }
+    },
+    "6_no_write": {
+      "head": {
+        "db_queries": 9,
+        "elapsed_ms": 112.481,
+        "error_code": "review_disposition_conflict",
+        "location": null,
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": false,
+        "status": 400,
+        "store_transaction": false
+      },
+      "trunk": {
+        "db_queries": 48,
+        "elapsed_ms": 1353.203,
+        "error_code": "review_disposition_conflict",
+        "location": null,
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch",
+          "source_prepare",
+          "source_read",
+          "source_verify",
+          "source_views_hydrate",
+          "source_views_read_records",
+          "source_views_validate",
+          "store_lock_hold",
+          "store_lock_wait",
+          "store_transaction"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": true,
+        "status": 400,
+        "store_transaction": true
+      }
+    },
+    "7_stale": {
+      "head": {
+        "db_queries": 9,
+        "elapsed_ms": 58.798,
+        "error_code": "review_disposition_conflict",
+        "location": null,
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": false,
+        "status": 400,
+        "store_transaction": false
+      },
+      "trunk": {
+        "db_queries": 16,
+        "elapsed_ms": 556.121,
+        "error_code": null,
+        "location": null,
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch",
+          "source_prepare",
+          "source_read",
+          "source_verify",
+          "source_views_hydrate",
+          "source_views_read_records",
+          "source_views_validate"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": true,
+        "status": 409,
+        "store_transaction": false
+      }
+    },
+    "8_revise": {
+      "head": {
+        "db_queries": 55,
+        "elapsed_ms": 2453.354,
+        "error_code": null,
+        "location": null,
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch",
+          "document_load",
+          "objects_read",
+          "source_prepare",
+          "source_read",
+          "source_verify",
+          "source_views_hydrate",
+          "source_views_read_records",
+          "source_views_validate",
+          "store_lock_hold",
+          "store_lock_wait",
+          "store_transaction"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": true,
+        "status": 200,
+        "store_transaction": true
+      },
+      "trunk": {
+        "db_queries": 55,
+        "elapsed_ms": 2754.572,
+        "error_code": null,
+        "location": null,
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch",
+          "document_load",
+          "objects_read",
+          "source_prepare",
+          "source_read",
+          "source_verify",
+          "source_views_hydrate",
+          "source_views_read_records",
+          "source_views_validate",
+          "store_lock_hold",
+          "store_lock_wait",
+          "store_transaction"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": true,
+        "status": 200,
+        "store_transaction": true
+      }
+    },
+    "9_unknown": {
+      "head": {
+        "db_queries": 5,
+        "elapsed_ms": 50.129,
+        "error_code": "suitability_required",
+        "location": null,
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": false,
+        "status": 400,
+        "store_transaction": false
+      },
+      "trunk": {
+        "db_queries": 5,
+        "elapsed_ms": 47.897,
+        "error_code": "suitability_required",
+        "location": null,
+        "phases": [
+          "db_connect",
+          "db_execute",
+          "db_fetch"
+        ],
+        "review_events_delta": 0,
+        "source_preparation": false,
+        "status": 400,
+        "store_transaction": false
+      }
+    }
+  },
+  "trunk_checkout_verdicts": {
+    "1": false,
+    "10": "no MCP review route: src/settings/metis_mcp_v1.py exposes only read-only tools (readOnlyHint true); nothing there calls review_object",
+    "2": false,
+    "3": true,
+    "4": true,
+    "5": true,
+    "6": true,
+    "7": true,
+    "8": true,
+    "9": true
+  },
+  "verdicts": {
+    "1": true,
+    "10": "no MCP review route: src/settings/metis_mcp_v1.py exposes only read-only tools (readOnlyHint true); nothing there calls review_object",
+    "2": true,
+    "3": true,
+    "4": true,
+    "5": true,
+    "6": true,
+    "7": true,
+    "8": true,
+    "9": true
+  }
+}
