@@ -44,6 +44,7 @@ def fixed(monkeypatch):
         monkeypatch.setattr(ko, "candidate_lifecycle", lambda obj: lifecycle)
         # One exact current approver unless a case says otherwise.
         monkeypatch.setattr(ko, "exact_current_approver_ids", lambda obj, bindings: ("reviewer",))
+        monkeypatch.setattr(ko, "provenance_resolves", lambda obj, fragments: True)
     return apply
 
 
@@ -205,3 +206,15 @@ def test_approved_without_binding_is_invalid_even_without_an_open_stage(fixed, m
     assert result["invalid"] == ["approved_without_current_binding"]
     monkeypatch.setattr(ko, "exact_current_approver_ids", lambda obj, bindings: ("reviewer",))
     assert _state(_obj("approved"))["invalid"] == []
+
+
+def test_unresolved_provenance_is_not_an_assembled_package(fixed, monkeypatch):
+    # Codex on #996: review_stage is None when lineage no longer resolves; that must not
+    # read as a complete package.
+    fixed(None)
+    monkeypatch.setattr(ko, "provenance_resolves", lambda obj, fragments: False)
+    result = _state(_obj())
+    assert result["state"] == ko.KANDIDAAT
+    assert result["reasons"] == ["provenance_unresolved"]
+    monkeypatch.setattr(ko, "provenance_resolves", lambda obj, fragments: True)
+    assert _state(_obj())["state"] == ko.SAMENGESTELD

@@ -32,7 +32,8 @@ Bij elke `approved`-rij wordt de exacte huidige binding apart gecontroleerd, ook
 | 11 | Geen voorgestelde of bevestigde `supported_by`- of `explains`-relatie | Bewijs open |
 | 12 | De eerste review is open | In review |
 | 13 | De tweede review is open | Tweede review |
-| 14 | Anders | Samengesteld |
+| 14 | De herkomst lost niet meer op (geen geldige spans of bronlijn) | Kandidaat, reden `provenance_unresolved` |
+| 15 | Anders | Samengesteld |
 
 Regel 11 volgt het besluit van 5 november 2026: bewijs is verplicht voor elk type.
 

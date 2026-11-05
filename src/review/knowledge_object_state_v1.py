@@ -17,12 +17,12 @@ from src.knowledge_relations_v1 import (
     confirmed_knowledge_relations_of,
     proposed_knowledge_relations_of,
 )
-from src.review.knowledge_path_v1 import candidate_lifecycle
+from src.review.knowledge_path_v1 import candidate_lifecycle, content_reviewable, source_lineage_resolves
 from src.review.review_disposition_v1 import definitive_review_disposition
 from src.review.review_duty_v1 import (
     FIRST_REVIEW, SECOND_REVIEW, authoritative_review_type, exact_current_approver_ids, review_stage,
 )
-from src.vorming.admission_gate_v1 import GATE_BLOCKED, admission_of
+from src.vorming.admission_gate_v1 import GATE_BLOCKED, admission_of, is_boom_object
 from src.vorming.passage_register_v1 import passage_register_of, register_status_from_suitability
 
 KANDIDAAT = "Kandidaat"
@@ -86,6 +86,19 @@ def has_evidence(obj: dict[str, Any]) -> bool:
     """A proposed or confirmed supporting relation links evidence to the claim."""
     rows = [*proposed_knowledge_relations_of(obj), *confirmed_knowledge_relations_of(obj)]
     return any(str(row.get("relation_type") or "") in EVIDENCE_RELATION_TYPES for row in rows)
+
+
+def provenance_resolves(obj: dict[str, Any], fragments: list[dict[str, Any]] | None) -> bool:
+    """A package is only complete when its source lineage still resolves.
+
+    Boom objects follow their own construction duty. Without fragments the
+    lineage cannot be checked here and the existing review duty decides.
+    """
+    if is_boom_object(obj):
+        return True
+    if not content_reviewable(obj):
+        return False
+    return fragments is None or source_lineage_resolves(obj, fragments=fragments)
 
 
 def _own_bindings(obj: dict[str, Any], bindings: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -191,6 +204,8 @@ def derive_ko_state(
         return result(IN_REVIEW, "review_stage_first")
     if stage == SECOND_REVIEW:
         return result(TWEEDE_REVIEW, "review_stage_second")
+    if not provenance_resolves(obj, fragments):
+        return result(KANDIDAAT, "provenance_unresolved")
     return result(SAMENGESTELD, "package_complete_no_open_review")
 
 
