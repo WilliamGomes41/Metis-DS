@@ -167,3 +167,73 @@ def test_help_text_names_approval_when_it_can_be_selected():
     scope = re.search(r'<span data-decision-scope="ja">([^<]*)</span>', html).group(1)
     assert scope == ("Bij ‘Ja, als zelfstandig stukje kennis’ kun je kiezen uit ‘Goedkeuren’, "
                      "‘Correctie specificeren’, ‘Afwijzen’ of ‘Later beoordelen’.")
+
+
+class _Steps(HTMLParser):
+    """Collect the suitabilities each follow-up step group stays open for."""
+
+    def __init__(self):
+        super().__init__()
+        self.steps_for = {}
+        self.closed_note = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if "data-steps-for" in attrs:
+            self.steps_for[attrs["data-steps"]] = set(attrs["data-steps-for"].split())
+        if "data-steps-closed" in attrs:
+            self.closed_note = True
+
+
+def test_follow_up_steps_stay_open_only_where_they_can_matter(review_system):
+    # Heading, type, strength and relations only matter for an approval;
+    # a discrepancy only matters where a correction is still possible.
+    _console, client, sid, _actor, ids = review_system
+    page = client.get("/review", params={"document": sid, "object": ids[0]})
+    steps = _Steps()
+    steps.feed(page.text)
+    assert steps.steps_for == {
+        "approval": {"ja", "alleen_onderbouwing"},
+        "correction": {"ja", "mist_context", "samenvoegen", "alleen_onderbouwing"},
+    }
+    assert steps.closed_note
+
+
+def _current(console, sid, oid):
+    return next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
+
+
+@pytest.mark.parametrize("legacy", [False, True], ids=["prepared", "serial"])
+def test_no_knowledge_rejection_ignores_stale_follow_up_answers(review_system, monkeypatch, legacy):
+    console, client, sid, _actor, ids = review_system
+    if legacy:
+        _legacy_review_window(monkeypatch, console)
+    data = _review_form(client, sid, ids[0], suitability="geen_kenniseenheid",
+                        eindoordeel="afwijzen", decision="", comment="Literatuurvoorwaarde, geen kennis",
+                        source_discrepancy=["context_ontbreekt"])
+    response = client.post("/review", data=data, follow_redirects=False)
+    assert response.status_code == 303, response.text[:300]
+    passage = (_current(console, sid, ids[0]).get("metadata") or {}).get("review_passage") or {}
+    assert passage.get("suitability") == "geen_kenniseenheid"
+    assert passage.get("type_action") == ""
+    assert passage.get("documentpositie_action") == ""
+    from src.review.source_discrepancy_v1 import DETAILS_KEY
+    assert DETAILS_KEY not in (_current(console, sid, ids[0]).get("metadata") or {})
+
+
+def test_no_knowledge_with_correction_is_refused_with_the_explanation(review_system):
+    console, client, sid, _actor, ids = review_system
+    data = _review_form(client, sid, ids[0], suitability="geen_kenniseenheid",
+                        eindoordeel="goedkeuren_na_correctie", decision="", comment="c")
+    before = _review_event_count(console)
+    response = client.post("/review", data=data, follow_redirects=False)
+    assert response.status_code == 400, response.text[:300]
+    banner = re.search(r'<div class="banner err" data-error-code="([^"]+)"[^>]*>(.*?)</div>',
+                       response.text, re.S)
+    assert banner.group(1) == CONFLICT
+    assert " ".join(banner.group(2).split()) == (
+        "Je koos ‘Geen zelfstandig stukje kennis’ met het besluit ‘Correctie specificeren’. Die "
+        "combinatie kan niet. Bij ‘Geen zelfstandig stukje kennis’ kun je kiezen uit ‘Afwijzen’ of "
+        "‘Later beoordelen’. Je beoordeling is niet opgeslagen. Ga terug naar de passage en kies een "
+        "besluit dat past.")
+    assert _review_event_count(console) == before
