@@ -10,7 +10,9 @@ from __future__ import annotations
 
 from html import escape
 
-from src.review.closed_review_loop_v1 import ReviewDispositionConflict, allowed_eindoordelen
+from src.review.closed_review_loop_v1 import (
+    ReviewDispositionConflict, allowed_eindoordelen, suitabilities_allowing,
+)
 from src.review.review_cockpit_v1 import EINDOORDEEL_TO_DECISION, EINDOORDEEL_VALUES, SUITABILITY_VALUES
 
 SUITABILITY_QUESTION = "Is deze passage op zichzelf bruikbaar?"
@@ -94,7 +96,11 @@ def _scope_css() -> str:
             f'{chosen} [data-decision-scope="{value}"]{{display:block}}',
             f"{chosen} {misfit}:not(:has(:checked)){{display:none}}",
             f"{chosen} {misfit} [data-decision-mismatch]{{display:block}}",
+            # Follow-up steps the chosen suitability closes; which ones lives in data-steps-for.
+            f'{chosen} [data-steps-for]:not([data-steps-for~="{value}"]){{display:none}}',
         ]
+        if value not in suitabilities_allowing("approve"):
+            rules.append(f"{chosen} [data-steps-closed]{{display:block}}")
     return "@supports selector(:has(*)){" + "".join(rules) + "}"
 
 
@@ -128,3 +134,24 @@ def decision_choices_html(object_id: str, selected: str, *, approval: str | None
         f'<p class="field-help decision-scope" id="{escape(scope_id)}">{"".join(notes)}</p>'
         + "".join(options) + "</fieldset>"
     )
+
+
+STEPS_DECISION = {"approval": "approve", "correction": "revise"}
+CLOSED_STEPS_NOTE = ("Kop, type en relaties bevestig je alleen bij goedkeuren. "
+                     "Met deze keuze vervallen die vragen.")
+
+
+def follow_up_steps(kind: str) -> str:
+    """Opening tag of review steps that only matter when ``kind`` is still possible.
+
+    Heading, type, strength and relations confirm an approval; a source
+    discrepancy feeds a correction. The kernel ignores their answers when the
+    suitability closes them (``without_closed_follow_up``).
+    """
+    open_for = " ".join(suitabilities_allowing(STEPS_DECISION[kind]))
+    return f'<div class="review-follow-up" data-steps="{kind}" data-steps-for="{open_for}">'
+
+
+def closed_steps_note() -> str:
+    return ('<p class="field-help review-steps-closed" data-steps-closed aria-live="polite" hidden>'
+            f"{escape(CLOSED_STEPS_NOTE)}</p>")

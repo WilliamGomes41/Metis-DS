@@ -83,6 +83,8 @@ from src.review.source_context_review_v1 import projections as source_context_pr
 from src.review.review_disposition_choices_ui_v1 import (
     conflict_message as disposition_conflict_message,
     decision_choices_html,
+    closed_steps_note,
+    follow_up_steps,
     suitability_choices_html,
 )
 from src.vorming.extract_coverage_v1 import coverage_panel_rows
@@ -719,6 +721,25 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
     if (cleared && decision) decision.value = '';
     return cleared;
   }};
+  // data-steps-for comes from the same rule: steps a suitability closes are hidden and not sent.
+  const stepGroups = Array.from(form.querySelectorAll('[data-steps-for]'));
+  const closedNote = form.querySelector('[data-steps-closed]');
+  const stepFields = (group) => Array.from(group.querySelectorAll('input, select, textarea'));
+  const lockedSteps = new Set(stepGroups.flatMap((group) => stepFields(group).filter((node) => node.disabled)));
+  const fitSteps = (restore) => {{
+    const chosen = selected(suitability);
+    let approvalClosed = false;
+    stepGroups.forEach((group) => {{
+      const open = !chosen || group.dataset.stepsFor.split(' ').includes(chosen);
+      group.hidden = !open;
+      if (!open && group.dataset.steps === 'approval') approvalClosed = true;
+      stepFields(group).forEach((node) => {{
+        if (!open) node.disabled = true;
+        else if (restore) node.disabled = lockedSteps.has(node);
+      }});
+    }});
+    if (closedNote) closedNote.hidden = !approvalClosed;
+  }};
   const liveType = () => {{
     const action = selected(typeAction);
     if (action === 'dit_klopt' && proposed && proposed.value) return proposed.value;
@@ -750,6 +771,7 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
     }});
   }};
   const update = () => {{
+    fitSteps(true);
     const cleared = fitDecisions();
     const value = selected(eindoordeel) || (decision ? decision.value : '');
     if (decision && selected(eindoordeel)) {{
@@ -787,6 +809,7 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
       else hint.textContent = '';
     }}
     updateStamp();
+    fitSteps(false);
   }};
   eindoordeel.forEach((node) => node.addEventListener('change', update));
   typeAction.forEach((node) => node.addEventListener('change', update));
@@ -3123,7 +3146,9 @@ def _render_review_card(
                     {f'<p>{_esc(admission_notice)}</p>' if admission_notice else ''}{repair_guidance}
                     <section class="review-step" data-review-step="c">
                       {suitability_choices_html(str(draft.get("suitability", "")))}
+                      {closed_steps_note()}
                     </section>
+                    {follow_up_steps("approval")}
                     <section class="review-step" data-review-step="d">
                       <h4>Staat de passage onder de juiste kop?</h4>
                       <p>Gevonden onder: <b>{_esc(path_text or "het document")}</b></p>
@@ -3156,7 +3181,8 @@ def _render_review_card(
                         review_path=review_path,
                         draft=draft, bindings=bindings, fragments=fragments
                     )}
-                    {_source_discrepancy_block(obj, draft, review_path=review_path)}
+                    </div>
+                    {follow_up_steps("correction")}{_source_discrepancy_block(obj, draft, review_path=review_path)}</div>
                     <section class="review-step" data-review-step="f">
                       {decision_choices_html(str(obj["object_id"]), str(draft.get("eindoordeel", "")),
                                              approval=None if structural_heading else approval_disabled)}

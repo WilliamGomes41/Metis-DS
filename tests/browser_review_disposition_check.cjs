@@ -10,6 +10,9 @@ const FITS = {
   geen_kenniseenheid: ['afwijzen', 'later_beoordelen'],
 };
 const ALL = FITS.ja;
+// Heading, type and relations only matter for an approval; a discrepancy only for a correction (#987).
+const APPROVAL_OPEN = new Set(['ja', 'alleen_onderbouwing']);
+const CORRECTION_OPEN = new Set(['ja', 'mist_context', 'samenvoegen', 'alleen_onderbouwing']);
 
 (async () => {
   const base = process.env.METIS_BROWSER_BASE;
@@ -49,7 +52,20 @@ const ALL = FITS.ja;
     }
     return [...new Set(seen)].sort();
   }
+  async function stepsFit(page, suitability, label) {
+    const visible = (selector) => page.locator(selector).first().isVisible();
+    const open = APPROVAL_OPEN.has(suitability);
+    assert.equal(await visible('[data-review-step=d]'), open, `heading step ${label} ${suitability}`);
+    assert.equal(await visible('[data-review-step=e]'), open, `type step ${label} ${suitability}`);
+    assert.equal(await visible('[data-steps-closed]'), !open, `closed note ${label} ${suitability}`);
+    if (await page.locator('[data-review-step=discrepancy]').count()) {
+      assert.equal(await visible('[data-review-step=discrepancy]'), CORRECTION_OPEN.has(suitability),
+        `discrepancy step ${label} ${suitability}`);
+    }
+  }
   const shoot = (page, name) => page.locator('[data-review-form]').screenshot({path: `${out}/${name}.png`});
+  // Closed-step evidence (#987) lives apart from the six shots the shared harness counts.
+  const shootClosed = (page, name) => page.locator('[data-review-form]').screenshot({path: `${out}/closed-steps/${name}.png`});
 
   for (const width of [1440, 390]) {
     // With JavaScript: hidden and disabled, a judgement that stops fitting is cleared.
@@ -61,7 +77,12 @@ const ALL = FITS.ja;
       assert.deepEqual(await arrowCycle(page, fits[0]), [...fits].sort(), `keyboard js ${suitability}`);
       const scope = page.locator(`[data-decision-scope="${suitability}"]`);
       assert.equal(await scope.isVisible(), true);
+      await stepsFit(page, suitability, 'js');
+      // Closed steps are not sent: their fields are disabled, not only hidden.
+      assert.equal(await page.locator('[name=documentpositie_action]').isEnabled(), APPROVAL_OPEN.has(suitability));
     }
+    await page.locator('[name=suitability][value=geen_kenniseenheid]').check();
+    await shootClosed(page, `js-no-knowledge-${width}`);
     await page.locator('[name=suitability][value=ja]').check();
     await decision(page, 'goedkeuren').check();
     await page.locator('[name=suitability][value=mist_context]').check();
@@ -79,16 +100,19 @@ const ALL = FITS.ja;
       await page.locator(`[name=suitability][value=${suitability}]`).check();
       assert.deepEqual(await offered(page), fits, `no-js ${suitability}`);
       assert.deepEqual(await arrowCycle(page, fits[0]), [...fits].sort(), `keyboard no-js ${suitability}`);
+      await stepsFit(page, suitability, 'no-js');
     }
+    await shootClosed(page, `nojs-no-knowledge-${width}`);
+    await page.goto(card);
     await page.locator('[name=suitability][value=ja]').check();
     await decision(page, 'goedkeuren').check();
+    for (const name of ['documentpositie_action', 'type_action']) await page.locator(`[name=${name}][value=dit_klopt]`).check();
+    const ack = page.locator('[name=relation_review_ack]');
+    if (await ack.count()) await ack.check();
     await page.locator('[name=suitability][value=mist_context]').check();
     assert.equal(await decision(page, 'goedkeuren').isVisible(), true);
     assert.equal(await page.locator('[data-allowed-for] [data-decision-mismatch]:visible').count(), 1);
     assert.equal(await decision(page, 'goedkeuren').evaluate((node) => node.closest('label').innerText.includes('Past niet bij je keuze hierboven')), true);
-    for (const name of ['documentpositie_action', 'type_action']) await page.locator(`[name=${name}][value=dit_klopt]`).check();
-    const ack = page.locator('[name=relation_review_ack]');
-    if (await ack.count()) await ack.check();
     await shoot(page, `nojs-mismatch-${width}`);
     const before = await events();
     const [response] = await Promise.all([page.waitForNavigation(), page.locator('[data-submit-review]').click()]);
