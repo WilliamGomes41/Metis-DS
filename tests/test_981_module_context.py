@@ -113,3 +113,12 @@ def test_recommendation_directly_under_a_titled_module_stays_in_that_module():
     context = _context(_task(tasks_for(blocks, blocks), "m1-direct"))
     assert "m1-rat" in context
     assert not {"m2-rat", "m2-rec"} & context
+
+
+def test_unsectioned_preface_does_not_erase_the_document_root():
+    # Codex on #994: content before the first heading has section_path [] in the HTML extractor.
+    blocks = [block("preface", "Deze richtlijn is bedoeld voor verpleegkundigen.", [])]
+    blocks += [dict(b, section_path=["Smetten", *b["section_path"]]) for b in guideline()]
+    context = _context(_task(tasks_for(blocks, blocks), "m1-rec"))
+    assert {"m1-rat", "m1-ow"} <= context
+    assert not {"m2-rat", "m2-rec"} & context

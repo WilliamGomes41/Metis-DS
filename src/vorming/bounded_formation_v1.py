@@ -77,8 +77,11 @@ def tasks_for(blocks, evidence_blocks, targets=None):
     target_spans = [t["span"] for t in targets] if targets is not None else [full_span(b) for b in blocks]
     selected_ids = {s["block_id"] for s in target_spans}
     possible = {row["span"]["block_id"] for row in inventory(blocks, recommendation_sections_only=False)}
-    root = _shared_root([*blocks, *evidence_blocks])
-    depth = _module_depth([*blocks, *evidence_blocks], root)
+    # Unsectioned blocks (content before the first heading) belong to no module
+    # and must not erase the shared root.
+    sectioned = [b for b in (*blocks, *evidence_blocks) if _path(b)]
+    root = _shared_root(sectioned)
+    depth = _module_depth(sectioned, root)
     groups, group, size, path = [], [], 0, None
     for block in blocks:
         if block["block_id"] not in selected_ids:
