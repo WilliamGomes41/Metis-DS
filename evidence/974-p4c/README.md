@@ -69,3 +69,38 @@ afgebakende fix op bestaande code, modus Operate. Gelezen: `craft-floor.md`,
 `clarify.md`. Bestaande `console.css`-tokens en klassen hergebruikt. Geen
 gestructureerde vraagmogelijkheid in deze subagent; ontwerpkeuzes afgeleid uit
 de brief en het projectleidersbesluit.
+
+`impeccable detect --json` over de gewijzigde UI-bestanden meldt alleen
+bestaande `border-left`-waarschuwingen elders in `console.css`; geen melding op
+de nieuwe regels. Kleurcontrast: de markering gebruikt `--alert-text`
+(#914500 op wit, ongeveer 5,9:1; donker thema #ffcf91 op #172232).
+
+## Browserbewijs
+
+Echte Chromium (Playwright) op de lokale productie-app met PostgreSQL
+(`tests/browser_review_disposition_fixture.py`,
+`tests/browser_review_disposition_check.cjs`), 1440 en 390 px breed,
+deviceScaleFactor 2. Per geschiktheid zijn precies de toegestane
+eindoordelen zichtbaar en kiesbaar, met en zonder JavaScript; pijltjestoetsen
+in de besluitgroep doorlopen alleen die eindoordelen. Met JavaScript wordt een
+niet meer passend besluit leeggemaakt en gemeld. Zonder JavaScript blijft een
+eerder aangevinkt, niet-passend besluit zichtbaar met de markering; opslaan
+geeft 400 met de precieze uitleg en schrijft geen review-event.
+
+| Bestand | Wat |
+| --- | --- |
+| `js-mist-context-{1440,390}.png` | JS aan, ‘Nee, ik mis uitleg eromheen’: drie besluiten, gewist goedkeuren gemeld |
+| `nojs-mismatch-{1440,390}.png` | JS uit, eerst goedkeuren, dan ‘Nee, ik mis uitleg eromheen’: markering |
+| `nojs-conflict-page-{1440,390}.png` | Opslaan van die combinatie: foutpagina met uitleg |
+
+Opnieuw draaien:
+
+    METIS_BROWSER_EXECUTABLE=<chromium> METIS_PLAYWRIGHT_MODULE=<node playwright> \
+      python -m pytest -q tests/test_browser_knowledge_context.py -k disposition
+
+## Bekend, niet gewijzigd
+
+`geen_kenniseenheid` + `goedkeuren_na_correctie` via een zelfgemaakt verzoek
+leidt nog steeds naar het gestructureerde herstel in plaats van naar
+`review_disposition_conflict` (P3-gedrag, `test_revise_keeps_the_structured_repair_flow`).
+Het formulier biedt die combinatie niet meer aan.
