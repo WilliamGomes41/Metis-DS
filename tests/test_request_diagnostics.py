@@ -390,6 +390,7 @@ def test_json_byte_map_is_bounded_like_the_phase_tree(events, postgres_template)
     @app.get('/review')
     def review():
         with db.connect() as connection:
+            db.read(connection, '22')  # outside every phase
             for outer, inner in pairs:
                 with diagnostic_phase(outer), diagnostic_phase(inner):
                     db.read(connection, '1')
@@ -399,10 +400,13 @@ def test_json_byte_map_is_bounded_like_the_phase_tree(events, postgres_template)
         assert client.get('/review').status_code == 200
     finished = _finished_for(events, '/review')
     by_phase = finished['db_json_bytes_by_phase']
+    # Both reserved buckets fit inside the bound; overflow is explicit, never dropped.
     assert len(by_phase) == MAX_TREE_NODES
+    assert by_phase['<none>'] == 2
+    assert by_phase['<overflow>'] == len(pairs) - (MAX_TREE_NODES - 2)
     assert finished['db_json_bytes_by_phase_truncated'] is True
     assert finished['phase_tree_truncated'] is True
-    assert sum(by_phase.values()) < finished['db']['db_json_bytes'] == len(pairs)
+    assert sum(by_phase.values()) == finished['db']['db_json_bytes'] == len(pairs) + 2
 
 
 def test_json_byte_map_survives_a_failing_request_and_the_hub(events, postgres_template):
