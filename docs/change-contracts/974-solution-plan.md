@@ -124,7 +124,7 @@ Each live lane runs in its own checkout at the PR head on a disposable PostgreSQ
 - [ ] Metric. Inclusive ms of the phase `source_reconstruction` and total `elapsed_ms` for `GET /source-selection?document=<sid>` on the 2,000 paragraph fixture.
 - [ ] Probe. Five interleaved runs at trunk and head with `evidence/974-design/prototype_source_reads.py` adapted to the HTTP route, vetted with the benchmark-checklist skill.
 - [ ] Baseline. Record the trunk value first. The P1 run measured `source_reconstruction` at 1,569 ms on trunk with 400 comparisons, about 0.8 ms per HTML hit and 10.6 to 13.9 ms per PDF-shaped hit (`evidence/974-p1/` in PR #977).
-- [ ] Rule. Head reports `source_input_compared` of 0, a per-hit cost of at most 0.01 ms on PDF-shaped rows, and `source_reconstruction` no higher than trunk. A miss on any of the three fails. This replaces the earlier 1,000 ms and 10 percent rule, which rested on the prototype error in Appendix A and is pending the operator's confirmation.
+- [ ] Rule. Head reports `source_input_compared` of 0, a per-hit cost of at most 0.01 ms on PDF-shaped rows, and `source_reconstruction` no higher than trunk. A miss on any of the three fails. This replaces the earlier 1,000 ms and 10 percent rule, which rested on the prototype error in Appendix A. The operator confirmed this rule on 2026-11-05, recorded in `docs/change-contracts/974-worker-abort-incident.md`.
 
 **Review gate.** None. P1 is not review-gated.
 

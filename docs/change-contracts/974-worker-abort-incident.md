@@ -56,6 +56,10 @@ Dit is de domeinweigering van een ongeldige combinatie volgens `ALLOWED_FINAL_BY
 
 Ruwe uitvoer blijft privé, buiten de repo, in een nieuwe map met modus 700 en bestanden onder umask 077. Alleen beoordeelde technische samenvattingen worden overgedragen; geen bronteksten, ruwe provider-uitvoer, secrets of persoonsgegevens. De databasecontrole toont geen document-/object-ids, actoren of eventdetails. Live KQL-validatie blijft open. Het ontbreken van een logtabel of resultaat is ontbrekend bewijs, geen vastgestelde oorzaak.
 
+## Besluiten (GO projectlead, 2026-11-05)
+
+- P1-prestatieregel (PR #977): de oorspronkelijke regel (hooguit 1.000 ms en hooguit 10% van trunk) vervalt, omdat het prototype de eenmalige opbouw meetelde. De vervangende regel geldt: op head `source_input_compared` = 0, hooguit 0,01 ms per cache-treffer op PDF-achtige rijen, en `source_reconstruction` niet hoger dan trunk. Een misser op een van de drie is een faal. De besparing in productie wordt na deploy apart gemeten.
+
 ## Vervolg
 
 Het toegevoegde oplossingsontwerp met synthetische prototypes staat in [974-solution-plan.md](974-solution-plan.md). Het is geen geactiveerd uitvoeringsprogramma; de hieronder genoemde bewijsgrenzen blijven leidend.
