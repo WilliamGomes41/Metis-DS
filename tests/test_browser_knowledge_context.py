@@ -30,6 +30,7 @@ import pytest
     ('tests.browser_personal_review_fixture', 'browser_personal_review_check.cjs'),
     ('tests.browser_content_review_fixture', 'browser_content_review_check.cjs'),
     ('tests.browser_insight_owner_fixture', 'browser_insight_owner_check.cjs'),
+    ('tests.browser_review_disposition_fixture', 'browser_review_disposition_check.cjs'),
 ])
 def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_path, fixture, script):
     root = Path(__file__).resolve().parents[1]
