@@ -148,3 +148,22 @@ def test_conflicting_post_explains_the_combination(review_system, monkeypatch, s
     assert " ".join(banner.group(2).split()) == CONFLICT_COPY[(suitability, eindoordeel)]
     assert _review_event_count(console) == before
 
+
+
+@pytest.mark.parametrize("approval", [None, " disabled"])
+def test_help_text_never_names_an_approval_the_form_cannot_offer(approval):
+    from src.review.review_disposition_choices_ui_v1 import decision_choices_html
+
+    html = decision_choices_html("obj-1", "", approval=approval)
+    scope = re.search(r'<span data-decision-scope="ja">([^<]*)</span>', html).group(1)
+    assert scope == ("Bij ‘Ja, als zelfstandig stukje kennis’ kun je kiezen uit "
+                     "‘Correctie specificeren’, ‘Afwijzen’ of ‘Later beoordelen’.")
+
+
+def test_help_text_names_approval_when_it_can_be_selected():
+    from src.review.review_disposition_choices_ui_v1 import decision_choices_html
+
+    html = decision_choices_html("obj-1", "", approval="")
+    scope = re.search(r'<span data-decision-scope="ja">([^<]*)</span>', html).group(1)
+    assert scope == ("Bij ‘Ja, als zelfstandig stukje kennis’ kun je kiezen uit ‘Goedkeuren’, "
+                     "‘Correctie specificeren’, ‘Afwijzen’ of ‘Later beoordelen’.")
