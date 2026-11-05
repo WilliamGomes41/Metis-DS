@@ -40,8 +40,9 @@ COUNTERS = frozenset({'document_snapshot_reused', 'source_reconstruction_built',
 HEARTBEAT_SECONDS = 15
 MAX_PHASE_EVENTS = 40
 MAX_TREE_NODES = 64
-# Database JSON bytes read outside every phase.
+# Reserved JSON byte buckets: read outside every phase, and phase paths past the bound.
 NO_PHASE = '<none>'
+OVERFLOW = '<overflow>'
 # Driver instrumentation wraps every read; the reader is the phase around it.
 _DRIVER_PHASES = frozenset({'db_connect', 'db_execute', 'db_fetch'})
 DEPLOYED_COMMIT_MARKER = Path(__file__).resolve().parents[1] / 'config' / 'deployed_commit.txt'
@@ -121,8 +122,9 @@ def diagnostic_count(name, amount=1):
 def diagnostic_json_bytes(amount):
     """Attribute database JSON bytes to the innermost reading phase path.
 
-    A no-op outside diagnosed requests. Keys are fixed phase names only and are
-    bounded like the phase tree.
+    A no-op outside diagnosed requests. Keys are fixed phase names only. With the
+    two reserved buckets the map holds at most MAX_TREE_NODES keys and always
+    sums to the request's JSON byte total.
     """
     evidence = _CURRENT.get()
     if evidence is None:
@@ -137,10 +139,12 @@ def diagnostic_json_bytes(amount):
         path = '/'.join(names) or NO_PHASE
         evidence.json_path = (stack, path)
     table = evidence.json_bytes
-    if path in table or len(table) < MAX_TREE_NODES:
-        table[path] = table.get(path, 0) + amount
-    else:
-        evidence.json_bytes_truncated = True
+    if path != NO_PHASE and path not in table:
+        phase_keys = len(table) - (NO_PHASE in table) - (OVERFLOW in table)
+        if phase_keys >= MAX_TREE_NODES - 2:
+            path = OVERFLOW
+            evidence.json_bytes_truncated = True
+    table[path] = table.get(path, 0) + amount
 
 
 def note_handled_error(code):
