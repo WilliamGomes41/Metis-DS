@@ -39,6 +39,26 @@ ALLOWED_FINAL_BY_SUITABILITY = {
 }
 
 
+def require_allowed_review_disposition(submission: dict[str, Any]) -> None:
+    """Refuse a decision that the stated suitability never permits.
+
+    Reads no stored state, so the review command can apply it before it
+    prepares any input. ``later`` with a suitability is deferred, not refused.
+    """
+    suitability = str(submission.get("suitability") or "").strip()
+    if not suitability:
+        return
+    decision = map_eindoordeel(
+        str(submission.get("eindoordeel") or ""),
+        str(submission.get("decision") or ""),
+    )
+    if decision == "later":
+        return
+    allowed = ALLOWED_FINAL_BY_SUITABILITY.get(suitability)
+    if allowed is None or decision not in allowed:
+        raise ConsoleError("review_disposition_conflict")
+
+
 def _norm(value: str) -> str:
     return " ".join(str(value or "").split())
 
@@ -224,9 +244,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                     deferred[key] = None
                 deferred["decision"] = "later"
                 return super().review_object(**deferred)
-            allowed = ALLOWED_FINAL_BY_SUITABILITY.get(original_suitability)
-            if allowed is None or decision not in allowed:
-                raise ConsoleError("review_disposition_conflict")
+            require_allowed_review_disposition(kwargs)
             if (
                 decision == "approve"
                 and original_suitability == "alleen_onderbouwing"

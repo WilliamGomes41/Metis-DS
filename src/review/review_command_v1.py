@@ -131,6 +131,16 @@ def capture_histories(console, snapshot_id, object_id, command, *, admission_con
     return histories
 
 
+def _refuse_static_disposition(command):
+    """Apply the kernel's static disposition rule before any input is prepared."""
+    from src.review.closed_review_loop_v1 import require_allowed_review_disposition
+    from src.review.review_cockpit_v1 import map_eindoordeel
+    # A revise with a suitability becomes a structured repair before the kernel
+    # reaches this rule; the kernel still applies it to revise itself.
+    if map_eindoordeel(str(command.get('eindoordeel') or ''), str(command.get('decision') or '')) != 'revise':
+        require_allowed_review_disposition(command)
+
+
 def _prepare_review_source_inputs(console, envelope, original_ids):
     sid = envelope["snapshot_id"]
     documents = console.workflow_document_store
@@ -241,6 +251,7 @@ def execute_review_command(console, submitted, invoke, *, completed_command=None
         if command['actor_id'] not in envelope.get('named_reviewers', []):
             raise ConsoleError('reviewer_not_named_on_snapshot')
         console._require_mutable_working_revision(sid)
+        _refuse_static_disposition(command)
         (envelope, source_path, frozen, fragments, source_failure, original_checks) = (
             _prepare_review_source_inputs(console, envelope, original_ids))
         identity = _source_identity(envelope)
@@ -389,6 +400,7 @@ def _execute_prepared_command(console, command, invoke, *, compact=False, admiss
         if command['actor_id'] not in envelope.get('named_reviewers', []):
             raise ConsoleError('reviewer_not_named_on_snapshot')
         console._require_mutable_working_revision(sid, current=True)
+        _refuse_static_disposition(command)
         envelope, path, frozen, fragments, source_error, originals = _prepare_review_source_inputs(
             console, envelope, command.get('_original_ids'))
         try:
