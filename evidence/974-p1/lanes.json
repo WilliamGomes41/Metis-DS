@@ -1,0 +1,111 @@
+{
+ "1-regression": {
+  "head_counters": {
+   "document_snapshot_reused": 9,
+   "source_input_hashed": 1,
+   "source_reconstruction_built": 2,
+   "source_reconstruction_reused": 399
+  },
+  "problems": 100,
+  "result": "PASS",
+  "same_page": true,
+  "trunk_counters": {
+   "document_snapshot_reused": 9,
+   "source_input_compared": 400,
+   "source_input_hashed": 1,
+   "source_reconstruction_built": 2,
+   "source_reconstruction_reused": 399
+  }
+ },
+ "10-concurrent": {
+  "counters": [
+   {
+    "document_snapshot_reused": 9,
+    "source_input_hashed": 1,
+    "source_reconstruction_built": 2,
+    "source_reconstruction_reused": 9
+   },
+   {
+    "document_snapshot_reused": 9,
+    "source_input_hashed": 1,
+    "source_reconstruction_built": 2,
+    "source_reconstruction_reused": 9
+   }
+  ],
+  "problems": 15,
+  "result": "PASS",
+  "statuses": [
+   200,
+   200
+  ]
+ },
+ "2-rejections": {
+  "problems": 2,
+  "redirect": "/source-selection?document=snap-68170bc101859fdc-25bffe6a",
+  "result": "PASS"
+ },
+ "3-running": {
+  "progress_line": [
+   "<p>Fase: Bronpassages selecteren \u00b7 Verstreken: minder dan 1 min \u00b7 Geschat resterend: Onvoldoende gegevens voor een schatting.</p>"
+  ],
+  "result": "PASS",
+  "trunk_status": 200
+ },
+ "4-overview": {
+  "phases": [
+   "authorization",
+   "db_connect",
+   "db_execute",
+   "db_fetch",
+   "document_list"
+  ],
+  "result": "PASS"
+ },
+ "5-not-named": {
+  "error": {
+   "code": "reviewer_not_named_on_snapshot",
+   "handled": true,
+   "type": "ConsoleError"
+  },
+  "result": "PASS",
+  "status": 400
+ },
+ "6-boom": {
+  "head_counters": {
+   "document_snapshot_reused": 9
+  },
+  "result": "PASS",
+  "same_page": true,
+  "status": 200,
+  "trunk_counters": {
+   "document_snapshot_reused": 9
+  }
+ },
+ "7-legacy": {
+  "head_counters": {
+   "document_snapshot_reused": 9
+  },
+  "result": "PASS",
+  "same_page": true,
+  "status": 200,
+  "trunk_counters": {
+   "document_snapshot_reused": 9
+  }
+ },
+ "8-disposition": {
+  "head_counters": {},
+  "result": "PASS",
+  "same_page": true,
+  "status": 200,
+  "trunk_counters": {}
+ },
+ "9-twice": {
+  "counters": {
+   "document_snapshot_reused": 9,
+   "source_input_hashed": 1,
+   "source_reconstruction_built": 2,
+   "source_reconstruction_reused": 9
+  },
+  "result": "PASS"
+ }
+}

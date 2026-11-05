@@ -1,0 +1,35 @@
+{
+ "lane": 6,
+ "source_selection": {
+  "counters": {
+   "document_snapshot_reused": 9
+  },
+  "elapsed_ms": 71.729,
+  "error": null,
+  "location": null,
+  "outcome": "completed",
+  "page": {
+   "content_sha256": "9c5d7c43734a6fb58815be85a3a1ce63a953fd50fa50bed098c4e8c0fcfa33d4",
+   "hrefs": [
+    "/brand/console.css?v=400b38134f582d54",
+    "/",
+    "/ingest",
+    "/source-selection",
+    "/review",
+    "/publish",
+    "/tree",
+    "/settings",
+    "/review?document=<id0>",
+    "/inzicht/document?document=<id0>",
+    "/source-selection?document=<id0>&amp;task=disposition",
+    "/wat-is-nieuw"
+   ],
+   "problem_ids": [],
+   "progress_line": [],
+   "progress_refresh": false,
+   "sha256": "ebb426271e0f22688ea8b97c2b95fa6e92f2842b02602811e98c487c836a2b13"
+  },
+  "source_reconstruction": null,
+  "status": 200
+ }
+}

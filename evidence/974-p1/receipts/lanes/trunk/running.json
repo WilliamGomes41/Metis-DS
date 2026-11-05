@@ -1,0 +1,37 @@
+{
+ "lane": 3,
+ "source_selection": {
+  "counters": {
+   "document_snapshot_reused": 14
+  },
+  "elapsed_ms": 149.759,
+  "error": null,
+  "location": null,
+  "outcome": "completed",
+  "page": {
+   "content_sha256": "ca92e211e29a31e4788417b562a745c5459ab1d048fef5cd03dc7e08777553b0",
+   "hrefs": [
+    "/brand/console.css?v=400b38134f582d54",
+    "/",
+    "/ingest",
+    "/source-selection",
+    "/review",
+    "/publish",
+    "/tree",
+    "/settings",
+    "/inzicht/document?document=<id0>",
+    "/wat-is-nieuw"
+   ],
+   "problem_ids": [
+    "<id1>",
+    "<id2>"
+   ],
+   "progress_line": [
+    "<p>Fase: Bronpassages selecteren \u00b7 Verstreken: minder dan 1 min \u00b7 Geschat resterend: Onvoldoende gegevens voor een schatting.</p>"
+   ],
+   "progress_refresh": true
+  },
+  "source_reconstruction": null,
+  "status": 200
+ }
+}

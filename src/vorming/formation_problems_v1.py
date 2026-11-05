@@ -12,6 +12,7 @@ from src.vorming.source_accountability_v1 import is_source_record
 from src.vorming.source_containers_v1 import source_accountability
 from src.vorming.admission_gate_v1 import is_admission_blocked
 from src.vorming.blockage_diagnostics_v1 import explain
+from src.vorming.prepared_source_views_v1 import freeze_extraction
 from src.review.knowledge_path_v1 import spans_are_exact
 
 
@@ -49,7 +50,9 @@ def collect(console, *, actor_id, snapshot_id):
     envelope = console._processing_history_envelope(snapshot_id)
     objects = console._read_current_objects(snapshot_id)
     bindings = console.object_review_bindings(snapshot_id, objects=objects)
-    fragments = stored_extraction(envelope)
+    # One immutable source for every consumer below: the reconstruction scope
+    # then compares it once instead of once per validated object.
+    fragments = freeze_extraction(stored_extraction(envelope))
     from src.vorming.semantic_passage_v1 import semantic_source_blocks
     source_blocks = {block['block_id']: (index, block)
                      for index, block in enumerate(semantic_source_blocks(fragments or []))}

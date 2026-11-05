@@ -59,6 +59,25 @@ def freeze(value, _memo=None):
     return result
 
 
+class FrozenExtraction(FrozenList):
+    """A frozen stored extraction that keeps the Docling record its readers expect."""
+    def __init__(self,rows,record):
+        list.__init__(self,rows)
+        self._record=freeze(record)
+    @property
+    def extraction_record(self):
+        return deepcopy(self._record)
+
+
+def freeze_extraction(fragments):
+    """Freeze one read source so every consumer can share it by identity."""
+    if fragments is None or isinstance(fragments,FrozenList):
+        return fragments
+    rows=freeze(fragments)
+    record=getattr(fragments,'extraction_record',None)
+    return rows if record is None else FrozenExtraction(rows,record)
+
+
 class SourceFragments(FrozenList):
     def __init__(self,root,name):
         self.root,self.name=root,name
@@ -198,7 +217,7 @@ def prepare(raw):
 
 
 def preserve_fragments(fragments):
-    return fragments if isinstance(fragments,SourceFragments) else list(fragments)
+    return fragments if isinstance(fragments,FrozenList) else list(fragments)
 
 
 def filtered_view(fragments,name):
