@@ -154,6 +154,34 @@
     {
       "github_issue": 974,
       "linear_issue": "MET-48"
+    },
+    {
+      "github_issue": 986,
+      "linear_issue": "MET-49"
+    },
+    {
+      "github_issue": 987,
+      "linear_issue": "MET-50"
+    },
+    {
+      "github_issue": 988,
+      "linear_issue": "MET-51"
+    },
+    {
+      "github_issue": 989,
+      "linear_issue": "MET-52"
+    },
+    {
+      "github_issue": 990,
+      "linear_issue": "MET-53"
+    },
+    {
+      "github_issue": 991,
+      "linear_issue": "MET-54"
+    },
+    {
+      "github_issue": 992,
+      "linear_issue": "MET-55"
     }
   ]
 }
