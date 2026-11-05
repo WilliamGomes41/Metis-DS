@@ -218,3 +218,15 @@ def test_unresolved_provenance_is_not_an_assembled_package(fixed, monkeypatch):
     assert result["reasons"] == ["provenance_unresolved"]
     monkeypatch.setattr(ko, "provenance_resolves", lambda obj, fragments: True)
     assert _state(_obj())["state"] == ko.SAMENGESTELD
+
+
+def test_prepared_source_carrier_is_passed_through_unchanged(fixed, monkeypatch):
+    # Codex on #996: review_source_fragments returns a non-iterable ReadSource carrier for
+    # prepared sources; the derivation must hand it on as the review-duty readers do.
+    class Carrier:  # not iterable, like prepared_source_views_v1.ReadSource
+        pass
+    carrier, seen = Carrier(), []
+    fixed(FIRST_REVIEW)
+    monkeypatch.setattr(ko, "review_stage", lambda *a, **k: seen.append(k.get("fragments")) or FIRST_REVIEW)
+    assert _state(_obj(), fragments=carrier)["state"] == ko.IN_REVIEW
+    assert seen == [carrier]

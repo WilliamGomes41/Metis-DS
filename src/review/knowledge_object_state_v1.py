@@ -88,7 +88,7 @@ def has_evidence(obj: dict[str, Any]) -> bool:
     return any(str(row.get("relation_type") or "") in EVIDENCE_RELATION_TYPES for row in rows)
 
 
-def provenance_resolves(obj: dict[str, Any], fragments: list[dict[str, Any]] | None) -> bool:
+def provenance_resolves(obj: dict[str, Any], fragments: Any) -> bool:
     """A package is only complete when its source lineage still resolves.
 
     Boom objects follow their own construction duty. Without fragments the
@@ -135,7 +135,7 @@ def derive_ko_state(
     *,
     review_path: str,
     bindings: Iterable[dict[str, Any]] = (),
-    fragments: Iterable[dict[str, Any]] | None = None,
+    fragments: Any = None,
     release_status: str = "none",
 ) -> dict[str, Any]:
     """Return ``{"state", "reasons", "invalid"}`` for one current object revision.
@@ -145,7 +145,7 @@ def derive_ko_state(
     """
     if not is_knowledge_object(obj, review_path):
         return {"state": None, "reasons": ["not_knowledge_object"], "invalid": []}
-    fragments = list(fragments) if fragments is not None else None
+    # Hand fragments on unchanged: a prepared source is a ReadSource carrier, not a list.
     own = _own_bindings(obj, bindings)
     governance = _governance(obj)
     status = str(governance.get("validation_status") or "")
