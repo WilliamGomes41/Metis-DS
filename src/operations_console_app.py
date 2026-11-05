@@ -80,6 +80,11 @@ from src.vorming.processing_diagnostics_v1 import (
 from src.vorming.processing_evidence_export_v1 import processing_evidence_zip
 from src.vorming.source_label_hint_v1 import source_label_hint
 from src.review.source_context_review_v1 import projections as source_context_projections, role_of, links_of
+from src.review.review_disposition_choices_ui_v1 import (
+    conflict_message as disposition_conflict_message,
+    decision_choices_html,
+    suitability_choices_html,
+)
 from src.vorming.extract_coverage_v1 import coverage_panel_rows
 from src.review.review_cockpit_v1 import (
     SUITABILITY_VALUES,
@@ -372,6 +377,7 @@ ERROR_COPY = {
     "unsupported_locator": "Metis kan deze bronverwijzing niet openen. Laat de beoordeling open en meld dit bij de beheerder.",
     "invalid_review_decision": "Kies een eindoordeel: goedkeuren, goedkeuren na correctie, afwijzen of later beoordelen.",
     "suitability_required": "Kies of de passage geschikt is.",
+    "review_disposition_conflict": "Je keuze bij ‘Is deze passage op zichzelf bruikbaar?’ past niet bij je besluit. Je beoordeling is niet opgeslagen. Ga terug naar de passage en kies een besluit dat past.",
     "review_comment_required": "Geef een toelichting bij goedkeuren na correctie of afwijzen.",
     "source_date_required": "Vul de publicatiedatum uit het colofon in.",
     "invalid_source_date": "Gebruik een geldige kalenderdatum.",
@@ -696,6 +702,23 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
     const hit = Array.from(nodes || []).find((node) => node.checked);
     return hit ? hit.value : '';
   }};
+  const fitting = Array.from(form.querySelectorAll('[data-allowed-for] [name="eindoordeel"]'));
+  const lockedByServer = new Set(fitting.filter((node) => node.disabled));
+  // data-allowed-for is written from the kernel's disposition rule.
+  const fitDecisions = () => {{
+    const chosen = selected(suitability);
+    let cleared = false;
+    fitting.forEach((node) => {{
+      const fits = !chosen || node.closest('[data-allowed-for]').dataset.allowedFor.split(' ').includes(chosen);
+      node.disabled = lockedByServer.has(node) || !fits;
+      if (!fits && node.checked) {{
+        node.checked = false;
+        cleared = true;
+      }}
+    }});
+    if (cleared && decision) decision.value = '';
+    return cleared;
+  }};
   const liveType = () => {{
     const action = selected(typeAction);
     if (action === 'dit_klopt' && proposed && proposed.value) return proposed.value;
@@ -727,6 +750,7 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
     }});
   }};
   const update = () => {{
+    const cleared = fitDecisions();
     const value = selected(eindoordeel) || (decision ? decision.value : '');
     if (decision && selected(eindoordeel)) {{
       if (value === 'goedkeuren') decision.value = 'approve';
@@ -754,7 +778,8 @@ document.querySelectorAll('[data-review-form]').forEach((form) => {{
       submit.textContent = mapped === 'revise' ? 'Correctie specificeren' : 'Review opslaan en volgende';
     }}
     if (hint) {{
-      if (!value) hint.textContent = 'Kies een eindoordeel.';
+      if (cleared) hint.textContent = 'Je besluit past niet bij deze keuze en is leeggemaakt. Kies een besluit dat past.';
+      else if (!value) hint.textContent = 'Kies een eindoordeel.';
       else if (!hasSuitability) hint.textContent = 'Kies of de passage geschikt is.';
       else if (needsType && !liveType()) hint.textContent = 'Bevestig eerst het type.';
       else if (needsRecommendationSemantics && !hasRecommendationSemantics) hint.textContent = 'Bevestig richting en sterkte van de aanbeveling.';
@@ -3019,10 +3044,6 @@ def _render_review_card(
         'Correcties voer je uit op Vorming; afwijzen blijft hieronder beschikbaar.</p>'
         if structural_heading else ""
     )
-    approval_choice = (
-        f'<label class="check"><input type="radio" name="eindoordeel" value="goedkeuren"{approval_disabled}{_checked(draft.get("eindoordeel", ""), "goedkeuren")}> Goedkeuren — inhoud en indeling kloppen</label>'
-        if not structural_heading else ""
-    )
     owner = '/source-selection?' + urlencode(dict(document=snapshot_id, object=obj['object_id'], task='repair'))
     repair_guidance = ('<aside class="banner warn" data-repair-owner>'
         '<a href="' + _esc(owner) + '">Passage herstellen in Vorming</a>. '
@@ -3101,12 +3122,7 @@ def _render_review_card(
 
                     {f'<p>{_esc(admission_notice)}</p>' if admission_notice else ''}{repair_guidance}
                     <section class="review-step" data-review-step="c">
-                      <h4>Is deze passage op zichzelf bruikbaar?</h4>
-                      <label class="check"><input type="radio" name="suitability" value="ja"{_checked(draft.get("suitability", ""), "ja")}> Ja, als zelfstandig stukje kennis</label>
-                      <label class="check"><input type="radio" name="suitability" value="mist_context"{_checked(draft.get("suitability", ""), "mist_context")}> Nee, ik mis uitleg eromheen</label>
-                      <label class="check"><input type="radio" name="suitability" value="samenvoegen"{_checked(draft.get("suitability", ""), "samenvoegen")}> Nee, deze hoort samen met een andere passage</label>
-                      <label class="check"><input type="radio" name="suitability" value="alleen_onderbouwing"{_checked(draft.get("suitability", ""), "alleen_onderbouwing")}> Alleen als onderbouwing van een andere passage</label>
-                      <label class="check"><input type="radio" name="suitability" value="geen_kenniseenheid"{_checked(draft.get("suitability", ""), "geen_kenniseenheid")}> Geen zelfstandig stukje kennis</label>
+                      {suitability_choices_html(str(draft.get("suitability", "")))}
                     </section>
                     <section class="review-step" data-review-step="d">
                       <h4>Staat de passage onder de juiste kop?</h4>
@@ -3142,14 +3158,9 @@ def _render_review_card(
                     )}
                     {_source_discrepancy_block(obj, draft, review_path=review_path)}
                     <section class="review-step" data-review-step="f">
-                      <h4>Wat is je besluit?</h4>
-                      <fieldset id="decision-{_esc(obj["object_id"])}">
-                      {approval_choice}
-                      <label class="check"><input type="radio" name="eindoordeel" value="goedkeuren_na_correctie"{_checked(draft.get("eindoordeel", ""), "goedkeuren_na_correctie")}> Correctie specificeren — maak een nieuw voorstel voor beoordeling</label>
-                      <label class="check"><input type="radio" name="eindoordeel" value="afwijzen"{_checked(draft.get("eindoordeel", ""), "afwijzen")}> Afwijzen — niet gebruiken als kennisobject</label>
-                      <label class="check"><input type="radio" name="eindoordeel" value="later_beoordelen"{_checked(draft.get("eindoordeel", ""), "later_beoordelen")}> Later beoordelen — nog geen besluit</label>
-                      </fieldset>
-                      <p class="field-help" data-decision-hint>Kies een eindoordeel.</p>
+                      {decision_choices_html(str(obj["object_id"]), str(draft.get("eindoordeel", "")),
+                                             approval=None if structural_heading else approval_disabled)}
+                      <p class="field-help" data-decision-hint aria-live="polite">Kies een eindoordeel.</p>
                       <div class="decision-comment" data-comment-field hidden>
                         <label for="comment-{_esc(obj["object_id"])}">Toelichting (verplicht)</label>
                         <textarea id="comment-{_esc(obj["object_id"])}" name="comment">{html.escape(draft.get("comment", ""), quote=True)}</textarea>
@@ -3604,7 +3615,7 @@ def create_console_app(
             from src.review.review_passage_read_v1 import PREFIX
             if submitted_revision.startswith(PREFIX):
                 status = 409
-        message = ERROR_COPY.get(exc.code, "Metis kon deze actie niet afronden. Controleer de huidige status voordat je opnieuw probeert. Blijft dit gebeuren? Meld het bij de beheerder.")
+        message = disposition_conflict_message(exc) or ERROR_COPY.get(exc.code, "Metis kon deze actie niet afronden. Controleer de huidige status voordat je opnieuw probeert. Blijft dit gebeuren? Meld het bij de beheerder.")
         filename_error = exc.code == "invalid_store_path" and _request.url.path == "/ingest"
         hint = f'<p class="field-help">{_esc(FILENAME_HINT)}</p>' if filename_error else ""
         processing_details = ""
