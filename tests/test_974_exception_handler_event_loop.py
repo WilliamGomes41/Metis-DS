@@ -8,6 +8,7 @@ timed out. These tests serve the production app with a real uvicorn server
 concurrent cheap request is still answered while the handler runs.
 
 # release-control-evidence: scope/belofte
+# release-control-evidence: toegang
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
