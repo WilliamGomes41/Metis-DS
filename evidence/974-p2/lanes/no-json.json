@@ -5,7 +5,7 @@
     "db_json_bytes_by_phase": {},
     "db_json_bytes_by_phase_truncated": false,
     "db_queries": 0,
-    "elapsed_ms": 4.029,
+    "elapsed_ms": 3.638,
     "error": null,
     "method": "GET",
     "outcome": "completed",

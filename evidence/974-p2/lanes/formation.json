@@ -1,18 +1,18 @@
 {
   "head": {
-    "by_phase_sum": 18889194,
-    "db_json_bytes": 18889194,
+    "by_phase_sum": 18889195,
+    "db_json_bytes": 18889195,
     "db_json_bytes_by_phase": {
-      "<none>": 9959568,
+      "_none": 9959568,
       "authorization": 4,
-      "document_list": 965,
+      "document_list": 966,
       "document_list/document_load": 8928649,
       "processing_status": 4,
       "selection_projection": 4
     },
     "db_json_bytes_by_phase_truncated": false,
     "db_queries": 17,
-    "elapsed_ms": 3486.059,
+    "elapsed_ms": 3301.605,
     "error": null,
     "method": "GET",
     "outcome": "completed",

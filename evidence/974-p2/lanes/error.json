@@ -1,15 +1,15 @@
 {
   "conflict": {
-    "by_phase_sum": 52416,
-    "db_json_bytes": 52416,
+    "by_phase_sum": 52418,
+    "db_json_bytes": 52418,
     "db_json_bytes_by_phase": {
-      "<none>": 3296,
+      "_none": 3297,
       "source_read/source_views_read_records": 22763,
-      "store_transaction": 26357
+      "store_transaction": 26358
     },
     "db_json_bytes_by_phase_truncated": false,
     "db_queries": 15,
-    "elapsed_ms": 105.77,
+    "elapsed_ms": 104.369,
     "error": null,
     "method": "POST",
     "outcome": "completed",
@@ -18,16 +18,16 @@
     "status": 409
   },
   "error-form": {
-    "by_phase_sum": 149682,
-    "db_json_bytes": 149682,
+    "by_phase_sum": 149684,
+    "db_json_bytes": 149684,
     "db_json_bytes_by_phase": {
-      "<none>": 44995,
+      "_none": 44997,
       "document_load": 81924,
       "source_read/source_views_read_records": 22763
     },
     "db_json_bytes_by_phase_truncated": false,
     "db_queries": 29,
-    "elapsed_ms": 135.057,
+    "elapsed_ms": 129.745,
     "error": null,
     "method": "POST",
     "outcome": "completed",
@@ -39,12 +39,12 @@
     "by_phase_sum": 12,
     "db_json_bytes": 12,
     "db_json_bytes_by_phase": {
-      "<none>": 8,
+      "_none": 8,
       "authorization": 4
     },
     "db_json_bytes_by_phase_truncated": false,
     "db_queries": 6,
-    "elapsed_ms": 77.93,
+    "elapsed_ms": 77.549,
     "error": {
       "code": "unknown_snapshot",
       "handled": true,

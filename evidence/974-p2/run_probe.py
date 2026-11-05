@@ -116,7 +116,7 @@ def lanes(args, out):
     receipts["truncated"] = {"head": truncated, "pass": bool(
         truncated.get("db_json_bytes_by_phase_truncated") and truncated.get("phase_tree_truncated")
         and len(truncated["db_json_bytes_by_phase"]) <= truncated["max_tree_nodes"]
-        and "<overflow>" in truncated["db_json_bytes_by_phase"] and sums(truncated))}
+        and "_overflow" in truncated["db_json_bytes_by_phase"] and sums(truncated))}
     receipts["privacy"] = {"head": head["privacy"],
                            "pass": not any(head["privacy"]["request_event_hits"].values())}
     receipts["concurrent"] = {"head": head["concurrent"], "pass": all(sums(row) for row in head["concurrent"])
