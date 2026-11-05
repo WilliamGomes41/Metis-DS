@@ -41,9 +41,19 @@ AppServiceConsoleLogs
 AppServiceConsoleLogs
 | where TimeGenerated between (datetime({START}) .. datetime({END}))
 | where _ResourceId endswith strcat("/sites/", "{SITE}")
-| where ResultDescription has_any ("WORKER TIMEOUT", "was sent SIG", "Booting worker", "Worker exiting",
-        "Fatal Python error", "Current thread", "Thread 0x", "Handling signal", "Shutting down",
-        "Perhaps out of memory", "worker_abort", "Worker (pid")
+// has_any matches whole terms only; these are phrases and partial tokens (SIG -> SIGKILL).
+| where ResultDescription contains "WORKER TIMEOUT"
+     or ResultDescription contains "was sent SIG"
+     or ResultDescription contains "Booting worker"
+     or ResultDescription contains "Worker exiting"
+     or ResultDescription contains "Fatal Python error"
+     or ResultDescription contains "Current thread"
+     or ResultDescription contains "Thread 0x"
+     or ResultDescription contains "Handling signal"
+     or ResultDescription contains "Shutting down"
+     or ResultDescription contains "Perhaps out of memory"
+     or ResultDescription contains "worker_abort"
+     or ResultDescription contains "Worker (pid"
      or ResultDescription matches regex @'^\s+File ".*", line \d+ in '
 | project TimeGenerated, Level, Host = tostring(column_ifexists("Host", "")), ResultDescription
 | order by TimeGenerated asc
