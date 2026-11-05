@@ -71,9 +71,10 @@ def main() -> int:
     from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 
     store = PostgresWorkflowReviewStore(credential=CachedAzurePostgresCredential())
-    # Ledger events carry second precision; include the request's starting second.
-    args.start = args.start.replace(microsecond=0)
+    # Ledger events carry second precision: floor only the lower bound, so the
+    # starting second is included and the requested end is kept.
     end = args.start + timedelta(seconds=args.seconds)
+    args.start = args.start.replace(microsecond=0)
     with store._connect() as con:
         con.execute("SET TRANSACTION READ ONLY")
         con.execute("SET LOCAL statement_timeout = '10s'")
