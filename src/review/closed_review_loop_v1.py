@@ -284,6 +284,8 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
         actor_id = str(kwargs.get("actor_id") or "")
 
         if original_suitability:
+            # Before any branch, deferral included: hidden steps still post their answers.
+            kwargs = without_closed_follow_up(kwargs)
             if decision == "later":
                 deferred = dict(kwargs)
                 for key in (
@@ -300,7 +302,6 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                 deferred["decision"] = "later"
                 return super().review_object(**deferred)
             require_allowed_review_disposition(kwargs)
-            kwargs = without_closed_follow_up(kwargs)
             if (
                 decision == "approve"
                 and original_suitability == "alleen_onderbouwing"
