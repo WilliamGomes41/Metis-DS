@@ -62,6 +62,17 @@ def test_reports_only_events_inside_the_window_without_ids_or_details(complete_p
         assert secret not in result.stdout
 
 
+def test_event_in_the_starting_second_is_included(complete_postgres):
+    # Ledger events are stored with second precision; telemetry starts carry milliseconds.
+    snapshot_id = _seed(complete_postgres.dsn)
+    result = _run(complete_postgres.dsn, "--doc-ref", doc_ref(snapshot_id),
+                  "--start", "2026-11-04T09:12:10.800Z", "--seconds", "5")
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["review_events_in_window"] == 1
+    assert report["window"]["start"] == "2026-11-04T09:12:10+00:00"
+
+
 def test_unknown_document_is_reported_not_guessed(complete_postgres):
     _seed(complete_postgres.dsn)
     result = _run(complete_postgres.dsn, "--doc-ref", "d_" + "0" * 16, "--start", "2026-11-04T09:12:03Z")

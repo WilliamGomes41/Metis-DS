@@ -42,7 +42,7 @@ done
 [[ "$METIS_WEBAPP" =~ ^[A-Za-z0-9-]+$ ]] || { echo "METIS_WEBAPP has unexpected characters" >&2; exit 2; }
 WORKSPACE_GROUP="${METIS_LOG_WORKSPACE_GROUP:-$METIS_RESOURCE_GROUP}"
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 KQL="$ROOT/docs/diagnostics/worker-abort-incident.kql"
 [ -f "$KQL" ] || { echo "query file not found: $KQL" >&2; exit 2; }
 

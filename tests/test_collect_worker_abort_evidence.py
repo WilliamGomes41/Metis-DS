@@ -87,6 +87,24 @@ def test_repository_symlink_is_rejected_before_azure(tmp_path):
     assert not (ROOT / 'must-not-create-974').exists()
 
 
+def test_symlinked_checkout_still_refuses_output_inside_repository(tmp_path):
+    env = environment(tmp_path)
+    alias = tmp_path / 'checkout-alias'
+    alias.symlink_to(ROOT, target_is_directory=True)
+    target = ROOT / 'must-not-create-974-physical'
+    result = subprocess.run(['bash', str(alias / 'scripts/collect_worker_abort_evidence.sh'),
+                             '2026-11-04T13:28:00Z', '2026-11-04T14:05:00Z', str(target)],
+                            env=env, capture_output=True, text=True, timeout=30)
+    try:
+        assert result.returncode == 2, result.stderr
+        assert not Path(env['FAKE_AZ_CALLS']).exists()
+        assert not target.exists()
+    finally:
+        if target.exists():
+            import shutil
+            shutil.rmtree(target)
+
+
 def test_wrong_subscription_stops_before_workspace_read(tmp_path):
     env = {**environment(tmp_path), 'FAKE_SUBSCRIPTION': 'wrong'}
     result = collect(tmp_path, env)

@@ -71,6 +71,8 @@ def main() -> int:
     from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 
     store = PostgresWorkflowReviewStore(credential=CachedAzurePostgresCredential())
+    # Ledger events carry second precision; include the request's starting second.
+    args.start = args.start.replace(microsecond=0)
     end = args.start + timedelta(seconds=args.seconds)
     with store._connect() as con:
         con.execute("SET TRANSACTION READ ONLY")

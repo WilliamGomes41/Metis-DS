@@ -68,7 +68,7 @@ def test_prototype(tmp_path, production_console, monkeypatch):
         return real(fragments, include_headings=include_headings)
     monkeypatch.setattr(km, '_read_source_blocks', identity_first)
     b = _timed(frozen, CALLS, keep=True)
-    print(f"\nPROTOTYPE fragments={len(plain)} per-call-ms current={current:.2f} A={a:.4f} B={b:.4f} "
-          f"one-time-ms A_load={load_a:.1f} A_json_bytes={a_bytes} B_freeze={freeze_ms:.1f} "
-          f"projected-945-calls-s current={current*945/1000:.1f} A={(a*945+load_a)/1000:.2f} "
-          f"B_first_build_plus_hits={(b*CALLS+freeze_ms)/1000:.2f}")
+    # Each average includes its first call's one-time build, so it is not a per-hit cost and
+    # must not be multiplied into a 945-call projection; evidence/974-p1 measures hits separately.
+    print(f"\nPROTOTYPE fragments={len(plain)} build-inclusive-avg-ms current={current:.2f} A={a:.4f} B={b:.4f} "
+          f"one-time-ms A_load={load_a:.1f} A_json_bytes={a_bytes} B_freeze={freeze_ms:.1f}")
