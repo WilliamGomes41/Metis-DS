@@ -496,9 +496,11 @@ Product decisions recorded by the operator.
 
 | Decision | Answer | Date |
 |---|---|---|
-| Supporting evidence mandatory per type, and does "niet van toepassing" close it | open | |
-| Publication per object or per document (#991) | open | |
-| Package derived on read or stored aggregate | open | |
+| Supporting evidence mandatory per type, and does "niet van toepassing" close it | Mandatory for every type. An explicit, recorded "niet van toepassing" closes it. | 2026-11-05 |
+| Publication per object or per document (#991) | Per object. | 2026-11-05 |
+| Package derived on read or stored aggregate | Derived on read. No new storage or authority. | 2026-11-05 |
+
+The operator gave the go for KO-1 on 2026-11-05. KO-2 onward wait for KO-1 to merge.
 
 ## Appendix D. Links and reading list
 
