@@ -1096,7 +1096,9 @@ def install_deterministic_review_repair_routes(app: FastAPI, console: Determinis
     def account_for(request):
         return console.session_account(request.cookies.get("console_session"))
 
-    async def structured_repair_handler(request: Request, exc: StructuredRepairRequired) -> HTMLResponse:
+    # Sync on purpose: Starlette runs sync exception handlers in the threadpool;
+    # the repair render is slow enough to starve the single worker's event loop.
+    def structured_repair_handler(request: Request, exc: StructuredRepairRequired) -> HTMLResponse:
         account = account_for(request)
         if str(exc.submission.get('actor_id') or '') != str(account['account_id']):
             raise ConsoleError('correction_role_required')
