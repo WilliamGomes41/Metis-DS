@@ -124,3 +124,17 @@ def test_repair_page_html_is_unchanged_by_the_read_snapshot(repair_document, mon
     assert scoped.text.count('<option value="') == 2 * PARAGRAPHS
     assert f"De verpleegkundige legt waarneming {PARAGRAPHS - 1} vast.</option>" in scoped.text
     assert f"<p><b>Huidige passage:</b> {_text(0)}</p>" in scoped.text
+
+
+def test_current_object_stays_a_detached_copy_inside_a_read_snapshot(repair_document):
+    """The repair readers borrow the snapshot's rows; their callers still own a copy."""
+    console, _client, sid, obj = repair_document
+    with console.document_read_operation():
+        mine = console._current_object(sid, obj["object_id"])
+        mine["content"]["clean_text"] = "Gewijzigd."
+        mine["governance"]["validation_status"] = "approved"
+        again = console._current_object(sid, obj["object_id"])
+        listed = next(row for row in console.snapshot_objects(sid) if row["object_id"] == obj["object_id"])
+    assert again["content"]["clean_text"] == listed["content"]["clean_text"] == _text(0)
+    assert again["governance"]["validation_status"] == listed["governance"]["validation_status"] == "needs_review"
+    assert again is not mine

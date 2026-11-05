@@ -303,17 +303,18 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             return deepcopy(self.snapshot_objects(snapshot_id))
 
     def _current_object(self, snapshot_id: str, object_id: str) -> dict[str, Any]:
+        # Borrow the current rows and copy only the one the caller owns.
         current = next(
             (
                 row
-                for row in self.snapshot_objects(snapshot_id)
+                for row in self._read_current_objects(snapshot_id)
                 if row.get("object_id") == object_id
             ),
             None,
         )
         if current is None:
             raise ConsoleError("unknown_object")
-        return current
+        return deepcopy(current)
 
     def _validate_source_bound_patch(
         self,
