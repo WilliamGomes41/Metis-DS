@@ -49,7 +49,7 @@ Governance in this repository overrides pstack where they differ. Class A with `
   - [ ] KO-6 after KO-5 has run in production for one full review week without a rollback.
 - [ ] Hold the file boundaries.
   - [ ] KO-1 touches only `src/review/knowledge_object_state_v1.py`, `scripts/ko_state_inventory.py`, `tests/test_ko_state_*.py` and `evidence/ko-1/**`.
-  - [ ] KO-2 touches only the review card renderers in `src/operations_console_app.py`, `src/review/review_cockpit_v1.py`, `src/review/review_workboard_v1.py`, `static/console.css` and their tests.
+  - [ ] KO-2 touches only the review card renderers and existing post-save response/navigation, `src/review/ko_receipt_ui_v1.py`, `src/review/review_cockpit_v1.py`, `src/review/review_workboard_v1.py`, `static/console.css` and their tests.
   - [ ] KO-3 touches only `src/publication/publication_readiness_v1.py`, `src/publication/publish_readiness_ui_v1.py`, `src/retrieval/retrieval_projection_v2.py`, `src/workflows/workflow_badge_counts_postgres_v1.py` and their tests.
   - [ ] KO-4 touches only `src/review/ko_transitions_v1.py`, the command methods it replaces, and their tests.
   - [ ] KO-5 only deletes code, rewrites stale contract rows, and updates the tests that pinned deleted paths.
@@ -148,61 +148,69 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 - [ ] The root appends KO-1 to the stack and the operator lands it bottom-up.
 - [ ] The operator runs the inventory in production after deploy and posts counts only on the program issue. Those counts decide KO-5's start.
 
-## Show the reviewer the KO state and a receipt before approval (KO-2)
+## Show a clear review card, then a receipt after a successful save (KO-2)
 
 **Depends on.** KO-1.
 
+**Interaction.** Clear review card → review and save → receipt of the saved result. This follows William's correction: the bonnetje is the overview after the action, showing what the reviewer did and how the result is organised in the kernel. It is not placed before approval.
+
 **Files.**
 
-- [ ] Edit `src/operations_console_app.py` (review card renderer only).
+- [ ] Edit `src/operations_console_app.py` (review card renderer and existing post-save response/navigation only).
 - [ ] Edit `src/review/review_cockpit_v1.py`.
 - [ ] Edit `src/review/review_workboard_v1.py`.
 - [ ] Edit `static/console.css`.
 - [ ] Create `src/review/ko_receipt_ui_v1.py`.
 - [ ] Create `tests/test_ko_receipt_ui.py`.
 - [ ] Edit `tests/browser_review_disposition_check.cjs`.
+- [ ] Reuse the existing save result and authorised read boundary; follow the existing response owner where the route delegates navigation.
 
 **Build.**
 
-- [ ] Render the derived state on the review card header, from `derive_ko_state`, in Dutch, with the reasons as a short list.
-- [ ] Add `render_ko_receipt` in `ko_receipt_ui_v1.py`. It shows the claim, its context, its evidence and its provenance exactly as the package will carry them, before the approve button. This is the bonnetje from the advisors' meeting.
+- [ ] Render the derived state on the review card header, from `derive_ko_state`, in Dutch, with the reasons as a short list. Before saving, the card provides the source and context needed to review, without a receipt.
+- [ ] Add `render_ko_receipt` in `ko_receipt_ui_v1.py`. Render it only after the existing command has successfully saved. It identifies the action and the exact saved object version, and shows how its claim, context, evidence and provenance are organised in the kernel.
+- [ ] Derive the receipt from the durable result of that action through the existing authorised readers. Posted form values or a success flag alone are not evidence of a saved decision. A later change must not be silently presented as the result of this action.
+- [ ] Present the receipt within the existing post-save navigation, without a new form, confirmation click, separate approval step, stored receipt, status or write authority. An initial review card has no successful-action receipt.
+- [ ] On validation refusal, conflict, rollback or an unconfirmed save outcome, preserve the existing error/recovery flow and show no successful receipt. Display only what was saved: opening a repair form is not a completed correction; a first approval is not a completed second review or publication.
 - [ ] Replace the workboard's own status labels with the derived state. Remove the workboard's local "final" set in favour of `FINAL_VALIDATION_STATUSES`.
-- [ ] Run Impeccable in Operate mode per `docs/agents/impeccable.md` for the header and the receipt.
+- [ ] Run Impeccable in Operate mode per `docs/agents/impeccable.md` for the header and the post-save receipt.
 
 **You see.**
 
-- [ ] The card for a KO in review shows the state "In review" and a receipt block titled "Wat je goedkeurt" with four labelled rows.
-- [ ] Approving still writes the same review event and binding as trunk.
+- [ ] Before saving, a KO in review shows the state "In review" and a clear review card, without a receipt.
+- [ ] After successful storage, "Dit heb je gedaan" shows the actual action, saved version and organisation of the result. Approval may be labelled "Dit heb je goedgekeurd" only when that approval was saved.
+- [ ] The next passage or overview remains reachable through the existing flow; there is no extra confirmation step.
+- [ ] Approving still writes the same review event and binding as trunk. A required second review or publication is shown as pending when it has not happened.
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `tests/test_ko_receipt_ui.py` gains a case per state header and a case that the receipt shows exactly the package fields. Run `scripts/test_postgres.sh python -m pytest tests/test_ko_receipt_ui.py -q`.
-- [ ] `tests/characterization/` review room suites still pass with an updated snapshot that differs only in the header and receipt. Run `scripts/test_postgres.sh python -m pytest tests/characterization -q`.
+- [ ] `tests/test_ko_receipt_ui.py` gains a case per state header and cases for receipt absence before saving, receipt contents matching the exact durable action/version, and no successful receipt on validation refusal, stale conflict, rollback or unconfirmed outcome. It also proves that subsequent changes and another object's result cannot be presented as this action's receipt. Run `scripts/test_postgres.sh python -m pytest tests/test_ko_receipt_ui.py -q`.
+- [ ] `tests/characterization/` review room suites still pass with updated snapshots limited to the state header and receipt at the existing post-save destination. Run `scripts/test_postgres.sh python -m pytest tests/characterization -q`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `grok-4.7-xhigh-fast` at the PR head, per the boot recipe.
 
-- [ ] Lane 1. Regression lane against trunk. Approve the first fixture KO at trunk and head. Trunk lacks the receipt, so record that and gate that the head shows the receipt and writes the same event type and binding tuple as trunk. Save `ko2-regression.png`. Pass when event and binding match and the receipt is visible.
-- [ ] Lane 2. Open a card in Context open. Save `ko2-context-open.png`. Pass when the header reads "Context open" and names the missing context.
-- [ ] Lane 3. Open a card in Tweede review as a second reviewer. Save `ko2-second.png`. Pass when the header reads "Tweede review" and the receipt shows the first reviewer's choice.
-- [ ] Lane 4. Open an approved card. Save `ko2-approved.png`. Pass when the header reads "Goedgekeurd" and no approve button is offered.
-- [ ] Lane 5. Open the card at 375 px width. Save `ko2-mobile.png`. Pass when there is no horizontal scroll and the receipt rows stack.
-- [ ] Lane 6. Open the card with JavaScript disabled. Save `ko2-nojs.png`. Pass when header and receipt render and approval still posts.
-- [ ] Lane 7. Navigate the card with the keyboard only. Save `ko2-keyboard.png`. Pass when focus reaches the receipt before the approve button and focus is visible.
+- [ ] Lane 1. Regression lane against trunk. Open the first fixture KO at trunk and head: head has no receipt before saving. Approve on both, then read the head receipt and reopen the saved object. Save `ko2-regression.png`. Pass when the event and binding match trunk, the receipt matches the saved action/version and organisation, and no extra confirmation is required.
+- [ ] Lane 2. Open a card in Context open. Submit a stale revision and then a validation-refused action. Save `ko2-context.png`. Pass when the card names the missing context, the existing errors remain visible, and neither failure shows a successful receipt.
+- [ ] Lane 3. Approve a high-risk object once, then open it as the independent second reviewer and complete the second review. Save `ko2-second.png`. Pass when the first receipt reports the saved first approval with second review pending, and the second receipt reports only the successfully saved independent decision.
+- [ ] Lane 4. Reopen the saved approved version and compare it with the receipt, then repeat the action using an old revision. Save `ko2-approved.png`. Pass when the saved result matches, no approval button is offered for completed work, and the refused stale action does not produce a new successful receipt.
+- [ ] Lane 5. At 375 px width, review and save a fixture KO. Save `ko2-mobile.png`. Pass when both card and subsequent receipt have no horizontal scroll and the receipt rows stack.
+- [ ] Lane 6. With JavaScript disabled, review and save a fixture KO. Save `ko2-nojs.png`. Pass when the card renders without a receipt before the save, approval posts, and the receipt appears only after successful storage.
+- [ ] Lane 7. Use the keyboard only to review, save and read the receipt. Save `ko2-keyboard.png`. Pass when focus is visible, the saved outcome is accessible and continuation needs no extra confirmation.
 - [ ] Lane 8. Open the workboard. Save `ko2-workboard.png`. Pass when every row shows a state from `KO_STATES` and none shows a legacy label.
-- [ ] Lane 9. Open a recommendation without evidence. Save `ko2-no-evidence.png`. Pass when the receipt shows an empty evidence row with the text "Geen onderbouwing gekoppeld".
-- [ ] Lane 10. Switch to dark mode. Save `ko2-dark.png`. Pass when header and receipt meet WCAG AA contrast per an axe run.
+- [ ] Lane 9. Open a recommendation without evidence. Save `ko2-no-evidence.png`. Pass when the review card names the missing evidence without a receipt. A refusal has no successful receipt; any permitted saved action reports the actual outcome and does not invent evidence.
+- [ ] Lane 10. In dark mode, review, save and read the receipt. Save `ko2-dark.png`. Pass when both the card and post-save receipt meet WCAG AA contrast per an axe run.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] Metric. Review card server time p95 and the request's PostgreSQL bytes read, at trunk and head.
-- [ ] Probe. `evidence/974-p4b/run_p4b.sh`, interleaved trunk and head, five rounds each.
-- [ ] Baseline. Record the trunk p95 and bytes first.
-- [ ] Rule. Head p95 above trunk by more than 10 percent fails. Head bytes read above trunk by more than 10 percent fails.
+- [ ] Metric. Review card server time p95, the complete save → existing post-save destination time p95, and PostgreSQL bytes read for each path, at trunk and head.
+- [ ] Probe. `evidence/974-p4b/run_p4b.sh` for the existing read baseline, plus the same fixture through save and its post-save destination, interleaved trunk and head, five rounds each.
+- [ ] Baseline. Record trunk p95 and bytes for both paths first.
+- [ ] Rule. Head p95 or bytes above the corresponding trunk value by more than 10 percent fails. Measure the whole save/navigation action so receipt cost cannot be hidden in a redirect.
 
 **Review gate.** The operator reviews before merge.
 
-- [ ] Copy lane 1, 2, 3 and 5 screenshots into `evidence/ko-2/ko-2-review-<slug>.png`.
-- [ ] Record a 30 to 60 second video of opening a card, reading the receipt and approving, on a lane VM. Save it as `evidence/ko-2/ko-2-review.mp4`.
+- [ ] Copy lane 1, 2, 3 and 5 screenshots into `evidence/ko-2/ko-2-review-<slug>.png`, including the card before saving, the receipt after success and an error without a successful receipt.
+- [ ] Record a 30 to 60 second video of opening the card, reviewing and saving, reading the resulting receipt, then continuing through the existing navigation. Save it as `evidence/ko-2/ko-2-review.mp4`.
 - [ ] Post the screenshots and the video in chat. Stop at merge-ready. Wait for the operator's click.
 
 **Merge.**
@@ -484,7 +492,7 @@ Measured facts this plan relies on come from the read-only map of 5 November 202
 ## Appendix C. Risks
 
 - KO-1. The derivation may disagree with `definitive_review_disposition` on edge cases. The owner pins both in the same test and treats any disagreement as a finding, not a tolerance.
-- KO-2. The receipt can grow the review card render, which caused the #974 worker timeouts. The perf rule holds it at 10 percent.
+- KO-2. Receipt rendering can slow the post-save response, and state presentation can slow the card. The #974 worker timeouts make both relevant: measure card reads and the complete save/navigation action; the perf rule holds each at 10 percent.
 - KO-3. The per-object decision is open. Without it KO-3 builds per-document readiness only.
 - KO-4. The Bewijs open guard can block existing recommendations that have no linked evidence. The owner reports the KO-1 production count before KO-4 merges, and the operator decides whether existing KOs are grandfathered.
 - KO-4. Two workers can race on one KO. Lane 6 and the revision CAS cover it.
@@ -495,7 +503,7 @@ Measured facts this plan relies on come from the read-only map of 5 November 202
 
 Work that runs beside this program, so no PR builds a second way.
 
-- #990 is the product acceptance for the review card. KO-2 builds its state header and receipt, and KO-4 builds its three questions as transition guards. Nobody changes the review card for #990 outside KO-2 and KO-4.
+- #990 is the product acceptance for the review card and the receipt after a successful save. KO-2 builds the state header and post-save overview of the exact durable action/version and its kernel organisation; KO-4 builds the three questions as transition guards. No extra form or confirmation step is added. Nobody changes this flow for #990 outside KO-2 and KO-4.
 - #991 owns the per-object publish action and its contract. KO-3 only derives readiness per object and adds no publish action.
 - #992 measures the Athena package, which stays derived on read.
 - #942 owns the single writer for source roles. KO-4 routes the source-context commands through `apply_ko_event` only on top of that writer, so the source-context part of KO-4 waits for #942.
