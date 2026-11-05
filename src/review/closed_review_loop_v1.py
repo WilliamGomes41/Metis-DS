@@ -23,7 +23,12 @@ from src.vorming.passage_register_v1 import (
 )
 from src.review.proportionate_review_v1 import ProportionateReviewConsole
 from src.publication.publish_authorization_v1 import invalidate_for_object
-from src.review.review_cockpit_v1 import broncontext_parts, map_eindoordeel
+from src.review.review_cockpit_v1 import (
+    EINDOORDEEL_TO_DECISION,
+    EINDOORDEEL_VALUES,
+    broncontext_parts,
+    map_eindoordeel,
+)
 from src.review.source_discrepancy_v1 import normalize as normalize_discrepancy
 from src.review.review_ledger import append_event, read_events, read_command_events
 from src.serving_relations_v1 import binding_relations
@@ -37,6 +42,23 @@ ALLOWED_FINAL_BY_SUITABILITY = {
     "alleen_onderbouwing": {"revise", "approve", "reject"},
     "geen_kenniseenheid": {"reject"},
 }
+
+
+class ReviewDispositionConflict(ConsoleError):
+    """``review_disposition_conflict`` that names the refused combination."""
+
+    def __init__(self, suitability: str, decision: str) -> None:
+        super().__init__("review_disposition_conflict")
+        self.suitability = suitability
+        self.decision = decision
+
+
+def allowed_eindoordelen(suitability: str) -> tuple[str, ...]:
+    """Final judgements the rule below accepts for ``suitability``, in form order."""
+    if not suitability:
+        return EINDOORDEEL_VALUES
+    allowed = ALLOWED_FINAL_BY_SUITABILITY.get(suitability, set()) | {"later"}
+    return tuple(value for value in EINDOORDEEL_VALUES if EINDOORDEEL_TO_DECISION[value] in allowed)
 
 
 def require_allowed_review_disposition(submission: dict[str, Any]) -> None:
@@ -56,7 +78,7 @@ def require_allowed_review_disposition(submission: dict[str, Any]) -> None:
         return
     allowed = ALLOWED_FINAL_BY_SUITABILITY.get(suitability)
     if allowed is None or decision not in allowed:
-        raise ConsoleError("review_disposition_conflict")
+        raise ReviewDispositionConflict(suitability, decision)
 
 
 def _norm(value: str) -> str:

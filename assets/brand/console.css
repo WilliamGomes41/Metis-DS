@@ -2120,6 +2120,12 @@ details.review-document-card { border-left: 1px solid var(--line); background: v
 [data-essential-context] { white-space: normal; }
 [data-essential-context] p { margin: 0; white-space: pre-wrap; }
 .review-choices-column fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.review-choices-column legend { padding: 0; }
+/* Without :has() every scope sentence stays visible, so the full rule is readable. */
+.decision-scope span { display: block; }
+.decision-scope [data-decision-scope=""],
+[data-decision-mismatch] { display: none; }
+.decision-mismatch { color: var(--alert-text); font-weight: 600; margin-top: 2px; }
 .review-choices-column .review-step {
   border: 0;
   border-top: 1px solid var(--line);
