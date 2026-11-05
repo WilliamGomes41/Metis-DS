@@ -100,11 +100,14 @@ def test_oversized_module_context_is_an_explicit_error_without_truncation():
     assert next(b for b in task["evidence_blocks"] if b["block_id"] == "m1-rat")["text"] == long
 
 
-def test_single_module_document_without_title_is_its_own_module():
-    # Codex on #994: every path starts with the only module, so the shared root is the module.
+def test_untitled_single_module_keeps_trunk_context_and_never_leaks():
+    # Codex on #994 (P2, then P1): an untitled single module ([module, Aanbevelingen]) has the
+    # same shape as a titled document with flat modules ([title, module]). Leakage is the worse
+    # error, so this case keeps the trunk behaviour: own section and ancestor headings only.
     blocks = [b for b in guideline() if b["section_path"][0].startswith("Module 1")]
     context = _context(_task(tasks_for(blocks, blocks), "m1-rec"))
-    assert {"m1-rat", "m1-ow"} <= context
+    assert "m1" in context
+    assert not {"m1-rat", "m1-ow", "m1-bg"} & context
 
 
 def test_recommendation_directly_under_a_titled_module_stays_in_that_module():
@@ -135,3 +138,15 @@ def test_titled_module_without_subsections_still_separates_modules():
     context = _context(_task(tasks_for(blocks, blocks), "m1-rec"))
     assert {"m1-rat", "m1-ow"} <= context
     assert not {"m2", "m2-rec", "m2-txt"} & context
+
+
+def test_titled_document_with_only_flat_modules_does_not_leak():
+    # Codex on #994: every module holds its text directly under [title, module].
+    m1, m2 = "Module 1: Risicofactoren", "Module 2: Preventieve maatregelen"
+    blocks = [block("t", "Smetten", ["Smetten"], heading="Smetten"),
+              block("m1", m1, ["Smetten", m1], heading=m1),
+              block("m1-rec", "Breng bij iedere patiënt de risicofactoren voor smetten in kaart.", ["Smetten", m1]),
+              block("m2", m2, ["Smetten", m2], heading=m2),
+              block("m2-rec", "Houd de huidplooien droog.", ["Smetten", m2])]
+    context = _context(_task(tasks_for(blocks, blocks), "m1-rec"))
+    assert not {"m2", "m2-rec"} & context

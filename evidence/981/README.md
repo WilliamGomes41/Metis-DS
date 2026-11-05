@@ -13,7 +13,8 @@ Nu geldt een structurele regel:
   het taakpad;
 - de hele bronmodule voor een taak met een mogelijke aanbeveling (het bestaande
   inventarissignaal van het taakplan). De module is het niveau onder de gedeelde
-  documentwortel, dus ook bij parsers die de documenttitel vooraan zetten;
+  documentwortel, dus ook bij parsers die de documenttitel vooraan zetten.
+  Blokken zonder sectiepad tellen niet mee voor die wortel;
 - expliciete verwijzingen (Tabel, Figuur, Bijlage) blijven exact traceerbaar,
   ook naar een andere module.
 
@@ -57,3 +58,11 @@ blijft de onafhankelijke referentiemeting in #530.
 |---|---|---|
 | Echte Smetten-export (15 modules op het eerste niveau, geen titel) | 1 | Ongewijzigd: vreemde koppen 5, Rationale 7 van 8, overwegingen 5 van 8, totaal 350.565 tekens, maximaal 40.511 |
 | Dezelfde blokken met de titel "Smetten" vooraan in elk pad | 2 | Identiek aan de run hierboven |
+
+## Bekende grens: één module zonder titel
+
+Een document met één module en zonder titel (`[module, Aanbevelingen]`) heeft dezelfde vorm als een document met titel en platte modules (`[titel, module]`). Geen structurele regel kan die twee scheiden.
+
+Context die over modules heen lekt, is de ergste fout. Daarom wint altijd het smallere niveau. Zo'n document met één module krijgt het gedrag van trunk: de eigen sectie en de koppen erboven, zonder de zustersecties. Dat is geen achteruitgang ten opzichte van main.
+
+De tests `test_untitled_single_module_keeps_trunk_context_and_never_leaks` en `test_titled_document_with_only_flat_modules_does_not_leak` leggen beide kanten vast.
