@@ -297,3 +297,165 @@ def test_failed_response_transport_does_not_claim_completed_body(events):
     assert 'response_started' in names and 'response_completed' not in names
     assert events[-1]['outcome'] == 'exception'
     assert 'private' not in json.dumps(events)
+
+
+# --- database JSON bytes attributed to the reading phase -----------------------
+
+ONE_MB_JSON = '"private-value-' + 'a' * (1_000_000 - len('"private-value-') - 1) + '"'
+
+
+class _JsonReads:
+    """Real psycopg JSON loads through the console's measured connection."""
+
+    def __init__(self, dsn):
+        self.dsn = dsn
+
+    def connect(self):
+        import psycopg
+        from src.console_performance_v1 import connect_postgres
+        return connect_postgres(psycopg, self.dsn)
+
+    @staticmethod
+    def read(connection, text):
+        # The column alias is a marker that MAG NIET reach telemetry.
+        return connection.execute('SELECT %s::jsonb AS private_column', (text,)).fetchone()[0]
+
+
+def _measured_app():
+    from src.console_performance_v1 import install_console_performance
+    app = FastAPI()
+    install_console_performance(app)
+    return app
+
+
+def _finished_for(events, route):
+    return [r for r in events if r['event'] == 'request_finished' and r['route'] == route][-1]
+
+
+def test_json_bytes_are_attributed_to_the_reading_phase(events, postgres_template):
+    db = _JsonReads(postgres_template[0])
+    assert len(ONE_MB_JSON.encode()) == 1_000_000
+    app = _measured_app()
+
+    @app.get('/review')
+    def review():
+        with db.connect() as connection:
+            with diagnostic_phase('review_render'):
+                with diagnostic_phase('source_views_read_records'):
+                    value = db.read(connection, ONE_MB_JSON)
+            with diagnostic_phase('document_load'):
+                db.read(connection, '{"k": 1}')
+            db.read(connection, '[1, 2]')  # outside every phase
+        return {'length': len(value)}
+
+    with TestClient(app) as client:
+        assert client.get('/review').json() == {'length': 999_998}
+    finished = _finished_for(events, '/review')
+    by_phase = finished['db_json_bytes_by_phase']
+    assert by_phase == {'review_render/source_views_read_records': 1_000_000,
+                        'document_load': len('{"k": 1}'), '_none': len('[1, 2]')}
+    assert sum(by_phase.values()) == finished['db']['db_json_bytes']
+    # Every phase key names a node of the request's own phase tree.
+    assert set(by_phase) - {'_none'} <= set(finished['phase_tree'])
+    assert 'db_json_bytes_by_phase_truncated' not in finished
+    serialized = json.dumps(events)
+    assert 'private' not in serialized and 'SELECT' not in serialized
+
+
+def test_request_without_json_reads_has_an_empty_map(events, postgres_template):
+    db = _JsonReads(postgres_template[0])
+    app = _measured_app()
+
+    @app.get('/tree')
+    def tree():
+        with db.connect() as connection, diagnostic_phase('document_list'):
+            connection.execute('SELECT 1').fetchone()
+        return 'ok'
+
+    with TestClient(app) as client:
+        assert client.get('/tree').status_code == 200
+    finished = _finished_for(events, '/tree')
+    assert finished['db_json_bytes_by_phase'] == {}
+    assert finished['db']['db_json_bytes'] == 0
+
+
+def test_json_byte_map_is_bounded_like_the_phase_tree(events, postgres_template):
+    from src.request_diagnostics_v1 import MAX_TREE_NODES, PHASES
+    db = _JsonReads(postgres_template[0])
+    app = _measured_app()
+    names = sorted(PHASES - {'db_connect', 'db_execute', 'db_fetch'})
+    pairs = [(outer, inner) for outer in names[:9] for inner in names[9:18]]
+    assert len(pairs) > MAX_TREE_NODES
+
+    @app.get('/review')
+    def review():
+        with db.connect() as connection:
+            db.read(connection, '22')  # outside every phase
+            for outer, inner in pairs:
+                with diagnostic_phase(outer), diagnostic_phase(inner):
+                    db.read(connection, '1')
+        return 'ok'
+
+    with TestClient(app) as client:
+        assert client.get('/review').status_code == 200
+    finished = _finished_for(events, '/review')
+    by_phase = finished['db_json_bytes_by_phase']
+    # Both reserved buckets fit inside the bound; overflow is explicit, never dropped.
+    assert len(by_phase) == MAX_TREE_NODES
+    assert by_phase['_none'] == 2
+    assert by_phase['_overflow'] == len(pairs) - (MAX_TREE_NODES - 2)
+    assert finished['db_json_bytes_by_phase_truncated'] is True
+    assert finished['phase_tree_truncated'] is True
+    assert sum(by_phase.values()) == finished['db']['db_json_bytes'] == len(pairs) + 2
+
+
+def test_json_byte_map_survives_a_failing_request_and_the_hub(events, postgres_template):
+    from src.telemetry.hub import _clean
+    db = _JsonReads(postgres_template[0])
+    app = _measured_app()
+
+    @app.get('/review')
+    def review():
+        with db.connect() as connection:
+            db.read(connection, '[1, 2]')  # outside every phase: the reserved bucket
+            with diagnostic_phase('document_load'):
+                db.read(connection, '{"k": 1}')
+                raise ValueError('private failure')
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        assert client.get('/review').status_code == 500
+    finished = _finished_for(events, '/review')
+    assert finished['outcome'] == 'exception' and finished['error']['type'] == 'ValueError'
+    assert finished['db_json_bytes_by_phase'] == {'document_load': len('{"k": 1}'), '_none': len('[1, 2]')}
+    # The hub keeps every key, reserved buckets included, so the stored map still sums to the total.
+    assert _clean(finished)['db_json_bytes_by_phase'] == finished['db_json_bytes_by_phase']
+    assert sum(_clean(finished)['db_json_bytes_by_phase'].values()) == finished['db']['db_json_bytes']
+    assert 'private' not in json.dumps(events)
+
+
+def test_json_byte_keys_longer_than_the_hub_allows_go_to_overflow(events, postgres_template):
+    from contextlib import ExitStack
+    from src.request_diagnostics_v1 import PHASES
+    from src.telemetry.hub import _KEY, _clean
+    db = _JsonReads(postgres_template[0])
+    app = _measured_app()
+    names = sorted(PHASES - {'db_connect', 'db_execute', 'db_fetch'}, key=len, reverse=True)[:8]
+    assert len('/'.join(names)) > 121
+
+    @app.get('/review')
+    def review():
+        with db.connect() as connection, ExitStack() as stack:
+            for name in names:
+                stack.enter_context(diagnostic_phase(name))
+            db.read(connection, '{"k": 1}')
+        return 'ok'
+
+    with TestClient(app) as client:
+        assert client.get('/review').status_code == 200
+    finished = _finished_for(events, '/review')
+    by_phase = finished['db_json_bytes_by_phase']
+    assert all(_KEY.fullmatch(key) for key in by_phase)
+    assert by_phase == {'_overflow': len('{"k": 1}')}
+    assert finished['db_json_bytes_by_phase_truncated'] is True
+    cleaned = _clean(finished)['db_json_bytes_by_phase']
+    assert sum(cleaned.values()) == finished['db']['db_json_bytes']

@@ -1,0 +1,104 @@
+{
+  "runs": [
+    {
+      "by_phase_sum": 24015897,
+      "db_json_bytes": 24015897,
+      "db_json_bytes_by_phase": {
+        "<none>": 4,
+        "authorization": 4,
+        "document_load": 8928649,
+        "review_render": 8626491,
+        "review_render/source_views_read_records": 6460749
+      },
+      "db_json_bytes_by_phase_truncated": false,
+      "db_queries": 15,
+      "elapsed_ms": 1275.501,
+      "error": null,
+      "method": "GET",
+      "outcome": "completed",
+      "phase_tree_truncated": false,
+      "route": "/review",
+      "status": 200
+    },
+    {
+      "by_phase_sum": 24015897,
+      "db_json_bytes": 24015897,
+      "db_json_bytes_by_phase": {
+        "<none>": 4,
+        "authorization": 4,
+        "document_load": 8928649,
+        "review_render": 8626491,
+        "review_render/source_views_read_records": 6460749
+      },
+      "db_json_bytes_by_phase_truncated": false,
+      "db_queries": 15,
+      "elapsed_ms": 1457.519,
+      "error": null,
+      "method": "GET",
+      "outcome": "completed",
+      "phase_tree_truncated": false,
+      "route": "/review",
+      "status": 200
+    },
+    {
+      "by_phase_sum": 24015897,
+      "db_json_bytes": 24015897,
+      "db_json_bytes_by_phase": {
+        "<none>": 4,
+        "authorization": 4,
+        "document_load": 8928649,
+        "review_render": 8626491,
+        "review_render/source_views_read_records": 6460749
+      },
+      "db_json_bytes_by_phase_truncated": false,
+      "db_queries": 15,
+      "elapsed_ms": 1414.915,
+      "error": null,
+      "method": "GET",
+      "outcome": "completed",
+      "phase_tree_truncated": false,
+      "route": "/review",
+      "status": 200
+    },
+    {
+      "by_phase_sum": 24015897,
+      "db_json_bytes": 24015897,
+      "db_json_bytes_by_phase": {
+        "<none>": 4,
+        "authorization": 4,
+        "document_load": 8928649,
+        "review_render": 8626491,
+        "review_render/source_views_read_records": 6460749
+      },
+      "db_json_bytes_by_phase_truncated": false,
+      "db_queries": 15,
+      "elapsed_ms": 1243.364,
+      "error": null,
+      "method": "GET",
+      "outcome": "completed",
+      "phase_tree_truncated": false,
+      "route": "/review",
+      "status": 200
+    },
+    {
+      "by_phase_sum": 24015897,
+      "db_json_bytes": 24015897,
+      "db_json_bytes_by_phase": {
+        "<none>": 4,
+        "authorization": 4,
+        "document_load": 8928649,
+        "review_render": 8626491,
+        "review_render/source_views_read_records": 6460749
+      },
+      "db_json_bytes_by_phase_truncated": false,
+      "db_queries": 15,
+      "elapsed_ms": 1510.297,
+      "error": null,
+      "method": "GET",
+      "outcome": "completed",
+      "phase_tree_truncated": false,
+      "route": "/review",
+      "status": 200
+    }
+  ]
+}

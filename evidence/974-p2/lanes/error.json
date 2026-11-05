@@ -1,0 +1,60 @@
+{
+  "conflict": {
+    "by_phase_sum": 52418,
+    "db_json_bytes": 52418,
+    "db_json_bytes_by_phase": {
+      "_none": 3297,
+      "source_read/source_views_read_records": 22763,
+      "store_transaction": 26358
+    },
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 15,
+    "elapsed_ms": 104.369,
+    "error": null,
+    "method": "POST",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 409
+  },
+  "error-form": {
+    "by_phase_sum": 149684,
+    "db_json_bytes": 149684,
+    "db_json_bytes_by_phase": {
+      "_none": 44997,
+      "document_load": 81924,
+      "source_read/source_views_read_records": 22763
+    },
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 29,
+    "elapsed_ms": 129.745,
+    "error": null,
+    "method": "POST",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 400
+  },
+  "head": {
+    "by_phase_sum": 12,
+    "db_json_bytes": 12,
+    "db_json_bytes_by_phase": {
+      "_none": 8,
+      "authorization": 4
+    },
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 6,
+    "elapsed_ms": 77.549,
+    "error": {
+      "code": "unknown_snapshot",
+      "handled": true,
+      "type": "ConsoleError"
+    },
+    "method": "GET",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 400
+  },
+  "pass": true
+}

@@ -1,0 +1,25 @@
+{
+  "head": {
+    "checked_values": {
+      "object_id": 2006,
+      "snapshot_id": 2,
+      "sql": 4
+    },
+    "events": 501,
+    "events_with_snapshot_id": [
+      "processing_checkpoint"
+    ],
+    "hits": {
+      "object_id": 0,
+      "snapshot_id": 2,
+      "sql": 0
+    },
+    "request_event_hits": {
+      "object_id": 0,
+      "snapshot_id": 0,
+      "sql": 0
+    },
+    "request_events": 477
+  },
+  "pass": true
+}

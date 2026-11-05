@@ -1,0 +1,335 @@
+{
+  "attributed_request": {
+    "by_phase_sum": 24015897,
+    "db_json_bytes": 24015897,
+    "db_json_bytes_by_phase": {
+      "<none>": 4,
+      "authorization": 4,
+      "document_load": 8928649,
+      "review_render": 8626491,
+      "review_render/source_views_read_records": 6460749
+    },
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 15,
+    "elapsed_ms": 1734.837,
+    "error": null,
+    "method": "GET",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/review",
+    "status": 200
+  },
+  "head": {
+    "all_requests": {
+      "max": 1913.441,
+      "median": 1444.45,
+      "min": 1181.666,
+      "n": 50,
+      "p25": 1322.682,
+      "p75": 1510.646
+    },
+    "db_json_bytes": [
+      24015897
+    ],
+    "per_round_median": {
+      "max": 1487.674,
+      "median": 1438.13,
+      "min": 1388.581,
+      "n": 10,
+      "p25": 1410.983,
+      "p75": 1469.724
+    },
+    "statuses": [
+      200
+    ]
+  },
+  "head_vs_trunk_percent": -2.84,
+  "metric": "median elapsed_ms of GET /review?document=<sid>, 2,000-paragraph fixture",
+  "order": [
+    {
+      "elapsed_ms": [
+        1247.246,
+        1425.927,
+        1466.225,
+        1288.888,
+        1450.146
+      ],
+      "process_seconds": 87.4,
+      "round": 1,
+      "side": "trunk"
+    },
+    {
+      "elapsed_ms": [
+        1298.139,
+        1511.695,
+        1442.134,
+        1429.211,
+        1564.357
+      ],
+      "process_seconds": 91.4,
+      "round": 1,
+      "side": "head"
+    },
+    {
+      "elapsed_ms": [
+        1275.501,
+        1457.519,
+        1414.915,
+        1243.364,
+        1510.297
+      ],
+      "process_seconds": 88.6,
+      "round": 2,
+      "side": "head"
+    },
+    {
+      "elapsed_ms": [
+        1315.132,
+        1506.518,
+        1795.175,
+        1326.621,
+        1482.87
+      ],
+      "process_seconds": 88.3,
+      "round": 2,
+      "side": "trunk"
+    },
+    {
+      "elapsed_ms": [
+        1353.598,
+        1426.683,
+        1528.068,
+        1333.815,
+        1544.544
+      ],
+      "process_seconds": 88.3,
+      "round": 3,
+      "side": "trunk"
+    },
+    {
+      "elapsed_ms": [
+        1472.422,
+        1487.674,
+        1535.728,
+        1255.484,
+        1913.441
+      ],
+      "process_seconds": 89.3,
+      "round": 3,
+      "side": "head"
+    },
+    {
+      "elapsed_ms": [
+        1314.22,
+        1409.462,
+        1502.535,
+        1238.617,
+        1521.205
+      ],
+      "process_seconds": 91.1,
+      "round": 4,
+      "side": "head"
+    },
+    {
+      "elapsed_ms": [
+        1243.767,
+        1496.992,
+        1789.74,
+        1391.902,
+        1617.164
+      ],
+      "process_seconds": 87.9,
+      "round": 4,
+      "side": "trunk"
+    },
+    {
+      "elapsed_ms": [
+        1327.414,
+        1521.851,
+        1635.617,
+        1396.69,
+        1649.006
+      ],
+      "process_seconds": 86.2,
+      "round": 5,
+      "side": "trunk"
+    },
+    {
+      "elapsed_ms": [
+        1336.336,
+        1446.766,
+        1474.495,
+        1259.303,
+        1577.085
+      ],
+      "process_seconds": 87.5,
+      "round": 5,
+      "side": "head"
+    },
+    {
+      "elapsed_ms": [
+        1332.722,
+        1487.833,
+        1524.317,
+        1385.518,
+        1467.115
+      ],
+      "process_seconds": 89.5,
+      "round": 6,
+      "side": "head"
+    },
+    {
+      "elapsed_ms": [
+        1268.338,
+        1424.857,
+        1570.701,
+        1480.176,
+        1545.317
+      ],
+      "process_seconds": 86.9,
+      "round": 6,
+      "side": "trunk"
+    },
+    {
+      "elapsed_ms": [
+        1343.903,
+        1536.064,
+        1583.914,
+        1233.767,
+        1535.588
+      ],
+      "process_seconds": 87.0,
+      "round": 7,
+      "side": "trunk"
+    },
+    {
+      "elapsed_ms": [
+        1250.458,
+        1388.581,
+        1468.952,
+        1325.503,
+        1580.832
+      ],
+      "process_seconds": 87.7,
+      "round": 7,
+      "side": "head"
+    },
+    {
+      "elapsed_ms": [
+        1326.103,
+        1464.19,
+        1411.49,
+        1246.199,
+        1682.621
+      ],
+      "process_seconds": 86.2,
+      "round": 8,
+      "side": "head"
+    },
+    {
+      "elapsed_ms": [
+        1220.997,
+        1476.114,
+        1522.303,
+        1264.465,
+        1628.14
+      ],
+      "process_seconds": 85.1,
+      "round": 8,
+      "side": "trunk"
+    },
+    {
+      "elapsed_ms": [
+        1203.86,
+        1371.083,
+        1539.972,
+        1372.893,
+        1435.549
+      ],
+      "process_seconds": 85.6,
+      "round": 9,
+      "side": "trunk"
+    },
+    {
+      "elapsed_ms": [
+        1267.735,
+        1539.849,
+        1434.126,
+        1353.661,
+        1476.789
+      ],
+      "process_seconds": 86.0,
+      "round": 9,
+      "side": "head"
+    },
+    {
+      "elapsed_ms": [
+        1181.666,
+        1477.549,
+        1527.56,
+        1257.363,
+        1734.837
+      ],
+      "process_seconds": 86.6,
+      "round": 10,
+      "side": "head"
+    },
+    {
+      "elapsed_ms": [
+        1410.2,
+        1497.621,
+        1628.403,
+        1236.129,
+        1480.112
+      ],
+      "process_seconds": 88.5,
+      "round": 10,
+      "side": "trunk"
+    }
+  ],
+  "paired_ratio_percent": {
+    "ci95_high": 2.05,
+    "ci95_low": -5.21,
+    "median": -2.63,
+    "per_round": [
+      1.14,
+      -4.58,
+      4.28,
+      -5.85,
+      -4.93,
+      -0.88,
+      -9.57,
+      -4.38,
+      4.46,
+      -0.17
+    ]
+  },
+  "requests_per_round": 5,
+  "rounds": 10,
+  "rule": "head median <= trunk median * 1.02; verdict from a 95 % bootstrap interval of the paired per-round head/trunk median ratio",
+  "trunk": {
+    "all_requests": {
+      "max": 1795.175,
+      "median": 1458.186,
+      "min": 1203.86,
+      "n": 50,
+      "p25": 1332.215,
+      "p75": 1537.041
+    },
+    "db_json_bytes": [
+      24015897
+    ],
+    "per_round_median": {
+      "max": 1535.588,
+      "median": 1480.144,
+      "min": 1372.893,
+      "n": 10,
+      "p25": 1426.494,
+      "p75": 1503.207
+    },
+    "statuses": [
+      200
+    ]
+  },
+  "verdict": "inconclusive"
+}

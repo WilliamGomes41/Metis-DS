@@ -1,0 +1,17 @@
+{
+  "head": {
+    "by_phase_sum": 0,
+    "db_json_bytes": 0,
+    "db_json_bytes_by_phase": {},
+    "db_json_bytes_by_phase_truncated": false,
+    "db_queries": 0,
+    "elapsed_ms": 3.638,
+    "error": null,
+    "method": "GET",
+    "outcome": "completed",
+    "phase_tree_truncated": false,
+    "route": "/login",
+    "status": 200
+  },
+  "pass": true
+}
