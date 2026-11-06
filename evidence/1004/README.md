@@ -22,3 +22,11 @@ Local tests use PostgreSQL17, actual Chromium with Playwright1.58.2, and local s
 [KO2 desktop](ko2-first-1440.png) · [KO2 mobile](ko2-first-390.png) · [KO3 desktop](ko3-regression.png) · [KO3 mobile](ko3-mobile.png)
 
 No merge or deployment. KO4 is a separate child PR; MET56 remains In Progress.
+
+## Rejection receipt finding
+
+Automatic review found one copied KO2 omission: the standalone receipt did not show the required rejection comment even though the exact durable event contained it. A native PostgreSQL HTTP regression failed at the missing “Jouw toelichting” label while the stored comment assertion passed. The bounded fix renders only that event comment, HTML-escaped, in the existing assessment panel; it adds no writes or queries. The full new-page/receipt/authorization group then passed32cases (0skips,32.03s). Actual Chromium rejection submissions at1440px and375px show the stored explanation as text, with no script element or horizontal overflow.
+
+[Rejection desktop](rejection-1440.png) · [Rejection mobile](rejection-375.png)
+
+This three-line receipt fix is the sole integration-authored product change beyond the unchanged parent reconciliation. It is included because the copied bug becomes newly reachable when landing KO2 on main.

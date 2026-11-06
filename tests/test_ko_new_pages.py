@@ -81,6 +81,23 @@ def test_later_without_answers_has_no_durable_decision_or_bon(tmp_path, producti
     assert after['bindings'] == before['bindings']
 
 
+def test_rejection_receipt_shows_the_saved_explanation(tmp_path, production_console, monkeypatch):
+    from html import escape
+    console, sid, reviewer, obj, client, page, _ = prepared(tmp_path, production_console, monkeypatch)
+    comment = 'Voorwaarde ontbreekt: <script>geen uitvoerbare HTML</script> & opnieuw beoordelen.'
+    data = {**compact_submission(page), 'review_action': 'reject', 'comment': comment}
+    saved = client.post('/review', data=data, follow_redirects=False)
+    assert saved.status_code == 303, saved.text
+    receipt = read_saved_review(console, console._account(reviewer), sid, obj['object_id'], data['interaction_id'])
+    assert receipt.event['details']['comment'] == comment
+    bon = client.get(saved.headers['location'])
+    assert bon.status_code == 200
+    assert 'Besluit: <strong>afgewezen</strong>' in bon.text
+    assert 'Jouw toelichting' in bon.text
+    assert escape(comment) in bon.text
+    assert comment not in bon.text
+
+
 def test_second_review_keeps_exact_tuple_and_refuses_mislabelled_rejection(system, production_app):
     from src.integrity_kernel import compute_canonical_object_hash
     console, _, accounts, sid, obj = system

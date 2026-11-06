@@ -289,6 +289,7 @@ def render_receipt_page(account, receipt, snapshot_id, continuation):
     approved = kind.endswith('_review_approve') or kind == 'second_review_approve'
     rejected = kind.endswith('_review_reject')
     decision = 'goedgekeurd' if approved else 'afgewezen' if rejected else 'correctie gevraagd'
+    comment = str((event.get('details') or {}).get('comment') or '')
     heading = 'Dit heb je goedgekeurd. Zo hangt het samen.' if approved else 'Dit heb je vastgelegd. Zo hangt het samen.'
     saved_version = str(event.get('object_version') or '')
     assessment = ReviewAssessment.from_evidence(((event.get('details') or {}).get('review_interaction') or {}).get('assessment'))
@@ -336,7 +337,8 @@ def render_receipt_page(account, receipt, snapshot_id, continuation):
         '<div class="ko-source-band"><strong>Herkomst</strong><span>' + escape(found_under_path(obj))
         + '</span><a href="' + escape(source, quote=True) + '">Open oorspronkelijke bron</a></div></section></section>'
         '<aside class="ko-assessment-aside"><section class="ko-assessment-receipt"><h2>Jouw beoordeling</h2>' + ''.join(saved_answers)
-        + '<p class="ko-saved-decision">Besluit: <strong>' + decision + '</strong></p></section>'
+        + '<p class="ko-saved-decision">Besluit: <strong>' + decision + '</strong></p>'
+        + ('<p><strong>Jouw toelichting</strong> ' + escape(comment) + '</p>' if comment else '') + '</section>'
         '<p class="ko-saved-version">Dit overzicht hoort bij de opgeslagen versie ' + escape(saved_version) + '.</p>' + stage_note
         + '</aside></div><div class="ko-result-actions"><a class="ko-primary" data-ko-next-passage href="'
         + escape(continuation, quote=True) + '">Volgende passage</a><a data-ko-back-overview href="'
