@@ -146,6 +146,13 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
         direction = {'for': 'Aanraden', 'against': 'Afraden'}.get(descriptor.direction, 'Richting nog onbekend')
         strength = {'strong': 'Sterk', 'weak': 'Zwak', 'not_stated': 'Sterkte niet vermeld'}.get(descriptor.strength_choice, 'Sterkte nog onbekend')
         semantics = '<p class="ko-interpretation">' + escape(direction + ' · ' + strength) + '</p>'
+    if descriptor.object_type == 'outcome':
+        from src.object_taxonomy_v1 import recommendation_strength_sentence
+        meaning = recommendation_strength_sentence(descriptor.outcome_strength)
+        if descriptor.outcome_no_action:
+            meaning = 'Bronuitkomst: geen actie nodig. ' + meaning
+        if meaning:
+            semantics = '<p class="ko-interpretation">' + escape(meaning) + '</p>'
     notice = ''
     if error:
         notice = '<p class="ko-notice" role="alert">' + escape(error) + '</p>'

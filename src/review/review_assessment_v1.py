@@ -68,6 +68,8 @@ class DisplayedReviewDescriptor:
     relation_choices: tuple[str, ...]
     relations: tuple[dict, ...]
     issues: tuple[str, ...]
+    outcome_strength: str = ''
+    outcome_no_action: bool = False
 
     @property
     def can_confirm(self) -> bool:
@@ -99,6 +101,21 @@ def _recommendation_values(focal, object_type):
     return direction, strength, errors
 
 
+def _outcome_values(focal, object_type):
+    if object_type != 'outcome':
+        return '', False, []
+    from src.object_taxonomy_v1 import is_closed_recommendation_strength
+    from src.review.beslisboom_path_v1 import is_geen_actie_outcome
+    strength = str(focal.get('confirmed_recommendation_strength')
+                   or focal.get('proposed_recommendation_strength') or '')
+    no_action = is_geen_actie_outcome(str((focal.get('content') or {}).get('clean_text') or ''))
+    if strength:
+        issues = [] if is_closed_recommendation_strength(strength) else ['unknown_recommendation_strength']
+    else:
+        issues = [] if no_action else ['outcome_strength_required']
+    return strength, no_action, issues
+
+
 def displayed_review_descriptor(
     focal: dict[str, Any], objects: Iterable[dict[str, Any]], review_path: str,
     *, bindings=(), fragments=None, stage=None,
@@ -114,6 +131,8 @@ def displayed_review_descriptor(
     issues = [] if known_type else ['review_type_required']
     direction, strength, semantic_errors = _recommendation_values(focal, object_type)
     issues.extend(semantic_errors)
+    outcome_strength, outcome_no_action, outcome_errors = _outcome_values(focal, object_type)
+    issues.extend(outcome_errors)
     proposed = semantic_proposed_relations(focal) if stage != 'second_review' else []
     basis = proposed or semantic_confirmed_relations(focal)
     choices = tuple(relation_choice_value(relation) for relation in basis)
@@ -148,7 +167,8 @@ def displayed_review_descriptor(
         str(focal.get('object_id') or ''), str(focal.get('object_version') or ''),
         str((focal.get('content') or {}).get('clean_text') or ''), object_type,
         direction, strength, str(focal.get('parent_object_id') or ''),
-        found_under_path(focal), choices, tuple(relations), tuple(dict.fromkeys(issues)))
+        found_under_path(focal), choices, tuple(relations), tuple(dict.fromkeys(issues)),
+        outcome_strength=outcome_strength, outcome_no_action=outcome_no_action)
 
 
 def compact_approval_arguments(
@@ -169,4 +189,6 @@ def compact_approval_arguments(
     if descriptor.object_type == 'recommendation':
         arguments.update(recommendation_direction=descriptor.direction,
                          recommendation_strength_level=descriptor.strength_choice)
+    if descriptor.object_type == 'outcome' and descriptor.outcome_strength:
+        arguments['recommendation_strength'] = descriptor.outcome_strength
     return arguments

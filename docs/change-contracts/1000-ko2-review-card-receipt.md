@@ -99,3 +99,13 @@ Een nieuwe gecombineerde query of gedeelde opslagautoriteit is hiervoor niet
 nodig en is verworpen. De gerichte proef verbiedt globale prefetch op de bon,
 controleert de autorisatie en vereist de canonieke read buiten de
 workflowtransactie; bestaande pagina's blijven prefetch gebruiken.
+
+Een beslisboomuitkomst gebruikt de bestaande gesloten sterkte
+`confirmed_recommendation_strength` of het bestaande voorstel daarvan. De
+gedeelde display-/commandprojectie toont die waarde en geeft haar aan de
+bestaande `recommendation_strength`-parameter door. Er komt geen nieuwe
+sterkte-inferentie bij. Ontbrekende of onbekende sterkte blokkeert goedkeuren,
+behalve de bestaande `is_geen_actie_outcome`-vrijstelling; daarbij blijft de
+bestaande kernel eigenaar van het vastleggen van geen actie. Een tweede
+beoordeling bevestigt uitsluitend dezelfde bestaande tuple en wijzigt geen
+sterkte.
