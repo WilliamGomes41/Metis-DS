@@ -59,8 +59,6 @@ def _seed():
         selections = [(FIRST, 'definition')] if slug == 'source' else None
         bind_fixture_selections(console, selections)
         second_text = UNSELECTED if slug == 'source' else SECOND
-        # Standalone definitions are the valid publication fixture. A source
-        # heading would require its own published structural parent here.
         heading = '' if slug == 'main' else '<h1>Begrippen</h1>'
         html = f'<html><body>{heading}<p>{FIRST}</p><p>{second_text}</p></body></html>'
         policy = {}

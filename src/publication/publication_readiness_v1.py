@@ -146,7 +146,6 @@ def _publication_object_rows(
     source_projection: dict[str, dict[str, Any]], repair_duties: list[dict[str, Any]],
     conflict_ids: Iterable[str],
 ) -> list[dict[str, Any]]:
-    """Explain captured facts; existing T9/T10 and technical gates own readiness."""
     bindings: dict[str, list[dict[str, Any]]] = {}
     for binding in inputs["bindings"]:
         bindings.setdefault(str(binding.get("object_id") or ""), []).append(binding)
