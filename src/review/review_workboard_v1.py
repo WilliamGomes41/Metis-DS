@@ -771,7 +771,8 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             from src.review.review_passage_read_v1 import read_review_passage
             try:
                 read_inputs = read_review_passage(console, account, document, object.strip(),
-                    context_target=context_target, choice_page=max(context_page, 0), choice_query=context_q)
+                    context_target=context_target, choice_page=max(context_page, 0), choice_query=context_q,
+                    include_document_context=True)
             except ConsoleError as exc:
                 if exc.code == 'reviewer_not_named_on_snapshot':
                     return RedirectResponse('/review/trajectory?' + urlencode({'document': document}), status_code=303)

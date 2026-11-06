@@ -107,9 +107,10 @@ def test_original_outline_and_adjacent_paragraphs_use_scoped_immutable_source(tm
     before = console.objects_revision(sid)
     original = FormationTaskStore.read_review_source
     source_reads = []
-    def bounded(self, envelope, *, objects=None, con=None):
+    def bounded(self, envelope, *, objects=None, con=None, display_target=None):
         source_reads.append(objects)
-        return original(self, envelope, objects=objects, con=con)
+        assert display_target['object_id'] == obj['object_id']
+        return original(self, envelope, objects=objects, con=con, display_target=display_target)
     monkeypatch.setattr(FormationTaskStore, 'read_review_source', bounded)
     client = TestClient(console._metis_test_application)
     login(client, 'reviewer')
@@ -207,9 +208,13 @@ def test_display_source_rejects_tampering_even_with_rewritten_raw_checksum(tmp_p
             (json.dumps(row['payload']), row['views_id'], row['fragment_id']))
     with pytest.raises(WorkflowDocumentStoreError, match='source_read_integrity_failed'):
         owner.read_review_document_context(inputs.envelope, obj, source=inputs.fragments)
+    with pytest.raises(WorkflowDocumentStoreError, match='source_read_integrity_failed'):
+        owner.read_review_source(inputs.envelope, objects=inputs.objects, display_target=obj)
     digest = stable_hash({key: row[key] for key in ('ordinal','views','blocks','payload')})
     with console.workflow_document_store._connect() as con:
         con.execute('UPDATE workflow.source_read_fragments SET payload_hash=%s WHERE views_id=%s AND fragment_id=%s',
             (digest, row['views_id'], row['fragment_id']))
     with pytest.raises(WorkflowDocumentStoreError, match='source_read_integrity_failed'):
         owner.read_review_document_context(inputs.envelope, obj, source=inputs.fragments)
+    with pytest.raises(WorkflowDocumentStoreError, match='source_read_integrity_failed'):
+        owner.read_review_source(inputs.envelope, objects=inputs.objects, display_target=obj)

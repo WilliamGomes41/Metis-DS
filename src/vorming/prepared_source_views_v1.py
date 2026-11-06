@@ -172,6 +172,7 @@ class ReadSource(PreparedSource):
     records; a window carries the original root identity and scope.
     """
     def __init__(self, raw, views, header, reference, *, complete, docling_loader):
+        self.review_document_context = None
         self.reference = freeze(reference)
         self.complete = complete
         self._docling_loader = docling_loader

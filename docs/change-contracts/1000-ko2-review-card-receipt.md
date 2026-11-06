@@ -33,6 +33,18 @@ Blokkerende eerste stap is het vaststellen van bron-/eventeigenaren. Eén code-e
 
 ## Verificatiestatus
 
+Voor de gefocuste kaart vraagt de passage-reader optioneel één display-target aan
+de bestaande source-reader. Die leest de bestaande raw koppen/buren-query op zijn
+al geopende sourceverbinding en valideert de resultaten na sluiting. Het resultaat
+staat als afzonderlijke `ReviewDocumentContext` op dezelfde read-carrier, met
+target-id en focal-fragment-id's; de renderer controleert die identiteit. Raw,
+views, blocks, complete en het logische closurevenster blijven identiek. Andere
+callers vragen dit niet aan; uncaptured bronnen behouden de bestaande display-read.
+De bestaande source-cachekey blijft exact gelijk: een al gecachete carrier zonder
+sidecar wordt hergebruikt, nooit opnieuw geladen om displaygegevens te verzamelen.
+Een gecombineerde SQL-projectie met bredere logische fragmentselectie is afgewezen
+omdat die display en inhoudelijke bronleden onnodig zou vermengen.
+
 De bon controleert de actuele reviewerrol en retirement binnen zijn bestaande
 workflow-leestransactie. De PostgreSQL identity-mixin leest ook zonder `current=True`
 steeds de accounttabel; alleen commandvoorbereiding heeft een captured account,
