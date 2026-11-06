@@ -61,10 +61,9 @@ INVALID_CODES = (
     "approval_outside_suitability",
     "register_disagrees_with_review",
     "disposition_invalid",
+    "published_not_approved",
 )
 
-# Release history of the object's document. Per-object publication (#991) is
-# decided; KO-3 replaces this document-level input with the per-object registry.
 _RELEASE_STATE = {"published": GEPUBLICEERD, "superseded": VERVANGEN, "withdrawn": INGETROKKEN}
 
 
@@ -81,6 +80,39 @@ def is_knowledge_object(obj: dict[str, Any], review_path: str | None = None) -> 
 def _governance(obj: dict[str, Any]) -> dict[str, Any]:
     value = obj.get("governance")
     return value if isinstance(value, dict) else {}
+
+
+def has_recorded_approval(obj: dict[str, Any]) -> bool:
+    """Read an approval stamp; current bindings remain the review authority."""
+    return _governance(obj).get("validation_status") == "approved"
+
+
+def object_release_status(obj: dict[str, Any], membership: dict[str, Any]) -> str:
+    """Interpret selected-tuple canonical metadata without deciding serving."""
+    if not membership.get("release_id"):
+        return "none"
+    from src.integrity_kernel import compute_canonical_object_hash
+    identity = (str(obj.get("object_id") or ""), str(obj.get("object_version") or ""),
+                compute_canonical_object_hash(obj))
+    if identity != tuple(str(membership.get(key) or "")
+                         for key in ("object_id", "object_version", "content_hash")):
+        return "none"
+    if (membership.get("registry_state") == "active"
+            and membership.get("registry_object_version") == identity[1]
+            and membership.get("registry_content_hash") == identity[2]
+            and bool(membership.get("snapshot_id"))
+            and membership.get("registry_snapshot_id") == membership.get("snapshot_id")
+            and membership.get("registry_has_release_item") is True):
+        return "published"
+    if membership.get("release_status") == "withdrawn" or membership.get("withdrawn_at"):
+        return "withdrawn"
+    if (membership.get("successor_release_id") or membership.get("later_logical_release_id")
+            or membership.get("registry_state") == "active"
+            and membership.get("registry_has_release_item") is True
+            and bool(membership.get("registry_object_version"))
+            and membership.get("registry_object_version") != identity[1]):
+        return "superseded"
+    return "none"
 
 
 def has_evidence(obj: dict[str, Any]) -> bool:
@@ -153,6 +185,8 @@ def derive_ko_state(
     invalid = _disposition_invalid(obj, own)
 
     def result(state: str, *reasons: str) -> dict[str, Any]:
+        if release_status == "published" and (state not in {GOEDGEKEURD, GEPUBLICEERD} or invalid):
+            invalid.append("published_not_approved")
         return {"state": state, "reasons": list(reasons), "invalid": list(dict.fromkeys(invalid))}
 
     if status == "superseded":
@@ -168,7 +202,7 @@ def derive_ko_state(
     lifecycle = candidate_lifecycle(obj)
     stage = review_stage(obj, review_path=review_path, bindings=own, fragments=fragments)
 
-    if status == "approved":
+    if has_recorded_approval(obj):
         if passage_register_of(obj).get("status") == "not_yet_assessed":
             invalid.append("approved_with_passage_not_assessed")
         second = governance.get("second_review")
@@ -222,13 +256,24 @@ def snapshot_ko_states(console: Any, envelope: dict[str, Any]) -> list[dict[str,
         objects = console.snapshot_objects(snapshot_id, envelope=envelope)
         bindings = console.object_review_bindings(snapshot_id, objects=objects)
         fragments = console.review_source_fragments(snapshot_id, envelope=envelope, objects=objects)
-        release = console.document_release_serving_status(snapshot_id, envelope=envelope)
     path = review_path_for_klasse(str(envelope.get("class") or ""))
-    return [
-        derive_ko_state(obj, review_path=path, bindings=bindings, fragments=fragments,
-                        release_status=str(release.get("release_status") or "none"))
-        for obj in objects
-    ]
+    from src.integrity_kernel import compute_canonical_object_hash
+    keys = {str(obj["object_id"]): (str(obj["object_id"]), str(obj["object_version"]),
+                                   compute_canonical_object_hash(obj))
+            for obj in objects if is_knowledge_object(obj, path)
+            and obj.get("object_id") and obj.get("object_version")}
+    membership = console.canonical_publication_store.object_publication_membership(snapshot_id, list(keys.values()))
+    rows = []
+    for obj in objects:
+        key = keys.get(str(obj.get("object_id") or ""))
+        facts = membership.get(key, {})
+        released = object_release_status(obj, facts)
+        row = derive_ko_state(obj, review_path=path, bindings=bindings, fragments=fragments,
+                              release_status=released)
+        if facts.get("release_id") and released == "none":
+            row["reasons"].append("publication_activation_unconfirmed")
+        rows.append(row)
+    return rows
 
 
 def count_states(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:

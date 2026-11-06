@@ -103,8 +103,8 @@ def publication_errors(envelope: dict[str, Any]) -> list[str]:
     for field in ("release_id", "release_version", "published_at"):
         if not pub.get(field):
             errors.append(f"publication_{field}_missing")
-    gov = obj.get("governance") or {}
-    if gov.get("validation_status") != "approved":
+    from src.review.knowledge_object_state_v1 import has_recorded_approval
+    if not has_recorded_approval(obj):
         errors.append("object_not_clinically_approved")
     if (obj.get("uncertainty") or {}).get("has_uncertainty"):
         errors.append("unresolved_uncertainty")
