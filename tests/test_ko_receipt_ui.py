@@ -123,6 +123,11 @@ def test_original_outline_and_adjacent_paragraphs_use_scoped_immutable_source(tm
     assert 'Richtlijn' in text and 'Huidzorg' in text and 'Evaluatie' in text
     assert 'Gebruik geen zalf.' in text and 'Bespreek de verzorging.' in text
     assert 'Evalueer morgen.' not in text
+    neighbors = re.search(r'<div class="ko-source-neighbors"[^>]*>(.*?)</div>', panel.group(1), re.S)
+    assert neighbors is not None
+    assert 'Naburige passages onder deze kop' in neighbors.group(1)
+    assert re.findall(r'<li>(.*?)</li>', neighbors.group(1)) == ['Gebruik geen zalf.', 'Bespreek de verzorging.']
+    assert 'Evalueer morgen.' not in neighbors.group(1)
     assert console.objects_revision(sid) == before
 
 

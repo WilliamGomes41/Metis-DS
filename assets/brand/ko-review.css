@@ -32,6 +32,10 @@
 .ko-page .ko-document-context .field-help { font-size: 12px; }
 .ko-page .ko-document-context p { margin: 10px 0; }
 .ko-page .ko-document-context .meta { font-size: 12px; color: var(--muted); }
+.ko-source-neighbors { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+.ko-source-neighbors ul { list-style: none; padding: 0; margin: 0; font-size: 13px; }
+.ko-source-neighbors li { padding: 7px 0; border-bottom: 1px solid var(--line); }
+.ko-connection-status { font-weight: 700; }
 .ko-page .ko-outline { margin: 8px 0 16px; }
 .ko-page .ko-outline li { padding: 8px 4px; border-left: 1px solid var(--line); }
 .ko-page .ko-outline-depth-2 { margin-left: 12px; }
@@ -116,6 +120,10 @@
 .ko-saved-decision { padding: 14px; border-radius: 7px; background: #e1f4d7; color: #164b22; font-size: 16px; margin-top: 22px; }
 .ko-saved-version { font-size: 13px; color: var(--muted); margin: 20px 0; }
 .ko-result-actions { display: flex; align-items: center; gap: 26px; margin-top: 28px; }
+html[data-theme="dark"] .ko-page h2,
+html[data-theme="dark"] .ko-page .ko-document-context > summary { color: var(--heading-ink); }
+html[data-theme="dark"] .ko-page .ko-document-context mark { color: #fff5d1; background: #66551f; }
+html[data-theme="dark"] .ko-type-badge { color: var(--paars); background: #3b2854; }
 @media (max-width: 1100px) { .ko-brand { min-width: 190px; } .ko-topbar { gap: 12px; } .ko-topbar nav { gap: 2px; } .ko-topbar nav a { padding: 7px; font-size: 13px; } .ko-account { min-width: 95px; } .ko-question > div { gap: 12px; } .ko-actions { gap: 12px; } }
 @media (max-width: 760px) {
  .canvas { padding: 12px 16px 24px; } .ko-topbar { flex-wrap: wrap; gap: 12px; }

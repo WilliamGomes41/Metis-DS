@@ -27,6 +27,7 @@ def render_document_context(snapshot_id, obj, objects, *, task='', source=None):
     heading_items = []
     current_path = tuple((obj.get('structure') or {}).get('section_path') or [])
     original = source is not None
+    neighbors = []
     if original:
         from src.object_taxonomy_v1 import extract_object_type
         rows = source.fragments
@@ -40,6 +41,13 @@ def render_document_context(snapshot_id, obj, objects, *, task='', source=None):
                     + (' · bronsectie van de passage' if active else '') + '</li>')
         matches = [i for i, row in enumerate(rows) if row['fragment_id'] in source.focal_fragment_ids]
         if matches:
+            source_paths = {tuple(rows[index].get('section_path') or []) for index in matches}
+            if len(source_paths) == 1:
+                source_path = next(iter(source_paths))
+                neighbors = [str(row.get('clean_text') or row.get('raw_text') or '') for row in rows
+                    if row['fragment_id'] not in source.focal_fragment_ids
+                    and tuple(row.get('section_path') or []) == source_path
+                    and extract_object_type(row)[0] != 'heading'][:2]
             first, last = min(matches), max(matches)
             parts = {**parts,
                 'previous_paragraph': str(rows[first-1].get('clean_text') or rows[first-1].get('raw_text') or '')
@@ -70,12 +78,16 @@ def render_document_context(snapshot_id, obj, objects, *, task='', source=None):
     outline_attribute = 'data-original-outline' if original else 'data-current-outline'
     heading_note = ('Koppen uit de vastgelegde oorspronkelijke bron.' if original else
         'De oorspronkelijke bronstructuur en buuralinea’s konden niet worden bevestigd. Hier staan de koppen van het huidige kennisvoorstel; open de volledige bron voor de oorspronkelijke structuur.')
+    neighbor_list = ('<ul>' + ''.join('<li>' + escape(text) + '</li>' for text in neighbors) + '</ul>'
+        if neighbors else '<p class="field-help">Geen naburige passage onder dezelfde bronkop in dit vastgelegde venster. Open de hele sectie voor meer context.</p>')
     return ('<details class="ko-document-context" data-document-context open><summary><span role="heading" aria-level="2">Bekijk in documentcontext</span></summary>'
         '<div class="ko-source-layout"><section><h3>Plek in het document</h3><p class="field-help">'
         + heading_note + '</p>'
         + (f'<ul class="ko-outline" {outline_attribute}>' + ''.join(heading_items) + '</ul>' if heading_items else '<p>Geen koppen vastgelegd.</p>')
         + f'<p><strong>Vindplaats</strong> {escape(found_under_path(obj))}</p></section>'
-        '<section><h3>Bronpassage en omliggende tekst</h3>' + paragraphs + '</section></div>'
+        '<section><h3>Bronpassage en omliggende tekst</h3>' + paragraphs
+        + '<div class="ko-source-neighbors" data-source-neighbors><h3>Naburige passages onder deze kop</h3>'
+        + neighbor_list + '</div></section></div>'
         + f'<p><a class="btn-secondary" href="{escape(section_url, quote=True)}">Toon hele sectie en naburige passages</a></p>'
           f'<p><a href="{escape(original_url, quote=True)}">Open volledige bron</a></p></details>')
 

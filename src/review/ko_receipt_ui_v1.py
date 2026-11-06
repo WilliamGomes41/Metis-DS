@@ -301,7 +301,8 @@ def render_receipt_page(account, receipt, snapshot_id, continuation):
     for label, title in (('Geldt wanneer', 'Voorwaarde'), ('Tenzij', 'Uitzondering'), ('Onderbouwd door', 'Gekoppelde onderbouwing')):
         items = [row for row in connections if row.label == label]
         text = ''.join('<p>' + escape(row.text) + '</p>'
-            + ('<small>' + escape(row.origin) + '</small>' if row.origin else '') for row in items)
+            + ('<small>' + escape(row.origin) + '</small>' if row.origin else '')
+            + ('<p class="ko-connection-status">' + escape(row.status) + '</p>' if row.status else '') for row in items)
         if not text:
             text = '<p class="ko-muted">Niet afzonderlijk vastgelegd. Dit betekent niet automatisch niet van toepassing.</p>'
         branches.append('<li><span class="ko-branch-label">' + label.lower() + '</span>'

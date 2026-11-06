@@ -145,6 +145,9 @@ def render_review_page(console, account, inputs, obj, *, task='', second=False, 
     notice = ''
     if error:
         notice = '<p class="ko-notice" role="alert">' + escape(error) + '</p>'
+        if conflict:
+            reopen = '/review?' + urlencode({'document': sid, 'object': obj['object_id'], 'task': task})
+            notice += '<p><a href="' + escape(reopen, quote=True) + '">Passage opnieuw beoordelen</a></p>'
     elif not can_approve:
         message = ('De passage kan nu niet worden goedgekeurd. Bekijk de bron of kies een gerichte correctie.'
                    if inputs.source_available else 'De oorspronkelijke bron kon niet worden bevestigd. Goedkeuren is geblokkeerd.')
@@ -204,19 +207,19 @@ def compact_review_error(console, account, snapshot_id, object_id, revision, tas
     from src.review.review_passage_read_v1 import read_review_passage
     inputs = read_review_passage(console, account, snapshot_id, object_id)
     obj = next(row for row in inputs.objects if row['object_id'] == object_id)
-    conflict = getattr(error, 'code', '') == SNAPSHOT_OBJECT_WRITE_CONFLICT
-    if conflict:
-        inputs = replace(inputs, revision=revision)
+    conflict = (getattr(error, 'code', '') == SNAPSHOT_OBJECT_WRITE_CONFLICT
+                or bool(revision.strip()) and revision != inputs.revision)
+    inputs = replace(inputs, revision=revision)
     messages = {
         'review_assessment_required': 'Beantwoord de drie vragen voordat je goedkeurt.',
         'review_assessment_answer_invalid': 'Kies bij iedere vraag Ja of Aanpassen.',
         'review_assessment_requires_three_yes': 'Voor goedkeuren moeten de drie antwoorden Ja zijn. Kies anders Correctie nodig.',
         'review_assessment_unresolved_proposal': 'De getoonde interpretatie kan nog niet volledig worden bevestigd. Kies Correctie nodig.',
     }
-    code = getattr(error, 'code', str(error))
+    code = SNAPSHOT_OBJECT_WRITE_CONFLICT if conflict else getattr(error, 'code', str(error))
     message = messages.get(code) or ERROR_COPY.get(code) or 'Deze beoordeling is niet opgeslagen. Controleer de passage en probeer opnieuw.'
     page = render_review_page(console, account, inputs, obj, task=task, second=second,
-                              draft=draft, error=message, conflict=conflict)
+                              draft=draft, error=message, conflict=conflict or not revision.strip())
     return HTMLResponse(page, status_code=409 if conflict else 400, headers={'Cache-Control': 'no-store'})
 
 

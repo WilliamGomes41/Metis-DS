@@ -28,7 +28,6 @@ def test_compact_http_commit_standalone_bon_and_durable_answers(tmp_path, produc
     assert 'ko-review.css' in page.text
     assert not re.search(r'<input[^>]+type="radio"[^>]+checked', page.text)
     data = compact_submission(page)
-    # Client legacy fields cannot contradict the captured, displayed interpretation.
     data.update(confirmed_object_type='definition', recommendation_direction='for')
     with bounded_post_only(console, sid, monkeypatch):
         saved = client.post('/review', data=data, follow_redirects=False)
@@ -105,3 +104,28 @@ def test_second_review_keeps_exact_tuple_and_refuses_mislabelled_rejection(syste
     assert receipt.object['object_version'] == original['object_version']
     assert compute_canonical_object_hash(receipt.object) == compute_canonical_object_hash(original)
     assert receipt.event['details']['review_interaction']['assessment']['complete'] == 'yes'
+
+
+@pytest.mark.parametrize('invalid', [dict(review_action='reject', comment=''),
+    dict(review_action='unknown'), dict(complete='tampered')])
+def test_early_validation_error_cannot_rebase_old_answers_onto_current_revision(tmp_path, production_console, monkeypatch, invalid):
+    console, sid, _, obj, client, page, _ = prepared(tmp_path, production_console, monkeypatch)
+    old = compact_submission(page)
+    peer = next(row for row in console.snapshot_objects(sid)
+        if row['object_id'] != obj['object_id'] and row.get('proposed_object_type') == 'recommendation')
+    peer_page = client.get('/review', params={'document': sid, 'object': peer['object_id']})
+    winner = client.post('/review', data=compact_submission(peer_page), follow_redirects=False)
+    assert winner.status_code == 303, winner.text
+    committed = physical_state(console, sid)
+    refused = client.post('/review', data={**old, **invalid}, follow_redirects=False)
+    assert refused.status_code == 409
+    recovered = compact_submission(refused)
+    assert recovered['snapshot_revision'] == old['snapshot_revision']
+    assert refused.text.count(' checked') == (2 if 'complete' in invalid else 3)
+    assert re.search(r'<button[^>]+value="approve"[^>]+disabled', refused.text)
+    assert 'Passage opnieuw beoordelen' in refused.text
+    assert client.post('/review', data=recovered, follow_redirects=False).status_code == 409
+    assert physical_state(console, sid) == committed
+    fresh = client.get('/review', params={'document': sid, 'object': obj['object_id']})
+    assert compact_submission(fresh)['snapshot_revision'] != old['snapshot_revision']
+    assert not re.search(r'<input[^>]+type="radio"[^>]+checked', fresh.text)

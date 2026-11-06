@@ -140,7 +140,10 @@ Dit onderdeel bevat drie samenhangende weergaven:
    opent de bestaande oorspronkelijke-bronroute.
 3. **Naburige passages onder deze kop.** Leesbare tekst of een herkenbaar
    fragment van de aangrenzende passages; geen lijst met alleen identifiers.
-   De actuele passage is herkenbaar en de volgorde komt uit de bron.
+   De actuele passage is herkenbaar en de volgorde komt uit de bron. De kaart
+   gebruikt maximaal twee reeds geverifieerde passages onder dezelfde bronkop
+   uit het vastgelegde venster. Dit is geen claim dat de hele sectie is geladen;
+   de bestaande sectieroute blijft beschikbaar voor uitbreiding.
 
 Een passage aan het begin of einde van een sectie krijgt geen verzonnen
 buuralinea. Koploze, grafische, tabel- of beslisboombronnen gebruiken hun
@@ -322,6 +325,12 @@ reviewer mag niet een andere bon openen of als het eigen resultaat gelden.
 | Fout vóór of tijdens commit | Bestaande rollback en foutpresentatie. | Geen half opgeslagen besluit of succesvolle bon. |
 | Commit slaagt, antwoord gaat verloren | Uitkomst eerst vaststellen met de exacte bestaande command-/interaction- en opslagbewijzen. | Geen automatische herhaling, geen verzonnen rollback, geen tweede goedkeuring. |
 | Opgeslagen resultaat teruggevonden | Bon van precies dat resultaat. | Geen nieuw besluit om de bon opnieuw te tonen. |
+
+Ook een vroege formulierfout behoudt de oorspronkelijk ingediende
+revisievoorwaarde. Een foutpagina mag oude antwoorden nooit combineren met
+een nieuwe geldige mutatietoken. Bij een inmiddels gewijzigde generatie
+blijft goedkeuren geblokkeerd; Passage opnieuw beoordelen opent dezelfde
+bestaande kaart met actuele invoer en zonder vooraf gekozen antwoorden.
 | Uitkomst niet vast te stellen | Benoem dat opslag niet bevestigd is; gebruik de bestaande herstelroute. | Een leeg eventvenster geldt niet als bewijs van rollback. |
 | Herstart | Opgeslagen besluit blijft zichtbaar via bestaande duurzame autoriteiten. | Succes hangt niet af van alleen browser- of procesgeheugen. |
 | Context laden mislukt | Expliciete fout of ontbrekende-contextmelding met passende bestaande vervolgactie. | Lege context wordt niet als 'geen context nodig' gepresenteerd. |
