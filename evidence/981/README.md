@@ -52,16 +52,16 @@ blijft de onafhankelijke referentiemeting in #530.
 
 ## Titelniveau uit het parsercontract (#997)
 
-Na #994 riep de vorming het titelniveau af uit de vorm van de paden. Dat leverde twee bekende grenzen op. Nu komt het titelniveau uit wat de parser zelf heeft vastgelegd:
+Na #994 riep de vorming het titelniveau af uit de vorm van de paden. Dat leverde twee bekende grenzen op. Nu komt het uit wat de parser zelf heeft vastgelegd:
 
-- **HTML.** De locator bewaart de tag van elk blok. Heeft een pagina precies één `<h1>`, dan is het pad daarvan de documenttitel. Zijn er meerdere `<h1>`, dan zijn dat secties en geen titel.
-- **Docling.** Docling labelt de titel apart en zet hem nooit vóór de modulekoppen. Een PDF heeft dus geen titelpad.
+- **HTML** bewaart de tag van elk blok in de locator. Een `<h1>` met dieper liggende inhoud eronder is een container, bijvoorbeeld een titel met modulekoppen in `<h2>`. De module ligt dan één niveau lager. Een `<h1>` zonder iets eronder, zoals een platte bijlage, is een gewone sectie. Een titel én een bijlage-`<h1>` naast elkaar houden de modules dus gescheiden (Codex-bevinding).
+- **Docling** labelt de titel apart en zet hem nooit vóór de modulekoppen. Een PDF heeft daarom geen container.
 
-`document_title_path(fragments)` leest dit uit de fragmenten. `module_of(section, title_path)` geeft het niveau direct onder de titel terug. Zonder titel is dat het eerste padniveau. De structuurgok (`module_depth`) is verwijderd.
+`document_title_paths(fragments)` leest de containers uit de evidence-fragmenten. De inhoudsfragmenten zijn hiervoor niet bruikbaar, omdat die geen koppen bevatten. `module_of(section, title_paths)` geeft het niveau direct onder de container terug. Zonder container is dat het eerste padniveau. De structuurgok (`module_depth`) is verwijderd.
 
 De bronblokken veranderen niet. Hashes van bestaande taakplannen blijven dus geldig, en vastgezette plannen houden hun `evidence_block_ids`.
 
-| Run | Titelpad | Resultaat |
+| Run | Container | Resultaat |
 |---|---|---|
 | Echte Smetten-export | geen | Vreemde koppen 5, Rationale 7 van 8, overwegingen 5 van 8, 350.565 tekens totaal, maximaal 40.511 |
 | Met titel "Smetten" vóór elk pad | `Smetten` | Identiek |

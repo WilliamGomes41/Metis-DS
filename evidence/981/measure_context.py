@@ -8,8 +8,8 @@ import json, sys, subprocess
 sys.path.insert(0, '.')
 from src.vorming.bounded_formation_v1 import tasks_for, MAX_CONTEXT_CHARS, module_of
 blocks = json.load(open(sys.argv[1]))
-TITLE = tuple(sys.argv[2:3])  # the parser-recorded document title path, if the source has one
-tasks = tasks_for(blocks, blocks, title_path=TITLE)
+TITLE = frozenset({(a,) for a in sys.argv[2:3]})  # the parser-recorded container heading, if any
+tasks = tasks_for(blocks, blocks, title_paths=TITLE)
 def module(path):
     return module_of(path, TITLE)
 sizes = [sum(len(b['text']) for b in t['evidence_blocks']) for t in tasks]
@@ -23,4 +23,4 @@ print(json.dumps({"tasks": len(tasks), "context_chars_total": sum(sizes), "conte
   "tasks_with_foreign_module_heading": foreign, "recommendation_section_tasks": len(rec),
   "with_rationale": sum(has(t, 'Rationale') for t in rec),
   "with_considerations": sum(has(t, 'Van bewijs naar aanbeveling (overwegingen)') for t in rec),
-  "title_path": list(TITLE), "module_context_tasks": sum(x > 0 and len(t['evidence_blocks']) > 0 and any(b['section_path'] != t['section_path'] and not b.get('heading') for b in t['evidence_blocks']) for t, x in zip(tasks, sizes))}))
+  "title_paths": sorted(list(p) for p in TITLE), "module_context_tasks": sum(x > 0 and len(t['evidence_blocks']) > 0 and any(b['section_path'] != t['section_path'] and not b.get('heading') for b in t['evidence_blocks']) for t, x in zip(tasks, sizes))}))

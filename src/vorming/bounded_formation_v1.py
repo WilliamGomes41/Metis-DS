@@ -31,35 +31,40 @@ def _path(block):
     return tuple(block.get("section_path") or [])
 
 
-def document_title_path(fragments):
-    """The section path of the document title, as the parser recorded it (#997).
+def document_title_paths(fragments):
+    """Top-level headings the parser recorded as containers of modules (#997).
 
-    HTML keeps each heading tag in its locator. A page with exactly one ``<h1>``
-    puts that title above every module, so its path is the title path. Several
-    ``<h1>`` headings are top-level sections, not a title. Docling labels the
-    title separately and never puts it in front of the module headings, so a
-    PDF has no title path. Nothing is inferred from the shape of the paths.
+    HTML keeps each heading tag in its locator. Every ``<h1>`` with deeper
+    content beneath it (a title above module ``<h2>`` headings) is a container:
+    its modules sit one level below. An ``<h1>`` with nothing beneath it, such
+    as a flat appendix, stays an ordinary section. Docling labels the title
+    separately and never puts it in front of module headings, so a PDF has no
+    container. Nothing is inferred from which paths happen to look alike.
     """
-    titles = set()
-    for fragment in fragments or ():
+    fragments = list(fragments or ())
+    h1 = set()
+    for fragment in fragments:
         locator = fragment.get("source_locator") or {}
         path = tuple(fragment.get("section_path") or [])
         if (locator.get("locator_type") == "web_line_range" and len(path) == 1
                 and ";h1:" in str(locator.get("locator_value") or "")):
-            titles.add(path)
-    return next(iter(titles)) if len(titles) == 1 else ()
+            h1.add(path)
+    deeper = {tuple(f.get("section_path") or [])[:1] for f in fragments
+              if len(f.get("section_path") or []) > 1}
+    return frozenset(h1 & deeper)
 
 
-def module_of(section, title_path=()):
-    """The source module of a section: the level directly below the title, if any.
+def module_of(section, title_paths=frozenset()):
+    """The source module of a section: the level directly below its container.
 
-    Content directly under the title, or outside it (an appendix beside the
-    titled guideline), is its own top-level section.
+    Content directly under a container heading is its own section; a section
+    outside every container (no title, or a flat appendix) is a module itself.
     """
     section = tuple(section)
-    title = tuple(title_path)
-    if title and section[:len(title)] == title:
-        return section[:len(title) + 1] if len(section) > len(title) else None
+    for title in title_paths:
+        title = tuple(title)
+        if title and section[:len(title)] == title:
+            return section[:len(title) + 1] if len(section) > len(title) else None
     return section[:1] or None
 
 
@@ -72,12 +77,12 @@ def _in_context(block, section, module):
     return bool(block.get("heading")) and bool(path) and path == section[:len(path)]
 
 
-def tasks_for(blocks, evidence_blocks, targets=None, *, title_path=()):
+def tasks_for(blocks, evidence_blocks, targets=None, *, title_paths=frozenset()):
     """Keep section runs together; headings/referenced sections are context only.
 
     A task with a possible recommendation also consults its whole source
-    module (the level below the parser-recorded document title, see
-    ``document_title_path``), so supporting text
+    module (the level below the parser-recorded container heading, see
+    ``document_title_paths``), so supporting text
     such as Rationale or considerations in a sibling section is available.
     Other tasks keep their own section, which bounds the request size.
 
@@ -101,7 +106,7 @@ def tasks_for(blocks, evidence_blocks, targets=None, *, title_path=()):
     for group in groups:
         ids = {b["block_id"] for b in group}
         section = tuple(group[0].get("section_path") or [])
-        module = (module_of(section, title_path)
+        module = (module_of(section, title_paths)
                   if any(b["block_id"] in possible for b in group) else None)
         contexts = {b["block_id"]: b for b in evidence_blocks if _in_context(b, section, module)}
         # Reference closure includes the complete referenced section, not just
@@ -318,9 +323,9 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
         baseline = _durable_targets(blocks, {"objects":[], "source_assessments":[]})
         # The content fragments have every heading, the <h1> included, filtered out;
         # the evidence fragments keep the parser's heading record.
-        title_path = document_title_path(validator_input.get("evidence_fragments")
-                                         or validator_input.get("fragments"))
-        plan = build_plan(tasks_for(blocks,evidence_blocks,baseline,title_path=title_path),blocks,evidence_blocks)
+        title_paths = document_title_paths(validator_input.get("evidence_fragments")
+                                           or validator_input.get("fragments"))
+        plan = build_plan(tasks_for(blocks,evidence_blocks,baseline,title_paths=title_paths),blocks,evidence_blocks)
         if durable:
             plan = checkpoint.retain_task_plan(plan)
     evidence["task_plan"] = plan
