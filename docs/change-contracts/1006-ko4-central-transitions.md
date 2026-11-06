@@ -77,3 +77,10 @@ Part of MET-56.
 | Reparatiecontext | Private gevalideerde in-command context | Alleen actor/snapshot/object van deze atomaire command; reset bij verlaten scope |
 
 De bestaande expliciete steunreparatie schrijft nog legacy confirmed_relations. Binnen diezelfde reparatie wordt de actuele, brongebonden claim als open opvolger via de bestaande relationbuilder en bestaande _commit_knowledge_change voorzien van versiegebonden relaties. Dat is geen algemene backfill: alleen de expliciet gerepareerde claim verandert, blijft onbeoordeeld en moet daarna de normale relation-ack/assessmentcontrole doorlopen. Er komt geen tweede relatieschrijver of nieuwe transactie.
+
+## Aanvullende gegronde ingangen en relatierichting
+De bestaande publieke confirm_relations-command gebruikt dezelfde relationpreparer die binnen review_object voorkomt. Alleen de publieke command krijgt een centrale confirm_relations-overgang en controle van zijn voorbereide opvolger; de private helper blijft voorbereiding binnen dezelfde goedkeuring. Ook de bestaande later-commit wordt centraal gecontroleerd. Dit voegt geen nieuwe actie of schrijver toe.
+
+De actuele D4.2-eigenaar knowledge_relation_proposal_v1 definieert explains als claim naar context met doeltype explanation. Daarom telt de uitgaande bevestigde explains-relatie mee als onderbouwing van de claim. Een inkomende explains-relatie is niet automatisch onderbouwing van het doelobject. De kaart/bonlabels worden op deze bestaande regel aangesloten; de opgeslagen relaties worden niet omgedraaid. Alleen geldige huidige versiegebonden bevestigde relaties voldoen aan het nieuwe akkoordguard; geen promotie van losse legacy- of voorstelregels.
+
+Bij expliciet reviewbeleid met meerdere verplichte mede-beoordelaars kan ook een tweede-reviewbijdrage de afgeleide toestand Tweede review behouden tot alle bestaande vereiste actuele akkoorden aanwezig zijn. De overgangstabel controleert deze werkelijke voorbereide na-toestand met de bestaande deriver; zij schrijft geen vast label of nieuwe reviewerregel.

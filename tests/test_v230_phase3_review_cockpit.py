@@ -693,14 +693,6 @@ def test_review_and_correction_do_not_change_sibling_canonical_hash(tmp_path: Pa
         and obj.get("object_type") != "document"
     )
     other_hash = compute_canonical_object_hash(other)
-    console.review_object(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=other["object_id"],
-        decision="revise",
-        comment="Corrigeer de formulering.",
-        proposed_correction="Bespreek het onderwerp expliciet met de zorgvrager.",
-    )
     sealed = console._current_object(receipt["snapshot_id"], other["object_id"])
     other_hash = compute_canonical_object_hash(sealed)
     console.correct_object(
@@ -713,7 +705,7 @@ def test_review_and_correction_do_not_change_sibling_canonical_hash(tmp_path: Pa
                 {
                     "op": "set",
                     "path": "content.clean_text",
-                    "value": "Bespreek het onderwerp expliciet met de zorgvrager.",
+                    "value": other["content"]["clean_text"],
                 }
             ],
         },

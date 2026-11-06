@@ -1095,7 +1095,7 @@ class OperationsConsole:
         return revise_object(previous, proposed, snapshot_id=snapshot_id,
                              reason=reason, actor=actor)
 
-    def _commit_knowledge_change(self, snapshot_id, previous, proposed, *, reason, actor, retain_revise=False):
+    def _commit_knowledge_change(self, snapshot_id, previous, proposed, *, reason, actor):
         """Existing store transaction for repair metadata/provenance mutations."""
         revision = self.objects_revision(snapshot_id)
         updated = self._prepare_knowledge_revision(snapshot_id, previous, proposed, reason=reason, actor=actor)
@@ -1127,8 +1127,6 @@ class OperationsConsole:
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
-        from src.review.ko_transitions_v1 import apply_ko_event
-        apply_ko_event(current=target, event='confirm_type', review_path=review_path)
         previous = deepcopy(target)
         if target.get("object_type") == "document":
             raise ConsoleError("unknown_object_type")
@@ -1150,6 +1148,9 @@ class OperationsConsole:
         history = with_current_revision(self._load_objects(snapshot_id), target)
         new_bindings = deepcopy(review_bindings_view(self))
         new_bindings[snapshot_id] = invalidate_for_object(new_bindings.get(snapshot_id, []), object_id)
+        from src.review.ko_transitions_v1 import apply_ko_event
+        apply_ko_event(current=previous, prepared=target, event='confirm_type',
+            review_path=review_path, after_bindings=new_bindings.get(snapshot_id, []))
         self._commit_prepared_store(
             objects=(snapshot_id, history),
             bindings=new_bindings,
@@ -1167,11 +1168,17 @@ class OperationsConsole:
         expected_revision: str | None = None,
     ) -> dict[str, Any]:
         reviewer = self._require_role(actor_id, "reviewer")
+        self._require_mutable_working_revision(snapshot_id)
         if actor_id not in self._envelope(snapshot_id)["named_reviewers"]:
             raise ConsoleError("reviewer_not_named_on_snapshot")
         current = self.snapshot_objects(snapshot_id, for_update=True)
         target, history, new_bindings = self._prepare_relation_confirmation(
             snapshot_id=snapshot_id, object_id=object_id, relations=relations, current=current, actor=reviewer["username"])
+        from src.review.ko_transitions_v1 import apply_ko_event
+        previous = next(row for row in current if row['object_id'] == object_id)
+        apply_ko_event(current=previous, prepared=target, event='confirm_relations',
+            review_path=review_path_for_klasse(self._envelope(snapshot_id)['class']),
+            after_bindings=new_bindings.get(snapshot_id, []))
         self._commit_prepared_store(objects=(snapshot_id, history), bindings=new_bindings,
                                     expected_revision=expected_revision)
         return deepcopy(target)
@@ -3517,6 +3524,10 @@ class OperationsConsole:
                     reason="review context change", actor=reviewer["username"])
                 history = with_current_revision(
                     relation_history if relation_history is not None else self._load_objects(snapshot_id), saved)
+                from src.review.ko_transitions_v1 import apply_ko_event
+                apply_ko_event(current=target, prepared=saved, event='later',
+                    review_path=review_path, bindings=binding_authority, fragments=source_fragments,
+                    after_bindings=relation_bindings.get(snapshot_id, []) if relation_bindings is not None else binding_authority)
                 self._commit_prepared_store(objects=(snapshot_id, history), bindings=relation_bindings,
                     expected_revision=current_revision, snapshot_id=snapshot_id)
                 return deepcopy(self.snapshot_objects(snapshot_id))
@@ -3720,15 +3731,9 @@ class OperationsConsole:
             if confirmed_relation_set is not None:
                 confirmed_relation_set = deepcopy(target.get(CONFIRMED_KNOWLEDGE_RELATIONS_FIELD) or [])
             current = [target if row["object_id"] == object_id else row for row in current]
-            from src.review.ko_transitions_v1 import apply_ko_event, active_repair
+            from src.review.ko_transitions_v1 import active_repair
             if decision == 'revise' and active_repair(actor_id, snapshot_id, object_id) is None:
                 raise ConsoleError('structured_repair_required')
-            transition_evidence = apply_ko_event(current=revision_predecessor, prepared=target,
-                event='correct' if decision == 'revise' else decision, review_path=review_path, bindings=binding_authority,
-                fragments=source_fragments, objects=current,
-                assessment=assessment if assessment is not None else
-                    (interaction_evidence or {}).get('assessment'),
-                evidence_not_applicable=evidence_not_applicable)
             track = target["governance"]["review_track"]
             payload = {
                 "object_id": object_id,
@@ -3832,6 +3837,14 @@ class OperationsConsole:
                 binding["review_domain"] = review_domain if review_path != "boom" else "decision_tree"
                 binding["reviewed_at"] = utc_now()
                 binding["review_command_hash"] = command_hash
+                from src.review.ko_transitions_v1 import apply_ko_event
+                transition_evidence = apply_ko_event(current=revision_predecessor,
+                    prepared=updated_target, event='approve', review_path=review_path,
+                    bindings=binding_authority, fragments=source_fragments,
+                    after_bindings=[*binding_authority, binding], objects=updated,
+                    assessment=assessment if assessment is not None else
+                        (interaction_evidence or {}).get('assessment'),
+                    evidence_not_applicable=evidence_not_applicable)
                 binding.update(transition_evidence)
                 if passage_meta:
                     binding["suitability"] = passage_meta.get("suitability")
@@ -3845,6 +3858,12 @@ class OperationsConsole:
                     new_bindings.get(snapshot_id, []),
                     object_id,
                 )
+            if decision != 'approve':
+                from src.review.ko_transitions_v1 import apply_ko_event
+                transition_evidence = apply_ko_event(current=revision_predecessor,
+                    prepared=updated_target, event='correct' if decision == 'revise' else decision,
+                    review_path=review_path, bindings=binding_authority, fragments=source_fragments,
+                    after_bindings=new_bindings.get(snapshot_id, []))
             ledger_fn = None
             if decision != "later":
                 ledger_details = {
@@ -3959,12 +3978,6 @@ class OperationsConsole:
                     raise ConsoleError("second_review_not_available")
             self._require_open_original(snapshot_id, object_id)
 
-            from src.review.ko_transitions_v1 import apply_ko_event
-            transition_evidence = apply_ko_event(current=target, event='approve_second',
-                review_path=review_path, bindings=bindings, fragments=source_fragments,
-                objects=objects, assessment=assessment if assessment is not None else
-                    (interaction_evidence or {}).get('assessment'),
-                evidence_not_applicable=evidence_not_applicable)
             canonical_hash = compute_canonical_object_hash(target)
             binding = tuple_record(
                 object_id=object_id,
@@ -3977,10 +3990,6 @@ class OperationsConsole:
             )
             binding["review_domain"] = "content" if review_path != "boom" else "decision_tree"
             binding["reviewed_at"] = utc_now()
-            binding.update(transition_evidence)
-            new_bindings = deepcopy(review_bindings_view(self))
-            rows = _recorded_authorization(new_bindings.get(snapshot_id, []), binding, reviewer)
-            new_bindings[snapshot_id] = rows
 
             history = self._load_objects(snapshot_id)
             current_target = next(
@@ -3999,6 +4008,19 @@ class OperationsConsole:
                     "snapshot_hash": canonical_hash,
                 }
             )
+
+            from src.review.ko_transitions_v1 import apply_ko_event
+            transition_evidence = apply_ko_event(current=target, prepared=current_target,
+                event='approve_second', review_path=review_path, bindings=bindings,
+                fragments=source_fragments, objects=objects,
+                after_bindings=[*bindings, binding],
+                assessment=assessment if assessment is not None else
+                    (interaction_evidence or {}).get('assessment'),
+                evidence_not_applicable=evidence_not_applicable)
+            binding.update(transition_evidence)
+            new_bindings = deepcopy(review_bindings_view(self))
+            rows = _recorded_authorization(new_bindings.get(snapshot_id, []), binding, reviewer)
+            new_bindings[snapshot_id] = rows
 
             self._commit_prepared_store(
                 objects=(snapshot_id, history),
@@ -4147,10 +4169,7 @@ class OperationsConsole:
         if target is None:
             raise ConsoleError("unknown_object")
         correction_input = deepcopy(target)
-        if source_repair_spec is not None or materialisation_decision is not None:
-            # Explicit source correction prepares a successor from the actual
-            # current object without activating a temporary revise state.
-            correction_input["governance"]["validation_status"] = "revise"
+        correction_input['governance']['validation_status'] = 'revise'
         revised = create_revision(
             correction_input,
             patch,
@@ -4304,7 +4323,8 @@ class OperationsConsole:
                         raise ConsoleError("reviewer_not_named_on_snapshot")
                     from src.review.ko_transitions_v1 import apply_ko_event
                     apply_ko_event(current=target, prepared=revised, event='correct',
-                        review_path=review_path_for_klasse(envelope['class']))
+                        review_path=review_path_for_klasse(envelope['class']),
+                        after_bindings=new_bindings.get(snapshot_id, []))
                     self._commit_prepared_store(
                         objects=(snapshot_id, history),
                         envelopes=new_envelopes,

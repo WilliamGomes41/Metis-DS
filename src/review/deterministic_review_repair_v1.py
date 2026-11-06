@@ -527,15 +527,15 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             object_id = str(row.get("object_id") or "")
             if object_id not in versions or str(row.get("object_version") or "") != versions[object_id]:
                 continue
-            from src.review.ko_transitions_v1 import apply_ko_event
-            apply_ko_event(current=row, event='supersede_merge',
-                review_path=review_path_for_klasse(self._envelope(snapshot_id)['class']))
             updated = deepcopy(row)
             governance = updated.setdefault("governance", {})
             governance["validation_status"] = "superseded"
             governance["publication_status"] = "unpublished"
             governance["superseded_by"] = superseded_by
             stamp_canonical_hashes(updated)
+            from src.review.ko_transitions_v1 import apply_ko_event
+            apply_ko_event(current=row, prepared=updated, event='supersede_merge',
+                review_path=review_path_for_klasse(self._envelope(snapshot_id)['class']))
             errors = schema_errors(updated, self.schema_path)
             if errors:
                 raise ConsoleError("revision_schema_invalid", " | ".join(errors))

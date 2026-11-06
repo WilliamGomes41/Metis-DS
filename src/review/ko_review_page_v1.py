@@ -62,19 +62,12 @@ def summary_rows(obj, objects, descriptor=None, *, review_path='richtlijn'):
                                 '' if item.get('status') == 'bound' else 'Nog te controleren', ''))
     relations = descriptor.relations if descriptor is not None else ()
     for item in relations:
-        label = {'applies_if': 'Voorwaarde', 'except_if': 'Uitzondering', 'supported_by': 'Onderbouwing'}.get(item.get('relation_type'))
+        label = {'applies_if': 'Voorwaarde', 'except_if': 'Uitzondering', 'supported_by': 'Onderbouwing', 'explains': 'Onderbouwing'}.get(item.get('relation_type'))
         if not label:
             continue
         target = item.get('target') or {}
         rows[label].append((str(target.get('text') or item.get('text') or 'Gekoppelde tekst ontbreekt.'),
                             'Voorstel, nog niet bevestigd' if item.get('authority') == 'proposed' else '', ''))
-    from src.review.review_context_v1 import review_context
-    context = review_context(obj, objects=objects, review_path=review_path)
-    for item in context['links']:
-        if item.get('direction') == 'incoming' and item.get('relation_type') == 'explains':
-            source = item['source']
-            rows['Onderbouwing'].append((source.get('text') or 'Gekoppelde tekst ontbreekt.',
-                'Voorstel, nog niet bevestigd' if item.get('authority') == 'proposed' else '', ''))
     return {label: list(dict.fromkeys(values)) for label, values in rows.items()}
 
 
@@ -104,7 +97,7 @@ def _additional_relations(descriptor):
     items = []
     for relation in descriptor.relations:
         kind = relation['relation_type']
-        if kind in {'applies_if', 'except_if', 'supported_by'}:
+        if kind in {'applies_if', 'except_if', 'supported_by', 'explains'}:
             continue
         target = relation['target']
         items.append('<li><strong>' + escape(RELATION_LABELS.get(kind, kind)) + '</strong>: '

@@ -63,7 +63,14 @@ def _review(console, reviewer, sid, target, status):
         console.review_object(**args, decision="reject", suitability="ja",
                               eindoordeel="afwijzen", comment="Geen zelfstandige kennis.")
     else:
-        console.review_object(**args, decision="revise", comment="Context opnieuw beoordelen.")
+        from tests.semantic_fixture_support import install_fixture_history
+
+        target = console._current_object(sid, target["object_id"])
+        rows = console._load_objects(sid, remember=False)
+        historical = next(row for row in rows if row["object_id"] == target["object_id"]
+                          and row["object_version"] == target["object_version"])
+        historical["governance"]["validation_status"] = "revise"
+        install_fixture_history(console, sid, rows)
 
 
 def _projection(console, sid):

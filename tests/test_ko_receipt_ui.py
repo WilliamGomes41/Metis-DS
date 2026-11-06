@@ -41,6 +41,9 @@ def test_card_then_exact_receipt_after_durable_save_and_restart(tmp_path, produc
     assert 'Is dit toepasbaar?' in page.text and 'Is dit compleet?' in page.text
     assert 'Staat dit op de juiste plek?' in page.text
     assert not re.search(r'<input[^>]+type="radio"[^>]+checked', page.text)
+    choice = re.search(r'<input[^>]+name="evidence_not_applicable"[^>]*>', page.text)
+    assert choice is not None and 'checked' not in choice.group(0)
+    assert data['evidence_not_applicable'] == 'yes'
     response = client.post('/review', data=data, follow_redirects=False)
     assert response.status_code == 303, response.text
     assert parse_qs(urlsplit(response.headers['location']).query)['receipt_interaction'] == [data['interaction_id']]
@@ -53,6 +56,8 @@ def test_card_then_exact_receipt_after_durable_save_and_restart(tmp_path, produc
     assert 'Dit heb je goedgekeurd' in result.text
     assert 'Zo is het kennisobject vastgelegd' in result.text
     assert 'data-knowledge-connections' in result.text
+    assert 'data-saved-evidence-applicability="not_applicable"' in result.text
+    assert direct.event['details']['supporting_evidence']['applicability'] == 'not_applicable'
     receipt = read_saved_review(console, console._account(reviewer), sid, obj['object_id'], data['interaction_id'])
     assert receipt is not None
     restarted = restart_production(console)

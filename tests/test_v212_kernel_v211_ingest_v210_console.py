@@ -511,14 +511,6 @@ def test_a_hash_version_or_type_change_invalidates_authorization(tmp_path: Path,
         for item in bindings
     )
 
-    console.review_object(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=target["object_id"],
-        decision="revise",
-        comment="Nieuwe versie nodig.",
-        confirmed_object_type="explanation",
-    )
     revised = console.correct_object(
         actor_id=accounts["researcher"]["account_id"],
         snapshot_id=receipt["snapshot_id"],

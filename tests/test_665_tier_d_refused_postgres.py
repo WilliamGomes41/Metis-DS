@@ -655,8 +655,6 @@ def _scenario_review_flow(request, tmp_path, monkeypatch):
     first, second = queue[0], queue[1]
     _approve(console, rid, sid, first)
     text = second["content"]["clean_text"].rstrip(".")
-    console.review_object(actor_id=rid, snapshot_id=sid, object_id=second["object_id"], decision="revise",
-                          comment="Corrigeer.", proposed_correction=text)
     console.correct_object(actor_id=rid, snapshot_id=sid, object_id=second["object_id"],
                            patch={"reason": "t13", "operations": [
                                {"op": "set", "path": "content.clean_text", "value": text}]})
@@ -748,8 +746,8 @@ def test_t13_numeric_version_order_and_non_numeric_category(workflow_postgres, t
     console = _review_tier(tmp_path, workflow_postgres)
     sid, rid, queue = _ingest(console)
     second = queue[1]
-    console.review_object(actor_id=rid, snapshot_id=sid, object_id=second["object_id"], decision="revise",
-                          comment="Corrigeer.", proposed_correction=second["content"]["clean_text"].rstrip("."))
+    console.review_object(actor_id=rid, snapshot_id=sid, object_id=second["object_id"], decision="reject",
+                          comment="Afgewezen; wel een reviewevent, geen goedkeuringsbinding.")
     _insert_version(workflow_postgres, sid, second["object_id"], "1.0.9")
     _insert_version(workflow_postgres, sid, second["object_id"], "1.0.10")
     _copy_event_to_version(workflow_postgres, sid, second["object_id"], "1.0.9")

@@ -132,6 +132,16 @@ def _review(
     )
 
 
+def _repair_source(console, reviewer, sid, oid, *, comment):
+    obj = console._current_object(sid, oid)
+    units = console.source_units(snapshot_id=sid, object_id=oid)
+    selected = next(unit for unit in units if unit["text"] == obj["content"]["clean_text"])
+    return console.submit_review_resolution(actor_id=reviewer["account_id"], snapshot_id=sid,
+        object_id=oid, repair_kind="source_units", suitability="mist_context",
+        source_unit_ids=[selected["unit_id"]], comment=comment,
+        expected_revision=console.objects_revision(sid))
+
+
 def test_impossible_review_combination_fails_closed(tmp_path, *, production_console):
     console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     with pytest.raises(ConsoleError, match="review_disposition_conflict"):
@@ -228,62 +238,33 @@ def test_reject_with_revision_is_one_commit_without_type_or_position_write(tmp_p
     assert binding_relations(after) == before_relations
 
 
-def test_revise_is_non_terminal_until_repair(tmp_path, *, production_console):
-    console, researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
-    oid = ids[0]
-    before = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
-    prior_status = passage_register_of(before)["status"]
-    _review(
-        console,
-        reviewer,
-        sid,
-        oid,
-        decision="revise",
-        suitability="mist_context",
-        eindoordeel="goedkeuren_na_correctie",
-        comment="Context ontbreekt.",
-    )
-    current = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
-    assert current["governance"]["validation_status"] == "revise"
-    assert passage_register_of(current)["status"] == prior_status
-    assert passage_register_of(current)["status"] != "used_as_context"
-    assert console.waiting_task_counts(researcher["account_id"])["ingest"] == 1
-    assert console.waiting_task_counts(reviewer["account_id"])["review"] == 1
-    assert console.audit_review_signals()[0]["details"]["final_disposition"] == "repair_required"
+def test_direct_raw_revise_refuses_without_persisting_partial_review(tmp_path, *, production_console):
+    console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
+    before = console.snapshot_objects(sid)
+    events = read_events(console._ledger_path)
+    bindings = console.object_review_bindings(sid)
+    with pytest.raises(ConsoleError, match="structured_repair_required"):
+        _review(console, reviewer, sid, ids[0], decision="revise", suitability="mist_context",
+                eindoordeel="goedkeuren_na_correctie", comment="Context ontbreekt.")
+    assert console.snapshot_objects(sid) == before
+    assert console.object_review_bindings(sid) == bindings
+    assert read_events(console._ledger_path) == events
 
 
 def test_proposed_correction_is_not_automatically_applied(tmp_path, *, production_console):
     console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     oid = ids[0]
     before = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
-    _review(
-        console,
-        reviewer,
-        sid,
-        oid,
-        decision="revise",
-        suitability="mist_context",
-        eindoordeel="goedkeuren_na_correctie",
-        comment="Voorstel, nog niet uitvoeren.",
-        proposed_correction=broncontext_parts(before)["source_text_exact"],
-    )
-    current = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
-    assert current["content"]["clean_text"] == before["content"]["clean_text"]
+    with pytest.raises(ConsoleError, match="structured_repair_required"):
+        _review(console, reviewer, sid, oid, decision="revise", suitability="mist_context",
+                eindoordeel="goedkeuren_na_correctie", comment="Voorstel, nog niet uitvoeren.",
+                proposed_correction=broncontext_parts(before)["source_text_exact"])
+    assert console._current_object(sid, oid) == before
 
 
 def test_source_bound_repair_rejects_invented_text(tmp_path, *, production_console):
     console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     oid = ids[0]
-    _review(
-        console,
-        reviewer,
-        sid,
-        oid,
-        decision="revise",
-        suitability="samenvoegen",
-        eindoordeel="goedkeuren_na_correctie",
-        comment="Samenvoegen met broncontext.",
-    )
     with pytest.raises(ConsoleError, match="correction_not_source_bound"):
         console.correct_object(
             actor_id=reviewer["account_id"],
@@ -326,41 +307,20 @@ def test_later_has_no_hidden_state_transition(tmp_path, *, production_console):
 def test_support_disposition_requires_relation_and_reopens_both(tmp_path, *, production_console):
     console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     support_id, claim_id = ids[0], ids[1]
-    _review(
-        console,
-        reviewer,
-        sid,
-        support_id,
-        decision="revise",
-        suitability="alleen_onderbouwing",
-        eindoordeel="goedkeuren_na_correctie",
-        comment="Alleen onderbouwing.",
-    )
-    support = next(row for row in console.snapshot_objects(sid) if row["object_id"] == support_id)
+    support = console._current_object(sid, support_id)
     with pytest.raises(ConsoleError, match="support_relation_required"):
-        console.review_object(
-            actor_id=reviewer["account_id"],
-            snapshot_id=sid,
-            object_id=support_id,
-            decision="approve",
+        console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid, object_id=support_id,
+            decision="approve", assessment=affirmative_assessment(),
             confirmed_object_type=confirmable_proposed_type(support),
-            suitability="alleen_onderbouwing",
-            eindoordeel="goedkeuren",
-            type_action="dit_klopt",
-        )
-    console.resolve_support_relation(
-        actor_id=reviewer["account_id"],
-        snapshot_id=sid,
-        support_object_id=support_id,
-        claim_object_id=claim_id,
-        expected_revision=console.objects_revision(sid),
-    )
+            suitability="alleen_onderbouwing", eindoordeel="goedkeuren", type_action="dit_klopt")
+    console.submit_review_resolution(actor_id=reviewer["account_id"], snapshot_id=sid,
+        object_id=support_id, repair_kind="support_relation", suitability="alleen_onderbouwing",
+        claim_object_id=claim_id, comment="Alleen onderbouwing.",
+        expected_revision=console.objects_revision(sid))
     current = {row["object_id"]: row for row in console.snapshot_objects(sid)}
-    assert any(
-        rel.get("relation_type") == "supported_by"
-        and rel.get("target_object_id") == support_id
-        for rel in binding_relations(current[claim_id])
-    )
+    assert any(rel.get("relation_type") == "supported_by"
+               and rel.get("target_object_id") == support_id
+               for rel in binding_relations(current[claim_id]))
     assert passage_register_of(current[support_id])["status"] == "linked_as_support"
     assert current[support_id]["governance"]["validation_status"] == "needs_review"
     assert current[claim_id]["governance"]["validation_status"] == "needs_review"
@@ -377,16 +337,7 @@ def test_review_and_audit_write_roll_back_together(tmp_path, monkeypatch, *, pro
 
     monkeypatch.setattr(console, "_append_audit_evidence", fail_audit)
     with pytest.raises(RuntimeError, match="audit write failed"):
-        _review(
-            console,
-            reviewer,
-            sid,
-            oid,
-            decision="revise",
-            suitability="mist_context",
-            eindoordeel="goedkeuren_na_correctie",
-            comment="Moet atomair zijn.",
-        )
+        _repair_source(console, reviewer, sid, oid, comment="Moet atomair zijn.")
     after = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
     assert after == before
     assert read_events(console._ledger_path) == ledger_before
@@ -408,19 +359,12 @@ def test_publication_fails_closed_when_disposition_conflict_is_found(tmp_path, m
     assert considered["disposition_conflict_object_ids"] == [oid]
 
 
-def test_revise_and_rejected_objects_do_not_leak_from_question_selector(tmp_path, *, production_console):
+
+
+def test_repaired_and_rejected_objects_do_not_leak_from_question_selector(tmp_path, *, production_console):
     console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
     revise_id, reject_id = ids[0], ids[1]
-    _review(
-        console,
-        reviewer,
-        sid,
-        revise_id,
-        decision="revise",
-        suitability="mist_context",
-        eindoordeel="goedkeuren_na_correctie",
-        comment="Herstel nodig.",
-    )
+    _repair_source(console, reviewer, sid, revise_id, comment="Herstel nodig.")
     _review(
         console,
         reviewer,
@@ -441,16 +385,7 @@ def test_revise_and_rejected_objects_do_not_leak_from_question_selector(tmp_path
 
 def test_review_evidence_is_visible_in_read_only_audit_route(tmp_path, *, production_app, production_console):
     console, _researcher, reviewer, sid, ids = _system(tmp_path, production_console=production_console)
-    _review(
-        console,
-        reviewer,
-        sid,
-        ids[0],
-        decision="revise",
-        suitability="mist_context",
-        eindoordeel="goedkeuren_na_correctie",
-        comment="Context ontbreekt.",
-    )
+    _repair_source(console, reviewer, sid, ids[0], comment="Context ontbreekt.")
     app = production_app(console)
     client = TestClient(app, base_url="https://testserver")
     client.post("/login", data={"username": "anne", "password": "anne-secret"})
@@ -460,7 +395,7 @@ def test_review_evidence_is_visible_in_read_only_audit_route(tmp_path, *, produc
     assert "Context ontbreekt." in response.text
     assert sid in response.text
     obj = next(row for row in console.snapshot_objects(sid) if row["object_id"] == ids[0])
-    assert obj["governance"]["validation_status"] == "revise"
+    assert obj["governance"]["validation_status"] == "needs_review"
 
 
 def test_batch_failure_rolls_back_all_selected_decisions_and_restart(tmp_path, monkeypatch, *, production_console):

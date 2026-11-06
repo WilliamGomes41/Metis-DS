@@ -421,8 +421,6 @@ def test_native_correction_deferred_commit_failure_preserves_revision_reviews_an
     root=tmp_path/'native-correction'; root.mkdir()
     state, _, reviewer, _, target, command = _system(root, production_console(root=root, processing_binder=lambda console: None, azure=True, immutable_source_store=FakeBlobStore(), environment={"CONSOLE_PUBLIC_ORIGIN": "https://testserver"}), production_console=production_console)
     sid=command['snapshot_id']
-    state.review_object(actor_id=reviewer['account_id'],snapshot_id=sid,object_id=target['object_id'],
-                        decision='revise',comment='Controleer broncontext.')
     before=deepcopy(state.snapshot_objects(sid)); events=deepcopy(read_events(state._ledger_path))
     bindings=deepcopy(state.object_review_bindings(sid)); revision=state.objects_revision(sid)
     patch={'reason':'Expliciete brongebonden correctie.', 'operations':[{'op':'set','path':'content.clean_text',

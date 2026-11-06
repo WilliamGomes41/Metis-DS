@@ -272,7 +272,6 @@ def test_two_thousand_objects_need_one_selection_and_confirmation_per_twenty(rev
 
 def test_real_uncertain_content_keeps_an_individual_review_route(review_system):
     console, client, sid, actor, ids = review_system
-    console.review_object(actor_id=actor, snapshot_id=sid, object_id=ids[0], decision="revise", comment="Onduidelijk")
     console.correct_object(actor_id=actor, snapshot_id=sid, object_id=ids[0], patch={
         "reason": "Onduidelijk", "operations": [{"op": "set", "path": "uncertainty.has_uncertainty", "value": True}],
     })

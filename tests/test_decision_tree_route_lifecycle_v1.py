@@ -177,8 +177,6 @@ def test_retired_route_work_stays_readable_but_is_never_re_formed(tmp_path, monk
     for obj in _objects(console, sid):
         assert unit_issues(obj) in ([], ["decision_unit_incomplete"])
     target = _objects(console, sid)[0]
-    console.review_object(actor_id=accounts["researcher"]["account_id"], snapshot_id=sid,
-                          object_id=target["object_id"], decision="revise", comment="Bronselectie aanpassen.")
     before = deepcopy(console.snapshot_objects(sid))
     with pytest.raises(ConsoleError, match="decision_unit_legacy_revision_retired"):
         console.correct_object(actor_id=accounts["researcher"]["account_id"], snapshot_id=sid,

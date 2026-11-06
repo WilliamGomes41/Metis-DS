@@ -51,8 +51,6 @@ def test_source_context_target_has_explicit_predecessor(tmp_path, *, production_
 @pytest.mark.parametrize("new_version", ["1.0", "0.9"])
 def test_correction_cannot_reuse_or_decrease_version(tmp_path, new_version, *, production_console):
     console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
-    console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
-        object_id=obj["object_id"], decision="revise", comment="Expliciete correctie.")
     before = deepcopy(console.snapshot_objects(sid, include_blocked=True))
     with pytest.raises((ValueError, ConsoleError)):
         console.correct_object(actor_id=reviewer["account_id"], snapshot_id=sid,

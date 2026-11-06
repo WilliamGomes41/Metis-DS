@@ -137,6 +137,7 @@ def test_twenty_member_batch_uses_actual_compact_http_form(review_client, monkey
     form = next(row for row in Forms(page.text).forms
                 if row['attrs'].get('action') == '/review/normal-risk/batch-confirm')
     data = {row['name']:row.get('value','') for row in form['inputs'] if row.get('type') == 'hidden'}
+    data.update(applicable='yes', complete='yes', placed_correctly='yes', evidence_not_applicable='yes')
     ids = [row['value'] for row in form['inputs'] if row.get('name') == 'object_ids']
     assert len(ids) == 20
     assert data['snapshot_revision'].startswith('review-generation-v1:')

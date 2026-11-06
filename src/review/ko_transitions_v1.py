@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Iterable
 
-from src.knowledge_relations_v1 import confirmed_knowledge_relations_of
+from src.knowledge_relations_v1 import confirmed_knowledge_relations_of, validate_knowledge_relation_set
 from src.review.knowledge_object_state_v1 import (
     KO_STATES, GEPUBLICEERD, INGETROKKEN, VERVANGEN, AFGEWEZEN,
     GOEDGEKEURD, TWEEDE_REVIEW, derive_ko_state, is_knowledge_object,
@@ -15,7 +15,7 @@ from src.review.knowledge_object_state_v1 import (
 
 EVIDENCE_VERSION = 'ko-supporting-evidence-v1'
 EVENTS = ('approve', 'approve_second', 'reject', 'later', 'confirm_type',
-          'correct', 'link_support', 'supersede_merge')
+          'correct', 'link_support', 'confirm_relations', 'supersede_merge')
 ALLOWED_FINAL_BY_SUITABILITY = {
     'ja': {'approve', 'revise', 'reject'},
     'mist_context': {'revise', 'reject'},
@@ -32,15 +32,29 @@ APPROVAL_ONLY_FIELDS = (
 @dataclass(frozen=True)
 class Transition:
     event: str
-    target: str
+    targets: frozenset[str]
+
+    def target(self, prepared, *, review_path, bindings=(), fragments=None):
+        state = derive_ko_state(prepared, review_path=review_path, bindings=bindings,
+                                fragments=fragments)['state']
+        if state not in self.targets:
+            _refuse('ko_transition_result_invalid',
+                    f'De handeling {self.event} levert geen toegestane toestand op: {state}.')
+        return state
 
 
 _MUTABLE = frozenset(KO_STATES) - {GEPUBLICEERD, INGETROKKEN, VERVANGEN}
+_OPEN = _MUTABLE - {GOEDGEKEURD, TWEEDE_REVIEW, AFGEWEZEN}
+_TARGETS = {
+    'approve': frozenset({GOEDGEKEURD, TWEEDE_REVIEW}),
+    'approve_second': frozenset({GOEDGEKEURD, TWEEDE_REVIEW}),
+    'reject': frozenset({AFGEWEZEN}),
+    'supersede_merge': frozenset({VERVANGEN}),
+    'confirm_type': _OPEN, 'correct': _OPEN, 'link_support': _OPEN,
+    'confirm_relations': _OPEN, 'later': _OPEN,
+}
 TRANSITIONS = {
-    (state, event): Transition(event, 'derived_open_revision' if event in
-        {'confirm_type', 'correct', 'link_support'} else
-        GOEDGEKEURD if event in {'approve', 'approve_second'} else
-        AFGEWEZEN if event == 'reject' else VERVANGEN if event == 'supersede_merge' else state)
+    (state, event): Transition(event, _TARGETS[event])
     for state in _MUTABLE for event in EVENTS
     if (event != 'approve_second' or state == TWEEDE_REVIEW)
     and (event != 'approve' or state in {'Kandidaat', 'Bewijs open', 'In review', 'Samengesteld'})
@@ -68,12 +82,21 @@ def require_assessment(value: Any) -> dict[str, Any]:
 
 
 def confirmed_support(obj: dict[str, Any], objects: Iterable[dict[str, Any]]) -> bool:
+    relations = confirmed_knowledge_relations_of(obj)
+    if validate_knowledge_relation_set(relations, source_object_id=str(obj.get('object_id') or ''),
+                                       source_object_version=str(obj.get('object_version') or '')):
+        _refuse('knowledge_relation_source_version_stale')
     peers = {str(row.get('object_id') or ''): row for row in objects}
-    for relation in confirmed_knowledge_relations_of(obj):
+    for relation in relations:
         if relation.get('relation_type') not in EVIDENCE_RELATION_TYPES:
             continue
         peer = peers.get(str(relation.get('target_object_id') or ''))
-        if (peer is not None and peer.get('object_id') != obj.get('object_id')
+        from src.vorming.knowledge_relation_proposal_v1 import relation_endpoint_compatible
+        source_type = str(obj.get('confirmed_object_type') or obj.get('proposed_object_type') or obj.get('object_type') or '')
+        target_type = str((peer or {}).get('confirmed_object_type') or (peer or {}).get('proposed_object_type') or (peer or {}).get('object_type') or '')
+        if (peer is not None and relation_endpoint_compatible(relation['relation_type'],
+                source_type=source_type, target_type=target_type)
+                and peer.get('object_id') != obj.get('object_id')
                 and str(peer.get('object_version') or '') == str(relation.get('target_object_version') or '')
                 and (peer.get('content') or {}).get('clean_text')
                 and (peer.get('governance') or {}).get('validation_status') not in {'rejected', 'superseded'}):
@@ -84,9 +107,10 @@ def confirmed_support(obj: dict[str, Any], objects: Iterable[dict[str, Any]]) ->
 def supporting_evidence(obj, objects, *, not_applicable=False):
     if type(not_applicable) is not bool:
         _refuse('supporting_evidence_choice_invalid')
+    linked = confirmed_support(obj, objects)
     if not_applicable:
         return {'version': EVIDENCE_VERSION, 'applicability': 'not_applicable'}
-    if not confirmed_support(obj, objects):
+    if not linked:
         _refuse('knowledge_evidence_required', 'Dit kennisobject heeft nog geen onderbouwing.')
     return {'version': EVIDENCE_VERSION, 'applicability': 'linked'}
 
@@ -99,7 +123,8 @@ def recorded_not_applicable(obj, bindings):
 
 
 def apply_ko_event(*, current, event, review_path, bindings=(), fragments=None,
-                   prepared=None, objects=(), assessment=None, evidence_not_applicable=False):
+                   prepared=None, objects=(), assessment=None, evidence_not_applicable=False,
+                   after_bindings=()):
     """Authorize captured facts; the enclosing command retains its writer/transaction."""
     if event not in EVENTS:
         _refuse('ko_event_unknown')
@@ -110,11 +135,15 @@ def apply_ko_event(*, current, event, review_path, bindings=(), fragments=None,
     transition = TRANSITIONS.get((state, event))
     if transition is None or (state == 'Kandidaat' and event == 'approve' and review_path != 'boom'):
         _refuse('ko_transition_refused', f'De handeling {event} is niet toegestaan bij {state}.')
+    evidence = {}
     if event in {'approve', 'approve_second'}:
-        return {'assessment': require_assessment(assessment),
-                'supporting_evidence': supporting_evidence(prepared or current, objects,
-                    not_applicable=evidence_not_applicable)}
-    return {}
+        evidence = {'assessment': require_assessment(assessment),
+                    'supporting_evidence': supporting_evidence(prepared or current, objects,
+                        not_applicable=evidence_not_applicable)}
+    if prepared is not None:
+        transition.target(prepared, review_path=review_path, bindings=after_bindings,
+                          fragments=fragments)
+    return evidence
 
 
 def require_allowed_review_disposition(submission):

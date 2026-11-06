@@ -304,9 +304,15 @@ def test_stale_browser_post_commits_no_object_binding_or_event(tmp_path, *, prod
 @pytest.mark.parametrize("decision", ["later", "revise", "reject"])
 def test_nonapproval_decisions_never_grant_approval(tmp_path, decision, *, production_console):
     console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
-    console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid, object_id=obj["object_id"],
-        decision=decision, comment="Beoordeling blijft zonder approval.",
-        expected_revision=console.objects_revision(sid))
+    if decision == 'revise':
+        console.correct_object(actor_id=reviewer['account_id'], snapshot_id=sid,
+            object_id=obj['object_id'], expected_revision=console.objects_revision(sid),
+            patch={'reason': 'Beoordeling vraagt een nieuwe open versie.', 'operations': [
+                {'op': 'set', 'path': 'uncertainty.has_uncertainty', 'value': True}]})
+    else:
+        console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid, object_id=obj["object_id"],
+            decision=decision, comment="Beoordeling blijft zonder approval.",
+            expected_revision=console.objects_revision(sid))
     current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
     assert current["metadata"]["admission"]["gate_result"] == "allowed"
     assert exact_current_approver_ids(current, console.object_review_bindings(sid)) == ()
@@ -543,8 +549,8 @@ def test_completed_content_candidate_cannot_be_reopened_by_revise(tmp_path, *, p
 
 
 @pytest.mark.parametrize("independent", [False, True])
-def test_second_stage_revise_requires_an_actionable_independent_reviewer(tmp_path, independent, *, production_console):
-    """RED for the first approver; GREEN GUARD for the authorized second human."""
+def test_second_stage_review_refuses_self_but_independent_correction_reopens(tmp_path, independent, *, production_console):
+    """Self-review is refused; a separate explicit correction creates new open work."""
     from src.review.review_duty_v1 import review_stage, SECOND_REVIEW
     console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
     second = console.create_account(username="carla", password="carla-secret", roles=("reviewer",))
@@ -563,6 +569,14 @@ def test_second_stage_revise_requires_an_actionable_independent_reviewer(tmp_pat
     before = _state(console, sid)
     actor = second if independent else reviewer
     def submit():
+        if independent:
+            units = console.source_units(snapshot_id=sid, object_id=obj['object_id'])
+            selected = next(unit['unit_id'] for unit in units
+                            if unit['text'] == obj['content']['clean_text'])
+            return console.submit_review_resolution(actor_id=actor['account_id'], snapshot_id=sid,
+                object_id=obj['object_id'], expected_revision=console.objects_revision(sid),
+                suitability='ja', comment='Tweede review: herzien', repair_kind='source_units',
+                source_unit_ids=[selected])
         return console.review_object(actor_id=actor["account_id"], snapshot_id=sid,
             object_id=obj["object_id"], decision="revise", comment="Tweede review: herzien",
             expected_revision=console.objects_revision(sid))

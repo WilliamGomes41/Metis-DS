@@ -218,7 +218,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
         if updated is None:
             raise ConsoleError("unknown_object")
         return self._commit_knowledge_change(snapshot_id, live, updated,
-            reason="review repair context", actor="repair-command", retain_revise=True)
+            reason="review repair context", actor="repair-command")
 
     def review_object(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
         if args:
@@ -508,8 +508,6 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             self._require_mutable_working_revision(snapshot_id)
             from src.review.beslisboom_path_v1 import review_path_for_klasse
             path = review_path_for_klasse(envelope['class'])
-            for affected in (support, claim):
-                apply_ko_event(current=affected, event='link_support', review_path=path)
             relations = list(binding_relations(claim))
             if not any(
                 rel.get("relation_type") == "supported_by"
@@ -552,8 +550,10 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                     target_object_version=str(peers[target_id]['object_version'])))
             prepared_claim[CONFIRMED_FIELD] = confirmed
             prepared_claim['confirmed_relations'] = legacy_confirmed_mirror(confirmed)
-            self._commit_knowledge_change(snapshot_id, current_claim, prepared_claim,
+            saved_claim = self._commit_knowledge_change(snapshot_id, current_claim, prepared_claim,
                 reason='reviewed support relation', actor=self._account(actor_id)['username'])
+            apply_ko_event(current=claim, prepared=saved_claim, event='link_support', review_path=path)
+            apply_ko_event(current=support, prepared=current_support, event='link_support', review_path=path)
             self._append_audit_evidence(
                 actor_id=actor_id,
                 snapshot_id=snapshot_id,

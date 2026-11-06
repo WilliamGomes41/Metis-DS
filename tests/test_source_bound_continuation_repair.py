@@ -487,14 +487,13 @@ def test_legacy_generic_correction_keeps_document_scoped_rereview_default(tmp_pa
         for row in console.snapshot_objects(snapshot_id)
         if "gevoel van gemis" in str((row.get("content") or {}).get("clean_text") or "")
     )
-    console.review_object(
-        actor_id=reviewer["account_id"],
-        snapshot_id=snapshot_id,
-        object_id=str(target["object_id"]),
-        decision="revise",
-        comment="Legacy correctie blijft document-scoped.",
-        expected_revision=console.objects_revision(snapshot_id),
-    )
+    from tests.semantic_fixture_support import install_fixture_history
+
+    rows = console._load_objects(snapshot_id, remember=False)
+    historical = next(row for row in rows if row["object_id"] == target["object_id"]
+                      and row["object_version"] == target["object_version"])
+    historical["governance"]["validation_status"] = "revise"
+    install_fixture_history(console, snapshot_id, rows)
 
     envelope = console._envelope(snapshot_id)
     envelope["review_passes"] = {

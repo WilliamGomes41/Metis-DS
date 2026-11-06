@@ -264,13 +264,14 @@ def test_kernel_revise_by_the_other_designated_person_is_not_overridden(kernel):
     console, ids = kernel
     sid = _ingest(console, ids, _choice("two_others", [ids["bert"], ids["carla"]]))["snapshot_id"]
     target = next(o for o in console.snapshot_objects(sid) if o.get("object_type") == "unclassified")
-    console.review_object(actor_id=ids["carla"], snapshot_id=sid, object_id=target["object_id"],
-                          decision="revise", comment="Klopt niet met de bron.")
-    try:
+    reviewed_revision = console.objects_revision(sid)
+    console.correct_object(actor_id=ids['carla'], snapshot_id=sid, object_id=target['object_id'],
+        expected_revision=reviewed_revision, patch={'reason': 'Klopt niet met de bron.', 'operations': [
+            {'op': 'set', 'path': 'uncertainty.has_uncertainty', 'value': True}]})
+    with pytest.raises(ConsoleError, match='snapshot_object_write_conflict'):
         console.review_object(actor_id=ids["bert"], snapshot_id=sid, object_id=target["object_id"],
-                              decision="approve", confirmed_object_type="explanation")
-    except ConsoleError:
-        pass
+            decision="approve", confirmed_object_type="explanation", expected_revision=reviewed_revision,
+            assessment=affirmative_assessment(), evidence_not_applicable=True)
     current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == target["object_id"])
     assert (current.get("governance") or {}).get("validation_status") != "approved"
     assert console.publication_readiness(sid)["publish_allowed"] is False
