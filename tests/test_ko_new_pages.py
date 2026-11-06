@@ -129,3 +129,62 @@ def test_early_validation_error_cannot_rebase_old_answers_onto_current_revision(
     fresh = client.get('/review', params={'document': sid, 'object': obj['object_id']})
     assert compact_submission(fresh)['snapshot_revision'] != old['snapshot_revision']
     assert not re.search(r'<input[^>]+type="radio"[^>]+checked', fresh.text)
+
+
+def test_standalone_bon_avoids_global_prefetch_but_keeps_exact_authorization(tmp_path, production_console, monkeypatch):
+    from src.workflows.workflow_transaction_v1 import workflow_transaction_active
+    console, sid, _, _, client, page, _ = prepared(tmp_path, production_console, monkeypatch)
+    data = compact_submission(page)
+    saved = client.post('/review', data=data, follow_redirects=False)
+    assert saved.status_code == 303
+
+    def no_global_prefetch():
+        raise AssertionError('Standalone bon must not calculate lifecycle for all documents')
+
+    monkeypatch.setattr(console, 'list_document_lifecycle_statuses', no_global_prefetch)
+    original = console.document_release_serving_status
+    canonical_reads = []
+
+    def selected_canonical_status(snapshot_id, **kwargs):
+        assert not workflow_transaction_active()
+        canonical_reads.append(snapshot_id)
+        return original(snapshot_id, **kwargs)
+
+    monkeypatch.setattr(console, 'document_release_serving_status', selected_canonical_status)
+    result = client.get(saved.headers['location'])
+    assert result.status_code == 200
+    assert result.text.count('data-answer="yes"') == 3
+    assert canonical_reads == [sid]
+    console.create_account(username='foreign-reviewer', password='fixture-only', roles=('reviewer',))
+    client.post('/login', data={'username': 'foreign-reviewer', 'password': 'fixture-only'})
+
+    def no_private_event_read(*args, **kwargs):
+        raise AssertionError('A reviewer outside this document cannot read its event')
+
+    monkeypatch.setattr(console.workflow_review_store, 'read_review_command_events', no_private_event_read)
+    forbidden = client.get(saved.headers['location'])
+    assert forbidden.status_code == 400
+    assert 'data-review-receipt' not in forbidden.text
+    assert canonical_reads == [sid]
+
+
+@pytest.mark.parametrize('destination', ['document', 'object', 'after', 'partial_receipt', 'tree'])
+def test_other_review_destinations_keep_document_status_prefetch(tmp_path, production_console, monkeypatch, destination):
+    console, sid, _, obj, client, _, _ = prepared(tmp_path, production_console, monkeypatch)
+    original = console.list_document_lifecycle_statuses
+    calls = []
+
+    def document_statuses():
+        result = original()
+        calls.append(result)
+        return result
+
+    monkeypatch.setattr(console, 'list_document_lifecycle_statuses', document_statuses)
+    params = {'document': sid}
+    if destination in {'object', 'after'}:
+        params[destination] = obj['object_id']
+    if destination == 'partial_receipt':
+        params['receipt_interaction'] = 'incomplete-reference'
+    response = client.get('/tree' if destination == 'tree' else '/review', params=params)
+    assert response.status_code == 200
+    assert calls and sid in calls[0]

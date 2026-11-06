@@ -1,5 +1,5 @@
 """Read-only receipt of an existing durable review interaction."""
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from html import escape
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -36,7 +36,14 @@ def read_saved_review(console, account, snapshot_id, object_id, interaction_id):
     from src.workflows.workflow_transaction_v1 import workflow_read_transaction
     console._require_role(account['account_id'], 'reviewer', current=True)
     with workflow_read_transaction(console.workflow_document_store):
-        return _read_saved_review(console, account, snapshot_id, object_id, interaction_id)
+        receipt = _read_saved_review(console, account, snapshot_id, object_id, interaction_id)
+    if receipt is None:
+        return None
+    try:
+        publication = console.document_release_serving_status(snapshot_id).get('release_status', '')
+    except ConsoleError:
+        publication = ''
+    return replace(receipt, publication_state=publication)
 
 
 def _read_saved_review(console, account, snapshot_id, object_id, interaction_id):
@@ -96,13 +103,9 @@ def _read_saved_review(console, account, snapshot_id, object_id, interaction_id)
     bindings = console.workflow_review_store.read_bindings([snapshot_id], object_ids=[object_id]).get(snapshot_id, [])
     state = derive_ko_state(current, review_path=review_path_for_klasse(envelope['class']),
                            bindings=bindings)['state'] or 'Broncontext of structuur'
-    try:
-        publication = console.document_release_serving_status(snapshot_id, envelope=envelope).get('release_status', '')
-    except ConsoleError:
-        publication = ''
     return SavedReviewReceipt(snapshot_id, event, canonical_object_payload(focal), related,
                               str(current.get('object_version') or ''), state,
-                              str(envelope.get('title') or ''), publication)
+                              str(envelope.get('title') or ''))
 
 
 _RELATION_LABELS = {

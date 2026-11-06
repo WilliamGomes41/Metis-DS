@@ -79,3 +79,23 @@ De gebruiker heeft de twee oorspronkelijke afbeeldingen opnieuw bevestigd als on
 De gedeelde pure `DisplayedReviewDescriptor` vormt zowel de getoonde interpretatie als de invoer voor de compacte commandadapter. De nieuwe formulierintentie bevat alleen drie antwoorden, actie en bestaande identiteit/preconditie. Zij bevat geen tegenstrijdige verborgen oude bevestigingen. De adapter bevestigt uitsluitend de werkelijk getoonde, bekende en oplosbare waarden; onbekende semantiek of onoplosbare relaties vragen gerichte correctie. De tweede review wijzigt de eerder goedgekeurde canonieke tuple niet.
 
 De globale reviewclosure, publicatievoorwaarden, canonical hash en het onafhankelijke-reviewbeleid veranderen niet. Er komen geen receipt-store, tabel, status of tweede transitieautoriteit bij.
+
+## Begrensde leesoptimalisatie van de zelfstandige bon
+
+De bon-GET gebruikt uitsluitend de eigen opgeslagen interactie en de actuele
+canonieke publicatiestatus van het geselecteerde document. De gedeelde
+documentkaartmiddleware hoeft daarom alleen voor precies deze zelfstandige
+bestemming geen levenscyclusstatussen van alle documenten vooraf te laden:
+`/review` met niet-lege `document`, `receipt_interaction` en `receipt_object`.
+Alle andere document-, object-, koppen-, bron- en vervolgbestemmingen behouden
+hun bestaande statuscontext. De endpointautorisatie, actuele rol en deelname,
+eventeigenaar, hash en historische tuple blijven dezelfde vereisten.
+
+De gevalideerde workflowbon wordt binnen de bestaande readtransactie gelezen.
+Daarna sluit die transactie voordat de bestaande canonieke statusreader wordt
+aangeroepen. Die reader blijft eigenaar van de actuele publicatiewaarheid;
+zijn uitkomst wordt alleen toegevoegd aan de onveranderlijke displayprojectie.
+Een nieuwe gecombineerde query of gedeelde opslagautoriteit is hiervoor niet
+nodig en is verworpen. De gerichte proef verbiedt globale prefetch op de bon,
+controleert de autorisatie en vereist de canonieke read buiten de
+workflowtransactie; bestaande pagina's blijven prefetch gebruiken.
