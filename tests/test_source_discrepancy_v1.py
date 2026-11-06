@@ -138,6 +138,7 @@ def test_compact_card_offers_repair_and_legacy_discrepancy_still_blocks_approval
     assert "Correctie nodig" in card and "/source-selection?" in card
     assert 'data-ko-assessment-form' in card
     form = {"snapshot_id": snapshot_id, "object_id": object_id, "suitability": "ja",
+            'applicable': 'yes', 'complete': 'yes', 'placed_correctly': 'yes', 'evidence_not_applicable': 'yes',
             "eindoordeel": "goedkeuren", "type_action": "dit_klopt", "proposed_object_type": "definition",
             "confirmed_object_type": "definition", "documentpositie_action": "dit_klopt",
             "snapshot_revision": console.objects_revision(snapshot_id),

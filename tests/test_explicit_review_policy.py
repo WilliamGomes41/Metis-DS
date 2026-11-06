@@ -9,6 +9,7 @@ from src.review.four_eyes_v1 import requires_four_eyes
 from src.operations_console_v1 import ConsoleError
 from src.review.review_policy_v1 import CONTRACT, validate_policy
 from src.review.review_duty_v1 import review_stage
+from src.review.knowledge_object_state_v1 import is_knowledge_object
 from tests.test_v225_beslisboom_path import _accounts, _console, _ingest_boom, _confirm_applies_if, _boom_freeze_bytes
 
 
@@ -17,6 +18,21 @@ def policy(accounts, participation=None):
             "primary": accounts["researcher"]["account_id"],
             "assignments": ([{"reviewer_id": accounts["reviewer"]["account_id"],
                               "participation": participation}] if participation else [])}
+
+
+def _assemble_score_graph(console, accounts, sid, target_id):
+    graph = deepcopy(console._envelope(sid)['decision_graph'])
+    objects = {row['object_id']: row for row in console.snapshot_objects(sid)}
+    for node in graph['nodes']:
+        node['object_version'] = objects[node['object_id']]['object_version']
+        node['mode'] = 'terminal' if node['object_id'] == target_id else 'context'
+    graph.update(entrypoints=[target_id], edges=[], unresolved=[])
+    console.update_decision_graph(actor_id=accounts['researcher']['account_id'], snapshot_id=sid,
+        command_id='prepare-score-policy-fixture', reason='Score als actieve eenheid beoordelen.', graph=graph,
+        expected_revision=console.objects_revision(sid))
+    assert next(node for node in console._envelope(sid)['decision_graph']['nodes']
+                if node['object_id'] == target_id)['mode'] == 'terminal'
+    return next(row for row in console.snapshot_objects(sid) if row['object_id'] == target_id)
 
 
 @pytest.mark.parametrize("participation", [None, "optional", "required"])
@@ -32,6 +48,7 @@ def test_explicit_participation_survives_restart_and_drives_exact_review(tmp_pat
     # Besluit William 2026-10-23: a score risk demands four eyes under every
     # policy; before, a one-reviewer policy switched that off.
     obj = next(o for o in console.snapshot_objects(sid) if o.get("scorelist"))
+    obj = _assemble_score_graph(console, accounts, sid, obj['object_id'])
     assert obj["risk"]["risk_fields"]
     assert requires_four_eyes(obj) is True
     console.review_object(actor_id=primary, snapshot_id=sid, object_id=obj["object_id"],
@@ -77,6 +94,8 @@ def test_every_required_reviewer_is_needed_optional_cannot_substitute(tmp_path, 
     sid = _ingest_boom(console, accounts, named_reviewers=[], review_policy=p)["snapshot_id"]
     obj = next(o for o in console.snapshot_objects(sid) if o.get("scorelist"))
     oid = obj["object_id"]
+    obj = _assemble_score_graph(console, accounts, sid, oid)
+    assert is_knowledge_object(obj, 'boom') and obj.get('scorelist')
     console.review_object(actor_id=p["primary"], snapshot_id=sid, object_id=oid,
                           decision="approve", confirmed_object_type="node", assessment=affirmative_assessment(), evidence_not_applicable=True)
     for actor in [p["primary"], accounts["reviewer"]["account_id"], optional["account_id"]]:

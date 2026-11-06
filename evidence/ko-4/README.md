@@ -175,6 +175,28 @@ browser/characterization jobs.
 
 ## Remaining verification
 
+Post-b82 CI diagnostics identified three test-only compatibility/setup repairs.
+The rollback test now proves every pre-existing event is unchanged, explicitly
+checks the new current approval's three answers/N/A, and compares only the
+known common fields of new decisions created by the pinned old binary; both
+backends passed in 17.96s. Policy fixtures assemble their graph through the
+real command while retaining an active scorelist KO and all reviewer/risk
+assertions; five cases passed in 3.29s. The exact legacy-discrepancy HTTP probe
+now submits explicit attempted-approval answers so it reaches its original
+semantic refusal; its complete rejection/report assertions passed in 1.09s.
+The original partition-zero diagnostic exercised 1,991 distinct cases plus
+five known-file exclusions; its final unknown suffix passed 1,553 cases with
+one optional skip. This is bounded diagnostic coverage, not a fresh full CI
+partition pass.
+
+Production/configuration, frozen performance methods and shared fixture
+composition remain unchanged from measured runtime
+`b82a046592961c4cb4ec8c1240a33bfadd944cdc`. Its fresh complete 80-save
+performance run passed; the independently recomputed durable result is
+[recorded on PR #1007](https://github.com/WilliamGomes41/Metis-DS/pull/1007#issuecomment-6690387964).
+Those timings remain labelled b82, not the later test-only commit. A fresh
+complete final-head CI run is still required.
+
 Final-head remote CI, exact-head closure of the last contradiction guard,
 final source read-only audit and frozen approval/correction p95 acceptance
 remain required. The actual responsive browser proof above is bounded to its
