@@ -9,7 +9,13 @@ De werkende reviewkaart en de zelfstandige bon volgen de twee goedgekeurde compo
 - review-dark.png en receipt-dark.png tonen de donkere variant. De vier bijgevoegde axe-resultaten hebben geen ernstige of kritieke bevindingen.
 - ../ko-2-review.mp4 toont openen, beoordelen, opslaan, de bon en de bestaande vervolgnavigatie. De opname duurt 31,28 seconden, inclusief vier seconden stilstaand eindbeeld.
 
-Visuele/browserproef op 776be44dcd6db6b9f003da6e59a3ed2995f8e76d: werkende PG/ASGI-app met Chromium, 1440 x 1000 en 375 x 900. Beide panelen beginnen op 228,59 px; de primaire actie eindigt op 886,56 px. Er is geen horizontale paginaschuifbalk. De daaropvolgende wijzigingen wijzigen uitsluitend de bewezen bron-/autorisatielezingen; dezelfde UI en broninhoud blijven behouden. result.json bindt de opname aan de echte eigen interactie en opgeslagen inhoud.
+![Werkende nieuwe reviewkaart](review-desktop.png)
+
+![Zelfstandige bon na opslag](receipt-desktop.png)
+
+[Bekijk de werkende flow op video](../ko-2-review.mp4) · [Mobiele kaart](review-mobile.png) · [Mobiele bon](receipt-mobile.png)
+
+Visuele/browserproef op 776be44dcd6db6b9f003da6e59a3ed2995f8e76d: werkende PG/ASGI-app met Chromium, 1440 x 1000 en 375 x 900. Beide panelen beginnen op 228,59 px; de primaire actie eindigt op 886,56 px. Er is geen horizontale paginaschuifbalk. De daaropvolgende productwijzigingen betreffen de bewezen bron-/autorisatielezingen en validatie van het formulier-ID; dezelfde UI en broninhoud blijven behouden. result.json bindt de opname aan de echte eigen interactie en opgeslagen inhoud.
 
 ## Functionele controles
 
@@ -27,6 +33,8 @@ Aanvullend vastgelegd:
 De volledige laatste suite en CI-resultaten staan bij de implementatie-PR en GitHub #1000. PostgreSQL 17 is lokaal gebruikt; CI gebruikt PostgreSQL 16. Productacceptatie door een echte reviewer, RC-21, blijft MET-53.
 
 ## Prestatieprotocol en actuele uitslag
+
+**V4.1: FAIL op de ongewijzigde grens van tien procent.** [Uitslag](performance/RESULT.md), [alle meetwaarden](performance/samples.csv), [samenvatting](performance/summary.json) en [analyse van bestaande faseregistraties](performance/DIAGNOSIS.md) zijn opgenomen. Gemeten productversie: f64c476b. Beide native tijdpoorten en alle JSON-bytepoorten slagen; bij legacy falen de p95 voor de kaart (+21,14%) en de volledige opslagroute (+19,07%). Alle zestig goedkeuringen en dertig opgeslagen head-beoordelingen zijn geverifieerd. Dit resultaat is geen merge- of productieacceptatie.
 
 De actuele gemeten uitslag en het exact geteste codehoofd worden in de implementatie-PR en GitHub #1000 vastgelegd. Dit bestand legt de reproduceerbare methode vast, geen verklaring dat een nog lopende meetrun of CI is geslaagd.
 
