@@ -465,6 +465,8 @@ def test_one_save_stores_suitability_documentpositie_type_and_eindoordeel(tmp_pa
             "confirmed_object_type": "recommendation",
             "eindoordeel": "goedkeuren",
             "decision": "approve",
+            "applicable": "yes", "complete": "yes", "placed_correctly": "yes",
+            "evidence_not_applicable": "yes",
             "recommendation_strength": "doen",
         },
         follow_redirects=False,

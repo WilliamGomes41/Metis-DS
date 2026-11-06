@@ -435,6 +435,8 @@ def test_type_confirm_succeeds_after_open_original(tmp_path: Path, *, production
             "object_id": target["object_id"],
             "snapshot_revision": console.objects_revision(receipt["snapshot_id"]),
             "decision": "approve",
+            "applicable": "yes", "complete": "yes", "placed_correctly": "yes",
+            "evidence_not_applicable": "yes",
             "confirmed_object_type": "explanation",
             "suitability": "ja",
             "eindoordeel": "goedkeuren",
