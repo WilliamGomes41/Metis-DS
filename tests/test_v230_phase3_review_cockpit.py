@@ -373,11 +373,15 @@ def test_step_c_suitability_options_are_ordinary_dutch(tmp_path: Path, *, produc
 # ---------------------------------------------------------------------------
 
 
-def test_step_d_documentpositie_is_gevonden_onder_not_parent_dump(tmp_path: Path, *, production_app, production_console) -> None:
+def test_source_position_does_not_invent_a_missing_current_parent(tmp_path: Path, *, production_app, production_console) -> None:
     _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert['object_id'])
     question = re.search(r'<fieldset class="ko-question"><legend>Staat dit op de juiste plek\?.*?</fieldset>', card, re.S).group()
-    assert CURRENT_HEADING in question
+    assert adviseert.get('parent_object_id') is None
+    assert 'Geen bovenliggende kop vastgelegd.' in question
+    assert 'data-current-parent' not in question
+    source = re.search(r'<details class="ko-document-context"[^>]*>.*?</details>', card, re.S).group()
+    assert CURRENT_HEADING in _visible_text(source)
     assert 'Andere plek kiezen' in question
     assert '/source-selection?' in question
     assert 'data-parent-choice-list' not in card
