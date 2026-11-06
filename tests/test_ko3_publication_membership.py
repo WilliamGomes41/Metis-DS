@@ -190,6 +190,34 @@ def test_later_recovered_history_does_not_prove_activation_or_retirement(complet
     assert physical_state(store) == before
 
 
+def test_same_tuple_recovery_preserves_registry_withdrawal(complete_postgres):
+    store = PostgresCanonicalPublicationStore(complete_postgres)
+    obj = publish(store)
+    store.withdraw_logical_document(logical_document_id="logical-1", expected_release_id="release-1",
+        actor="fixture-publisher", reason="Keep this withdrawal", withdrawn_at="2026-11-03T12:00:00+00:00")
+    store.persist_published_release(logical_document_id="logical-1", working_revision_id="historical-work",
+        snapshot_id="source-1", source_sha256="a" * 64, source_locator="g2://fixture/" + "a" * 64,
+        release_id="recovered-release", release_version="historical", release_owner="fixture-publisher",
+        published_at="2026-11-02T12:00:00+00:00", objects=[obj], preserve_newer_registry=True)
+    restarted = PostgresCanonicalPublicationStore(complete_postgres)
+    before = physical_state(restarted)
+    assert restarted.active_publication_rows() == []
+    row = facts(restarted, obj)
+    assert row["release_id"] == "recovered-release"
+    assert row["release_status"] == "published"
+    assert row["historical_recovery"] is row["registry_preserved"] is True
+    assert row["registry_release_id"] == "release-1"
+    assert row["registry_state"] == "emergency_unpublished"
+    assert row["registry_unpublished_at"].startswith("2026-11-03T12:00:00")
+    assert row["registry_unpublish_reason"] == "Keep this withdrawal"
+    assert ko.object_release_status(obj, row) == "withdrawn"
+    for changed in [{**obj, "object_version": "2"},
+                    {**obj, "content": {"clean_text": "Unpublished changed content."}}]:
+        assert ko.object_release_status(changed, facts(restarted, changed)) == "none"
+    assert ko.object_release_status(obj, facts(restarted, obj, "different-source")) == "none"
+    assert physical_state(restarted) == before
+
+
 @pytest.mark.parametrize("remove_binding", [False, True])
 def test_active_tuple_with_open_review_reports_invalid_without_writing(
     tmp_path, remove_binding, monkeypatch, *, production_console,

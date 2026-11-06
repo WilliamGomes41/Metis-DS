@@ -677,6 +677,8 @@ class PostgresCanonicalPublicationStore:
                            r.object_version AS registry_object_version,
                            current.content_hash AS registry_content_hash,
                            r.release_id AS registry_release_id,r.state AS registry_state,
+                           r.unpublished_at AS registry_unpublished_at,
+                           r.unpublish_reason AS registry_unpublish_reason,
                            current_source.snapshot_id AS registry_snapshot_id,
                            EXISTS (
                                SELECT 1 FROM publication_release_items active_item

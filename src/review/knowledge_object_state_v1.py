@@ -95,13 +95,16 @@ def object_release_status(obj: dict[str, Any], membership: dict[str, Any]) -> st
     if identity != tuple(str(membership.get(key) or "")
                          for key in ("object_id", "object_version", "content_hash")):
         return "none"
-    if (membership.get("registry_state") == "active"
-            and bool(membership.get("registry_release_id"))
+    registry_matches = (bool(membership.get("registry_release_id"))
             and membership.get("registry_object_version") == identity[1]
             and membership.get("registry_content_hash") == identity[2]
             and bool(membership.get("snapshot_id"))
-            and membership.get("registry_snapshot_id") == membership.get("snapshot_id")):
-        return "published"
+            and membership.get("registry_snapshot_id") == membership.get("snapshot_id"))
+    if registry_matches:
+        if membership.get("registry_state") == "active":
+            return "published"
+        if membership.get("registry_state") == "emergency_unpublished":
+            return "withdrawn"
     if not membership.get("release_id"):
         return "none"
     if membership.get("release_status") == "withdrawn" or membership.get("withdrawn_at"):
