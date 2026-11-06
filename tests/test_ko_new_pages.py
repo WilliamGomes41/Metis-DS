@@ -88,8 +88,15 @@ def test_second_review_keeps_exact_tuple_and_refuses_mislabelled_rejection(syste
     original = next(row for row in console.snapshot_objects(sid) if row['object_id'] == obj['object_id'])
     client = TestClient(production_app(console))
     client.post('/login', data={'username': 'reviewer', 'password': 'fixture-only'})
-    page = client.get('/review', params={'document': sid, 'object': obj['object_id'], 'task': 'second_review'})
+    first_client = TestClient(console._metis_test_application)
+    first_client.post('/login', data={'username': 'researcher', 'password': 'fixture-only'})
+    already_approved = first_client.get('/review', params={'document': sid, 'object': obj['object_id'], 'task': 'contextual'})
+    assert 'Onafhankelijke tweede review' in already_approved.text
+    assert re.search(r'<button[^>]+value="approve"[^>]+disabled', already_approved.text)
+    page = client.get('/review', params={'document': sid, 'object': obj['object_id'], 'task': 'contextual'})
     assert 'Onafhankelijke tweede review' in page.text
+    assert 'action="/review/second-review"' in page.text
+    assert compact_submission(page)['return_task'] == 'second_review'
     assert 'value="reject"' not in page.text
     data = compact_submission(page)
     before = physical_state(console, sid)
@@ -104,6 +111,23 @@ def test_second_review_keeps_exact_tuple_and_refuses_mislabelled_rejection(syste
     assert receipt.object['object_version'] == original['object_version']
     assert compute_canonical_object_hash(receipt.object) == compute_canonical_object_hash(original)
     assert receipt.event['details']['review_interaction']['assessment']['complete'] == 'yes'
+
+
+def test_explicit_second_mode_does_not_invent_a_second_review_duty(tmp_path, production_console, monkeypatch):
+    console, sid, _, obj, client, page, _ = prepared(tmp_path, production_console, monkeypatch)
+    before = physical_state(console, sid)
+    normal = compact_submission(page)
+    wrong_mode = client.get('/review', params={'document': sid, 'object': obj['object_id'], 'task': 'second_review'})
+    assert wrong_mode.status_code == 200
+    assert '<h1>Review</h1>' in wrong_mode.text
+    assert 'Onafhankelijke tweede review' not in wrong_mode.text
+    assert 'action="/review/second-review"' not in wrong_mode.text
+    assert 'data-can-approve="true"' in wrong_mode.text
+    corrected = compact_submission(wrong_mode)
+    assert corrected['return_task'] == 'contextual'
+    assert corrected['snapshot_revision'] == normal['snapshot_revision']
+    assert 'review_stage' not in corrected
+    assert physical_state(console, sid) == before
 
 
 @pytest.mark.parametrize('invalid', [dict(review_action='reject', comment=''),

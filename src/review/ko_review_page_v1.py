@@ -13,7 +13,7 @@ def review_page_shell(account, body, *, title='Review'):
                         ('/review', 'Review'), ('/publish', 'Publicatie'), ('/tree', 'Documenten')))
     person = escape(str(account.get('display_name') or account.get('username') or ''))
     roles = escape(' · '.join(account.get('roles') or []))
-    nav = ('<header class="ko-topbar"><a class="ko-brand" href="/" aria-label="Metis, naar Mijn werk">'
+    nav = ('<header class="ko-topbar"><a class="ko-brand" href="/">'
            + _metis_mark() + '<span><strong>Metis</strong><small>V&amp;VN Data Services</small></span></a>'
            '<nav aria-label="Werkplekken">' + links + '</nav>'
            '<button class="theme-toggle" type="button" data-theme-toggle aria-label="Wissel tussen lichte en donkere modus">'
@@ -111,7 +111,7 @@ def _additional_relations(descriptor):
     return '<ul>' + ''.join(items) + '</ul>' if items else ''
 
 
-def render_review_page(console, account, inputs, obj, *, task='', second=False, draft=None, error='', conflict=False):
+def render_review_page(console, account, inputs, obj, *, task='', draft=None, error='', conflict=False):
     from src.operations_console_app import _object_type_label, _source_bound_fields_html, new_review_interaction_id
     from src.review.review_assessment_v1 import displayed_review_descriptor
     from src.review.knowledge_object_state_v1 import derive_ko_state
@@ -120,10 +120,14 @@ def render_review_page(console, account, inputs, obj, *, task='', second=False, 
     draft = draft or {}
     sid = inputs.envelope['snapshot_id']
     path = review_path_for_klasse(inputs.envelope['class'])
-    descriptor = displayed_review_descriptor(obj, inputs.objects, path, bindings=inputs.bindings,
-        fragments=inputs.fragments, stage='second_review' if second else None)
     route = reviewer_route_for(obj, review_path=path, reviewer_id=account['account_id'],
                               bindings=inputs.bindings, fragments=inputs.fragments)
+    canonical_task = str((route or {}).get('canonical_task') or '')
+    second = canonical_task == 'second_review'
+    if second or task == 'second_review':
+        task = canonical_task
+    descriptor = displayed_review_descriptor(obj, inputs.objects, path, bindings=inputs.bindings,
+        fragments=inputs.fragments, stage='second_review' if second else None)
     published = console.snapshot_is_published(sid)
     can_approve = bool(not published and inputs.source_available and route and route.get('actionable')
                        and descriptor.can_confirm and not conflict)
@@ -200,7 +204,7 @@ for (const form of document.querySelectorAll('[data-ko-assessment-form]')) {
 </script>'''
 
 
-def compact_review_error(console, account, snapshot_id, object_id, revision, task, draft, error, *, second=False):
+def compact_review_error(console, account, snapshot_id, object_id, revision, task, draft, error):
     from dataclasses import replace
     from fastapi.responses import HTMLResponse
     from src.operations_console_app import ERROR_COPY, SNAPSHOT_OBJECT_WRITE_CONFLICT
@@ -218,7 +222,7 @@ def compact_review_error(console, account, snapshot_id, object_id, revision, tas
     }
     code = SNAPSHOT_OBJECT_WRITE_CONFLICT if conflict else getattr(error, 'code', str(error))
     message = messages.get(code) or ERROR_COPY.get(code) or 'Deze beoordeling is niet opgeslagen. Controleer de passage en probeer opnieuw.'
-    page = render_review_page(console, account, inputs, obj, task=task, second=second,
+    page = render_review_page(console, account, inputs, obj, task=task,
                               draft=draft, error=message, conflict=conflict or not revision.strip())
     return HTMLResponse(page, status_code=409 if conflict else 400, headers={'Cache-Control': 'no-store'})
 
@@ -289,6 +293,6 @@ def handle_compact_review(console, account, snapshot_id, object_id, revision, in
                 expected_revision=revision, _compact_result=True, _interaction_id=interaction_id,
                 _review_assessment=assessment)
     except ConsoleError as error:
-        return compact_review_error(console, account, snapshot_id, object_id, revision, task, draft, error, second=second)
+        return compact_review_error(console, account, snapshot_id, object_id, revision, task, draft, error)
     location = '/review?' + urlencode({'document': snapshot_id, 'after': object_id, 'task': task})
     return RedirectResponse(receipt_location(location, interaction_id, object_id), status_code=303)

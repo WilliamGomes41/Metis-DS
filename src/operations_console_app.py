@@ -3459,11 +3459,8 @@ def _render_review_room(
                         source_available = False
                     focused_inputs = ReviewPassageInputs(chosen_row, snapshot_objects, local_bindings,
                         snapshot_revision, local_fragments, source_available)
-                route = reviewer_route_for(obj, review_path=review_path, reviewer_id=reviewer_id,
-                    bindings=focused_inputs.bindings, fragments=focused_inputs.fragments)
-                second = chosen_task == 'second_review' or bool(route and route.get('canonical_task') == 'second_review')
                 return render_review_page(console, account, focused_inputs, obj,
-                    task=chosen_task, second=second, draft=draft, conflict=conflict)
+                    task=chosen_task, draft=draft, conflict=conflict)
             objects_html += '<h2>Kennisvoorstellen beoordelen</h2>'
             if review_revision and review_revision != snapshot_revision:
                 objects_html += '<p class="banner warn" data-review-return-changed>De revisie is gewijzigd sinds je naar Vorming ging. Controleer het huidige voorstel en beoordeel deze versie opnieuw.</p>'
