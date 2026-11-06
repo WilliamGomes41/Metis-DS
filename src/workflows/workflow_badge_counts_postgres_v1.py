@@ -15,6 +15,7 @@ from src.documents.document_status_v1 import derive_lifecycle_status
 from src.console_performance_v1 import measure_badges
 from src.publication.publish_authorization_v1 import still_matches
 from src.review.four_eyes_v1 import HIGH_RISK_FIELDS
+from src.review.knowledge_object_state_v1 import FINAL_VALIDATION_STATUSES
 from src.operations_console_v1 import CAPTURED, PRE_REVIEW_BLOCKED, ConsoleError
 from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
 from src.workflows.workflow_documents_cutover_v1 import _DOCUMENT_CARD_COLUMNS, _document_cards_from_rows
@@ -24,7 +25,7 @@ from src.workflows.workflow_remaining_cutover_v1 import (
     PostgresCompleteWorkflowDurablePublicationConsole,
 )
 
-_LIST_FINAL_REVIEW_STATUSES = ('approved', 'rejected', 'superseded')
+_LIST_FINAL_REVIEW_STATUSES = tuple(sorted(FINAL_VALIDATION_STATUSES))
 
 
 def _list_review_open(obj):
@@ -130,7 +131,6 @@ class _PostgresBadgeCountsMixin:
             where = "WHERE d.snapshot_id=ANY(%s)"
             params = (snapshot_ids,)
         try:
-            final_status_sql = ','.join("'" + status + "'" for status in _LIST_FINAL_REVIEW_STATUSES)
             with self.workflow_document_store._connect() as con:
                 rows = con.execute(
                     f"""
@@ -150,13 +150,13 @@ class _PostgresBadgeCountsMixin:
                                  AND COALESCE(o.payload->>'object_type','')<>'document'
                                  AND COALESCE(
                                      o.payload->'governance'->>'validation_status',''
-                                 ) NOT IN ({final_status_sql})
+                                 ) <> ALL(%s::text[])
                            ) AS has_open_review
                     FROM workflow.documents d
                     {where}
                     ORDER BY d.acquired_at,d.snapshot_id
                     """,
-                    params,
+                    (list(_LIST_FINAL_REVIEW_STATUSES), *params),
                 ).fetchall()
         except WorkflowDocumentStoreError:
             raise
