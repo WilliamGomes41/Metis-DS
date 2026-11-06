@@ -76,7 +76,6 @@ def test_exact_active_tuple_and_wrong_snapshot_hash_or_working_version(complete_
     assert "canonical_json" not in statements[0]
     assert len(rows) == 3
     assert ko.object_release_status(obj, rows[key(obj)]) == "published"
-    assert ko.object_release_status(obj, {**rows[key(obj)], "registry_has_release_item": "false"}) == "none"
     assert ko.object_release_status(obj, {**rows[key(obj)], "snapshot_id": None,
                                          "registry_snapshot_id": None}) == "none"
     assert ko.object_release_status(changed, rows[key(changed)]) == "none"
@@ -98,6 +97,25 @@ def test_active_registry_is_not_gated_by_historical_release_status(complete_post
     assert row["registry_state"] == "active"
     assert ko.object_release_status(obj, row) == "published"
     assert store.active_publication_rows()[0]["knowledge_object"] == obj
+
+
+@pytest.mark.parametrize("missing_history", ["items", "publication_event"])
+def test_exact_active_registry_is_not_gated_by_missing_history(complete_postgres, missing_history):
+    store = PostgresCanonicalPublicationStore(complete_postgres)
+    obj = publish(store)
+    with store._connect() as con:
+        if missing_history == "items":
+            con.execute("DELETE FROM publication_release_items WHERE release_id='release-1'")
+        else:
+            con.execute("DELETE FROM audit_events WHERE entity_type='release' AND entity_id='release-1' "
+                        "AND event_type='release_published'")
+    before = physical_state(store)
+    assert store.active_publication_rows()[0]["knowledge_object"] == obj
+    row = facts(store, obj)
+    assert row["release_id"] is None
+    assert row["registry_release_id"] == "release-1"
+    assert ko.object_release_status(obj, row) == "published"
+    assert physical_state(store) == before
 
 
 def test_withdrawal_remains_inactive_after_reopening_store(complete_postgres):
@@ -150,6 +168,26 @@ def test_missing_registry_without_retirement_proof_is_not_invented(complete_post
     assert row["release_id"] == "release-1"
     assert row["successor_release_id"] is row["later_logical_release_id"] is row["registry_state"] is None
     assert ko.object_release_status(obj, row) == "none"
+
+
+def test_later_recovered_history_does_not_prove_activation_or_retirement(complete_postgres):
+    store = PostgresCanonicalPublicationStore(complete_postgres)
+    publish(store, sid="source-0", release="release-0", oid="ko-0", version="0",
+            checksum="0" * 64, at="2026-10-30T12:00:00+00:00")
+    store.withdraw_logical_document(logical_document_id="logical-1", expected_release_id="release-0",
+        actor="fixture-publisher", reason="Recovery barrier", withdrawn_at="2026-11-03T12:00:00+00:00")
+    old = publish(store, recovery=True)
+    later = publish(store, sid="source-2", release="release-2", oid="ko-2", version="2",
+                    checksum="b" * 64, at="2026-11-02T12:00:00+00:00", recovery=True)
+    assert store.active_publication_rows() == []
+    before = physical_state(store)
+    for obj, sid in [(old, "source-1"), (later, "source-2")]:
+        row = facts(store, obj, sid)
+        assert row["historical_recovery"] is row["registry_preserved"] is True
+        assert row["registry_state"] is row["successor_release_id"] is None
+        assert row["later_logical_release_id"] is None
+        assert ko.object_release_status(obj, row) == "none"
+    assert physical_state(store) == before
 
 
 @pytest.mark.parametrize("remove_binding", [False, True])

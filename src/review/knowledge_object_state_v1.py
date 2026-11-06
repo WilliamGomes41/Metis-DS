@@ -89,8 +89,6 @@ def has_recorded_approval(obj: dict[str, Any]) -> bool:
 
 def object_release_status(obj: dict[str, Any], membership: dict[str, Any]) -> str:
     """Interpret selected-tuple canonical metadata without deciding serving."""
-    if not membership.get("release_id"):
-        return "none"
     from src.integrity_kernel import compute_canonical_object_hash
     identity = (str(obj.get("object_id") or ""), str(obj.get("object_version") or ""),
                 compute_canonical_object_hash(obj))
@@ -98,17 +96,20 @@ def object_release_status(obj: dict[str, Any], membership: dict[str, Any]) -> st
                          for key in ("object_id", "object_version", "content_hash")):
         return "none"
     if (membership.get("registry_state") == "active"
+            and bool(membership.get("registry_release_id"))
             and membership.get("registry_object_version") == identity[1]
             and membership.get("registry_content_hash") == identity[2]
             and bool(membership.get("snapshot_id"))
-            and membership.get("registry_snapshot_id") == membership.get("snapshot_id")
-            and membership.get("registry_has_release_item") is True):
+            and membership.get("registry_snapshot_id") == membership.get("snapshot_id")):
         return "published"
+    if not membership.get("release_id"):
+        return "none"
     if membership.get("release_status") == "withdrawn" or membership.get("withdrawn_at"):
         return "withdrawn"
     if (membership.get("successor_release_id") or membership.get("later_logical_release_id")
             or membership.get("registry_state") == "active"
-            and membership.get("registry_has_release_item") is True
+            and bool(membership.get("registry_release_id"))
+            and bool(membership.get("registry_content_hash"))
             and bool(membership.get("registry_object_version"))
             and membership.get("registry_object_version") != identity[1]):
         return "superseded"

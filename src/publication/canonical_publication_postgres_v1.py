@@ -650,6 +650,8 @@ class PostgresCanonicalPublicationStore:
 
         No content validation or lifecycle policy is performed here. In
         particular, a missing registry row can be a legitimate successor cutover.
+        Later logical-release evidence requires recorded activation; a recovery
+        event that preserved the registry does not establish that fact.
         """
         if not snapshot_id:
             raise CanonicalPublicationStoreError("canonical_snapshot_id_required")
@@ -756,6 +758,18 @@ class PostgresCanonicalPublicationStore:
                           AND COALESCE(history.logical_document_id,'')<>''
                           AND ev.details->>'logical_document_id'=history.logical_document_id
                           AND rel.published_at>history.published_at
+                          AND (
+                              EXISTS (
+                                  SELECT 1 FROM publication_registry activated
+                                  WHERE activated.release_id=rel.release_id AND activated.state='active'
+                              ) OR EXISTS (
+                                  SELECT 1 FROM audit_events activation
+                                  WHERE activation.entity_type='object' AND activation.event_type='published'
+                                    AND activation.details->>'release_id'=rel.release_id
+                                    AND COALESCE(activation.details->>'historical_recovery','false')<>'true'
+                                    AND COALESCE(activation.details->>'registry_preserved','false')<>'true'
+                              )
+                          )
                         ORDER BY rel.published_at DESC,rel.release_id DESC LIMIT 1
                     ) later ON TRUE
                     """, (ids, versions, hashes, snapshot_id, snapshot_id),
