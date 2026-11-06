@@ -123,6 +123,9 @@ def supporting_evidence(obj, objects, *, not_applicable=False):
         _refuse('supporting_evidence_choice_invalid')
     linked = confirmed_support(obj, objects)
     if not_applicable:
+        if linked:
+            _refuse('supporting_evidence_choice_conflict',
+                    'Er is onderbouwing gekoppeld. Beoordeel of corrigeer de koppeling voordat je goedkeurt.')
         return {'version': EVIDENCE_VERSION, 'applicability': 'not_applicable'}
     if not linked:
         _refuse('knowledge_evidence_required', 'Dit kennisobject heeft nog geen onderbouwing.')

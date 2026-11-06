@@ -41,6 +41,7 @@ def page_form(client, sid, focal):
         'suitability': 'ja', 'documentpositie_action': 'dit_klopt', 'type_action': 'dit_klopt',
         'confirmed_object_type': focal.get('confirmed_object_type') or focal.get('proposed_object_type') or 'definition',
         'eindoordeel': 'goedkeuren', 'decision': 'approve', 'recommendation_direction': 'against',
+        'applicable': 'yes', 'complete': 'yes', 'placed_correctly': 'yes', 'evidence_not_applicable': 'yes',
         'recommendation_strength_level': 'not_stated', 'relation_review_ack': '1',
         'comment': 'Synthetic completion probe.'}
 
@@ -196,6 +197,8 @@ def lock_worker(folder, kind):
             console.workflow_review_store._lock_authorizations = hold_auth
             console.review_object(actor_id=inputs['reviewer'], snapshot_id=inputs['sid'],
                 object_id=inputs['focal'], decision='approve', confirmed_object_type='recommendation',
+                assessment={'version': 'review-assessment-v1', 'applicable': 'yes', 'complete': 'yes', 'placed_correctly': 'yes'},
+                evidence_not_applicable=True,
                 recommendation_direction='against', recommendation_strength_level='not_stated',
                 relation_review_ack=True, expected_revision=inputs['revision'])
         else:
@@ -250,6 +253,8 @@ def context_lock_cycle(tmp_path, production_console, monkeypatch, with_binding):
     if with_binding:
         console.review_object(actor_id=reviewer, snapshot_id=sid, object_id=focal['object_id'],
             decision='approve', confirmed_object_type='recommendation', recommendation_direction='against',
+            assessment={'version': 'review-assessment-v1', 'applicable': 'yes', 'complete': 'yes', 'placed_correctly': 'yes'},
+            evidence_not_applicable=True,
             recommendation_strength_level='not_stated', relation_review_ack=True)
         BASE['append_post_fixture_revision'](console, sid, focal['object_id'], reviewer)
         focal = next(o for o in console.snapshot_objects(sid) if o['object_id'] == focal['object_id'])

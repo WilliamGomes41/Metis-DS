@@ -23,7 +23,7 @@ Governance in this repository overrides pstack where they differ. Class A with `
 
 - [ ] State the protocol and this plan to the operator, then stop. Start execution only on the operator's explicit go.
 - [ ] Record the operator's answers to the three product decisions in Appendix C before KO-3 and KO-4 start.
-  - [ ] Is supporting evidence mandatory per object type, and does an explicit "niet van toepassing" close it.
+  - [x] Supporting evidence is mandatory for every type; explicit N/A is permitted when no applicable supporting evidence exists. The rule applies to every next approval of existing unpublished KOs (operator decision 6 November 2026).
   - [ ] Is publication per object or per document (#991).
   - [ ] Is the Athena package derived on read or stored as an aggregate.
 - [ ] Read these from trunk at program start. Re-read them at every tick.
@@ -294,13 +294,13 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 
 **Files.**
 
-- [ ] Create `src/review/ko_transitions_v1.py`.
-- [ ] Edit `src/review/review_workflow_v3.py`.
-- [ ] Edit `src/review/closed_review_loop_v1.py`.
-- [ ] Edit `src/review/deterministic_review_repair_v1.py`.
+- [x] Create `src/review/ko_transitions_v1.py`.
+- [x] Edit `src/review/review_workflow_v3.py`.
+- [x] Edit `src/review/closed_review_loop_v1.py`.
+- [x] Edit `src/review/deterministic_review_repair_v1.py`.
 - [ ] Edit `src/review/source_context_review_v1.py`.
-- [ ] Edit `src/operations_console_v1.py` (`review_object`, `approve_second_review`, `correct_object`, `confirm_object_type` only).
-- [ ] Create `tests/test_ko_transitions_postgres.py`.
+- [x] Edit the existing command boundaries in `src/operations_console_v1.py`, including public relation confirmation and deferral, per the bounded #1006 contract.
+- [x] Create `tests/test_ko_transitions_postgres.py` and the independent matrix in `tests/test_ko_transition_matrix.py`.
 
 **Build.**
 

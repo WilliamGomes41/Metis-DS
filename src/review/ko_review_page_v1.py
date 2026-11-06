@@ -300,6 +300,7 @@ def compact_review_error(console, account, snapshot_id, object_id, revision, tas
         'review_assessment_required': 'Beantwoord de drie vragen voordat je goedkeurt.',
         'knowledge_evidence_required': 'Dit kennisobject heeft nog geen onderbouwing. Koppel onderbouwing via Correctie nodig of kies expliciet niet van toepassing.',
         'supporting_evidence_choice_invalid': 'Kies expliciet of onderbouwing niet van toepassing is.',
+        'supporting_evidence_choice_conflict': 'Er is onderbouwing gekoppeld. Beoordeel of corrigeer de koppeling voordat je goedkeurt.',
         'review_assessment_answer_invalid': 'Kies bij iedere vraag Ja of Aanpassen.',
         'review_assessment_requires_three_yes': 'Voor goedkeuren moeten de drie antwoorden Ja zijn. Kies anders Correctie nodig.',
         'review_assessment_unresolved_proposal': 'De getoonde interpretatie kan nog niet volledig worden bevestigd. Kies Correctie nodig.',

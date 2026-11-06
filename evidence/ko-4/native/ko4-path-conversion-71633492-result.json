@@ -1,0 +1,12 @@
+{
+  "sha": "7163349276730d8b1892a691bcea603461b862bd",
+  "before_type": "unclassified",
+  "before_authoritative_type": "path",
+  "before_version": "1.0",
+  "input_assessment": null,
+  "input_na": false,
+  "result": "REFUSED",
+  "code": "review_assessment_required",
+  "message": "Beantwoord de drie vragen voordat je goedkeurt.",
+  "unchanged": true
+}

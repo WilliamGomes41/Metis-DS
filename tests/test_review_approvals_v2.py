@@ -437,8 +437,8 @@ def test_every_required_reviewer_supplies_own_answers_and_evidence_choice(kernel
         assert physical_state(console, sid) == before
 
 
-@pytest.mark.parametrize('invalid_kind', ['explains', 'supersedes'])
-def test_second_review_na_cannot_bypass_an_incompatible_confirmed_endpoint(kernel, invalid_kind):
+@pytest.mark.parametrize('invalid_kind', ['explains', 'supersedes', 'linked_na'])
+def test_second_review_na_respects_confirmed_relation_validity_and_applicability(kernel, invalid_kind):
     from copy import deepcopy
     from src.integrity_kernel import compute_canonical_object_hash, stamp_canonical_hashes
     from src.knowledge_relations_v1 import build_knowledge_relation, canonicalize_knowledge_relation_set
@@ -456,7 +456,8 @@ def test_second_review_na_cannot_bypass_an_incompatible_confirmed_endpoint(kerne
             row['confirmed_object_type'] = 'definition'
             row['governance']['validation_status'] = 'needs_review'
             stamp_canonical_hashes(row)
-    kinds = [invalid_kind] if invalid_kind == 'explains' else ['supported_by', invalid_kind]
+    kinds = (['supported_by'] if invalid_kind == 'linked_na' else
+             [invalid_kind] if invalid_kind == 'explains' else ['supported_by', invalid_kind])
     claim['confirmed_knowledge_relations'] = canonicalize_knowledge_relation_set([
         build_knowledge_relation(source_object_id=object_id, source_object_version=claim['object_version'],
             relation_type=kind, target_object_id=peer['object_id'], target_object_version=peer['object_version'])
@@ -474,6 +475,7 @@ def test_second_review_na_cannot_bypass_an_incompatible_confirmed_endpoint(kerne
     with pytest.raises(ConsoleError) as refused:
         console.approve_second_review(actor_id=ids['carla'], snapshot_id=sid, object_id=object_id,
             assessment=affirmative_assessment(), evidence_not_applicable=True)
-    assert refused.value.code == 'knowledge_relation_endpoint_type_invalid'
+    assert refused.value.code == ('supporting_evidence_choice_conflict' if invalid_kind == 'linked_na'
+                                 else 'knowledge_relation_endpoint_type_invalid')
     assert physical_state(console, sid) == before
     assert console.workflow_review_store.read_events_for_snapshots([sid]) == events

@@ -146,6 +146,8 @@ def seed_post_history(console, sid, candidates, reviewer, depth):
         kind = candidate.get('proposed_object_type') or 'definition'
         console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=oid,
             decision='approve', confirmed_object_type=kind, suitability='ja',
+            assessment={'version': 'review-assessment-v1', 'applicable': 'yes', 'complete': 'yes', 'placed_correctly': 'yes'},
+            evidence_not_applicable=True,
             recommendation_direction=('against' if 'geen' in candidate['content']['clean_text'] else 'for') if kind == 'recommendation' else None,
             recommendation_strength_level='not_stated' if kind == 'recommendation' else None,
             documentpositie_action='dit_klopt', type_action='dit_klopt',
@@ -477,6 +479,7 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
         return {'snapshot_id': sid, 'object_id': focal['object_id'], 'snapshot_revision': match.group(1),
             'suitability': 'ja', 'documentpositie_action': 'dit_klopt', 'type_action': 'dit_klopt',
             'confirmed_object_type': 'recommendation', 'eindoordeel': 'goedkeuren', 'decision': 'approve',
+            'applicable': 'yes', 'complete': 'yes', 'placed_correctly': 'yes', 'evidence_not_applicable': 'yes',
             'recommendation_direction': 'against', 'recommendation_strength_level': 'not_stated',
             'relation_review_ack': '1', 'comment': 'synthetic task-v1 draft'}
 
@@ -765,6 +768,7 @@ def test_native_review_post_baseline(size, tmp_path, production_console, product
         return {'snapshot_id': sid, 'object_id': focal['object_id'], 'snapshot_revision': match.group(1),
             'suitability': 'ja', 'documentpositie_action': 'dit_klopt', 'type_action': 'dit_klopt',
             'confirmed_object_type': 'definition', 'eindoordeel': 'goedkeuren', 'decision': 'approve',
+            'applicable': 'yes', 'complete': 'yes', 'placed_correctly': 'yes', 'evidence_not_applicable': 'yes',
             'relation_review_ack': '1', 'comment': 'synthetic draft retained'}
 
     with TestClient(production_app(console), base_url='https://testserver') as client:

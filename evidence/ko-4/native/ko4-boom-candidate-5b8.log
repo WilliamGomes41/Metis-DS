@@ -1,0 +1,126 @@
+{"sha": "5b8fa397047dcbbd4becf5b0ab5f644dd380a898", "mode": "unresolved_pdf", "before_state": {"state": "Kandidaat", "reasons": ["admission_blocked"], "invalid": []}, "before_is_ko": true, "admission": {"gate_result": "blocked", "source_hash": "bd708b0c968f42809dce9fa311042659fd67dd35453a12f4c9b4ee1a2fa3186f", "reason_codes": ["decision_unit_graph_unresolved"], "candidate_text": "Bespreek de situatie.", "document_version": "1.0", "admission_version": "decision-tree-construction-v1"}, "result": "APPROVED", "after_state": {"state": "Goedgekeurd", "reasons": ["approved"], "invalid": ["approved_with_passage_not_assessed"]}}
+F{"sha": "5b8fa397047dcbbd4becf5b0ab5f644dd380a898", "mode": "resolved_pdf", "before_state": {"state": "Bewijs open", "reasons": ["no_supporting_evidence"], "invalid": []}, "before_is_ko": true, "admission": {"gate_result": "allowed", "source_hash": "8d9cb159a35267b8c649443a75cfe94871df075bc299bea1a15fb07e17010607", "reason_codes": [], "candidate_text": "Bespreek de situatie.", "document_version": "1.0", "admission_version": "decision-tree-construction-v1"}, "result": "APPROVED", "after_state": {"state": "Goedgekeurd", "reasons": ["approved"], "invalid": []}}
+.{"sha": "5b8fa397047dcbbd4becf5b0ab5f644dd380a898", "mode": "historical_html", "before_state": {"state": "Bewijs open", "reasons": ["no_supporting_evidence"], "invalid": []}, "before_is_ko": true, "admission": null, "result": "REFUSED", "code": "reviewer_not_named_on_snapshot", "unchanged": true}
+F{"sha": "5b8fa397047dcbbd4becf5b0ab5f644dd380a898", "mode": "structural_conversion", "before_state": {"state": null, "reasons": ["not_knowledge_object"], "invalid": []}, "before_is_ko": false, "admission": null, "result": "REFUSED", "code": "reviewer_not_named_on_snapshot", "unchanged": true}
+F
+=================================== FAILURES ===================================
+_ test_existing_boom_candidate_is_not_the_conversion_exception[unresolved_pdf] _
+
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-378/test_existing_boom_candidate_i0')
+production_console = <function production_console.<locals>.factory at 0x7fda2b32a2a0>
+mode = 'unresolved_pdf'
+
+    @pytest.mark.parametrize('mode',['unresolved_pdf','resolved_pdf','historical_html','structural_conversion'])
+    def test_existing_boom_candidate_is_not_the_conversion_exception(tmp_path,production_console,mode):
+     c=_console(tmp_path,production_console=production_console); actors=_accounts(c)
+     sid=(ingest(c,actors) if mode.endswith('pdf') else _ingest_boom(c,actors))['snapshot_id']
+     if mode=='resolved_pdf': c.update_decision_graph(**command(c,actors,sid,'independent-resolve',graph=complete_graph(c,sid)))
+     from src.review.review_duty_v1 import authoritative_review_type
+     objects=c.snapshot_objects(sid)
+     row=next(o for o in objects if authoritative_review_type(o)==('path' if mode=='structural_conversion' else 'node'))
+     facts=derive_ko_state(row,review_path='boom',bindings=c.object_review_bindings(sid),fragments=c.review_source_fragments(sid))
+     before=state(c,sid)
+     outcome={'sha':'5b8fa397047dcbbd4becf5b0ab5f644dd380a898','mode':mode,'before_state':facts,'before_is_ko':is_knowledge_object(row,'boom'),'admission':row.get('metadata',{}).get('admission')}
+     try:
+      c.review_object(actor_id=actors['researcher']['account_id'],snapshot_id=sid,object_id=row['object_id'],decision='approve',
+        confirmed_object_type='node',type_action='type_wijzigen' if mode=='structural_conversion' else 'dit_klopt',assessment=YES,evidence_not_applicable=True,expected_revision=c.objects_revision(sid))
+     except ConsoleError as e:
+      outcome.update(result='REFUSED',code=e.code,unchanged=state(c,sid)==before)
+     else:
+      saved=target_now(c,sid,row['object_id']);outcome.update(result='APPROVED',after_state=derive_ko_state(saved,review_path='boom',bindings=c.object_review_bindings(sid),fragments=c.review_source_fragments(sid)))
+     Path('/tmp/ko4-boom-candidate-5b8-'+mode+'.json').write_text(json.dumps(outcome,indent=2));print(json.dumps(outcome))
+     if mode=='unresolved_pdf':
+      assert outcome['before_is_ko'] and facts['state']=='Kandidaat'
+>     assert outcome['result']=='REFUSED', 'Existing blocked boomKO Kandidaat can approve while only true nonKO conversion should be exempt'
+E     AssertionError: Existing blocked boomKO Kandidaat can approve while only true nonKO conversion should be exempt
+E     assert 'APPROVED' == 'REFUSED'
+E       
+E       - REFUSED
+E       + APPROVED
+
+tests/ko4_boom_candidate_probe_tmp.py:32: AssertionError
+_ test_existing_boom_candidate_is_not_the_conversion_exception[historical_html] _
+
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-378/test_existing_boom_candidate_i2')
+production_console = <function production_console.<locals>.factory at 0x7fda28a1ef20>
+mode = 'historical_html'
+
+    @pytest.mark.parametrize('mode',['unresolved_pdf','resolved_pdf','historical_html','structural_conversion'])
+    def test_existing_boom_candidate_is_not_the_conversion_exception(tmp_path,production_console,mode):
+     c=_console(tmp_path,production_console=production_console); actors=_accounts(c)
+     sid=(ingest(c,actors) if mode.endswith('pdf') else _ingest_boom(c,actors))['snapshot_id']
+     if mode=='resolved_pdf': c.update_decision_graph(**command(c,actors,sid,'independent-resolve',graph=complete_graph(c,sid)))
+     from src.review.review_duty_v1 import authoritative_review_type
+     objects=c.snapshot_objects(sid)
+     row=next(o for o in objects if authoritative_review_type(o)==('path' if mode=='structural_conversion' else 'node'))
+     facts=derive_ko_state(row,review_path='boom',bindings=c.object_review_bindings(sid),fragments=c.review_source_fragments(sid))
+     before=state(c,sid)
+     outcome={'sha':'5b8fa397047dcbbd4becf5b0ab5f644dd380a898','mode':mode,'before_state':facts,'before_is_ko':is_knowledge_object(row,'boom'),'admission':row.get('metadata',{}).get('admission')}
+     try:
+      c.review_object(actor_id=actors['researcher']['account_id'],snapshot_id=sid,object_id=row['object_id'],decision='approve',
+        confirmed_object_type='node',type_action='type_wijzigen' if mode=='structural_conversion' else 'dit_klopt',assessment=YES,evidence_not_applicable=True,expected_revision=c.objects_revision(sid))
+     except ConsoleError as e:
+      outcome.update(result='REFUSED',code=e.code,unchanged=state(c,sid)==before)
+     else:
+      saved=target_now(c,sid,row['object_id']);outcome.update(result='APPROVED',after_state=derive_ko_state(saved,review_path='boom',bindings=c.object_review_bindings(sid),fragments=c.review_source_fragments(sid)))
+     Path('/tmp/ko4-boom-candidate-5b8-'+mode+'.json').write_text(json.dumps(outcome,indent=2));print(json.dumps(outcome))
+     if mode=='unresolved_pdf':
+      assert outcome['before_is_ko'] and facts['state']=='Kandidaat'
+      assert outcome['result']=='REFUSED', 'Existing blocked boomKO Kandidaat can approve while only true nonKO conversion should be exempt'
+      assert outcome['unchanged']
+     else:
+>     assert outcome['result']=='APPROVED'
+E     AssertionError: assert 'REFUSED' == 'APPROVED'
+E       
+E       - APPROVED
+E       + REFUSED
+
+tests/ko4_boom_candidate_probe_tmp.py:35: AssertionError
+_ test_existing_boom_candidate_is_not_the_conversion_exception[structural_conversion] _
+
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-378/test_existing_boom_candidate_i3')
+production_console = <function production_console.<locals>.factory at 0x7fda2a349440>
+mode = 'structural_conversion'
+
+    @pytest.mark.parametrize('mode',['unresolved_pdf','resolved_pdf','historical_html','structural_conversion'])
+    def test_existing_boom_candidate_is_not_the_conversion_exception(tmp_path,production_console,mode):
+     c=_console(tmp_path,production_console=production_console); actors=_accounts(c)
+     sid=(ingest(c,actors) if mode.endswith('pdf') else _ingest_boom(c,actors))['snapshot_id']
+     if mode=='resolved_pdf': c.update_decision_graph(**command(c,actors,sid,'independent-resolve',graph=complete_graph(c,sid)))
+     from src.review.review_duty_v1 import authoritative_review_type
+     objects=c.snapshot_objects(sid)
+     row=next(o for o in objects if authoritative_review_type(o)==('path' if mode=='structural_conversion' else 'node'))
+     facts=derive_ko_state(row,review_path='boom',bindings=c.object_review_bindings(sid),fragments=c.review_source_fragments(sid))
+     before=state(c,sid)
+     outcome={'sha':'5b8fa397047dcbbd4becf5b0ab5f644dd380a898','mode':mode,'before_state':facts,'before_is_ko':is_knowledge_object(row,'boom'),'admission':row.get('metadata',{}).get('admission')}
+     try:
+      c.review_object(actor_id=actors['researcher']['account_id'],snapshot_id=sid,object_id=row['object_id'],decision='approve',
+        confirmed_object_type='node',type_action='type_wijzigen' if mode=='structural_conversion' else 'dit_klopt',assessment=YES,evidence_not_applicable=True,expected_revision=c.objects_revision(sid))
+     except ConsoleError as e:
+      outcome.update(result='REFUSED',code=e.code,unchanged=state(c,sid)==before)
+     else:
+      saved=target_now(c,sid,row['object_id']);outcome.update(result='APPROVED',after_state=derive_ko_state(saved,review_path='boom',bindings=c.object_review_bindings(sid),fragments=c.review_source_fragments(sid)))
+     Path('/tmp/ko4-boom-candidate-5b8-'+mode+'.json').write_text(json.dumps(outcome,indent=2));print(json.dumps(outcome))
+     if mode=='unresolved_pdf':
+      assert outcome['before_is_ko'] and facts['state']=='Kandidaat'
+      assert outcome['result']=='REFUSED', 'Existing blocked boomKO Kandidaat can approve while only true nonKO conversion should be exempt'
+      assert outcome['unchanged']
+     else:
+>     assert outcome['result']=='APPROVED'
+E     AssertionError: assert 'REFUSED' == 'APPROVED'
+E       
+E       - APPROVED
+E       + REFUSED
+
+tests/ko4_boom_candidate_probe_tmp.py:35: AssertionError
+=============================== warnings summary ===============================
+../.venvs/metis-ds/lib/python3.13/site-packages/starlette/testclient.py:45
+  /workspace/.venvs/metis-ds/lib/python3.13/site-packages/starlette/testclient.py:45: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/ko4_boom_candidate_probe_tmp.py::test_existing_boom_candidate_is_not_the_conversion_exception[unresolved_pdf]
+FAILED tests/ko4_boom_candidate_probe_tmp.py::test_existing_boom_candidate_is_not_the_conversion_exception[historical_html]
+FAILED tests/ko4_boom_candidate_probe_tmp.py::test_existing_boom_candidate_is_not_the_conversion_exception[structural_conversion]
+3 failed, 1 passed, 1 warning in 1.79s

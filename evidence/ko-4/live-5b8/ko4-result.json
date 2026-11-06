@@ -1,0 +1,26 @@
+{
+  "source_sha": "13b10ee9bada80f645b700d714e5e95b84856758",
+  "restart_preserved": true,
+  "linked_approval": true,
+  "explicit_not_applicable": true,
+  "correction_reopens": true,
+  "same_person_no_additional_decision": true,
+  "same_person_http_status": 200,
+  "viewports": [
+    375,
+    768,
+    1024,
+    1440
+  ],
+  "evidence": [
+    "missing/negative answers",
+    "missing evidence",
+    "native support repair",
+    "exact linked approval",
+    "explicit N/A",
+    "new open correction",
+    "old receipt stability",
+    "independent second approval",
+    "immutable source/canonical state"
+  ]
+}

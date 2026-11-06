@@ -200,7 +200,7 @@ def test_path_to_node_enters_ko_guards_while_true_structure_remains_exempt(tmp_p
             assert 'assessment' not in binding and 'supporting_evidence' not in binding
 
 
-@pytest.mark.parametrize('change_support', [False, True])
+@pytest.mark.parametrize('change_support', [False, True, 'contradictory_na'])
 def test_real_support_repair_targets_final_versions_and_allows_approval_without_na(
         tmp_path, production_console, production_app, change_support):
     from tests.test_deterministic_review_repair_v1 import REPAIR_SUPPORT_RELATION
@@ -232,7 +232,7 @@ def test_real_support_repair_targets_final_versions_and_allows_approval_without_
     assert supporting['target_object_version'] == support_now['object_version']
     assert all((row.get('governance') or {}).get('validation_status') != 'revise'
                for row in console.snapshot_objects(sid))
-    if change_support:
+    if change_support is True:
         console.confirm_object_type(actor_id=reviewer['account_id'], snapshot_id=sid,
             object_id=support['object_id'], confirmed_object_type='explanation',
             expected_revision=console.objects_revision(sid))
@@ -244,7 +244,20 @@ def test_real_support_repair_targets_final_versions_and_allows_approval_without_
             relation_choices=[relation_choice_value(row) for row in relations
                               if row['relation_type'] in {'supported_by', 'explains'}],
             relation_review_ack=True, expected_revision=console.objects_revision(sid))
-    if change_support is True:
+    if change_support == 'contradictory_na':
+        before = deepcopy(physical_state(console, sid))
+        events = console.workflow_review_store.read_events_for_snapshots([sid])
+        with pytest.raises(ConsoleError) as refused:
+            console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid,
+                object_id=claim['object_id'], decision='approve', confirmed_object_type='definition',
+                suitability='ja', eindoordeel='goedkeuren', assessment=YES, evidence_not_applicable=True,
+                relation_choices=[relation_choice_value(row) for row in relations
+                                  if row['relation_type'] in {'supported_by', 'explains'}],
+                relation_review_ack=True, expected_revision=console.objects_revision(sid))
+        assert refused.value.code == 'supporting_evidence_choice_conflict'
+        assert physical_state(console, sid) == before
+        assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
+    elif change_support is True:
         with pytest.raises(ConsoleError) as refused:
             approve()
         assert refused.value.code in {'knowledge_relation_target_stale', 'knowledge_relation_target_version_mismatch'}
