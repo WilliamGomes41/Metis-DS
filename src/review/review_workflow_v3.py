@@ -49,7 +49,7 @@ def _apply_review_state(objects:list[dict[str,Any]], decisions:list[dict[str,Any
             g['validation_status']='approved'; stats['approved']+=1
             if o['risk']['requires_second_review']: g['second_review']['status']='pending'
         elif decision=='revise':
-            g['validation_status']='revise'; stats['revise']+=1
+            g['validation_status']='needs_review'; stats['revise']+=1
         else:
             g['validation_status']='rejected'; stats['rejected']+=1
         # Governance mutation must not change canonical content hash.

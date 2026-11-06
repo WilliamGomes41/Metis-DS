@@ -66,3 +66,14 @@ Explicit non-goals: #942-bronrolconsolidatie/broncontextfase, KO-5/6, destructie
 
 Part of MET-56.
 
+
+## Context en geldigheid bij de commandgrens
+| Gegeven | Eigenaar / overdracht | Geldigheid en verval |
+|---|---|---|
+| Snapshot, object-id/versie/hash | Bestaande ReviewCommand-input en exacte binding | Dezelfde huidige tuple; materiële opvolger maakt oude binding ongeldig |
+| Verwachte revisie en actor/policy | Bestaande PostgreSQL-command/CAS | Binnen de bestaande transactie opnieuw gecontroleerd; oude invoer weigert |
+| Drie antwoorden | Expliciete ReviewAssessment van huidige reviewer | Alle drie ja voor ieder nieuw KO-akkoord; nooit impliciet ingevuld |
+| Onderbouwing/N/A | Uiteindelijke bevestigde relaties of eigen expliciete keuze op nieuwe binding | Alleen huidige versie/doelversie; keuze van vorige reviewer geldt niet als nieuwe keuze |
+| Reparatiecontext | Private gevalideerde in-command context | Alleen actor/snapshot/object van deze atomaire command; reset bij verlaten scope |
+
+De bestaande expliciete steunreparatie schrijft nog legacy confirmed_relations. Binnen diezelfde reparatie wordt de actuele, brongebonden claim als open opvolger via de bestaande relationbuilder en bestaande _commit_knowledge_change voorzien van versiegebonden relaties. Dat is geen algemene backfill: alleen de expliciet gerepareerde claim verandert, blijft onbeoordeeld en moet daarna de normale relation-ack/assessmentcontrole doorlopen. Er komt geen tweede relatieschrijver of nieuwe transactie.

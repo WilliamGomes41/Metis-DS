@@ -115,6 +115,9 @@ def record_authorization(
             if row.get("confirmed_object_type") != binding.get("confirmed_object_type"):
                 raise ValueError("review_binding_tuple_conflict")
             row["valid"] = bool(binding.get("valid"))
+            for field in ('assessment', 'supporting_evidence'):
+                if field in binding:
+                    row[field] = binding[field]
             return rows
     rows.append(dict(binding))
     return rows

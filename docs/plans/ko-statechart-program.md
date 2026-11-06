@@ -500,7 +500,7 @@ Measured facts this plan relies on come from the read-only map of 5 November 202
 - KO-1. The derivation may disagree with `definitive_review_disposition` on edge cases. The owner pins both in the same test and treats any disagreement as a finding, not a tolerance.
 - KO-2. Receipt rendering can slow the post-save response, and state presentation can slow the card. The #974 worker timeouts make both relevant: measure card reads and the complete save/navigation action; the perf rule holds each at 10 percent.
 - KO-3. The per-object decision is open. Without it KO-3 builds per-document readiness only.
-- KO-4. The Bewijs open guard can block existing recommendations that have no linked evidence. The owner reports the KO-1 production count before KO-4 merges, and the operator decides whether existing KOs are grandfathered.
+- KO-4. The Bewijs open guard can block existing recommendations that have no linked evidence. Operator decision on 2026-11-06: every next approval of an existing unpublished KO follows the same evidence-or-explicit-N/A rule; no grandfathering. Existing published history remains immutable. The production inventory remains an operator pre-deployment check.
 - KO-4. Two workers can race on one KO. Lane 6 and the revision CAS cover it.
 - KO-5. A reader of a mirror field may be missed. The architecture test and the adversarial audit lane hunt for it.
 - KO-6. The migration is destructive. Only the operator runs it, after a backup and a restore drill.

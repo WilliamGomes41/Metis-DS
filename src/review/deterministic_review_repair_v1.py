@@ -527,6 +527,9 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             object_id = str(row.get("object_id") or "")
             if object_id not in versions or str(row.get("object_version") or "") != versions[object_id]:
                 continue
+            from src.review.ko_transitions_v1 import apply_ko_event
+            apply_ko_event(current=row, event='supersede_merge',
+                review_path=review_path_for_klasse(self._envelope(snapshot_id)['class']))
             updated = deepcopy(row)
             governance = updated.setdefault("governance", {})
             governance["validation_status"] = "superseded"
@@ -785,7 +788,8 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         transaction = (self._reprocessing_transaction(snapshot_id)
                        if getattr(self, "workflow_document_store", None) is not None
                        else self._store_write_lock())
-        with transaction, self._atomic_snapshot_mutation(snapshot_id):
+        from src.review.ko_transitions_v1 import validated_repair
+        with transaction, self._atomic_snapshot_mutation(snapshot_id), validated_repair(submission):
             self._preflight_structured_repair(submission)
             if repair_kind in {REPAIR_SOURCE_UNITS, REPAIR_MERGE_OBJECTS}:
                 self._assert_source_work_unchanged(

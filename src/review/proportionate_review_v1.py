@@ -235,7 +235,15 @@ def render_normal_risk_batch_panel(
                 '</div>'
             )
         panels.append(
-            '</fieldset><button class="btn-primary" type="submit">Bevestig geselecteerde passages</button>'
+            '</fieldset>'
+            + ''.join('<fieldset><legend>' + question + '</legend>'
+                '<label><input type="radio" name="' + field + '" value="yes" required> Ja</label>'
+                '<label><input type="radio" name="' + field + '" value="adjust"> Aanpassen</label></fieldset>'
+                for field, question in (('applicable', 'Zijn deze passages toepasbaar?'),
+                    ('complete', 'Zijn deze passages compleet?'), ('placed_correctly', 'Staan deze passages op de juiste plek?')))
+            + '<label><input type="checkbox" name="evidence_not_applicable" value="yes"> '
+              'Onderbouwing is voor alle geselecteerde passages niet van toepassing.</label>'
+            '<button class="btn-primary" type="submit">Bevestig geselecteerde passages</button>'
             f'<span class="sr-only">Batch {batch_index}</span></form>'
         )
     if include_individual:
@@ -283,6 +291,8 @@ class ProportionateReviewConsole(OperationsConsole):
         object_ids: Iterable[str],
         expected_revision: str | None = None,
         interaction_evidence: dict[str, Any] | None = None,
+        assessment: dict[str, Any] | None = None,
+        evidence_not_applicable: bool = False,
     ) -> list[dict[str, Any]]:
         """Approve one bounded coherent normal-risk batch per object.
 
@@ -352,7 +362,8 @@ class ProportionateReviewConsole(OperationsConsole):
                 eindoordeel="goedkeuren",
                 type_action="dit_klopt",
                 expected_revision=pin,
-                interaction_evidence=interaction_evidence,
+                interaction_evidence=interaction_evidence, assessment=assessment,
+                evidence_not_applicable=evidence_not_applicable,
             )
             # _save_objects records this call's committed revision in thread-local
             # state. Never adopt a later writer's revision between batch members.
@@ -373,6 +384,8 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
         object_ids: list[str] = Form(default=[]),
         snapshot_revision: str = Form(""),
         interaction_id: str = Form(""),
+        applicable: str = Form(""), complete: str = Form(""), placed_correctly: str = Form(""),
+        evidence_not_applicable: str = Form(""),
     ) -> Response:
         token = request.cookies.get("console_session")
         account = console.session_account(token)
@@ -406,6 +419,9 @@ def install_proportionate_review_routes(app: FastAPI, console: ProportionateRevi
                 object_ids=raw,
                 expected_revision=snapshot_revision.strip(),
                 interaction_evidence=evidence,
+                assessment={'version': 'review-assessment-v1', 'applicable': applicable or None,
+                    'complete': complete or None, 'placed_correctly': placed_correctly or None},
+                evidence_not_applicable=evidence_not_applicable == 'yes',
             )
         except ConsoleError as exc:
             if exc.code != SNAPSHOT_OBJECT_WRITE_CONFLICT:

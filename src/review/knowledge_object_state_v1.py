@@ -119,10 +119,12 @@ def object_release_status(obj: dict[str, Any], membership: dict[str, Any]) -> st
     return "none"
 
 
-def has_evidence(obj: dict[str, Any]) -> bool:
+def has_evidence(obj: dict[str, Any], *, bindings=()) -> bool:
     """A proposed or confirmed supporting relation links evidence to the claim."""
     rows = [*proposed_knowledge_relations_of(obj), *confirmed_knowledge_relations_of(obj)]
-    return any(str(row.get("relation_type") or "") in EVIDENCE_RELATION_TYPES for row in rows)
+    from src.review.ko_transitions_v1 import recorded_not_applicable
+    return (any(str(row.get("relation_type") or "") in EVIDENCE_RELATION_TYPES for row in rows)
+            or recorded_not_applicable(obj, bindings))
 
 
 def provenance_resolves(obj: dict[str, Any], fragments: Any) -> bool:
@@ -240,7 +242,7 @@ def derive_ko_state(
         return result(CONTEXT_OPEN, CONTEXT_UNRESOLVED)
     if admission.get("gate_result") == GATE_BLOCKED:
         return result(KANDIDAAT, "admission_blocked")
-    if not has_evidence(obj):
+    if not has_evidence(obj, bindings=own):
         return result(BEWIJS_OPEN, "no_supporting_evidence")
     if stage == FIRST_REVIEW:
         return result(IN_REVIEW, "review_stage_first")

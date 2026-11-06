@@ -1099,8 +1099,6 @@ class OperationsConsole:
         """Existing store transaction for repair metadata/provenance mutations."""
         revision = self.objects_revision(snapshot_id)
         updated = self._prepare_knowledge_revision(snapshot_id, previous, proposed, reason=reason, actor=actor)
-        if retain_revise and proposed.get("governance", {}).get("validation_status") == "revise":
-            updated["governance"]["validation_status"] = "revise"
         rows = self._load_objects(snapshot_id, remember=False)
         rows = with_current_revision(rows, updated)
         bindings = deepcopy(review_bindings_view(self))
@@ -1119,6 +1117,7 @@ class OperationsConsole:
         expected_revision: str | None = None,
     ) -> dict[str, Any]:
         reviewer = self._require_role(actor_id, "reviewer")
+        self._require_mutable_working_revision(snapshot_id)
         if actor_id not in self._envelope(snapshot_id)["named_reviewers"]:
             raise ConsoleError("reviewer_not_named_on_snapshot")
         review_path = review_path_for_klasse(self._envelope(snapshot_id)["class"])
@@ -1128,6 +1127,8 @@ class OperationsConsole:
         target = next((row for row in current if row["object_id"] == object_id), None)
         if target is None:
             raise ConsoleError("unknown_object")
+        from src.review.ko_transitions_v1 import apply_ko_event
+        apply_ko_event(current=target, event='confirm_type', review_path=review_path)
         previous = deepcopy(target)
         if target.get("object_type") == "document":
             raise ConsoleError("unknown_object_type")
@@ -3244,6 +3245,8 @@ class OperationsConsole:
         expected_revision: str | None = None,
         interaction_evidence: dict[str, Any] | None = None,
         source_discrepancy: Iterable[str] | None = None,
+        assessment: dict[str, Any] | None = None,
+        evidence_not_applicable: bool = False,
     ) -> list[dict[str, Any]]:
         with self._atomic_snapshot_mutation(snapshot_id):
             reviewer = self._require_role(actor_id, "reviewer")
@@ -3328,7 +3331,10 @@ class OperationsConsole:
                 source_fragments = self._require_resolved_candidate_source(envelope, target)
             from src.integrity_kernel import stable_hash
             relation_choices = tuple(relation_choices or ())
+            if type(evidence_not_applicable) is not bool:
+                raise ConsoleError("supporting_evidence_choice_invalid")
             command_hash = stable_hash({
+                **({"evidence_not_applicable": True} if evidence_not_applicable else {}),
                 # Present only when reported, so earlier command hashes stay valid.
                 **({"source_discrepancy": discrepancy} if discrepancy else {}),
                 "decision": decision, "confirmed_object_type": confirmed_object_type,
@@ -3714,6 +3720,15 @@ class OperationsConsole:
             if confirmed_relation_set is not None:
                 confirmed_relation_set = deepcopy(target.get(CONFIRMED_KNOWLEDGE_RELATIONS_FIELD) or [])
             current = [target if row["object_id"] == object_id else row for row in current]
+            from src.review.ko_transitions_v1 import apply_ko_event, active_repair
+            if decision == 'revise' and active_repair(actor_id, snapshot_id, object_id) is None:
+                raise ConsoleError('structured_repair_required')
+            transition_evidence = apply_ko_event(current=revision_predecessor, prepared=target,
+                event='correct' if decision == 'revise' else decision, review_path=review_path, bindings=binding_authority,
+                fragments=source_fragments, objects=current,
+                assessment=assessment if assessment is not None else
+                    (interaction_evidence or {}).get('assessment'),
+                evidence_not_applicable=evidence_not_applicable)
             track = target["governance"]["review_track"]
             payload = {
                 "object_id": object_id,
@@ -3817,6 +3832,7 @@ class OperationsConsole:
                 binding["review_domain"] = review_domain if review_path != "boom" else "decision_tree"
                 binding["reviewed_at"] = utc_now()
                 binding["review_command_hash"] = command_hash
+                binding.update(transition_evidence)
                 if passage_meta:
                     binding["suitability"] = passage_meta.get("suitability")
                     binding["eindoordeel"] = passage_meta.get("eindoordeel")
@@ -3833,6 +3849,7 @@ class OperationsConsole:
             if decision != "later":
                 ledger_details = {
                     "review_snapshot_hash": compute_canonical_object_hash(updated_target),
+                    **transition_evidence,
                     "comment": str(comment or ""),
                     "proposed_correction": str(proposed_correction or ""),
                     "snapshot_id": snapshot_id,
@@ -3869,6 +3886,8 @@ class OperationsConsole:
         object_id: str,
         expected_revision: str | None = None,
         interaction_evidence: dict[str, Any] | None = None,
+        assessment: dict[str, Any] | None = None,
+        evidence_not_applicable: bool = False,
     ) -> dict[str, Any]:
         """Approve one exact current tuple as the independent second reviewer.
 
@@ -3940,6 +3959,12 @@ class OperationsConsole:
                     raise ConsoleError("second_review_not_available")
             self._require_open_original(snapshot_id, object_id)
 
+            from src.review.ko_transitions_v1 import apply_ko_event
+            transition_evidence = apply_ko_event(current=target, event='approve_second',
+                review_path=review_path, bindings=bindings, fragments=source_fragments,
+                objects=objects, assessment=assessment if assessment is not None else
+                    (interaction_evidence or {}).get('assessment'),
+                evidence_not_applicable=evidence_not_applicable)
             canonical_hash = compute_canonical_object_hash(target)
             binding = tuple_record(
                 object_id=object_id,
@@ -3952,6 +3977,7 @@ class OperationsConsole:
             )
             binding["review_domain"] = "content" if review_path != "boom" else "decision_tree"
             binding["reviewed_at"] = utc_now()
+            binding.update(transition_evidence)
             new_bindings = deepcopy(review_bindings_view(self))
             rows = _recorded_authorization(new_bindings.get(snapshot_id, []), binding, reviewer)
             new_bindings[snapshot_id] = rows
@@ -3987,6 +4013,7 @@ class OperationsConsole:
                     actor=reviewer["username"],
                     details={
                         "snapshot_id": snapshot_id,
+                        **transition_evidence,
                         "canonical_object_hash": canonical_hash,
                         "confirmed_object_type": target.get("confirmed_object_type"),
                         "first_approver_ids": list(approvers),
@@ -4275,6 +4302,9 @@ class OperationsConsole:
                         raise ConsoleError("correction_role_required")
                     if "researcher" not in current_actor["roles"] and actor_id not in self._envelope(snapshot_id)["named_reviewers"]:
                         raise ConsoleError("reviewer_not_named_on_snapshot")
+                    from src.review.ko_transitions_v1 import apply_ko_event
+                    apply_ko_event(current=target, prepared=revised, event='correct',
+                        review_path=review_path_for_klasse(envelope['class']))
                     self._commit_prepared_store(
                         objects=(snapshot_id, history),
                         envelopes=new_envelopes,
