@@ -70,7 +70,7 @@ def render_document_context(snapshot_id, obj, objects, *, task='', source=None):
     outline_attribute = 'data-original-outline' if original else 'data-current-outline'
     heading_note = ('Koppen uit de vastgelegde oorspronkelijke bron.' if original else
         'De oorspronkelijke bronstructuur en buuralinea’s konden niet worden bevestigd. Hier staan de koppen van het huidige kennisvoorstel; open de volledige bron voor de oorspronkelijke structuur.')
-    return ('<details class="ko-document-context" data-document-context open><summary>Bekijk in documentcontext</summary>'
+    return ('<details class="ko-document-context" data-document-context open><summary><span role="heading" aria-level="2">Bekijk in documentcontext</span></summary>'
         '<div class="ko-source-layout"><section><h3>Plek in het document</h3><p class="field-help">'
         + heading_note + '</p>'
         + (f'<ul class="ko-outline" {outline_attribute}>' + ''.join(heading_items) + '</ul>' if heading_items else '<p>Geen koppen vastgelegd.</p>')

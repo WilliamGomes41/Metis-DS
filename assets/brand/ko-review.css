@@ -18,14 +18,14 @@
 .ko-account > a, .ko-account > form { background: var(--wit); padding: 8px; }
 .ko-page { padding: 18px 0 0; font-size: 15px; line-height: 1.4; }
 .ko-page h1 { color: var(--text); font-size: 30px; margin: 0 0 8px; }
-.ko-page h2 { font-size: 19px; color: var(--water); }
+.ko-page h2 { font-size: 19px; color: #087e96; }
 .ko-page h3 { font-size: 15px; color: var(--text); }
 .ko-breadcrumb { display: flex; gap: 16px; flex-wrap: wrap; margin: 6px 0 10px; }
 .ko-progress { margin: 8px 0 24px; display: flex; align-items: center; gap: 10px; font-size: 14px; }
 .ko-review-layout { display: grid; grid-template-columns: minmax(0, .97fr) minmax(0, 1.03fr); gap: 16px; align-items: stretch; }
 .ko-page .ko-document-context, .ko-object-panel { min-width: 0; border: 1px solid var(--line); border-radius: 12px; }
 .ko-page .ko-document-context { margin: 0; background: var(--water-light); padding: 16px 18px; }
-.ko-page .ko-document-context > summary { color: var(--water); font-size: 19px; font-weight: 700; }
+.ko-page .ko-document-context > summary { color: #087e96; font-size: 19px; font-weight: 700; }
 .ko-page .ko-source-layout { display: grid; grid-template-columns: minmax(0,.72fr) minmax(0,1fr); gap: 18px; margin-top: 18px; }
 .ko-page .ko-source-layout > section + section { border-left: 1px solid var(--line); padding-left: 18px; }
 .ko-page .ko-document-context h3 { margin: 0 0 14px; font-size: 15px; }
