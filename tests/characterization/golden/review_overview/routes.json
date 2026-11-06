@@ -389,6 +389,12 @@
       ]
     ],
     [
+      "/review/context-section",
+      [
+        "GET"
+      ]
+    ],
+    [
       "/review/context/accept",
       [
         "POST"

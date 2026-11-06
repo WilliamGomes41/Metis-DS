@@ -194,17 +194,47 @@ class ReviewSourceRecords:
         return {'layout': 1, 'views_id': prepared.views_id, 'extraction_hash': prepared.extraction_hash,
                 'header_hash': prepared.header_hash}
 
+    @diagnostic_phase('review_document_context')
+    def read_review_document_context(self, envelope, target):
+        """Display-only headings and adjacent original fragments in one sealed root."""
+        from src.vorming.source_preparation_context_v1 import KEY
+        from src.vorming.prepared_source_views_v1 import contract
+        extraction = envelope.get(KEY)
+        if not extraction:
+            return None
+        views_id = stable_hash({'extraction_hash': extraction['record_hash'], 'contract': contract()})
+        selection = (target.get('metadata') or {}).get('semantic_passage') or target.get('source') or {}
+        block_ids, raw_ids = references(selection)
+        if not block_ids and not raw_ids:
+            return None
+        with self.documents._connect() as con:
+            if con.execute("SELECT to_regclass('workflow.source_read_roots') AS table_name").fetchone()['table_name'] is None:
+                return None
+            selected = con.execute(
+                "WITH focal AS (SELECT f.ordinal FROM workflow.source_read_fragments f "
+                "WHERE f.views_id=%s AND (f.fragment_id=ANY(%s) OR f.fragment_id IN "
+                "(SELECT m.fragment_id FROM workflow.source_read_block_fragments m "
+                "WHERE m.views_id=%s AND m.block_id=ANY(%s)))), "
+                "bounds AS (SELECT min(ordinal) AS first,max(ordinal) AS last FROM focal) "
+                "SELECT fragment_id FROM workflow.source_read_fragments f,bounds "
+                "WHERE views_id=%s AND ('headings'=ANY(views) OR "
+                "ordinal BETWEEN bounds.first-1 AND bounds.last+1) ORDER BY ordinal",
+                (views_id, sorted(raw_ids), views_id, sorted(block_ids), views_id)).fetchall()
+        return self.read_review_source(envelope, objects=[target],
+            display_fragment_ids=[row['fragment_id'] for row in selected])
+
     @diagnostic_phase('source_views_read_records')
-    def read_review_source(self, envelope, *, objects=None, con=None):
+    def read_review_source(self, envelope, *, objects=None, con=None, display_fragment_ids=None):
         import psycopg
         try:
-            return self._read_review_source(envelope, objects=objects, con=con)
+            return self._read_review_source(envelope, objects=objects, con=con,
+                                            display_fragment_ids=display_fragment_ids)
         except (KeyError, TypeError, IndexError, ValueError) as error:
             raise WorkflowDocumentStoreError('source_read_integrity_failed') from error
         except psycopg.Error as error:
             raise WorkflowDocumentStoreError('source_read_unavailable') from error
 
-    def _read_review_source(self, envelope, *, objects=None, con=None):
+    def _read_review_source(self, envelope, *, objects=None, con=None, display_fragment_ids=None):
         from src.vorming.prepared_source_views_v1 import ReadSource, contract
         from src.vorming.source_preparation_context_v1 import KEY, VERSION, SourceIdentity
         from dataclasses import asdict
@@ -213,7 +243,9 @@ class ReviewSourceRecords:
             return None
         views_id = stable_hash({'extraction_hash': extraction['record_hash'], 'contract': contract()})
         block_ids, raw_ids = references(objects)
-        complete = objects is None or not (block_ids or raw_ids)
+        if display_fragment_ids is not None:
+            raw_ids.update(display_fragment_ids)
+        complete = display_fragment_ids is None and (objects is None or not (block_ids or raw_ids))
         # Whole-document callers already require all records. Capture those
         # with the root in one SQL snapshot, preserving the existing validators
         # and publication query budget. Selected-object reads stay windowed.
