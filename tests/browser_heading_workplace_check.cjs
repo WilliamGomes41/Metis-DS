@@ -29,7 +29,7 @@ const assert = require('node:assert/strict');
     assert.equal(await page.locator('input[name=eindoordeel][value=afwijzen]').count(), 1);
     await proof('review-heading', width);
     await Promise.all([page.waitForURL(url => url.pathname === '/review/bronpassage'),
-      page.getByRole('link', {name: 'Open oorspronkelijke bron', exact: true}).click()]);
+      page.getByRole('link', {name: 'Open volledige bron', exact: true}).click()]);
     await page.goBack();
     assert.deepEqual(await state(), before, 'Opening source and detail must not write');
     await page.locator('[data-heading-owner] a').focus();

@@ -195,6 +195,8 @@ def _client(console: OperationsConsole, *, production_app) -> TestClient:
 
 
 def _card(html: str, object_id: str) -> str:
+    if 'class="ko-review-layout"' in html and object_id in html:
+        return re.search(r'<main class="ko-page">(.*?)</main>', html, re.S).group(1)
     match = re.search(
         rf'<article class="[^"]*review-card[^"]*"[^>]*>.*?</article>',
         html,
@@ -550,8 +552,8 @@ def test_primary_review_card_has_no_register_or_metrics_jargon(tmp_path: Path, *
     for token in PROTOCOL_REGISTER_JARGON:
         assert token not in card
     assert "Ja" in card
-    assert "Nee, ik mis uitleg eromheen" in card
-    assert "Review opslaan en volgende" in card
+    assert "Aanpassen" in card
+    assert "Goedkeuren en opslaan" in card
 
 
 def test_researcher_ops_surface_may_show_coverage_without_touching_the_card(tmp_path: Path, *, production_app, production_console) -> None:
@@ -615,12 +617,11 @@ def test_phase3_cockpit_and_sterkte_still_present(tmp_path: Path, *, production_
         f"/review?document={receipt['snapshot_id']}&object={adviseert['object_id']}"
     ).text
     card = _card(html, adviseert["object_id"])
-    assert "Gevonden onder" in card
-    assert "Dit klopt" in card
-    assert "Andere kop kiezen" not in card
-    assert "Passage herstellen in Vorming" in card
-    assert "Open volledige richtlijn" in card or "broncontext" in card.lower()
-    assert "Geen zelfstandig stukje kennis" in card
+    assert "Staat dit op de juiste plek?" in card
+    assert "Andere plek kiezen" in card and "/source-selection?" in card
+    assert "Open volledige bron" in card
+    assert "Is dit toepasbaar?" in card and "Is dit compleet?" in card
+    assert re.search(r'<button[^>]+value="approve"[^>]+disabled', card)
     assert is_slow_review_duty(adviseert, fragments=console.review_source_fragments(receipt["snapshot_id"]), bindings=console.object_review_bindings(receipt["snapshot_id"])) is True
 
 
