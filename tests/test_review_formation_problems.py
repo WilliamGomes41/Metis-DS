@@ -72,9 +72,16 @@ def test_durable_independent_valid_proposal_reaches_review(tmp_path, production_
     assert 'source_formation_incomplete' in console.publication_readiness(sid)['blockers']
     client = TestClient(console._metis_test_application)
     login(client, 'reviewer')
+    before = console.snapshot_objects(sid)
+    revision = console.objects_revision(sid)
+    provider_calls = len(calls)
     response = client.get('/review', params={'document': sid, 'object': candidates[0]['object_id'], 'task': 'contextual'})
     assert response.status_code == 200 and FIRST in response.text
     assert 'data-document-assessment="not_evaluated"' in response.text and 'Bekijk documentbeoordeling' in response.text
+    assert f'href="/source-selection?document={sid}">Bekijk documentbeoordeling</a>' in response.text
+    assert console.snapshot_objects(sid) == before
+    assert console.objects_revision(sid) == revision and len(calls) == provider_calls
+    assert 'source_formation_incomplete' in console.publication_readiness(sid)['blockers']
 
 
 def test_whitespace_ranges_are_not_model_work():

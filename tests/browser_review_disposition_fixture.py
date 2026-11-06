@@ -12,7 +12,9 @@ sid = state.ingest(
     actor_id=researcher['account_id'], filename='begrippen.html', content_type='text/html',
     data=b'<html><body><h1>Begrippen</h1><h2>1 Begrippen</h2>'
          b'<p>De Dutch Job Group (dJG) is een meetinstrument voor werkbelasting.</p>'
-         b'<p>Een observatie is een systematische waarneming van gedrag.</p></body></html>',
+         b'<p>Een observatie is een systematische waarneming van gedrag.</p>'
+         b'<p>Een evaluatie is een beoordeling van de gemaakte afspraken.</p>'
+         b'<p>Een interventie is een handeling gericht op een zorgdoel.</p></body></html>',
     ingest_kind='new', title='Begrippen', version='1.0', date='2026-09-08', live_url='',
     class_='richtlijn', family='begrippen', named_reviewers=[reviewer['account_id']],
 )['snapshot_id']

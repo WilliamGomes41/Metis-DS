@@ -8,9 +8,9 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 
-A–F stack: selected passage, real broncontext, suitability, documentpositie,
-type proposal, eindoordeel. One save. Type/approve stay blocked when the
-passage cannot open. Relatie bevestigen is not on the primary surface.
+The new knowledge review page compares original source and object, with
+three explicit answer groups and one approval action. Structural review
+retains its existing controls. Approval stays blocked without the source.
 No graph editor. No new locator scheme.
 """
 from __future__ import annotations
@@ -126,7 +126,8 @@ def _strip_locator(console: OperationsConsole, snapshot_id: str, object_id: str)
         for frag in provenance.get("source_fragments") or []:
             frag.pop("source_locator", None)
         row.pop("source_locator", None)
-    console._save_objects(snapshot_id, rows)
+    from tests.semantic_fixture_support import install_fixture_history
+    install_fixture_history(console, snapshot_id, rows)
 
 
 def test_review_document_index_does_not_open_passages(tmp_path: Path, *, production_app, production_console) -> None:
@@ -170,69 +171,42 @@ def test_review_card_has_two_column_class(tmp_path: Path, *, production_app, pro
     assert "graaf-editor" not in html.lower()
 
 
-def test_review_card_object_left_bronpassage_right(tmp_path: Path, *, production_app, production_console) -> None:
+def test_review_card_source_left_and_knowledge_object_right(tmp_path: Path, *, production_app, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
-    objects = [
-        obj
-        for obj in console.snapshot_objects(receipt["snapshot_id"])
-        if obj["object_type"] != "document"
-    ]
-    rec = next(obj for obj in objects if "Verwijs" in ((obj.get("content") or {}).get("clean_text") or ""))
-    html = _review_page(console, receipt["snapshot_id"], rec["object_id"], production_app=production_app)
-    opened = console.open_source_passage(
-        snapshot_id=receipt["snapshot_id"],
-        object_id=rec["object_id"],
-    )
-    assert opened.get("passage")
-    card = next(block for block in _cards(html) if rec["object_id"] in block)
-    object_idx = card.find(OBJECT_COL)
-    passage_idx = card.find(PASSAGE_COL)
-    assert object_idx >= 0
-    assert passage_idx >= 0
-    assert object_idx < passage_idx
-    left = card[object_idx:passage_idx]
-    right = card[passage_idx:]
-    assert "Geselecteerde passage" in left or "Geselecteerd omdat" in left
-    assert "Relatie bevestigen" not in left
-    assert 'name="relation"' not in left
-    assert 'name="confirmed_object_type"' in card
-    assert 'data-type-chooser' not in card
-    assert f'id="decision-{rec["object_id"]}"' in card
-    prose = researcher_visible_prose(opened["passage"])
-    assert "Broncontext" in right
-    assert _esc(prose) in right or prose in right or "Verwijs" in right
-    assert "brxe-faadvp" not in right
-    assert "&lt;p&gt;" not in right
-    assert "&lt;div" not in right
-    assert "Welk type kennisobject is dit?" not in right
-    assert "Wat is je besluit over dit kennisobject?" not in right
+    rec = next(obj for obj in console.snapshot_objects(receipt['snapshot_id'])
+               if 'Verwijs' in ((obj.get('content') or {}).get('clean_text') or ''))
+    page = _review_page(console, receipt['snapshot_id'], rec['object_id'], production_app=production_app)
+    opened = console.open_source_passage(snapshot_id=receipt['snapshot_id'], object_id=rec['object_id'])
+    source = re.search(r'<details class="ko-document-context".*?</details>', page, re.S)
+    assert source is not None
+    assert page.index('class="ko-document-context"') < page.index('class="ko-object-panel"')
+    assert 'Bronpassage en omliggende tekst' in source.group()
+    assert 'Verwijs' in source.group()
+    assert opened.get('passage')
+    assert 'brxe-faadvp' not in source.group() and '&lt;p&gt;' not in source.group()
+    assert page.count('class="ko-question"') == 3
+    assert not re.search(r'<input[^>]+name="confirmed_object_type"', page)
+    assert not re.search(r'<input[^>]+name="eindoordeel"', page)
 
 
-def test_review_card_uses_clear_labels_and_requires_an_explicit_decision(tmp_path: Path, *, production_app, production_console) -> None:
+def test_review_card_uses_clear_labels_and_requires_explicit_answers(tmp_path: Path, *, production_app, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
-    target = next(
-        obj
-        for obj in console.snapshot_objects(receipt["snapshot_id"])
-        if obj["object_type"] not in {"document", "heading"}
-    )
-    html = _review_page(console, receipt["snapshot_id"], target["object_id"], production_app=production_app)
-    card = next(block for block in _cards(html) if target["object_id"] in block)
-    assert "Geselecteerde passage" in card
-    assert "Metis stelt voor:" in card
-    assert not re.search(r'<select[^>]*name="confirmed_object_type"', card)
-    assert "Passage herstellen in Vorming" in card
-    assert "Broncontext" in card
-    assert 'name="eindoordeel"' in card
-    assert 'value="goedkeuren"' in card
-    assert 'value="goedkeuren" selected' not in card
-    assert "Review opslaan en volgende" in card
-    assert 'data-comment-field hidden' in card
-    assert 'name="proposed_correction"' not in card
-    assert 'data-submit-review' in card
+    target = next(obj for obj in console.snapshot_objects(receipt['snapshot_id'])
+                  if obj['object_type'] not in {'document', 'heading'})
+    page = _review_page(console, receipt['snapshot_id'], target['object_id'], production_app=production_app)
+    for label in ('Te beoordelen kennisobject', 'Is dit toepasbaar?', 'Is dit compleet?',
+                  'Staat dit op de juiste plek?', 'Goedkeuren en opslaan', 'Correctie nodig', 'Later beoordelen'):
+        assert label in page
+    assert not re.search(r'<input[^>]+type="radio"[^>]+checked', page)
+    for name in ('applicable', 'complete', 'placed_correctly'):
+        assert page.count('name="' + name + '"') == 2
+    assert 'name="proposed_correction"' not in page
+    assert 'data-ko-assessment-form' in page
+    assert '/source-selection?' in page
 
 
 def test_review_post_requires_explicit_decision_and_comment_when_needed(tmp_path: Path, *, production_app, production_console) -> None:
@@ -332,44 +306,27 @@ def test_review_card_css_two_column_and_stacks_on_narrow() -> None:
     )
 
 
-def test_type_and_approve_still_disabled_when_passage_cannot_open(tmp_path: Path, *, production_app, production_console) -> None:
+def test_approve_remains_disabled_when_passage_cannot_open(tmp_path: Path, *, production_app, production_console) -> None:
+    from tests.test_ko_new_pages import compact_submission
+    from tests.test_review_command_bounded_http_v1 import physical_state
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
-    target = next(
-        obj
-        for obj in console.snapshot_objects(receipt["snapshot_id"])
-        if obj["object_type"] != "document"
-    )
-    _strip_locator(console, receipt["snapshot_id"], target["object_id"])
+    sid = receipt['snapshot_id']
+    target = next(obj for obj in console.snapshot_objects(sid) if obj['object_type'] not in {'document', 'heading'})
+    _strip_locator(console, sid, target['object_id'])
     with pytest.raises(ConsoleError):
-        console.open_source_passage(snapshot_id=receipt["snapshot_id"], object_id=target["object_id"])
-
+        console.open_source_passage(snapshot_id=sid, object_id=target['object_id'])
     client = TestClient(production_app(console))
-    client.post("/login", data={"username": "reviewer.bert", "password": "bert-secret"})
-    html = _review_page(console, receipt["snapshot_id"], target["object_id"], production_app=production_app)
-    assert TWO_COLUMN_CLASS in html
-    card = next(block for block in _cards(html) if target["object_id"] in block)
-    assert PASSAGE_COL in card
-    confirmation = re.search(r'<input[^>]*name="confirmed_object_type"[^>]*>', html)
-    assert confirmation and 'disabled' in confirmation.group()
-    assert 'data-heading-owner' in card
-    assert 'name="eindoordeel" value="goedkeuren"' not in card
-    assert 'value="goedkeuren_na_correctie"' in html
-    assert 'value="afwijzen"' in html
-
-    with pytest.raises(ConsoleError, match="structure_confirmation_command_required"):
-        console.review_object(
-            actor_id=accounts["reviewer"]["account_id"],
-            snapshot_id=receipt["snapshot_id"],
-            object_id=target["object_id"],
-            decision="approve",
-            confirmed_object_type="explanation",
-        )
-    with pytest.raises(ConsoleError, match="open_original|source_locator"):
-        console.confirm_object_type(
-            actor_id=accounts["reviewer"]["account_id"],
-            snapshot_id=receipt["snapshot_id"],
-            object_id=target["object_id"],
-            confirmed_object_type="explanation",
-        )
+    client.post('/login', data={'username': 'reviewer.bert', 'password': 'bert-secret'})
+    page = client.get('/review', params={'document': sid, 'object': target['object_id']})
+    button = re.search(r'<button[^>]+value="approve"[^>]*>', page.text)
+    assert button and 'disabled' in button.group()
+    assert '/source-selection?' in page.text
+    before = physical_state(console, sid)
+    refused = client.post('/review', data=compact_submission(page), follow_redirects=False)
+    assert refused.status_code == 400
+    assert physical_state(console, sid) == before
+    with pytest.raises(ConsoleError, match='blocked_candidate_not_reviewable'):
+        console.confirm_object_type(actor_id=accounts['reviewer']['account_id'], snapshot_id=sid,
+            object_id=target['object_id'], confirmed_object_type='explanation')

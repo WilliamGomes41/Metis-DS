@@ -101,6 +101,16 @@ def temporary_behavior_mutation(request, monkeypatch, offline_clock):
     namespace = vars(module).copy()
     exec(compile(tree, inspect.getsourcefile(function), "exec"), namespace)
     monkeypatch.setattr(owner, name, namespace[name])
+    from src.review import ko_review_page_v1 as focused
+    import re
+    shell = focused.review_page_shell
+
+    def mutated_focused_heading(account, body, **kwargs):
+        body, count = re.subn(r'<h1>[^<]+</h1>', '<h1>Mutated review</h1>', body, count=1)
+        assert count == 1, 'Focused page mutation must change its single main heading'
+        return shell(account, body, **kwargs)
+
+    monkeypatch.setattr(focused, 'review_page_shell', mutated_focused_heading)
 
 
 @pytest.fixture

@@ -1,9 +1,8 @@
-"""The review form only offers final judgements that fit the chosen suitability.
+"""Compact review answers and existing legacy disposition rules remain explicit.
 
-A conflicting combination that still reaches the server (old form, no
-JavaScript, crafted request) is refused as before, and the error page names
-the combination and the judgements that do fit. Expected sets and copy are
-literal, so a drift of the rule or of the rendering fails here.
+The new card submits three native answer groups. A crafted approval with an
+adjustment is refused without writes. Existing legacy/raw HTTP disposition
+conflicts and closed-field behavior remain covered independently.
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: toegang no route or auth change; the conflict copy renders only after sign-in and reviewer checks (test_authorization_still_precedes_the_disposition_rule)
@@ -24,64 +23,27 @@ from tests.test_v233_review_audit_regressions import review_system  # noqa: F401
 
 CONFLICT = "review_disposition_conflict"
 
-OFFERED = {
-    "ja": {"goedkeuren", "goedkeuren_na_correctie", "afwijzen", "later_beoordelen"},
-    "mist_context": {"goedkeuren_na_correctie", "afwijzen", "later_beoordelen"},
-    "samenvoegen": {"goedkeuren_na_correctie", "afwijzen", "later_beoordelen"},
-    "alleen_onderbouwing": {"goedkeuren", "goedkeuren_na_correctie", "afwijzen", "later_beoordelen"},
-    "geen_kenniseenheid": {"afwijzen", "later_beoordelen"},
-}
-
-SCOPE_NOTE = {
-    "ja": "Bij ‘Ja, als zelfstandig stukje kennis’ kun je kiezen uit ‘Goedkeuren’, "
-          "‘Correctie specificeren’, ‘Afwijzen’ of ‘Later beoordelen’.",
-    "mist_context": "Bij ‘Nee, ik mis uitleg eromheen’ kun je kiezen uit "
-                    "‘Correctie specificeren’, ‘Afwijzen’ of ‘Later beoordelen’.",
-    "samenvoegen": "Bij ‘Nee, deze hoort samen met een andere passage’ kun je kiezen uit "
-                   "‘Correctie specificeren’, ‘Afwijzen’ of ‘Later beoordelen’.",
-    "alleen_onderbouwing": "Bij ‘Alleen als onderbouwing van een andere passage’ kun je kiezen uit "
-                           "‘Goedkeuren’, ‘Correctie specificeren’, ‘Afwijzen’ of ‘Later beoordelen’.",
-    "geen_kenniseenheid": "Bij ‘Geen zelfstandig stukje kennis’ kun je kiezen uit "
-                          "‘Afwijzen’ of ‘Later beoordelen’.",
-}
-
 
 class _Form(HTMLParser):
-    """Collect each final-judgement radio with the suitabilities it is offered for."""
-
     def __init__(self):
         super().__init__()
-        self.allowed_for = {}
-        self.notes = {}
+        self.answers = {}
         self.legends = []
-        self._label = None
-        self._note = None
         self._legend = None
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
-        if tag == "label" and "data-allowed-for" in attrs:
-            self._label = attrs["data-allowed-for"].split()
-        if tag == "input" and attrs.get("name") == "eindoordeel":
-            self.allowed_for[attrs["value"]] = self._label
-        if "data-decision-scope" in attrs:
-            self._note = attrs["data-decision-scope"]
-            self.notes[self._note] = ""
-        if tag == "legend":
-            self._legend = ""
+        if tag == 'input' and attrs.get('type') == 'radio':
+            self.answers.setdefault(attrs['name'], []).append(attrs['value'])
+        if tag == 'legend':
+            self._legend = ''
 
     def handle_endtag(self, tag):
-        if tag == "label":
-            self._label = None
-        if tag == "span" and self._note is not None:
-            self._note = None
-        if tag == "legend" and self._legend is not None:
-            self.legends.append(" ".join(self._legend.split()))
+        if tag == 'legend' and self._legend is not None:
+            self.legends.append(' '.join(self._legend.split()))
             self._legend = None
 
     def handle_data(self, data):
-        if self._note is not None:
-            self.notes[self._note] += data
         if self._legend is not None:
             self._legend += data
 
@@ -94,21 +56,25 @@ def _rendered_form(client, sid, oid):
     return form
 
 
-@pytest.mark.parametrize("suitability", sorted(OFFERED))
-def test_form_offers_only_final_judgements_that_fit_the_suitability(review_system, suitability):
-    _console, client, sid, _actor, ids = review_system
-    form = _rendered_form(client, sid, ids[0])
-    offered = {value for value, scope in form.allowed_for.items() if scope and suitability in scope}
-    assert offered == OFFERED[suitability]
-    assert " ".join(form.notes[suitability].split()) == SCOPE_NOTE[suitability]
+@pytest.mark.parametrize('answer', ['applicable', 'complete', 'placed_correctly'])
+def test_compact_approval_refuses_each_adjustment_without_writing(review_system, answer):
+    from tests.test_ko_new_pages import compact_submission
+    from tests.test_review_command_bounded_http_v1 import physical_state
+    console, client, sid, _actor, ids = review_system
+    page = client.get('/review', params={'document': sid, 'object': ids[0]})
+    before = physical_state(console, sid)
+    response = client.post('/review', data={**compact_submission(page), answer: 'adjust'}, follow_redirects=False)
+    assert response.status_code == 400
+    assert physical_state(console, sid) == before
+    assert 'data-review-receipt' not in response.text
 
 
-def test_both_questions_are_named_groups(review_system):
+def test_three_questions_are_named_native_groups(review_system):
     _console, client, sid, _actor, ids = review_system
     form = _rendered_form(client, sid, ids[0])
-    assert "Is deze passage op zichzelf bruikbaar?" in form.legends
-    assert "Wat is je besluit?" in form.legends
-    assert set(form.allowed_for) == {"goedkeuren", "goedkeuren_na_correctie", "afwijzen", "later_beoordelen"}
+    assert form.legends == ['Is dit toepasbaar?', 'Is dit compleet?', 'Staat dit op de juiste plek?']
+    assert form.answers == {name: ['yes', 'adjust']
+                            for name in ('applicable', 'complete', 'placed_correctly')}
 
 
 CONFLICT_COPY = {
@@ -149,7 +115,6 @@ def test_conflicting_post_explains_the_combination(review_system, monkeypatch, s
     assert _review_event_count(console) == before
 
 
-
 @pytest.mark.parametrize("approval", [None, " disabled"])
 def test_help_text_never_names_an_approval_the_form_cannot_offer(approval):
     from src.review.review_disposition_choices_ui_v1 import decision_choices_html
@@ -169,34 +134,15 @@ def test_help_text_names_approval_when_it_can_be_selected():
                      "‘Correctie specificeren’, ‘Afwijzen’ of ‘Later beoordelen’.")
 
 
-class _Steps(HTMLParser):
-    """Collect the suitabilities each follow-up step group stays open for."""
-
-    def __init__(self):
-        super().__init__()
-        self.steps_for = {}
-        self.closed_note = False
-
-    def handle_starttag(self, tag, attrs):
-        attrs = dict(attrs)
-        if "data-steps-for" in attrs:
-            self.steps_for[attrs["data-steps"]] = set(attrs["data-steps-for"].split())
-        if "data-steps-closed" in attrs:
-            self.closed_note = True
-
-
-def test_follow_up_steps_stay_open_only_where_they_can_matter(review_system):
-    # Heading, type, strength and relations only matter for an approval;
-    # a discrepancy only matters where a correction is still possible.
+def test_follow_up_repairs_are_separate_from_compact_confirmation(review_system):
     _console, client, sid, _actor, ids = review_system
-    page = client.get("/review", params={"document": sid, "object": ids[0]})
-    steps = _Steps()
-    steps.feed(page.text)
-    assert steps.steps_for == {
-        "approval": {"ja", "alleen_onderbouwing"},
-        "correction": {"ja", "mist_context", "samenvoegen", "alleen_onderbouwing"},
-    }
-    assert steps.closed_note
+    page = client.get('/review', params={'document': sid, 'object': ids[0]})
+    form = re.search(r'<form[^>]*data-ko-assessment-form[^>]*>.*?</form>', page.text, re.S)
+    assert form
+    for field in ('confirmed_object_type', 'documentpositie_action', 'recommendation_strength_level', 'relation_choice', 'eindoordeel'):
+        assert 'name="' + field + '"' not in form.group()
+    assert 'Correctie nodig' in form.group() and '/source-selection?' in form.group()
+    assert 'class="ko-adjustment"' in form.group()
 
 
 def _current(console, sid, oid):

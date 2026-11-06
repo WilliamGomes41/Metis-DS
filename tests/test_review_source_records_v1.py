@@ -36,6 +36,7 @@ def source_records(tmp_path, production_console):
 def test_full_and_selected_reads_preserve_exact_views_after_restart(tmp_path, production_console):
     console, envelope, store, root, artifact = source_records(tmp_path, production_console)
     assert store.read_review_source(envelope) is None  # Explicit legacy absence.
+    assert store.read_review_source(envelope, display_target={'object_id': 'display-only'}) is None
     store.publish_review_source(artifact)
     fresh = FormationTaskStore(console.workflow_document_store)
     full = fresh.read_review_source(envelope)

@@ -8,6 +8,7 @@ PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here. publish() stays G2-BLOCK
 """
 from __future__ import annotations
 from tests.semantic_fixture_support import bind_fixture_selections
+from tests.test_v215_ingest_date_version_review_lanes import _compact_review_form
 
 import re
 from html.parser import HTMLParser
@@ -878,18 +879,12 @@ def test_block_b_console_hides_sterkte_on_proposed_recommendation_until_confirm(
     confirmed_html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
-    confirmed_visible = _visible_text(confirmed_html)
-    assert "Sterkte van de aanbeveling" in confirmed_visible
-    assert 'name="recommendation_strength"' in confirmed_html
+    assert 'Sterkte van de aanbeveling: DOEN' in confirmed_html
+    assert not any(item.get('name') == 'recommendation_strength' for item in _compact_review_form(confirmed_html)['inputs'])
+    assert next(row for row in console.snapshot_objects(receipt['snapshot_id']) if row['object_id'] == rec['object_id'])['confirmed_recommendation_strength'] == 'doen'
 
 
-def test_block_b_live_ui_appears_and_disappears_before_submit(tmp_path: Path, *, production_app, production_console) -> None:
-    source = APP_SOURCE.read_text(encoding="utf-8")
-    assert "data-stamp-block" in source
-    assert "confirmed_object_type" in source
-    assert re.search(r"stamp\.hidden|hidden\s*=\s*!show|data-stamp-block", source)
-    assert "addEventListener('change'" in source or 'addEventListener("change"' in source
-    assert "recommendation" in source and "outcome" in source
+def test_compact_review_requires_three_explicit_answers_without_strength_mutation(tmp_path: Path, *, production_app, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
@@ -898,22 +893,22 @@ def test_block_b_live_ui_appears_and_disappears_before_submit(tmp_path: Path, *,
         for obj in _non_document(console.snapshot_objects(receipt["snapshot_id"]))
         if "Bespreek" in _text_of(obj)
     )
-    html = _client(console, production_app=production_app).get(
-        f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
-    ).text
-    assert "data-stamp-block" in html
-    assert "data-review-form" in html
-    scripts = re.findall(
-        r"<script[^>]*>([\s\S]*?)</script[^>]*>",
-        html,
-        flags=re.IGNORECASE,
-    )
-    body = next((script for script in scripts if "confirmed_object_type" in script), "")
-    assert body
-    assert "confirmed_object_type" in body or "type.value" in body
-    assert "hidden" in body
-    assert "recommendation" in body
-    assert "submit" not in body.lower() or "before" in source.lower() or "hidden" in body
+    client = _client(console, production_app=production_app)
+    page = client.get(f'/review?document={receipt["snapshot_id"]}&object={rec["object_id"]}')
+    html = page.text
+    form = _compact_review_form(html)
+    radios = [item for item in form['inputs'] if item.get('type') == 'radio']
+    assert len(radios) == 6
+    assert all('checked' not in item for item in radios)
+    assert {item['name'] for item in radios} == {'applicable', 'complete', 'placed_correctly'}
+    assert not any(item.get('name') in {'type_action', 'recommendation_strength'} for item in form['inputs'])
+    assert 'data-ko-assessment-form' in html
+    from tests.test_ko_new_pages import compact_submission
+    before = console.snapshot_objects(receipt['snapshot_id'])
+    posted = {**compact_submission(page), 'complete': ''}
+    refused = client.post('/review', data=posted, follow_redirects=False)
+    assert refused.status_code == 400
+    assert console.snapshot_objects(receipt['snapshot_id']) == before
 
 
 def test_block_b_type_change_away_clears_active_strength_audit_may_keep(tmp_path: Path, *, production_console) -> None:
@@ -966,7 +961,7 @@ def test_block_b_type_change_away_clears_active_strength_audit_may_keep(tmp_path
     assert any(row.get("confirmed_recommendation_strength") == "doen" for row in history)
 
 
-def test_block_b_machine_proposed_strength_stays_hidden_until_type_confirm(tmp_path: Path, *, production_app, production_console) -> None:
+def test_block_b_known_legacy_strength_is_shown_and_confirmed_by_three_answers(tmp_path: Path, *, production_app, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
@@ -991,12 +986,58 @@ def test_block_b_machine_proposed_strength_stays_hidden_until_type_confirm(tmp_p
         if obj["object_id"] == rec["object_id"]
     )
     assert recommendation_strength_ui_applies(planted) is False
-    html = _client(console, production_app=production_app).get(
-        f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
-    ).text
-    visible = _visible_text(html)
-    assert "Sterkte van de aanbeveling" not in visible
-    assert planted.get("proposed_recommendation_strength") == "doen"
+    client = _client(console, production_app=production_app)
+    page = client.get(f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}")
+    form = _compact_review_form(page.text)
+    assert 'Sterkte van de aanbeveling: DOEN — dit moet de zorgverlener doen.' in _visible_text(page.text)
+    assert form['attrs']['data-can-approve'] == 'true'
+    assert page.text.count('class="ko-question"') == 3
+    assert not any(item.get('name') in {'recommendation_strength', 'recommendation_direction',
+        'recommendation_strength_level', 'confirmed_object_type', 'type_action'} for item in form['inputs'])
+    # Reading the known proposal does not itself confirm a type or invent modern semantics.
+    assert console._current_object(receipt['snapshot_id'], rec['object_id']) == planted
+    assert not planted.get('confirmed_object_type')
+    assert 'proposed_recommendation_semantics' not in planted
+    assert 'confirmed_recommendation_semantics' not in planted
+
+    from tests.test_ko_new_pages import compact_submission
+    saved = client.post('/review', data=compact_submission(page), follow_redirects=False)
+    assert saved.status_code == 303, saved.text
+    confirmed = console._current_object(receipt['snapshot_id'], rec['object_id'])
+    assert confirmed['confirmed_object_type'] == 'recommendation'
+    assert confirmed['confirmed_recommendation_strength'] == 'doen'
+    assert 'proposed_recommendation_semantics' not in confirmed
+    assert 'confirmed_recommendation_semantics' not in confirmed
+
+
+@pytest.mark.parametrize('invalid_modern_record', [False, True])
+def test_compact_review_cannot_approve_unknown_or_invalid_modern_strength(
+    tmp_path: Path, invalid_modern_record, *, production_app, production_console,
+) -> None:
+    console = _console(tmp_path, production_console=production_console)
+    accounts = _accounts(console)
+    receipt = _ingest(console, accounts)
+    rec = next(obj for obj in _non_document(console.snapshot_objects(receipt['snapshot_id']))
+               if 'Bespreek' in _text_of(obj))
+    if invalid_modern_record:
+        rows = console._load_objects(receipt['snapshot_id'])
+        row = next(row for row in rows if row['object_id'] == rec['object_id'])
+        # An explicitly invalid modern record cannot fall back to an otherwise
+        # known legacy stamp. This is adversarial input, not source evidence.
+        row['proposed_recommendation_strength'] = 'doen'
+        row['proposed_recommendation_semantics'] = {}
+        from tests.semantic_fixture_support import install_fixture_history
+        install_fixture_history(console, receipt['snapshot_id'], rows)
+    client = _client(console, production_app=production_app)
+    page = client.get(f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}")
+    assert _compact_review_form(page.text)['attrs']['data-can-approve'] == 'false'
+    assert 'Sterkte van de aanbeveling: DOEN' not in _visible_text(page.text)
+    from tests.test_ko_new_pages import compact_submission
+    from tests.test_review_command_bounded_http_v1 import physical_state
+    before = physical_state(console, receipt['snapshot_id'])
+    refused = client.post('/review', data=compact_submission(page), follow_redirects=False)
+    assert refused.status_code == 400
+    assert physical_state(console, receipt['snapshot_id']) == before
 
 
 def test_block_b_confirm_object_type_clears_active_strength(tmp_path: Path, *, production_console) -> None:
@@ -1050,8 +1091,6 @@ def test_block_b_confirm_object_type_clears_active_strength(tmp_path: Path, *, p
 
 
 def test_block_b_hidden_sterkte_select_is_disabled_until_type_confirm(tmp_path: Path, *, production_app, production_console) -> None:
-    source = APP_SOURCE.read_text(encoding="utf-8")
-    assert "strength.disabled" in source
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
@@ -1063,16 +1102,13 @@ def test_block_b_hidden_sterkte_select_is_disabled_until_type_confirm(tmp_path: 
     html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
-    assert re.search(r"data-stamp-block\b[^>]*\bhidden", html)
-    select = re.search(
-        r'<select\b[^>]*name="recommendation_strength"[^>]*>',
-        html,
-        flags=re.IGNORECASE,
-    )
-    assert select
-    assert re.search(r"\bdisabled\b", select.group(0))
-    visible = _visible_text(html)
-    assert "Sterkte van de aanbeveling" not in visible
+    form = _compact_review_form(html)
+    assert not any(item.get('name') == 'recommendation_strength' for item in form['inputs'])
+    assert not re.search(r'<select\b[^>]*name="recommendation_strength"', html)
+    assert html.count('class="ko-question"') == 3
+    current = next(row for row in console.snapshot_objects(receipt['snapshot_id']) if row['object_id'] == rec['object_id'])
+    assert not current.get('confirmed_object_type')
+    assert recommendation_strength_ui_applies(current) is False
 
 
 def test_block_b_publish_stays_g2_blocked_and_handoff_absent(tmp_path: Path, *, production_app, production_console) -> None:

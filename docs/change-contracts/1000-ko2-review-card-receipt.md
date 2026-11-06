@@ -1,0 +1,169 @@
+# #1000 — KO-2 reviewkaart en bon
+
+Change class: B
+Promise: De reviewer beoordeelt met leesbare documentcontext en krijgt na opslag een bon die de eigen opgeslagen handeling en inhoudelijke samenhang toont.
+Proof: Gerichte PostgreSQL-/HTTP-regressies, bestaande karakterisatie en browserproeven bij het exacte PR-hoofd.
+Touches lifecycle invariants: no
+Rewrite risk: none
+
+## Ground
+
+`review_workboard_v1.review_get` selecteert de bestaande geautoriseerde passage; `read_review_passage` levert één samenhangend venster met koppen, afhankelijkheden, bindingen en immutable bron. `_render_review_card` post de bestaande verplichte geschiktheid-, kop-, type-, sterkte- en relatie-invoer. `review_post` roept de bestaande reviewopdracht aan en navigeert daarna naar de volgende passage. KO-2 wijzigt deze validators en opslagautoriteiten niet.
+
+De bronfragmenten in een passagevenster zijn begrensd. Alleen de expliciete volledige-bronleesroute mag als volledige sectie worden gepresenteerd. De bron-koppenstructuur moet uit de bronrepresentatie komen; actuele KO-koppen zijn geen vervanging voor een oorspronkelijke inhoudsopgave.
+
+`workflow_review_store.read_review_command_events(..., interaction_id=..., include_pending=False)` leest bestaand duurzaam interactiebewijs. De exacte objectinhoud is identificeerbaar met de opgeslagen versie/hash en `review_command_histories`. Een event met alleen een precommand-contextmanifest bewijst geen postcommand antwoorden. Later beoordelen kan geen duurzaam event opleveren; dan verschijnt geen succesvolle-opslagbon.
+
+## Sketch en keuze
+
+Twee structurele alternatieven zijn op dezelfde code onderzocht met de beschikbare agents, allen op hetzelfde geërfde model; dit is geen consensus van verschillende modellen.
+
+| Vorm | Eigendom en kosten | Oordeel |
+| --- | --- | --- |
+| Bestaande redirect/GET met exacte bestaande interactiereferentie | Bestaande commands blijven eigenaar; GET lost uitsluitend duurzaam bewijs op, met expliciete uitkomst als historische samenhang niet oplosbaar is. Heropenen en herstart gebruiken dezelfde bron. | Gekozen; kleinste aansluiting op bestaande navigatie. |
+| Een apart ontvangstbewijs in sessie of nieuwe tabel | Extra opslag-/autoriteitsgrens; sessies verliezen bewijs bij herstart of kunnen een latere toestand verwisselen; tabel vraagt eigen levenscyclus. | Verworpen; niet nodig en strijdig met het goedgekeurde ontwerp. |
+
+Publieke presentatievormen zijn een read-only `SavedReviewReceipt` met exact event, object en bewezen context, en een broncontextweergave van één immutable snapshot. Caller gebruik: POST voltooit bestaande command, redirect draagt de bestaande interaction-id, GET controleert huidige deelname en eigenaar van het event vóór renderen. Deze navigatiereferentie verleent geen bevoegdheid.
+
+## Implementatie en bewijslast
+
+De drie hoofdvragen vormen de nieuwe compacte invoer. De gedeelde display-/commandprojectie sluit de drie expliciete Ja-antwoorden aan op de bestaande vereiste bevestigingen. Geen extra goedkeuring, universele tweede reviewer of nieuwe kerneltransitie. De bon vermeldt alleen bewezen eigen keuzes; ontbrekende historische antwoorden worden niet tot Ja aangevuld. Een latere wijziging wordt niet stil als de opgeslagen uitkomst getoond.
+
+Blokkerende eerste stap is het vaststellen van bron-/eventeigenaren. Eén code-eigenaar verzorgt de gekoppelde renderer, POST en GET, zodat gedeelde bestanden geen gelijktijdige schrijvers hebben. Onafhankelijke grounding en verificatie lezen dezelfde patch. De kleinste veilige decompositie is bron-/kaartprojectie, bonprojectie en navigatie, gevolgd door HTTP-/browserbewijs. Geen schema- of migratiewerk hoort hierbij.
+
+## Verificatiestatus
+
+Voor de gefocuste kaart vraagt de passage-reader optioneel één display-target aan
+de bestaande source-reader. Die leest de bestaande raw koppen/buren-query op zijn
+al geopende sourceverbinding en valideert de resultaten na sluiting. Het resultaat
+staat als afzonderlijke `ReviewDocumentContext` op dezelfde read-carrier, met
+target-id en focal-fragment-id's; de renderer controleert die identiteit. Raw,
+views, blocks, complete en het logische closurevenster blijven identiek. Andere
+callers vragen dit niet aan; uncaptured bronnen behouden de bestaande display-read.
+De bestaande source-cachekey blijft exact gelijk: een al gecachete carrier zonder
+sidecar wordt hergebruikt, nooit opnieuw geladen om displaygegevens te verzamelen.
+Een gecombineerde SQL-projectie met bredere logische fragmentselectie is afgewezen
+omdat die display en inhoudelijke bronleden onnodig zou vermengen.
+
+De bon controleert de actuele reviewerrol en retirement binnen zijn bestaande
+workflow-leestransactie. De PostgreSQL identity-mixin leest ook zonder `current=True`
+steeds de accounttabel; alleen commandvoorbereiding heeft een captured account,
+die op deze GET niet actief is. De productiecompositie bindt identity en workflow
+aan dezelfde verbinding. Dit vervangt de voorafgaande losse `FOR SHARE`-read door
+een verse read in hetzelfde snapshot als deelname en eventbewijs. De canonieke
+publicatiestatus blijft na sluiting van die transactie gelezen. Een extra queryjoin
+of accountcache is niet nodig; opslag- en autorisatie-eigenaren blijven gelijk.
+
+Wanneer het bestaande passagevenster documentvorming afzonderlijk laat beoordelen,
+blijft de geselecteerde documentbeoordeling met één link in de bronpaneelvoet
+bereikbaar. Deze link gebruikt dezelfde Vorming-route en vereist geen extra reads;
+de passage blijft `not_evaluated` voor documentbeoordeling.
+
+Uitvoering en exacte resultaten worden bij de PR vastgelegd. Deze ontwerptekst is geen verklaring dat runtime, browserproef of productieacceptatie al geslaagd is.
+
+## Uitwerking van de bewijsgrenzen
+
+De opgeslagen bon gebruikt uitsluitend canonieke inhoud uit de exacte historische tuple. Mutable admission-, register- en governanceprojecties worden via `canonical_object_payload` weggelaten, zodat een latere governancewijziging bij hetzelfde hash niet op de oude bon verschijnt. Het event bewijst de eigen handeling; drie historische Ja-antwoorden worden niet gereconstrueerd uit een huidige status. Bij een eerste akkoord is de tekst daarom dat een eventueel vereiste tweede beoordeling hierdoor niet is afgerond. De actuele vervolgbeoordelingen blijven in het bestaande overzicht staan.
+
+De aanvullende display-reader in `ReviewSourceRecords` hergebruikt de al geverifieerde source carrier en zijn oorspronkelijke fragmentordinalen. Eén aanvullende query leest uitsluitend ontbrekende originele heading-fragmenten en directe bronburen. Elk toegevoegd raw fragment moet zijn eigen hash én de onafhankelijke immutable block-membershiphash uit dezelfde sealed root behouden. Er wordt geen tweede root/header/blokvenster geladen; reviewsourceaanroepen, opnamecriteria en closure blijven ongewijzigd. Ontbrekende of corrupte broncontext krijgt een expliciete melding en de oorspronkelijke-bronroute, geen gefabriceerde structuur.
+
+De werkbordkaarten betreffen documenten. Hun documentwerkstatus wordt niet vervangen door een KO-status. De kennisvoorstelrijen en beide detailkaarten gebruiken de KO-1-afleiding; de bestaande finale-statushelper gebruikt `FINAL_VALIDATION_STATUSES`.
+
+Gerichte lokale controles: zes nieuwe PostgreSQL-/HTTP-proeven voor opgeslagen resultaat/herstart, onbekende of verwisselde interactie, stale save, read-only sectie-uitbreiding, originele volledige koppen met begrensde bronburen en uitsluiting van later admissionbewijs. Samen met bestaande passage/source/commandproeven zijn 55 tests geslaagd op lokaal PostgreSQL 17. CI gebruikt PostgreSQL 16. De 35 karakterisatieproeven zijn bijgewerkt voor de goedgekeurde presentatie; ongewijzigde pagina's verschillen alleen in de stylesheet-cacheversie. Routekarakterisatie krijgt de extra read-only sectieroute. De opzettelijke reviewmutatie blijft een afzonderlijke check.
+
+De bon onderscheidt de historische eigen handeling van de **actuele reviewtoestand en versie**. Die actuele status wordt met `derive_ko_state` afgeleid uit de reeds gelezen huidige revisie en één bestaande, op dit object begrensde bindingread in hetzelfde leesvenster. Dit is geen historische status of publicatiebewijs. Daardoor blijven ook gewijzigde managed reviewverplichtingen zichtbaar zonder ze terug te projecteren op de eerdere handeling.
+
+
+## Gerichte correctieronde na onafhankelijke verificatie
+
+Het eerste ontwerp las dezelfde source root twee keer en overschreed daardoor het bestaande leesbudget. Twee reparatievormen zijn vergeleken: extra displayreferenties aan het reviewvenster toevoegen, of uitsluitend ontbrekende raw displayfragmenten aan de reeds geverifieerde capture ontlenen. De tweede vorm is gekozen. Zij houdt displaygegevens buiten het review-/closurevenster en laat bestaande readers intact. De eerste vorm zou het reviewvenster inhoudelijk verbreden en opnieuw onnodige block-/membershippayloads laden.
+
+Een lokale smokeproef op de bestaande synthetische bron met 923 paragrafen en 92 kandidaten meet 26.613 PostgreSQL JSON-bytes en 22 queries voor de eerste kaart, tegenover 25.671 bytes en 21 queries op de referentie. Dit is één smokeproef, geen volledige prestatieacceptatie. De onafhankelijke vijf rondes en de native aanbevelingsroute worden bij de uiteindelijke head opnieuw geverifieerd.
+
+De volledigheidskop blijft zichtbaar wanneer een geschiktheidskeuze correctievragen sluit. De discrepantiecontrols volgen weer de bestaande correctiongroep, zodat JavaScript ze uitschakelt en uit FormData houdt; zonder JavaScript worden ze verborgen en blijft de bestaande kernel eigenaar van het negeren van vervallen antwoorden. De primaire context toont bekende voorgestelde relaties met de tekst ‘Voorstel, nog niet bevestigd’; de bon toont uitsluitend daadwerkelijk bevestigde relaties.
+
+Deze correctieronde is een functionele voorwaarde. Zij is geen acceptatie van de eerdere visuele uitvoering: de gebruiker heeft opnieuw expliciet twee nieuwe pagina’s volgens de goedgekeurde afbeeldingen gevraagd. De daaropvolgende UI-eigenaar voert die opdracht uit na deze afzonderlijk geteste commit.
+
+## Goedgekeurde nieuwe pagina's en expliciete beoordeling
+
+De gebruiker heeft de twee oorspronkelijke afbeeldingen opnieuw bevestigd als ontwerpmaatstaf en de implementatie hervat. De eerste formulieruitwerking is geen visuele oplevering. De gefocuste reviewroute krijgt een nieuwe paginaopbouw, eigen afgebakende stylesheet en drie Ja/Aanpassen-rijen. De bon wordt een zelfstandige resultaatpagina met een schema links en ‘Jouw beoordeling’ rechts. Het documentwerkbord blijft zijn bestaande bestemming houden.
+
+### Stateful Class B-overlay
+
+| Veld | Afspraak |
+| --- | --- |
+| Domain entity/aggregate | Bestaand kennisobject en de bestaande reviewinteractie. |
+| Invariant(s) | De kernel blijft eigenaar van toelating, bronintegriteit, semantiek, relaties, versie, bevoegdheden en bindingen. Antwoorden zijn aanvullend menselijk bewijs, geen nieuwe goedkeuringsautoriteit. |
+| Durable state before | De bestaande te beoordelen versie en bestaande audit/bindingen. |
+| Durable state after | Dezelfde bestaande reviewtransitie, met optioneel `review-assessment-v1` in hetzelfde opgeslagen interactiebewijs. |
+| Transaction boundary | Bestaande gezamenlijke object-, binding- en auditcommit via de reviewcommand. |
+| Failure/recovery result | Weigering of stale input schrijft geen assessment/besluit; herstart leest hetzelfde exacte event. |
+| Duplicate execution / idempotency result | Bestaande interactie-identiteit en precondities; een bon opnieuw lezen veroorzaakt geen review. |
+| Concurrency result | Bestaande native generation-/revisiecontrole en de vastgelegde commandinputs blijven gelden. |
+| Audit/evidence requirement | Drie daadwerkelijke antwoorden worden in bestaand interactiebewijs vastgelegd. Oud bewijs zonder antwoorden krijgt geen afgeleide vinkjes. |
+
+De gedeelde pure `DisplayedReviewDescriptor` vormt zowel de getoonde interpretatie als de invoer voor de compacte commandadapter. De nieuwe formulierintentie bevat alleen drie antwoorden, actie en bestaande identiteit/preconditie. Zij bevat geen tegenstrijdige verborgen oude bevestigingen. De adapter bevestigt uitsluitend de werkelijk getoonde, bekende en oplosbare waarden; onbekende semantiek of onoplosbare relaties vragen gerichte correctie. De tweede review wijzigt de eerder goedgekeurde canonieke tuple niet.
+
+De globale reviewclosure, publicatievoorwaarden, canonical hash en het onafhankelijke-reviewbeleid veranderen niet. Er komen geen receipt-store, tabel, status of tweede transitieautoriteit bij.
+
+## Begrensde leesoptimalisatie van de zelfstandige bon
+
+De bon-GET gebruikt uitsluitend de eigen opgeslagen interactie en de actuele
+canonieke publicatiestatus van het geselecteerde document. De gedeelde
+documentkaartmiddleware hoeft daarom alleen voor precies deze zelfstandige
+bestemming geen levenscyclusstatussen van alle documenten vooraf te laden:
+`/review` met niet-lege `document`, `receipt_interaction` en `receipt_object`.
+Alle andere document-, object-, koppen-, bron- en vervolgbestemmingen behouden
+hun bestaande statuscontext. De endpointautorisatie, actuele rol en deelname,
+eventeigenaar, hash en historische tuple blijven dezelfde vereisten.
+
+De gevalideerde workflowbon wordt binnen de bestaande readtransactie gelezen.
+Daarna sluit die transactie voordat de bestaande canonieke statusreader wordt
+aangeroepen. Die reader blijft eigenaar van de actuele publicatiewaarheid;
+zijn uitkomst wordt alleen toegevoegd aan de onveranderlijke displayprojectie.
+Een nieuwe gecombineerde query of gedeelde opslagautoriteit is hiervoor niet
+nodig en is verworpen. De gerichte proef verbiedt globale prefetch op de bon,
+controleert de autorisatie en vereist de canonieke read buiten de
+workflowtransactie; bestaande pagina's blijven prefetch gebruiken.
+
+Een beslisboomuitkomst gebruikt de bestaande gesloten sterkte
+`confirmed_recommendation_strength` of het bestaande voorstel daarvan. De
+gedeelde display-/commandprojectie toont die waarde en geeft haar aan de
+bestaande `recommendation_strength`-parameter door. Er komt geen nieuwe
+sterkte-inferentie bij. Ontbrekende of onbekende sterkte blokkeert goedkeuren,
+behalve de bestaande `is_geen_actie_outcome`-vrijstelling; daarbij blijft de
+bestaande kernel eigenaar van het vastleggen van geen actie. Een tweede
+beoordeling bevestigt uitsluitend dezelfde bestaande tuple en wijzigt geen
+sterkte.
+
+De nieuwe pagina behoudt de bestaande betekenisdragende herstelcontext zonder
+het oude formulier terug te plaatsen. De huidige bovenliggende kop komt uit
+de al vastgelegde `parent_object_id` en het vastgelegde kopobject; de originele
+bronstructuur links blijft daarvan onderscheiden. Een terugkeer uit Vorming
+vergelijkt de meegedragen `review_revision` met de actuele DTO en waarschuwt
+bij verschil; de nieuwe vragen starten dan zonder antwoorden. De bestaande
+berekende overzichts-URL behoudt alleen de al ondersteunde zoek-/paginafilters.
+
+In de bestaande bewijsdisclosure staan de echte links en problemen van
+`source_context_review_v1.projection`, met de bestaande contextbewerkroute in
+Vorming. Die disclosure staat automatisch open bij nog niet elders getoonde
+context of ongeldige koppelingen. Bestaande letterlijke bronaanvulvoorstellen
+tonen hun ontbrekende tekst en verwijzen naar de bestaande continuation-route.
+Een queryparameter als `context_saved` geldt niet als opslagbewijs. De
+bestaande four-eyes-helper toont uitsluitend een werkelijk vereiste tweede
+beoordeling; er ontstaat geen universele verplichting.
+
+Voor bestaande aanbevelingen zonder modern semantiekrecord blijft dezelfde
+bekende gesloten legacy-sterkte bruikbaar. De displayprojectie toont het
+werkelijk opgeslagen DOEN/OVERWEEG/NIET DOEN; de commandadapter geeft alleen
+de bestaande `recommendation_strength` door. Zij maakt daar geen moderne
+richting of brongebonden sterke/zwakke semantiek van. Een aanwezig ongeldig
+of ongemapt modern record blijft geblokkeerd en valt niet op legacy terug.
+Ontbreken beide vormen, dan blijft goedkeuren geblokkeerd. Dit behoudt een
+bestaande geldige opdracht zonder een nieuwe modus op te slaan.
+
+De bestaande geïmporteerde benchmarkharness blijft actief als regressieproef.
+Zijn passageweergave verlangt nu in beide vormingstoestanden dezelfde DTO-tag
+`document_assessment=not_evaluated`: afgeronde kennisvorming is geen volledige
+documentbeoordeling door het passagevenster. De numerieke budgets, bron- en
+archiefspies, closurevoorwaarden en historische meetresultaten veranderen niet.

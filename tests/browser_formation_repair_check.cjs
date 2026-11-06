@@ -23,7 +23,7 @@ const assert = require('node:assert/strict');
     await page.goto(base + '/review?' + new URLSearchParams({document: d.snapshot_id, object: d.object_id}));
     assert.equal(await page.locator('[name=type_action][value=type_wijzigen], [name=documentpositie_action][value=andere_kop], [name=proposed_correction]').count(), 0);
     await proof('review-before-repair', width);
-    await page.getByRole('link', {name: 'Passage herstellen in Vorming', exact: true}).focus();
+    await page.getByRole('link', {name: 'Correctie nodig', exact: true}).focus();
     await Promise.all([page.waitForURL(url => url.pathname === '/source-selection'), page.keyboard.press('Enter')]);
     await page.getByRole('link', {name: 'Type of plaats corrigeren', exact: true}).click();
     const form = page.locator('form[action="/review/resolve"]');
@@ -56,16 +56,18 @@ const assert = require('node:assert/strict');
     assert.deepEqual(await state(), repaired);
     await page.getByRole('link', {name: 'Deze passage beoordelen in Review', exact: true}).click();
     assert.equal(new URL(page.url()).searchParams.get('object'), d.object_id);
-    const review = page.locator('form[action="/review"]');
-    assert.equal(await review.locator('[name=confirmed_object_type]').inputValue(), 'explanation');
-    assert.equal(await review.locator('[name=parent_choice]').inputValue(), d.parent_id);
+    const review = page.locator('[data-ko-assessment-form][action="/review"]');
+    assert.equal(await page.locator('.ko-type').innerText(), 'Toelichting');
     assert.ok((await page.locator(`[data-current-parent="${d.parent_id}"]`).innerText()).includes('2 Vervolg'));
     await proof('review-after-repair', width);
-    await review.locator('[name=suitability][value=ja]').check();
-    await review.locator('[name=documentpositie_action][value=dit_klopt]').check();
-    await review.locator('[name=type_action][value=dit_klopt]').check();
-    await review.locator('[name=eindoordeel][value=goedkeuren]').check();
-    await Promise.all([page.waitForNavigation({waitUntil: 'domcontentloaded'}), review.locator('[data-submit-review]').click()]);
+    for (const question of ['applicable','complete','placed_correctly']) {
+      assert.equal(await review.locator(`[name=${question}]:checked`).count(),0);
+      await review.locator(`[name=${question}][value=yes]`).check();
+    }
+    await Promise.all([page.waitForNavigation({waitUntil: 'domcontentloaded'}),
+      review.locator('[name=review_action][value=approve]').click()]);
+    assert.equal(await page.locator('[data-review-receipt]').count(),1);
+    assert.equal(await page.locator('[data-saved-answer][data-answer=yes]').count(),3);
     const approved = await state();
     assert.equal(approved[index].status, 'approved');
     assert.equal(approved[index].type, 'explanation');

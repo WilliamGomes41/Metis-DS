@@ -127,7 +127,8 @@ def test_http_followup_is_reachable_and_can_be_resolved_without_losing_history(t
         assert 'data-formation-repair' in detail.text and 'action="/review/resolve"' in detail.text
         assert 'action="/review"' not in detail.text
     else:
-        assert ("kan nog niet worden goedgekeurd" if gate else "nog niet beschikbaar voor goedkeuring") in detail.text
+        assert "De passage kan nu niet worden goedgekeurd" in detail.text
+        assert re.search(r'<button[^>]+value="approve"[^>]+disabled', detail.text)
     assert "Metis heeft de technische controles uitgevoerd" not in detail.text
     assert console.objects_revision(sid) == before
     assert not source_passage_closure(console.snapshot_objects(sid))["source_passage_review_complete"]

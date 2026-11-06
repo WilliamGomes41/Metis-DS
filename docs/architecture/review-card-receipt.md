@@ -56,8 +56,19 @@ De drie vragen zijn de hoofdstructuur van de beoordeling. Er komen geen
 extra bevestigingsvragen, verplichte boncontrole of automatisch verplicht
 tweede paar ogen bij. Bestaande vereisten rond type, sterkte, broncontext,
 relaties, rollen en four-eyes verdwijnen evenmin stilzwijgend. Hun projectie
-in deze kaart wordt bij implementatie op het bestaande contract aangesloten;
-een ontbrekend inhoudelijk besluit blijft bij #986.
+in deze kaart gebruikt één gedeelde, pure projectie van de werkelijk getoonde
+interpretatie. Drie expliciete Ja-antwoorden bevestigen uitsluitend de
+getoonde, bekende waarden via de bestaande kernelopdracht. Onbekende semantiek
+of onoplosbare voorstellen blokkeren goedkeuren en verwijzen naar gerichte
+correctie; ontbrekende waarden krijgen geen stilzwijgende standaard.
+
+De drie daadwerkelijke antwoorden (`applicable`, `complete`,
+`placed_correctly`: `yes`, `adjust` of niet ingevuld) staan als optionele
+`review-assessment-v1` in het bestaande, atomair opgeslagen interactiebewijs.
+Goedkeuren vereist driemaal `yes`. Dit is menselijk bewijs en geen nieuwe
+bindingsautoriteit. De bon leest deze antwoorden van de exacte opgeslagen
+handeling; historische events zonder dit bewijs tonen ‘Niet afzonderlijk
+vastgelegd’ en krijgen geen afgeleide vinkjes.
 
 ## 3. Reviewkaart vóór opslag
 
@@ -129,7 +140,10 @@ Dit onderdeel bevat drie samenhangende weergaven:
    opent de bestaande oorspronkelijke-bronroute.
 3. **Naburige passages onder deze kop.** Leesbare tekst of een herkenbaar
    fragment van de aangrenzende passages; geen lijst met alleen identifiers.
-   De actuele passage is herkenbaar en de volgorde komt uit de bron.
+   De actuele passage is herkenbaar en de volgorde komt uit de bron. De kaart
+   gebruikt maximaal twee reeds geverifieerde passages onder dezelfde bronkop
+   uit het vastgelegde venster. Dit is geen claim dat de hele sectie is geladen;
+   de bestaande sectieroute blijft beschikbaar voor uitbreiding.
 
 Een passage aan het begin of einde van een sectie krijgt geen verzonnen
 buuralinea. Koploze, grafische, tabel- of beslisboombronnen gebruiken hun
@@ -187,8 +201,11 @@ herstelpagina bewijzen geen opgeslagen reviewbesluit.
 De bon hoort bij de bestaande vervolgnavigatie. Geen extra formulier,
 akkoordknop, bevestigingsklik of verplichte controle van het bonnetje. De
 reviewer kan verder naar de volgende passage of terug naar het overzicht.
-De exacte presentatie mag de opgeslagen handeling en volgende passage in
-dezelfde bestemming combineren; zij voegt geen verplichte tussenstop toe.
+De bon is een eigen, nieuw vormgegeven pagina na de bestaande POST → 303 →
+GET. De volgende reviewkaart staat daar niet onder. De knop Volgende passage
+opent de bestaande vervolgbestemming zonder bonparameters. Er komt geen
+extra akkoord of formulier bij: de bon bevestigt uitsluitend de al opgeslagen
+handeling.
 
 ### 4.2 Kop en opgeslagen handeling
 
@@ -308,6 +325,12 @@ reviewer mag niet een andere bon openen of als het eigen resultaat gelden.
 | Fout vóór of tijdens commit | Bestaande rollback en foutpresentatie. | Geen half opgeslagen besluit of succesvolle bon. |
 | Commit slaagt, antwoord gaat verloren | Uitkomst eerst vaststellen met de exacte bestaande command-/interaction- en opslagbewijzen. | Geen automatische herhaling, geen verzonnen rollback, geen tweede goedkeuring. |
 | Opgeslagen resultaat teruggevonden | Bon van precies dat resultaat. | Geen nieuw besluit om de bon opnieuw te tonen. |
+
+Ook een vroege formulierfout behoudt de oorspronkelijk ingediende
+revisievoorwaarde. Een foutpagina mag oude antwoorden nooit combineren met
+een nieuwe geldige mutatietoken. Bij een inmiddels gewijzigde generatie
+blijft goedkeuren geblokkeerd; Passage opnieuw beoordelen opent dezelfde
+bestaande kaart met actuele invoer en zonder vooraf gekozen antwoorden.
 | Uitkomst niet vast te stellen | Benoem dat opslag niet bevestigd is; gebruik de bestaande herstelroute. | Een leeg eventvenster geldt niet als bewijs van rollback. |
 | Herstart | Opgeslagen besluit blijft zichtbaar via bestaande duurzame autoriteiten. | Succes hangt niet af van alleen browser- of procesgeheugen. |
 | Context laden mislukt | Expliciete fout of ontbrekende-contextmelding met passende bestaande vervolgactie. | Lege context wordt niet als 'geen context nodig' gepresenteerd. |
@@ -354,7 +377,7 @@ krijgt de bestaande expliciete uitkomst in plaats van een misleidend leeg
 scherm. GET doet geen backfill of stille reparatie.
 
 Meet afzonderlijk kaart openen, documentcontext uitbreiden en de volledige
-handeling opslaan → bestaande vervolgbestemming met bon → heropenen.
+handeling opslaan → zelfstandige bon → volgende passage → heropenen.
 Reken redirect en bonrender mee; verplaats wachttijd niet naar een volgende
 pagina. De bestaande KO-2-budgets en MET-36/MET-48-metingen blijven gelden.
 Synthetische of lokale metingen zijn geen gemeten Azure-SLO.

@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 from tests.semantic_fixture_support import bind_fixture_selections
+from tests.test_v215_ingest_date_version_review_lanes import _compact_review_form
 
 from pathlib import Path
 
@@ -295,16 +296,22 @@ def test_second_review_http_surface_is_read_only_for_canonical_semantics(tmp_pat
     assert f"object={object_id}" in lane.text
     assert "task=second_review" in lane.text
 
+    before = console._current_object(snapshot_id, object_id)
+    before_identity = (before['object_version'], compute_canonical_object_hash(before))
     card = client.get(
         f"/review?document={snapshot_id}&object={object_id}&task=second_review"
     )
     assert card.status_code == 200
-    assert "Onafhankelijke tweede beoordeling" in card.text
-    assert "Tweede beoordeling goedkeuren" in card.text
-    assert 'action="/review/second-review"' in card.text
-    assert '<input type="radio" name="type_action"' not in card.text
-    assert '<input type="checkbox" name="relation_choice"' not in card.text
-    assert "Wat voor informatie is dit?" not in card.text
+    assert 'Onafhankelijke tweede review' in card.text
+    form = _compact_review_form(card.text)
+    assert form['attrs']['action'] == '/review/second-review'
+    fields = {item.get('name') for item in form['inputs']}
+    assert {'applicable', 'complete', 'placed_correctly'} <= fields
+    assert not fields & {'type_action', 'relation_choice', 'confirmed_object_type', 'recommendation_direction', 'recommendation_strength_level'}
+    assert not any('checked' in item for item in form['inputs'] if item.get('type') == 'radio')
+    assert 'Wat voor informatie is dit?' not in card.text
+    after = console._current_object(snapshot_id, object_id)
+    assert (after['object_version'], compute_canonical_object_hash(after)) == before_identity
 
 
 def test_legacy_individual_url_redirects_into_contextual_surface(tmp_path: Path, *, production_app, production_console) -> None:
