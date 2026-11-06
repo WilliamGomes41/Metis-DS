@@ -54,7 +54,7 @@ def test_complete_existing_repair_runs_only_on_formation(tmp_path, monkeypatch, 
     assert 'data-heading-chooser' not in review.text
     assert 'name="proposed_correction"' not in review.text
     assert 'action="/review/resolve"' not in review.text
-    assert 'Passage herstellen in Vorming' in review.text
+    assert 'Correctie nodig' in review.text
     if kind == 'classification':
         import src.review.review_passage_read_v1 as reader
         original_read = reader.read_review_passage
@@ -124,12 +124,13 @@ def test_complete_existing_repair_runs_only_on_formation(tmp_path, monkeypatch, 
     assert restarted._current_object(sid, oid) == revised
     if kind == 'classification':
         review = client.get('/review', params=dict(document=sid, object=oid))
-        approve = form_data(review, '/review')
-        assert approve['confirmed_object_type'] == 'explanation'
-        assert approve['parent_choice'] == data['parent_choice']
+        from tests.test_ko_new_pages import compact_submission
+        approve = compact_submission(review)
+        current = state._current_object(sid, oid)
+        assert current['confirmed_object_type'] == 'explanation'
+        assert current['parent_object_id'] == data['parent_choice']
         assert 'data-current-parent="' + data['parent_choice'] + '"' in review.text
         assert 'Actuele kop:' in review.text
-        approve.update(suitability='ja', eindoordeel='goedkeuren', type_action='dit_klopt', documentpositie_action='dit_klopt')
         approved = client.post('/review', data=approve, follow_redirects=False)
         assert approved.status_code == 303, approved.text
         assert state._current_object(sid, oid)['confirmed_object_type'] == 'explanation'

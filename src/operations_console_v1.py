@@ -2816,7 +2816,7 @@ class OperationsConsole:
             return {**envelope, 'prepared_source_extraction': extraction}
         return envelope
 
-    def _prepared_review_source(self, envelope, *, objects=None):
+    def _prepared_review_source(self, envelope, *, objects=None, display_target=None):
         from src.integrity_kernel import stable_hash
         store = getattr(self, 'workflow_document_store', None)
         if store is None:
@@ -2842,7 +2842,8 @@ class OperationsConsole:
         if reads is not None and key in reads.sources:
             return reads.sources[key]
         try:
-            result = FormationTaskStore(store).read_review_source(envelope, objects=objects)
+            display_options = {'display_target': display_target} if display_target is not None else {}
+            result = FormationTaskStore(store).read_review_source(envelope, objects=objects, **display_options)
         except WorkflowDocumentStoreError as error:
             raise ConsoleError(str(error)) from error
         if reads is not None:
@@ -2895,7 +2896,7 @@ class OperationsConsole:
                     raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
         return reference
 
-    def review_source_fragments(self, snapshot_id, *, envelope=None, objects=None):
+    def review_source_fragments(self, snapshot_id, *, envelope=None, objects=None, display_target=None):
         """Call-local authoritative extraction for content-duty readers."""
         command = active_review_command(self, snapshot_id)
         if command is not None:
@@ -2914,7 +2915,8 @@ class OperationsConsole:
         if review_path_for_klasse(envelope["class"]) == "boom":
             return None
         try:
-            prepared = self._prepared_review_source(envelope, objects=objects)
+            display_options = {'display_target': display_target} if display_target is not None else {}
+            prepared = self._prepared_review_source(envelope, objects=objects, **display_options)
             if prepared is not None:
                 self._verified_source_bytes(envelope, cache_recovery=False)
                 return prepared

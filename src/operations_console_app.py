@@ -1718,7 +1718,7 @@ def _source_discrepancy_block(obj: dict[str, Any], draft: dict[str, Any], *, rev
     )
     return (
         '<section class="review-step source-discrepancy" data-review-step="discrepancy">'
-        "<h4>Rapporteer een discrepantie (optioneel)</h4>"
+        "<h4>Als iets ontbreekt of afwijkt</h4>"
         '<p class="field-help">Wijkt het kennisobject af van de originele tekst? Kies wat afwijkt. '
         "Met een gemelde discrepantie kies je daarna correctie of afwijzen; ongewijzigd goedkeuren "
         "kan dan niet.</p>"
@@ -1829,9 +1829,10 @@ def _review_index_item(
     checkbox: bool = False,
     reason: str = "",
     task: str = "",
+    ko_state: str = "",
 ) -> str:
     title = review_row_title(obj)
-    status = review_row_status(obj)
+    status = ko_state or review_row_status(obj)
     task_query = f"&amp;task={_esc(task)}" if task in REVIEW_TASKS else ""
     workplace = "/source-selection" if task == "repair" else "/review"
     link = (
@@ -1871,10 +1872,12 @@ def _review_section_groups(
     context_objects = objects if context_objects is None else context_objects
 
     def passage_row(obj: dict[str, Any]) -> str:
+        from src.review.knowledge_object_state_v1 import derive_ko_state
+        derived = derive_ko_state(obj, review_path=review_path, bindings=bindings or (), fragments=fragments)
         item = _review_index_item(
             obj, snapshot_id,
             reason=_individual_review_reason(obj, priority=str(obj.get("object_id")) in priority_ids),
-            task=task,
+            task=task, ko_state=derived['state'] or "",
         )
         context = _review_context_block(
             obj, context_objects, snapshot_id=snapshot_id, review_path=review_path, task=task, bindings=bindings, fragments=fragments
@@ -1928,7 +1931,8 @@ def _review_lane_copy(review_path: str, koppen: list[dict[str, Any]]) -> dict[st
 
 
 def _review_is_final(obj: dict[str, Any]) -> bool:
-    return (obj.get("governance") or {}).get("validation_status") in {"approved", "rejected", "superseded"}
+    from src.review.knowledge_object_state_v1 import FINAL_VALIDATION_STATUSES
+    return (obj.get("governance") or {}).get("validation_status") in FINAL_VALIDATION_STATUSES
 
 
 def _review_was_revised(obj: dict[str, Any]) -> bool:
@@ -2224,7 +2228,29 @@ def _decision_paths_html(console: OperationsConsole, snapshot_id: str, obj: dict
     return '<section data-decision-paths><h4>Afzonderlijke paden naar deze uitkomst</h4>' + notice + ''.join(paths) + '</section>'
 
 
-def _knowledge_review_html(obj: dict[str, Any], objects: list[dict[str, Any]]) -> str:
+def _ko_state_reasons_html(derived):
+    copy = {
+        'validation_superseded': 'Een opvolgende versie vervangt dit voorstel.',
+        'validation_rejected': 'Dit voorstel is afgewezen.',
+        'legacy_revise': 'Dit oudere correctieverzoek vraagt opnieuw beoordeling.',
+        'review_stage_first': 'De inhoudelijke beoordeling staat nog open.',
+        'review_stage_second': 'De onafhankelijke tweede beoordeling staat nog open.',
+        'approved': 'De vereiste goedkeuringen zijn vastgelegd; dit is geen publicatie.',
+        'materialisation_failed': 'De vorming van dit voorstel vraagt herstel.',
+        'context_necessary_unresolved': 'Noodzakelijke betekeniscontext is nog niet geldig verbonden.',
+        'admission_blocked': 'Bronbewijs of verplichte inhoud vraagt eerst herstel.',
+        'no_supporting_evidence': 'Er is nog geen onderbouwing gekoppeld.',
+        'provenance_unresolved': 'De herkomst kan nog niet worden bevestigd.',
+        'package_complete_no_open_review': 'De onderdelen hangen samen; er staat geen reviewtaak open.',
+        'release_published': 'Deze versie is gepubliceerd.',
+        'release_superseded': 'Een gepubliceerde opvolger vervangt deze versie.',
+        'release_withdrawn': 'Deze gepubliceerde versie is ingetrokken.',
+    }
+    reasons = [copy[code] for code in derived['reasons'] if code in copy]
+    return '<ul class="ko-state-reasons">' + ''.join('<li>' + _esc(text) + '</li>' for text in reasons) + '</ul>' if reasons else ''
+
+
+def _knowledge_review_html(obj: dict[str, Any], objects: list[dict[str, Any]], *, state_label='', include_context=True, reason_html='') -> str:
     from src.review.review_cockpit_v1 import knowledge_review_projection
     projected = knowledge_review_projection(obj, objects)
     essential = "".join(
@@ -2240,10 +2266,11 @@ def _knowledge_review_html(obj: dict[str, Any], objects: list[dict[str, Any]]) -
     return f'''<section class="review-card-object review-step" data-review-step="a" aria-label="Geselecteerde passage"
         data-reviewed-version="{_esc(projected['object_version'])}">
       <p class="meta">type <b>{_esc(_object_type_label(str(projected['object_type'] or '')))}</b> ·
-        status <b>{_esc(review_row_status(obj))}</b> · versie <b>{_esc(projected['object_version'])}</b></p>
-      <p class="eyebrow">Te beoordelen passage</p><h3 data-full-knowledge-passage>{_esc(projected['text'])}</h3>
-      <section data-essential-context><h4>Voorwaarden, uitzonderingen en scope</h4>
-        {f'<ul>{essential}</ul>' if essential else '<p>Geen afzonderlijke betekeniscontext vastgelegd.</p>'}</section>
+        status <b data-ko-state>{_esc(state_label or review_row_status(obj))}</b> · versie <b>{_esc(projected['object_version'])}</b></p>
+      {reason_html}<h3 data-full-knowledge-passage>{_esc(projected['text'])}</h3>
+      {('<section data-essential-context><h4>Voorwaarden, uitzonderingen en scope</h4>'
+        + (f'<ul>{essential}</ul>' if essential else '<p>Geen afzonderlijke betekeniscontext vastgelegd.</p>')
+        + '</section>') if include_context else ''}
       {issues}{proposal}
     </section>'''
 
@@ -2309,17 +2336,26 @@ def _render_second_review_card(
         and row.get("confirmed_object_type") == obj.get("confirmed_object_type")
     ]
     first_copy = ", ".join(dict.fromkeys(first_reviewers)) or "eerste reviewer"
-    text = str((obj.get("content") or {}).get("clean_text") or "")
+    from src.review.ko_document_context_ui_v1 import read_document_context, render_document_context
+    from src.review.ko_receipt_ui_v1 import knowledge_connections_html
+    from src.review.knowledge_object_state_v1 import derive_ko_state
+    derived = derive_ko_state(obj, review_path=review_path, bindings=bindings, fragments=fragments)
     return f"""
       <p><a class="btn-secondary" href="/review?document={_esc(snapshot_id)}&amp;task=second_review">← Terug naar kennisvoorstellen</a></p>
       <article class="object review-card-two-column second-review-card" data-object-id="{_esc(obj.get("object_id"))}">
-        {_knowledge_review_html(obj, snapshot_objects)}
+        <div class="review-decision-layout"><div class="review-source-column">
+        {render_document_context(snapshot_id, obj, snapshot_objects, task='second_review',
+            source=read_document_context(console, read_inputs, obj))}
+        <details><summary>Bronbewijs bij het voorstel</summary>{_source_bound_fields_html(obj)}</details>
+        </div><div class="review-choices-column">
+        {_knowledge_review_html(obj, snapshot_objects, state_label=derived['state'], include_context=False,
+            reason_html=_ko_state_reasons_html(derived))}
+        {knowledge_connections_html(obj, snapshot_objects, include_proposals=True)}
         <div class="review-cockpit-copy">
-          <p class="eyebrow">Onafhankelijke tweede beoordeling</p>
+          <h3>Onafhankelijke tweede beoordeling</h3>
           <p>Versie {_esc(obj.get("object_version"))}</p>
         </div>
         {_decision_paths_html(console, snapshot_id, obj, snapshot_objects)}
-        {_broncontext_html(obj, snapshot_id, str(obj.get("object_id") or ""), True, task="second_review")}
         {_review_context_block(
             obj,
             snapshot_objects,
@@ -2342,6 +2378,7 @@ def _render_second_review_card(
             <button class="btn-secondary" type="submit" name="action" value="revise">Correctie nodig</button>
           </section>
         </form>
+        </div></div>
       </article>
     """
 
@@ -3112,25 +3149,32 @@ def _render_review_card(
         _esc(draft['proposed_correction']) + '</textarea></label>'
         if draft.get('proposed_correction') else ''
     )
+    from src.review.ko_document_context_ui_v1 import read_document_context, render_document_context
+    from src.review.ko_receipt_ui_v1 import knowledge_connections_html
+    from src.review.knowledge_object_state_v1 import derive_ko_state
+    derived = derive_ko_state(obj, review_path=review_path, bindings=bindings, fragments=fragments)
     return f"""
                 <p><a class="btn-secondary" href="{_esc(_review_location(console, snapshot_id, task=task or "contextual"))}">← Terug naar kennisvoorstellen</a></p>
                 <article class="object review-card-two-column" data-object-id="{_esc(obj["object_id"])}" data-object-type="{_esc(proposed or confirmable)}" data-confirmed-type="{_esc(str(confirmed or ""))}">
                     <div class="review-decision-layout">
                     <div class="review-source-column">
-                    {_knowledge_review_html(obj, snapshot_objects)}
+                    {render_document_context(snapshot_id, obj, snapshot_objects, task=task,
+                        source=read_document_context(console, read_inputs, obj))}
+                    <details class="ko-source-proof"><summary>Bronbewijs bij het voorstel</summary>{_source_bound_fields_html(obj)}</details>
+                    </div>
+                    <div class="review-choices-column">
+                    {_knowledge_review_html(obj, snapshot_objects, state_label=derived['state'], include_context=False,
+                        reason_html=_ko_state_reasons_html(derived))}
+                    {knowledge_connections_html(obj, snapshot_objects, include_proposals=True)}
                     {_decision_paths_html(console, snapshot_id, obj, snapshot_objects)}
                     {object_text_html}
-                    {_broncontext_html(obj, snapshot_id, obj["object_id"], passage_ok, task=task)}
-                    {_review_context_block(
+                    <details><summary>Verbonden passages en hun bron</summary>{_review_context_block(
                         obj,
                         snapshot_objects,
                         snapshot_id=snapshot_id,
                         review_path=review_path,
                         task=task, bindings=bindings, fragments=fragments
-                    )}
-                    {context_html}
-                    </div>
-                    <div class="review-choices-column">
+                    )}{context_html}</details>
                   <form id="review-form-{_esc(obj["object_id"])}" class="review-decision-form" method="post" action="/review" data-review-form>
                     <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
                     <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
@@ -3145,17 +3189,24 @@ def _render_review_card(
 
                     {f'<p>{_esc(admission_notice)}</p>' if admission_notice else ''}{repair_guidance}
                     <section class="review-step" data-review-step="c">
-                      {suitability_choices_html(str(draft.get("suitability", "")))}
+                      {suitability_choices_html(str(draft.get("suitability", ""))).replace('Is deze passage op zichzelf bruikbaar?', 'Is dit toepasbaar?')}
                       {closed_steps_note()}
+                    </section>
+                    <section class="review-step" data-review-question="completeness">
+                      <h4>Is dit compleet?</h4>
+                      <p>Vergelijk de claim, voorwaarden, uitzonderingen en onderbouwing met de broncontext links. Open zo nodig de hele sectie.</p>
+                      {follow_up_steps("correction")}{_source_discrepancy_block(obj, draft, review_path=review_path)}</div>
                     </section>
                     {follow_up_steps("approval")}
                     <section class="review-step" data-review-step="d">
-                      <h4>Staat de passage onder de juiste kop?</h4>
+                      <h4>Staat dit op de juiste plek?</h4>
                       <p>Gevonden onder: <b>{_esc(path_text or "het document")}</b></p>
                       {placement}
+                      <p><a href="{_esc(owner)}">Andere plek kiezen in Vorming</a></p>
                       <label class="check"><input type="radio" name="documentpositie_action" value="dit_klopt"{_checked(draft.get("documentpositie_action", ""), "dit_klopt")}> Dit klopt</label>
                       <input type="hidden" name="parent_choice" value="{_esc(draft.get('parent_choice') or obj.get('parent_object_id') or '')}">
                     </section>
+                    <details class="ko-required-confirmations" open><summary>Type, richting, sterkte en relaties bevestigen</summary>
                     <section class="review-step" data-review-step="e" id="classification-{_esc(obj["object_id"])}">
                       <h4>Wat voor informatie is dit?</h4>
                       <p>{classification_note}</p>
@@ -3181,8 +3232,7 @@ def _render_review_card(
                         review_path=review_path,
                         draft=draft, bindings=bindings, fragments=fragments
                     )}
-                    </div>
-                    {follow_up_steps("correction")}{_source_discrepancy_block(obj, draft, review_path=review_path)}</div>
+                    </details></div>
                     <section class="review-step" data-review-step="f">
                       {decision_choices_html(str(obj["object_id"]), str(draft.get("eindoordeel", "")),
                                              approval=None if structural_heading else approval_disabled)}
@@ -3191,7 +3241,7 @@ def _render_review_card(
                         <label for="comment-{_esc(obj["object_id"])}">Toelichting (verplicht)</label>
                         <textarea id="comment-{_esc(obj["object_id"])}" name="comment">{html.escape(draft.get("comment", ""), quote=True)}</textarea>
                       </div>
-                      {correction_draft}<button class="btn-primary" type="submit" data-submit-review>Review opslaan en volgende</button>
+                      {correction_draft}<button class="btn-primary" type="submit" data-submit-review>Beoordeling opslaan en volgende</button>
                     </section>
                   </form>
                     </div></div>
@@ -3331,6 +3381,7 @@ def _render_review_room(
     read_inputs=None,
     queue_page: int = 1,
     review_revision: str = "",
+    overview_url: str = "",
 ) -> str:
     reviewer_id = str(account.get("account_id") or "")
     chosen = document.strip()
@@ -3394,6 +3445,24 @@ def _render_review_room(
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
             if obj is None:
                 raise ConsoleError("unknown_object")
+            from src.review.knowledge_object_state_v1 import is_knowledge_object
+            if is_knowledge_object(obj, review_path):
+                from src.review.ko_review_page_v1 import render_review_page
+                from src.review.review_passage_read_v1 import ReviewPassageInputs
+                focused_inputs = read_inputs
+                if focused_inputs is None:
+                    local_bindings = _review_bindings(console, chosen, objects=snapshot_objects) or []
+                    local_fragments = console.review_source_fragments(chosen)
+                    try:
+                        console.open_source_passage(snapshot_id=chosen, object_id=chosen_object_id)
+                        source_available = True
+                    except ConsoleError:
+                        source_available = False
+                    focused_inputs = ReviewPassageInputs(chosen_row, snapshot_objects, local_bindings,
+                        snapshot_revision, local_fragments, source_available)
+                return render_review_page(console, account, focused_inputs, obj,
+                    task=chosen_task, draft=draft, conflict=conflict,
+                    origin_revision=review_revision, overview_url=overview_url)
             objects_html += '<h2>Kennisvoorstellen beoordelen</h2>'
             if review_revision and review_revision != snapshot_revision:
                 objects_html += '<p class="banner warn" data-review-return-changed>De revisie is gewijzigd sinds je naar Vorming ging. Controleer het huidige voorstel en beoordeel deze versie opnieuw.</p>'
@@ -5246,6 +5315,12 @@ def create_console_app(
         return JSONResponse(payload)
 
 
+    @app.get("/review/context-section", response_class=HTMLResponse)
+    def review_context_section(request: Request, document: str, object: str, task: str = ""):
+        from src.review.ko_document_context_ui_v1 import render_source_section
+        return HTMLResponse(render_source_section(state, _require(request), document, object,
+            task=normalize_review_task(task)), headers={'Cache-Control': 'no-store'})
+
     @app.get("/review/bronpassage", response_class=HTMLResponse)
     def review_bronpassage(request: Request, document: str = "", object: str = "", task: str = "") -> str:
         account = _require(request)
@@ -5384,8 +5459,18 @@ def create_console_app(
         return_task: str = Form(""),
         interaction_id: str = Form(""),
         source_discrepancy: list[str] = Form(default=[]),
+        review_ui: str = Form(""),
+        review_action: str = Form(""),
+        applicable: str = Form(""),
+        complete: str = Form(""),
+        placed_correctly: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
+        if review_ui == "compact-v1":
+            from src.review.ko_review_page_v1 import handle_compact_review
+            return handle_compact_review(state, account, snapshot_id, object_id,
+                snapshot_revision, interaction_id, normalize_review_task(return_task), review_action,
+                dict(applicable=applicable, complete=complete, placed_correctly=placed_correctly), comment)
         mapped = map_eindoordeel(eindoordeel, decision)
         if eindoordeel == "later_beoordelen" or mapped == "later":
             mapped = "later"
@@ -5537,11 +5622,14 @@ def create_console_app(
                 ),
                 status_code=400 if input_error else 409,
             )
+        from src.review.ko_receipt_ui_v1 import receipt_location
+        def saved_location(location):
+            return receipt_location(location, interaction_id if mapped != 'later' else '', object_id)
         if bounded:
             params = {'document': snapshot_id, 'after': object_id}
             if safe_task := normalize_review_task(return_task):
                 params['task'] = safe_task
-            return RedirectResponse('/review?' + urlencode(params), status_code=303)
+            return RedirectResponse(saved_location('/review?' + urlencode(params)), status_code=303)
         if mapped == "revise" and proposed_correction.strip():
             state.correct_object(
                 actor_id=account["account_id"],
@@ -5577,27 +5665,27 @@ def create_console_app(
             )
             if nxt:
                 return RedirectResponse(
-                    _review_location(
+                    saved_location(_review_location(
                         state,
                         snapshot_id,
                         nxt,
                         task=safe_task,
-                    ),
+                    )),
                     status_code=303,
                 )
             return RedirectResponse(
-                _review_location(state, snapshot_id),
+                saved_location(_review_location(state, snapshot_id)),
                 status_code=303,
             )
         if not safe_task:
             nxt = state.next_review_object_id(snapshot_id, object_id)
             if nxt:
                 return RedirectResponse(
-                    _review_location(state, snapshot_id, nxt),
+                    saved_location(_review_location(state, snapshot_id, nxt)),
                     status_code=303,
                 )
         return RedirectResponse(
-            _review_location(state, snapshot_id, task=safe_task),
+            saved_location(_review_location(state, snapshot_id, task=safe_task)),
             status_code=303,
         )
 
@@ -5805,11 +5893,21 @@ def create_console_app(
         snapshot_id: str = Form(...),
         object_id: str = Form(...),
         snapshot_revision: str = Form(""),
-        action: str = Form(...),
+        action: str = Form(""),
         comment: str = Form(""),
         interaction_id: str = Form(""),
+        review_ui: str = Form(""),
+        review_action: str = Form(""),
+        applicable: str = Form(""),
+        complete: str = Form(""),
+        placed_correctly: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
+        if review_ui == "compact-v1":
+            from src.review.ko_review_page_v1 import handle_compact_review
+            return handle_compact_review(state, account, snapshot_id, object_id,
+                snapshot_revision, interaction_id, 'second_review', review_action,
+                dict(applicable=applicable, complete=complete, placed_correctly=placed_correctly), comment, second=True)
         if not snapshot_revision.strip():
             raise ConsoleError("snapshot_revision_required")
         from src.review.review_passage_read_v1 import resolve_review_revision
@@ -5880,13 +5978,14 @@ def create_console_app(
             ),
             "",
         )
+        from src.review.ko_receipt_ui_v1 import receipt_location
         if nxt:
             return RedirectResponse(
-                _review_location(state, snapshot_id, nxt, task="second_review"),
+                receipt_location(_review_location(state, snapshot_id, nxt, task="second_review"), interaction_id, object_id),
                 status_code=303,
             )
         return RedirectResponse(
-            _review_location(state, snapshot_id),
+            receipt_location(_review_location(state, snapshot_id), interaction_id, object_id),
             status_code=303,
         )
 

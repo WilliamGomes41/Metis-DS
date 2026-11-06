@@ -296,10 +296,10 @@ def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_p
     before = console.snapshot_objects(sid)
     card = client.get(f'/review?document={sid}&object={obj["object_id"]}')
     assert card.status_code == 200
-    assert "Passage herstellen in Vorming" in card.text
-    inputs = Inputs(card.text).inputs
-    approval = next(row for row in inputs if row.get("name") == "eindoordeel" and row.get("value") == "goedkeuren")
-    assert "disabled" in approval
+    assert "Correctie nodig" in card.text
+    import re
+    approval = re.search(r'<button[^>]+value="approve"[^>]*>', card.text)
+    assert approval and "disabled" in approval.group()
     assert 'action="/review/resolve"' not in card.text
     owner = client.get(f'/source-selection?document={sid}&object={obj["object_id"]}&task=repair')
     assert owner.status_code == 200 and 'action="/review/resolve"' in owner.text
@@ -349,7 +349,7 @@ def test_approval_ui_uses_existing_admission_policy(tmp_path, gate, *, productio
     console._save_objects(sid, rows)
     page = client.get(f'/review?document={sid}&object={obj["object_id"]}')
     assert page.status_code == 200
-    approval = re.search(r'<input[^>]*name="eindoordeel"[^>]*value="goedkeuren"[^>]*>', page.text)
+    approval = re.search(r'<button[^>]*name="review_action"[^>]*value="approve"[^>]*>', page.text)
     assert approval
     assert ("disabled" in approval.group()) == (gate != "allowed")
 

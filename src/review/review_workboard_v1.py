@@ -700,10 +700,18 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         review_revision: str = "",
         after: str = "",
         after_batch: bool = False,
+        receipt_interaction: str = "",
+        receipt_object: str = "",
     ) -> str:
         account = _current_account(console, request)
         from src.review.review_participation_ui_v1 import overview, require_overview
         require_overview(account)
+        if document and receipt_interaction and receipt_object:
+            from src.review.ko_receipt_ui_v1 import read_saved_review, render_receipt_page
+            receipt = read_saved_review(console, account, document, receipt_object, receipt_interaction)
+            continuation = '/review?' + urlencode({'document': document, 'after': receipt_object,
+                'task': normalize_review_task(task)})
+            return render_receipt_page(account, receipt, document, continuation)
         if task.strip() in {"history", "decisions"}:
             # Retired page bookmarks navigate before any document/source/audit capture.
             params = {"document": document} if document else {}
@@ -763,7 +771,8 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             from src.review.review_passage_read_v1 import read_review_passage
             try:
                 read_inputs = read_review_passage(console, account, document, object.strip(),
-                    context_target=context_target, choice_page=max(context_page, 0), choice_query=context_q)
+                    context_target=context_target, choice_page=max(context_page, 0), choice_query=context_q,
+                    include_document_context=True)
             except ConsoleError as exc:
                 if exc.code == 'reviewer_not_named_on_snapshot':
                     return RedirectResponse('/review/trajectory?' + urlencode({'document': document}), status_code=303)
@@ -800,7 +809,11 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             if not remaining:
                 return RedirectResponse('/review?' + urlencode({'document':document}), status_code=303)
         if not chosen or (not object.strip() and not chosen_task):
-            return _workboard_page(console, account=account, snapshot_id=chosen, q=q, page=page, theme=theme)
+            rendered = _workboard_page(console, account=account, snapshot_id=chosen, q=q, page=page, theme=theme)
+            return rendered
+        back = "/review?" + urlencode({"document": chosen, "q": q, "page": page})
+        if theme:
+            back += '&' + urlencode({'theme': theme})
         rendered = _render_review_room(
             console,
             account,
@@ -813,11 +826,9 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             read_inputs=read_inputs,
             queue_page=queue_page,
             review_revision=review_revision,
+            overview_url=back if q or page != 1 or theme else '',
         )
 
-        back = "/review?" + urlencode({"document": chosen, "q": q, "page": page})
-        if theme:
-            back += '&' + urlencode({'theme': theme})
         if q or page != 1 or theme:
             suffix = _esc(urlencode({'q': q, 'page': page, 'theme': theme}))
             # Match each complete attribute once; overlapping wildcards around

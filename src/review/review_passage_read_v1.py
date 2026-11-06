@@ -248,7 +248,8 @@ def _outgoing_ids(obj):
 
 
 def read_review_passage(console, account, snapshot_id, object_id, *, context_target='',
-                        choice_page=0, choice_query='', include_choices=False, context_targets=()):
+                        choice_page=0, choice_query='', include_choices=False, context_targets=(),
+                        include_document_context=False):
     """Capture the required connected context; never infer review permission."""
     store = console.workflow_document_store
     reads = console._document_reads()
@@ -303,7 +304,10 @@ def read_review_passage(console, account, snapshot_id, object_id, *, context_tar
     by_id = {obj['object_id']: obj for obj in objects}
     bindings = [{**row, 'valid': bool(by_id.get(row.get('object_id')))
                  and still_matches(row, by_id[row['object_id']])} for row in bindings]
-    fragments = console.review_source_fragments(snapshot_id, envelope=envelope, objects=objects)
+    source_options = {}
+    if include_document_context:
+        source_options['display_target'] = by_id[object_id]
+    fragments = console.review_source_fragments(snapshot_id, envelope=envelope, objects=objects, **source_options)
     if fragments is not None:
         from src.vorming.source_reconstruction_v1 import review_source_window
         from src.vorming.prepared_source_views_v1 import prepare

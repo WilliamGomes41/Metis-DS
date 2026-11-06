@@ -125,14 +125,12 @@ const path = require('node:path');
     await login(reviewer, 'reviewer');
     const main = manifest.documents.main;
     await reviewer.goto(base + '/review?document=' + main.snapshot_id + '&object=' + main.pending_object_id);
-    const form = reviewer.locator('[data-review-form]');
-    await form.locator('[name=suitability][value=ja]').check();
-    await form.locator('[name=documentpositie_action][value=dit_klopt]').check();
-    await form.locator('[name=type_action][value=dit_klopt]').check();
-    const relations = form.locator('[name=relation_review_ack]');
-    if (await relations.count()) await relations.check();
-    await form.locator('[name=eindoordeel][value=goedkeuren]').check();
-    const [reviewResponse] = await Promise.all([reviewer.waitForNavigation(), form.locator('[data-submit-review]').click()]);
+    const form = reviewer.locator('[data-ko-assessment-form][action="/review"]');
+    for (const question of ['applicable', 'complete', 'placed_correctly']) {
+      await form.locator(`[name="${question}"][value="yes"]`).check();
+    }
+    const [reviewResponse] = await Promise.all([reviewer.waitForNavigation(),
+      form.locator('[name=review_action][value=approve]').click()]);
     assert.ok(reviewResponse.status() < 400, await reviewer.content());
     await reviewerContext.close();
     await open('main');

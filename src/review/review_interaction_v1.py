@@ -112,6 +112,7 @@ def build_review_interaction_evidence(
     objects: Iterable[dict[str, Any]] = (),
     review_path: str = "",
     members: Iterable[dict[str, Any]] = (),
+    assessment=None,
 ) -> dict[str, Any]:
     interaction_id = str(interaction_id or "").strip()
     if not interaction_id.startswith(REVIEW_INTERACTION_PREFIX):
@@ -141,7 +142,7 @@ def build_review_interaction_evidence(
             member_rows = [_tuple(focal)]
         manifest = {"members": member_rows}
 
-    return {
+    evidence = {
         "version": REVIEW_INTERACTION_VERSION,
         "interaction_id": interaction_id,
         "interaction_kind": interaction_kind,
@@ -153,6 +154,12 @@ def build_review_interaction_evidence(
         "context_manifest": manifest,
         "context_manifest_hash": stable_hash(manifest),
     }
+    if assessment is not None:
+        from src.review.review_assessment_v1 import ReviewAssessment
+        if not isinstance(assessment, ReviewAssessment):
+            raise ValueError("review_assessment_invalid")
+        evidence["assessment"] = assessment.as_evidence()
+    return evidence
 
 
 def validate_review_interaction_identity(

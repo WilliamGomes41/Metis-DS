@@ -117,8 +117,8 @@ def test_next_passage_uses_verified_cards_then_real_passage(tmp_path, production
         patch.setattr(store, 'list_document_objects', forbidden)
         page = client.get(saved.headers['location'])
     assert page.status_code == 200, page.text
-    assert f'id="review-form-{ids[1]}"' in page.text
-    assert f'id="review-form-{ids[0]}"' not in page.text
+    assert f'name="object_id" value="{ids[1]}"' in page.text
+    assert f'name="object_id" value="{ids[0]}"' not in page.text
     reopened = client.get('/review', params={'document': sid, 'object': ids[0]})
     assert reopened.status_code == 200
     restarted = restart_production(console)

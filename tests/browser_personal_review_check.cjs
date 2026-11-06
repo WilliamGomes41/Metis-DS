@@ -37,21 +37,23 @@ const assert = require('node:assert/strict');
     await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded'}),page.keyboard.press('Enter')]);
     assert.equal(new URL(page.url()).searchParams.get('task'), 'contextual');
     // The existing contextual route may show its inventory before a passage.
-    if (!await page.locator('[data-review-form]').count()) {
+    if (!await page.locator('[data-ko-assessment-form]').count()) {
       const passage = page.locator(`a[href*="object=${d.context}"]`).first();
       await passage.click();
     }
-    const form = page.locator('[data-review-form]');
+    const form = page.locator('[data-ko-assessment-form]');
     assert.equal(await form.locator('[name=object_id]').inputValue(),d.context);
     assert.deepEqual(await state(), before, 'Landing and detail navigation must not mutate domain work');
-    await form.locator('[name=suitability][value=ja]').check();
-    await form.locator('[name=documentpositie_action][value=dit_klopt]').check();
-    await form.locator('[name=type_action][value=dit_klopt]').check();
-    await form.locator('[name=recommendation_direction][value=for]').check();
-    await form.locator('[name=recommendation_strength_level][value=not_stated]').check();
-    await form.locator('[name=eindoordeel][value=goedkeuren]').check();
-    if (await form.locator('[name=relation_review_ack]').count()) await form.locator('[name=relation_review_ack]').check();
-    await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded'}), form.locator('[data-submit-review]').click()]);
+    for (const question of ['applicable','complete','placed_correctly']) {
+      assert.equal(await form.locator(`[name=${question}]:checked`).count(),0);
+      await form.locator(`[name=${question}][value=yes]`).check();
+    }
+    const approve = form.locator('[name=review_action][value=approve]');
+    assert.equal(await approve.isEnabled(),true,'The displayed fixture proposal must be confirmable');
+    await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded'}), approve.click()]);
+    assert.equal(await page.locator('[data-review-receipt]').count(),1);
+    assert.equal(await page.locator('[data-ko-assessment-form]').count(),0);
+    assert.equal(await page.locator('[data-saved-answer][data-answer=yes]').count(),3);
     const after = await state();
     assert.notDeepEqual(after,before,'Real review POST must commit');
     await page.goto(base + '/review');

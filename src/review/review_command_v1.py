@@ -86,6 +86,7 @@ def capture_histories(console, snapshot_id, object_id, command, *, admission_con
     # Explicit parent confirmation uses the same TOC/body rule. This dependency
     # is all current headings and therefore grows with structural head count.
     if (command.get('_all_headings') or command.get('parent_choice')
+            or command.get('_review_assessment') is not None
             or command.get('documentpositie_action') == 'dit_klopt'):
         pending.update(store.review_command_heading_ids(snapshot_id))
     pending.update(store.review_command_neighbor_ids(snapshot_id, sorted(focals)))
@@ -186,6 +187,20 @@ def _command_envelope(documents, snapshot_id):
 def _invoke_review_kernel(console, command, invoke, inputs, changes, *, compact=False):
     """Invoke the original kernel with its private workspace precondition."""
     internal = dict(command)
+    assessment = internal.pop('_review_assessment', None)
+    if assessment is not None:
+        from src.review.review_assessment_v1 import (
+            ReviewAssessment, displayed_review_descriptor, compact_approval_arguments)
+        if not isinstance(assessment, ReviewAssessment):
+            raise ConsoleError('review_assessment_invalid')
+        if internal.get('decision') == 'approve':
+            from src.review.beslisboom_path_v1 import review_path_for_klasse
+            current = current_revisions(inputs.histories, snapshot_id=inputs.snapshot_id)
+            focal = next(row for row in current if row['object_id'] == inputs.target_object_id)
+            descriptor = displayed_review_descriptor(focal, current,
+                review_path_for_klasse(inputs.envelope['class']),
+                bindings=inputs.bindings, fragments=inputs.fragments)
+            internal.update(compact_approval_arguments(assessment, descriptor))
     internal['expected_revision'] = changes.revision if command.get('expected_revision') is not None else None
     if (inputs.interaction_id and internal.get('decision') != 'later'
             and internal.get('interaction_evidence') is None):
@@ -200,7 +215,15 @@ def _invoke_review_kernel(console, command, invoke, inputs, changes, *, compact=
             interaction_id=inputs.interaction_id, interaction_kind='contextual',
             reviewer_account_id=internal['actor_id'], snapshot_id=inputs.snapshot_id,
             review_stage=str((duty or {}).get('stage') or 'first_review'), focal=focal,
-            objects=live, review_path=review_path_for_klasse(inputs.envelope['class']))
+            objects=live, review_path=review_path_for_klasse(inputs.envelope['class']),
+            assessment=assessment)
+    if assessment is not None and internal.get('interaction_evidence') is not None:
+        evidence = deepcopy(internal['interaction_evidence'])
+        recorded = evidence.get('assessment')
+        if recorded is not None and recorded != assessment.as_evidence():
+            raise ConsoleError('review_assessment_conflict')
+        evidence['assessment'] = assessment.as_evidence()
+        internal['interaction_evidence'] = evidence
     for key in ('_dependency_ids', '_focal_ids', '_all_headings', '_original_ids', '_interaction_id'):
         internal.pop(key, None)
     try:

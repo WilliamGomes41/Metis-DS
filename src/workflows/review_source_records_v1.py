@@ -55,6 +55,54 @@ def block_fragments(pair):
     return deps
 
 
+@dataclass(frozen=True)
+class ReviewDocumentContext:
+    fragments: tuple[dict, ...]
+    focal_fragment_ids: frozenset[str]
+    target_object_id: str = ''
+
+
+def _context_window(target, cached, blocks):
+    selection = (target.get('metadata') or {}).get('semantic_passage') or target.get('source') or {}
+    block_ids, raw_ids = references(selection)
+    for public, _ in blocks:
+        if public['block_id'] in block_ids:
+            raw_ids.update(public['source_fragment_ids'])
+    focal = [ordinal for fid, (ordinal, _) in cached.items() if fid in raw_ids]
+    return (min(focal), max(focal), raw_ids) if focal and raw_ids <= cached.keys() else None
+
+
+def _context_additions(con, views_id, first, last, cached):
+    return con.execute(
+        "SELECT f.fragment_id,f.ordinal,f.views,f.blocks,f.payload_hash,f.payload, "
+        "ARRAY(SELECT DISTINCT m.payload_hash FROM workflow.source_read_block_fragments m "
+        "WHERE m.views_id=f.views_id AND m.fragment_id=f.fragment_id) AS member_hashes "
+        "FROM workflow.source_read_fragments f WHERE f.views_id=%s "
+        "AND ('headings'=ANY(views) OR ordinal BETWEEN %s AND %s) "
+        "AND NOT (fragment_id=ANY(%s)) ORDER BY ordinal",
+        (views_id, first-1, last+1, list(cached))).fetchall()
+
+
+def _verified_context(target, cached, window, fragment_count, additions):
+    from src.vorming.prepared_source_views_v1 import freeze
+    from src.object_taxonomy_v1 import extract_object_type
+    first, last, raw_ids = window
+    cached = dict(cached)
+    for row in additions:
+        if (row['member_hashes'] != [row['payload_hash']]
+                or row['payload'].get('fragment_id') != row['fragment_id']
+                or row['payload_hash'] != stable_hash({key: row[key] for key in
+                    ('ordinal', 'views', 'blocks', 'payload')})):
+            fail()
+        cached[row['fragment_id']] = (row['ordinal'], row['payload'])
+    expected_ordinals = set(range(max(0, first-1), min(fragment_count, last+2)))
+    if not expected_ordinals <= {ordinal for ordinal, _ in cached.values()}:
+        fail('source_read_fragment_missing')
+    rows = tuple(freeze(row) for ordinal, row in sorted(cached.values(), key=lambda item: item[0])
+        if first-1 <= ordinal <= last+1 or extract_object_type(row)[0] == 'heading')
+    return ReviewDocumentContext(rows, frozenset(raw_ids), str(target.get('object_id') or ''))
+
+
 class ReviewSourceRecords:
     @diagnostic_phase('source_views_prepare_records')
     def prepare_review_source(self, input_reference, payload, *, extraction=None):
@@ -194,17 +242,47 @@ class ReviewSourceRecords:
         return {'layout': 1, 'views_id': prepared.views_id, 'extraction_hash': prepared.extraction_hash,
                 'header_hash': prepared.header_hash}
 
+    @diagnostic_phase('review_document_context')
+    def read_review_document_context(self, envelope, target, *, source):
+        """Display only verified original headings and immediate raw-source neighbors."""
+        from src.vorming.prepared_source_views_v1 import ReadSource
+        from src.vorming.source_preparation_context_v1 import KEY, SourceIdentity
+        from dataclasses import asdict
+        root = getattr(source, 'root', None)
+        extraction = envelope.get(KEY)
+        if not isinstance(root, ReadSource) or not extraction:
+            return None
+        if (root.payload.get('source') != asdict(SourceIdentity.from_envelope(envelope))
+                or root.reference.get('extraction_hash') != extraction.get('record_hash')):
+            fail('source_read_reference_invalid')
+        ordinals = getattr(root, 'fragment_ordinals', None)
+        if ordinals is None:
+            return None
+        cached = {row['fragment_id']: (ordinal, row) for ordinal, row in zip(ordinals, root.raw)}
+        window = _context_window(target, cached, source.blocks)
+        if window is None:
+            return None
+        captured = getattr(root, 'review_document_context', None)
+        if (captured is not None and captured.target_object_id == str(target.get('object_id') or '')
+                and captured.focal_fragment_ids == frozenset(window[2])):
+            return captured
+        additions = []
+        if not root.complete:
+            with self.documents._connect() as con:
+                additions = _context_additions(con, root.reference['views_id'], *window[:2], cached)
+        return _verified_context(target, cached, window, root.payload['fragment_count'], additions)
+
     @diagnostic_phase('source_views_read_records')
-    def read_review_source(self, envelope, *, objects=None, con=None):
+    def read_review_source(self, envelope, *, objects=None, con=None, display_target=None):
         import psycopg
         try:
-            return self._read_review_source(envelope, objects=objects, con=con)
+            return self._read_review_source(envelope, objects=objects, con=con, display_target=display_target)
         except (KeyError, TypeError, IndexError, ValueError) as error:
             raise WorkflowDocumentStoreError('source_read_integrity_failed') from error
         except psycopg.Error as error:
             raise WorkflowDocumentStoreError('source_read_unavailable') from error
 
-    def _read_review_source(self, envelope, *, objects=None, con=None):
+    def _read_review_source(self, envelope, *, objects=None, con=None, display_target=None):
         from src.vorming.prepared_source_views_v1 import ReadSource, contract
         from src.vorming.source_preparation_context_v1 import KEY, VERSION, SourceIdentity
         from dataclasses import asdict
@@ -299,6 +377,12 @@ class ReviewSourceRecords:
                                               for bid in ids if bid not in seen_blocks)
                 if not block_ids <= {r['block_id'] for r in blocks}:
                     fail('source_read_block_missing')
+            display_window, display_cached, display_additions = None, {}, []
+            if display_target is not None:
+                display_cached = {item['fragment_id']: (item['ordinal'], item['payload']) for item in fragments}
+                display_window = _context_window(display_target, display_cached, [item['payload'] for item in blocks])
+                if display_window is not None and not complete:
+                    display_additions = _context_additions(con, views_id, *display_window[:2], display_cached)
         with diagnostic_phase('source_views_validate'):
             fragments.sort(key=lambda r:r['ordinal'])
             blocks.sort(key=lambda r:(r['view_name'],r['ordinal']))
@@ -353,4 +437,8 @@ class ReviewSourceRecords:
         with diagnostic_phase('source_views_hydrate'):
             result = ReadSource([r['payload'] for r in fragments], views, header, expected_ref,
                                 complete=complete, docling_loader=docling)
+            result.fragment_ordinals = tuple(row['ordinal'] for row in fragments)
+        if display_window is not None:
+            result.review_document_context = _verified_context(display_target, display_cached, display_window,
+                header['fragment_count'], display_additions)
         return result.fragments

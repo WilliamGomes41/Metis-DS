@@ -1,0 +1,595 @@
+{
+  "probe_version": 4,
+  "log_finalize_version": "v4-after-server-stop",
+  "method": "Frozen fresh-process production HTTPS server per execution; parent seeds and parses client/logJSON, child ordinary production restart and HTTP only, default GC. All direct proof verification after all3timed flows, exact events reverified after stop. Five alternating baseline/head rounds per fixture; nearest-rank p95 over15distinct approval samples per side/fixture. All real redirects and head bon plus continuation included. Unchanged10% p95 server-time and PostgreSQL JSON-byte thresholds for both initial card and whole save flow.",
+  "baseline_sha": "595fe8f233fdee98dfb67609bd5c7206136ee956",
+  "head_sha": "f64c476b9cde822af650397c1c938a98c83dcb09",
+  "environment": "Local synthetic production-composed app, Python3.13/PostgreSQL17, Uvicorn HTTPS; not Azure SLO. Root authorized quiet window.",
+  "fixtures": {
+    "legacy": {
+      "paragraphs": 923,
+      "candidate_count": 92,
+      "paths": {
+        "card": {
+          "base": {
+            "samples": 15,
+            "statuses": [
+              200
+            ],
+            "server_ms": {
+              "p95": 60.425,
+              "median": 47.712,
+              "min": 45.361,
+              "max": 60.425
+            },
+            "wall_ms": {
+              "p95": 61.27947500499431,
+              "median": 48.595159001706634,
+              "min": 46.31985099695157,
+              "max": 61.27947500499431
+            },
+            "db_json_bytes": {
+              "p95": 26231,
+              "median": 26225,
+              "min": 25672,
+              "max": 26231
+            },
+            "db_queries": {
+              "p95": 21,
+              "median": 21,
+              "min": 21,
+              "max": 21
+            },
+            "physical_connections": {
+              "p95": 6,
+              "median": 6,
+              "min": 6,
+              "max": 6
+            }
+          },
+          "head": {
+            "samples": 15,
+            "statuses": [
+              200
+            ],
+            "server_ms": {
+              "p95": 73.196,
+              "median": 49.238,
+              "min": 44.274,
+              "max": 73.196
+            },
+            "wall_ms": {
+              "p95": 74.18121900263941,
+              "median": 50.26283099869033,
+              "min": 45.20769900409505,
+              "max": 74.18121900263941
+            },
+            "db_json_bytes": {
+              "p95": 28127,
+              "median": 28117,
+              "min": 26614,
+              "max": 28127
+            },
+            "db_queries": {
+              "p95": 22,
+              "median": 22,
+              "min": 22,
+              "max": 22
+            },
+            "physical_connections": {
+              "p95": 6,
+              "median": 6,
+              "min": 6,
+              "max": 6
+            }
+          },
+          "budget_10_percent": {
+            "server_ms": {
+              "ratio": 1.2113529168390567,
+              "percent_change": 21.135291683905667,
+              "pass": false
+            },
+            "db_json_bytes": {
+              "ratio": 1.0722808890244366,
+              "percent_change": 7.228088902443663,
+              "pass": true
+            }
+          }
+        },
+        "save": {
+          "base": {
+            "samples": 15,
+            "statuses": [
+              200
+            ],
+            "server_ms": {
+              "p95": 1055.435,
+              "median": 990.671,
+              "min": 866.022,
+              "max": 1055.435
+            },
+            "wall_ms": {
+              "p95": 1057.8470480031683,
+              "median": 995.0380849986686,
+              "min": 868.0349979986204,
+              "max": 1057.8470480031683
+            },
+            "db_json_bytes": {
+              "p95": 19859838,
+              "median": 19839167,
+              "min": 19814532,
+              "max": 19859838
+            },
+            "db_queries": {
+              "p95": 88,
+              "median": 88,
+              "min": 88,
+              "max": 88
+            },
+            "physical_connections": {
+              "p95": 19,
+              "median": 19,
+              "min": 19,
+              "max": 19
+            }
+          },
+          "head": {
+            "samples": 15,
+            "statuses": [
+              200
+            ],
+            "server_ms": {
+              "p95": 1256.677,
+              "median": 1030.424,
+              "min": 898.417,
+              "max": 1256.677
+            },
+            "wall_ms": {
+              "p95": 1262.6526930034743,
+              "median": 1033.78469600284,
+              "min": 901.014307004516,
+              "max": 1262.6526930034743
+            },
+            "db_json_bytes": {
+              "p95": 19892540,
+              "median": 19871851,
+              "min": 19846044,
+              "max": 19892540
+            },
+            "db_queries": {
+              "p95": 99,
+              "median": 99,
+              "min": 99,
+              "max": 99
+            },
+            "physical_connections": {
+              "p95": 22,
+              "median": 22,
+              "min": 22,
+              "max": 22
+            }
+          },
+          "budget_10_percent": {
+            "server_ms": {
+              "ratio": 1.1906720925495176,
+              "percent_change": 19.067209254951756,
+              "pass": false
+            },
+            "db_json_bytes": {
+              "ratio": 1.001646639816498,
+              "percent_change": 0.16466398164980411,
+              "pass": true
+            }
+          }
+        }
+      },
+      "head_save_to_receipt": {
+        "samples": 15,
+        "statuses": [
+          200
+        ],
+        "server_ms": {
+          "p95": 581.5500000000001,
+          "median": 471.56300000000005,
+          "min": 418.938,
+          "max": 581.5500000000001
+        },
+        "wall_ms": {
+          "p95": 583.5915310017299,
+          "median": 476.78898199956166,
+          "min": 420.57484200631734,
+          "max": 583.5915310017299
+        },
+        "db_json_bytes": {
+          "p95": 5750974,
+          "median": 5750902,
+          "min": 5745700,
+          "max": 5750974
+        },
+        "db_queries": {
+          "p95": 79,
+          "median": 79,
+          "min": 79,
+          "max": 79
+        },
+        "physical_connections": {
+          "p95": 15,
+          "median": 15,
+          "min": 15,
+          "max": 15
+        }
+      },
+      "head_continue_to_next": {
+        "samples": 15,
+        "statuses": [
+          200
+        ],
+        "server_ms": {
+          "p95": 718.02,
+          "median": 516.108,
+          "min": 474.079,
+          "max": 718.02
+        },
+        "wall_ms": {
+          "p95": 719.5504240007722,
+          "median": 517.1579910020228,
+          "min": 475.0097799987998,
+          "max": 719.5504240007722
+        },
+        "db_json_bytes": {
+          "p95": 14141566,
+          "median": 14120949,
+          "min": 14100344,
+          "max": 14141566
+        },
+        "db_queries": {
+          "p95": 20,
+          "median": 20,
+          "min": 20,
+          "max": 20
+        },
+        "physical_connections": {
+          "p95": 7,
+          "median": 7,
+          "min": 7,
+          "max": 7
+        }
+      },
+      "head_context_expand": {
+        "samples": 5,
+        "statuses": [
+          200
+        ],
+        "server_ms": {
+          "p95": 225.45,
+          "median": 223.757,
+          "min": 213.931,
+          "max": 225.45
+        },
+        "wall_ms": {
+          "p95": 227.2124159935629,
+          "median": 225.2621640000143,
+          "min": 215.5519850057317,
+          "max": 227.2124159935629
+        },
+        "db_json_bytes": {
+          "p95": 5612844,
+          "median": 5612844,
+          "min": 5612844,
+          "max": 5612844
+        },
+        "db_queries": {
+          "p95": 20,
+          "median": 20,
+          "min": 20,
+          "max": 20
+        },
+        "physical_connections": {
+          "p95": 4,
+          "median": 4,
+          "min": 4,
+          "max": 4
+        }
+      }
+    },
+    "native": {
+      "paragraphs": 128,
+      "candidate_count": 128,
+      "paths": {
+        "card": {
+          "base": {
+            "samples": 15,
+            "statuses": [
+              200
+            ],
+            "server_ms": {
+              "p95": 52.384,
+              "median": 37.358,
+              "min": 30.893,
+              "max": 52.384
+            },
+            "wall_ms": {
+              "p95": 50.361469002382364,
+              "median": 38.213587999052834,
+              "min": 31.680432002758607,
+              "max": 50.361469002382364
+            },
+            "db_json_bytes": {
+              "p95": 33436,
+              "median": 33436,
+              "min": 32822,
+              "max": 33436
+            },
+            "db_queries": {
+              "p95": 21,
+              "median": 21,
+              "min": 21,
+              "max": 21
+            },
+            "physical_connections": {
+              "p95": 6,
+              "median": 6,
+              "min": 6,
+              "max": 6
+            }
+          },
+          "head": {
+            "samples": 15,
+            "statuses": [
+              200
+            ],
+            "server_ms": {
+              "p95": 44.011,
+              "median": 36.908,
+              "min": 34.29,
+              "max": 44.011
+            },
+            "wall_ms": {
+              "p95": 45.007578999502584,
+              "median": 37.87009099323768,
+              "min": 35.23541500180727,
+              "max": 45.007578999502584
+            },
+            "db_json_bytes": {
+              "p95": 35436,
+              "median": 35436,
+              "min": 33822,
+              "max": 35436
+            },
+            "db_queries": {
+              "p95": 22,
+              "median": 22,
+              "min": 22,
+              "max": 22
+            },
+            "physical_connections": {
+              "p95": 6,
+              "median": 6,
+              "min": 6,
+              "max": 6
+            }
+          },
+          "budget_10_percent": {
+            "server_ms": {
+              "ratio": 0.840161117898595,
+              "percent_change": -15.983888210140496,
+              "pass": true
+            },
+            "db_json_bytes": {
+              "ratio": 1.0598157674362962,
+              "percent_change": 5.981576743629624,
+              "pass": true
+            }
+          }
+        },
+        "save": {
+          "base": {
+            "samples": 15,
+            "statuses": [
+              200
+            ],
+            "server_ms": {
+              "p95": 346.74300000000005,
+              "median": 246.043,
+              "min": 213.093,
+              "max": 346.74300000000005
+            },
+            "wall_ms": {
+              "p95": 350.5561670026509,
+              "median": 247.5651589993504,
+              "min": 215.3023930004565,
+              "max": 350.5561670026509
+            },
+            "db_json_bytes": {
+              "p95": 1618365,
+              "median": 1616745,
+              "min": 1610267,
+              "max": 1618365
+            },
+            "db_queries": {
+              "p95": 96,
+              "median": 96,
+              "min": 96,
+              "max": 96
+            },
+            "physical_connections": {
+              "p95": 19,
+              "median": 19,
+              "min": 19,
+              "max": 19
+            }
+          },
+          "head": {
+            "samples": 15,
+            "statuses": [
+              200
+            ],
+            "server_ms": {
+              "p95": 346.826,
+              "median": 265.20799999999997,
+              "min": 230.904,
+              "max": 346.826
+            },
+            "wall_ms": {
+              "p95": 352.17161800392205,
+              "median": 268.61410399578745,
+              "min": 233.38361600326607,
+              "max": 352.17161800392205
+            },
+            "db_json_bytes": {
+              "p95": 1675263,
+              "median": 1673643,
+              "min": 1665699,
+              "max": 1675263
+            },
+            "db_queries": {
+              "p95": 108,
+              "median": 108,
+              "min": 108,
+              "max": 108
+            },
+            "physical_connections": {
+              "p95": 22,
+              "median": 22,
+              "min": 22,
+              "max": 22
+            }
+          },
+          "budget_10_percent": {
+            "server_ms": {
+              "ratio": 1.000239370369409,
+              "percent_change": 0.02393703694090199,
+              "pass": true
+            },
+            "db_json_bytes": {
+              "ratio": 1.035157705461994,
+              "percent_change": 3.5157705461994038,
+              "pass": true
+            }
+          }
+        }
+      },
+      "head_save_to_receipt": {
+        "samples": 15,
+        "statuses": [
+          200
+        ],
+        "server_ms": {
+          "p95": 222.153,
+          "median": 189.74,
+          "min": 170.02200000000002,
+          "max": 222.153
+        },
+        "wall_ms": {
+          "p95": 225.8667870046338,
+          "median": 191.52342100278474,
+          "min": 171.73782300233142,
+          "max": 225.8667870046338
+        },
+        "db_json_bytes": {
+          "p95": 1043446,
+          "median": 1043446,
+          "min": 1037122,
+          "max": 1043446
+        },
+        "db_queries": {
+          "p95": 79,
+          "median": 79,
+          "min": 79,
+          "max": 79
+        },
+        "physical_connections": {
+          "p95": 15,
+          "median": 15,
+          "min": 15,
+          "max": 15
+        }
+      },
+      "head_continue_to_next": {
+        "samples": 15,
+        "statuses": [
+          200
+        ],
+        "server_ms": {
+          "p95": 124.673,
+          "median": 64.857,
+          "min": 57.611,
+          "max": 124.673
+        },
+        "wall_ms": {
+          "p95": 126.30483099928824,
+          "median": 65.81572400318692,
+          "min": 58.44907500431873,
+          "max": 126.30483099928824
+        },
+        "db_json_bytes": {
+          "p95": 631817,
+          "median": 630197,
+          "min": 628577,
+          "max": 631817
+        },
+        "db_queries": {
+          "p95": 29,
+          "median": 29,
+          "min": 29,
+          "max": 29
+        },
+        "physical_connections": {
+          "p95": 7,
+          "median": 7,
+          "min": 7,
+          "max": 7
+        }
+      },
+      "head_context_expand": {
+        "samples": 5,
+        "statuses": [
+          200
+        ],
+        "server_ms": {
+          "p95": 66.691,
+          "median": 51.16,
+          "min": 50.212,
+          "max": 66.691
+        },
+        "wall_ms": {
+          "p95": 68.57668299926445,
+          "median": 52.72059500566684,
+          "min": 51.63465700024972,
+          "max": 68.57668299926445
+        },
+        "db_json_bytes": {
+          "p95": 824195,
+          "median": 824195,
+          "min": 824195,
+          "max": 824195
+        },
+        "db_queries": {
+          "p95": 20,
+          "median": 20,
+          "min": 20,
+          "max": 20
+        },
+        "physical_connections": {
+          "p95": 4,
+          "median": 4,
+          "min": 4,
+          "max": 4
+        }
+      }
+    }
+  },
+  "checks": {
+    "executions": 20,
+    "durable_approvals": 60,
+    "head_assessments": 30,
+    "startup_immutability_verified": 20,
+    "after_stop_committed_events_verified": 20,
+    "head_full_section_expansions": 10,
+    "forced_reaps": 0,
+    "child_exit_codes": [
+      -15
+    ]
+  },
+  "verdict": "FAIL"
+}

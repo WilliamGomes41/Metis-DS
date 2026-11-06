@@ -729,8 +729,8 @@ def test_phase2_ingest_records_deep_window_and_wires_scan(tmp_path: Path, *, pro
         f"/review?document={receipt['snapshot_id']}&object={calcium['object_id']}"
     ).text
     assert "hypercalciëmie" in card
-    assert "Gevonden onder" in card
-    assert "Review opslaan en volgende" in card
+    assert "Plek in het document" in card
+    assert "Goedkeuren en opslaan" in card
 
 def test_boom_ingest_still_skips_richtlijn_phase2(tmp_path: Path, *, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)

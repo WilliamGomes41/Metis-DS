@@ -95,8 +95,8 @@ def test_http_next_passage_uses_unprepared_cards_without_document_assessment(nav
         response = browser.get('/review', params={'document': sid, 'after': ids[FIRST]},
                                follow_redirects=False)
     assert response.status_code == 200, response.text
-    assert f'id="review-form-{ids[THIRD]}"' in response.text
-    assert f'id="review-form-{ids[FIRST]}"' not in response.text
+    assert f'name="object_id" value="{ids[THIRD]}"' in response.text
+    assert f'name="object_id" value="{ids[FIRST]}"' not in response.text
     assert 'data-document-assessment="not_evaluated"' in response.text
     assert _durable(console, sid) == before
 
@@ -131,10 +131,10 @@ def test_http_navigation_omits_archive_bytes_and_keeps_the_same_passage(navigati
         assert response.status_code == 200, response.text
         if end_of_queue:
             assert f'data-workboard-document="{sid}"' in response.text
-            assert f'id="review-form-{ids[THIRD]}"' not in response.text
+            assert f'name="object_id" value="{ids[THIRD]}"' not in response.text
         else:
-            assert f'id="review-form-{ids[THIRD]}"' in response.text
-        assert f'id="review-form-{ids[FIRST]}"' not in response.text
+            assert f'name="object_id" value="{ids[THIRD]}"' in response.text
+        assert f'name="object_id" value="{ids[FIRST]}"' not in response.text
     assert len(captured) == 2
     assert captured[1]['db']['db_json_bytes'] < captured[0]['db']['db_json_bytes']
     assert captured[1]['db']['db_queries'] < captured[0]['db']['db_queries']

@@ -219,6 +219,8 @@ def _chrome_freeze() -> bytes:
 
 
 def _object_column(html: str) -> str:
+    if 'class="ko-object-panel"' in html:
+        return re.search(r'<section class="ko-object-panel".*?</form></section>', html, re.S).group()
     card = re.search(
         r'<article class="object[^"]*review-card-two-column[^"]*".*?</article>',
         html,
@@ -234,6 +236,8 @@ def _object_column(html: str) -> str:
 
 
 def _bronpassage_column(html: str) -> str:
+    if 'class="ko-document-context"' in html:
+        return re.search(r'<details class="ko-document-context".*?</details>', html, re.S).group()
     card = re.search(
         r'<article class="object[^"]*review-card-two-column[^"]*".*?</article>',
         html,
@@ -244,23 +248,6 @@ def _bronpassage_column(html: str) -> str:
     passage_idx = block.find("review-card-bronpassage")
     assert passage_idx >= 0
     return block[passage_idx:]
-
-
-def _h3_text(column_html: str) -> str:
-    match = re.search(r"<h3(?:\s[^>]*)?>(.*?)</h3>", column_html, flags=re.S)
-    assert match, "open card must have an h3"
-    return _visible_text(match.group(1)).strip()
-
-
-def _object_text_body(column_html: str) -> str:
-    match = re.search(
-        r'<div class="object-text">\s*<p>(.*?)</p>\s*</div>',
-        column_html,
-        flags=re.S,
-    )
-    if not match:
-        return ""
-    return _visible_text(match.group(1)).strip()
 
 
 def _record(
@@ -330,16 +317,16 @@ def test_review_card_shows_freeze_sentence_once_not_h3_and_body(tmp_path: Path, 
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
     left = _object_column(html)
-    heading = _h3_text(left)
-    body = _object_text_body(left)
+    heading = _visible_text(re.search(r'<p class="ko-claim"[^>]*>(.*?)</p>', left, re.S).group(1))
+    body = ""
     assert EVENTUEEL in heading or EVENTUEEL in _text_of(rec)
     assert heading != ""
     assert body == "" or re.sub(r"\s+", " ", body) != re.sub(r"\s+", " ", heading)
     assert left.count(EVENTUEEL) == 1
     assert left.count(OVERWEEG) == 1
     assert 'class="object-expand-merge"' not in left
-    assert "status" in left
-    assert "wacht" in left or "geclassificeerd" in left or "bevestigd" in left
+    assert "data-ko-state" in html
+    assert "data-ko-assessment-form" in left
     assert review_card_sentence(rec) == _text_of(rec)
     assert review_row_title(rec) in _text_of(rec) or review_row_title(rec).rstrip("…") in _text_of(rec)
 
@@ -527,10 +514,8 @@ def test_v217_chrome_slogan_bronpassage_prose_still_holds(tmp_path: Path, *, pro
     card = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
     ).text
-    if recommendation_strength_ui_applies(rec):
-        assert "Sterkte van de aanbeveling" in card
-    else:
-        assert re.search(r"data-stamp-block(?:\s+hidden|[^>]*\shidden)", card)
+    assert 'class="ko-type"' in card
+    assert not re.search(r'<input[^>]+name="recommendation_strength"', card)
     right = _bronpassage_column(card)
     assert "brxe-" not in right
     assert "&lt;p&gt;" not in right
