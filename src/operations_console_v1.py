@@ -3362,7 +3362,7 @@ class OperationsConsole:
                                           bindings=binding_authority, fragments=source_fragments)
             route = reviewer_route_for(target, review_path=review_path, reviewer_id=actor_id,
                                        bindings=binding_authority, fragments=source_fragments)
-            if review_path != "boom" and decision == "approve" and not current_duty:
+            if decision == "approve" and (review_path == "boom" or not current_duty):
                 if any(
                     row.get("reviewer_id") == actor_id and row.get("decision") == "approve"
                     and row.get("review_command_hash") == command_hash and still_matches(row, target)

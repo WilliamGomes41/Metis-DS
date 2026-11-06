@@ -9,6 +9,8 @@ import time
 
 import pytest
 
+from tests.ko_review_fixture_support import affirmative_assessment
+
 
 @pytest.mark.parametrize("layout", ["legacy", "compact"])
 def test_partial_formation_history_existing_decision_and_http_command_together(tmp_path, production_console, monkeypatch, layout):
@@ -27,7 +29,8 @@ def test_partial_formation_history_existing_decision_and_http_command_together(t
     focal, other = candidates
     console.review_object(actor_id=reviewer, snapshot_id=sid, object_id=other['object_id'],
         decision='approve', confirmed_object_type='recommendation',
-        recommendation_direction='against', recommendation_strength_level='not_stated')
+        recommendation_direction='against', recommendation_strength_level='not_stated',
+        assessment=affirmative_assessment(), evidence_not_applicable=True)
     rows = console._load_objects(sid)
     previous = focal
     # Human revision helper preserves the actual materialised candidate identity,
@@ -72,7 +75,9 @@ def test_partial_formation_history_existing_decision_and_http_command_together(t
             'suitability': 'ja', 'documentpositie_action': 'dit_klopt', 'type_action': 'dit_klopt',
             'confirmed_object_type': 'recommendation', 'recommendation_direction': 'against',
             'recommendation_strength_level': 'not_stated', 'eindoordeel': 'goedkeuren',
-            'decision': 'approve', 'relation_review_ack': '1'}
+            'decision': 'approve', 'relation_review_ack': '1',
+            'applicable': 'yes', 'complete': 'yes', 'placed_correctly': 'yes',
+            'evidence_not_applicable': 'yes'}
         saved = measured('save', 'post', '/review', data=data, follow_redirects=False)
         assert saved.status_code == 303, saved.text
         assert measured('redirect', 'get', saved.headers['location']).status_code == 200

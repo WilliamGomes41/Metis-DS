@@ -1,0 +1,16 @@
+{
+  "source_sha": "01bcfa173d904d7b1b1711bc2d23c22479e88a05",
+  "source_label": "01bc",
+  "participation": "required",
+  "retry": "exact",
+  "before_state": {
+    "state": "Tweede review",
+    "reasons": [
+      "review_stage_second"
+    ],
+    "invalid": []
+  },
+  "result": "REFUSED",
+  "code": "second_review_command_required",
+  "unchanged": true
+}

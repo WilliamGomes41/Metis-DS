@@ -62,6 +62,7 @@ const assert = require('node:assert/strict');
       for (const name of ['applicable', 'complete', 'placed_correctly']) {
         await page.locator(`[name=${name}][value=yes]`).focus(); await page.keyboard.press('Space');
       }
+      await page.locator('[name=evidence_not_applicable]').check();
       await Promise.all([page.waitForURL(url => url.searchParams.has('receipt_interaction')),
         page.getByRole('button', {name: 'Goedkeuren en opslaan', exact: true}).click()]);
       assert.equal(await page.locator('[data-review-receipt]').count(), 1);

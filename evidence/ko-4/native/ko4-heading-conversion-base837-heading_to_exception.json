@@ -1,0 +1,14 @@
+{
+  "sha": "837b115f213bcfd0e9f4a71a1010231d2040365e",
+  "mode": "heading_to_exception",
+  "before_version": "1.0.1",
+  "before_validation": "approved",
+  "before_is_ko": false,
+  "result": "SAVED",
+  "after_version": "1.0.2",
+  "after_validation": "approved",
+  "after_is_ko": true,
+  "requires_four_eyes": true,
+  "valid_bindings": [],
+  "publication": "unpublished"
+}

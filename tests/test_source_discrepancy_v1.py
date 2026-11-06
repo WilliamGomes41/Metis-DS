@@ -12,6 +12,8 @@ counts the reports per formation route and model.
 from __future__ import annotations
 
 from copy import deepcopy
+
+from tests.ko_review_fixture_support import affirmative_assessment
 import re
 
 import pytest
@@ -62,6 +64,7 @@ def test_reported_discrepancy_blocks_unchanged_approval_and_is_recorded_on_rejec
                    source_discrepancy=["context_ontbreekt"])
     with pytest.raises(ConsoleError, match="source_discrepancy_requires_correction_or_rejection"):
         console.review_object(**command, decision="approve", confirmed_object_type="definition",
+                              assessment=affirmative_assessment(), evidence_not_applicable=True,
                               expected_revision=console.objects_revision(snapshot_id))
     with pytest.raises(ConsoleError, match="source_discrepancy_requires_correction_or_rejection"):
         console.review_object(**command, decision="later")

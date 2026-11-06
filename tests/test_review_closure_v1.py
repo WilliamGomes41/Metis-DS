@@ -303,7 +303,8 @@ def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_p
     assert "Passages herstellen" in inventory.text
 
     approval_payload = _review_payload(console, sid, target)
-    approval_payload.update(suitability="ja", eindoordeel="goedkeuren")
+    approval_payload.update(suitability="ja", eindoordeel="goedkeuren", applicable="yes",
+                            complete="yes", placed_correctly="yes", evidence_not_applicable="yes")
     rejected = client.post("/review", data=approval_payload)
     assert rejected.status_code == 400
     assert "blocked_candidate_not_reviewable" in rejected.text

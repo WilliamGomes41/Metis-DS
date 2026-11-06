@@ -9,9 +9,8 @@ from tests.semantic_fixture_support import bind_fixture_selections
 
 from fastapi.testclient import TestClient
 
-from src.review.closed_review_loop_v1 import ClosedLoopReviewConsole
 from src.review.proportionate_review_v1 import normal_risk_batch_queue
-from src.review.review_cockpit_v1 import broncontext_parts, confirmable_proposed_type
+from src.review.review_cockpit_v1 import broncontext_parts
 from src.review.review_ledger import read_events
 
 
@@ -56,18 +55,12 @@ def test_legacy_free_text_repair_post_is_not_routed_and_writes_nothing(tmp_path,
     )[0]["object_id"]
     obj = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
     # Seed the historical owner record; the actual HTTP entrypoint stays closed.
-    ClosedLoopReviewConsole.review_object(console,
-        actor_id=reviewer["account_id"],
-        snapshot_id=sid,
-        object_id=oid,
-        decision="revise",
-        comment="Brongebonden herstel.",
-        proposed_correction="",
-        confirmed_object_type=(confirmable_proposed_type(obj) or None),
-        suitability="mist_context",
-        eindoordeel="goedkeuren_na_correctie",
-        type_action="dit_klopt",
-    )
+    from tests.semantic_fixture_support import install_fixture_history
+    rows = console._load_objects(sid)
+    legacy = next(row for row in rows if (row['object_id'], row['object_version']) ==
+                  (obj['object_id'], obj['object_version']))
+    legacy['governance']['validation_status'] = 'revise'
+    install_fixture_history(console, sid, rows)
     before = next(row for row in console.snapshot_objects(sid) if row["object_id"] == oid)
     ledger_before = list(read_events(console._ledger_path))
     exact = broncontext_parts(before)["source_text_exact"]

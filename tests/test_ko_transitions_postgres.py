@@ -353,3 +353,42 @@ def test_existing_boom_candidate_requires_resolved_graph_before_approval(tmp_pat
         assert refused.value.code == 'ko_transition_refused'
         assert physical_state(console, sid) == before
         assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
+
+
+@pytest.mark.parametrize('require_second', [False, True])
+def test_exact_boom_approval_replay_is_noop_and_new_facts_still_refuse(tmp_path, production_console, require_second):
+    from src.review.knowledge_object_state_v1 import derive_ko_state
+    from src.review.review_duty_v1 import authoritative_review_type
+    from tests.test_v225_beslisboom_path import _console as boom_console, _accounts
+    from tests.test_decision_graph_chain import ingest, complete_graph, command
+    console = boom_console(tmp_path, production_console=production_console)
+    people = _accounts(console)
+    sid = ingest(console, people, 'required' if require_second else None)['snapshot_id']
+    console.update_decision_graph(**command(console, people, sid, 'resolve-before-replay',
+        graph=complete_graph(console, sid)))
+    obj = next(row for row in console.snapshot_objects(sid) if authoritative_review_type(row) == 'node')
+    values = dict(actor_id=people['researcher']['account_id'], snapshot_id=sid, object_id=obj['object_id'],
+        decision='approve', confirmed_object_type='node', type_action='dit_klopt', suitability='ja',
+        eindoordeel='goedkeuren', assessment=YES, evidence_not_applicable=True)
+    old_revision = console.objects_revision(sid)
+    console.review_object(**values, expected_revision=old_revision)
+    saved = next(row for row in console.snapshot_objects(sid) if row['object_id'] == obj['object_id'])
+    derived = derive_ko_state(saved, review_path='boom', bindings=console.object_review_bindings(sid))
+    assert derived['invalid'] == []
+    assert derived['state'] == (
+        'Tweede review' if require_second else 'Goedgekeurd')
+    before = deepcopy(physical_state(console, sid))
+    events = console.workflow_review_store.read_events_for_snapshots([sid])
+    console.review_object(**values, expected_revision=console.objects_revision(sid))
+    assert physical_state(console, sid) == before
+    assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
+    for changed in [{'assessment': {**YES, 'complete': 'adjust'}}, {'comment': 'Een ander besluit.'},
+                    {'interaction_evidence': {'assessment': {**YES, 'complete': 'adjust'}}}]:
+        with pytest.raises(ConsoleError):
+            console.review_object(**{**values, **changed}, expected_revision=console.objects_revision(sid))
+        assert physical_state(console, sid) == before
+        assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
+    with pytest.raises(ConsoleError) as stale:
+        console.review_object(**values, expected_revision=old_revision)
+    assert stale.value.code == 'snapshot_object_write_conflict'
+    assert physical_state(console, sid) == before

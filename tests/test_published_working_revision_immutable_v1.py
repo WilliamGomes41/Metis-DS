@@ -17,7 +17,6 @@ from typing import Any
 
 import pytest
 
-from src.review.closed_review_loop_v1 import ClosedLoopReviewConsole
 from src.operations_console_v1 import ConsoleError
 from src.review.review_closure_v1 import PUBLISHED_WORKING_REVISION_IMMUTABLE
 from src.workflows.workflow_document_concurrency_v1 import (
@@ -82,17 +81,12 @@ def test_canonical_release_seals_review_before_workflow_envelope_reconciliation(
 
     # Persist one pre-closure revise state before publication. This is exactly the
     # kind of legacy state the startup migration used to reopen.
-    ClosedLoopReviewConsole.review_object(
-        console,
-        actor_id=reviewer["account_id"],
-        snapshot_id=snapshot_id,
-        object_id=target["object_id"],
-        decision="revise",
-        suitability="mist_context",
-        eindoordeel="goedkeuren_na_correctie",
-        comment="legacy revise before publication",
-        expected_revision=console.objects_revision(snapshot_id),
-    )
+    from tests.semantic_fixture_support import install_fixture_history
+    rows = console._load_objects(snapshot_id)
+    historical = next(row for row in rows if (row['object_id'], row['object_version']) ==
+                      (target['object_id'], target['object_version']))
+    historical['governance']['validation_status'] = 'revise'
+    install_fixture_history(console, snapshot_id, rows)
     assert console._current_object(snapshot_id, target["object_id"])["governance"]["validation_status"] == "revise"
 
     before_revision = console.objects_revision(snapshot_id)

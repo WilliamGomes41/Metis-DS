@@ -1,0 +1,15 @@
+{
+  "source_sha": "837b115f213bcfd0e9f4a71a1010231d2040365e",
+  "source_label": "base837",
+  "participation": null,
+  "retry": "exact",
+  "before_state": {
+    "state": "Goedgekeurd",
+    "reasons": [
+      "approved"
+    ],
+    "invalid": []
+  },
+  "result": "ACCEPTED",
+  "unchanged": false
+}

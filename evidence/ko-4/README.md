@@ -116,6 +116,63 @@ and restart on baseline 837 reproduces it. This is recorded as pre-existing
 startup debt, not a passed whole-physical-state restart assertion, and no
 unrelated startup rewrite was introduced.
 
+## Post-01bc native and CI corrections
+
+The first 01bc performance execution was stopped for correctness work: eight
+executions finished, execution nine was partial and execution ten never
+started. None of those timings is acceptance or reused for the next candidate.
+The frozen method and baseline remain unchanged; the next runtime head needs
+a fresh complete five-pair run.
+
+Real native comparison found that an identical successful BOOM approval retry
+was accepted by baseline 837 but wrote again; 01bc refused it. A primary retry
+while second review was pending was refused on both heads. The bounded fix
+lets BOOM reach the existing exact reviewer/command-hash/current-binding no-op,
+including pending-second work, while preserving existing non-BOOM semantics.
+Zero-write idempotence is an improvement, not a relabelled baseline property.
+Valid PDF/initial-graph-update controls for both policies passed two cases in
+1.49s, retaining negative/conflicting/new-command refusal and stale CAS.
+
+Another native comparison exposed a historical approved heading reclassified
+as exception retaining its old approval stamp without a valid binding. The
+01bc post-state guard correctly refused that invalid result. The existing pure
+revision builder now handles genuine structural-heading to non-BOOM KO entry
+through its existing version, predecessor-lineage and governance-reset code.
+It does not invent selected materialisation or broaden all raw records into
+knowledge revisions. Stronger assertions retain the approved heading history,
+require a new open unpublished successor, invalidate structural authority and
+preserve the existing four-eyes requirement. The heading, existing T11,
+native guard and bundle group passed 61 cases in 35.79s.
+
+Actual remote CI revealed missing explicit positive decisions in native
+thread/process callers, existing browser fixture seeds/clicks and two batch
+payloads. Their fixtures now explicitly provide the three answers and N/A
+through real commands/visible controls. All existing assertions remain.
+The six previously failing browser cases passed in 46.05s; affected native
+A08/D5 controls passed; both positive batch cases passed in 3.85s. Four MET36,
+discrepancy and closure cases passed in 24.54s with their original budgets and
+history/source/no-write assertions. Only the executable positive producers in
+the retained 951 probe changed; archived measurements remain untouched.
+
+Three legacy-compatibility tests now install actual persisted historical
+revise rows through the native fixture installer instead of asking a current
+production command to write a new obsolete state. Their original closed-route,
+requested-revision and published-startup-immutability assertions remain.
+The outcome-strength fixture first assembles its real graph through the
+existing graph-update command; four legacy/outcome cases passed in 3.68s.
+The proposed explains target remains visibly labelled as unconfirmed support
+beside six unchecked answer radios; its updated markup assertion passed in
+1.00s. These are bounded local results on 01bc plus the recorded working-tree
+fixes; final committed-head independent closure and all new CI shards remain
+required.
+
+Initial remote shard-zero logs for both Python versions could not be retrieved
+through the available connector; artifact access was also unavailable under
+the configured network policy. The initial failure inventory is therefore
+explicitly incomplete. No test was skipped or suppressed for that limitation;
+the next CI run must pass all eight complete native suite shards and the
+browser/characterization jobs.
+
 ## Remaining verification
 
 Final-head remote CI, exact-head closure of the last contradiction guard,

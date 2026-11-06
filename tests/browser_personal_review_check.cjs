@@ -48,6 +48,7 @@ const assert = require('node:assert/strict');
       assert.equal(await form.locator(`[name=${question}]:checked`).count(),0);
       await form.locator(`[name=${question}][value=yes]`).check();
     }
+    await form.locator('[name=evidence_not_applicable]').check();
     const approve = form.locator('[name=review_action][value=approve]');
     assert.equal(await approve.isEnabled(),true,'The displayed fixture proposal must be confirmable');
     await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded'}), approve.click()]);

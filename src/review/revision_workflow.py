@@ -113,7 +113,12 @@ def revise_object(previous, proposed, *, snapshot_id, reason, actor, force=False
     The caller supplies the actual current row, never a reconstructed predecessor.
     """
     from src.integrity_kernel import compute_canonical_object_hash
-    if not (knowledge_revision(previous) or knowledge_revision(proposed)):
+    from src.review.knowledge_path_v1 import is_structural_projection
+    from src.review.knowledge_object_state_v1 import is_knowledge_object
+    from src.vorming.admission_gate_v1 import is_boom_object
+    heading_to_knowledge = (is_structural_projection(previous) and is_knowledge_object(proposed)
+                            and not is_boom_object(proposed))
+    if not (knowledge_revision(previous) or knowledge_revision(proposed) or heading_to_knowledge):
         return deepcopy(proposed)
     if not snapshot_id or not reason or not actor:
         raise ValueError("revision_evidence_required")

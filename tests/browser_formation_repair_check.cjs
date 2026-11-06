@@ -64,6 +64,7 @@ const assert = require('node:assert/strict');
       assert.equal(await review.locator(`[name=${question}]:checked`).count(),0);
       await review.locator(`[name=${question}][value=yes]`).check();
     }
+    await review.locator('[name=evidence_not_applicable]').check();
     await Promise.all([page.waitForNavigation({waitUntil: 'domcontentloaded'}),
       review.locator('[name=review_action][value=approve]').click()]);
     assert.equal(await page.locator('[data-review-receipt]').count(),1);

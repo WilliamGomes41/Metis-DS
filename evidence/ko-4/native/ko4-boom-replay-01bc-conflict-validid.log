@@ -1,0 +1,10 @@
+{"source_sha": "01bcfa173d904d7b1b1711bc2d23c22479e88a05", "source_label": "01bc", "participation": null, "retry": "conflict", "before_state": {"state": "Goedgekeurd", "reasons": ["approved"], "invalid": []}, "result": "REFUSED", "code": "review_assessment_conflict", "unchanged": true}
+.{"source_sha": "01bcfa173d904d7b1b1711bc2d23c22479e88a05", "source_label": "01bc", "participation": "required", "retry": "conflict", "before_state": {"state": "Tweede review", "reasons": ["review_stage_second"], "invalid": []}, "result": "REFUSED", "code": "review_assessment_conflict", "unchanged": true}
+.
+=============================== warnings summary ===============================
+../.venvs/metis-ds/lib/python3.13/site-packages/starlette/testclient.py:45
+  /workspace/.venvs/metis-ds/lib/python3.13/site-packages/starlette/testclient.py:45: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2 passed, 4 deselected, 1 warning in 1.26s

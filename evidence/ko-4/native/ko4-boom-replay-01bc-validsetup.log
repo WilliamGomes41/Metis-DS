@@ -1,0 +1,196 @@
+{"source_sha": "01bcfa173d904d7b1b1711bc2d23c22479e88a05", "source_label": "01bc", "participation": null, "retry": "exact", "before_state": {"state": "Goedgekeurd", "reasons": ["approved"], "invalid": []}, "result": "REFUSED", "code": "ko_transition_refused", "unchanged": true}
+F{"source_sha": "01bcfa173d904d7b1b1711bc2d23c22479e88a05", "source_label": "01bc", "participation": "required", "retry": "exact", "before_state": {"state": "Tweede review", "reasons": ["review_stage_second"], "invalid": []}, "result": "REFUSED", "code": "second_review_command_required", "unchanged": true}
+F{"source_sha": "01bcfa173d904d7b1b1711bc2d23c22479e88a05", "source_label": "01bc", "participation": null, "retry": "negative", "before_state": {"state": "Goedgekeurd", "reasons": ["approved"], "invalid": []}, "result": "REFUSED", "code": "review_assessment_requires_three_yes", "unchanged": true}
+.{"source_sha": "01bcfa173d904d7b1b1711bc2d23c22479e88a05", "source_label": "01bc", "participation": "required", "retry": "negative", "before_state": {"state": "Tweede review", "reasons": ["review_stage_second"], "invalid": []}, "result": "REFUSED", "code": "review_assessment_requires_three_yes", "unchanged": true}
+.FF
+=================================== FAILURES ===================================
+________ test_boom_successful_approval_exact_replay_is_noop[exact-None] ________
+
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-400/test_boom_successful_approval_0')
+production_console = <function production_console.<locals>.factory at 0x7ff0dabdcf40>
+participation = None, retry = 'exact'
+
+    @pytest.mark.parametrize('participation',[None,'required'])
+    @pytest.mark.parametrize('retry',['exact','negative','conflict'])
+    def test_boom_successful_approval_exact_replay_is_noop(tmp_path,production_console,participation,retry):
+     c=_console(tmp_path,production_console=production_console);actors=_accounts(c)
+     from tests.test_decision_graph_chain import ingest,complete_graph,command
+     sid=ingest(c,actors,participation)['snapshot_id']
+     c.update_decision_graph(**command(c,actors,sid,'independent-valid-graph',graph=complete_graph(c,sid)))
+     row=next(o for o in c.snapshot_objects(sid) if authoritative_review_type(o)=='node' and not o.get('scorelist'))
+     baseline=os.environ.get('KO4_REPLAY_BASELINE')=='1'
+     def call(**extra):
+      return c.review_object(actor_id=actors['researcher']['account_id'],snapshot_id=sid,object_id=row['object_id'],decision='approve',confirmed_object_type='node',type_action='dit_klopt',expected_revision=c.objects_revision(sid),**extra)
+     initial={} if baseline else {'assessment':YES,'evidence_not_applicable':True}
+     call(**initial)
+     current=target_now(c,sid,row['object_id']);before=state(c,sid)
+     facts=derive_ko_state(current,review_path='boom',bindings=c.object_review_bindings(sid),fragments=c.review_source_fragments(sid))
+     extra=dict(initial)
+     if retry=='negative':extra['assessment']={**YES,'complete':'adjust'}
+     if retry=='conflict':
+      extra['interaction_evidence']=build_review_interaction_evidence(interaction_id='ri-native-boom-replay-conflict',interaction_kind='contextual',reviewer_account_id=actors['researcher']['account_id'],snapshot_id=sid,review_stage='first_review',focal=current,objects=c.snapshot_objects(sid),review_path='boom',assessment=ReviewAssessment.from_evidence({**YES,'complete':'adjust'}))
+     label='base837' if baseline else '01bc'
+     output={'source_sha':'837b115f213bcfd0e9f4a71a1010231d2040365e' if baseline else '01bcfa173d904d7b1b1711bc2d23c22479e88a05','source_label':label,'participation':participation,'retry':retry,'before_state':facts}
+     try:call(**extra)
+     except ConsoleError as e:output.update(result='REFUSED',code=e.code,unchanged=state(c,sid)==before)
+     else:output.update(result='ACCEPTED',unchanged=state(c,sid)==before)
+     Path('/tmp/ko4-boom-replay-'+label+'-'+str(participation)+'-'+retry+'.json').write_text(json.dumps(output,indent=2));print(json.dumps(output))
+     if retry=='exact':
+>     assert output['result']=='ACCEPTED','Exact successful native boom approval retry must not become refused transition'
+E     AssertionError: Exact successful native boom approval retry must not become refused transition
+E     assert 'REFUSED' == 'ACCEPTED'
+E       
+E       - ACCEPTED
+E       + REFUSED
+
+tests/ko4_boom_replay_probe_tmp.py:40: AssertionError
+______ test_boom_successful_approval_exact_replay_is_noop[exact-required] ______
+
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-400/test_boom_successful_approval_1')
+production_console = <function production_console.<locals>.factory at 0x7ff0d87fce00>
+participation = 'required', retry = 'exact'
+
+    @pytest.mark.parametrize('participation',[None,'required'])
+    @pytest.mark.parametrize('retry',['exact','negative','conflict'])
+    def test_boom_successful_approval_exact_replay_is_noop(tmp_path,production_console,participation,retry):
+     c=_console(tmp_path,production_console=production_console);actors=_accounts(c)
+     from tests.test_decision_graph_chain import ingest,complete_graph,command
+     sid=ingest(c,actors,participation)['snapshot_id']
+     c.update_decision_graph(**command(c,actors,sid,'independent-valid-graph',graph=complete_graph(c,sid)))
+     row=next(o for o in c.snapshot_objects(sid) if authoritative_review_type(o)=='node' and not o.get('scorelist'))
+     baseline=os.environ.get('KO4_REPLAY_BASELINE')=='1'
+     def call(**extra):
+      return c.review_object(actor_id=actors['researcher']['account_id'],snapshot_id=sid,object_id=row['object_id'],decision='approve',confirmed_object_type='node',type_action='dit_klopt',expected_revision=c.objects_revision(sid),**extra)
+     initial={} if baseline else {'assessment':YES,'evidence_not_applicable':True}
+     call(**initial)
+     current=target_now(c,sid,row['object_id']);before=state(c,sid)
+     facts=derive_ko_state(current,review_path='boom',bindings=c.object_review_bindings(sid),fragments=c.review_source_fragments(sid))
+     extra=dict(initial)
+     if retry=='negative':extra['assessment']={**YES,'complete':'adjust'}
+     if retry=='conflict':
+      extra['interaction_evidence']=build_review_interaction_evidence(interaction_id='ri-native-boom-replay-conflict',interaction_kind='contextual',reviewer_account_id=actors['researcher']['account_id'],snapshot_id=sid,review_stage='first_review',focal=current,objects=c.snapshot_objects(sid),review_path='boom',assessment=ReviewAssessment.from_evidence({**YES,'complete':'adjust'}))
+     label='base837' if baseline else '01bc'
+     output={'source_sha':'837b115f213bcfd0e9f4a71a1010231d2040365e' if baseline else '01bcfa173d904d7b1b1711bc2d23c22479e88a05','source_label':label,'participation':participation,'retry':retry,'before_state':facts}
+     try:call(**extra)
+     except ConsoleError as e:output.update(result='REFUSED',code=e.code,unchanged=state(c,sid)==before)
+     else:output.update(result='ACCEPTED',unchanged=state(c,sid)==before)
+     Path('/tmp/ko4-boom-replay-'+label+'-'+str(participation)+'-'+retry+'.json').write_text(json.dumps(output,indent=2));print(json.dumps(output))
+     if retry=='exact':
+>     assert output['result']=='ACCEPTED','Exact successful native boom approval retry must not become refused transition'
+E     AssertionError: Exact successful native boom approval retry must not become refused transition
+E     assert 'REFUSED' == 'ACCEPTED'
+E       
+E       - ACCEPTED
+E       + REFUSED
+
+tests/ko4_boom_replay_probe_tmp.py:40: AssertionError
+______ test_boom_successful_approval_exact_replay_is_noop[conflict-None] _______
+
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-400/test_boom_successful_approval_4')
+production_console = <function production_console.<locals>.factory at 0x7ff0d85c3060>
+participation = None, retry = 'conflict'
+
+    @pytest.mark.parametrize('participation',[None,'required'])
+    @pytest.mark.parametrize('retry',['exact','negative','conflict'])
+    def test_boom_successful_approval_exact_replay_is_noop(tmp_path,production_console,participation,retry):
+     c=_console(tmp_path,production_console=production_console);actors=_accounts(c)
+     from tests.test_decision_graph_chain import ingest,complete_graph,command
+     sid=ingest(c,actors,participation)['snapshot_id']
+     c.update_decision_graph(**command(c,actors,sid,'independent-valid-graph',graph=complete_graph(c,sid)))
+     row=next(o for o in c.snapshot_objects(sid) if authoritative_review_type(o)=='node' and not o.get('scorelist'))
+     baseline=os.environ.get('KO4_REPLAY_BASELINE')=='1'
+     def call(**extra):
+      return c.review_object(actor_id=actors['researcher']['account_id'],snapshot_id=sid,object_id=row['object_id'],decision='approve',confirmed_object_type='node',type_action='dit_klopt',expected_revision=c.objects_revision(sid),**extra)
+     initial={} if baseline else {'assessment':YES,'evidence_not_applicable':True}
+     call(**initial)
+     current=target_now(c,sid,row['object_id']);before=state(c,sid)
+     facts=derive_ko_state(current,review_path='boom',bindings=c.object_review_bindings(sid),fragments=c.review_source_fragments(sid))
+     extra=dict(initial)
+     if retry=='negative':extra['assessment']={**YES,'complete':'adjust'}
+     if retry=='conflict':
+>     extra['interaction_evidence']=build_review_interaction_evidence(interaction_id='ri-native-boom-replay-conflict',interaction_kind='contextual',reviewer_account_id=actors['researcher']['account_id'],snapshot_id=sid,review_stage='first_review',focal=current,objects=c.snapshot_objects(sid),review_path='boom',assessment=ReviewAssessment.from_evidence({**YES,'complete':'adjust'}))
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/ko4_boom_replay_probe_tmp.py:32: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def build_review_interaction_evidence(
+        *,
+        interaction_id: str,
+        interaction_kind: str,
+        reviewer_account_id: str,
+        snapshot_id: str,
+        review_stage: str,
+        focal: dict[str, Any] | None = None,
+        objects: Iterable[dict[str, Any]] = (),
+        review_path: str = "",
+        members: Iterable[dict[str, Any]] = (),
+        assessment=None,
+    ) -> dict[str, Any]:
+        interaction_id = str(interaction_id or "").strip()
+        if not interaction_id.startswith(REVIEW_INTERACTION_PREFIX):
+>           raise ValueError("review_interaction_id_invalid")
+E           ValueError: review_interaction_id_invalid
+
+src/review/review_interaction_v1.py:119: ValueError
+____ test_boom_successful_approval_exact_replay_is_noop[conflict-required] _____
+
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-400/test_boom_successful_approval_5')
+production_console = <function production_console.<locals>.factory at 0x7ff0d82db9c0>
+participation = 'required', retry = 'conflict'
+
+    @pytest.mark.parametrize('participation',[None,'required'])
+    @pytest.mark.parametrize('retry',['exact','negative','conflict'])
+    def test_boom_successful_approval_exact_replay_is_noop(tmp_path,production_console,participation,retry):
+     c=_console(tmp_path,production_console=production_console);actors=_accounts(c)
+     from tests.test_decision_graph_chain import ingest,complete_graph,command
+     sid=ingest(c,actors,participation)['snapshot_id']
+     c.update_decision_graph(**command(c,actors,sid,'independent-valid-graph',graph=complete_graph(c,sid)))
+     row=next(o for o in c.snapshot_objects(sid) if authoritative_review_type(o)=='node' and not o.get('scorelist'))
+     baseline=os.environ.get('KO4_REPLAY_BASELINE')=='1'
+     def call(**extra):
+      return c.review_object(actor_id=actors['researcher']['account_id'],snapshot_id=sid,object_id=row['object_id'],decision='approve',confirmed_object_type='node',type_action='dit_klopt',expected_revision=c.objects_revision(sid),**extra)
+     initial={} if baseline else {'assessment':YES,'evidence_not_applicable':True}
+     call(**initial)
+     current=target_now(c,sid,row['object_id']);before=state(c,sid)
+     facts=derive_ko_state(current,review_path='boom',bindings=c.object_review_bindings(sid),fragments=c.review_source_fragments(sid))
+     extra=dict(initial)
+     if retry=='negative':extra['assessment']={**YES,'complete':'adjust'}
+     if retry=='conflict':
+>     extra['interaction_evidence']=build_review_interaction_evidence(interaction_id='ri-native-boom-replay-conflict',interaction_kind='contextual',reviewer_account_id=actors['researcher']['account_id'],snapshot_id=sid,review_stage='first_review',focal=current,objects=c.snapshot_objects(sid),review_path='boom',assessment=ReviewAssessment.from_evidence({**YES,'complete':'adjust'}))
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/ko4_boom_replay_probe_tmp.py:32: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def build_review_interaction_evidence(
+        *,
+        interaction_id: str,
+        interaction_kind: str,
+        reviewer_account_id: str,
+        snapshot_id: str,
+        review_stage: str,
+        focal: dict[str, Any] | None = None,
+        objects: Iterable[dict[str, Any]] = (),
+        review_path: str = "",
+        members: Iterable[dict[str, Any]] = (),
+        assessment=None,
+    ) -> dict[str, Any]:
+        interaction_id = str(interaction_id or "").strip()
+        if not interaction_id.startswith(REVIEW_INTERACTION_PREFIX):
+>           raise ValueError("review_interaction_id_invalid")
+E           ValueError: review_interaction_id_invalid
+
+src/review/review_interaction_v1.py:119: ValueError
+=============================== warnings summary ===============================
+../.venvs/metis-ds/lib/python3.13/site-packages/starlette/testclient.py:45
+  /workspace/.venvs/metis-ds/lib/python3.13/site-packages/starlette/testclient.py:45: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/ko4_boom_replay_probe_tmp.py::test_boom_successful_approval_exact_replay_is_noop[exact-None]
+FAILED tests/ko4_boom_replay_probe_tmp.py::test_boom_successful_approval_exact_replay_is_noop[exact-required]
+FAILED tests/ko4_boom_replay_probe_tmp.py::test_boom_successful_approval_exact_replay_is_noop[conflict-None]
+FAILED tests/ko4_boom_replay_probe_tmp.py::test_boom_successful_approval_exact_replay_is_noop[conflict-required]
+4 failed, 2 passed, 1 warning in 2.86s

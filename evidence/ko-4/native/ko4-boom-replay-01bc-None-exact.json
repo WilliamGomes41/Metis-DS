@@ -1,0 +1,16 @@
+{
+  "source_sha": "01bcfa173d904d7b1b1711bc2d23c22479e88a05",
+  "source_label": "01bc",
+  "participation": null,
+  "retry": "exact",
+  "before_state": {
+    "state": "Goedgekeurd",
+    "reasons": [
+      "approved"
+    ],
+    "invalid": []
+  },
+  "result": "REFUSED",
+  "code": "ko_transition_refused",
+  "unchanged": true
+}

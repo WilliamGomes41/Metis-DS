@@ -301,6 +301,7 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 - [ ] Edit `src/review/source_context_review_v1.py`.
 - [x] Edit the existing command boundaries in `src/operations_console_v1.py`, including public relation confirmation and deferral, per the bounded #1006 contract.
 - [x] Create `tests/test_ko_transitions_postgres.py` and the independent matrix in `tests/test_ko_transition_matrix.py`.
+- [x] Reuse `src/review/revision_workflow.py` for explicit structural-heading to non-boom KO successors; preserve history/source identity and open the new revision instead of retaining structural approval.
 
 **Build.**
 

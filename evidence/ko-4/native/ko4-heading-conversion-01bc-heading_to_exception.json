@@ -1,0 +1,10 @@
+{
+  "sha": "01bcfa173d904d7b1b1711bc2d23c22479e88a05",
+  "mode": "heading_to_exception",
+  "before_version": "1.0.1",
+  "before_validation": "approved",
+  "before_is_ko": false,
+  "result": "REFUSED",
+  "code": "ko_transition_result_invalid",
+  "unchanged": true
+}

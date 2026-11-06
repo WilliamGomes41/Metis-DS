@@ -47,7 +47,8 @@ def test_http_batch_failure_retry_stale_and_restart(workflow_postgres, tmp_path,
     before = deepcopy(console.snapshot_objects(sid))
     reviews = console.workflow_review_store
     before_bindings, before_events = reviews.read_bindings(), reviews.read_events()
-    data = {"snapshot_id": sid, "snapshot_revision": console.objects_revision(sid), "object_ids": ids}
+    data = {"snapshot_id": sid, "snapshot_revision": console.objects_revision(sid), "object_ids": ids,
+            'applicable': 'yes', 'complete': 'yes', 'placed_correctly': 'yes', 'evidence_not_applicable': 'yes'}
     original = console.review_object
 
     def fail_second(**kwargs):

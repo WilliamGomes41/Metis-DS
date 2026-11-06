@@ -19,6 +19,7 @@ from src.publication.publication_refusal_store_v1 import postgres_store
 from src.review.knowledge_object_state_v1 import snapshot_ko_states
 from src.retrieval.retrieval_projection_v2 import build_projection
 from tests.context_test_support import bind_detected_context
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.production_support import production_application
 from tests.semantic_fixture_support import bind_fixture_selections, install_fixture_history
 from tests.test_a10_source_cache_repair import DiskBlobTransport
@@ -81,6 +82,7 @@ def _seed():
                 continue
             console.review_object(actor_id=people['reviewer']['account_id'], snapshot_id=sid,
                 object_id=obj['object_id'], decision='approve', confirmed_object_type='definition',
+                assessment=affirmative_assessment(), evidence_not_applicable=True,
                 relation_review_ack=True, suitability='ja', eindoordeel='goedkeuren')
         conflict_id = None
         if slug == 'conflict':

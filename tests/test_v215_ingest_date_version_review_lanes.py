@@ -812,6 +812,8 @@ def test_reclassify_heading_onto_exception_still_needs_four_eyes(tmp_path: Path,
         snapshot_id=receipt["snapshot_id"],
         object_ids=[heading["object_id"]],
     )
+    before = next(obj for obj in console.snapshot_objects(receipt['snapshot_id'])
+                  if obj['object_id'] == heading['object_id'])
     console.confirm_object_type(
         actor_id=accounts["reviewer"]["account_id"],
         snapshot_id=receipt["snapshot_id"],
@@ -825,6 +827,16 @@ def test_reclassify_heading_onto_exception_still_needs_four_eyes(tmp_path: Path,
     )
     assert refreshed["confirmed_object_type"] == "exception"
     assert requires_four_eyes(refreshed, confirmed_type="exception") is True
+    assert refreshed['object_version'] != before['object_version']
+    assert refreshed['governance']['validation_status'] == 'needs_review'
+    assert refreshed['governance']['publication_status'] == 'unpublished'
+    assert refreshed['governance']['validated_by'] is None
+    assert refreshed['governance']['review_snapshot_hash'] is None
+    assert not any(row.get('valid') for row in console.object_review_bindings(receipt['snapshot_id'])
+                   if row['object_id'] == heading['object_id'])
+    history = console._load_objects(receipt['snapshot_id'])
+    assert next(row for row in history if (row['object_id'], row['object_version']) ==
+                (before['object_id'], before['object_version'])) == before
 
 
 # ---------------------------------------------------------------------------
