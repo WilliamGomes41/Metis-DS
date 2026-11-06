@@ -34,8 +34,8 @@ def receipt_location(location, interaction_id, object_id):
 
 def read_saved_review(console, account, snapshot_id, object_id, interaction_id):
     from src.workflows.workflow_transaction_v1 import workflow_read_transaction
-    console._require_role(account['account_id'], 'reviewer', current=True)
     with workflow_read_transaction(console.workflow_document_store):
+        console._require_role(account['account_id'], 'reviewer')
         receipt = _read_saved_review(console, account, snapshot_id, object_id, interaction_id)
     if receipt is None:
         return None

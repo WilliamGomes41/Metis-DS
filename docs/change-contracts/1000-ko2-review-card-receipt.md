@@ -33,6 +33,15 @@ Blokkerende eerste stap is het vaststellen van bron-/eventeigenaren. Eén code-e
 
 ## Verificatiestatus
 
+De bon controleert de actuele reviewerrol en retirement binnen zijn bestaande
+workflow-leestransactie. De PostgreSQL identity-mixin leest ook zonder `current=True`
+steeds de accounttabel; alleen commandvoorbereiding heeft een captured account,
+die op deze GET niet actief is. De productiecompositie bindt identity en workflow
+aan dezelfde verbinding. Dit vervangt de voorafgaande losse `FOR SHARE`-read door
+een verse read in hetzelfde snapshot als deelname en eventbewijs. De canonieke
+publicatiestatus blijft na sluiting van die transactie gelezen. Een extra queryjoin
+of accountcache is niet nodig; opslag- en autorisatie-eigenaren blijven gelijk.
+
 Wanneer het bestaande passagevenster documentvorming afzonderlijk laat beoordelen,
 blijft de geselecteerde documentbeoordeling met één link in de bronpaneelvoet
 bereikbaar. Deze link gebruikt dezelfde Vorming-route en vereist geen extra reads;
