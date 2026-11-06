@@ -5,7 +5,9 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Iterable
 
-from src.knowledge_relations_v1 import confirmed_knowledge_relations_of, validate_knowledge_relation_set
+from src.knowledge_relations_v1 import (
+    SEMANTIC_RELATION_TYPES, confirmed_knowledge_relations_of, validate_knowledge_relation_set,
+)
 from src.review.knowledge_object_state_v1 import (
     KO_STATES, GEPUBLICEERD, INGETROKKEN, VERVANGEN, AFGEWEZEN,
     GOEDGEKEURD, TWEEDE_REVIEW, derive_ko_state, is_knowledge_object,
@@ -89,26 +91,31 @@ def command_assessment(assessment, interaction_evidence):
 
 
 def confirmed_support(obj: dict[str, Any], objects: Iterable[dict[str, Any]]) -> bool:
+    from src.vorming.knowledge_relation_proposal_v1 import relation_endpoint_compatible
     relations = confirmed_knowledge_relations_of(obj)
     if validate_knowledge_relation_set(relations, source_object_id=str(obj.get('object_id') or ''),
                                        source_object_version=str(obj.get('object_version') or '')):
         _refuse('knowledge_relation_source_version_stale')
     peers = {str(row.get('object_id') or ''): row for row in objects}
+    source_type = str(obj.get('confirmed_object_type') or obj.get('proposed_object_type') or obj.get('object_type') or '')
+    linked = False
     for relation in relations:
-        if relation.get('relation_type') not in EVIDENCE_RELATION_TYPES:
+        if relation.get('relation_type') not in SEMANTIC_RELATION_TYPES:
             continue
         peer = peers.get(str(relation.get('target_object_id') or ''))
-        from src.vorming.knowledge_relation_proposal_v1 import relation_endpoint_compatible
-        source_type = str(obj.get('confirmed_object_type') or obj.get('proposed_object_type') or obj.get('object_type') or '')
-        target_type = str((peer or {}).get('confirmed_object_type') or (peer or {}).get('proposed_object_type') or (peer or {}).get('object_type') or '')
-        if (peer is not None and relation_endpoint_compatible(relation['relation_type'],
-                source_type=source_type, target_type=target_type)
+        if peer is None:
+            _refuse('knowledge_relation_target_missing')
+        if str(peer.get('object_version') or '') != str(relation.get('target_object_version') or ''):
+            _refuse('knowledge_relation_target_stale')
+        target_type = str(peer.get('confirmed_object_type') or peer.get('proposed_object_type') or peer.get('object_type') or '')
+        if not relation_endpoint_compatible(relation['relation_type'], source_type=source_type, target_type=target_type):
+            _refuse('knowledge_relation_endpoint_type_invalid')
+        if (relation['relation_type'] in EVIDENCE_RELATION_TYPES
                 and peer.get('object_id') != obj.get('object_id')
-                and str(peer.get('object_version') or '') == str(relation.get('target_object_version') or '')
                 and (peer.get('content') or {}).get('clean_text')
                 and (peer.get('governance') or {}).get('validation_status') not in {'rejected', 'superseded'}):
-            return True
-    return False
+            linked = True
+    return linked
 
 
 def supporting_evidence(obj, objects, *, not_applicable=False):

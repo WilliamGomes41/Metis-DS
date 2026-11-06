@@ -60,6 +60,14 @@ compatibility cases. Contradictory answer carriers also refuse before saving.
 The converse KO-to-structural bundle case was restored without weakening its
 original source, per-member review or publication assertions.
 
+A later independent native run found that N/A could bypass an incompatible
+confirmed semantic endpoint during second review of an existing exact binding.
+All confirmed semantic endpoints now undergo the existing D4 compatibility and
+current-target checks before N/A is considered. Validation visits the whole
+set even after finding valid support. Native regression first failed because
+no refusal occurred; the targeted command/receipt/reviewer suite then passed
+70 cases in 32.41s. Exact-final-head independent closure remains required.
+
 Independent browser runs found a hidden N/A control caused by reusing an
 adjustment-only CSS class, and an inherited header overflow at 768px. Both
 were fixed and verified with native keyboard/geometry checks. The further

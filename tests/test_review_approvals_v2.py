@@ -420,6 +420,7 @@ def test_every_required_reviewer_supplies_own_answers_and_evidence_choice(kernel
                 object_id=object_id, **values)
         assert refused.value.code == code
         assert physical_state(console, sid) == before
+
         assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
     for actor, expected in [('carla', 'Tweede review'), ('dirk', 'Goedgekeurd')]:
         console.approve_second_review(actor_id=ids[actor], snapshot_id=sid, object_id=object_id,
@@ -434,3 +435,45 @@ def test_every_required_reviewer_supplies_own_answers_and_evidence_choice(kernel
                 assessment={**affirmative_assessment(), 'complete': 'adjust'}, evidence_not_applicable=True)
         assert refused.value.code == 'review_assessment_requires_three_yes'
         assert physical_state(console, sid) == before
+
+
+@pytest.mark.parametrize('invalid_kind', ['explains', 'supersedes'])
+def test_second_review_na_cannot_bypass_an_incompatible_confirmed_endpoint(kernel, invalid_kind):
+    from copy import deepcopy
+    from src.integrity_kernel import compute_canonical_object_hash, stamp_canonical_hashes
+    from src.knowledge_relations_v1 import build_knowledge_relation, canonicalize_knowledge_relation_set
+    from tests.semantic_fixture_support import install_fixture_history
+    from tests.test_review_command_bounded_http_v1 import physical_state
+    console, ids = kernel
+    sid = _ingest(console, ids, _choice('two_others', [ids['bert'], ids['carla']], four_eyes=True))['snapshot_id']
+    object_id = _approve_as_exception(console, sid, ids['bert'])
+    history = console._load_objects(sid)
+    claim = next(row for row in reversed(history) if row['object_id'] == object_id)
+    peer = next(row for row in console.snapshot_objects(sid)
+                if row['object_id'] != object_id and row.get('object_type') not in {'document', 'heading'})
+    for row in history:
+        if (row['object_id'], row['object_version']) == (peer['object_id'], peer['object_version']):
+            row['confirmed_object_type'] = 'definition'
+            row['governance']['validation_status'] = 'needs_review'
+            stamp_canonical_hashes(row)
+    kinds = [invalid_kind] if invalid_kind == 'explains' else ['supported_by', invalid_kind]
+    claim['confirmed_knowledge_relations'] = canonicalize_knowledge_relation_set([
+        build_knowledge_relation(source_object_id=object_id, source_object_version=claim['object_version'],
+            relation_type=kind, target_object_id=peer['object_id'], target_object_version=peer['object_version'])
+        for kind in kinds], source_object_id=object_id, source_object_version=claim['object_version'])
+    stamp_canonical_hashes(claim)
+    claim['governance']['review_snapshot_hash'] = compute_canonical_object_hash(claim)
+    bindings = console.object_review_bindings(sid)
+    for binding in bindings:
+        if binding['object_id'] == object_id:
+            binding['canonical_object_hash'] = compute_canonical_object_hash(claim)
+    install_fixture_history(console, sid, history)
+    console.workflow_review_store.replace_snapshot_bindings(sid, bindings)
+    before = deepcopy(physical_state(console, sid))
+    events = console.workflow_review_store.read_events_for_snapshots([sid])
+    with pytest.raises(ConsoleError) as refused:
+        console.approve_second_review(actor_id=ids['carla'], snapshot_id=sid, object_id=object_id,
+            assessment=affirmative_assessment(), evidence_not_applicable=True)
+    assert refused.value.code == 'knowledge_relation_endpoint_type_invalid'
+    assert physical_state(console, sid) == before
+    assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
