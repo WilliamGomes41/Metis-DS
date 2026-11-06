@@ -15,9 +15,9 @@ const assert = require('node:assert/strict');
       overflow: document.documentElement.scrollWidth > innerWidth,
       stylesheet: [...document.styleSheets].some(s => s.href?.includes('/brand/console.css') && s.cssRules.length),
       nestedForms: !!document.querySelector('form form'),
-      context: document.querySelector('[data-passage-context]')?.innerText,
-      contextTop: document.querySelector('[data-passage-context]')?.getBoundingClientRect().top,
-      menuBottom: document.querySelector('.topbar')?.getBoundingClientRect().bottom,
+      context: document.querySelector('[data-passage-context], [data-document-context]')?.innerText,
+      contextTop: document.querySelector('[data-passage-context], [data-document-context]')?.getBoundingClientRect().top,
+      menuBottom: document.querySelector('.topbar, .ko-topbar')?.getBoundingClientRect().bottom,
     }));
     assert.equal(data.overflow, false);
     assert.equal(data.nestedForms, false);
@@ -28,6 +28,13 @@ const assert = require('node:assert/strict');
     }
     fs.writeFileSync(`${process.env.METIS_BROWSER_OUTPUT}/${stage}-${width}.json`, JSON.stringify(data, null, 2));
     await page.screenshot({path: `${process.env.METIS_BROWSER_OUTPUT}/${stage}-${width}.png`, fullPage: true});
+  }
+  async function openContextEvidence() {
+    const evidence = page.locator('.ko-evidence');
+    if (await evidence.count() && !await evidence.evaluate(element => element.open)) {
+      await evidence.locator(':scope > summary').focus();
+      await page.keyboard.press('Enter');
+    }
   }
   async function submit(form) {
     await form.locator('textarea[name=reason]').fill('Gecontroleerd in de oorspronkelijke bron.');
@@ -40,13 +47,14 @@ const assert = require('node:assert/strict');
     await proof('passage', width);
     assert.equal(await page.locator('form[action="/review/source-context"]').count(), 0);
     assert.equal(await page.locator('[data-context-picker]').count(), 0);
+    await openContextEvidence();
     await page.getByRole('link', {name: 'Broncontext vastleggen of aanpassen in Vorming'}).focus();
     await Promise.all([
       page.waitForURL(url => url.pathname === '/source-selection'),
       page.keyboard.press('Enter'),
     ]);
     assert.equal(new URL(page.url()).pathname, '/source-selection');
-    assert.equal(await page.locator('[data-review-form]').count(), 0);
+    assert.equal(await page.locator('[data-review-form], [data-ko-assessment-form]').count(), 0);
     await page.locator('[data-context-picker] > summary').click();
     const choice = page.locator('[data-context-picker] .context-choice').filter({has: page.locator(`a[href*="object=${m.source_id}"]`)}).first();
     const group = choice.locator('xpath=..');
@@ -66,6 +74,7 @@ const assert = require('node:assert/strict');
     assert.equal(saved.links[0].text, 'DOEN');
     assert.equal(saved.target_status, 'needs_review');
     await proof('vastgelegde-context', width);
+    await openContextEvidence();
     await page.getByRole('link', {name: 'Koppeling aanpassen of verwijderen'}).click();
     const exclude = page.locator('[data-context-action=excluded]');
     await exclude.locator('summary').click();

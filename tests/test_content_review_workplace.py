@@ -82,7 +82,8 @@ def test_one_mixed_workplace_actor_routes_exact_commands_and_restart(tmp_path, m
     assert a.post('/review/normal-risk/batch-confirm', data=batch).status_code == 409
     assert snapshot(console, docs) == after
     second_page = b.get('/review', params=dict(document=doc['second_snapshot'], object=doc['second'], task='second_review'))
-    second = form_data(second_page, '/review/second-review'); second['action'] = 'approve'
+    from tests.test_ko_new_pages import compact_submission
+    second = compact_submission(second_page)
     assert b.post('/review/second-review', data=second, follow_redirects=False).status_code == 303
     final = deepcopy(snapshot(console, docs))
     assert snapshot(restart_production(console), docs) == final

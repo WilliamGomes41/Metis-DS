@@ -135,3 +135,9 @@ richting of brongebonden sterke/zwakke semantiek van. Een aanwezig ongeldig
 of ongemapt modern record blijft geblokkeerd en valt niet op legacy terug.
 Ontbreken beide vormen, dan blijft goedkeuren geblokkeerd. Dit behoudt een
 bestaande geldige opdracht zonder een nieuwe modus op te slaan.
+
+De bestaande geïmporteerde benchmarkharness blijft actief als regressieproef.
+Zijn passageweergave verlangt nu in beide vormingstoestanden dezelfde DTO-tag
+`document_assessment=not_evaluated`: afgeronde kennisvorming is geen volledige
+documentbeoordeling door het passagevenster. De numerieke budgets, bron- en
+archiefspies, closurevoorwaarden en historische meetresultaten veranderen niet.

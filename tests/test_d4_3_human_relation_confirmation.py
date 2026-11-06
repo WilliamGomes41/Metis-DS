@@ -422,8 +422,6 @@ def test_review_ui_shows_version_bound_relations_with_three_explicit_answers(tmp
     assert len(answers) == 6
     assert {item['name'] for item in answers} == {'applicable', 'complete', 'placed_correctly'}
     assert not any('checked' in item for item in answers)
-    # The displayed target must be the actual version-bound proposal. Kernel
-    # confirmation and stale-target rejection remain covered by the tests above.
     current = _rows(console, snapshot_id)[COND]
     assert proposals[0]['target_object_id'] == current['object_id']
     assert proposals[0]['target_object_version'] == current['object_version']

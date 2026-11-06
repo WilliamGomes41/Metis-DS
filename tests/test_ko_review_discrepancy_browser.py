@@ -1,4 +1,4 @@
-"""Actual recommendation controls follow the existing suitability contract.
+"""Legacy recommendation controls retain the existing suitability contract.
 
 # release-control-evidence: scope/belofte
 # release-control-evidence: toegang
@@ -13,6 +13,9 @@ import subprocess
 import pytest
 
 from tests.test_ko_receipt_ui import prepared
+from src.operations_console_app import _page, _render_review_card
+from src.review.beslisboom_path_v1 import review_path_for_klasse
+from src.review.review_passage_read_v1 import read_review_passage
 
 
 @pytest.mark.skipif(not os.environ.get('METIS_BROWSER_EXECUTABLE'), reason='Chromium verification is opt-in')
@@ -21,7 +24,13 @@ def test_closed_recommendation_discrepancy_controls(tmp_path, production_console
     console, sid, reviewer, obj, client, page, data = prepared(tmp_path, production_console, monkeypatch)
     assert page.status_code == 200
     source = tmp_path / 'review.html'
-    source.write_text(page.text)
+    inputs = read_review_passage(console, console._account(reviewer), sid, obj['object_id'])
+    legacy = _page(_render_review_card(
+        console, sid, obj, inputs.objects, review_path_for_klasse(inputs.envelope['class']),
+        {}, '', snapshot_revision=inputs.revision, read_inputs=inputs))
+    assert 'data-review-form' in legacy
+    assert 'data-ko-assessment-form' not in legacy
+    source.write_text(legacy)
     script = tmp_path / 'review.cjs'
     script.write_text('''
 const {chromium}=require(process.env.METIS_PLAYWRIGHT_MODULE || 'playwright');

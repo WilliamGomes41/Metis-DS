@@ -454,8 +454,6 @@ def test_stamps_bind_to_recommendation_not_objects_or_koppen(tmp_path: Path, *, 
     ).text
     form = _compact_review_form(card)
     assert not any(item.get('name') in {'recommendation_strength', 'recommendation_direction', 'recommendation_strength_level'} for item in form['inputs'])
-    # The stamp stays source context; this historical fixture has no mapped
-    # recommendation semantics and must not silently acquire a strength.
     assert '<p class="ko-interpretation">' not in card
     assert form['attrs']['data-can-approve'] == 'false'
     assert 'De passage kan nu niet worden goedgekeurd.' in card
