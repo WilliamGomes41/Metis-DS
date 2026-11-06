@@ -810,6 +810,9 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         if not chosen or (not object.strip() and not chosen_task):
             rendered = _workboard_page(console, account=account, snapshot_id=chosen, q=q, page=page, theme=theme)
             return rendered
+        back = "/review?" + urlencode({"document": chosen, "q": q, "page": page})
+        if theme:
+            back += '&' + urlencode({'theme': theme})
         rendered = _render_review_room(
             console,
             account,
@@ -822,11 +825,9 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             read_inputs=read_inputs,
             queue_page=queue_page,
             review_revision=review_revision,
+            overview_url=back if q or page != 1 or theme else '',
         )
 
-        back = "/review?" + urlencode({"document": chosen, "q": q, "page": page})
-        if theme:
-            back += '&' + urlencode({'theme': theme})
         if q or page != 1 or theme:
             suffix = _esc(urlencode({'q': q, 'page': page, 'theme': theme}))
             # Match each complete attribute once; overlapping wildcards around

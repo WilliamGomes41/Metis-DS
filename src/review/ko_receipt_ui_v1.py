@@ -277,6 +277,7 @@ def render_ko_receipt(receipt):
 def render_receipt_page(account, receipt, snapshot_id, continuation):
     from src.review.ko_review_page_v1 import review_page_shell, source_breadcrumb
     from src.review.review_assessment_v1 import ReviewAssessment
+    from src.review.knowledge_object_state_v1 import GOEDGEKEURD
     from src.operations_console_app import _object_type_label
     overview = '/review?' + urlencode({'document': snapshot_id})
     if receipt is None:
@@ -312,6 +313,7 @@ def render_receipt_page(account, receipt, snapshot_id, continuation):
             '<div class="ko-branch-body"><h3>' + title + '</h3>' + text + '</div></li>')
     publication = {'none': 'Nog niet gepubliceerd', 'published': 'Gepubliceerd',
                    'withdrawn': 'Ingetrokken', 'superseded': 'Vervangen'}.get(receipt.publication_state, 'Niet vastgesteld')
+    status_class = 'ko-status' + ('' if receipt.current_review_state == GOEDGEKEURD else ' ko-status-neutral')
     old_version = receipt.current_version != saved_version
     current_note = ('<p class="ko-notice">Er is inmiddels een nieuwere versie ' + escape(receipt.current_version)
         + '. Deze bon blijft horen bij de opgeslagen handeling op versie ' + escape(saved_version) + '.</p>') if old_version else ''
@@ -323,7 +325,7 @@ def render_receipt_page(account, receipt, snapshot_id, continuation):
         + source_breadcrumb(snapshot_id, obj, title=receipt.document_title) + current_note
         + '<div class="ko-result-layout"><section class="ko-result-main"><dl class="ko-result-metadata">'
         '<div><dt>Kennisobject</dt><dd><strong>' + escape((obj.get('structure') or {}).get('section_path', [''])[-1] if (obj.get('structure') or {}).get('section_path') else _object_type_label(str(obj.get('confirmed_object_type') or obj.get('object_type') or '')))
-        + '</strong></dd></div><div><dt>Actuele reviewstatus</dt><dd><span class="ko-status">' + escape(receipt.current_review_state)
+        + '</strong></dd></div><div><dt>Actuele reviewstatus</dt><dd><span class="' + status_class + '">' + escape(receipt.current_review_state)
         + '</span></dd></div><div><dt>Opgeslagen versie</dt><dd>Versie ' + escape(saved_version)
         + '</dd></div><div><dt>Publicatie document</dt><dd><span class="ko-status ko-status-neutral">' + escape(publication)
         + '</span></dd></div></dl><section class="ko-result-diagram" aria-label="Samenhang van het opgeslagen kennisobject"><h2>Zo is het kennisobject vastgelegd</h2>'

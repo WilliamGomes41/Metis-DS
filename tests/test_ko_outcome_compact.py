@@ -50,6 +50,8 @@ def test_known_outcome_strength_is_visible_saved_and_unchanged_by_second_review(
     assert saved.status_code == 303, saved.text
     receipt = read_saved_review(console, accounts['researcher'], sid, obj['object_id'], first['interaction_id'])
     assert receipt.object['confirmed_recommendation_strength'] == 'doen'
+    first_bon = client.get(saved.headers['location'])
+    assert '<span class="ko-status ko-status-neutral">Tweede review</span>' in first_bon.text
     assert receipt.event['details']['review_interaction']['assessment'] == ReviewAssessment('yes', 'yes', 'yes').as_evidence()
     version, digest = receipt.object['object_version'], compute_canonical_object_hash(receipt.object)
     second_page = open_outcome(client, sid, obj)

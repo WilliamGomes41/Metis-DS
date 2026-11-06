@@ -109,3 +109,20 @@ behalve de bestaande `is_geen_actie_outcome`-vrijstelling; daarbij blijft de
 bestaande kernel eigenaar van het vastleggen van geen actie. Een tweede
 beoordeling bevestigt uitsluitend dezelfde bestaande tuple en wijzigt geen
 sterkte.
+
+De nieuwe pagina behoudt de bestaande betekenisdragende herstelcontext zonder
+het oude formulier terug te plaatsen. De huidige bovenliggende kop komt uit
+de al vastgelegde `parent_object_id` en het vastgelegde kopobject; de originele
+bronstructuur links blijft daarvan onderscheiden. Een terugkeer uit Vorming
+vergelijkt de meegedragen `review_revision` met de actuele DTO en waarschuwt
+bij verschil; de nieuwe vragen starten dan zonder antwoorden. De bestaande
+berekende overzichts-URL behoudt alleen de al ondersteunde zoek-/paginafilters.
+
+In de bestaande bewijsdisclosure staan de echte links en problemen van
+`source_context_review_v1.projection`, met de bestaande contextbewerkroute in
+Vorming. Die disclosure staat automatisch open bij nog niet elders getoonde
+context of ongeldige koppelingen. Bestaande letterlijke bronaanvulvoorstellen
+tonen hun ontbrekende tekst en verwijzen naar de bestaande continuation-route.
+Een queryparameter als `context_saved` geldt niet als opslagbewijs. De
+bestaande four-eyes-helper toont uitsluitend een werkelijk vereiste tweede
+beoordeling; er ontstaat geen universele verplichting.

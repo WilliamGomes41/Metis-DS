@@ -24,13 +24,13 @@ def review_page_shell(account, body, *, title='Review'):
                  title=title + ' · Metis', stylesheets=('ko-review.css',))
 
 
-def source_breadcrumb(snapshot_id, obj, *, title='', task=''):
+def source_breadcrumb(snapshot_id, obj, *, title='', task='', overview_url=''):
     parts = [part.strip() for part in found_under_path(obj).split(' › ') if part.strip()]
     if title and (not parts or parts[0] != title):
         parts.insert(0, title)
     if not parts:
         parts = [title or 'Document']
-    document = '/review?' + urlencode({'document': snapshot_id, **({'task': task} if task else {})})
+    document = overview_url or '/review?' + urlencode({'document': snapshot_id, **({'task': task} if task else {})})
     source = '/review/bronpassage?' + urlencode({'document': snapshot_id, 'object': obj['object_id']})
     return '<nav class="ko-breadcrumb" aria-label="Bronpad">' + '<span aria-hidden="true">/</span>'.join(
         f'<a href="{escape(document if index == 0 else source, quote=True)}">{escape(part)}</a>'
@@ -75,8 +75,7 @@ def summary_rows(obj, objects, descriptor=None, *, review_path='richtlijn'):
     return {label: list(dict.fromkeys(values)) for label, values in rows.items()}
 
 
-def _summary_table(obj, objects, descriptor, review_path):
-    rows = summary_rows(obj, objects, descriptor, review_path=review_path)
+def _summary_table(rows):
     missing = {'Doelgroep': 'Niet afzonderlijk vermeld.', 'Voorwaarde': 'Niet afzonderlijk vastgelegd.',
                'Uitzondering': 'Niet afzonderlijk vastgelegd.', 'Bij deze uitzondering': 'Niet afzonderlijk vastgelegd.',
                'Onderbouwing': 'Niet afzonderlijk gekoppeld.'}
@@ -111,13 +110,69 @@ def _additional_relations(descriptor):
     return '<ul>' + ''.join(items) + '</ul>' if items else ''
 
 
-def render_review_page(console, account, inputs, obj, *, task='', draft=None, error='', conflict=False):
+def _context_evidence(obj, objects, snapshot_id, revision, shown):
+    from src.review.source_context_review_v1 import projection
+    context = projection(obj, objects)
+    by_id = {row['object_id']: row for row in objects}
+    owner = '/source-selection?' + urlencode({'document': snapshot_id, 'object': obj['object_id'],
+                                              'review_revision': revision}) + '#passage-context'
+    rows = []
+    if context['issues']:
+        rows.append('<p class="ko-notice" role="alert">Een koppeling verwijst naar gewijzigde of ontbrekende tekst. '
+                    'Controleer de koppeling opnieuw; deze telt nu niet als geldig contextbewijs.</p>')
+    if context['links']:
+        rows.append('<section data-confirmed-source-context><h3>Context die bij deze passage is vastgelegd</h3>')
+        for link in context['links']:
+            text = str(link.get('text') or '')
+            label = 'Bronlabel' if link.get('role') == 'label' else 'Contextfragment'
+            rows.append('<p><strong>' + label + '</strong> · versie '
+                + escape(str(link.get('source_object_version') or '')) + '</p>')
+            if text not in shown:
+                rows.append('<p class="context-literal">' + escape(text) + '</p>')
+            rows.append('<p>' + escape(str(link.get('reason') or '')) + '</p>')
+            if link.get('source_object_id') in by_id:
+                adjust = '/source-selection?' + urlencode({'document': snapshot_id,
+                    'object': link['source_object_id'], 'context_target': obj['object_id'],
+                    'context_mode': 'source', 'review_revision': revision}) + '#passage-context'
+                rows.append('<p><a href="' + escape(adjust, quote=True) + '">Koppeling aanpassen of verwijderen</a></p>')
+            else:
+                rows.append('<p>De contextbron ontbreekt. Laat de beheerder de bronverwijzing controleren.</p>')
+        rows.append('</section>')
+    rows.append('<p><a href="' + escape(owner, quote=True)
+                + '">Broncontext vastleggen of aanpassen in Vorming</a></p>')
+    unseen = any(str(link.get('text') or '') not in shown for link in context['links'])
+    return ''.join(rows), bool(unseen or context['issues'])
+
+
+def _continuation_proposal(obj, snapshot_id, revision, task):
+    from src.vorming.admission_gate_v1 import admission_of
+    proposal = admission_of(obj).get('expand_merge') or {}
+    merged = str(proposal.get('merged_text') or '').strip()
+    current = str((obj.get('content') or {}).get('clean_text') or '')
+    if proposal.get('kind') != 'sentence_continuation' or not merged or ' '.join(merged.split()) == ' '.join(current.split()):
+        return ''
+    parts = list(proposal.get('parts') or [])
+    missing = str(parts[1] if len(parts) > 1 else '').strip()
+    owner = '/source-selection?' + urlencode({'document': snapshot_id, 'object': obj['object_id'],
+        'task': 'continuation', 'return_task': task, 'review_revision': revision})
+    return ('<aside class="ko-notice source-continuation-proposal" aria-label="Voorstel om afgebroken zin te herstellen">'
+        '<h3>Voorstel: afgebroken zin aanvullen</h3><p><strong>Ontbrekende brontekst:</strong> ' + escape(missing)
+        + '</p><p><strong>Herstelde passage:</strong> ' + escape(merged)
+        + '</p><p>Na aanvullen ontstaat een nieuwe versie. Die moet opnieuw worden beoordeeld.</p>'
+        '<a href="' + escape(owner, quote=True) + '">Bronaanvulling herstellen in Vorming</a></aside>')
+
+
+def render_review_page(console, account, inputs, obj, *, task='', draft=None, error='', conflict=False,
+                       origin_revision='', overview_url=''):
     from src.operations_console_app import _object_type_label, _source_bound_fields_html, new_review_interaction_id
     from src.review.review_assessment_v1 import displayed_review_descriptor
     from src.review.knowledge_object_state_v1 import derive_ko_state
     from src.review.review_duty_v1 import reviewer_route_for
     from src.review.beslisboom_path_v1 import review_path_for_klasse
     draft = draft or {}
+    origin_changed = bool(origin_revision and origin_revision != inputs.revision)
+    if origin_changed:
+        draft = {key: value for key, value in draft.items() if key not in {'applicable', 'complete', 'placed_correctly'}}
     sid = inputs.envelope['snapshot_id']
     path = review_path_for_klasse(inputs.envelope['class'])
     route = reviewer_route_for(obj, review_path=path, reviewer_id=account['account_id'],
@@ -134,7 +189,13 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     state = derive_ko_state(obj, review_path=path, bindings=inputs.bindings, fragments=inputs.fragments)['state']
     repair = '/source-selection?' + urlencode({'document': sid, 'object': obj['object_id'], 'task': 'repair',
                                               'review_revision': inputs.revision})
-    place = escape(found_under_path(obj)) + ' <span aria-hidden="true">·</span> <a href="' + escape(repair, quote=True) + '">Andere plek kiezen</a>'
+    parent = next((row for row in inputs.objects if row['object_id'] == descriptor.parent_id), None)
+    if parent is not None:
+        from src.vorming.heading_parent_list_v1 import heading_visible_text
+        placement = '<span data-current-parent="' + escape(descriptor.parent_id, quote=True) + '">Actuele kop: <strong>' + escape(heading_visible_text(parent)) + '</strong></span>'
+    else:
+        placement = 'Geen bovenliggende kop vastgelegd.' if not descriptor.parent_id else 'De actuele kop kon niet worden bevestigd.'
+    place = placement + ' <span aria-hidden="true">·</span> <a href="' + escape(repair, quote=True) + '">Andere plek kiezen</a>'
     fields = {'snapshot_id': sid, 'object_id': obj['object_id'], 'snapshot_revision': inputs.revision,
               'interaction_id': new_review_interaction_id(), 'return_task': task,
               'review_ui': 'compact-v1'}
@@ -163,25 +224,33 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
         message = ('De passage kan nu niet worden goedgekeurd. Bekijk de bron of kies een gerichte correctie.'
                    if inputs.source_available else 'De oorspronkelijke bron kon niet worden bevestigd. Goedkeuren is geblokkeerd.')
         notice = '<p class="ko-notice" role="status">' + message + '</p>'
+    if origin_changed:
+        notice += '<p class="ko-notice" data-review-return-changed role="status">De revisie is gewijzigd sinds je naar Vorming ging. Controleer het huidige voorstel en beoordeel deze versie opnieuw.</p>'
+    from src.review.four_eyes_v1 import requires_four_eyes
+    required_second = requires_four_eyes(obj, confirmed_type=descriptor.object_type)
+    rows = summary_rows(obj, inputs.objects, descriptor, review_path=path)
+    shown = {text for values in rows.values() for text, _status, _origin in values}
+    context_html, context_open = _context_evidence(obj, inputs.objects, sid, inputs.revision, shown)
     heading = 'Onafhankelijke tweede review' if second else 'Review'
     rejection = ('' if second else
         '<details class="ko-reject"><summary>Afwijzen</summary><label>Toelichting bij afwijzing<textarea name="comment">'
         + escape(str(draft.get('comment') or '')) + '</textarea></label>'
         '<button class="ko-text-button" type="submit" name="review_action" value="reject" formnovalidate>Afwijzen met toelichting</button></details>')
     body = ('<header class="ko-page-heading"><h1>' + heading + '</h1>'
-            + source_breadcrumb(sid, obj, title=inputs.envelope.get('title') or '', task=task or canonical_task)
+            + source_breadcrumb(sid, obj, title=inputs.envelope.get('title') or '', task=task or canonical_task, overview_url=overview_url)
             + '<p class="ko-progress">Te beoordelen passage <span aria-hidden="true">·</span> '
             '<strong data-ko-state>' + escape(state or 'Broncontext') + '</strong>'
-            + (' <span aria-hidden="true">·</span> Onafhankelijk tweede akkoord' if second else '') + '</p></header>'
+            + (' <span aria-hidden="true">·</span> Onafhankelijk tweede akkoord' if second else '')
+            + (' <span data-required-second-review>Er is een onafhankelijke tweede beoordeling nodig.</span>' if required_second and not second else '') + '</p></header>'
             + notice + '<div class="ko-review-layout" data-document-assessment="'
             + escape(inputs.document_assessment, quote=True) + '">'
             + _source_panel(console, inputs, obj, task=task)
             + '<section class="ko-object-panel" aria-labelledby="ko-object-title"><h2 id="ko-object-title">Te beoordelen kennisobject</h2>'
             '<p class="ko-claim" data-full-knowledge-passage data-reviewed-version="' + escape(descriptor.object_version, quote=True) + '">'
             + escape(descriptor.text) + '</p><p class="ko-type">' + escape(_object_type_label(descriptor.object_type)) + '</p>'
-            + semantics + _summary_table(obj, inputs.objects, descriptor, path)
-            + '<details class="ko-evidence"><summary>Bekijk gekoppelde onderbouwing en bronbewijs</summary>'
-            + _additional_relations(descriptor) + _source_bound_fields_html(obj) + '</details>'
+            + semantics + _continuation_proposal(obj, sid, inputs.revision, task) + _summary_table(rows)
+            + '<details class="ko-evidence"' + (' open' if context_open else '') + '><summary>Bekijk gekoppelde onderbouwing, broncontext en bronbewijs</summary>'
+            + context_html + _additional_relations(descriptor) + _source_bound_fields_html(obj) + '</details>'
             + '<form method="post" action="' + ('/review/second-review' if second else '/review')
             + '" class="ko-assessment-form" data-ko-assessment-form data-can-approve="' + str(can_approve).lower() + '">'
             + hidden

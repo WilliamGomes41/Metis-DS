@@ -3381,6 +3381,7 @@ def _render_review_room(
     read_inputs=None,
     queue_page: int = 1,
     review_revision: str = "",
+    overview_url: str = "",
 ) -> str:
     reviewer_id = str(account.get("account_id") or "")
     chosen = document.strip()
@@ -3460,7 +3461,8 @@ def _render_review_room(
                     focused_inputs = ReviewPassageInputs(chosen_row, snapshot_objects, local_bindings,
                         snapshot_revision, local_fragments, source_available)
                 return render_review_page(console, account, focused_inputs, obj,
-                    task=chosen_task, draft=draft, conflict=conflict)
+                    task=chosen_task, draft=draft, conflict=conflict,
+                    origin_revision=review_revision, overview_url=overview_url)
             objects_html += '<h2>Kennisvoorstellen beoordelen</h2>'
             if review_revision and review_revision != snapshot_revision:
                 objects_html += '<p class="banner warn" data-review-return-changed>De revisie is gewijzigd sinds je naar Vorming ging. Controleer het huidige voorstel en beoordeel deze versie opnieuw.</p>'

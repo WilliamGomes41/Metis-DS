@@ -21,7 +21,7 @@
 .ko-page h2 { font-size: 19px; color: #087e96; }
 .ko-page h3 { font-size: 15px; color: var(--text); }
 .ko-breadcrumb { display: flex; gap: 16px; flex-wrap: wrap; margin: 6px 0 10px; }
-.ko-progress { margin: 8px 0 24px; display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.ko-progress { margin: 8px 0 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 14px; }
 .ko-review-layout { display: grid; grid-template-columns: minmax(0, .97fr) minmax(0, 1.03fr); gap: 16px; align-items: stretch; }
 .ko-page .ko-document-context, .ko-object-panel { min-width: 0; border: 1px solid var(--line); border-radius: 12px; }
 .ko-page .ko-document-context { margin: 0; background: var(--water-light); padding: 16px 18px; }
