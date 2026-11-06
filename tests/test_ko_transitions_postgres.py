@@ -94,6 +94,65 @@ def test_negative_answers_cannot_replay_a_previous_approval(tmp_path, production
     assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
 
 
+def test_actual_command_refuses_wrong_prepared_poststate_before_commit(tmp_path, production_console, monkeypatch):
+    from src import operations_console_v1 as module
+    console, sid = _console(tmp_path, production_console=production_console)
+    target = next(row for row in console.snapshot_objects(sid) if content_reviewable(row))
+    original = module._apply_review_state
+    def wrong_result(*args, **kwargs):
+        rows, report = original(*args, **kwargs)
+        for row in rows:
+            if row['object_id'] == target['object_id']:
+                row['governance']['validation_status'] = 'rejected'
+        return rows, report
+    monkeypatch.setattr(module, '_apply_review_state', wrong_result)
+    before = deepcopy(physical_state(console, sid))
+    events = console.workflow_review_store.read_events_for_snapshots([sid])
+    with pytest.raises(ConsoleError) as refused:
+        _approval(console, sid, target, assessment=YES, evidence_not_applicable=True)
+    assert refused.value.code == 'ko_transition_result_invalid'
+    assert physical_state(console, sid) == before
+    assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
+
+
+@pytest.mark.parametrize('kind', ['missing_answers', 'missing_evidence', 'explicit_conversion', 'structure'])
+def test_path_to_node_enters_ko_guards_while_true_structure_remains_exempt(tmp_path, production_console, kind):
+    from src.review.review_duty_v1 import authoritative_review_type
+    from src.review.knowledge_object_state_v1 import is_knowledge_object
+    from tests.test_v225_beslisboom_path import _console as boom_console, _accounts, _ingest_boom
+    console = boom_console(tmp_path, production_console=production_console)
+    accounts = _accounts(console)
+    sid = _ingest_boom(console, accounts)['snapshot_id']
+    target = next(row for row in console.snapshot_objects(sid) if authoritative_review_type(row) == 'path')
+    before = deepcopy(physical_state(console, sid))
+    events = console.workflow_review_store.read_events_for_snapshots([sid])
+    kwargs = dict(actor_id=accounts['reviewer']['account_id'], snapshot_id=sid,
+        object_id=target['object_id'], decision='approve',
+        confirmed_object_type='path' if kind == 'structure' else 'node',
+        type_action='type_wijzigen', expected_revision=console.objects_revision(sid))
+    if kind in {'missing_evidence', 'explicit_conversion'}:
+        kwargs['assessment'] = YES
+    if kind == 'explicit_conversion':
+        kwargs['evidence_not_applicable'] = True
+    if kind.startswith('missing_'):
+        with pytest.raises(ConsoleError) as refused:
+            console.review_object(**kwargs)
+        assert refused.value.code == ('review_assessment_required' if kind == 'missing_answers' else 'knowledge_evidence_required')
+        assert physical_state(console, sid) == before
+        assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
+    else:
+        console.review_object(**kwargs)
+        saved = next(row for row in console.snapshot_objects(sid) if row['object_id'] == target['object_id'])
+        assert is_knowledge_object(saved, 'boom') is (kind == 'explicit_conversion')
+        binding = next(row for row in console.object_review_bindings(sid)
+                       if row['object_id'] == target['object_id'] and row.get('valid'))
+        if kind == 'explicit_conversion':
+            assert binding['assessment'] == YES
+            assert binding['supporting_evidence']['applicability'] == 'not_applicable'
+        else:
+            assert 'assessment' not in binding and 'supporting_evidence' not in binding
+
+
 @pytest.mark.parametrize('change_support', [False, True])
 def test_real_support_repair_targets_final_versions_and_allows_approval_without_na(
         tmp_path, production_console, production_app, change_support):
@@ -142,6 +201,58 @@ def test_real_support_repair_targets_final_versions_and_allows_approval_without_
         with pytest.raises(ConsoleError) as refused:
             approve()
         assert refused.value.code in {'knowledge_relation_target_stale', 'knowledge_relation_target_version_mismatch'}
+        assert physical_state(console, sid) == before
+    else:
+        approve()
+        binding = next(row for row in console.object_review_bindings(sid)
+                       if row['object_id'] == claim['object_id'] and row.get('valid'))
+        assert binding['supporting_evidence']['applicability'] == 'linked'
+
+
+@pytest.mark.parametrize('direction', ['outgoing', 'incoming'])
+def test_explains_evidence_uses_claim_to_explanation_direction(tmp_path, production_console, direction):
+    from src.knowledge_relations_v1 import build_knowledge_relation, CONFIRMED_FIELD, PROPOSED_FIELD
+    from src.integrity_kernel import stamp_canonical_hashes
+    from src.review.knowledge_relation_review_v1 import relation_choice_value
+    from tests.semantic_fixture_support import install_fixture_history
+    from tests.test_d4_3_human_relation_confirmation import _console as d4_console, _accounts, _ingest, _rows, REC, EXPL
+    console = d4_console(tmp_path, production_console=production_console)
+    accounts = _accounts(console)
+    sid = _ingest(console, accounts)['snapshot_id']
+    objects = _rows(console, sid)
+    claim, explanation = objects[REC], objects[EXPL]
+    if direction == 'incoming':
+        console.confirm_object_type(actor_id=accounts['reviewer']['account_id'], snapshot_id=sid,
+            object_id=claim['object_id'], confirmed_object_type='explanation',
+            expected_revision=console.objects_revision(sid))
+        objects = _rows(console, sid)
+        claim, explanation = objects[EXPL], objects[REC]
+    relation = build_knowledge_relation(source_object_id=claim['object_id'],
+        source_object_version=claim['object_version'], relation_type='explains',
+        target_object_id=explanation['object_id'], target_object_version=explanation['object_version'])
+    history = console._load_objects(sid)
+    for row in history:
+        if (row['object_id'], row['object_version']) == (claim['object_id'], claim['object_version']):
+            row[CONFIRMED_FIELD] = [relation]
+            row.pop(PROPOSED_FIELD, None)
+            stamp_canonical_hashes(row)
+        elif (row['object_id'], row['object_version']) == (explanation['object_id'], explanation['object_version']):
+            row.pop(CONFIRMED_FIELD, None)
+            row.pop(PROPOSED_FIELD, None)
+            stamp_canonical_hashes(row)
+    install_fixture_history(console, sid, history)
+    target = claim if direction == 'outgoing' else explanation
+    before = deepcopy(physical_state(console, sid))
+    def approve():
+        return console.review_object(actor_id=accounts['reviewer']['account_id'], snapshot_id=sid,
+            object_id=target['object_id'], decision='approve', assessment=YES,
+            confirmed_object_type='recommendation' if direction == 'outgoing' else 'explanation',
+            relation_choices=[relation_choice_value(relation)] if direction == 'outgoing' else [],
+            relation_review_ack=True, expected_revision=console.objects_revision(sid))
+    if direction == 'incoming':
+        with pytest.raises(ConsoleError) as refused:
+            approve()
+        assert refused.value.code == 'knowledge_evidence_required'
         assert physical_state(console, sid) == before
     else:
         approve()

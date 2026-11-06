@@ -134,10 +134,11 @@ def apply_ko_event(*, current, event, review_path, bindings=(), fragments=None,
                    after_bindings=()):
     if event not in EVENTS:
         _refuse('ko_event_unknown')
-    if not is_knowledge_object(current, review_path):
+    current_is_ko = is_knowledge_object(current, review_path)
+    if not current_is_ko and (prepared is None or not is_knowledge_object(prepared, review_path)):
         return {}
-    state = derive_ko_state(current, review_path=review_path, bindings=bindings,
-                            fragments=fragments)['state']
+    state = (derive_ko_state(current, review_path=review_path, bindings=bindings,
+                            fragments=fragments)['state'] if current_is_ko else 'Kandidaat')
     transition = TRANSITIONS.get((state, event))
     if transition is None or (state == 'Kandidaat' and event == 'approve' and review_path != 'boom'):
         _refuse('ko_transition_refused', f'De handeling {event} is niet toegestaan bij {state}.')
