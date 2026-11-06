@@ -39,6 +39,7 @@ CURATION_BLOCKER_LABELS = {
     "review_disposition_inconsistent": (
         "De reviewuitkomst en de vastgelegde passage-afhandeling zijn niet consistent."
     ),
+    "review_repair_incomplete": "Er staat nog een inhoudelijke correctie open.",
 }
 REVIEW_RECOVERY_BLOCKERS = frozenset(
     {
@@ -133,7 +134,44 @@ def publish_readiness_view(
         "technical_ready": technical_ready,
         "technical_blocker_codes": technical_codes,
         "technical_blockers": [_blocker_view(code, snapshot_id) for code in technical_codes],
+        "object_readiness": [
+            _object_readiness_view(row, snapshot_id)
+            for row in considered.get("object_readiness") or [] if row.get("blockers")
+        ],
     }
+
+
+def _object_readiness_view(row: dict[str, Any], snapshot_id: str) -> dict[str, Any]:
+    priority = ("review_disposition_inconsistent", "review_repair_incomplete",
+                "review_work_incomplete", "source_passage_review_incomplete")
+    code = next((code for code in priority if code in row["blockers"]), row["blockers"][0])
+    reason = _blocker_view(code, snapshot_id)
+    if code == "review_work_incomplete":
+        reason["message"] = ("Een onafhankelijke tweede beoordeling staat nog open."
+            if row.get("review_stage") == "second_review" else "De eerste beoordeling staat nog open.")
+        reason["recovery_href"] += "&object=" + quote(row["object_id"], safe="")
+    elif code == "source_passage_review_incomplete" and row.get("source_closure") == "waiting_on_target":
+        reason["message"] = "Deze bronpassage wacht op een definitief beoordeeld kennisobject."
+    return {**row, "reason": reason}
+
+
+def _object_readiness_list(view: dict[str, Any]) -> str:
+    rows: list[str] = []
+    for row in view.get("object_readiness") or []:
+        reason = row["reason"]
+        recovery = (f' <a class="btn-secondary" href="{_esc(reason["recovery_href"])}">'
+                    f'{_esc(reason["recovery_label"])}</a>') if reason.get("recovery_href") else ""
+        state = row.get("state") or "Bronpassage"
+        text = row.get("text") or "Passage zonder afzonderlijke tekst"
+        rows.append(f'<li data-readiness-object="{_esc(row["object_id"])}" '
+            f'data-ko-state="{_esc(row.get("state") or "")}" data-blocker-code="{_esc(reason["code"])}">'
+            f'<p class="publication-passage-text"><strong>{_esc(text)}</strong></p>'
+            f'<p class="publication-passage-state">{_esc(state)}</p>'
+            f'<div class="publication-next-step"><p>{_esc(reason["message"])}</p>{recovery}</div></li>')
+    if not rows:
+        return ""
+    return ('<section class="section" data-object-readiness><h3>Wat staat nog open per passage?</h3>'
+            '<ul class="stack">' + "".join(rows) + '</ul></section>')
 
 
 def _blocker_list(items: list[dict[str, Any]]) -> str:
@@ -147,7 +185,7 @@ def _blocker_list(items: list[dict[str, Any]]) -> str:
             )
         rows.append(
             f'<li data-blocker-code="{_esc(item["code"])}">'
-            f'{_esc(item["message"])}{recovery}</li>'
+            f'<span>{_esc(item["message"])}</span>{recovery}</li>'
         )
     return f'<ul class="stack">{"".join(rows)}</ul>' if rows else ""
 
@@ -223,7 +261,7 @@ def _render_publish_state(view: dict[str, Any]) -> str:
         noun = "kennisobject" if count == 1 else "kennisobjecten"
         reviewed = "gereviewd" if count == 1 else "gereviewde"
         return f'''
-          <div class="banner ok" data-publication-state="ready">Klaar voor publicatie: {count} {reviewed} {noun}. Review en technische controles zijn afgerond.</div>
+          <div class="banner ok" data-publication-state="ready">Klaar om te publiceren: {count} {reviewed} {noun}. Review en technische controles zijn afgerond.</div>
           <form method="post" action="/publish" class="stack" data-publish-form>
             <input type="hidden" name="snapshot_id" value="{_esc(view['snapshot_id'])}">
             <label class="check"><input type="checkbox" name="publish_confirmed" value="yes" required>
@@ -267,7 +305,8 @@ def _render_publish_state(view: dict[str, Any]) -> str:
     return (
         '<div class="banner warn" data-publication-state="blocked">'
         "Publicatie is nog geblokkeerd. Rond onderstaande punten af.</div>"
-        f'<div class="sections" data-publication-readiness>{"".join(sections)}</div>'
+        + _object_readiness_list(view)
+        + f'<div class="sections" data-publication-readiness>{"".join(sections)}</div>'
     )
 
 
@@ -358,6 +397,7 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
     def publish_get(request: Request, document: str = "") -> str:
         account = _publisher_account(console, request)
         rows: list[str] = []
+        other_rows: list[str] = []
         documents = console.list_document_cards()
         # One canonical metadata read for the complete overview. Failure remains
         # visible as unknown on each card, never a fictional readiness result.
@@ -367,7 +407,7 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
             pass  # _apply_release_state renders the existing explicit unknown state
         for envelope in documents:
             if str(envelope["snapshot_id"]) != document:
-                rows.append(_compact_card(console, envelope))
+                other_rows.append(_compact_card(console, envelope))
                 continue
             try:
                 considered = console.consider_publish(
@@ -398,6 +438,13 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
             )
             rows.append(_card(envelope, view, display_status))
 
+        if rows and other_rows:
+            rows.append('<details class="publication-other-documents"><summary>Andere documenten ('
+                        + str(len(other_rows)) + ')</summary><div class="doc-list">'
+                        + ''.join(other_rows) + '</div></details>')
+        else:
+            rows.extend(other_rows)
+
         success = ""
         if request.query_params.get("published") == "yes":
             success = (
@@ -406,7 +453,7 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
         return _page(
             f'''
             {_nav(account, "publish")}
-            <section class="room">
+            <section class="room publication-room">
               <h1>Publiceren</h1>
               {_task_links("publish")}
               {success}

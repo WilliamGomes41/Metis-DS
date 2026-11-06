@@ -643,6 +643,150 @@ class PostgresCanonicalPublicationStore:
         except Exception as exc:
             raise CanonicalPublicationStoreError("canonical_postgres_write_failed") from exc
 
+    def object_publication_membership(
+        self, snapshot_id: str, object_tuples: list[tuple[str, str, str]],
+    ) -> dict[tuple[str, str, str], dict[str, Any]]:
+        """Read exact selected-tuple history and registry facts in one SQL snapshot.
+
+        No content validation or lifecycle policy is performed here. In
+        particular, a missing registry row can be a legitimate successor cutover.
+        Later logical-release evidence requires recorded activation; a recovery
+        event that preserved the registry does not establish that fact.
+        """
+        if not snapshot_id:
+            raise CanonicalPublicationStoreError("canonical_snapshot_id_required")
+        selected = list(dict.fromkeys(object_tuples))
+        if not selected:
+            return {}
+        if any(len(row) != 3 or not row[0] or not row[1]
+               or len(row[2]) != 64 or any(c not in "0123456789abcdef" for c in row[2])
+               for row in selected):
+            raise CanonicalPublicationStoreError("canonical_object_selector_invalid")
+        ids, versions, hashes = map(list, zip(*selected))
+        try:
+            with self._connect() as con:
+                rows = con.execute(
+                    """
+                    WITH selected AS (
+                        SELECT * FROM unnest(%s::text[],%s::text[],%s::text[])
+                            AS chosen(object_id,object_version,content_hash)
+                    )
+                    SELECT chosen.*, %s::text AS snapshot_id,
+                           history.release_id,history.release_status,
+                           history.published_at,history.logical_document_id,
+                           r.object_version AS registry_object_version,
+                           current.content_hash AS registry_content_hash,
+                           r.release_id AS registry_release_id,r.state AS registry_state,
+                           r.unpublished_at AS registry_unpublished_at,
+                           r.unpublish_reason AS registry_unpublish_reason,
+                           current_source.snapshot_id AS registry_snapshot_id,
+                           EXISTS (
+                               SELECT 1 FROM publication_release_items active_item
+                               WHERE active_item.release_id=r.release_id
+                                 AND active_item.object_id=r.object_id
+                                 AND active_item.object_version=r.object_version
+                                 AND active_item.content_hash=current.content_hash
+                           ) AS registry_has_release_item,
+                           recovery.details->'historical_recovery' AS historical_recovery,
+                           recovery.details->'registry_preserved' AS registry_preserved,
+                           superseded.successor_release_id,superseded.event_at AS superseded_at,
+                           withdrawn.event_at AS withdrawn_at,
+                           later.release_id AS later_logical_release_id,
+                           later.published_at AS later_logical_release_at
+                    FROM selected chosen
+                    LEFT JOIN LATERAL (
+                        SELECT i.release_id,rel.status AS release_status,rel.published_at,
+                               ev.details->>'logical_document_id' AS logical_document_id
+                        FROM canonical_object_sources source
+                        JOIN canonical_object_versions canonical
+                          ON canonical.object_id=source.object_id
+                         AND canonical.object_version=source.object_version
+                        JOIN publication_release_items i
+                          ON i.object_id=canonical.object_id
+                         AND i.object_version=canonical.object_version
+                         AND i.content_hash=canonical.content_hash
+                        JOIN publication_releases rel ON rel.release_id=i.release_id
+                        JOIN audit_events ev ON ev.entity_type='release'
+                         AND ev.entity_id=rel.release_id AND ev.event_type='release_published'
+                        WHERE source.snapshot_id=%s
+                          AND ev.details->>'snapshot_id'=source.snapshot_id
+                          AND source.object_id=chosen.object_id
+                          AND source.object_version=chosen.object_version
+                          AND canonical.content_hash=chosen.content_hash
+                        ORDER BY rel.published_at DESC,rel.release_id DESC
+                        LIMIT 1
+                    ) history ON TRUE
+                    LEFT JOIN publication_registry r ON r.object_id=chosen.object_id
+                    LEFT JOIN canonical_object_versions current
+                      ON current.object_id=r.object_id AND current.object_version=r.object_version
+                    LEFT JOIN canonical_object_sources current_source
+                      ON current_source.object_id=r.object_id
+                     AND current_source.object_version=r.object_version
+                    LEFT JOIN LATERAL (
+                        SELECT ev.details FROM audit_events ev
+                        WHERE ev.entity_type='object' AND ev.entity_id=chosen.object_id
+                          AND ev.entity_version=chosen.object_version AND ev.event_type='published'
+                          AND ev.details->>'release_id'=history.release_id
+                        ORDER BY ev.event_at DESC,ev.event_id DESC LIMIT 1
+                    ) recovery ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT target.release_id AS successor_release_id,ev.event_at
+                        FROM audit_events ev
+                        JOIN publication_releases target ON target.release_id=COALESCE(
+                            ev.details->>'superseded_by_release_id',ev.details->>'release_id')
+                        JOIN audit_events target_event ON target_event.entity_type='release'
+                         AND target_event.entity_id=target.release_id
+                         AND target_event.event_type='release_published'
+                        WHERE ev.entity_type='object' AND ev.entity_id=chosen.object_id
+                          AND ev.entity_version=chosen.object_version AND ev.event_type='superseded'
+                          AND target.published_at>history.published_at
+                          AND (COALESCE(ev.details->>'logical_document_id','')=''
+                               OR ev.details->>'logical_document_id'=history.logical_document_id)
+                        ORDER BY ev.event_at DESC,ev.event_id DESC LIMIT 1
+                    ) superseded ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT ev.event_at FROM audit_events ev
+                        WHERE ev.entity_type='object' AND ev.entity_id=chosen.object_id
+                          AND ev.entity_version=chosen.object_version
+                          AND ev.event_type='release_withdrawal_unpublished'
+                          AND ev.details->>'release_id'=history.release_id
+                        ORDER BY ev.event_at DESC,ev.event_id DESC LIMIT 1
+                    ) withdrawn ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT rel.release_id,rel.published_at
+                        FROM audit_events ev
+                        JOIN publication_releases rel ON rel.release_id=ev.entity_id
+                        WHERE ev.entity_type='release' AND ev.event_type='release_published'
+                          AND COALESCE(history.logical_document_id,'')<>''
+                          AND ev.details->>'logical_document_id'=history.logical_document_id
+                          AND rel.published_at>history.published_at
+                          AND (
+                              EXISTS (
+                                  SELECT 1 FROM publication_registry activated
+                                  WHERE activated.release_id=rel.release_id AND activated.state='active'
+                              ) OR EXISTS (
+                                  SELECT 1 FROM audit_events activation
+                                  WHERE activation.entity_type='object' AND activation.event_type='published'
+                                    AND activation.details->>'release_id'=rel.release_id
+                                    AND COALESCE(activation.details->>'historical_recovery','false')<>'true'
+                                    AND COALESCE(activation.details->>'registry_preserved','false')<>'true'
+                              )
+                          )
+                        ORDER BY rel.published_at DESC,rel.release_id DESC LIMIT 1
+                    ) later ON TRUE
+                    """, (ids, versions, hashes, snapshot_id, snapshot_id),
+                ).fetchall()
+        except CanonicalPublicationStoreError:
+            raise
+        except Exception as exc:
+            raise CanonicalPublicationStoreError("canonical_object_membership_read_failed") from exc
+        return {
+            (str(row["object_id"]), str(row["object_version"]), str(row["content_hash"])):
+                {key: _timestamp_text(value) if isinstance(value, datetime) else value
+                 for key, value in row.items()}
+            for row in rows
+        }
+
     def active_registry_summary(self, snapshot_id: str) -> list[dict[str, Any]]:
         """Stored registry metadata only; no canonical-content/integrity preflight."""
         try:

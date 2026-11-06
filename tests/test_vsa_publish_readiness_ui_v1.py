@@ -277,7 +277,7 @@ def test_publish_form_is_only_rendered_for_publication_ready(tmp_path: Path, mon
 
     assert page.status_code == 200
     assert 'data-publication-state="ready"' in page.text
-    assert "Klaar voor publicatie: 2 gereviewde kennisobjecten" in page.text
+    assert "Klaar om te publiceren: 2 gereviewde kennisobjecten" in page.text
     assert 'data-publish-form' in page.text
     assert 'name="publish_confirmed"' in page.text
 

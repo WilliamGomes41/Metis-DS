@@ -123,7 +123,7 @@ def test_publish_page_requires_explicit_confirmation_and_then_clears_badge(tmp_p
     client.post("/login", data={"username": "publisher.carla", "password": TEST_PASSWORD})
 
     page = client.get("/publish", params={"document": receipt["snapshot_id"]})
-    assert "Klaar voor publicatie: 1 gereviewd kennisobject" in page.text
+    assert "Klaar om te publiceren: 1 gereviewd kennisobject" in page.text
     assert 'name="publish_confirmed"' in page.text
     missing = client.post("/publish", data={"snapshot_id": receipt["snapshot_id"]})
     assert missing.status_code == 400

@@ -1,0 +1,109 @@
+{
+  "feature": "KO3",
+  "method_version": 1,
+  "status": "PREPARED; NOT MEASURED; acceptance requires explicit immutable head and quiet GO",
+  "baseline_sha": "c6fa679b7c0cc630d24e32e4578e21398cb796c4",
+  "head_pin": "Required explicit KO3_HEAD_SHA; moving code must never be timed",
+  "fixture": {
+    "raw_source_fragments": 900,
+    "paragraphs": 899,
+    "heading": 1,
+    "definition_candidates": 92
+  },
+  "rounds": 6,
+  "pair_order": "oddAB/evenBA;3each",
+  "measured_samples_per_path_side": 18,
+  "consider_metric": "first actual consider_publish wall time;startup excluded;p95<=1.10baseline",
+  "http_metric": "selected /publish?document server p95<=1.10baseline;actual publisher auth;all pages200/no errors",
+  "p95": "nearest-rankceil(.95*18)=18,max;all observations retained",
+  "direct_attribution": "Separate untimed second consider call in each direct child;warm observation,NOT measured-first-call counts",
+  "read_only": "Seed/setup fingerprint beforeanychild;allbusinessPG/sourcefile proofs afterALLtimedpaths;only actual authsessioncreation excluded",
+  "result_checks": "Unmodified directresult retained;existing blocker/count/flag fields identicalbase/head,existing fieldsets intact;head object_readiness additive",
+  "server": "Fresh production restart with persisted PG/filesystem and ordinary binder;standardGC;no forcedcollect/privilegedauth/childseed/customroutes",
+  "observer": "Parent parse/proof afteralltimedpaths;HTTPlogfinalized onlyafterclose+childstop",
+  "planned_order": [
+    {
+      "sequence": 1,
+      "round": 1,
+      "side": "base",
+      "pair_order": "AB"
+    },
+    {
+      "sequence": 2,
+      "round": 1,
+      "side": "head",
+      "pair_order": "AB"
+    },
+    {
+      "sequence": 3,
+      "round": 2,
+      "side": "head",
+      "pair_order": "BA"
+    },
+    {
+      "sequence": 4,
+      "round": 2,
+      "side": "base",
+      "pair_order": "BA"
+    },
+    {
+      "sequence": 5,
+      "round": 3,
+      "side": "base",
+      "pair_order": "AB"
+    },
+    {
+      "sequence": 6,
+      "round": 3,
+      "side": "head",
+      "pair_order": "AB"
+    },
+    {
+      "sequence": 7,
+      "round": 4,
+      "side": "head",
+      "pair_order": "BA"
+    },
+    {
+      "sequence": 8,
+      "round": 4,
+      "side": "base",
+      "pair_order": "BA"
+    },
+    {
+      "sequence": 9,
+      "round": 5,
+      "side": "base",
+      "pair_order": "AB"
+    },
+    {
+      "sequence": 10,
+      "round": 5,
+      "side": "head",
+      "pair_order": "AB"
+    },
+    {
+      "sequence": 11,
+      "round": 6,
+      "side": "head",
+      "pair_order": "BA"
+    },
+    {
+      "sequence": 12,
+      "round": 6,
+      "side": "base",
+      "pair_order": "BA"
+    }
+  ],
+  "expected_executions": 12,
+  "expected_fresh_children": 48,
+  "expected_measured_consider_calls": 36,
+  "expected_selected_http_pages": 36,
+  "query_byte_counts": "Attribution only;no extra acceptance thresholds",
+  "source_hashes": {
+    "probe.py": "1abdbd026ef54c61f95f9f0ff60c98f5c98b6933266df5238bc833ac76caf14d",
+    "server.py": "27bd2defb3a261bfb5023bc04b9a601422306dd8b28a2177742ba64ab8f6ca4e",
+    "runner.py": "61778ab36eeecccbeb8f11d8e5fbf6c14b95f3e36a255d330703a238a7a70b23",
+    "summarize.py": "a4674ba02062775c346dcaece5e5defa38c2aa0de664157bed25a32a30de4752"
+  }
+}

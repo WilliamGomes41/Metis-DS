@@ -1,0 +1,52 @@
+[
+  {
+    "antipattern": "side-tab",
+    "name": "Side-tab accent border",
+    "description": "Thick colored border on one side of a card — the most recognizable tell of AI-generated UIs. Use a subtler accent or remove it entirely.",
+    "severity": "warning",
+    "category": "slop",
+    "file": "/workspace/Metis-ko3/assets/brand/console.css",
+    "line": 957,
+    "snippet": "border-left: 3px solid var(--water)"
+  },
+  {
+    "antipattern": "side-tab",
+    "name": "Side-tab accent border",
+    "description": "Thick colored border on one side of a card — the most recognizable tell of AI-generated UIs. Use a subtler accent or remove it entirely.",
+    "severity": "warning",
+    "category": "slop",
+    "file": "/workspace/Metis-ko3/assets/brand/console.css",
+    "line": 972,
+    "snippet": "border-left: 3px solid var(--water)"
+  },
+  {
+    "antipattern": "side-tab",
+    "name": "Side-tab accent border",
+    "description": "Thick colored border on one side of a card — the most recognizable tell of AI-generated UIs. Use a subtler accent or remove it entirely.",
+    "severity": "warning",
+    "category": "slop",
+    "file": "/workspace/Metis-ko3/assets/brand/console.css",
+    "line": 1289,
+    "snippet": "border-left: 5px solid var(--rood)"
+  },
+  {
+    "antipattern": "side-tab",
+    "name": "Side-tab accent border",
+    "description": "Thick colored border on one side of a card — the most recognizable tell of AI-generated UIs. Use a subtler accent or remove it entirely.",
+    "severity": "warning",
+    "category": "slop",
+    "file": "/workspace/Metis-ko3/assets/brand/console.css",
+    "line": 1465,
+    "snippet": "border-left: 4px solid var(--paars)"
+  },
+  {
+    "antipattern": "side-tab",
+    "name": "Side-tab accent border",
+    "description": "Thick colored border on one side of a card — the most recognizable tell of AI-generated UIs. Use a subtler accent or remove it entirely.",
+    "severity": "warning",
+    "category": "slop",
+    "file": "/workspace/Metis-ko3/assets/brand/console.css",
+    "line": 1300,
+    "snippet": "border-left-width: 3px"
+  }
+]

@@ -16,6 +16,7 @@ from src.review.review_duty_v1 import (
 )
 from src.vorming.source_containers_v1 import source_accountability, source_closure
 from src.vorming.knowledge_materialisation_v1 import source_reconstruction_scope
+from src.review.knowledge_object_state_v1 import derive_ko_state
 
 REVIEW_WORK_INCOMPLETE = "review_work_incomplete"
 REVIEW_REPAIR_INCOMPLETE = "review_repair_incomplete"
@@ -138,6 +139,48 @@ def _failed_readiness(snapshot_id: str, error: Exception) -> dict[str, Any]:
         "review_complete": False,
         "source_passage_review_complete": False,
     }
+
+
+def _publication_object_rows(
+    inputs: dict[str, Any], *, duties: list[dict[str, Any]],
+    source_projection: dict[str, dict[str, Any]], repair_duties: list[dict[str, Any]],
+    conflict_ids: Iterable[str],
+) -> list[dict[str, Any]]:
+    bindings: dict[str, list[dict[str, Any]]] = {}
+    for binding in inputs["bindings"]:
+        bindings.setdefault(str(binding.get("object_id") or ""), []).append(binding)
+    review = {str(row["object_id"]): row for row in duties}
+    repairs = {str(row["object_id"]) for row in repair_duties}
+    conflicts = set(conflict_ids)
+    rows = []
+    for obj in inputs["objects"]:
+        object_id = str(obj.get("object_id") or "")
+        state = derive_ko_state(obj, review_path=inputs["review_path"],
+            bindings=bindings.get(object_id, ()), fragments=inputs["fragments"])
+        source = source_projection.get(object_id, {})
+        blockers = []
+        if object_id in conflicts:
+            blockers.append(REVIEW_DISPOSITION_INCONSISTENT)
+        if object_id in review:
+            blockers.append(REVIEW_WORK_INCOMPLETE)
+        if source.get("required") and source.get("closure") != "accounted":
+            blockers.append(SOURCE_PASSAGE_REVIEW_INCOMPLETE)
+        if object_id in repairs:
+            blockers.append(REVIEW_REPAIR_INCOMPLETE)
+        if state["state"] is None and not blockers:
+            continue
+        content = obj.get("content") or {}
+        rows.append({
+            "object_id": object_id,
+            "object_version": str(obj.get("object_version") or ""),
+            "object_type": str(obj.get("confirmed_object_type") or obj.get("object_type") or ""),
+            "text": str(content.get("clean_text") or content.get("text") or ""),
+            **state,
+            "review_stage": review.get(object_id, {}).get("stage"),
+            "source_closure": source.get("closure"),
+            "blockers": blockers,
+        })
+    return rows
 
 
 class PublicationReadinessMixin:
@@ -294,6 +337,14 @@ class PublicationReadinessMixin:
         considered["curation_blockers"] = curation_blockers
         considered["publication_ready"] = publication_ready
         considered["publish_allowed"] = publication_ready
+        try:
+            considered["object_readiness"] = _publication_object_rows(
+                inputs, duties=duties, source_projection=source_projection,
+                repair_duties=repair_duties,
+                conflict_ids=technical_projection.get("disposition_conflict_object_ids") or (),
+            )
+        except (KeyError, OSError, TypeError, ValueError) as exc:
+            return _failed_readiness(snapshot_id, exc)
         return considered
 
     def consider_publish(self, *, actor_id: str, snapshot_id: str, tree_input=None) -> dict[str, Any]:

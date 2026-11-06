@@ -43,7 +43,7 @@ def test_no_current_personal_work_does_not_imply_publication_readiness():
     item['actionable_review_duties'] = item['review_duties'] = 0
     html = _workboard_card(item)
     assert 'Geen open beoordeling voor jou.' in html
-    assert 'Klaar voor publicatie' not in html
+    assert 'Klaar om te publiceren' not in html
     assert 'data-personal-review-action' not in html
     assert 'task=history' not in html
 

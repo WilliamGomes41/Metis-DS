@@ -11,6 +11,7 @@ Regels:
 
 # release-control-evidence: opslag concurrent stale
 # release-control-evidence: scope/belofte
+# release-control-evidence: slop
 # release-control-evidence: beschikbaarheid
 # release-control-evidence: releasebewijs
 """
@@ -120,7 +121,7 @@ def test_publish_overview_never_shows_unchecked_document_as_ready(tmp_path, help
     assert 'data-publication-state="unchecked"' in page.text
     assert 'data-publication-state="ready"' not in page.text
     assert "data-publish-form" not in page.text
-    assert "Klaar voor publicatie" not in page.text
+    assert "Klaar om te publiceren" not in page.text
     assert "publicatiegereed" not in page.text.lower()
     assert "voltooid" not in page.text.lower()
     assert f'/publish?document={receipts[0]["snapshot_id"]}' in page.text
