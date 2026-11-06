@@ -24,13 +24,13 @@ def review_page_shell(account, body, *, title='Review'):
                  title=title + ' · Metis', stylesheets=('ko-review.css',))
 
 
-def source_breadcrumb(snapshot_id, obj, *, title=''):
+def source_breadcrumb(snapshot_id, obj, *, title='', task=''):
     parts = [part.strip() for part in found_under_path(obj).split(' › ') if part.strip()]
     if title and (not parts or parts[0] != title):
         parts.insert(0, title)
     if not parts:
         parts = [title or 'Document']
-    document = '/review?' + urlencode({'document': snapshot_id})
+    document = '/review?' + urlencode({'document': snapshot_id, **({'task': task} if task else {})})
     source = '/review/bronpassage?' + urlencode({'document': snapshot_id, 'object': obj['object_id']})
     return '<nav class="ko-breadcrumb" aria-label="Bronpad">' + '<span aria-hidden="true">/</span>'.join(
         f'<a href="{escape(document if index == 0 else source, quote=True)}">{escape(part)}</a>'
@@ -169,11 +169,12 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
         + escape(str(draft.get('comment') or '')) + '</textarea></label>'
         '<button class="ko-text-button" type="submit" name="review_action" value="reject" formnovalidate>Afwijzen met toelichting</button></details>')
     body = ('<header class="ko-page-heading"><h1>' + heading + '</h1>'
-            + source_breadcrumb(sid, obj, title=inputs.envelope.get('title') or '')
+            + source_breadcrumb(sid, obj, title=inputs.envelope.get('title') or '', task=task or canonical_task)
             + '<p class="ko-progress">Te beoordelen passage <span aria-hidden="true">·</span> '
             '<strong data-ko-state>' + escape(state or 'Broncontext') + '</strong>'
             + (' <span aria-hidden="true">·</span> Onafhankelijk tweede akkoord' if second else '') + '</p></header>'
-            + notice + '<div class="ko-review-layout">'
+            + notice + '<div class="ko-review-layout" data-document-assessment="'
+            + escape(inputs.document_assessment, quote=True) + '">'
             + _source_panel(console, inputs, obj, task=task)
             + '<section class="ko-object-panel" aria-labelledby="ko-object-title"><h2 id="ko-object-title">Te beoordelen kennisobject</h2>'
             '<p class="ko-claim" data-full-knowledge-passage data-reviewed-version="' + escape(descriptor.object_version, quote=True) + '">'

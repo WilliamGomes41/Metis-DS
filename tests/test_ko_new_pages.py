@@ -26,6 +26,8 @@ def test_compact_http_commit_standalone_bon_and_durable_answers(tmp_path, produc
     assert page.text.count('class="ko-question"') == 3
     assert not re.search(r'<form[^>]*\sdata-review-form', page.text)
     assert 'ko-review.css' in page.text
+    assert 'data-document-assessment="not_evaluated"' in page.text
+    assert f'/review?document={sid}&amp;task=contextual' in page.text
     assert not re.search(r'<input[^>]+type="radio"[^>]+checked', page.text)
     data = compact_submission(page)
     data.update(confirmed_object_type='definition', recommendation_direction='for')
