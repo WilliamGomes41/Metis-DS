@@ -1,0 +1,22 @@
+{
+  "approved_on": "2026-11-06",
+  "approval": "Nice is en de bon is wat ik wil leg de afspraken heel gedetalieerd vast in de architectuur",
+  "design_contract": "../../architecture/review-card-receipt.md",
+  "preservation": "Original generated PNGs copied unchanged; functional contract takes precedence over illustrative metadata.",
+  "images": [
+    {
+      "file": "review-card.png",
+      "source_generated_file": "exec-f46b79d0-561b-40e2-9d34-91e9a62b42b2.png",
+      "generator": "imagegen",
+      "sha256": "f6d2dacd14322576a70f493c2b5eb9b8d43be9944820145233f7453d29167b7b",
+      "content": "Fictional example; visual reference, not clinical or production evidence."
+    },
+    {
+      "file": "receipt.png",
+      "source_generated_file": "exec-a72d2b1e-36a4-475e-8a2b-2ba6e6f74806.png",
+      "generator": "imagegen",
+      "sha256": "d223d93c5e390c763c83d7a6e211c177e8bb224023a72c3c5cea85bce5ffda2e",
+      "content": "Fictional example; visual reference, not clinical or production evidence."
+    }
+  ]
+}

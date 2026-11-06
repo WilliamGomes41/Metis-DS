@@ -49,7 +49,7 @@ Governance in this repository overrides pstack where they differ. Class A with `
   - [ ] KO-6 after KO-5 has run in production for one full review week without a rollback.
 - [ ] Hold the file boundaries.
   - [ ] KO-1 touches only `src/review/knowledge_object_state_v1.py`, `scripts/ko_state_inventory.py`, `tests/test_ko_state_*.py` and `evidence/ko-1/**`.
-  - [ ] KO-2 touches only the review card renderers and existing post-save response/navigation, `src/review/ko_receipt_ui_v1.py`, `src/review/review_cockpit_v1.py`, `src/review/review_workboard_v1.py`, `static/console.css` and their tests.
+  - [ ] KO-2 touches only the review card renderers and existing post-save response/navigation, `src/review/ko_receipt_ui_v1.py`, `src/review/review_cockpit_v1.py`, `src/review/review_workboard_v1.py`, `assets/brand/console.css` and their tests.
   - [ ] KO-3 touches only `src/publication/publication_readiness_v1.py`, `src/publication/publish_readiness_ui_v1.py`, `src/retrieval/retrieval_projection_v2.py`, `src/workflows/workflow_badge_counts_postgres_v1.py` and their tests.
   - [ ] KO-4 touches only `src/review/ko_transitions_v1.py`, the command methods it replaces, and their tests.
   - [ ] KO-5 only deletes code, rewrites stale contract rows, and updates the tests that pinned deleted paths.
@@ -154,12 +154,14 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 
 **Interaction.** Clear review card → review and save → receipt of the saved result. This follows William's correction: the bonnetje is the overview after the action, showing what the reviewer did and how the result is organised in the kernel. It is not placed before approval.
 
+**Approved design contract.** [Reviewkaart en bon](../architecture/review-card-receipt.md) records the approved interaction, preserved mock-ups, source-context requirements, durable-result boundary and acceptance matrix RC-01–RC-21. This is the detailed design authority for KO-2; it does not mark the implementation complete.
+
 **Files.**
 
 - [ ] Edit `src/operations_console_app.py` (review card renderer and existing post-save response/navigation only).
 - [ ] Edit `src/review/review_cockpit_v1.py`.
 - [ ] Edit `src/review/review_workboard_v1.py`.
-- [ ] Edit `static/console.css`.
+- [ ] Edit `assets/brand/console.css`.
 - [ ] Create `src/review/ko_receipt_ui_v1.py`.
 - [ ] Create `tests/test_ko_receipt_ui.py`.
 - [ ] Edit `tests/browser_review_disposition_check.cjs`.
@@ -168,7 +170,10 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 **Build.**
 
 - [ ] Render the derived state on the review card header, from `derive_ko_state`, in Dutch, with the reasons as a short list. Before saving, the card provides the source and context needed to review, without a receipt.
-- [ ] Add `render_ko_receipt` in `ko_receipt_ui_v1.py`. Render it only after the existing command has successfully saved. It identifies the action and the exact saved object version, and shows how its claim, context, evidence and provenance are organised in the kernel.
+- [ ] Implement the approved two-pane card: document context beside the claim, doelgroep/scope, conditions, exceptions including their actions, supporting text and provenance. Preserve multiple and externally linked context items; distinguish missing, uncertain and explicitly not applicable.
+- [ ] Make the complete source heading hierarchy, current location and neighboring passages reachable. Show the selected passage with its preceding/following paragraph, with full-section and original-source navigation, all from the same source snapshot. Context reads reuse authorised source readers and do not mutate state.
+- [ ] Present the three main questions without preselected answers. Reuse existing correction, placement, deferral and rejection routes. Preserve required domain fields and policy-dependent independent review; do not add a universal second reviewer.
+- [ ] Add `render_ko_receipt` in `ko_receipt_ui_v1.py`. Render it only after the existing command has successfully saved. It identifies the action and the exact saved object version. Its central claim is visibly connected to conditions (geldt wanneer), exceptions (tenzij), support (onderbouwd door) and provenance, with readable content and the actual source references. A success banner or answer checklist alone is insufficient.
 - [ ] Derive the receipt from the durable result of that action through the existing authorised readers. Posted form values or a success flag alone are not evidence of a saved decision. A later change must not be silently presented as the result of this action.
 - [ ] Present the receipt within the existing post-save navigation, without a new form, confirmation click, separate approval step, stored receipt, status or write authority. An initial review card has no successful-action receipt.
 - [ ] On validation refusal, conflict, rollback or an unconfirmed save outcome, preserve the existing error/recovery flow and show no successful receipt. Display only what was saved: opening a repair form is not a completed correction; a first approval is not a completed second review or publication.
@@ -185,12 +190,13 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
 - [ ] `tests/test_ko_receipt_ui.py` gains a case per state header and cases for receipt absence before saving, receipt contents matching the exact durable action/version, and no successful receipt on validation refusal, stale conflict, rollback or unconfirmed outcome. It also proves that subsequent changes and another object's result cannot be presented as this action's receipt. Run `scripts/test_postgres.sh python -m pytest tests/test_ko_receipt_ui.py -q`.
-- [ ] `tests/characterization/` review room suites still pass with updated snapshots limited to the state header and receipt at the existing post-save destination. Run `scripts/test_postgres.sh python -m pytest tests/characterization -q`.
+- [ ] Verify the card/context/receipt contracts against RC-01–RC-21 in the approved design document. Keep failures, stale/foreign results, restart, optional and required second review, and source-snapshot coherence covered at their existing owners.
+- [ ] `tests/characterization/` review room suites still pass with snapshots updated for the approved card, document context and receipt at the existing post-save destination. Run `scripts/test_postgres.sh python -m pytest tests/characterization -q`.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `grok-4.7-xhigh-fast` at the PR head, per the boot recipe.
 
 - [ ] Lane 1. Regression lane against trunk. Open the first fixture KO at trunk and head: head has no receipt before saving. Approve on both, then read the head receipt and reopen the saved object. Save `ko2-regression.png`. Pass when the event and binding match trunk, the receipt matches the saved action/version and organisation, and no extra confirmation is required.
-- [ ] Lane 2. Open a card in Context open. Submit a stale revision and then a validation-refused action. Save `ko2-context.png`. Pass when the card names the missing context, the existing errors remain visible, and neither failure shows a successful receipt.
+- [ ] Lane 2. Open a card in Context open. Verify the heading hierarchy, highlighted passage, surrounding paragraphs, neighboring passages, full-section/source navigation and explicit missing-context labels against RC-02–RC-05. Submit a stale revision and then a validation-refused action. Save `ko2-context.png`. Pass when the card names the missing context, the existing errors remain visible, and neither failure shows a successful receipt.
 - [ ] Lane 3. Approve a high-risk object once, then open it as the independent second reviewer and complete the second review. Save `ko2-second.png`. Pass when the first receipt reports the saved first approval with second review pending, and the second receipt reports only the successfully saved independent decision.
 - [ ] Lane 4. Reopen the saved approved version and compare it with the receipt, then repeat the action using an old revision. Save `ko2-approved.png`. Pass when the saved result matches, no approval button is offered for completed work, and the refused stale action does not produce a new successful receipt.
 - [ ] Lane 5. At 375 px width, review and save a fixture KO. Save `ko2-mobile.png`. Pass when both card and subsequent receipt have no horizontal scroll and the receipt rows stack.
