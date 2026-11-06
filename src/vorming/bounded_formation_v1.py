@@ -316,7 +316,10 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
         # Full original source partition, independent of attempt or current
         # completion. Prior results keep their exact existing semantic keys.
         baseline = _durable_targets(blocks, {"objects":[], "source_assessments":[]})
-        title_path = document_title_path(validator_input.get("fragments"))
+        # The content fragments have every heading, the <h1> included, filtered out;
+        # the evidence fragments keep the parser's heading record.
+        title_path = document_title_path(validator_input.get("evidence_fragments")
+                                         or validator_input.get("fragments"))
         plan = build_plan(tasks_for(blocks,evidence_blocks,baseline,title_path=title_path),blocks,evidence_blocks)
         if durable:
             plan = checkpoint.retain_task_plan(plan)

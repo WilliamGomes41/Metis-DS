@@ -204,21 +204,28 @@ def test_module_of_follows_the_title():
 
 
 def test_formation_passes_the_parser_title_to_task_planning(monkeypatch):
-    # #997: execute derives the title from the validator fragments, not from path shape.
+    # #997: execute derives the title from the parser record. In production the
+    # content fragments have the headings, including the <h1>, filtered out
+    # (_content_fragments), so the title must come from the evidence fragments.
     from src.vorming import bounded_formation_v1 as bf
     from src.vorming.bounded_model_call_v1 import ModelCallLimits
+    from src.vorming.pre_review_semantic_v1 import _content_fragments, _evidence_fragments
     from src.vorming.semantic_passage_v1 import semantic_source_blocks
     from tests.test_recommendation_context_v3 import source
-    fragments = [dict(source(t)[0], fragment_id=str(i), fragment_hash=str(i), section_path=path,
+    rows = [("Smetten", ["Smetten"], "h1", "Smetten"), ("Module 1", ["Smetten", "Module 1"], "h2", "Module 1"),
+            ("Gebruik geen zalf", ["Smetten", "Module 1"], "p", None)]
+    fragments = [dict(source(t)[0], fragment_id=str(i), fragment_hash=str(i), section_path=path, heading=heading,
+                      object_type="heading" if heading else source(t)[0].get("object_type"),
                       source_locator={"locator_type": "web_line_range", "locator_value": f"lines:{i}-{i};{tag}:{i}"})
-                 for i, (t, path, tag) in enumerate([("Smetten", ["Smetten"], "h1"),
-                                                     ("Gebruik geen zalf", ["Smetten", "Module 1"], "p")])]
-    blocks = semantic_source_blocks(fragments)
+                 for i, (t, path, tag, heading) in enumerate(rows)]
+    content, evidence = _content_fragments(fragments), _evidence_fragments(fragments)
+    assert not any(f.get("heading") == "Smetten" for f in content)  # the production filter drops the title
+    blocks = semantic_source_blocks(content)
     seen = []
     real = bf.tasks_for
     monkeypatch.setattr(bf, "tasks_for", lambda *a, **k: seen.append(k.get("title_path")) or real(*a, **k))
-    bf.execute(blocks=blocks, evidence_blocks=blocks,
-               validator_input={"fragments": fragments, "document_id": "test", "evidence_fragments": fragments,
+    bf.execute(blocks=blocks, evidence_blocks=semantic_source_blocks(evidence),
+               validator_input={"fragments": content, "document_id": "test", "evidence_fragments": evidence,
                                 "allowed_candidate_block_ids": [b["block_id"] for b in blocks], "field_contract_v3": True},
                provider=lambda **k: None, limits=ModelCallLimits(total=0))
     assert seen == [("Smetten",)]
