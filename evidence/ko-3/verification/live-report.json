@@ -1,0 +1,69 @@
+{
+  "app_sha": "d5febaafa3113139439f62f104f3bcff28f8107f",
+  "test_sha": "ec8afa09af16338d6223ac58aff518e8c21ec0cc",
+  "baseline_sha": "e0505d99ac18dba37f7dae67def950f8badcaecb",
+  "method": "Local native Chromium DOM and HTTP commands; real PostgreSQL; actual process restart; deterministic model fixture; Azure adapter with disk network transport; no Azure account or remote VM",
+  "browser_versions": {
+    "recording": "Playwright 1.65, /usr/bin/chromium",
+    "CI compatibility": "Playwright 1.58.2, /usr/bin/chromium; 1 passed in 13.14s"
+  },
+  "backend": "Real PostgreSQL 17; complete_postgres isolated schemas",
+  "lanes": [
+    {
+      "lane": "1",
+      "status": "PASS",
+      "evidence": "Trunk/head half-review blocker arrays identical; same real POST refusal gate."
+    },
+    {
+      "lane": "2",
+      "status": "PASS",
+      "evidence": "Native separate reviewer form finishes remaining KO; publisher reload says Klaar om te publiceren."
+    },
+    {
+      "lane": "3",
+      "status": "PASS",
+      "evidence": "Actual native publish; retrieval contains exactly the two previously Goedgekeurd object IDs, with source locators."
+    },
+    {
+      "lane": "4",
+      "status": "PASS",
+      "evidence": "Managed second review left open; Tweede review row and actual publish refusal."
+    },
+    {
+      "lane": "5",
+      "status": "PASS",
+      "evidence": "Unassessed literal source passage named in source row; actual publish refusal."
+    },
+    {
+      "lane": "6",
+      "status": "PASS",
+      "evidence": "Initially seeded disposition conflict shown; actual publish refusal."
+    },
+    {
+      "lane": "7",
+      "status": "PASS (backend)",
+      "evidence": "No rendered numeric badges exist in MAIN. Real publisher waiting_task_counts counts four documents before and three after publish; one approved KO is not a document count."
+    },
+    {
+      "lane": "8",
+      "status": "PASS",
+      "evidence": "Actual native withdrawal; readiness says Ingetrokken; kernel state inventory says Ingetrokken for all KOs; projection empty."
+    },
+    {
+      "lane": "9",
+      "status": "PASS",
+      "evidence": "Actual 375 px viewport; document scrollWidth does not exceed innerWidth; readable full-page screenshot."
+    },
+    {
+      "lane": "10",
+      "status": "PASS",
+      "evidence": "Actual server stop/restart over same PostgreSQL/source stores; same blockers and fingerprints; one refusal per attempted document remains one."
+    }
+  ],
+  "integrity": "Workflow and six canonical table fingerprints unchanged for page reads and refused publish. Immutable source SHA persists through restart, publish and withdrawal.",
+  "accessibility": "New section heading, named recovery links and native Shift+Tab/Tab reachability verified; no full WCAG certification claimed.",
+  "limits": "Local synthetic sources and deterministic semantic model. Actual Azure adapter uses filesystem transport; no Azure account. MAIN review UI is the existing form, not unmerged KO-2. Linked structural publication context is covered by separate package owner tests, not the standalone-definition recording.",
+  "guard_evidence": "Initial heading fixture omitted required published structural parent; real prepublication_projection_failed/context_target_not_published guard correctly refused. Retained /tmp/ko3-live/baseline-proof-2.log; no production bug inferred.",
+  "artifacts": "/tmp/ko3-live/head-final/test_ko3_readiness_review_publ0",
+  "video": "/tmp/ko3-live/ko3-head-live.mp4"
+}

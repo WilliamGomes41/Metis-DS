@@ -165,8 +165,9 @@ def _object_readiness_list(view: dict[str, Any]) -> str:
         text = row.get("text") or "Passage zonder afzonderlijke tekst"
         rows.append(f'<li data-readiness-object="{_esc(row["object_id"])}" '
             f'data-ko-state="{_esc(row.get("state") or "")}" data-blocker-code="{_esc(reason["code"])}">'
-            f'<p><strong>{_esc(state)}</strong> · {_esc(text)}</p>'
-            f'<p>{_esc(reason["message"])}{recovery}</p></li>')
+            f'<p class="publication-passage-text"><strong>{_esc(text)}</strong></p>'
+            f'<p class="publication-passage-state">{_esc(state)}</p>'
+            f'<div class="publication-next-step"><p>{_esc(reason["message"])}</p>{recovery}</div></li>')
     if not rows:
         return ""
     return ('<section class="section" data-object-readiness><h3>Wat staat nog open per passage?</h3>'
@@ -184,7 +185,7 @@ def _blocker_list(items: list[dict[str, Any]]) -> str:
             )
         rows.append(
             f'<li data-blocker-code="{_esc(item["code"])}">'
-            f'{_esc(item["message"])}{recovery}</li>'
+            f'<span>{_esc(item["message"])}</span>{recovery}</li>'
         )
     return f'<ul class="stack">{"".join(rows)}</ul>' if rows else ""
 
@@ -396,6 +397,7 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
     def publish_get(request: Request, document: str = "") -> str:
         account = _publisher_account(console, request)
         rows: list[str] = []
+        other_rows: list[str] = []
         documents = console.list_document_cards()
         # One canonical metadata read for the complete overview. Failure remains
         # visible as unknown on each card, never a fictional readiness result.
@@ -405,7 +407,7 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
             pass  # _apply_release_state renders the existing explicit unknown state
         for envelope in documents:
             if str(envelope["snapshot_id"]) != document:
-                rows.append(_compact_card(console, envelope))
+                other_rows.append(_compact_card(console, envelope))
                 continue
             try:
                 considered = console.consider_publish(
@@ -436,6 +438,13 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
             )
             rows.append(_card(envelope, view, display_status))
 
+        if rows and other_rows:
+            rows.append('<details class="publication-other-documents"><summary>Andere documenten ('
+                        + str(len(other_rows)) + ')</summary><div class="doc-list">'
+                        + ''.join(other_rows) + '</div></details>')
+        else:
+            rows.extend(other_rows)
+
         success = ""
         if request.query_params.get("published") == "yes":
             success = (
@@ -444,7 +453,7 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
         return _page(
             f'''
             {_nav(account, "publish")}
-            <section class="room">
+            <section class="room publication-room">
               <h1>Publiceren</h1>
               {_task_links("publish")}
               {success}

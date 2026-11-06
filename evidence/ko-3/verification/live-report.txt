@@ -1,0 +1,18 @@
+KO-3 live proof: app d5febaafa3113139439f62f104f3bcff28f8107f, tests ec8afa09af16338d6223ac58aff518e8c21ec0cc.
+Local native Chromium DOM and HTTP commands; real PostgreSQL; actual process restart; deterministic model fixture; Azure adapter with disk network transport; no Azure account or remote VM
+
+Lane 1: PASS. Trunk/head half-review blocker arrays identical; same real POST refusal gate.
+Lane 2: PASS. Native separate reviewer form finishes remaining KO; publisher reload says Klaar om te publiceren.
+Lane 3: PASS. Actual native publish; retrieval contains exactly the two previously Goedgekeurd object IDs, with source locators.
+Lane 4: PASS. Managed second review left open; Tweede review row and actual publish refusal.
+Lane 5: PASS. Unassessed literal source passage named in source row; actual publish refusal.
+Lane 6: PASS. Initially seeded disposition conflict shown; actual publish refusal.
+Lane 7: PASS (backend). No rendered numeric badges exist in MAIN. Real publisher waiting_task_counts counts four documents before and three after publish; one approved KO is not a document count.
+Lane 8: PASS. Actual native withdrawal; readiness says Ingetrokken; kernel state inventory says Ingetrokken for all KOs; projection empty.
+Lane 9: PASS. Actual 375 px viewport; document scrollWidth does not exceed innerWidth; readable full-page screenshot.
+Lane 10: PASS. Actual server stop/restart over same PostgreSQL/source stores; same blockers and fingerprints; one refusal per attempted document remains one.
+
+Workflow and six canonical table fingerprints unchanged for page reads and refused publish. Immutable source SHA persists through restart, publish and withdrawal.
+New section heading, named recovery links and native Shift+Tab/Tab reachability verified; no full WCAG certification claimed.
+Local synthetic sources and deterministic semantic model. Actual Azure adapter uses filesystem transport; no Azure account. MAIN review UI is the existing form, not unmerged KO-2. Linked structural publication context is covered by separate package owner tests, not the standalone-definition recording.
+Initial heading fixture omitted required published structural parent; real prepublication_projection_failed/context_target_not_published guard correctly refused. Retained /tmp/ko3-live/baseline-proof-2.log; no production bug inferred.

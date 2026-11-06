@@ -98,7 +98,7 @@ Published payload approval is a frozen recorded fact checked by the existing pac
 4. Verify actual PG boundaries, all ten live scenarios grouped into isolated fixture runs, desktop/mobile screenshots and a 30–60 second video; independently challenge integrity/authorization/restart/rollback and measure six counterbalanced AB/BA pairs before the verdict.
 5. Publish a ready PR on main, inspect bots/CI and stop for operator review. Do not modify handed-off KO-2 or merge/deploy.
 
-No general scaffolding or unrelated cleanup is needed. Proof is pending: this document records source inspection and agreed design, not completed implementation or tests.
+No general scaffolding or unrelated cleanup is needed. The original design was committed before product code. The evidence below records the later verification stage; final CI and performance verdicts are recorded on the implementation PR and #1002.
 
 ### Context validity
 | Context | Owner / consumer | Lifetime and invalidation |
@@ -113,9 +113,15 @@ No general scaffolding or unrelated cleanup is needed. Proof is pending: this do
 - [x] Ground existing runtime and recorded product decisions.
 - [x] Compare structural candidates and document chosen public boundary.
 - [x] Confirm implementation authorization; no additional design approval checkpoint requested.
-- [ ] Implement one bounded feature with no persisted changes.
-- [ ] Prove baseline blocker/audit parity, exact registry isolation, package context, badges and real lifecycle restart/withdrawal.
-- [ ] Inspect rendered views and collect screenshots/video.
+- [x] Implement one bounded feature with no persisted changes.
+- [x] Prove baseline blocker/audit parity, exact registry isolation, package context, badges and real lifecycle restart/withdrawal.
+- [x] Inspect rendered views and collect screenshots/video.
 - [ ] Freeze/run balanced performance; all required CI and independent review green.
 - [ ] Reconsider the design if facts require a new authority or a changed lifecycle policy.
 
+
+### Requested layout refinement
+
+On 6 November the operator requested an Impeccable/pstack makeover because the page was cramped and hard to scan. This is a Class C presentation refinement inside KO-3: selected document first, other documents under a native disclosure, separate passage/state/reason/action, scoped spacing and removal of nested borders. No new read, write, gate, domain action or data authority. KO-2 remains unchanged. The existing browser lifecycle proof also checks selected-document order, keyboard disclosure and overflow at 375, 768, 1024 and 1440 pixels. The ready-state form and refusal checks remain intact.
+
+See [evidence and verification limits](../../evidence/ko-3/README.md). The unchecked final performance/CI item above records the evidence-freeze stage; use the PR's exact-head verdict for completion.

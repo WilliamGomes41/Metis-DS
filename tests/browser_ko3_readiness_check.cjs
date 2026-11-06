@@ -50,6 +50,14 @@ const path = require('node:path');
       const before = await proof(slug);
       assert.deepEqual(before.blockers, manifest.documents[slug].expected_blockers);
       await open(slug);
+      assert.equal(await page.locator('[data-publish-document]').first().getAttribute('data-publish-document'),
+        manifest.documents[slug].snapshot_id, 'selected document comes first');
+      const others = page.locator('.publication-other-documents');
+      assert.equal(await others.getAttribute('open'), null, 'other documents start collapsed');
+      await others.locator('summary').focus();
+      await page.keyboard.press('Enter');
+      assert.notEqual(await others.getAttribute('open'), null, 'other documents remain keyboard accessible');
+      await page.keyboard.press('Enter');
       assert.equal(await page.locator(card(slug) + ' [data-publication-state=blocked]').count(), 1);
       assert.equal(await page.locator(card(slug) + ' [data-publish-form]').count(), 0);
       for (const code of before.curation_blockers)
@@ -95,6 +103,11 @@ const path = require('node:path');
     await open('source');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     await shoot('mobile');
+    for (const width of [768, 1024]) {
+      await page.setViewportSize({width, height: 1000});
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      await shoot('width-' + width);
+    }
     fs.writeFileSync(path.join(out, 'before-restart.json'), JSON.stringify(observations, null, 2));
   } else {
     const beforeRestart = JSON.parse(fs.readFileSync(path.join(out, 'before-restart.json')));
