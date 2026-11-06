@@ -63,7 +63,7 @@ def test_current_and_prepared_classification_share_one_central_rule(monkeypatch,
     current = {'object_id': 'claim', 'object_type': before_type, 'phase': 'before'}
     prepared = {'object_id': 'claim', 'object_type': after_type, 'phase': 'after'}
     monkeypatch.setattr(policy, 'derive_ko_state',
-        lambda obj, **kwargs: {'state': 'Kandidaat' if obj['phase'] == 'before' else 'Goedgekeurd'})
+        lambda obj, **kwargs: {'state': 'Bewijs open' if obj['phase'] == 'before' else 'Goedgekeurd'})
     facts = {'assessment': YES, 'evidence_not_applicable': True} if after_type == 'node' else {}
     result = policy.apply_ko_event(current=current, prepared=prepared, event='approve', review_path='boom', **facts)
     assert bool(result) is (after_type == 'node')

@@ -68,6 +68,14 @@ set even after finding valid support. Native regression first failed because
 no refusal occurred; the targeted command/receipt/reviewer suite then passed
 70 cases in 32.41s. Exact-final-head independent closure remains required.
 
+Automatic review also identified an overly broad boom exception for existing
+Kandidaat objects. A real unresolved PDF graph reproduced approval of an
+unassembled existing KO. The exception now applies only to genuine structural
+to-KO conversion. Resolving graph structure before individual reviews remains
+supported, followed by graph confirmation; historical boom and bundle flows
+are preserved. Native graph, bundle and conversion checks passed 22 cases in
+14.60s after the fix.
+
 Independent browser runs found a hidden N/A control caused by reusing an
 adjustment-only CSS class, and an inherited header overflow at 768px. Both
 were fixed and verified with native keyboard/geometry checks. The further

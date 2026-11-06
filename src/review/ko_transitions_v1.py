@@ -148,7 +148,8 @@ def apply_ko_event(*, current, event, review_path, bindings=(), fragments=None,
     state = (derive_ko_state(current, review_path=review_path, bindings=bindings,
                             fragments=fragments)['state'] if current_is_ko else 'Kandidaat')
     transition = TRANSITIONS.get((state, event))
-    if transition is None or (state == 'Kandidaat' and event == 'approve' and review_path != 'boom'):
+    if transition is None or (state == 'Kandidaat' and event == 'approve' and prepared_is_ko
+            and (review_path != 'boom' or current_is_ko)):
         _refuse('ko_transition_refused', f'De handeling {event} is niet toegestaan bij {state}.')
     if not prepared_is_ko:
         return {}
