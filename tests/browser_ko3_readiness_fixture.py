@@ -96,14 +96,16 @@ def _seed():
         documents[slug] = {'snapshot_id': sid, 'title': title, 'pending_object_id': pending,
             'conflict_object_id': conflict_id, 'expected_blockers': EXPECTED[slug],
             'source_sha256': console._envelope(sid)['sha256']}
-    value = {'documents': documents, 'password': PASSWORD,
+    # The password stays in memory: the manifest file on disk holds no credential.
+    value = {'documents': documents,
              'people': {name: {'username': person['username'], 'account_id': person['account_id']}
                         for name, person in people.items()}}
     manifest_path.write_text(json.dumps(value))
     return value
 
 
-manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else _seed()
+manifest = {**(json.loads(manifest_path.read_text()) if manifest_path.exists() else _seed()),
+            'password': PASSWORD}
 
 
 def _digest(table, *, snapshot_id=None):
