@@ -135,13 +135,16 @@ def apply_ko_event(*, current, event, review_path, bindings=(), fragments=None,
     if event not in EVENTS:
         _refuse('ko_event_unknown')
     current_is_ko = is_knowledge_object(current, review_path)
-    if not current_is_ko and (prepared is None or not is_knowledge_object(prepared, review_path)):
+    prepared_is_ko = is_knowledge_object(prepared, review_path) if prepared is not None else current_is_ko
+    if not current_is_ko and not prepared_is_ko:
         return {}
     state = (derive_ko_state(current, review_path=review_path, bindings=bindings,
                             fragments=fragments)['state'] if current_is_ko else 'Kandidaat')
     transition = TRANSITIONS.get((state, event))
     if transition is None or (state == 'Kandidaat' and event == 'approve' and review_path != 'boom'):
         _refuse('ko_transition_refused', f'De handeling {event} is niet toegestaan bij {state}.')
+    if not prepared_is_ko:
+        return {}
     evidence = {}
     if event in {'approve', 'approve_second'}:
         evidence = {'assessment': require_assessment(assessment),

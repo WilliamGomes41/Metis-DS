@@ -519,6 +519,8 @@ def test_authenticated_review_post_confirms_new_semantics(tmp_path: Path, *, pro
             "type_action": "dit_klopt",
             "suitability": "ja",
             "eindoordeel": "goedkeuren",
+            "applicable": "yes", "complete": "yes", "placed_correctly": "yes",
+            "evidence_not_applicable": "yes",
             "recommendation_direction": "for",
             "recommendation_strength_level": "weak",
         },
@@ -553,6 +555,8 @@ def test_strength_error_keeps_review_input_without_saving(tmp_path: Path, *, pro
         "snapshot_id": snapshot_id, "object_id": target["object_id"],
         "snapshot_revision": revision, "proposed_object_type": "recommendation",
         "type_action": "dit_klopt", "suitability": "ja", "eindoordeel": "goedkeuren",
+        "applicable": "yes", "complete": "yes", "placed_correctly": "yes",
+        "evidence_not_applicable": "yes",
         "recommendation_direction": "for", "recommendation_strength_level": "strong",
         "comment": "Mijn toelichting <behouden>",
     })
@@ -618,6 +622,8 @@ def test_strength_retry_preserves_selected_parent(tmp_path: Path, *, production_
         "snapshot_revision": console.objects_revision(sid),
         "proposed_object_type": "recommendation", "type_action": "dit_klopt",
         "suitability": "ja", "eindoordeel": "goedkeuren",
+        "applicable": "yes", "complete": "yes", "placed_correctly": "yes",
+        "evidence_not_applicable": "yes",
         "documentpositie_action": "andere_kop", "parent_choice": parent_id,
         "recommendation_direction": "for", "recommendation_strength_level": "strong",
     }

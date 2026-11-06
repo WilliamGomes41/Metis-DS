@@ -55,3 +55,31 @@ def test_every_state_event_and_prepared_result_against_independent_oracle(monkey
 def test_matrix_covers_the_public_state_and_event_alphabets():
     assert set(STATES) == set(policy.KO_STATES)
     assert set(EVENTS) == set(policy.EVENTS)
+
+
+@pytest.mark.parametrize('before_type,after_type', [('path', 'path'), ('path', 'node'),
+                                                  ('node', 'node'), ('node', 'path')])
+def test_current_and_prepared_classification_share_one_central_rule(monkeypatch, before_type, after_type):
+    current = {'object_id': 'claim', 'object_type': before_type, 'phase': 'before'}
+    prepared = {'object_id': 'claim', 'object_type': after_type, 'phase': 'after'}
+    monkeypatch.setattr(policy, 'derive_ko_state',
+        lambda obj, **kwargs: {'state': 'Kandidaat' if obj['phase'] == 'before' else 'Goedgekeurd'})
+    facts = {'assessment': YES, 'evidence_not_applicable': True} if after_type == 'node' else {}
+    result = policy.apply_ko_event(current=current, prepared=prepared, event='approve', review_path='boom', **facts)
+    assert bool(result) is (after_type == 'node')
+    if after_type == 'node':
+        assert result['assessment'] == YES
+        assert result['supporting_evidence']['applicability'] == 'not_applicable'
+
+
+@pytest.mark.parametrize('state', ['Kandidaat', 'Gepubliceerd', 'Vervangen', 'Ingetrokken'])
+def test_leaving_ko_for_structure_retains_the_current_state_guard(monkeypatch, state):
+    current = {'object_id': 'claim', 'object_type': 'node'}
+    prepared = {'object_id': 'claim', 'object_type': 'path'}
+    monkeypatch.setattr(policy, 'derive_ko_state', lambda *args, **kwargs: {'state': state})
+    if state == 'Kandidaat':
+        assert policy.apply_ko_event(current=current, prepared=prepared, event='approve', review_path='boom') == {}
+    else:
+        with pytest.raises(ConsoleError) as refused:
+            policy.apply_ko_event(current=current, prepared=prepared, event='approve', review_path='boom')
+        assert refused.value.code == 'ko_transition_refused'
