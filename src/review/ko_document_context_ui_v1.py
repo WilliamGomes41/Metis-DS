@@ -80,7 +80,7 @@ def render_document_context(snapshot_id, obj, objects, *, task='', source=None):
         'De oorspronkelijke bronstructuur en buuralinea’s konden niet worden bevestigd. Hier staan de koppen van het huidige kennisvoorstel; open de volledige bron voor de oorspronkelijke structuur.')
     neighbor_list = ('<ul>' + ''.join('<li>' + escape(text) + '</li>' for text in neighbors) + '</ul>'
         if neighbors else '<p class="field-help">Geen naburige passage onder dezelfde bronkop in dit vastgelegde venster. Open de hele sectie voor meer context.</p>')
-    return ('<details class="ko-document-context" data-document-context open><summary><span role="heading" aria-level="2">Bekijk in documentcontext</span></summary>'
+    return ('<details class="ko-document-context" data-document-context open><summary><h2 style="display:inline;margin:0;font:inherit;color:inherit">Bekijk in documentcontext</h2></summary>'
         '<div class="ko-source-layout"><section><h3>Plek in het document</h3><p class="field-help">'
         + heading_note + '</p>'
         + (f'<ul class="ko-outline" {outline_attribute}>' + ''.join(heading_items) + '</ul>' if heading_items else '<p>Geen koppen vastgelegd.</p>')
