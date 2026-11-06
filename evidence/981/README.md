@@ -50,9 +50,32 @@ modelaanroepen.
 Of bredere context betere modelkeuzes oplevert, is hiermee niet aangetoond. Dat
 blijft de onafhankelijke referentiemeting in #530.
 
+## Titelniveau uit het parsercontract (#997)
+
+Na #994 riep de vorming het titelniveau af uit de vorm van de paden. Dat leverde twee bekende grenzen op. Nu komt het titelniveau uit wat de parser zelf heeft vastgelegd:
+
+- **HTML.** De locator bewaart de tag van elk blok. Heeft een pagina precies één `<h1>`, dan is het pad daarvan de documenttitel. Zijn er meerdere `<h1>`, dan zijn dat secties en geen titel.
+- **Docling.** Docling labelt de titel apart en zet hem nooit vóór de modulekoppen. Een PDF heeft dus geen titelpad.
+
+`document_title_path(fragments)` leest dit uit de fragmenten. `module_of(section, title_path)` geeft het niveau direct onder de titel terug. Zonder titel is dat het eerste padniveau. De structuurgok (`module_depth`) is verwijderd.
+
+De bronblokken veranderen niet. Hashes van bestaande taakplannen blijven dus geldig, en vastgezette plannen houden hun `evidence_block_ids`.
+
+| Run | Titelpad | Resultaat |
+|---|---|---|
+| Echte Smetten-export | geen | Vreemde koppen 5, Rationale 7 van 8, overwegingen 5 van 8, 350.565 tekens totaal, maximaal 40.511 |
+| Met titel "Smetten" vóór elk pad | `Smetten` | Identiek |
+| Idem, plus een bijlage `[Bijlagen]` op het hoogste niveau | `Smetten` | Identiek (147 taken) |
+| Idem, met een normatieve zin in de bijlage | `Smetten` | Identiek: de bijlage is een eigen sectie en lekt niet meer |
+
+Beide grenzen uit #994 zijn daarmee opgelost:
+
+1. Een document met één module zonder titel krijgt nu zijn Rationale.
+2. Een document met een titel en een normatieve bijlage laat de modules gescheiden.
+
 ## Moduleniveau in de meting (Codex-review)
 
-`measure_context.py` vergelijkt modules op hetzelfde niveau dat de productiecode bepaalt (`module_depth`), niet langer vast op het eerste padniveau. De documentwortel komt alleen uit takken op het hoogste niveau met een mogelijke aanbeveling. De meting is drie keer gedraaid.
+Historisch (#994): de meting vergeleek modules op het niveau dat de toenmalige structuurregel bepaalde. Sinds #997 gebruikt `measure_context.py` `module_of` met het titelpad als tweede argument.
 
 | Run | Gevonden moduleniveau | Resultaat |
 |---|---|---|
@@ -60,7 +83,7 @@ blijft de onafhankelijke referentiemeting in #530.
 | Dezelfde blokken met de titel "Smetten" vooraan in elk pad | 2 | Identiek aan de run hierboven |
 | Idem, plus een bijlage `[Bijlagen]` op het hoogste niveau | 2 | Identiek; 147 taken, waarvan de bijlage er één is zonder modulecontext |
 
-## Bekende grens: één module zonder titel
+## Historisch: grens van #994 (opgelost in #997)
 
 Een document met één module en zonder titel (`[module, Aanbevelingen]`) heeft dezelfde vorm als een document met titel en platte modules (`[titel, module]`). Geen structurele regel kan die twee scheiden.
 

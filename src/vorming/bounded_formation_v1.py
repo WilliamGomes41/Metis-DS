@@ -31,45 +31,36 @@ def _path(block):
     return tuple(block.get("section_path") or [])
 
 
-def _shared_root(blocks):
-    """Longest section-path prefix shared by every block, e.g. a document title."""
-    paths = [_path(b) for b in blocks]
-    if not paths:
-        return ()
-    root = paths[0]
-    for path in paths[1:]:
-        n = 0
-        while n < min(len(root), len(path)) and root[n] == path[n]:
-            n += 1
-        root = root[:n]
-    return root
+def document_title_path(fragments):
+    """The section path of the document title, as the parser recorded it (#997).
 
-
-def _module_depth(blocks, root):
-    """Depth of the module level: always one below the shared root.
-
-    A titled document with flat modules ([title, module]) and an untitled
-    single module with flat subsections ([module, Aanbevelingen]) have the same
-    shape, so no structural rule can tell them apart. Leaking context across
-    modules is the worse error, so the narrower level always wins: an untitled
-    single-module document keeps the trunk behaviour (own section and ancestor
-    headings) instead of receiving its sibling sections.
+    HTML keeps each heading tag in its locator. A page with exactly one ``<h1>``
+    puts that title above every module, so its path is the title path. Several
+    ``<h1>`` headings are top-level sections, not a title. Docling labels the
+    title separately and never puts it in front of the module headings, so a
+    PDF has no title path. Nothing is inferred from the shape of the paths.
     """
-    return len(root) + 1
+    titles = set()
+    for fragment in fragments or ():
+        locator = fragment.get("source_locator") or {}
+        path = tuple(fragment.get("section_path") or [])
+        if (locator.get("locator_type") == "web_line_range" and len(path) == 1
+                and ";h1:" in str(locator.get("locator_value") or "")):
+            titles.add(path)
+    return next(iter(titles)) if len(titles) == 1 else ()
 
 
-def module_depth(blocks, evidence_blocks, possible):
-    """Path depth of the module level for this source.
+def module_of(section, title_path=()):
+    """The source module of a section: the level directly below the title, if any.
 
-    The document root comes from the top-level branches that hold a possible
-    recommendation. Unsectioned blocks (content before the first heading) and
-    top-level peers without recommendations, such as an appendix, must not
-    erase it: modules are only ever needed where recommendations live.
+    Content directly under the title, or outside it (an appendix beside the
+    titled guideline), is its own top-level section.
     """
-    sectioned = [b for b in (*blocks, *evidence_blocks) if _path(b)]
-    branches = {_path(b)[0] for b in blocks if b["block_id"] in possible and _path(b)}
-    root = _shared_root([b for b in sectioned if _path(b)[0] in branches] or sectioned)
-    return _module_depth(sectioned, root)
+    section = tuple(section)
+    title = tuple(title_path)
+    if title and section[:len(title)] == title:
+        return section[:len(title) + 1] if len(section) > len(title) else None
+    return section[:1] or None
 
 
 def _in_context(block, section, module):
@@ -81,11 +72,12 @@ def _in_context(block, section, module):
     return bool(block.get("heading")) and bool(path) and path == section[:len(path)]
 
 
-def tasks_for(blocks, evidence_blocks, targets=None):
+def tasks_for(blocks, evidence_blocks, targets=None, *, title_path=()):
     """Keep section runs together; headings/referenced sections are context only.
 
     A task with a possible recommendation also consults its whole source
-    module (the level below the shared document root), so supporting text
+    module (the level below the parser-recorded document title, see
+    ``document_title_path``), so supporting text
     such as Rationale or considerations in a sibling section is available.
     Other tasks keep their own section, which bounds the request size.
 
@@ -95,7 +87,6 @@ def tasks_for(blocks, evidence_blocks, targets=None):
     target_spans = [t["span"] for t in targets] if targets is not None else [full_span(b) for b in blocks]
     selected_ids = {s["block_id"] for s in target_spans}
     possible = {row["span"]["block_id"] for row in inventory(blocks, recommendation_sections_only=False)}
-    depth = module_depth(blocks, evidence_blocks, possible)
     groups, group, size, path = [], [], 0, None
     for block in blocks:
         if block["block_id"] not in selected_ids:
@@ -110,8 +101,8 @@ def tasks_for(blocks, evidence_blocks, targets=None):
     for group in groups:
         ids = {b["block_id"] for b in group}
         section = tuple(group[0].get("section_path") or [])
-        module = (section[:depth]
-                  if depth and len(section) >= depth and any(b["block_id"] in possible for b in group) else None)
+        module = (module_of(section, title_path)
+                  if any(b["block_id"] in possible for b in group) else None)
         contexts = {b["block_id"]: b for b in evidence_blocks if _in_context(b, section, module)}
         # Reference closure includes the complete referenced section, not just
         # the table caption. If it does not fit, this task fails explicitly.
@@ -325,7 +316,8 @@ def execute(*, blocks, evidence_blocks, validator_input, provider, limits,
         # Full original source partition, independent of attempt or current
         # completion. Prior results keep their exact existing semantic keys.
         baseline = _durable_targets(blocks, {"objects":[], "source_assessments":[]})
-        plan = build_plan(tasks_for(blocks,evidence_blocks,baseline),blocks,evidence_blocks)
+        title_path = document_title_path(validator_input.get("fragments"))
+        plan = build_plan(tasks_for(blocks,evidence_blocks,baseline,title_path=title_path),blocks,evidence_blocks)
         if durable:
             plan = checkpoint.retain_task_plan(plan)
     evidence["task_plan"] = plan
