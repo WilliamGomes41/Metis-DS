@@ -9,7 +9,9 @@ module stays an explicit task error instead of being truncated.
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
-from src.vorming.bounded_formation_v1 import MAX_CONTEXT_CHARS, tasks_for
+from src.vorming.bounded_formation_v1 import MAX_CONTEXT_CHARS, document_title_paths, module_of, tasks_for
+
+TITLE = frozenset({("Smetten",)})  # the parser-recorded container heading (#997)
 
 
 def block(bid, text, path, heading=None, position=0):
@@ -73,7 +75,7 @@ def test_descriptive_task_keeps_its_own_section_only():
 def test_document_title_level_is_not_a_module():
     # Older parsers put the document title first; the module is the level below the shared root.
     blocks = [dict(b, section_path=["Smetten", *b["section_path"]]) for b in guideline()]
-    context = _context(_task(tasks_for(blocks, blocks), "m1-rec"))
+    context = _context(_task(tasks_for(blocks, blocks, title_paths=TITLE), "m1-rec"))
     assert {"m1-rat", "m1-ow"} <= context
     assert not {"m2-rat", "m2-rec"} & context
 
@@ -100,20 +102,18 @@ def test_oversized_module_context_is_an_explicit_error_without_truncation():
     assert next(b for b in task["evidence_blocks"] if b["block_id"] == "m1-rat")["text"] == long
 
 
-def test_untitled_single_module_keeps_trunk_context_and_never_leaks():
-    # Codex on #994 (P2, then P1): an untitled single module ([module, Aanbevelingen]) has the
-    # same shape as a titled document with flat modules ([title, module]). Leakage is the worse
-    # error, so this case keeps the trunk behaviour: own section and ancestor headings only.
+def test_untitled_single_module_is_its_own_module():
+    # #997: without a recorded title the first path level is the module, so a single
+    # untitled module ([module, Aanbevelingen]) keeps its Rationale and considerations.
     blocks = [b for b in guideline() if b["section_path"][0].startswith("Module 1")]
     context = _context(_task(tasks_for(blocks, blocks), "m1-rec"))
-    assert "m1" in context
-    assert not {"m1-rat", "m1-ow", "m1-bg"} & context
+    assert {"m1-rat", "m1-ow"} <= context
 
 
 def test_recommendation_directly_under_a_titled_module_stays_in_that_module():
     blocks = [dict(b, section_path=["Smetten", *b["section_path"]]) for b in guideline()]
     blocks.append(block("m1-direct", "Overweeg altijd de huidplooien.", ["Smetten", "Module 1: Risicofactoren"]))
-    context = _context(_task(tasks_for(blocks, blocks), "m1-direct"))
+    context = _context(_task(tasks_for(blocks, blocks, title_paths=TITLE), "m1-direct"))
     assert "m1-rat" in context
     assert not {"m2-rat", "m2-rec"} & context
 
@@ -122,7 +122,7 @@ def test_unsectioned_preface_does_not_erase_the_document_root():
     # Codex on #994: content before the first heading has section_path [] in the HTML extractor.
     blocks = [block("preface", "Deze richtlijn is bedoeld voor verpleegkundigen.", [])]
     blocks += [dict(b, section_path=["Smetten", *b["section_path"]]) for b in guideline()]
-    context = _context(_task(tasks_for(blocks, blocks), "m1-rec"))
+    context = _context(_task(tasks_for(blocks, blocks, title_paths=TITLE), "m1-rec"))
     assert {"m1-rat", "m1-ow"} <= context
     assert not {"m2-rat", "m2-rec"} & context
 
@@ -135,7 +135,7 @@ def test_titled_module_without_subsections_still_separates_modules():
     blocks += [block("m2", m2, ["Smetten", m2], heading=m2),
                block("m2-rec", "Houd de huidplooien droog.", ["Smetten", m2]),
                block("m2-txt", "Vocht verhoogt het risico.", ["Smetten", m2])]
-    context = _context(_task(tasks_for(blocks, blocks), "m1-rec"))
+    context = _context(_task(tasks_for(blocks, blocks, title_paths=TITLE), "m1-rec"))
     assert {"m1-rat", "m1-ow"} <= context
     assert not {"m2", "m2-rec", "m2-txt"} & context
 
@@ -148,7 +148,7 @@ def test_titled_document_with_only_flat_modules_does_not_leak():
               block("m1-rec", "Breng bij iedere patiënt de risicofactoren voor smetten in kaart.", ["Smetten", m1]),
               block("m2", m2, ["Smetten", m2], heading=m2),
               block("m2-rec", "Houd de huidplooien droog.", ["Smetten", m2])]
-    context = _context(_task(tasks_for(blocks, blocks), "m1-rec"))
+    context = _context(_task(tasks_for(blocks, blocks, title_paths=TITLE), "m1-rec"))
     assert not {"m2", "m2-rec"} & context
 
 
@@ -157,6 +157,98 @@ def test_top_level_appendix_peer_does_not_erase_the_title_root():
     blocks = [dict(b, section_path=["Smetten", *b["section_path"]]) for b in guideline()]
     blocks += [block("bijl", "Bijlage 1. Zoekverantwoording", ["Bijlagen"], heading="Bijlagen"),
                block("bijl-txt", "De zoekactie liep tot 2024.", ["Bijlagen"])]
-    context = _context(_task(tasks_for(blocks, blocks), "m1-rec"))
+    context = _context(_task(tasks_for(blocks, blocks, title_paths=TITLE), "m1-rec"))
     assert {"m1-rat", "m1-ow"} <= context
     assert not {"m2", "m2-rec", "m2-rat", "bijl", "bijl-txt"} & context
+
+
+def test_titled_document_with_normative_appendix_peer_does_not_leak():
+    # #997: a top-level appendix with a normative-looking sentence beside a titled
+    # guideline is its own section; the recorded title keeps the modules apart.
+    blocks = [dict(b, section_path=["Smetten", *b["section_path"]]) for b in guideline()]
+    blocks += [block("bijl", "Bijlagen", ["Bijlagen"], heading="Bijlagen"),
+               block("bijl-rec", "Gebruik deze zoekstrategie voor elke herziening.", ["Bijlagen"])]
+    context = _context(_task(tasks_for(blocks, blocks, title_paths=TITLE), "m1-rec"))
+    assert {"m1-rat", "m1-ow"} <= context
+    assert not {"m2", "m2-rec", "m2-rat", "bijl", "bijl-rec"} & context
+
+
+def _html(path, tag, ordinal):
+    return {"section_path": list(path), "source_locator": {"locator_type": "web_line_range",
+            "locator_value": f"lines:1-1;{tag}:{ordinal}"}}
+
+
+def test_an_h1_with_content_beneath_is_a_container():
+    fragments = [_html(["Smetten"], "h1", 1), _html(["Smetten", "Module 1"], "h2", 1),
+                 _html(["Smetten", "Module 1"], "p", 1)]
+    assert document_title_paths(fragments) == {("Smetten",)}
+
+
+def test_flat_h1_headings_are_sections_not_containers():
+    fragments = [_html(["Module 1"], "h1", 1), _html(["Module 1"], "p", 1), _html(["Module 2"], "h1", 2)]
+    assert document_title_paths(fragments) == frozenset()
+
+
+def test_pdf_fragments_have_no_title_path():
+    fragments = [{"section_path": ["Smetten"], "source_locator": {"locator_type": "page_bbox",
+                  "locator_value": "page:1;bbox:0,0,1,1"}}]
+    assert document_title_paths(fragments) == frozenset()
+
+
+def test_module_of_follows_the_title():
+    assert module_of(["Smetten", "Module 1", "Aanbevelingen"], TITLE) == ("Smetten", "Module 1")
+    assert module_of(["Smetten"], TITLE) is None
+    assert module_of(["Bijlagen"], TITLE) == ("Bijlagen",)
+    assert module_of(["Module 1", "Aanbevelingen"]) == ("Module 1",)
+    assert module_of(["Bijlagen", "Tabel 1"], TITLE) == ("Bijlagen",)
+    assert module_of([]) is None
+
+
+def test_formation_passes_the_parser_title_to_task_planning(monkeypatch):
+    # #997: execute derives the title from the parser record. In production the
+    # content fragments have the headings, including the <h1>, filtered out
+    # (_content_fragments), so the title must come from the evidence fragments.
+    from src.vorming import bounded_formation_v1 as bf
+    from src.vorming.bounded_model_call_v1 import ModelCallLimits
+    from src.vorming.pre_review_semantic_v1 import _content_fragments, _evidence_fragments
+    from src.vorming.semantic_passage_v1 import semantic_source_blocks
+    from tests.test_recommendation_context_v3 import source
+    rows = [("Smetten", ["Smetten"], "h1", "Smetten"), ("Module 1", ["Smetten", "Module 1"], "h2", "Module 1"),
+            ("Gebruik geen zalf", ["Smetten", "Module 1"], "p", None)]
+    fragments = [dict(source(t)[0], fragment_id=str(i), fragment_hash=str(i), section_path=path, heading=heading,
+                      object_type="heading" if heading else source(t)[0].get("object_type"),
+                      source_locator={"locator_type": "web_line_range", "locator_value": f"lines:{i}-{i};{tag}:{i}"})
+                 for i, (t, path, tag, heading) in enumerate(rows)]
+    content, evidence = _content_fragments(fragments), _evidence_fragments(fragments)
+    assert not any(f.get("heading") == "Smetten" for f in content)  # the production filter drops the title
+    blocks = semantic_source_blocks(content)
+    seen = []
+    real = bf.tasks_for
+    monkeypatch.setattr(bf, "tasks_for", lambda *a, **k: seen.append(k.get("title_paths")) or real(*a, **k))
+    bf.execute(blocks=blocks, evidence_blocks=semantic_source_blocks(evidence),
+               validator_input={"fragments": content, "document_id": "test", "evidence_fragments": evidence,
+                                "allowed_candidate_block_ids": [b["block_id"] for b in blocks], "field_contract_v3": True},
+               provider=lambda **k: None, limits=ModelCallLimits(total=0))
+    assert seen == [frozenset({("Smetten",)})]
+
+
+def _parsed_html(tmp_path, html):
+    from src.vorming.extract_html_v1 import extract
+    page = tmp_path / "page.html"
+    page.write_text(html, encoding="utf-8")
+    return extract(page, document_id="d", source_id="s")
+
+
+def test_title_with_an_appendix_h1_still_separates_modules(tmp_path):
+    # Codex on #998: a title <h1>, module <h2>s and a top-level <h1>Bijlagen</h1>,
+    # through the real HTML parser. The modules under the title must stay apart.
+    fragments = _parsed_html(tmp_path, """<html><body>
+      <h1>Smetten</h1>
+      <h2>Module 1</h2><h3>Aanbevelingen</h3><p>Breng de risicofactoren in kaart.</p>
+      <h3>Rationale</h3><p>Zweten weegt zwaar.</p>
+      <h2>Module 2</h2><h3>Aanbevelingen</h3><p>Houd de huidplooien droog.</p>
+      <h1>Bijlagen</h1><p>Gebruik deze zoekstrategie.</p>
+    </body></html>""")
+    titles = document_title_paths(fragments)
+    assert module_of(["Smetten", "Module 1", "Aanbevelingen"], titles) == ("Smetten", "Module 1")
+    assert module_of(["Bijlagen"], titles) == ("Bijlagen",)
