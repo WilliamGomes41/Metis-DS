@@ -94,6 +94,53 @@ def test_negative_answers_cannot_replay_a_previous_approval(tmp_path, production
     assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
 
 
+def test_renewed_same_tuple_saves_fresh_command_identity_for_exact_replay(tmp_path, production_console):
+    console, sid = _console(tmp_path, production_console=production_console)
+    target = next(row for row in console.snapshot_objects(sid) if content_reviewable(row))
+    _approval(console, sid, target, assessment=YES, evidence_not_applicable=True)
+    console._refresh_review_runtime()
+    rows = console._bindings[sid]
+    for row in rows:
+        if row['object_id'] == target['object_id']:
+            row['valid'] = False
+            row['review_command_hash'] = 'old-historical-command'
+    console._save_bindings()
+    _approval(console, sid, target, assessment=YES, evidence_not_applicable=True)
+    before = deepcopy(physical_state(console, sid))
+    events = console.workflow_review_store.read_events_for_snapshots([sid])
+    _approval(console, sid, target, assessment=YES, evidence_not_applicable=True)
+    assert physical_state(console, sid) == before
+    assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
+
+
+def test_absent_new_facts_preserve_a_historical_exact_command_replay(tmp_path, production_console, monkeypatch):
+    from src import integrity_kernel
+    console, sid = _console(tmp_path, production_console=production_console)
+    target = next(row for row in console.snapshot_objects(sid) if content_reviewable(row))
+    original = integrity_kernel.stable_hash
+    historical = []
+    def capture(value):
+        if isinstance(value, dict) and value.get('decision') == 'approve' and 'relation_choices' in value:
+            historical.append(original({key: item for key, item in value.items()
+                                        if key not in {'assessment', 'evidence_not_applicable'}}))
+        return original(value)
+    monkeypatch.setattr(integrity_kernel, 'stable_hash', capture)
+    _approval(console, sid, target, assessment=YES, evidence_not_applicable=True)
+    assert historical
+    console._refresh_review_runtime()
+    for row in console._bindings[sid]:
+        if row['object_id'] == target['object_id']:
+            row['review_command_hash'] = historical[-1]
+            row.pop('assessment', None)
+            row.pop('supporting_evidence', None)
+    console._save_bindings()
+    before = deepcopy(physical_state(console, sid))
+    events = console.workflow_review_store.read_events_for_snapshots([sid])
+    _approval(console, sid, target)
+    assert physical_state(console, sid) == before
+    assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
+
+
 def test_actual_command_refuses_wrong_prepared_poststate_before_commit(tmp_path, production_console, monkeypatch):
     from src import operations_console_v1 as module
     console, sid = _console(tmp_path, production_console=production_console)

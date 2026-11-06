@@ -654,7 +654,7 @@ def _scenario_review_flow(request, tmp_path, monkeypatch):
     sid, rid, queue = _ingest(console, accounts)
     first, second = queue[0], queue[1]
     _approve(console, rid, sid, first)
-    text = second["content"]["clean_text"].rstrip(".")
+    text = second["content"]["clean_text"]
     console.correct_object(actor_id=rid, snapshot_id=sid, object_id=second["object_id"],
                            patch={"reason": "t13", "operations": [
                                {"op": "set", "path": "content.clean_text", "value": text}]})

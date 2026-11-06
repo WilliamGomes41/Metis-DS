@@ -118,7 +118,8 @@ def _complete_review_http(console, accounts, receipt):
         }, follow_redirects=False)
         assert response.status_code == 303, response.text
         requests.append((obj["object_id"], decision))
-    decide(target, "approve", confirmed_object_type="explanation")
+    decide(target, "approve", confirmed_object_type="explanation", applicable="yes",
+           complete="yes", placed_correctly="yes", evidence_not_applicable="yes")
     for obj in console.snapshot_objects(sid):
         if obj["object_id"] == target["object_id"] or passage_register_of(obj).get("status") != "selected_as_candidate":
             continue
