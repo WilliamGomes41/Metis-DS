@@ -22,7 +22,7 @@ def read_document_context(console, read_inputs, obj):
         return None
 
 
-def render_document_context(snapshot_id, obj, objects, *, task='', source=None):
+def render_document_context(snapshot_id, obj, objects, *, task='', source=None, document_assessment_url=''):
     parts = broncontext_parts(obj)
     heading_items = []
     current_path = tuple((obj.get('structure') or {}).get('section_path') or [])
@@ -89,7 +89,9 @@ def render_document_context(snapshot_id, obj, objects, *, task='', source=None):
         + '<div class="ko-source-neighbors" data-source-neighbors><h3>Naburige passages onder deze kop</h3>'
         + neighbor_list + '</div></section></div>'
         + f'<p><a class="btn-secondary" href="{escape(section_url, quote=True)}">Toon hele sectie en naburige passages</a></p>'
-          f'<p><a href="{escape(original_url, quote=True)}">Open volledige bron</a></p></details>')
+          f'<p><a href="{escape(original_url, quote=True)}">Open volledige bron</a></p>'
+        + (f'<p><a href="{escape(document_assessment_url, quote=True)}">Bekijk documentbeoordeling</a></p>'
+           if document_assessment_url else '') + '</details>')
 
 
 

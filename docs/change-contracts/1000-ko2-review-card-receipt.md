@@ -33,6 +33,11 @@ Blokkerende eerste stap is het vaststellen van bron-/eventeigenaren. Eén code-e
 
 ## Verificatiestatus
 
+Wanneer het bestaande passagevenster documentvorming afzonderlijk laat beoordelen,
+blijft de geselecteerde documentbeoordeling met één link in de bronpaneelvoet
+bereikbaar. Deze link gebruikt dezelfde Vorming-route en vereist geen extra reads;
+de passage blijft `not_evaluated` voor documentbeoordeling.
+
 Uitvoering en exacte resultaten worden bij de PR vastgelegd. Deze ontwerptekst is geen verklaring dat runtime, browserproef of productieacceptatie al geslaagd is.
 
 ## Uitwerking van de bewijsgrenzen

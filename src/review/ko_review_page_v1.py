@@ -40,7 +40,10 @@ def source_breadcrumb(snapshot_id, obj, *, title='', task='', overview_url=''):
 def _source_panel(console, inputs, obj, *, task=''):
     from src.review.ko_document_context_ui_v1 import read_document_context, render_document_context
     source = read_document_context(console, inputs, obj)
-    panel = render_document_context(inputs.envelope['snapshot_id'], obj, inputs.objects, task=task, source=source)
+    assessment_url = ('/source-selection?' + urlencode({'document': inputs.envelope['snapshot_id']})
+        if inputs.envelope.get('_review_check_formation') else '')
+    panel = render_document_context(inputs.envelope['snapshot_id'], obj, inputs.objects,
+        task=task, source=source, document_assessment_url=assessment_url)
     return panel
 
 
