@@ -166,6 +166,30 @@ def build_app() -> object:
     install_structured_logging()
     validate_workflow_store_configuration()
     topology = assert_supported_topology()
+    console, running_in_azure = compose_console()
+
+    # Gunicorn workers initialize independently. Keep migration and local-copy
+    # reconciliation inside the same process-shared store lock used by runtime
+    # commits, and refresh after acquiring it so worker two cannot replay a
+    # stale startup snapshot over worker one's completed work.
+    with console._store_write_lock():
+        console._reload_store_locked()
+        bootstrap_accounts(console)
+        console.migrate_legacy_revise_to_review()
+        console.reconcile_durable_publications()
+
+    return build_console_app(
+        console, trusted_origin=_console_public_origin(running_in_azure=running_in_azure),
+        topology=topology,
+    )
+
+
+def compose_console() -> tuple[OperationsConsole, bool]:
+    """Construct the production console without any startup write.
+
+    ``build_app`` and read-only tools such as ``scripts/ko_state_inventory.py``
+    share this one composition.
+    """
     data_root = _env_path("CONSOLE_DATA_ROOT", _default_data_root())
     immutable_store = _immutable_source_store()
     postgres_credential = _postgres_credential()
@@ -209,21 +233,7 @@ def build_app() -> object:
                 raise ValueError('review_card_schema_unprepared')
 
     bind_pre_review_semantic_processing(console)
-
-    # Gunicorn workers initialize independently. Keep migration and local-copy
-    # reconciliation inside the same process-shared store lock used by runtime
-    # commits, and refresh after acquiring it so worker two cannot replay a
-    # stale startup snapshot over worker one's completed work.
-    with console._store_write_lock():
-        console._reload_store_locked()
-        bootstrap_accounts(console)
-        console.migrate_legacy_revise_to_review()
-        console.reconcile_durable_publications()
-
-    return build_console_app(
-        console, trusted_origin=_console_public_origin(running_in_azure=running_in_azure),
-        topology=topology,
-    )
+    return console, running_in_azure
 
 
 def build_console_app(console: OperationsConsole, *, trusted_origin=None, topology=None):
