@@ -115,6 +115,32 @@ def test_second_review_keeps_exact_tuple_and_refuses_mislabelled_rejection(syste
     assert receipt.event['details']['review_interaction']['assessment']['complete'] == 'yes'
 
 
+@pytest.mark.parametrize('second', [False, True])
+def test_malformed_interaction_id_is_refused_without_review_or_receipt(system, production_app, second):
+    console, _, accounts, sid, obj = system
+    if second:
+        participation(console, accounts, sid, 'archive', accounts['reviewer']['account_id'])
+        participation(console, accounts, sid, 'add_required', accounts['reviewer']['account_id'])
+        approve(console, accounts, sid, obj)
+    client = TestClient(production_app(console))
+    username = 'reviewer' if second else 'researcher'
+    client.post('/login', data={'username': username, 'password': 'fixture-only'})
+    page = client.get('/review', params={'document': sid, 'object': obj['object_id'], 'task': 'contextual'})
+    assert page.status_code == 200
+    data = compact_submission(page)
+    before = physical_state(console, sid)
+    events = console.workflow_review_store.read_events_for_snapshots([sid])
+    endpoint = '/review/second-review' if second else '/review'
+    result = client.post(endpoint, data={**data, 'interaction_id': 'invalid'}, follow_redirects=False)
+    assert result.status_code == 400
+    assert 'data-ko-assessment-form' in result.text and 'data-review-receipt' not in result.text
+    assert compact_submission(result)['snapshot_revision'] == data['snapshot_revision']
+    assert physical_state(console, sid) == before
+    assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
+    saved = client.post(endpoint, data=data, follow_redirects=False)
+    assert saved.status_code == 303
+
+
 def test_explicit_second_mode_does_not_invent_a_second_review_duty(tmp_path, production_console, monkeypatch):
     console, sid, _, obj, client, page, _ = prepared(tmp_path, production_console, monkeypatch)
     before = physical_state(console, sid)
@@ -133,7 +159,7 @@ def test_explicit_second_mode_does_not_invent_a_second_review_duty(tmp_path, pro
 
 
 @pytest.mark.parametrize('invalid', [dict(review_action='reject', comment=''),
-    dict(review_action='unknown'), dict(complete='tampered')])
+    dict(review_action='unknown'), dict(complete='tampered'), dict(interaction_id='invalid')])
 def test_early_validation_error_cannot_rebase_old_answers_onto_current_revision(tmp_path, production_console, monkeypatch, invalid):
     console, sid, _, obj, client, page, _ = prepared(tmp_path, production_console, monkeypatch)
     old = compact_submission(page)
@@ -143,6 +169,7 @@ def test_early_validation_error_cannot_rebase_old_answers_onto_current_revision(
     winner = client.post('/review', data=compact_submission(peer_page), follow_redirects=False)
     assert winner.status_code == 303, winner.text
     committed = physical_state(console, sid)
+    events = console.workflow_review_store.read_events_for_snapshots([sid])
     refused = client.post('/review', data={**old, **invalid}, follow_redirects=False)
     assert refused.status_code == 409
     recovered = compact_submission(refused)
@@ -152,6 +179,7 @@ def test_early_validation_error_cannot_rebase_old_answers_onto_current_revision(
     assert 'Passage opnieuw beoordelen' in refused.text
     assert client.post('/review', data=recovered, follow_redirects=False).status_code == 409
     assert physical_state(console, sid) == committed
+    assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
     fresh = client.get('/review', params={'document': sid, 'object': obj['object_id']})
     assert compact_submission(fresh)['snapshot_revision'] != old['snapshot_revision']
     assert not re.search(r'<input[^>]+type="radio"[^>]+checked', fresh.text)

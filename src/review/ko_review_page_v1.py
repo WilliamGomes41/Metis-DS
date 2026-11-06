@@ -317,7 +317,7 @@ def handle_compact_review(console, account, snapshot_id, object_id, revision, in
     from src.operations_console_v1 import ConsoleError
     from src.review.review_assessment_v1 import ReviewAssessment, displayed_review_descriptor, compact_approval_arguments
     from src.review.review_passage_read_v1 import read_review_passage, resolve_review_revision
-    from src.review.review_interaction_v1 import build_review_interaction_evidence
+    from src.review.review_interaction_v1 import build_review_interaction_evidence, REVIEW_INTERACTION_PREFIX
     from src.review.beslisboom_path_v1 import review_path_for_klasse
     from src.review.ko_receipt_ui_v1 import receipt_location
     draft = {**values, 'comment': comment}
@@ -326,6 +326,9 @@ def handle_compact_review(console, account, snapshot_id, object_id, revision, in
             raise ConsoleError('snapshot_revision_required')
         if not interaction_id.strip():
             raise ConsoleError('review_assessment_required')
+        interaction_id = interaction_id.strip()
+        if not interaction_id.startswith(REVIEW_INTERACTION_PREFIX):
+            raise ConsoleError('review_interaction_id_invalid')
         try:
             assessment = ReviewAssessment.from_values(**values)
         except ValueError as exc:
