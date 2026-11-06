@@ -125,7 +125,7 @@ html[data-theme="dark"] .ko-page .ko-document-context > summary { color: var(--h
 html[data-theme="dark"] .ko-page .ko-document-context mark { color: #fff5d1; background: #66551f; }
 html[data-theme="dark"] .ko-type-badge { color: var(--paars); background: #3b2854; }
 @media (max-width: 1100px) { .ko-brand { min-width: 190px; } .ko-topbar { flex-wrap: wrap; gap: 12px; } .ko-topbar nav { gap: 2px; } .ko-topbar nav a { padding: 7px; font-size: 13px; } .ko-account { min-width: 95px; } .ko-question > div { gap: 12px; } .ko-actions { gap: 12px; } }
-@media (max-width: 760px) {
+@media (max-width: 960px) {
  .canvas { padding: 12px 16px 24px; } .ko-topbar { flex-wrap: wrap; gap: 12px; }
  .ko-brand { flex: 1; } .ko-topbar nav { order: 4; flex-basis: 100%; overflow-x: auto; gap: 8px; }
  .ko-topbar .theme-toggle { margin-left: auto; } .ko-account { min-width: 80px; }
