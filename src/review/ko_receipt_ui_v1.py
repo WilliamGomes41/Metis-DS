@@ -324,7 +324,8 @@ def render_receipt_page(account, receipt, snapshot_id, continuation):
         + '</dd></div><div><dt>Publicatie document</dt><dd><span class="ko-status ko-status-neutral">' + escape(publication)
         + '</span></dd></div></dl><section class="ko-result-diagram" aria-label="Samenhang van het opgeslagen kennisobject"><h2>Zo is het kennisobject vastgelegd</h2>'
         '<div class="ko-result-claim"><span class="ko-type-badge">' + escape(_object_type_label(str(obj.get('confirmed_object_type') or obj.get('object_type') or '')))
-        + '</span><p data-full-knowledge-passage>' + escape(str((obj.get('content') or {}).get('clean_text') or '')) + '</p></div>'
+        + '</span><p data-full-knowledge-passage>' + escape(str((obj.get('content') or {}).get('clean_text') or '')) + '</p>'
+        + _connection_scope_html(connections) + '</div>'
         '<ul class="ko-result-branches" data-knowledge-connections>' + ''.join(branches) + '</ul>'
         '<div class="ko-source-band"><strong>Herkomst</strong><span>' + escape(found_under_path(obj))
         + '</span><a href="' + escape(source, quote=True) + '">Open oorspronkelijke bron</a></div></section></section>'
