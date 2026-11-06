@@ -55,6 +55,12 @@ def block_fragments(pair):
     return deps
 
 
+@dataclass(frozen=True)
+class ReviewDocumentContext:
+    fragments: tuple[dict, ...]
+    focal_fragment_ids: frozenset[str]
+
+
 class ReviewSourceRecords:
     @diagnostic_phase('source_views_prepare_records')
     def prepare_review_source(self, input_reference, payload, *, extraction=None):
@@ -195,46 +201,67 @@ class ReviewSourceRecords:
                 'header_hash': prepared.header_hash}
 
     @diagnostic_phase('review_document_context')
-    def read_review_document_context(self, envelope, target):
-        """Display-only headings and adjacent original fragments in one sealed root."""
-        from src.vorming.source_preparation_context_v1 import KEY
-        from src.vorming.prepared_source_views_v1 import contract
+    def read_review_document_context(self, envelope, target, *, source):
+        """Display only verified original headings and immediate raw-source neighbors."""
+        from src.vorming.prepared_source_views_v1 import ReadSource, freeze
+        from src.vorming.source_preparation_context_v1 import KEY, SourceIdentity
+        from dataclasses import asdict
+        root = getattr(source, 'root', None)
         extraction = envelope.get(KEY)
-        if not extraction:
+        if not isinstance(root, ReadSource) or not extraction:
             return None
-        views_id = stable_hash({'extraction_hash': extraction['record_hash'], 'contract': contract()})
+        if (root.payload.get('source') != asdict(SourceIdentity.from_envelope(envelope))
+                or root.reference.get('extraction_hash') != extraction.get('record_hash')):
+            fail('source_read_reference_invalid')
+        ordinals = getattr(root, 'fragment_ordinals', None)
+        if ordinals is None:
+            return None
+        cached = {row['fragment_id']: (ordinal, row) for ordinal, row in zip(ordinals, root.raw)}
         selection = (target.get('metadata') or {}).get('semantic_passage') or target.get('source') or {}
         block_ids, raw_ids = references(selection)
-        if not block_ids and not raw_ids:
+        for public, _ in source.blocks:
+            if public['block_id'] in block_ids:
+                raw_ids.update(public['source_fragment_ids'])
+        focal = [ordinal for fid, (ordinal, _) in cached.items() if fid in raw_ids]
+        if not focal or not raw_ids <= cached.keys():
             return None
-        with self.documents._connect() as con:
-            if con.execute("SELECT to_regclass('workflow.source_read_roots') AS table_name").fetchone()['table_name'] is None:
-                return None
-            selected = con.execute(
-                "WITH focal AS (SELECT f.ordinal FROM workflow.source_read_fragments f "
-                "WHERE f.views_id=%s AND (f.fragment_id=ANY(%s) OR f.fragment_id IN "
-                "(SELECT m.fragment_id FROM workflow.source_read_block_fragments m "
-                "WHERE m.views_id=%s AND m.block_id=ANY(%s)))), "
-                "bounds AS (SELECT min(ordinal) AS first,max(ordinal) AS last FROM focal) "
-                "SELECT fragment_id FROM workflow.source_read_fragments f,bounds "
-                "WHERE views_id=%s AND ('headings'=ANY(views) OR "
-                "ordinal BETWEEN bounds.first-1 AND bounds.last+1) ORDER BY ordinal",
-                (views_id, sorted(raw_ids), views_id, sorted(block_ids), views_id)).fetchall()
-        return self.read_review_source(envelope, objects=[target],
-            display_fragment_ids=[row['fragment_id'] for row in selected])
+        first, last = min(focal), max(focal)
+        if not root.complete:
+            with self.documents._connect() as con:
+                additions = con.execute(
+                    "SELECT f.fragment_id,f.ordinal,f.views,f.blocks,f.payload_hash,f.payload, "
+                    "ARRAY(SELECT DISTINCT m.payload_hash FROM workflow.source_read_block_fragments m "
+                    "WHERE m.views_id=f.views_id AND m.fragment_id=f.fragment_id) AS member_hashes "
+                    "FROM workflow.source_read_fragments f WHERE f.views_id=%s "
+                    "AND ('headings'=ANY(views) OR ordinal BETWEEN %s AND %s) "
+                    "AND NOT (fragment_id=ANY(%s)) ORDER BY ordinal",
+                    (root.reference['views_id'], first-1, last+1, list(cached))).fetchall()
+            for row in additions:
+                if (row['member_hashes'] != [row['payload_hash']]
+                        or row['payload'].get('fragment_id') != row['fragment_id']
+                        or row['payload_hash'] != stable_hash({key: row[key] for key in
+                            ('ordinal', 'views', 'blocks', 'payload')})):
+                    fail()
+                cached[row['fragment_id']] = (row['ordinal'], row['payload'])
+        expected_ordinals = set(range(max(0, first-1), min(root.payload['fragment_count'], last+2)))
+        if not expected_ordinals <= {ordinal for ordinal, _ in cached.values()}:
+            fail('source_read_fragment_missing')
+        from src.object_taxonomy_v1 import extract_object_type
+        rows = tuple(freeze(row) for ordinal, row in sorted(cached.values(), key=lambda item: item[0])
+            if first-1 <= ordinal <= last+1 or extract_object_type(row)[0] == 'heading')
+        return ReviewDocumentContext(rows, frozenset(raw_ids))
 
     @diagnostic_phase('source_views_read_records')
-    def read_review_source(self, envelope, *, objects=None, con=None, display_fragment_ids=None):
+    def read_review_source(self, envelope, *, objects=None, con=None):
         import psycopg
         try:
-            return self._read_review_source(envelope, objects=objects, con=con,
-                                            display_fragment_ids=display_fragment_ids)
+            return self._read_review_source(envelope, objects=objects, con=con)
         except (KeyError, TypeError, IndexError, ValueError) as error:
             raise WorkflowDocumentStoreError('source_read_integrity_failed') from error
         except psycopg.Error as error:
             raise WorkflowDocumentStoreError('source_read_unavailable') from error
 
-    def _read_review_source(self, envelope, *, objects=None, con=None, display_fragment_ids=None):
+    def _read_review_source(self, envelope, *, objects=None, con=None):
         from src.vorming.prepared_source_views_v1 import ReadSource, contract
         from src.vorming.source_preparation_context_v1 import KEY, VERSION, SourceIdentity
         from dataclasses import asdict
@@ -243,9 +270,7 @@ class ReviewSourceRecords:
             return None
         views_id = stable_hash({'extraction_hash': extraction['record_hash'], 'contract': contract()})
         block_ids, raw_ids = references(objects)
-        if display_fragment_ids is not None:
-            raw_ids.update(display_fragment_ids)
-        complete = display_fragment_ids is None and (objects is None or not (block_ids or raw_ids))
+        complete = objects is None or not (block_ids or raw_ids)
         # Whole-document callers already require all records. Capture those
         # with the root in one SQL snapshot, preserving the existing validators
         # and publication query budget. Selected-object reads stay windowed.
@@ -385,4 +410,5 @@ class ReviewSourceRecords:
         with diagnostic_phase('source_views_hydrate'):
             result = ReadSource([r['payload'] for r in fragments], views, header, expected_ref,
                                 complete=complete, docling_loader=docling)
+            result.fragment_ordinals = tuple(row['ordinal'] for row in fragments)
         return result.fragments

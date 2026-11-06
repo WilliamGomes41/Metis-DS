@@ -4,7 +4,7 @@ from html import escape
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from src.integrity_kernel import canonical_object_payload, compute_canonical_object_hash, stable_hash
-from src.knowledge_relations_v1 import confirmed_knowledge_relations_of
+from src.knowledge_relations_v1 import confirmed_knowledge_relations_of, proposed_knowledge_relations_of
 from src.review.review_cockpit_v1 import knowledge_review_projection, found_under_path
 from src.review.review_interaction_v1 import _is_decision_event
 from src.operations_console_v1 import ConsoleError
@@ -105,7 +105,7 @@ _RELATION_LABELS = {
 }
 _CONTEXT_LABELS = {'condition': 'Geldt wanneer', 'exception': 'Tenzij',
                    'scope': 'Doelgroep en afbakening', 'target_group': 'Doelgroep',
-                   'support': 'Onderbouwd door'}
+                   'support': 'Onderbouwd door', 'context': 'Broncontext'}
 
 
 @dataclass(frozen=True)
@@ -141,7 +141,7 @@ def _scope_connections(obj):
     return rows
 
 
-def _knowledge_connections(obj, objects):
+def _knowledge_connections(obj, objects, *, include_proposals=False):
     projected = knowledge_review_projection(obj, list(objects))
     rows = _scope_connections(obj)
     for item in projected['essential_context']:
@@ -160,7 +160,10 @@ def _knowledge_connections(obj, objects):
         rows.append(KnowledgeConnection(label, str(item.get('text') or ''), origin, status))
     by_key = {(row.get('object_id'), row.get('object_version')): row for row in objects}
     for source in objects:
-        for relation in confirmed_knowledge_relations_of(source):
+        confirmed = [(relation, '') for relation in confirmed_knowledge_relations_of(source)]
+        proposals = ([(relation, 'Voorstel, nog niet bevestigd') for relation in proposed_knowledge_relations_of(source)]
+                     if include_proposals else [])
+        for relation, status in [*confirmed, *proposals]:
             kind = str(relation.get('relation_type') or '')
             if kind not in _RELATION_LABELS:
                 continue
@@ -180,13 +183,13 @@ def _knowledge_connections(obj, objects):
             if not text:
                 text = 'De inhoud van deze gekoppelde versie kon niet worden bevestigd.'
             origin = (found_under_path(target) + ' · versie ' + str(target.get('object_version') or '')) if target else ''
-            rows.append(KnowledgeConnection(label, text, origin))
+            rows.append(KnowledgeConnection(label, text, origin, status))
     return list(dict.fromkeys(rows))
 
 
-def knowledge_connections_html(obj, objects):
+def knowledge_connections_html(obj, objects, *, include_proposals=False):
     """Readable branches from one claim; no inferred relationships or completeness."""
-    rows = _knowledge_connections(obj, objects)
+    rows = _knowledge_connections(obj, objects, include_proposals=include_proposals)
     return _connection_scope_html(rows) + _connection_branches_html(rows)
 
 

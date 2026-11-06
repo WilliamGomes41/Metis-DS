@@ -16,7 +16,8 @@ def read_document_context(console, read_inputs, obj):
     from src.workflows.formation_task_store_v1 import FormationTaskStore
     from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
     try:
-        return FormationTaskStore(console.workflow_document_store).read_review_document_context(read_inputs.envelope, obj)
+        return FormationTaskStore(console.workflow_document_store).read_review_document_context(
+            read_inputs.envelope, obj, source=read_inputs.fragments)
     except WorkflowDocumentStoreError:
         return None
 
@@ -28,23 +29,23 @@ def render_document_context(snapshot_id, obj, objects, *, task='', source=None):
     original = source is not None
     if original:
         from src.object_taxonomy_v1 import extract_object_type
-        from src.vorming.semantic_passage_v1 import _reconstructed_blocks
-        blocks = _reconstructed_blocks(source)
-        for public, raw in blocks:
-            if extract_object_type(raw)[0] == 'heading':
-                path = tuple(public.get('section_path') or [])
+        rows = source.fragments
+        for row in rows:
+            if extract_object_type(row)[0] == 'heading':
+                path = tuple(row.get('section_path') or [])
                 active = path == current_path
+                text = str(row.get('clean_text') or row.get('raw_text') or '')
                 heading_items.append(f'<li class="ko-outline-depth-{min(len(path), 5)}"'
-                    + (' aria-current="location"' if active else '') + f'>{escape(public['text'])}'
+                    + (' aria-current="location"' if active else '') + f'>{escape(text)}'
                     + (' · bronsectie van de passage' if active else '') + '</li>')
-        selected_ids = {str(span.get('block_id')) for span in
-            ((obj.get('metadata') or {}).get('semantic_passage') or {}).get('spans') or []}
-        matches = [i for i, (public, raw) in enumerate(blocks) if public['block_id'] in selected_ids]
+        matches = [i for i, row in enumerate(rows) if row['fragment_id'] in source.focal_fragment_ids]
         if matches:
             first, last = min(matches), max(matches)
             parts = {**parts,
-                'previous_paragraph': blocks[first-1][0]['text'] if first > 0 and extract_object_type(blocks[first-1][1])[0] != 'heading' else '',
-                'next_paragraph': blocks[last+1][0]['text'] if last+1 < len(blocks) and extract_object_type(blocks[last+1][1])[0] != 'heading' else ''}
+                'previous_paragraph': str(rows[first-1].get('clean_text') or rows[first-1].get('raw_text') or '')
+                    if first > 0 and extract_object_type(rows[first-1])[0] != 'heading' else '',
+                'next_paragraph': str(rows[last+1].get('clean_text') or rows[last+1].get('raw_text') or '')
+                    if last+1 < len(rows) and extract_object_type(rows[last+1])[0] != 'heading' else ''}
     else:
         current = str(obj.get('parent_object_id') or '')
         for heading in objects:

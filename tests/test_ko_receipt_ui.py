@@ -19,8 +19,9 @@ from tests.test_availability_repair import login
 from tests.production_support import restart_production
 
 
-def prepared(tmp_path, production_console, monkeypatch):
-    console, sid, author, reviewer, calls, mode, provider = received(tmp_path, production_console, monkeypatch)
+def prepared(tmp_path, production_console, monkeypatch, *, source_html=None):
+    console, sid, author, reviewer, calls, mode, provider = received(
+        tmp_path, production_console, monkeypatch, source_html=source_html)
     mode['broken'] = False
     execute(console, sid, author, 'ko2-start')
     obj = next(row for row in console.snapshot_objects(sid) if row.get('proposed_object_type') == 'recommendation')
@@ -105,18 +106,16 @@ def test_original_outline_and_adjacent_paragraphs_use_scoped_immutable_source(tm
         if (row.get('content') or {}).get('clean_text') == 'Controleer dagelijks de huid.')
     before = console.objects_revision(sid)
     original = FormationTaskStore.read_review_source
-    displays = []
-    def bounded(self, envelope, *, objects=None, con=None, display_fragment_ids=None):
-        if display_fragment_ids is not None:
-            assert objects == [obj]
-            displays.append(display_fragment_ids)
-        return original(self, envelope, objects=objects, con=con, display_fragment_ids=display_fragment_ids)
+    source_reads = []
+    def bounded(self, envelope, *, objects=None, con=None):
+        source_reads.append(objects)
+        return original(self, envelope, objects=objects, con=con)
     monkeypatch.setattr(FormationTaskStore, 'read_review_source', bounded)
     client = TestClient(console._metis_test_application)
     login(client, 'reviewer')
     page = client.get('/review', params={'document': sid, 'object': obj['object_id']})
     assert page.status_code == 200
-    assert displays and len(displays[0]) <= 6
+    assert len(source_reads) == 1
     assert 'Koppen uit de vastgelegde oorspronkelijke bron.' in page.text
     panel = re.search(r'<details class="ko-document-context"[^>]*>(.*?)</details>', page.text, re.S)
     assert panel is not None
@@ -155,6 +154,11 @@ def test_bon_keeps_confirmed_condition_and_support_with_readable_exact_targets(t
     assert client.post('/login', data={'username': 'reviewer.d43', 'password': 'reviewer-secret'},
         follow_redirects=False).status_code == 303
     page = client.get('/review', params={'document': sid, 'object': obj['object_id']})
+    primary_context = re.search(r'<section data-essential-context[^>]*>(.*?)</section>', page.text, re.S)
+    assert primary_context is not None
+    assert COND in html.unescape(primary_context.group(1)) and EXPL in html.unescape(primary_context.group(1))
+    assert 'Voorstel, nog niet bevestigd' in primary_context.group(1)
+    assert 'Geen afzonderlijke onderbouwing gekoppeld.' not in primary_context.group(1)
     data = submission(page, sid, obj)
     data['interaction_id'] = re.search(r'name="interaction_id" value="([^"]+)"', page.text).group(1)
     data['relation_choice'] = [relation_choice_value(row) for row in proposals]
@@ -168,5 +172,39 @@ def test_bon_keeps_confirmed_condition_and_support_with_readable_exact_targets(t
     output = render_ko_receipt(receipt)
     assert REC in output and COND in output and EXPL in output
     assert 'Geldt wanneer' in output and 'Onderbouwd door' in output
+    assert 'Voorstel, nog niet bevestigd' not in output
     assert 'Geen afzonderlijke uitzondering vastgelegd.' in output
     assert len(receipt.related) >= 2
+
+
+def test_display_source_rejects_tampering_even_with_rewritten_raw_checksum(tmp_path, production_console, monkeypatch):
+    import json
+    import pytest
+    from src.integrity_kernel import stable_hash
+    from src.review.review_passage_read_v1 import read_review_passage
+    from src.workflows.formation_task_store_v1 import FormationTaskStore
+    from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+    from tests.test_review_formation_problems import FIRST, SECOND
+    source = f'<html><body><h1>Advies</h1><p>{FIRST}</p><p>{SECOND}</p></body></html>'.encode()
+    console, sid, reviewer, obj, client, page, data = prepared(
+        tmp_path, production_console, monkeypatch, source_html=source)
+    inputs = read_review_passage(console, console._account(reviewer), sid, obj['object_id'])
+    owner = FormationTaskStore(console.workflow_document_store)
+    original = owner.read_review_document_context(inputs.envelope, obj, source=inputs.fragments)
+    assert original and any(row.get('clean_text') == SECOND for row in original.fragments)
+    with console.workflow_document_store._connect() as con:
+        row = con.execute("SELECT * FROM workflow.source_read_fragments WHERE views_id=%s "
+            "AND payload->>'clean_text'=%s", (inputs.fragments.root.reference['views_id'], SECOND)).fetchone()
+        assert row is not None
+        con.execute('ALTER TABLE workflow.source_read_fragments DISABLE TRIGGER ALL')
+        row['payload']['clean_text'] = 'Deze tekst stond niet in de oorspronkelijke bron.'
+        con.execute('UPDATE workflow.source_read_fragments SET payload=%s::jsonb WHERE views_id=%s AND fragment_id=%s',
+            (json.dumps(row['payload']), row['views_id'], row['fragment_id']))
+    with pytest.raises(WorkflowDocumentStoreError, match='source_read_integrity_failed'):
+        owner.read_review_document_context(inputs.envelope, obj, source=inputs.fragments)
+    digest = stable_hash({key: row[key] for key in ('ordinal','views','blocks','payload')})
+    with console.workflow_document_store._connect() as con:
+        con.execute('UPDATE workflow.source_read_fragments SET payload_hash=%s WHERE views_id=%s AND fragment_id=%s',
+            (digest, row['views_id'], row['fragment_id']))
+    with pytest.raises(WorkflowDocumentStoreError, match='source_read_integrity_failed'):
+        owner.read_review_document_context(inputs.envelope, obj, source=inputs.fragments)

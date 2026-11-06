@@ -2350,7 +2350,7 @@ def _render_second_review_card(
         </div><div class="review-choices-column">
         {_knowledge_review_html(obj, snapshot_objects, state_label=derived['state'], include_context=False,
             reason_html=_ko_state_reasons_html(derived))}
-        {knowledge_connections_html(obj, snapshot_objects)}
+        {knowledge_connections_html(obj, snapshot_objects, include_proposals=True)}
         <div class="review-cockpit-copy">
           <h3>Onafhankelijke tweede beoordeling</h3>
           <p>Versie {_esc(obj.get("object_version"))}</p>
@@ -3165,7 +3165,7 @@ def _render_review_card(
                     <div class="review-choices-column">
                     {_knowledge_review_html(obj, snapshot_objects, state_label=derived['state'], include_context=False,
                         reason_html=_ko_state_reasons_html(derived))}
-                    {knowledge_connections_html(obj, snapshot_objects)}
+                    {knowledge_connections_html(obj, snapshot_objects, include_proposals=True)}
                     {_decision_paths_html(console, snapshot_id, obj, snapshot_objects)}
                     {object_text_html}
                     <details><summary>Verbonden passages en hun bron</summary>{_review_context_block(
@@ -3174,8 +3174,7 @@ def _render_review_card(
                         snapshot_id=snapshot_id,
                         review_path=review_path,
                         task=task, bindings=bindings, fragments=fragments
-                    )}</details>
-                    {context_html}
+                    )}{context_html}</details>
                   <form id="review-form-{_esc(obj["object_id"])}" class="review-decision-form" method="post" action="/review" data-review-form>
                     <input type="hidden" name="snapshot_id" value="{_esc(snapshot_id)}">
                     <input type="hidden" name="object_id" value="{_esc(obj["object_id"])}">
@@ -3196,7 +3195,7 @@ def _render_review_card(
                     <section class="review-step" data-review-question="completeness">
                       <h4>Is dit compleet?</h4>
                       <p>Vergelijk de claim, voorwaarden, uitzonderingen en onderbouwing met de broncontext links. Open zo nodig de hele sectie.</p>
-                      {_source_discrepancy_block(obj, draft, review_path=review_path)}
+                      {follow_up_steps("correction")}{_source_discrepancy_block(obj, draft, review_path=review_path)}</div>
                     </section>
                     {follow_up_steps("approval")}
                     <section class="review-step" data-review-step="d">
@@ -3234,7 +3233,6 @@ def _render_review_card(
                         draft=draft, bindings=bindings, fragments=fragments
                     )}
                     </details></div>
-                    {follow_up_steps("correction")}</div>
                     <section class="review-step" data-review-step="f">
                       {decision_choices_html(str(obj["object_id"]), str(draft.get("eindoordeel", "")),
                                              approval=None if structural_heading else approval_disabled)}
