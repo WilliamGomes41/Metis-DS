@@ -2,7 +2,7 @@
 
 Takeaway: the measured new-flow work is one bounded source-display query on the existing connection, plus the standalone bon(3connections/11queries,~19ms median). No new duplicated large-source read is evidenced. Most of the failed legacy tail increase occurs in existing reads with identical query counts and byte volumes. These records cannot establish whether runtime/GC/scheduler/database variability or allocation timing caused that inflation. The10% gate remains FAILED; calling it merely noise would overstate the evidence.
 
-No new timing requests, profiling hooks, production edits or runtime changes were performed. Full per-sample CSV and record-diagnosis.json retain every observation.
+Independent review subsequently identified that every V4.1 pair ran baseline beforeHEAD. This correlated ordering limits causal attribution; it does not turn the failed gate into a pass or establish noise as the cause. A separately versioned six-round3AB/3BA plan addresses that limitation without excluding any earlier observations. No new timing requests, profiling hooks, production edits or runtime changes were performed for this diagnosis. Full per-sample CSV and record-diagnosis.json retain every observation.
 
 ## Per-pair server distributions
 

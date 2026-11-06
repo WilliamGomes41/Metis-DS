@@ -2,7 +2,7 @@
 
 Legacy initial-card p95 exceeds10%:60.425→73.196ms(+21.14%). Legacy whole-save p95 also exceeds10%:1055.435→1256.677ms(+19.07%). Native gates and all PostgreSQL JSON-byte gates pass. No observations were removed and no further run started.
 
-Product f64c476b9cde822af650397c1c938a98c83dcb09 versus baseline595fe8f233fdee98dfb67609bd5c7206136ee956. Five alternating baseline/head pairs per fixture;15samples/path/side. Nearest-rank p95 is max of15. The fixed10% server-p95 and JSON-byte-p95 criteria are unchanged.
+Product f64c476b9cde822af650397c1c938a98c83dcb09 versus baseline595fe8f233fdee98dfb67609bd5c7206136ee956. Five paired rounds per fixture, baseline always first(AB);15samples/path/side. This correlated execution ordering is a methodological limitation identified by independent review. The observed strictFAIL is retained; it is not explained away as noise. A separately versioned six-round3AB/3BA protocol is prepared, with no revised acceptance result yet. Nearest-rank p95 is max of15. The fixed10% server-p95 and JSON-byte-p95 criteria are unchanged.
 
 | Fixture/path | Server median ms base→head | Range base | Range head | p95 delta | JSON bytes p95 base→head | Byte delta | Gate |
 |---|---:|---:|---:|---:|---:|---:|---|
