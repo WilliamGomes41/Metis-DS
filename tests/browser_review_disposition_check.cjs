@@ -35,10 +35,15 @@ const assert = require('node:assert/strict');
       if (javaScriptEnabled) {
         assert.equal(await page.locator('[value=approve]').isDisabled(), true);
         assert.equal(await page.locator('.ko-adjustment').isVisible(), true);
-        const form = await page.locator('[data-ko-assessment-form]').evaluate(el => Object.fromEntries(new FormData(el)));
-        const refused = await page.request.post(base + '/review', {form: {...form, review_action: 'approve'}});
-        assert.equal(refused.status(), 400);
-        assert.ok((await refused.text()).includes('value="adjust" required checked'));
+        // Playwright 1.58.2 API requests omit Secure cookies over HTTP on 127.0.0.1.
+        const refused = await page.locator('[data-ko-assessment-form]').evaluate(async el => {
+          const data = new URLSearchParams(new FormData(el));
+          data.set('review_action', 'approve');
+          const response = await fetch(el.action, {method: 'POST', body: data, credentials: 'same-origin'});
+          return {status: response.status, text: await response.text()};
+        });
+        assert.equal(refused.status, 400);
+        assert.ok(refused.text.includes('value="adjust" required checked'));
       } else {
         const [refused] = await Promise.all([page.waitForNavigation(), page.locator('[value=approve]').click()]);
         assert.equal(refused.status(), 400);
