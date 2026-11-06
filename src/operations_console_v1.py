@@ -3262,6 +3262,12 @@ class OperationsConsole:
             envelope = self._envelope(snapshot_id)
             if actor_id not in envelope["named_reviewers"]:
                 raise ConsoleError("reviewer_not_named_on_snapshot")
+            mapped = map_eindoordeel(eindoordeel or "", decision)
+            if mapped:
+                decision = mapped
+            from src.review.ko_transitions_v1 import command_assessment
+            if decision == 'approve':
+                assessment = command_assessment(assessment, interaction_evidence)
             if interaction_evidence is not None:
                 try:
                     validate_review_interaction_identity(
@@ -3270,9 +3276,6 @@ class OperationsConsole:
                     )
                 except ValueError as exc:
                     raise ConsoleError(str(exc)) from exc
-            mapped = map_eindoordeel(eindoordeel or "", decision)
-            if mapped:
-                decision = mapped
             if decision in {"revise", "reject"} and not str(comment or "").strip():
                 raise ConsoleError("review_comment_required")
             from src.review.source_discrepancy_v1 import assert_allowed, normalize
@@ -3341,6 +3344,7 @@ class OperationsConsole:
             if type(evidence_not_applicable) is not bool:
                 raise ConsoleError("supporting_evidence_choice_invalid")
             command_hash = stable_hash({
+                **({'assessment': assessment} if assessment is not None else {}),
                 **({"evidence_not_applicable": True} if evidence_not_applicable else {}),
                 # Present only when reported, so earlier command hashes stay valid.
                 **({"source_discrepancy": discrepancy} if discrepancy else {}),
@@ -3959,7 +3963,19 @@ class OperationsConsole:
                 raise ConsoleError("second_review_not_required")
 
             bindings = self.object_review_bindings(snapshot_id)
+            from src.review.ko_transitions_v1 import command_assessment
+            assessment = command_assessment(assessment, interaction_evidence)
+            if type(evidence_not_applicable) is not bool:
+                raise ConsoleError('supporting_evidence_choice_invalid')
             approvers = exact_current_approver_ids(target, bindings)
+            completed = (policy is not None and actor_id in approvers) or (policy is None and len(approvers) >= 2)
+            if completed and (assessment is not None or evidence_not_applicable):
+                expected_evidence = {'version': 'ko-supporting-evidence-v1',
+                    'applicability': 'not_applicable' if evidence_not_applicable else 'linked'}
+                if not any(row.get('reviewer_id') == actor_id and still_matches(row, target)
+                        and row.get('assessment') == assessment
+                        and row.get('supporting_evidence') == expected_evidence for row in bindings):
+                    raise ConsoleError('review_approval_replay_conflict')
             if policy is not None:
                 if policy["primary"] not in approvers:
                     raise ConsoleError("first_review_required")

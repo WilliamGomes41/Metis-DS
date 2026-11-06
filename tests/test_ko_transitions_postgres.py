@@ -1,7 +1,4 @@
-"""KO4 native transition rules at the existing durable review command.
-
 # release-control-evidence: scope/belofte opslag toegang slop releasebewijs
-"""
 from copy import deepcopy
 
 import pytest
@@ -84,6 +81,19 @@ def test_explicit_not_applicable_is_bound_to_the_saved_tuple_and_recorded_in_aud
     assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
 
 
+def test_negative_answers_cannot_replay_a_previous_approval(tmp_path, production_console):
+    console, sid = _console(tmp_path, production_console=production_console)
+    target = next(row for row in console.snapshot_objects(sid) if content_reviewable(row))
+    _approval(console, sid, target, assessment=YES, evidence_not_applicable=True)
+    before = deepcopy(physical_state(console, sid))
+    events = console.workflow_review_store.read_events_for_snapshots([sid])
+    with pytest.raises(ConsoleError) as refused:
+        _approval(console, sid, target, assessment={**YES, 'complete': 'adjust'}, evidence_not_applicable=True)
+    assert refused.value.code == 'review_assessment_requires_three_yes'
+    assert physical_state(console, sid) == before
+    assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
+
+
 @pytest.mark.parametrize('change_support', [False, True])
 def test_real_support_repair_targets_final_versions_and_allows_approval_without_na(
         tmp_path, production_console, production_app, change_support):
@@ -128,7 +138,7 @@ def test_real_support_repair_targets_final_versions_and_allows_approval_without_
             relation_choices=[relation_choice_value(row) for row in relations
                               if row['relation_type'] in {'supported_by', 'explains'}],
             relation_review_ack=True, expected_revision=console.objects_revision(sid))
-    if change_support:
+    if change_support is True:
         with pytest.raises(ConsoleError) as refused:
             approve()
         assert refused.value.code in {'knowledge_relation_target_stale', 'knowledge_relation_target_version_mismatch'}

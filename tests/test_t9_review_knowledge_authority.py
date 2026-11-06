@@ -550,7 +550,6 @@ def test_completed_content_candidate_cannot_be_reopened_by_revise(tmp_path, *, p
 
 @pytest.mark.parametrize("independent", [False, True])
 def test_second_stage_review_refuses_self_but_independent_correction_reopens(tmp_path, independent, *, production_console):
-    """Self-review is refused; a separate explicit correction creates new open work."""
     from src.review.review_duty_v1 import review_stage, SECOND_REVIEW
     console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
     second = console.create_account(username="carla", password="carla-secret", roles=("reviewer",))

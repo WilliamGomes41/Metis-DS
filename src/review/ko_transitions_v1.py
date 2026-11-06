@@ -1,4 +1,3 @@
-"""One read-only transition policy inside the existing atomic KO commands."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -81,6 +80,14 @@ def require_assessment(value: Any) -> dict[str, Any]:
     return parsed.as_evidence()
 
 
+def command_assessment(assessment, interaction_evidence):
+    interaction = (interaction_evidence or {}).get('assessment')
+    if assessment is not None and interaction is not None and assessment != interaction:
+        _refuse('review_assessment_conflict')
+    value = assessment if assessment is not None else interaction
+    return require_assessment(value) if value is not None else None
+
+
 def confirmed_support(obj: dict[str, Any], objects: Iterable[dict[str, Any]]) -> bool:
     relations = confirmed_knowledge_relations_of(obj)
     if validate_knowledge_relation_set(relations, source_object_id=str(obj.get('object_id') or ''),
@@ -125,7 +132,6 @@ def recorded_not_applicable(obj, bindings):
 def apply_ko_event(*, current, event, review_path, bindings=(), fragments=None,
                    prepared=None, objects=(), assessment=None, evidence_not_applicable=False,
                    after_bindings=()):
-    """Authorize captured facts; the enclosing command retains its writer/transaction."""
     if event not in EVENTS:
         _refuse('ko_event_unknown')
     if not is_knowledge_object(current, review_path):

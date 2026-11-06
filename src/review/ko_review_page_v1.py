@@ -254,7 +254,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             + '<form method="post" action="' + ('/review/second-review' if second else '/review')
             + '" class="ko-assessment-form" data-ko-assessment-form data-can-approve="' + str(can_approve).lower() + '">'
             + hidden
-            + ('<p class="ko-adjustment"><label><input type="checkbox" name="evidence_not_applicable" value="yes"'
+            + ('<p class="ko-evidence-choice"><label><input type="checkbox" name="evidence_not_applicable" value="yes"'
                + (' checked' if draft.get('evidence_not_applicable') else '')
                + '> Onderbouwing is voor dit kennisobject niet van toepassing.</label></p>'
                if not any(row.get('relation_type') in {'supported_by', 'explains'}

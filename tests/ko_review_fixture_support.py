@@ -1,7 +1,4 @@
-"""Explicit review answers for fixtures whose intended decision is approval.
-
 # release-control-evidence: scope/belofte slop releasebewijs
-"""
 
 
 def affirmative_assessment():

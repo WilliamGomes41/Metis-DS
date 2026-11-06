@@ -392,3 +392,45 @@ def test_kernel_content_four_eyes_optional_participant_can_give_the_second_revie
     assert "four_eyes_required" in console.publication_readiness(sid)["blockers"]
     console.approve_second_review(actor_id=ids["carla"], snapshot_id=sid, object_id=object_id, assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert not REVIEW_BLOCKERS & set(console.publication_readiness(sid)["blockers"])
+
+
+def test_every_required_reviewer_supplies_own_answers_and_evidence_choice(kernel):
+    from copy import deepcopy
+    from src.review.knowledge_object_state_v1 import derive_ko_state
+    from tests.test_review_command_bounded_http_v1 import physical_state
+    console, ids = kernel
+    policy = {'contract': POLICY, 'revision': 1, 'primary': ids['bert'],
+              'assignments': [{'reviewer_id': ids[name], 'participation': 'required'}
+                              for name in ('carla', 'dirk')]}
+    sid = _ingest(console, ids, {}, review_choice=None, review_policy=policy)['snapshot_id']
+    object_id = _approve_as_exception(console, sid, ids['bert'])
+
+    def state():
+        obj = next(row for row in console.snapshot_objects(sid) if row['object_id'] == object_id)
+        return derive_ko_state(obj, review_path='richtlijn', bindings=console.object_review_bindings(sid),
+            fragments=console.review_source_fragments(sid))['state']
+
+    assert state() == 'Tweede review'
+    for values, code in [({}, 'review_assessment_required'),
+                         ({'assessment': affirmative_assessment()}, 'knowledge_evidence_required')]:
+        before = deepcopy(physical_state(console, sid))
+        events = console.workflow_review_store.read_events_for_snapshots([sid])
+        with pytest.raises(ConsoleError) as refused:
+            console.approve_second_review(actor_id=ids['carla'], snapshot_id=sid,
+                object_id=object_id, **values)
+        assert refused.value.code == code
+        assert physical_state(console, sid) == before
+        assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
+    for actor, expected in [('carla', 'Tweede review'), ('dirk', 'Goedgekeurd')]:
+        console.approve_second_review(actor_id=ids[actor], snapshot_id=sid, object_id=object_id,
+            assessment=affirmative_assessment(), evidence_not_applicable=True)
+        assert state() == expected
+        binding = next(row for row in console.object_review_bindings(sid)
+                       if row['object_id'] == object_id and row['reviewer_id'] == ids[actor])
+        assert binding['supporting_evidence']['applicability'] == 'not_applicable'
+        before = deepcopy(physical_state(console, sid))
+        with pytest.raises(ConsoleError) as refused:
+            console.approve_second_review(actor_id=ids[actor], snapshot_id=sid, object_id=object_id,
+                assessment={**affirmative_assessment(), 'complete': 'adjust'}, evidence_not_applicable=True)
+        assert refused.value.code == 'review_assessment_requires_three_yes'
+        assert physical_state(console, sid) == before
