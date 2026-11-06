@@ -29,7 +29,12 @@ const path = require('node:path');
     await page.goto(base + '/publish?document=' + manifest.documents[slug].snapshot_id);
     await page.locator(card(slug)).scrollIntoViewIfNeeded();
   };
-  const shoot = name => page.screenshot({path: path.join(out, `ko3-${name}.png`), fullPage: true});
+  const shoot = async name => {
+    const scroll = await page.evaluate(() => ({x: scrollX, y: scrollY}));
+    await page.evaluate(() => scrollTo(0, 0));
+    await page.screenshot({path: path.join(out, `ko3-${name}.png`), fullPage: true});
+    await page.evaluate(({x, y}) => scrollTo(x, y), scroll);
+  };
   const stable = (before, after) => {
     assert.deepEqual(after.workflow_digest, before.workflow_digest, 'no workflow mutation');
     assert.deepEqual(after.canonical_digest, before.canonical_digest, 'no canonical mutation');
