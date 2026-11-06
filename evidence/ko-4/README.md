@@ -203,3 +203,30 @@ remain required. The actual responsive browser proof above is bounded to its
 recorded source/harness heads. A later test/evidence-only head needs explicit
 runtime equivalence against the measured head. No merge, deployment, source
 phase completion or performance acceptance is claimed here.
+
+
+### Legacy structural HTTP carrier correction after f3
+
+Actual legacy structural path cards contain no clinical answer controls. The
+first/second adapters previously manufactured an explicit three-empty-answer
+carrier, blocking an otherwise supported structural approval; the reachable
+decision-passage adapter had the same issue. Absence now remains absence only
+when none of the three field names is submitted. Blank, partial and negative
+carriers stay explicit; final prepared KO approvals retain the native guard.
+
+The focused real PostgreSQL/HTTP suite passed 15 cases in 6.75s, covering
+structural first/required second approvals through both supported second
+routes, supplied-answer refusals without writes, clinical missing-answer and
+path-to-KO refusals, and legacy reject/later. A valid clinical second decision
+refuses specifically `review_assessment_required` without answers, then saves
+with explicit three-Yes/N/A on the same eligible tuple. Three existing compact
+and legacy clinical parity cases also passed. The decision-route RED used a
+valid native revision and refused `review_assessment_requires_three_yes`; an
+earlier exploratory scoped-token failure was a fixture CAS error, not proof
+of the adapter defect.
+
+This correction changes runtime source. The b82 80-save PASS above remains
+historical evidence and cannot establish acceptance for this adapter head.
+Fresh immutable-head HTTP closure, source audit, complete remote CI and a new
+full frozen 80-save performance run remain pending. Source-context phase #942
+remains outside the completed core scope.

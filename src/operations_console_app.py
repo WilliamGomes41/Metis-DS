@@ -18,7 +18,7 @@ import uuid
 from typing import Any
 from urllib.parse import quote, urlencode, urlsplit
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
@@ -5434,6 +5434,13 @@ def create_console_app(
             },
         )
 
+    async def submitted_review_assessment(request: Request) -> dict[str, Any] | None:
+        form = await request.form()
+        fields = ('applicable', 'complete', 'placed_correctly')
+        if not any(field in form for field in fields):
+            return None
+        return {'version': 'review-assessment-v1', **{field: form.get(field) or None for field in fields}}
+
     @app.post("/review")
     def review_post(
         request: Request,
@@ -5465,6 +5472,7 @@ def create_console_app(
         complete: str = Form(""),
         placed_correctly: str = Form(""),
         evidence_not_applicable: str = Form(""),
+        submitted_assessment: dict[str, Any] | None = Depends(submitted_review_assessment),
     ) -> RedirectResponse:
         account = _require(request)
         if review_ui == "compact-v1":
@@ -5525,8 +5533,7 @@ def create_console_app(
                 actor_id=account["account_id"],
                 snapshot_id=snapshot_id,
                 object_id=object_id,
-                assessment={'version': 'review-assessment-v1', 'applicable': applicable or None,
-                    'complete': complete or None, 'placed_correctly': placed_correctly or None},
+                assessment=submitted_assessment,
                 evidence_not_applicable=evidence_not_applicable == 'yes',
                 decision=mapped,
                 comment=comment,
@@ -5907,6 +5914,7 @@ def create_console_app(
         complete: str = Form(""),
         placed_correctly: str = Form(""),
         evidence_not_applicable: str = Form(""),
+        submitted_assessment: dict[str, Any] | None = Depends(submitted_review_assessment),
     ) -> RedirectResponse:
         account = _require(request)
         if review_ui == "compact-v1":
@@ -5948,8 +5956,7 @@ def create_console_app(
                 object_id=object_id,
                 expected_revision=snapshot_revision.strip() or None,
                 interaction_evidence=evidence,
-                assessment={'version': 'review-assessment-v1', 'applicable': applicable or None,
-                    'complete': complete or None, 'placed_correctly': placed_correctly or None},
+                assessment=submitted_assessment,
                 evidence_not_applicable=evidence_not_applicable == 'yes',
             )
         elif action == "revise":

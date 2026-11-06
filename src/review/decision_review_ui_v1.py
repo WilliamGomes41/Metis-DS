@@ -194,7 +194,8 @@ def install_decision_review_routes(app, console, require, page):
         console.approve_second_review(actor_id=actor["account_id"], snapshot_id=sid,
             object_id=str(form.get("object_id") or ""), expected_revision=revision,
             assessment={'version': 'review-assessment-v1', **{key: str(form.get(key) or '') or None
-                for key in ('applicable', 'complete', 'placed_correctly')}},
+                for key in ('applicable', 'complete', 'placed_correctly')}}
+                if any(key in form for key in ('applicable', 'complete', 'placed_correctly')) else None,
             evidence_not_applicable=form.get('evidence_not_applicable') == 'yes')
         return RedirectResponse(f"/review/decision-graph?document={sid}", status_code=303)
 
