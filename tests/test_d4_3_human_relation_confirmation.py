@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 from tests.semantic_fixture_support import bind_fixture_selections
+from tests.test_v215_ingest_date_version_review_lanes import _compact_review_form
 
 from copy import deepcopy
 from pathlib import Path
@@ -398,7 +399,7 @@ def test_identical_human_confirmation_is_semantically_idempotent(tmp_path: Path,
     assert compute_canonical_object_hash(second) == first_hash
 
 
-def test_review_ui_shows_version_bound_relations_and_requires_ack(tmp_path: Path, *, production_app, production_console) -> None:
+def test_review_ui_shows_version_bound_relations_with_three_explicit_answers(tmp_path: Path, *, production_app, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     snapshot_id = _ingest(console, accounts)["snapshot_id"]
@@ -412,11 +413,29 @@ def test_review_ui_shows_version_bound_relations_and_requires_ack(tmp_path: Path
     html = client.get(
         f"/review?document={snapshot_id}&object={rec['object_id']}"
     ).text
-    assert "Welke relaties kloppen?" in html
-    assert 'name="relation_choice"' in html
-    assert relation_choice_value(proposals[0]) in html
-    assert 'name="relation_review_ack"' in html
-    assert "versie 1.0" in html
+    form = _compact_review_form(html)
+    assert not any(item.get('name') in {'relation_choice', 'relation_review_ack'} for item in form['inputs'])
+    assert COND in html and 'Voorstel, nog niet bevestigd' in html
+    assert f'data-reviewed-version="{rec["object_version"]}"' in html
+    assert html.count('class="ko-question"') == 3
+    answers = [item for item in form['inputs'] if item.get('type') == 'radio']
+    assert len(answers) == 6
+    assert {item['name'] for item in answers} == {'applicable', 'complete', 'placed_correctly'}
+    assert not any('checked' in item for item in answers)
+    # The displayed target must be the actual version-bound proposal. Kernel
+    # confirmation and stale-target rejection remain covered by the tests above.
+    current = _rows(console, snapshot_id)[COND]
+    assert proposals[0]['target_object_id'] == current['object_id']
+    assert proposals[0]['target_object_version'] == current['object_version']
+
+    from tests.test_ko_new_pages import compact_submission
+    from tests.test_review_command_bounded_http_v1 import physical_state
+    page = client.get(f'/review?document={snapshot_id}&object={rec["object_id"]}')
+    assert form['attrs']['data-can-approve'] == 'false'
+    before = physical_state(console, snapshot_id)
+    saved = client.post('/review', data=compact_submission(page), follow_redirects=False)
+    assert saved.status_code == 400
+    assert physical_state(console, snapshot_id) == before
 
 
 def test_d43_does_not_make_new_format_relations_serving_authority(tmp_path: Path, *, production_console) -> None:

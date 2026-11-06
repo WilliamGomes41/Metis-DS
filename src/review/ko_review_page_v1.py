@@ -207,6 +207,10 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
         direction = {'for': 'Aanraden', 'against': 'Afraden'}.get(descriptor.direction, 'Richting nog onbekend')
         strength = {'strong': 'Sterk', 'weak': 'Zwak', 'not_stated': 'Sterkte niet vermeld'}.get(descriptor.strength_choice, 'Sterkte nog onbekend')
         semantics = '<p class="ko-interpretation">' + escape(direction + ' · ' + strength) + '</p>'
+    if descriptor.legacy_recommendation_strength:
+        from src.object_taxonomy_v1 import recommendation_strength_sentence
+        semantics = '<p class="ko-interpretation">' + escape(recommendation_strength_sentence(
+            descriptor.legacy_recommendation_strength)) + '</p>'
     if descriptor.object_type == 'outcome':
         from src.object_taxonomy_v1 import recommendation_strength_sentence
         meaning = recommendation_strength_sentence(descriptor.outcome_strength)

@@ -126,3 +126,12 @@ tonen hun ontbrekende tekst en verwijzen naar de bestaande continuation-route.
 Een queryparameter als `context_saved` geldt niet als opslagbewijs. De
 bestaande four-eyes-helper toont uitsluitend een werkelijk vereiste tweede
 beoordeling; er ontstaat geen universele verplichting.
+
+Voor bestaande aanbevelingen zonder modern semantiekrecord blijft dezelfde
+bekende gesloten legacy-sterkte bruikbaar. De displayprojectie toont het
+werkelijk opgeslagen DOEN/OVERWEEG/NIET DOEN; de commandadapter geeft alleen
+de bestaande `recommendation_strength` door. Zij maakt daar geen moderne
+richting of brongebonden sterke/zwakke semantiek van. Een aanwezig ongeldig
+of ongemapt modern record blijft geblokkeerd en valt niet op legacy terug.
+Ontbreken beide vormen, dan blijft goedkeuren geblokkeerd. Dit behoudt een
+bestaande geldige opdracht zonder een nieuwe modus op te slaan.

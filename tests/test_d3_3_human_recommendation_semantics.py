@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 from tests.semantic_fixture_support import bind_fixture_selections
+from tests.test_v215_ingest_date_version_review_lanes import _compact_review_form
 
 from copy import deepcopy
 from pathlib import Path
@@ -480,11 +481,10 @@ def test_review_ui_uses_direction_strength_and_preserves_proposal_evidence(tmp_p
     html = client.get(
         f"/review?document={snapshot_id}&object={target['object_id']}"
     ).text
-    assert "data-recommendation-semantics-block" in html
-    assert 'name="recommendation_direction"' in html
-    assert 'name="recommendation_strength_level"' in html
-    assert "Aanraden" in html and "Afraden" in html
-    assert "Sterk" in html and "Zwak" in html and "Niet vermeld in de bron" in html
+    form = _compact_review_form(html)
+    assert not any(item.get('name') in {'recommendation_direction', 'recommendation_strength_level'} for item in form['inputs'])
+    assert '<p class="ko-interpretation">Aanraden · Zwak</p>' in html
+    assert html.count('class="ko-question"') == 3
     assert RECOMMENDATION_TEXT in html
     assert "Zwakke aanbeveling" in html
     assert ">DOEN<" not in html

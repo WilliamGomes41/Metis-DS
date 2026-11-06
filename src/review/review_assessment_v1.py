@@ -13,7 +13,7 @@ from src.review.knowledge_relation_review_v1 import (
 from src.vorming.recommendation_semantics_v1 import (
     confirmed_recommendation_semantics_from_review,
     confirmed_recommendation_semantics_of, proposed_recommendation_semantics_of,
-    legacy_recommendation_semantics_view, validate_recommendation_semantics,
+    validate_recommendation_semantics, PROPOSED_FIELD, CONFIRMED_FIELD,
 )
 
 ASSESSMENT_VERSION = 'review-assessment-v1'
@@ -70,6 +70,7 @@ class DisplayedReviewDescriptor:
     issues: tuple[str, ...]
     outcome_strength: str = ''
     outcome_no_action: bool = False
+    legacy_recommendation_strength: str = ''
 
     @property
     def can_confirm(self) -> bool:
@@ -78,15 +79,17 @@ class DisplayedReviewDescriptor:
 
 def _recommendation_values(focal, object_type):
     if object_type != 'recommendation':
-        return '', '', []
+        return '', '', [], ''
+    if PROPOSED_FIELD not in focal and CONFIRMED_FIELD not in focal:
+        from src.object_taxonomy_v1 import is_closed_recommendation_strength
+        legacy = str(focal.get('confirmed_recommendation_strength')
+                     or focal.get('proposed_recommendation_strength') or '')
+        if is_closed_recommendation_strength(legacy):
+            return '', '', [], legacy
+        return '', '', ['recommendation_semantics_required'], ''
     semantics = (confirmed_recommendation_semantics_of(focal)
                  or proposed_recommendation_semantics_of(focal))
-    if semantics:
-        errors = validate_recommendation_semantics(semantics)
-    else:
-        semantics = (legacy_recommendation_semantics_view(focal)
-                     or legacy_recommendation_semantics_view(focal, confirmed=False))
-        errors = [] if semantics else ['recommendation_semantics_required']
+    errors = validate_recommendation_semantics(semantics) if semantics else ['recommendation_semantics_required']
     direction = str(semantics.get('direction') or '')
     strength = ('not_stated' if semantics.get('strength_status') == 'not_stated'
                 else str(semantics.get('strength') or ''))
@@ -98,7 +101,7 @@ def _recommendation_values(focal, object_type):
                 focal, direction=direction, strength_choice=strength)
         except ValueError as error:
             errors.append(str(error))
-    return direction, strength, errors
+    return direction, strength, errors, ''
 
 
 def _outcome_values(focal, object_type):
@@ -129,7 +132,7 @@ def displayed_review_descriptor(
     known_type = (object_type in CLOSED_BOOM_TYPES if review_path == 'boom'
                   else is_closed_confirmed_type(object_type))
     issues = [] if known_type else ['review_type_required']
-    direction, strength, semantic_errors = _recommendation_values(focal, object_type)
+    direction, strength, semantic_errors, legacy_strength = _recommendation_values(focal, object_type)
     issues.extend(semantic_errors)
     outcome_strength, outcome_no_action, outcome_errors = _outcome_values(focal, object_type)
     issues.extend(outcome_errors)
@@ -168,7 +171,8 @@ def displayed_review_descriptor(
         str((focal.get('content') or {}).get('clean_text') or ''), object_type,
         direction, strength, str(focal.get('parent_object_id') or ''),
         found_under_path(focal), choices, tuple(relations), tuple(dict.fromkeys(issues)),
-        outcome_strength=outcome_strength, outcome_no_action=outcome_no_action)
+        outcome_strength=outcome_strength, outcome_no_action=outcome_no_action,
+        legacy_recommendation_strength=legacy_strength)
 
 
 def compact_approval_arguments(
@@ -187,8 +191,11 @@ def compact_approval_arguments(
         'relation_choices': list(descriptor.relation_choices), 'relation_review_ack': True,
     }
     if descriptor.object_type == 'recommendation':
-        arguments.update(recommendation_direction=descriptor.direction,
-                         recommendation_strength_level=descriptor.strength_choice)
+        if descriptor.legacy_recommendation_strength:
+            arguments['recommendation_strength'] = descriptor.legacy_recommendation_strength
+        else:
+            arguments.update(recommendation_direction=descriptor.direction,
+                             recommendation_strength_level=descriptor.strength_choice)
     if descriptor.object_type == 'outcome' and descriptor.outcome_strength:
         arguments['recommendation_strength'] = descriptor.outcome_strength
     return arguments
