@@ -3,6 +3,8 @@
 # release-control-evidence: scope/belofte opslag concurrent stale recovery
 # release-control-evidence: toegang kwaliteit metrics slop releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from contextlib import contextmanager
 from copy import deepcopy
 import json
@@ -25,7 +27,7 @@ def test_source_command_cost_is_independent_of_retained_history_and_other_docume
     sid = command['snapshot_id']
     documents, reviews = state.workflow_document_store, state.workflow_review_store
     state.review_object(actor_id=reviewer['account_id'], snapshot_id=sid,
-        object_id=target['object_id'], decision='approve', confirmed_object_type='definition')
+        object_id=target['object_id'], decision='approve', confirmed_object_type='definition', assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert state.object_review_bindings(sid)
     original_lock, original_reader = state._store_write_lock, state._open_original_reader
     depth, holds = local(), []

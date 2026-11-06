@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+from tests.ko_review_fixture_support import affirmative_assessment
+
 from copy import deepcopy
 
 import os
@@ -357,6 +359,7 @@ def test_successful_approve_persists_authorization_and_survives_restart(
         eindoordeel="goedkeuren",
         type_action="dit_klopt",
         expected_revision=console.objects_revision(snapshot_id),
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
 
     approved = next(
@@ -449,6 +452,7 @@ def test_approve_stale_conflict_leaves_no_durable_event_or_authorization(
         eindoordeel="goedkeuren",
         type_action="dit_klopt",
         expected_revision=console.objects_revision(snapshot_id),
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     current_target = next(
         row
@@ -494,6 +498,7 @@ def test_approve_stale_conflict_leaves_no_durable_event_or_authorization(
             eindoordeel="goedkeuren",
             type_action="dit_klopt",
             expected_revision=stale_revision,
+            assessment=affirmative_assessment(), evidence_not_applicable=True,
         )
 
     assert caught.value.code == SNAPSHOT_OBJECT_WRITE_CONFLICT

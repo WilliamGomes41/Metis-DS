@@ -11,6 +11,8 @@ corrected object (content and object_version), B's binding and B's audit
 events MOET survive A's post-rollback step; a blind write_bundle of A's
 pre-mutation copy MAG NIET overwrite them (see WilliamGomes41/Metis#33).
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 import fcntl
 
 from src.review.proportionate_review_v1 import normal_risk_batch_queue
@@ -25,6 +27,7 @@ def _approve(console, actor, sid, object_id, obj_type):
         actor_id=actor, snapshot_id=sid, object_id=object_id, decision="approve",
         confirmed_object_type=obj_type, suitability="ja", eindoordeel="goedkeuren",
         type_action="dit_klopt",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
 
 

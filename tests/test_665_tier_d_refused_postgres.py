@@ -26,6 +26,8 @@ _config_identity values (dsn) are compared only; NOOIT printed or used in assert
 """
 from __future__ import annotations
 
+from tests.ko_review_fixture_support import affirmative_assessment
+
 import inspect
 import importlib
 import os
@@ -113,7 +115,7 @@ def _ingest(console, accounts=None, *, title="Begrippen", family="begrippen", fi
 def _approve(console, rid, sid, obj):
     return console.review_object(actor_id=rid, snapshot_id=sid, object_id=obj["object_id"], decision="approve",
                                  confirmed_object_type=_batch_type(obj), suitability="ja",
-                                 eindoordeel="goedkeuren", type_action="dit_klopt")
+                                 eindoordeel="goedkeuren", type_action="dit_klopt", assessment=affirmative_assessment(), evidence_not_applicable=True)
 
 
 def _document_state(config, sid):
@@ -535,7 +537,7 @@ def test_t9_tier_r_batch_second_member_fault_leaves_state_unchanged(workflow_pos
         return original(**kwargs)
     monkeypatch.setattr(console, "_commit_prepared_store", second_fails)
     with pytest.raises(RuntimeError, match="t9_injected"):
-        console.batch_review_normal_risk(actor_id=rid, snapshot_id=sid, object_ids=[o["object_id"] for o in queue])
+        console.batch_review_normal_risk(actor_id=rid, snapshot_id=sid, object_ids=[o["object_id"] for o in queue], assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert _durable(console, workflow_postgres, sid) == before
 
 

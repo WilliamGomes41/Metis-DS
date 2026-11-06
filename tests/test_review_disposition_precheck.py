@@ -89,6 +89,8 @@ def _review_form(client, sid, oid, **overrides):
             "suitability": "ja", "documentpositie_action": "dit_klopt",
             "type_action": "dit_klopt", "confirmed_object_type": "definition",
             "eindoordeel": "goedkeuren", "decision": "approve", "relation_review_ack": "1",
+            "applicable": "yes", "complete": "yes", "placed_correctly": "yes",
+            "evidence_not_applicable": "yes",
             **overrides}
 
 

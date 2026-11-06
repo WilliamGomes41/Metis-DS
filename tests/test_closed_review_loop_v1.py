@@ -9,6 +9,8 @@
 """
 from __future__ import annotations
 
+from tests.ko_review_fixture_support import affirmative_assessment
+
 import json
 
 import pytest
@@ -477,7 +479,7 @@ def test_batch_failure_rolls_back_all_selected_decisions_and_restart(tmp_path, m
 
     monkeypatch.setattr(console, "review_object", fail_second)
     with pytest.raises(RuntimeError, match="second_member_failure"):
-        console.batch_review_normal_risk(actor_id=reviewer["account_id"], snapshot_id=sid, object_ids=ids[:2])
+        console.batch_review_normal_risk(actor_id=reviewer["account_id"], snapshot_id=sid, object_ids=ids[:2], assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert console.snapshot_objects(sid) == before
     assert console.object_review_bindings(sid) == bindings
     assert read_events(console._ledger_path) == events
@@ -485,10 +487,10 @@ def test_batch_failure_rolls_back_all_selected_decisions_and_restart(tmp_path, m
     assert restarted.snapshot_objects(sid) == before
     assert restarted.object_review_bindings(sid) == bindings
     assert read_events(restarted._ledger_path) == events
-    updated = restarted.batch_review_normal_risk(actor_id=reviewer["account_id"], snapshot_id=sid, object_ids=ids[:2])
+    updated = restarted.batch_review_normal_risk(actor_id=reviewer["account_id"], snapshot_id=sid, object_ids=ids[:2], assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert len(updated) == 2
     assert all(row["governance"]["validation_status"] == "approved" for row in updated)
     successful_events = read_events(restarted._ledger_path)
     with pytest.raises(ConsoleError, match="normal_risk_batch_ineligible"):
-        restarted.batch_review_normal_risk(actor_id=reviewer["account_id"], snapshot_id=sid, object_ids=ids[:2])
+        restarted.batch_review_normal_risk(actor_id=reviewer["account_id"], snapshot_id=sid, object_ids=ids[:2], assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert read_events(restarted._ledger_path) == successful_events

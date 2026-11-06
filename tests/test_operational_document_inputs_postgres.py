@@ -4,6 +4,8 @@
 # release-control-evidence: opslag concurrent stale recovery
 # release-control-evidence: toegang beschikbaarheid kwaliteit slop releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 import json
 
@@ -68,7 +70,7 @@ def test_review_reads_commands_and_readiness_after_compact_cutover(incomplete_do
     assert page.status_code==200 and FIRST in page.text
     console.review_object(actor_id=reviewer,snapshot_id=sid,object_id=candidate['object_id'],
         decision='approve',confirmed_object_type='recommendation',recommendation_direction='against',
-        recommendation_strength_level='not_stated')
+        recommendation_strength_level='not_stated', assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert console.processing_status(sid)['formation_incomplete']
     assert not console.processing_status(sid)['resume_allowed']
     assert not console.publication_readiness(sid)['publish_allowed']
@@ -205,7 +207,7 @@ def test_tree_cutover_preserves_original_evidence_and_mutable_graph_commands(tmp
     for obj in restarted.snapshot_objects(sid):
         if obj['object_type']!='document':
             restarted.review_object(actor_id=accounts['researcher']['account_id'],snapshot_id=sid,
-                object_id=obj['object_id'],decision='approve',confirmed_object_type='node')
+                object_id=obj['object_id'],decision='approve',confirmed_object_type='node', assessment=affirmative_assessment(), evidence_not_applicable=True)
     refreshed=deepcopy(restarted._envelope(sid)['decision_graph'])
     current={o['object_id']:o['object_version'] for o in restarted.snapshot_objects(sid)}
     for node in refreshed['nodes']:

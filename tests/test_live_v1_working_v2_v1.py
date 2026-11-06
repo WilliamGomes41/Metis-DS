@@ -9,6 +9,8 @@
 """
 from __future__ import annotations
 
+from tests.ko_review_fixture_support import affirmative_assessment
+
 import os
 from pathlib import Path
 from typing import Any
@@ -97,6 +99,7 @@ def _complete_review(
         object_id=target["object_id"],
         decision="approve",
         confirmed_object_type="explanation",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     for obj in console.snapshot_objects(snapshot_id):
         if obj.get("object_id") == target["object_id"]:
@@ -301,6 +304,7 @@ def test_published_v1_stays_live_while_successor_v2_is_mutable_and_unreleased(
             object_id=target_v2["object_id"],
             decision="approve",
             confirmed_object_type="explanation",
+            assessment=affirmative_assessment(), evidence_not_applicable=True,
         )
         with pytest.raises(ConsoleError, match="published_working_revision_immutable"):
             target_v1 = next(

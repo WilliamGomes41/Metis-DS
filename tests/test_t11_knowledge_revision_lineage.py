@@ -6,6 +6,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 import pytest
@@ -98,7 +100,7 @@ def test_forward_cutover_chain_and_old_approval_does_not_carry(tmp_path, *, prod
     assert edge["snapshot_id"] == sid
     console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
         object_id=before["object_id"], decision="approve", confirmed_object_type="definition",
-        relation_review_ack=True)
+        relation_review_ack=True, assessment=affirmative_assessment(), evidence_not_applicable=True)
     approved = deepcopy(current(console, sid, before["object_id"]))
     old_bindings = deepcopy(console.object_review_bindings(sid))
     assert exact_current_approver_ids(approved, old_bindings)

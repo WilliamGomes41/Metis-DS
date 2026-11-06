@@ -7,6 +7,8 @@ A pass MUST NOT be treated as a B pass. B pass MUST NOT be treated as an A pass.
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here. publish() stays G2-BLOCKED.
 """
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 from tests.test_v215_ingest_date_version_review_lanes import _compact_review_form
 
@@ -875,6 +877,7 @@ def test_block_b_console_hides_sterkte_on_proposed_recommendation_until_confirm(
         decision="approve",
         confirmed_object_type="recommendation",
         recommendation_strength="doen",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     confirmed_html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
@@ -927,6 +930,7 @@ def test_block_b_type_change_away_clears_active_strength_audit_may_keep(tmp_path
         decision="approve",
         confirmed_object_type="recommendation",
         recommendation_strength="doen",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     after_confirm = next(
         obj
@@ -1056,6 +1060,7 @@ def test_block_b_confirm_object_type_clears_active_strength(tmp_path: Path, *, p
         decision="approve",
         confirmed_object_type="recommendation",
         recommendation_strength="doen",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     after_confirm = next(
         obj

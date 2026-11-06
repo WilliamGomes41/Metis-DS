@@ -1,4 +1,6 @@
 """Source-bound mixed first/batch/second work for #861, using real commands."""
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 
 PASSWORD = 'content-review-test-only'
@@ -33,7 +35,7 @@ def prepare(console, copies=1):
         doc['second_snapshot'] = second_sid
         doc['second'] = next(r['object_id'] for r in console.snapshot_objects(second_sid) if r['content']['clean_text'] == TEXTS[3][0])
         console.review_object(actor_id=a, snapshot_id=second_sid, object_id=doc['second'], decision='approve',
-            confirmed_object_type='recommendation', recommendation_direction='for', recommendation_strength_level='not_stated')
+            confirmed_object_type='recommendation', recommendation_direction='for', recommendation_strength_level='not_stated', assessment=affirmative_assessment(), evidence_not_applicable=True)
         docs.append(doc)
     return accounts, docs
 

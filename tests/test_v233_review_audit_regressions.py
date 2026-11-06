@@ -5,6 +5,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 
 import threading
@@ -96,7 +98,9 @@ def test_real_page_links_to_cards_sources_and_writes_exact_object_bindings(revie
         assert source in client.get(card).text.replace("&amp;", "&")
         assert client.get(card).status_code == 200
         assert client.get(source).status_code == 200
-    response = client.post(form["action"], data={**form["fields"], "object_ids": ids}, follow_redirects=False)
+    response = client.post(form["action"], data={**form["fields"], "object_ids": ids,
+        "applicable": "yes", "complete": "yes", "placed_correctly": "yes",
+        "evidence_not_applicable": "yes"}, follow_redirects=False)
     assert response.status_code == 303
     objects = {obj["object_id"]: obj for obj in console.snapshot_objects(sid)}
     for oid in ids:
@@ -113,7 +117,7 @@ def test_real_human_reclassification_cannot_be_batch_overwritten(review_system):
     console, client, sid, actor, ids = review_system
     console.confirm_object_type(actor_id=actor, snapshot_id=sid, object_id=ids[0], confirmed_object_type="recommendation")
     with pytest.raises(ConsoleError, match="normal_risk_batch_ineligible"):
-        console.batch_review_normal_risk(actor_id=actor, snapshot_id=sid, object_ids=ids, expected_revision=console.objects_revision(sid))
+        console.batch_review_normal_risk(actor_id=actor, snapshot_id=sid, object_ids=ids, expected_revision=console.objects_revision(sid), assessment=affirmative_assessment(), evidence_not_applicable=True)
     current = next(obj for obj in console.snapshot_objects(sid) if obj["object_id"] == ids[0])
     assert current["confirmed_object_type"] == "recommendation"
     assert not console.object_review_bindings(sid)
@@ -194,7 +198,7 @@ def test_concurrent_writer_between_members_waits_for_atomic_pg_batch(review_syst
     monkeypatch.setattr(console, 'review_object', review_then_other_writer)
     revision = console.objects_revision(sid)
     try:
-        console.batch_review_normal_risk(actor_id=actor, snapshot_id=sid, object_ids=ids, expected_revision=revision)
+        console.batch_review_normal_risk(actor_id=actor, snapshot_id=sid, object_ids=ids, expected_revision=revision, assessment=affirmative_assessment(), evidence_not_applicable=True)
     finally:
         for thread in threads:
             thread.join(timeout=10)
@@ -314,7 +318,9 @@ def test_http_atomic_batch_and_serialized_writer_report_current_work_truthfully(
     revision = console.objects_revision(sid)
     try:
         response = client.post('/review/normal-risk/batch-confirm', data={
-            'snapshot_id': sid, 'snapshot_revision': revision, 'object_ids': ids}, follow_redirects=False)
+            'snapshot_id': sid, 'snapshot_revision': revision, 'object_ids': ids,
+            'applicable': 'yes', 'complete': 'yes', 'placed_correctly': 'yes',
+            'evidence_not_applicable': 'yes'}, follow_redirects=False)
         assert response.status_code == 303
         assert 'data-partial-batch-conflict' not in response.text
     finally:

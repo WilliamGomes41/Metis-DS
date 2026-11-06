@@ -1,3 +1,5 @@
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from test_t4_single_knowledge_path_invariants import _allowed_source
 """Passive measurement contract and lifecycle regression evidence.
 # release-control-evidence: scope/belofte
@@ -136,7 +138,7 @@ def test_real_review_carries_evidence_atomically_and_reading_does_not_change_aut
         review_stage='first_review', focal=focal, objects=objects, review_path='richtlijn')
     console.review_object(actor_id=users['reviewer_a']['account_id'], snapshot_id=sid,
         object_id=oid, decision='approve', confirmed_object_type='definition',
-        expected_revision=console.objects_revision(sid), interaction_evidence=interaction)
+        expected_revision=console.objects_revision(sid), interaction_evidence=interaction, assessment=affirmative_assessment(), evidence_not_applicable=True)
     event = next(e for e in reversed(read_events(console._ledger_path)) if e['event_type'] == 'clinical_review_approve')
     assert event['details']['quality_evidence']['run_id']
     before = stable_hash(console.snapshot_objects(sid))

@@ -2,6 +2,8 @@
 # release-control-evidence: scope/belofte opslag concurrent stale recovery
 # release-control-evidence: toegang kwaliteit metrics slop releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from contextlib import contextmanager
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
@@ -48,7 +50,7 @@ def execute(system):
     console,_client,sid,actor,ids=system
     _,generation=console.workflow_document_store.review_document_input(sid)
     return lambda: console.batch_review_normal_risk(actor_id=actor,snapshot_id=sid,
-                    object_ids=ids,expected_revision=_revision(sid,generation))
+                    object_ids=ids,expected_revision=_revision(sid,generation), assessment=affirmative_assessment(), evidence_not_applicable=True)
 
 
 @pytest.mark.parametrize('change', ['role','identity','roster','policy','source','quality','native0','binding','new_inbound'])
@@ -295,7 +297,7 @@ def test_foreign_interaction_committed_between_phases_is_rejected(review_system,
     before_commit(console,monkeypatch,mutation)
     with pytest.raises(ConsoleError):
         console.batch_review_normal_risk(actor_id=actor,snapshot_id=sid,object_ids=ids,
-            expected_revision=_revision(sid,generation),interaction_evidence=evidence)
+            expected_revision=_revision(sid,generation),interaction_evidence=evidence, assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert (durable(console,sid),reviews.read_events())==winner[0]
 
 

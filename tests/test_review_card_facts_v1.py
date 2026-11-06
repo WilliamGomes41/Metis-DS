@@ -7,6 +7,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 import json
 
@@ -75,7 +77,7 @@ def test_explicit_preparation_then_native_writer_seals_current_card_inputs(tmp_p
         assert 'unavailable' in capture_review_cards(store, con, [sid])[sid]
     prepare_review_cards(store, sid)
     console.review_object(actor_id=users['reviewer_a']['account_id'], snapshot_id=sid,
-                          object_id=oid, decision='approve', confirmed_object_type='definition')
+                          object_id=oid, decision='approve', confirmed_object_type='definition', assessment=affirmative_assessment(), evidence_not_applicable=True)
     with console.workflow_document_store._connect() as con:
         captured = capture_review_cards(console.workflow_document_store, con, [sid])[sid]
         state = con.execute('SELECT * FROM workflow.review_fact_state WHERE snapshot_id=%s',(sid,)).fetchone()
@@ -159,7 +161,7 @@ def test_graph_card_facts_preserve_review_and_confirmation_states(tmp_path, prod
     for obj in console.snapshot_objects(sid):
         if obj['object_type'] != 'document':
             console.review_object(actor_id=accounts['researcher']['account_id'],snapshot_id=sid,
-                object_id=obj['object_id'],decision='approve',confirmed_object_type='node')
+                object_id=obj['object_id'],decision='approve',confirmed_object_type='node', assessment=affirmative_assessment(), evidence_not_applicable=True)
     console.update_decision_graph(**command(console,accounts,sid,'facts-current-graph',graph=complete_graph(console,sid)))
     console.confirm_decision_graph(**command(console,accounts,sid,'facts-confirm-primary'))
     envelope, objects, facts, inventory = parity()
@@ -173,7 +175,7 @@ def test_graph_card_facts_preserve_review_and_confirmation_states(tmp_path, prod
     assert 'decision_graph_label_not_literal' in graph_issues(altered,facts,inventory)
     for obj in console.snapshot_objects(sid):
         if obj['object_type'] != 'document':
-            console.approve_second_review(actor_id=accounts['reviewer']['account_id'],snapshot_id=sid,object_id=obj['object_id'])
+            console.approve_second_review(actor_id=accounts['reviewer']['account_id'],snapshot_id=sid,object_id=obj['object_id'], assessment=affirmative_assessment(), evidence_not_applicable=True)
     cmd = command(console,accounts,sid,'facts-confirm-secondary')
     cmd['actor_id'] = accounts['reviewer']['account_id']
     console.confirm_decision_graph(**cmd)
@@ -264,7 +266,7 @@ def test_binding_only_changes_and_live_role_revocation_need_no_fact_rebuild(tmp_
     client = _login(console, actor['username'], production_app=production_app)
     assert 'data-personal-open>1<' in client.get('/review').text
     console.review_object(actor_id=actor['account_id'], snapshot_id=sid, object_id=oid,
-                          decision='approve', confirmed_object_type='definition')
+                          decision='approve', confirmed_object_type='definition', assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert 'data-personal-open>1<' not in client.get('/review').text
     with store._connect() as con:
         before = con.execute('SELECT * FROM workflow.review_fact_state WHERE snapshot_id=%s', (sid,)).fetchone()

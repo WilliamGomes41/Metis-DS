@@ -166,6 +166,7 @@ def test_bon_keeps_confirmed_condition_and_support_with_readable_exact_targets(t
     assert 'Voorstel, nog niet bevestigd' in primary_context.group(1)
     assert 'Geen afzonderlijke onderbouwing gekoppeld.' not in primary_context.group(1)
     data = submission(page, sid, obj)
+    data.pop('evidence_not_applicable')  # This case confirms actual supporting evidence.
     data['interaction_id'] = re.search(r'name="interaction_id" value="([^"]+)"', page.text).group(1)
     data['relation_choice'] = [relation_choice_value(row) for row in proposals]
     saved = client.post('/review', data=data, follow_redirects=False)

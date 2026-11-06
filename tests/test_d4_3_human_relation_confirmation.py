@@ -8,6 +8,8 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 from tests.test_v215_ingest_date_version_review_lanes import _compact_review_form
 
@@ -182,12 +184,14 @@ def _approve(
     snapshot_id: str,
     object_id: str,
     choices: list[str],
+    *, evidence_not_applicable: bool = False,
 ) -> list[dict]:
     return console.review_object(
         actor_id=accounts["reviewer"]["account_id"],
         snapshot_id=snapshot_id,
         object_id=object_id,
         decision="approve",
+        assessment=affirmative_assessment(), evidence_not_applicable=evidence_not_applicable,
         confirmed_object_type="recommendation",
         relation_choices=choices,
         relation_review_ack=True,
@@ -211,6 +215,7 @@ def test_confirmation_rebinds_relation_ids_to_new_source_version_atomically(tmp_
         snapshot_id,
         rec["object_id"],
         [relation_choice_value(proposals[0])],
+        evidence_not_applicable=True,
     )
 
     live = _rows(console, snapshot_id)[REC]
@@ -271,6 +276,7 @@ def test_reviewer_can_reject_one_machine_relation_from_atomic_set(tmp_path: Path
         snapshot_id,
         rec["object_id"],
         [relation_choice_value(applies)],
+        evidence_not_applicable=True,
     )
 
     live = _rows(console, snapshot_id)[REC]
@@ -297,7 +303,7 @@ def test_empty_selection_is_valid_only_with_explicit_relation_acknowledgement(tm
             expected_revision=console.objects_revision(snapshot_id),
         )
 
-    _approve(console, accounts, snapshot_id, rec["object_id"], [])
+    _approve(console, accounts, snapshot_id, rec["object_id"], [], evidence_not_applicable=True)
     live = _rows(console, snapshot_id)[REC]
     assert live[CONFIRMED_FIELD] == []
     assert live["confirmed_relations"] == []
@@ -380,6 +386,7 @@ def test_identical_human_confirmation_is_semantically_idempotent(tmp_path: Path,
         snapshot_id,
         rec["object_id"],
         [relation_choice_value(proposals[0])],
+        evidence_not_applicable=True,
     )
 
     first = _rows(console, snapshot_id)[REC]
@@ -393,6 +400,7 @@ def test_identical_human_confirmation_is_semantically_idempotent(tmp_path: Path,
         snapshot_id,
         rec["object_id"],
         [relation_choice_value(confirmed)],
+        evidence_not_applicable=True,
     )
     second = _rows(console, snapshot_id)[REC]
     assert second["object_version"] == first_version
@@ -449,6 +457,7 @@ def test_d43_does_not_make_new_format_relations_serving_authority(tmp_path: Path
         snapshot_id,
         rec["object_id"],
         [relation_choice_value(proposals[0])],
+        evidence_not_applicable=True,
     )
     live = _rows(console, snapshot_id)[REC]
 
@@ -486,6 +495,8 @@ def test_semantic_retry_preserves_relation_decisions(tmp_path: Path, choice_coun
         "suitability": "ja", "eindoordeel": "goedkeuren",
         "recommendation_direction": "for", "recommendation_strength_level": "strong",
         "relation_choice": selected, "relation_review_ack": "1",
+        "applicable": "yes", "complete": "yes", "placed_correctly": "yes",
+        "evidence_not_applicable": "yes" if choice_count < 2 else "",
     }
     response = client.post("/review", data=data)
     assert response.status_code == 400

@@ -1,3 +1,5 @@
+
+from tests.ko_review_fixture_support import affirmative_assessment
 import json
 from copy import deepcopy
 
@@ -33,7 +35,7 @@ def test_explicit_participation_survives_restart_and_drives_exact_review(tmp_pat
     assert obj["risk"]["risk_fields"]
     assert requires_four_eyes(obj) is True
     console.review_object(actor_id=primary, snapshot_id=sid, object_id=obj["object_id"],
-                          decision="approve", confirmed_object_type="node")
+                          decision="approve", confirmed_object_type="node", assessment=affirmative_assessment(), evidence_not_applicable=True)
     console = _console(tmp_path, production_console=production_console)
     obj = next(o for o in console.snapshot_objects(sid) if o.get("scorelist"))
     assert console._envelope(sid)["review_policy"] == policy(accounts, participation)
@@ -44,9 +46,9 @@ def test_explicit_participation_survives_restart_and_drives_exact_review(tmp_pat
     assert ("required_policy_review_missing" in considered["blockers"]) == (participation == "required")
     assert "four_eyes_required" in considered["blockers"]
     if participation:
-        console.approve_second_review(actor_id=secondary, snapshot_id=sid, object_id=obj["object_id"])
+        console.approve_second_review(actor_id=secondary, snapshot_id=sid, object_id=obj["object_id"], assessment=affirmative_assessment(), evidence_not_applicable=True)
         # Repeating a review is idempotent; optional participants can contribute.
-        console.approve_second_review(actor_id=secondary, snapshot_id=sid, object_id=obj["object_id"])
+        console.approve_second_review(actor_id=secondary, snapshot_id=sid, object_id=obj["object_id"], assessment=affirmative_assessment(), evidence_not_applicable=True)
         obj = next(o for o in console.snapshot_objects(sid) if o.get("scorelist"))
         assert review_stage(obj, review_path="boom", bindings=console.object_review_bindings(sid)) is None
 
@@ -76,11 +78,11 @@ def test_every_required_reviewer_is_needed_optional_cannot_substitute(tmp_path, 
     obj = next(o for o in console.snapshot_objects(sid) if o.get("scorelist"))
     oid = obj["object_id"]
     console.review_object(actor_id=p["primary"], snapshot_id=sid, object_id=oid,
-                          decision="approve", confirmed_object_type="node")
+                          decision="approve", confirmed_object_type="node", assessment=affirmative_assessment(), evidence_not_applicable=True)
     for actor in [p["primary"], accounts["reviewer"]["account_id"], optional["account_id"]]:
-        console.approve_second_review(actor_id=actor, snapshot_id=sid, object_id=oid)
+        console.approve_second_review(actor_id=actor, snapshot_id=sid, object_id=oid, assessment=affirmative_assessment(), evidence_not_applicable=True)
     current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == oid)
     assert review_stage(current, review_path="boom", bindings=console.object_review_bindings(sid)) == "second_review"
-    console.approve_second_review(actor_id=extra["account_id"], snapshot_id=sid, object_id=oid)
+    console.approve_second_review(actor_id=extra["account_id"], snapshot_id=sid, object_id=oid, assessment=affirmative_assessment(), evidence_not_applicable=True)
     current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == oid)
     assert review_stage(current, review_path="boom", bindings=console.object_review_bindings(sid)) is None

@@ -17,6 +17,8 @@ def submission(page, sid, obj, comment="bounded native draft"):
     revision = re.search(r'name="snapshot_revision" value="([^"]+)"', page.text)
     assert revision and revision.group(1).startswith("review-generation-v1:")
     return {"snapshot_id": sid, "object_id": obj["object_id"], "snapshot_revision": revision.group(1),
+            "applicable": "yes", "complete": "yes", "placed_correctly": "yes",
+            "evidence_not_applicable": "yes",
             "suitability": "ja", "documentpositie_action": "dit_klopt", "type_action": "dit_klopt",
             "confirmed_object_type": "recommendation", "eindoordeel": "goedkeuren", "decision": "approve",
             "recommendation_direction": "against" if "geen" in obj["content"]["clean_text"] else "for",

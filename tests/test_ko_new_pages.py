@@ -18,7 +18,11 @@ from tests.test_review_command_freshness_v1 import system, participation, approv
 def compact_submission(page):
     fields = dict(re.findall(r'<input type="hidden" name="([^"]+)" value="([^"]*)">', page.text))
     return {**fields, 'review_action': 'approve', 'applicable': 'yes',
-            'complete': 'yes', 'placed_correctly': 'yes'}
+            'complete': 'yes', 'placed_correctly': 'yes', 'evidence_not_applicable': 'yes'}
+
+
+def checked_answers(html):
+    return re.findall(r'<input[^>]*name="(?:applicable|complete|placed_correctly)"[^>]* checked', html)
 
 
 def test_compact_http_commit_standalone_bon_and_durable_answers(tmp_path, production_console, monkeypatch):
@@ -54,7 +58,7 @@ def test_compact_http_commit_standalone_bon_and_durable_answers(tmp_path, produc
     assert stale.status_code == 409
     assert 'data-review-receipt' not in stale.text
     assert 'data-ko-assessment-form' in stale.text
-    assert stale.text.count(' checked') == 3
+    assert len(checked_answers(stale.text)) == 3
 
 
 @pytest.mark.parametrize('change', [{'complete': ''}, {'complete': 'adjust'}, {'applicable': 'true'}])
@@ -191,7 +195,7 @@ def test_early_validation_error_cannot_rebase_old_answers_onto_current_revision(
     assert refused.status_code == 409
     recovered = compact_submission(refused)
     assert recovered['snapshot_revision'] == old['snapshot_revision']
-    assert refused.text.count(' checked') == (2 if 'complete' in invalid else 3)
+    assert len(checked_answers(refused.text)) == (2 if 'complete' in invalid else 3)
     assert re.search(r'<button[^>]+value="approve"[^>]+disabled', refused.text)
     assert 'Passage opnieuw beoordelen' in refused.text
     assert client.post('/review', data=recovered, follow_redirects=False).status_code == 409

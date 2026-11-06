@@ -8,6 +8,8 @@ RED/GREEN classification is recorded in the change contract after baseline CI.
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 
 import pytest
@@ -40,7 +42,7 @@ def _console(tmp_path, *, production_console, title="Begrippen"):
 
 def _approve(console, reviewer, sid, obj, **kwargs):
     return console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
-        object_id=obj["object_id"], decision="approve", confirmed_object_type="definition", **kwargs)
+        object_id=obj["object_id"], decision="approve", confirmed_object_type="definition", assessment=affirmative_assessment(), evidence_not_applicable=True, **kwargs)
 
 
 @pytest.mark.parametrize("kind", ["blocked", "deterministic", "coverage", "heading", "malformed"])
@@ -265,7 +267,8 @@ def _http(console, *, production_app):
 def _post_review(client, sid, obj, revision):
     return client.post("/review", data={"snapshot_id": sid, "object_id": obj["object_id"],
         "decision": "approve", "confirmed_object_type": "definition", "suitability": "ja",
-        "snapshot_revision": revision}, follow_redirects=False)
+        "snapshot_revision": revision, "applicable": "yes", "complete": "yes",
+        "placed_correctly": "yes", "evidence_not_applicable": "yes"}, follow_redirects=False)
 
 
 def test_direct_post_cannot_force_blocked_content_review(tmp_path, *, production_app, production_console):
@@ -449,10 +452,10 @@ def test_actual_four_eyes_commands_require_an_independent_second_human(tmp_path,
     before = _state(console, sid)
     with pytest.raises(ConsoleError, match="independent_second_reviewer_required"):
         console.approve_second_review(actor_id=reviewer["account_id"], snapshot_id=sid,
-            object_id=obj["object_id"], expected_revision=console.objects_revision(sid))
+            object_id=obj["object_id"], expected_revision=console.objects_revision(sid), assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert _state(console, sid) == before
     approved = console.approve_second_review(actor_id=second["account_id"], snapshot_id=sid,
-        object_id=obj["object_id"], expected_revision=console.objects_revision(sid))
+        object_id=obj["object_id"], expected_revision=console.objects_revision(sid), assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert approved["object_version"] == current["object_version"]
     assert exact_review_snapshot_hash(approved) == exact_review_snapshot_hash(current)
     args["bindings"] = console.object_review_bindings(sid)
@@ -511,7 +514,9 @@ def test_second_review_post_requires_the_reviewed_revision(tmp_path, pin, *, pro
     client = _http(console, production_app=production_app)
     client.post("/login", data={"username": "carla", "password": "carla-secret"})
     before = _state(console, sid)
-    payload = {"snapshot_id": sid, "object_id": obj["object_id"], "action": "approve"}
+    payload = {"snapshot_id": sid, "object_id": obj["object_id"], "action": "approve",
+               "applicable": "yes", "complete": "yes", "placed_correctly": "yes",
+               "evidence_not_applicable": "yes"}
     if pin is not None:
         payload["snapshot_revision"] = console.objects_revision(sid) if pin == "current" else pin
     response = client.post("/review/second-review", data=payload, follow_redirects=False)

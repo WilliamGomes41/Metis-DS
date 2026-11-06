@@ -4,6 +4,8 @@ Closed relations, type confirmation, high-risk four-eyes,
 open-original, G2-blocked publish, Documentenhiërarchie.
 """
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 
 from pathlib import Path
@@ -316,6 +318,7 @@ def test_changed_confirmed_relations_invalidate_publish_authorization(tmp_path: 
         confirmed_object_type="recommendation",
         recommendation_direction="for",
         recommendation_strength_level="not_stated",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     before = console.object_review_bindings(receipt["snapshot_id"])
     assert any(item.get("valid") and item["object_id"] == rec["object_id"] for item in before)
@@ -433,6 +436,7 @@ def test_four_eyes_required_for_exception_and_risk_fields_uploader_insufficient(
         object_id=target["object_id"],
         decision="approve",
         confirmed_object_type="definition",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     considered = console.consider_publish(
         actor_id=accounts["publisher"]["account_id"],

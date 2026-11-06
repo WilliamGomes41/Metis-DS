@@ -9,6 +9,8 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 
 from copy import deepcopy
@@ -373,6 +375,7 @@ def test_source_bound_repair_reopens_only_changed_candidate_and_survives_restart
         decision="approve",
         confirmed_object_type="definition",
         expected_revision=console.objects_revision(snapshot_id),
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     stable_before = next(
         row

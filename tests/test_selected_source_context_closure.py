@@ -7,6 +7,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 
 import pytest
@@ -56,7 +58,7 @@ def _review(console, reviewer, sid, target, status):
         return
     args = dict(actor_id=reviewer["account_id"], snapshot_id=sid, object_id=target["object_id"])
     if status == "approved":
-        console.review_object(**args, decision="approve", confirmed_object_type="definition")
+        console.review_object(assessment=affirmative_assessment(), evidence_not_applicable=True, **args, decision="approve", confirmed_object_type="definition")
     elif status == "rejected":
         console.review_object(**args, decision="reject", suitability="ja",
                               eindoordeel="afwijzen", comment="Geen zelfstandige kennis.")

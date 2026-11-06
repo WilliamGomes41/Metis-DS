@@ -7,6 +7,8 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
@@ -173,6 +175,7 @@ def _prepare_console(console):
         object_id=target["object_id"],
         decision="approve",
         confirmed_object_type="explanation",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     for obj in console.snapshot_objects(snapshot_id):
         if obj.get("object_id") == target["object_id"]:

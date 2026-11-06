@@ -7,6 +7,8 @@ context has rolled back and released the lock, but before the review mixin's
 _restore_review_state runs, instance B commits a second review. B's change and
 its audit event MOET survive A's restore.
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 import fcntl
 
 from src.review.proportionate_review_v1 import normal_risk_batch_queue
@@ -21,6 +23,7 @@ def _approve(console, actor, sid, object_id, obj_type):
         actor_id=actor, snapshot_id=sid, object_id=object_id, decision="approve",
         confirmed_object_type=obj_type, suitability="ja", eindoordeel="goedkeuren",
         type_action="dit_klopt",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
 
 

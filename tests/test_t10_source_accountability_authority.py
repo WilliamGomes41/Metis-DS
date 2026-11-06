@@ -7,6 +7,8 @@
 # release-control-evidence: toegang
 # release-control-evidence: beschikbaarheid
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 import pytest
@@ -209,7 +211,7 @@ def test_confirm_reset_duplicate_conflict_restart_and_projection(tmp_path, *, pr
     assert state.snapshot_objects(sid) == before
     assert read_events(state._ledger_path) == events
     state.review_object(actor_id=reviewer["account_id"], snapshot_id=sid, object_id=target["object_id"],
-                        decision="approve", confirmed_object_type="definition", relation_review_ack=True)
+                        decision="approve", confirmed_object_type="definition", relation_review_ack=True, assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert project(state)[source["object_id"]]["closure"] == "accounted"
     restarted = production_console(processing_binder=bind_fixture_selections, root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime")
     assert project(restarted) == project(state)

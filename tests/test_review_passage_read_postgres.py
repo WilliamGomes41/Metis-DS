@@ -440,7 +440,8 @@ def test_compact_form_uses_the_real_review_command_and_refuses_invalid_context(r
         'snapshot_id': sid, 'object_id': obj['object_id'], 'snapshot_revision': revision,
         'suitability': 'ja', 'documentpositie_action': 'dit_klopt', 'type_action': 'dit_klopt',
         'confirmed_object_type': 'definition', 'eindoordeel': 'goedkeuren', 'decision': 'approve',
-        'relation_review_ack': '1'}, follow_redirects=False)
+        'relation_review_ack': '1', 'applicable': 'yes', 'complete': 'yes',
+        'placed_correctly': 'yes', 'evidence_not_applicable': 'yes'}, follow_redirects=False)
     if case == 'current':
         assert result.status_code == 303
         current = next(o for o in console.snapshot_objects(sid) if o['object_id'] == obj['object_id'])

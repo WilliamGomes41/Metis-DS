@@ -8,6 +8,8 @@
 # release-control-evidence: releasebewijs
 # release-control-evidence: opslag durable recovery concurrent stale interrupt retry version-compat
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 import hashlib
 import json
@@ -211,7 +213,7 @@ def durable_story(root, monkeypatch, make=None, *, production_console):
     # An approval on one occurrence still grants no approval on the other.
     restored.review_object(actor_id=reviewer, snapshot_id=sid, object_id=repeated[0]['object_id'],
         decision='approve', confirmed_object_type='recommendation', recommendation_direction='for',
-        recommendation_strength_level='not_stated')
+        recommendation_strength_level='not_stated', assessment=affirmative_assessment(), evidence_not_applicable=True)
     bindings = restored.object_review_bindings(sid)
     assert any(b['valid'] and b['object_id'] == repeated[0]['object_id'] for b in bindings)
     assert not any(b['valid'] and b['object_id'] == repeated[1]['object_id'] for b in bindings)

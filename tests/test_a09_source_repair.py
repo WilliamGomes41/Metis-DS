@@ -7,6 +7,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 import json
 from copy import deepcopy
 from pathlib import Path
@@ -164,7 +166,7 @@ def test_old_approval_is_retained_and_invalidated(repair_setup, *, production_ap
     console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=obj['object_id'],
         decision='approve', confirmed_object_type='recommendation', recommendation_direction='against',
-        recommendation_strength_level='not_stated', comment='Bron gecontroleerd.')
+        recommendation_strength_level='not_stated', comment='Bron gecontroleerd.', assessment=affirmative_assessment(), evidence_not_applicable=True)
     bindings = deepcopy(console.object_review_bindings(sid))
     assert any(b['valid'] for b in bindings)
     events = read_events(console._ledger_path)
@@ -208,7 +210,7 @@ def test_failed_http_commit_rolls_back_objects_bindings_and_audit(repair_setup, 
     console, sid, obj, reviewer, fresh = repair_setup(secondary="Bespreek de opties." if kind == "merge" else None, production_console=production_console)
     console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid, object_id=obj["object_id"],
         decision="approve", confirmed_object_type="recommendation", recommendation_direction="against",
-        recommendation_strength_level="not_stated", comment="Bron gecontroleerd.")
+        recommendation_strength_level="not_stated", comment="Bron gecontroleerd.", assessment=affirmative_assessment(), evidence_not_applicable=True)
     units = console.source_units(snapshot_id=sid, object_id=obj['object_id'])
     before_objects = deepcopy(console._load_objects(sid, remember=False))
     before_bindings = deepcopy(console.object_review_bindings(sid))

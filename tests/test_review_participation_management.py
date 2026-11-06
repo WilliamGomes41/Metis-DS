@@ -7,6 +7,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
@@ -52,7 +54,7 @@ def passages(console,sid):
 
 def approve_all(console, accounts, sid, actor):
     for o in passages(console,sid):
-        console.approve_second_review(actor_id=actor, snapshot_id=sid, object_id=o['object_id'])
+        console.approve_second_review(actor_id=actor, snapshot_id=sid, object_id=o['object_id'], assessment=affirmative_assessment(), evidence_not_applicable=True)
     c=command(console,accounts,sid,uuid4().hex);c['actor_id']=actor
     console.confirm_decision_graph(**c)
 
@@ -91,7 +93,7 @@ def test_archive_required_then_replace_keeps_primary_and_demands_new_person(setu
     assert 'archived_required_review_unfilled' in result['blockers']
     assert all(secondary in missing_reviewers(o,console.object_review_bindings(sid)) for o in passages(console,sid))
     with pytest.raises(ConsoleError,match='reviewer_not_named'):
-        console.approve_second_review(actor_id=secondary,snapshot_id=sid,object_id=passages(console,sid)[0]['object_id'])
+        console.approve_second_review(actor_id=secondary,snapshot_id=sid,object_id=passages(console,sid)[0]['object_id'], assessment=affirmative_assessment(), evidence_not_applicable=True)
     with pytest.raises(ConsoleError,match='independent_replacement_required'):
         change(console,accounts,sid,'replace',secondary,replacement_id=primary)
     replacement=person(console)
@@ -157,7 +159,7 @@ def test_primary_replacement_and_readd_do_not_resurrect_evidence(setup):
     change(console,accounts,sid,'replace',primary,replacement_id=new,actor_id=new)
     assert all(new in missing_reviewers(o,console.object_review_bindings(sid)) for o in passages(console,sid))
     for o in passages(console,sid):
-        console.review_object(actor_id=new,snapshot_id=sid,object_id=o['object_id'],decision='approve',confirmed_object_type='node')
+        console.review_object(actor_id=new,snapshot_id=sid,object_id=o['object_id'],decision='approve',confirmed_object_type='node', assessment=affirmative_assessment(), evidence_not_applicable=True)
     c=command(console,accounts,sid,'primary-confirm');c['actor_id']=new
     console.confirm_decision_graph(**c)
     change(console,accounts,sid,'add_required',primary)

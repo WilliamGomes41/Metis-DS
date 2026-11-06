@@ -1,4 +1,6 @@
 """Mixed source-bound work, real commands and exact current bindings for #860."""
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 
 from tests.semantic_fixture_support import bind_fixture_selections, install_fixture_history
@@ -42,9 +44,9 @@ def prepare(console, *, mixed_copies=1):
                 assert target['metadata']['admission']['gate_result'] == 'allowed', (literal, target['metadata']['admission'])
                 console.review_object(actor_id=a, snapshot_id=sid, object_id=ids[literal], decision='approve',
                                       confirmed_object_type='recommendation' if literal == CONTEXT else 'definition',
-                                      recommendation_direction='for', recommendation_strength_level='not_stated')
+                                      recommendation_direction='for', recommendation_strength_level='not_stated', assessment=affirmative_assessment(), evidence_not_applicable=True)
                 if name in ('Klaar', 'Bronwerk'):
-                    console.approve_second_review(actor_id=b, snapshot_id=sid, object_id=ids[literal])
+                    console.approve_second_review(actor_id=b, snapshot_id=sid, object_id=ids[literal], assessment=affirmative_assessment(), evidence_not_applicable=True)
         if name.startswith('Gemengd'):
             console.review_object(actor_id=a, snapshot_id=sid, object_id=ids[REJECTED], decision='reject',
                                   comment='Niet bruikbaar na inhoudelijke beoordeling.')

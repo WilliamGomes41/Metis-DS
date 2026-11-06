@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+from tests.ko_review_fixture_support import affirmative_assessment
+
 from copy import deepcopy
 
 import pytest
@@ -216,7 +218,7 @@ def test_console_independence_counts_open_content_object(tmp_path, *, production
     bert = accounts["reviewer"]["account_id"]
     first, second = [o for o in console.snapshot_objects(sid) if o.get("object_type") == "unclassified"][:2]
     console.review_object(actor_id=bert, snapshot_id=sid, object_id=first["object_id"], decision="approve",
-                          confirmed_object_type="explanation")
+                          confirmed_object_type="explanation", assessment=affirmative_assessment(), evidence_not_applicable=True)
     envelope = console._envelope(sid)
     envelope["review_configuration"] = _config("one_other", [bert])
     readiness = console.technical_publication_readiness(snapshot_id=sid, envelope=envelope)
@@ -277,7 +279,7 @@ def test_sherlock_chosen_one_approved_one_open_blocks_total_readiness(tmp_path, 
     bert = accounts["reviewer"]["account_id"]
     first = next(o for o in console.snapshot_objects(sid) if o.get("object_type") == "unclassified")
     console.review_object(actor_id=bert, snapshot_id=sid, object_id=first["object_id"], decision="approve",
-                          confirmed_object_type="explanation")
+                          confirmed_object_type="explanation", assessment=affirmative_assessment(), evidence_not_applicable=True)
     original = console._envelope
 
     def with_choice(snapshot_id, *args, **kwargs):

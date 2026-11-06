@@ -3,6 +3,8 @@
 # release-control-evidence: scope/belofte toegang kwaliteit slop releasebewijs
 # release-control-evidence: opslag durable recovery stale
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from collections import Counter
 from copy import deepcopy
 import re
@@ -87,7 +89,7 @@ def test_real_review_changes_only_own_current_work_and_label(mixed, production_a
     assert '>Beginnen</a>' in card(page_b, waiting)
     console.review_object(actor_id=accounts['a']['account_id'], snapshot_id=sid, object_id=docs['Gemengd']['context'],
                           decision='approve', confirmed_object_type='recommendation', recommendation_direction='for',
-                          recommendation_strength_level='not_stated')
+                          recommendation_strength_level='not_stated', assessment=affirmative_assessment(), evidence_not_applicable=True)
     after = client.get('/review').text
     assert 'data-personal-open>1<' in card(after, sid)
     assert 'task=contextual' in card(after, sid)

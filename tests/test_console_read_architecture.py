@@ -6,6 +6,8 @@
 # release-control-evidence: beschikbaarheid
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from collections import Counter
 from copy import deepcopy
 import time
@@ -261,7 +263,7 @@ def test_overlapping_ingest_formation_review_and_document_reads(tmp_path, produc
         barrier.wait(timeout=5)
         return reviewer.review_object(actor_id=users['reviewer_a']['account_id'], snapshot_id=sid,
             object_id=oid, decision='approve', confirmed_object_type='definition',
-            expected_revision=reviewer.objects_revision(sid))
+            expected_revision=reviewer.objects_revision(sid), assessment=affirmative_assessment(), evidence_not_applicable=True)
     def ingest():
         barrier.wait(timeout=5)
         return producer.ingest(actor_id=users['researcher']['account_id'], filename='concurrent.html',

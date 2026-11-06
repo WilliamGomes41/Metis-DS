@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+from tests.ko_review_fixture_support import affirmative_assessment
+
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -172,6 +174,7 @@ def _ready_console(
         object_id=target["object_id"],
         decision="approve",
         confirmed_object_type="explanation",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     for obj in console.snapshot_objects(snapshot_id):
         if obj.get("object_id") == target["object_id"]:

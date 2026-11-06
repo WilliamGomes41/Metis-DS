@@ -12,6 +12,8 @@ partial projection nor a release manifest behind.
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
@@ -104,6 +106,7 @@ def test_independence_is_checked_for_each_published_object(tmp_path: Path, *, pr
         object_id=second["object_id"],
         decision="approve",
         confirmed_object_type="explanation",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
 
     considered = console.consider_publish(
@@ -181,6 +184,7 @@ def _prepare_ready_console(console, store, *, leave_second_candidate_open=False)
         object_id=target["object_id"],
         decision="approve",
         confirmed_object_type="explanation",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     deferred_id = ""
     if leave_second_candidate_open:

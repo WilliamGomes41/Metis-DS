@@ -7,6 +7,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 
 import psycopg
@@ -62,7 +64,7 @@ def _ready_to_confirm(console, accounts, sid):
     for obj in console.snapshot_objects(sid):
         if obj["object_type"] != "document":
             console.review_object(actor_id=accounts["researcher"]["account_id"], snapshot_id=sid,
-                                  object_id=obj["object_id"], decision="approve", confirmed_object_type="node")
+                                  object_id=obj["object_id"], decision="approve", confirmed_object_type="node", assessment=affirmative_assessment(), evidence_not_applicable=True)
     _update(console, accounts, sid, "graph-1")
 
 

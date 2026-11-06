@@ -6,6 +6,8 @@ publish() stays G2-BLOCKED. Product API boom serving is not activated.
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 """
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 
 import hashlib
@@ -466,6 +468,7 @@ def test_console_stamps_actionable_outcome_and_maps_geen_actie(tmp_path: Path, *
         decision="approve",
         confirmed_object_type="outcome",
         recommendation_strength="doen",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     row = next(item for item in updated if item["object_id"] == outcome["object_id"])
     assert row["confirmed_object_type"] == "outcome"
@@ -504,6 +507,7 @@ def test_console_stamps_actionable_outcome_and_maps_geen_actie(tmp_path: Path, *
         object_id=geen["object_id"],
         decision="approve",
         confirmed_object_type="outcome",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     row = next(item for item in updated if item["object_id"] == geen["object_id"])
     assert row.get("confirmed_recommendation_strength") == "niet_doen"
@@ -772,6 +776,7 @@ def test_approve_does_not_auto_confirm_proposed_applies_if(tmp_path: Path, *, pr
             object_id=outcome["object_id"],
             decision="approve",
             confirmed_object_type="outcome",
+            assessment=affirmative_assessment(), evidence_not_applicable=True,
         )
     stored = next(
         obj

@@ -6,6 +6,8 @@ that still admits non-heading prose without a semantic selection is not
 closed here.
 """
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
@@ -466,6 +468,7 @@ def _approve(console, reviewer, snapshot_id: str, object_id: str) -> str | None:
             object_id=object_id,
             decision="approve",
             confirmed_object_type="definition",
+            assessment=affirmative_assessment(), evidence_not_applicable=True,
         )
     except ConsoleError as exc:
         return exc.code

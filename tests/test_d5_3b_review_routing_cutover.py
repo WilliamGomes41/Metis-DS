@@ -8,6 +8,8 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 from tests.test_v215_ingest_date_version_review_lanes import _compact_review_form
 
@@ -217,6 +219,7 @@ def test_second_review_approval_preserves_canonical_tuple_and_is_idempotent(tmp_
         snapshot_id=snapshot_id,
         object_id=object_id,
         expected_revision=console.objects_revision(snapshot_id),
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
 
     after = next(row for row in console.snapshot_objects(snapshot_id) if row["object_id"] == object_id)
@@ -237,6 +240,7 @@ def test_second_review_approval_preserves_canonical_tuple_and_is_idempotent(tmp_
         actor_id=accounts["reviewer_b"]["account_id"],
         snapshot_id=snapshot_id,
         object_id=object_id,
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     assert len([
         row for row in read_events(console._ledger_path)
