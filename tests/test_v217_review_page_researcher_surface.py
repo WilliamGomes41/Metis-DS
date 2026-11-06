@@ -8,6 +8,7 @@ PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 """
 from __future__ import annotations
 from tests.semantic_fixture_support import bind_fixture_selections
+from tests.test_v215_ingest_date_version_review_lanes import _compact_review_form
 
 import re
 from html.parser import HTMLParser
@@ -493,7 +494,7 @@ def test_recommendation_strength_picker_absent_unless_type_is_recommendation(tmp
     if (body.get("proposed_object_type") or body.get("object_type")) != "recommendation":
         assert recommendation_strength_ui_applies(body) is False
         assert re.search(r"data-stamp-block(?:\s+hidden|[^>]*\shidden)", heading_page)
-        assert re.search(r"data-stamp-block(?:\s+hidden|[^>]*\shidden)", body_page)
+        assert not any(item.get('name') == 'recommendation_strength' for item in _compact_review_form(body_page)['inputs'])
     planted = {
         **body,
         "object_id": f"{body['object_id']}-tools-fail",
@@ -509,7 +510,9 @@ def test_recommendation_strength_picker_absent_unless_type_is_recommendation(tmp
     tools_card = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={planted['object_id']}"
     ).text
-    assert re.search(r"data-stamp-block(?:\s+hidden|[^>]*\shidden)", tools_card)
+    tools_form = _compact_review_form(tools_card)
+    assert not any(item.get('name') == 'recommendation_strength' for item in tools_form['inputs'])
+    assert tools_form['attrs']['data-can-approve'] == 'false'
     rec = {
         "object_type": "unclassified",
         "proposed_object_type": "recommendation",
@@ -529,7 +532,7 @@ def test_recommendation_strength_picker_absent_unless_type_is_recommendation(tmp
 # ---------------------------------------------------------------------------
 
 
-def test_relation_checkbox_label_is_adjacent_not_stretched(tmp_path: Path, *, production_app, production_console) -> None:
+def test_proposed_relation_is_readable_beside_three_explicit_answer_rows(tmp_path: Path, *, production_app, production_console) -> None:
     freeze = _chrome_freeze()
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
@@ -546,30 +549,15 @@ def test_relation_checkbox_label_is_adjacent_not_stretched(tmp_path: Path, *, pr
     ).text
     assert "Relatie bevestigen" not in html
     assert "Inleiding" in html
-    assert 'class="check"' in html
-    css = CSS.read_text(encoding="utf-8")
-    relation_block = re.search(
-        r"\.relations\s+\.check\s*\{[^}]+\}",
-        css,
-    )
-    assert relation_block, "relation checkbox must have a compact rule"
-    block = relation_block.group(0)
-    assert "space-between" not in block
-    assert "justify-content: space-between" not in css.split(".relations")[1].split(".help")[0]
-    input_rule = re.search(
-        r"\.relations\s+\.check\s+input\[type=\"checkbox\"\]\s*\{[^}]+\}",
-        css,
-    )
-    assert input_rule
-    assert "width: auto" in input_rule.group(0)
-    assert re.search(
-        r'input\[type="checkbox"\][^{]*\{[^}]*width:\s*auto',
-        css,
-        flags=re.S,
-    )
-    assert "justify-between" not in APP_SOURCE.read_text(encoding="utf-8")
-    assert "Relatie bevestigen" not in html
-    assert re.search(r'<label class="check">', html)
+    form = _compact_review_form(html)
+    radios = [item for item in form['inputs'] if item.get('type') == 'radio']
+    assert len(radios) == 6
+    assert {item['name'] for item in radios} == {'applicable', 'complete', 'placed_correctly'}
+    assert all('checked' not in item for item in radios)
+    assert not any(item.get('name') == 'relation_choice' for item in form['inputs'])
+    assert re.search(r'<li><strong>licht toe</strong>: ' + re.escape(goal), html)
+    assert 'Voorstel, nog niet bevestigd' in html
+    assert len(re.findall(r'<label><input type="radio"[^>]*> (?:Ja|Aanpassen)</label>', html)) == 6
 
 
 # ---------------------------------------------------------------------------

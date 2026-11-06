@@ -310,7 +310,7 @@ def test_native_review_matrix(case, tmp_path, production_console, production_app
                     assert page.status_code == 200
                     warning = 'data-formation-incomplete' in page.text
                     if params.get('object'):
-                        assert ('data-document-assessment="not_evaluated"' in page.text) == incomplete
+                        assert 'data-document-assessment="not_evaluated"' in page.text
                         assert not warning
                     elif name != 'overview':
                         assert warning == incomplete
@@ -496,7 +496,7 @@ def test_native_task_v1_review(tmp_path, production_console, production_app, mon
             assert durable(console, [sid]) == before
         page = request(client, 'passage', 'get', params=params)
         assert page.status_code == 200
-        assert ('data-document-assessment="not_evaluated"' in page.text) == incomplete
+        assert 'data-document-assessment="not_evaluated"' in page.text
         data = form(page)
         assert durable(console, [sid]) == before
         early = request(client, 'pretransaction_refusal', 'post',
@@ -774,7 +774,7 @@ def test_native_review_post_baseline(size, tmp_path, production_console, product
         before = durable(console, [sid])
         page = request(client, 'passage', 'get', params=params)
         assert page.status_code == 200
-        assert ('data-document-assessment="not_evaluated"' in page.text) == incomplete
+        assert 'data-document-assessment="not_evaluated"' in page.text
         data = form(page)
         assert durable(console, [sid]) == before
         # Real semantic refusal inside review_object, not an injected exception.

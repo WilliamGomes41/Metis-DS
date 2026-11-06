@@ -40,10 +40,9 @@ CURRENT_HEADING = "2 Aanbevelingen"
 ANCESTOR_HEADING = "Richtlijn Fractuurpreventie"
 
 REVIEWER_COPY = (
-    "Is deze passage op zichzelf bruikbaar?",
-    "Staat de passage onder de juiste kop?",
-    "Wat voor informatie is dit?",
-    "Wat is je besluit?",
+    "Is dit toepasbaar?",
+    "Is dit compleet?",
+    "Staat dit op de juiste plek?",
 )
 PROTOCOL_JARGON = (
     "Relatie bevestigen",
@@ -56,19 +55,6 @@ PROTOCOL_JARGON = (
     "Voorgestelde relatie",
     "Ouder kiezen",
     "ouder/kind",
-)
-SUITABILITY_LABELS = (
-    "Ja, als zelfstandig stukje kennis",
-    "Nee, ik mis uitleg eromheen",
-    "Nee, deze hoort samen met een andere passage",
-    "Alleen als onderbouwing van een andere passage",
-    "Geen zelfstandig stukje kennis",
-)
-EINDOORDEEL_LABELS = (
-    "Goedkeuren",
-    "Correctie specificeren",
-    "Afwijzen",
-    "Later beoordelen",
 )
 
 
@@ -179,6 +165,8 @@ def _client(console: OperationsConsole, *, production_app) -> TestClient:
 
 
 def _card(html: str, object_id: str) -> str:
+    if 'class="ko-review-layout"' in html and object_id in html:
+        return re.search(r'<main class="ko-page">(.*?)</main>', html, re.S).group(1)
     match = re.search(
         rf'<article class="[^"]*review-card[^"]*"[^>]*>.*?</article>',
         html,
@@ -211,16 +199,6 @@ def _strip_hidden(html: str) -> str:
         flags=re.S | re.I,
     )
     return cleaned
-
-
-def _step(card: str, letter: str) -> str:
-    match = re.search(
-        rf'<section[^>]*data-review-step="{letter}"[^>]*>.*?</section>',
-        card,
-        flags=re.S,
-    )
-    assert match, f"review step {letter} missing"
-    return match.group(0)
 
 
 def _strip_locator(console: OperationsConsole, snapshot_id: str, object_id: str) -> None:
@@ -297,28 +275,18 @@ def test_primary_surface_has_no_protocol_jargon_or_relation_chrome(tmp_path: Pat
     assert "toc-headings" not in primary
 
 
-def test_review_cockpit_is_a_to_f_order_with_one_save(tmp_path: Path, *, production_app, production_console) -> None:
+def test_review_has_source_then_object_and_one_compact_confirmation(tmp_path: Path, *, production_app, production_console) -> None:
     _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
-    card = _card(html, adviseert["object_id"])
-    positions = []
-    for letter in "abcdef":
-        idx = card.find(f'data-review-step="{letter}"')
-        assert idx >= 0, letter
-        positions.append(idx)
-    assert positions == sorted(positions)
-    assert card.count('data-submit-review') == 1
-    assert "Review opslaan en volgende" in card
-    assert "Review vastleggen" not in card
-    form = re.search(r'<form[^>]*data-review-form[^>]*>.*?</form>', card, flags=re.S)
-    assert form, "ONE save form missing"
-    blob = form.group(0)
-    for field in (
-        'name="suitability"',
-        'name="documentpositie_action"',
-        'name="type_action"',
-        'name="eindoordeel"',
-    ):
-        assert field in blob, field
+    card = _card(html, adviseert['object_id'])
+    assert card.index('ko-document-context') < card.index('ko-object-panel')
+    form = re.search(r'<form[^>]*data-ko-assessment-form[^>]*>.*?</form>', card, re.S)
+    assert form
+    assert form.group().count('value="approve"') == 1
+    for field in ('applicable', 'complete', 'placed_correctly'):
+        assert form.group().count('name="' + field + '"') == 2
+    assert 'Goedkeuren en opslaan' in form.group()
+    for field in ('suitability', 'type_action', 'eindoordeel', 'documentpositie_action'):
+        assert 'name="' + field + '"' not in form.group()
 
 
 # ---------------------------------------------------------------------------
@@ -328,12 +296,12 @@ def test_review_cockpit_is_a_to_f_order_with_one_save(tmp_path: Path, *, product
 
 def test_step_a_shows_selected_passage_without_selection_explanation(tmp_path: Path, *, production_app, production_console) -> None:
     _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
-    step = _step(_card(html, adviseert["object_id"]), "a")
-    visible = _visible_text(step)
-    assert "adviseert de verpleegkundige" in visible
-    assert "why-selected" not in step
-    assert "aanbeveling" in visible.casefold()
-    assert "Geselecteerd omdat dit een volledige aanbeveling is." not in visible
+    card = _card(html, adviseert['object_id'])
+    claim = re.search(r'<p class="ko-claim"[^>]*>(.*?)</p>', card, re.S).group(1)
+    assert 'adviseert de verpleegkundige' in claim
+    assert 'why-selected' not in card
+    assert 'Aanbeveling' in card
+    assert 'Geselecteerd omdat dit een volledige aanbeveling is.' not in card
 
 
 # ---------------------------------------------------------------------------
@@ -344,15 +312,15 @@ def test_step_a_shows_selected_passage_without_selection_explanation(tmp_path: P
 def test_step_b_broncontext_is_surrounding_freeze_not_card_enlarge(tmp_path: Path, *, production_app, production_console) -> None:
     console, _accounts, receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert["object_id"])
-    step = _step(card, "b")
+    step = re.search(r'<details class="ko-document-context".*?</details>', card, re.S).group()
     visible = _visible_text(step)
-    assert "Broncontext" in step or "broncontext" in step.casefold()
+    assert "Bekijk in documentcontext" in step
     assert PREV_CONDITION in visible
     assert NEXT_OVERLEG in visible
     assert CURRENT_HEADING in visible
     assert ANCESTOR_HEADING in visible
     marked = re.search(
-        r'<mark\b[^>]*class="[^"]*broncontext-marked[^"]*"[^>]*>(.*?)</mark>',
+        r'<mark\b[^>]*>(.*?)</mark>',
         step,
         flags=re.S,
     )
@@ -377,7 +345,7 @@ def test_step_b_broncontext_is_surrounding_freeze_not_card_enlarge(tmp_path: Pat
 def test_broncontext_is_not_a_css_zoom_of_the_card_snippet(tmp_path: Path, *, production_app, production_console) -> None:
     _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert["object_id"])
-    step = _step(card, "b")
+    step = re.search(r'<details class="ko-document-context".*?</details>', card, re.S).group()
     assert "transform: scale" not in step.casefold()
     assert "font-size: 2" not in step.casefold()
     assert PREV_CONDITION in _visible_text(step)
@@ -391,18 +359,13 @@ def test_broncontext_is_not_a_css_zoom_of_the_card_snippet(tmp_path: Path, *, pr
 
 def test_step_c_suitability_options_are_ordinary_dutch(tmp_path: Path, *, production_app, production_console) -> None:
     _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
-    step = _step(_card(html, adviseert["object_id"]), "c")
-    visible = _visible_text(step)
-    for label in SUITABILITY_LABELS:
-        assert label in visible, label
-    for value in (
-        "ja",
-        "mist_context",
-        "samenvoegen",
-        "alleen_onderbouwing",
-        "geen_kenniseenheid",
-    ):
-        assert f'value="{value}"' in step, value
+    card = _card(html, adviseert['object_id'])
+    questions = re.findall(r'<fieldset class="ko-question">.*?</fieldset>', card, re.S)
+    assert len(questions) == 3
+    for question in questions:
+        assert '> Ja</label>' in question and '> Aanpassen</label>' in question
+        assert ' checked' not in question
+        assert ' required' in question
 
 
 # ---------------------------------------------------------------------------
@@ -410,19 +373,19 @@ def test_step_c_suitability_options_are_ordinary_dutch(tmp_path: Path, *, produc
 # ---------------------------------------------------------------------------
 
 
-def test_step_d_documentpositie_is_gevonden_onder_not_parent_dump(tmp_path: Path, *, production_app, production_console) -> None:
+def test_source_position_does_not_invent_a_missing_current_parent(tmp_path: Path, *, production_app, production_console) -> None:
     _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
-    card = _card(html, adviseert["object_id"])
-    step = _step(card, "d")
-    primary = _strip_hidden(step)
-    visible = _visible_text(primary)
-    assert "Gevonden onder:" in visible or "Gevonden onder" in visible
-    assert CURRENT_HEADING in visible
-    assert "Dit klopt" in visible
-    assert "Andere kop kiezen" not in visible
-    assert "data-parent-choice-list" not in step
-    assert "data-heading-chooser" not in step
-    assert "Passage herstellen in Vorming" in card
+    card = _card(html, adviseert['object_id'])
+    question = re.search(r'<fieldset class="ko-question"><legend>Staat dit op de juiste plek\?.*?</fieldset>', card, re.S).group()
+    assert adviseert.get('parent_object_id') is None
+    assert 'Geen bovenliggende kop vastgelegd.' in question
+    assert 'data-current-parent' not in question
+    source = re.search(r'<details class="ko-document-context"[^>]*>.*?</details>', card, re.S).group()
+    assert CURRENT_HEADING in _visible_text(source)
+    assert 'Andere plek kiezen' in question
+    assert '/source-selection?' in question
+    assert 'data-parent-choice-list' not in card
+    assert 'name="parent_choice"' not in card
 
 
 def test_heading_chooser_browse_does_not_silently_select(tmp_path: Path, *, production_app, production_console) -> None:
@@ -447,32 +410,25 @@ def test_heading_chooser_browse_does_not_silently_select(tmp_path: Path, *, prod
 
 def test_step_e_starts_from_metis_proposal_not_only_unconfirmed(tmp_path: Path, *, production_app, production_console) -> None:
     _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
-    step = _step(_card(html, adviseert["object_id"]), "e")
-    primary = _visible_text(_strip_hidden(step))
-    assert "Metis stelt voor:" in primary
-    assert "Aanbeveling" in primary
-    assert "Dit klopt" in primary
-    assert "Type wijzigen" not in primary
-    assert 'name="confirmed_object_type"' in step
-    assert primary.strip().startswith("Metis") or "Metis stelt voor" in primary
-    assert not re.search(r"^nog niet bevestigd$", primary)
-    select = re.search(r"<select[^>]*name=\"confirmed_object_type\"[^>]*>.*?</select>", step, flags=re.S)
-    if select:
-        opening = select.group(0).split(">", 1)[0]
-        assert "hidden" in opening or 'hidden' in step[step.find("Type wijzigen") :][:400]
+    card = _card(html, adviseert['object_id'])
+    assert '<p class="ko-type">Aanbeveling</p>' in card
+    assert 'name="confirmed_object_type"' not in card
+    assert 'Correctie nodig' in card and '/source-selection?' in card
+    assert adviseert.get('confirmed_object_type') != 'recommendation'
 
 
-def test_sterkte_stays_hidden_until_confirmed_aanbeveling(tmp_path: Path, *, production_app, production_console) -> None:
+def test_unknown_strength_blocks_compact_confirmation_without_a_default(tmp_path: Path, *, production_app, production_console) -> None:
     _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
-    card = _card(html, adviseert["object_id"])
-    assert adviseert.get("confirmed_object_type") not in {"recommendation", "outcome"}
-    stamp = re.search(r"<section[^>]*data-stamp-block[^>]*>", card)
-    assert stamp, "stamp block must exist for live reveal"
-    assert "hidden" in stamp.group(0)
-    assert 'name="recommendation_strength"' in card
-    strength = re.search(r"<select[^>]*name=\"recommendation_strength\"[^>]*>", card)
-    assert strength
-    assert "disabled" in strength.group(0)
+    card = _card(html, adviseert['object_id'])
+    from src.review.review_assessment_v1 import displayed_review_descriptor
+    descriptor = displayed_review_descriptor(adviseert, [adviseert], 'richtlijn')
+    assert not descriptor.can_confirm
+    assert 'recommendation_semantics_required' in descriptor.issues
+    button = re.search(r'<button[^>]+value="approve"[^>]*>', card).group()
+    assert 'disabled' in button
+    assert 'Sterkte niet vermeld' not in card
+    assert 'name="recommendation_strength"' not in card
+    assert not re.search(r'<input[^>]*checked', card)
 
 
 # ---------------------------------------------------------------------------
@@ -482,25 +438,18 @@ def test_sterkte_stays_hidden_until_confirmed_aanbeveling(tmp_path: Path, *, pro
 
 def test_step_f_eindoordeel_options(tmp_path: Path, *, production_app, production_console) -> None:
     _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
-    step = _step(_card(html, adviseert["object_id"]), "f")
-    visible = _visible_text(step)
-    for label in EINDOORDEEL_LABELS:
-        assert label in visible, label
-    for value in (
-        "goedkeuren",
-        "goedkeuren_na_correctie",
-        "afwijzen",
-        "later_beoordelen",
-    ):
-        assert f'value="{value}"' in step, value
-    assert "Revisie vragen" not in visible
+    card = _card(html, adviseert['object_id'])
+    assert 'Goedkeuren en opslaan' in card
+    assert 'Correctie nodig' in card and 'Later beoordelen' in card
+    assert '<summary>Afwijzen</summary>' in card
+    assert 'value="reject"' in card and 'Toelichting bij afwijzing' in card
+    assert 'Revisie vragen' not in card
 
 
 def test_one_save_stores_suitability_documentpositie_type_and_eindoordeel(tmp_path: Path, *, production_app, production_console) -> None:
     console, accounts, receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert["object_id"])
-    parent_ids = re.findall(r'<input[^>]*name="parent_choice"[^>]*value="([^"]+)"', card)
-    parent_id = parent_ids[0] if parent_ids else ""
+    parent_id = adviseert.get("parent_object_id") or ""
     client = _client(console, production_app=production_app)
     posted = client.post(
         "/review",
@@ -618,8 +567,8 @@ def test_save_redirects_to_next_ordinary_object(tmp_path: Path, *, production_ap
     # task using fresh state rather than scanning the document in the POST.
     opened = client.get(location)
     assert opened.status_code == 200
-    assert f'id="review-form-{nxt["object_id"]}"' in opened.text
-    assert f'id="review-form-{adviseert["object_id"]}"' not in opened.text
+    assert f'name="object_id" value="{nxt["object_id"]}"' in opened.text
+    assert f'name="object_id" value="{adviseert["object_id"]}"' not in opened.text
 
 
 # ---------------------------------------------------------------------------
@@ -921,10 +870,8 @@ def test_failed_review_does_not_persist_parent_relation(tmp_path: Path, *, produ
 def test_empty_suitability_is_rejected_and_creates_no_approval_binding(tmp_path: Path, *, production_app, production_console) -> None:
     console, accounts, receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
     card = _card(html, adviseert["object_id"])
-    assert 'name="suitability"' in card
-    source = (ROOT / "src/operations_console_app.py").read_text(encoding="utf-8")
-    gate = source[source.find("const update = ") : source.find("updateChooser();")]
-    assert "suitability" in gate
+    assert 'name="applicable"' in card
+    assert not re.search(r'<input[^>]+name="suitability"', card)
     client = _client(console, production_app=production_app)
     posted = client.post(
         "/review",
@@ -967,16 +914,14 @@ def test_empty_suitability_is_rejected_and_creates_no_approval_binding(tmp_path:
         )
 
 
-def test_dit_klopt_reveals_sterkte_before_one_save(tmp_path: Path, *, production_app, production_console) -> None:
+def test_compact_answers_do_not_silently_confirm_unknown_semantics(tmp_path: Path, *, production_app, production_console) -> None:
     _console, _accounts, _receipt, adviseert, html = _setup_adviseert(tmp_path, production_app=production_app, production_console=production_console)
-    card = _card(html, adviseert["object_id"])
-    assert 'value="dit_klopt" checked' not in card
-    source = (ROOT / "src/operations_console_app.py").read_text(encoding="utf-8")
-    stamp_fn = source[source.find("const updateStamp") : source.find("const update =")]
-    assert "dit_klopt" in stamp_fn
-    assert "liveType" in stamp_fn
-    assert "recommendation" in stamp_fn
-    assert "confirmingProposal" in stamp_fn
+    card = _card(html, adviseert['object_id'])
+    assert re.search(r'<button[^>]+value="approve"[^>]+disabled', card)
+    assert not re.search(r'<input[^>]*checked', card)
+    assert 'name="type_action"' not in card
+    assert 'name="recommendation_strength"' not in card
+    assert len(re.findall(r'<button[^>]+value="approve"', card)) == 1
 
 
 def test_phase3_does_not_mutate_passage_register_or_add_gold_metrics() -> None:

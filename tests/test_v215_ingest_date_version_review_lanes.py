@@ -551,6 +551,13 @@ def test_fast_lane_batch_confirms_headings_as_structure(tmp_path: Path, *, produ
         assert (row.get("governance") or {}).get("validation_status") == "approved"
 
 
+def _compact_review_form(page):
+    from tests.test_source_context_review_ui_v1 import Forms
+    forms = [form for form in Forms(page).forms if 'data-ko-assessment-form' in form['attrs']]
+    assert len(forms) == 1
+    return forms[0]
+
+
 def test_slow_lane_stays_one_object_card(tmp_path: Path, *, production_app, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
@@ -563,11 +570,14 @@ def test_slow_lane_stays_one_object_card(tmp_path: Path, *, production_app, prod
     html = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={slow['object_id']}"
     ).text
-    assert "review-card-two-column" in html
-    assert "confirmed_object_type" in html
-    assert "batch-confirm" not in html
-    assert html.count('class="review-decision-form"') == 1
-    assert html.count("<select") >= 1
+    form = _compact_review_form(html)
+    fields = {item.get('name') for item in form['inputs']}
+    assert form['attrs']['action'] == '/review'
+    assert {'applicable', 'complete', 'placed_correctly'} <= fields
+    assert 'confirmed_object_type' not in fields
+    assert next(item['value'] for item in form['inputs'] if item.get('name') == 'object_id') == slow['object_id']
+    assert 'batch-confirm' not in html
+    assert html.count('class="ko-question"') == 3
 
 
 def test_batch_confirm_rejects_slow_lane_objects(tmp_path: Path, *, production_console) -> None:

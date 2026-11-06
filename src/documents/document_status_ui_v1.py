@@ -97,6 +97,9 @@ def install_document_status_ui(app: FastAPI, console: Any) -> None:
             return await document_status_calculation(request, call_next)
 
     async def document_status_calculation(request: Request, call_next):
+        if (request.url.path == '/review' and request.query_params.get('document')
+                and request.query_params.get('receipt_interaction') and request.query_params.get('receipt_object')):
+            return await call_next(request)
         if (getattr(console, 'review_card_read_mode', 'legacy') == 'compact'
                 and request.url.path == '/review' and not request.query_params.get('document')
                 and request.query_params.get('work', 'mine') == 'mine'):

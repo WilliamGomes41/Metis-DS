@@ -1,0 +1,7 @@
+# V5: evenveel AB- en BA-paren
+
+Dit protocol is vastgelegd voordat de bijbehorende meetrun begint. Het herstelt uitsluitend de vaste uitvoeringsvolgorde van V4.1. De oorspronkelijke FAIL-resultaten blijven in de bovenliggende directory staan. De actuele uitslag staat bij PR #1001 en issue #1000.
+
+De runner voert zes paren per fixture uit: oneven rondes baseline → head, even rondes head → baseline. Dat geeft drie paren van elke volgorde en achttien samples per pad/versie/fixture. Iedere sample en iedere werkelijke bon-/vervolgrequest blijft meetellen. De 10%-grenzen, datasets, authenticatie, standaard-GC, HTTP-proef en server veranderen niet. Er zijn 72 daadwerkelijke goedkeuringen en 36 opgeslagen head-beoordelingen vereist, met controle na het stoppen van de server.
+
+Reproductie: plaats beide worktrees en deze vier Pythonbestanden onder /tmp/ko2-perf, met baseline 595fe8f233fdee98dfb67609bd5c7206136ee956 en het te controleren head. Gebruik dezelfde lokale PostgreSQL-/Python-paden en het lokale test-TLS-certificaat als in V4.1. Stel KO2_HEAD_SHA expliciet in op het volledige head en start run_v5_counterbalanced.py. De runner weigert een afwijkende checkout, bronhash of bestaande resultaatdirectory. Manifest en execution-order.jsonl leggen de exacte hoofden, hashes en geplande/uitgevoerde volgorde vast. Start daarna summarize_v5_counterbalanced.py met de resultaatdirectory als argument. Bewaar alle bronbestanden en waarnemingen; certificaat, sleutel en cookies horen niet in de repository.

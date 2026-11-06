@@ -9,6 +9,7 @@ PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 """
 from __future__ import annotations
 from tests.semantic_fixture_support import bind_fixture_selections
+from tests.test_v215_ingest_date_version_review_lanes import _compact_review_form
 from tests.review_authority_fixture_support import materialised_row, source_fragments
 
 import re
@@ -437,7 +438,8 @@ def test_leftover_unclassified_stays_in_store_and_is_openable_not_duty(tmp_path:
         f"/review?document={receipt['snapshot_id']}&object={planted['object_id']}"
     ).text
     assert _text_of(planted) in _visible_text(card)
-    assert "review-card-two-column" in card
+    assert _compact_review_form(card)
+    assert card.count('class="ko-question"') == 3
     assert "batch-confirm" not in card
 
 
@@ -562,8 +564,8 @@ def test_console_inhoud_lists_only_slow_duty_cards(tmp_path: Path, *, production
         card = _client(console, production_app=production_app).get(
             f"/review?document={receipt['snapshot_id']}&object={obj['object_id']}"
         ).text
-        assert "review-card-two-column" in card
-        assert card.count('class="review-decision-form"') == 1
+        assert _compact_review_form(card)
+        assert card.count('class="ko-question"') == 3
         assert "batch-confirm" not in card
     visible = _visible_text(html)
     assert "Kennisvoorstellen beoordelen" in visible

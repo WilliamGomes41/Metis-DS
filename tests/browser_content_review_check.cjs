@@ -38,10 +38,10 @@ const assert = require('node:assert/strict');
     const committed=await state();
     for(const oid of d.batch) assert.ok(committed.bindings.flat().some(r=>r.object_id===oid && r.valid && r.decision==='approve'));
     await page.goto(base+'/review?'+new URLSearchParams({document:d.snapshot_id,object:d.context,task:'contextual'}));
-    const review=page.locator('[data-review-form]');
+    const review=page.locator('[data-ko-assessment-form]');
     assert.equal(await review.locator('[name=object_id]').inputValue(),d.context);
     // Carry the pinned review revision to the sole owner and back; no mutation.
-    const repair=page.getByRole('link',{name:'Passage herstellen in Vorming',exact:true});
+    const repair=page.getByRole('link',{name:'Correctie nodig',exact:true});
     const origin=new URL(await repair.getAttribute('href'),base).searchParams.get('review_revision');
     assert.ok(origin);
     await repair.focus();
@@ -51,24 +51,39 @@ const assert = require('node:assert/strict');
     await back.click();
     assert.equal(new URL(page.url()).searchParams.get('object'),d.context);
     assert.deepEqual(await state(),committed,'Owner/return does not mutate or transfer approval');
-    await review.locator('[name=suitability][value=ja]').check();
-    await review.locator('[name=documentpositie_action][value=dit_klopt]').check();
-    await review.locator('[name=type_action][value=dit_klopt]').check();
-    await review.locator('[name=recommendation_direction][value=for]').check();
-    await review.locator('[name=recommendation_strength_level][value=not_stated]').check();
-    await review.locator('[name=eindoordeel][value=goedkeuren]').check();
-    if(await review.locator('[name=relation_review_ack]').count()) await review.locator('[name=relation_review_ack]').check();
+    for (const question of ['applicable','complete','placed_correctly']) {
+      assert.equal(await review.locator(`[name=${question}]:checked`).count(),0);
+      await review.locator(`[name=${question}][value=yes]`).check();
+    }
+    const approve=review.locator('[name=review_action][value=approve]');
+    assert.equal(await approve.isEnabled(),true,'The displayed fixture proposal must be confirmable');
     await proof('content-individual',width);
-    await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded'}),review.locator('[data-submit-review]').click()]);
+    await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded'}),approve.click()]);
+    assert.equal(await page.locator('[data-review-receipt]').count(),1);
+    assert.equal(await page.locator('[data-ko-assessment-form]').count(),0);
+    assert.equal(await page.locator('[data-saved-answer][data-answer=yes]').count(),3);
     await page.goto(base+'/logout'); await login(m.other);
     await page.goto(base+'/review?'+new URLSearchParams({document:d.second_snapshot,task:'second_review'}));
     assert.equal(await page.locator('form[action="/review/normal-risk/batch-confirm"]').count(),0);
     await page.locator(`a[href*="object=${d.second}"]`).first().click();
     await proof('content-second',width);
-    const second=page.locator('form[action="/review/second-review"]');
-    await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded'}),second.locator('[name=action][value=approve]').click()]);
+    const second=page.locator('[data-ko-assessment-form][action="/review/second-review"]');
+    const beforeSecond=await state();
+    const original=beforeSecond.objects.flat().find(row=>row.object_id===d.second);
+    assert.ok(original);
+    for (const question of ['applicable','complete','placed_correctly']) {
+      assert.equal(await second.locator(`[name=${question}]:checked`).count(),0);
+      await second.locator(`[name=${question}][value=yes]`).check();
+    }
+    await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded'}),second.locator('[name=review_action][value=approve]').click()]);
+    assert.equal(await page.locator('[data-review-receipt]').count(),1);
+    assert.equal(await page.locator('[data-saved-answer][data-answer=yes]').count(),3);
     const after=await state();
     assert.ok(after.bindings.flat().some(r=>r.object_id===d.second && r.valid && r.decision==='approve'));
+    const current=after.objects.flat().find(row=>row.object_id===d.second);
+    assert.equal(current.object_version,original.object_version,'Second review must preserve the reviewed version');
+    assert.equal(current.provenance.canonical_object_hash,original.provenance.canonical_object_hash,
+      'Second review must preserve the canonical object tuple');
     await page.reload(); assert.deepEqual(await state(),after);
     await page.goto(base+'/logout');
     console.log('Unified first/batch/independent second/owner return',width,'PASSED');

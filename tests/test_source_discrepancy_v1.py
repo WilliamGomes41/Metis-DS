@@ -126,14 +126,14 @@ def _login(client, username):
                        follow_redirects=False).status_code == 303
 
 
-def test_review_card_offers_the_report_and_keeps_input_when_approval_is_refused(
+def test_compact_card_offers_repair_and_legacy_discrepancy_still_blocks_approval(
         tmp_path, *, production_app, production_console) -> None:
     console, users, snapshot_id, object_id = _system(tmp_path, production_console=production_console)
     client = TestClient(production_app(console), base_url="https://testserver")
     _login(client, users["reviewer_a"]["username"])
     card = client.get(f"/review?document={snapshot_id}&object={object_id}").text
-    assert "Rapporteer een discrepantie (optioneel)" in card
-    assert len(re.findall(r'name="source_discrepancy"', card)) == len(CATEGORIES)
+    assert "Correctie nodig" in card and "/source-selection?" in card
+    assert 'data-ko-assessment-form' in card
     form = {"snapshot_id": snapshot_id, "object_id": object_id, "suitability": "ja",
             "eindoordeel": "goedkeuren", "type_action": "dit_klopt", "proposed_object_type": "definition",
             "confirmed_object_type": "definition", "documentpositie_action": "dit_klopt",
@@ -142,7 +142,7 @@ def test_review_card_offers_the_report_and_keeps_input_when_approval_is_refused(
     refused = client.post("/review", data=form, follow_redirects=False)
     assert refused.status_code == 400
     assert "ongewijzigd goedkeuren of later beoordelen kan niet" in refused.text
-    assert re.search(r'value="tekst_of_bronplek_wijkt_af" checked', refused.text)
+    assert 'data-review-receipt' not in refused.text
     assert _reports(console) == []
     rejected = client.post("/review", data={**form, "eindoordeel": "afwijzen", "comment": "Tekst wijkt af",
                                             "snapshot_revision": console.objects_revision(snapshot_id)},

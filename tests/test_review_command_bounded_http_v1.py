@@ -117,5 +117,5 @@ def test_native_compact_post_is_bounded_and_preserves_independent_rows(
         # The post-commit GET owns queue navigation and must select a real next passage.
         next_page = client.get(saved.headers["location"], follow_redirects=False)
         assert next_page.status_code == 200
-        assert f'id="review-form-{second["object_id"]}"' in next_page.text
-        assert f'id="review-form-{focal["object_id"]}"' not in next_page.text
+        assert f'name="object_id" value="{second["object_id"]}"' in next_page.text
+        assert f'name="object_id" value="{focal["object_id"]}"' not in next_page.text

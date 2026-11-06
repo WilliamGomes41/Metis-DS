@@ -152,10 +152,10 @@ def test_incomplete_passage_preserves_unknown_document_assessment_and_fail_close
             monkeypatch.setattr('src.vorming.source_reconstruction_v1._with_status', no_rebuild)
             if case == 'carrier_error':
                 original_reader = console._prepared_review_source
-                def unavailable_full(envelope, *, objects=None):
+                def unavailable_full(envelope, *, objects=None, display_target=None):
                     if objects is None:
                         raise ConsoleError('source_views_integrity_failed')
-                    return original_reader(envelope, objects=objects)
+                    return original_reader(envelope, objects=objects, display_target=display_target)
                 monkeypatch.setattr(console, '_prepared_review_source', unavailable_full)
         if case == 'missing_source':
             def missing(*args, **kwargs):

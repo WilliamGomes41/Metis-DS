@@ -1,0 +1,38 @@
+{
+  "bounds": {
+    "source": {
+      "x": 38,
+      "y": 228.59375,
+      "width": 653.765625,
+      "height": 709.765625,
+      "top": 228.59375,
+      "right": 691.765625,
+      "bottom": 938.359375,
+      "left": 38
+    },
+    "target": {
+      "x": 707.765625,
+      "y": 228.59375,
+      "width": 694.234375,
+      "height": 709.765625,
+      "top": 228.59375,
+      "right": 1402,
+      "bottom": 938.359375,
+      "left": 707.765625
+    },
+    "action": {
+      "x": 726.765625,
+      "y": 840.96875,
+      "width": 207.265625,
+      "height": 45.59375,
+      "top": 840.96875,
+      "right": 934.03125,
+      "bottom": 886.5625,
+      "left": 726.765625
+    },
+    "overflow": false
+  },
+  "savedReceiptText": "Review opgeslagen\n\nDit heb je goedgekeurd. Zo hangt het samen.\n\nVoorbeeldrichtlijn — fictief voorbeeld\n/\nVoorbeeldrichtlijn\n/\n3 Huidverzorging\n/\n3.2 Ondersteuning\nKENNISOBJECT\n3.2 Ondersteuning\nACTUELE REVIEWSTATUS\nGoedgekeurd\nOPGESLAGEN VERSIE\nVersie 1.0.1\nPUBLICATIE DOCUMENT\nNog niet gepubliceerd\nZo is het kennisobject vastgelegd\nAanbeveling\n\nBespreek met de cliënt welke ondersteuning nodig is bij dagelijkse huidverzorging.\n\ngeldt wanneer\nVoorwaarde\n\nDe cliënt kan de verzorging niet zelfstandig uitvoeren.\n\nVoorbeeldrichtlijn › 3 Huidverzorging › 3.2 Ondersteuning · versie 1.0\ntenzij\nUitzondering\n\nDe cliënt wenst geen ondersteuning. Leg de keuze van de cliënt vast.\n\nVoorbeeldrichtlijn › 3 Huidverzorging › 3.2 Ondersteuning · versie 1.0\nonderbouwd door\nGekoppelde onderbouwing\n\nSluit aan bij de voorkeuren van de cliënt.\n\nVoorbeeldrichtlijn › 3 Huidverzorging › 3.2 Ondersteuning · versie 1.0\nHerkomst\nVoorbeeldrichtlijn › 3 Huidverzorging › 3.2 Ondersteuning\nOpen oorspronkelijke bron\nJouw beoordeling\nToepasbaar\nCompleet\nJuiste plek\n\nBesluit: goedgekeurd\n\nDit overzicht hoort bij de opgeslagen versie 1.0.1.\n\nJe eigen eerste akkoord bevestigt geen eventueel vereiste onafhankelijke tweede beoordeling.\n\nVolgende passage\nTerug naar overzicht",
+  "url": "http://127.0.0.1:8094/review?document=snap-8309a7327ca5349a-ef937efa&after=console-fixture-voorbeeldrichtlijn-fictief-voorbeeld-1-8309a732-sem-9a549192c970fbf9&task=contextual&receipt_interaction=ri_b868fb49dbeb44af85fc1d283664ea66&receipt_object=console-fixture-voorbeeldrichtlijn-fictief-voorbeeld-1-8309a732-sem-9a549192c970fbf9",
+  "status": "PASS"
+}

@@ -7,6 +7,7 @@ PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 """
 from __future__ import annotations
 from tests.semantic_fixture_support import bind_fixture_selections
+from tests.test_v215_ingest_date_version_review_lanes import _compact_review_form
 
 import re
 from html.parser import HTMLParser
@@ -451,15 +452,12 @@ def test_stamps_bind_to_recommendation_not_objects_or_koppen(tmp_path: Path, *, 
     card = _client(console, production_app=production_app).get(
         f"/review?document={receipt['snapshot_id']}&object={bespreek['object_id']}"
     ).text
-    # D3.3 supersedes the legacy guideline stamp picker: the source stamp
-    # remains extraction/provenance evidence, while human review confirms
-    # direction and strength as separate recommendation semantics.
-    assert "Sterkte van de aanbeveling: DOEN — dit moet de zorgverlener doen." not in card
-    assert "data-recommendation-semantics-block" in card
-    assert 'name="recommendation_direction"' in card
-    assert 'name="recommendation_strength_level"' in card
-    assert "Aanraden" in card and "Afraden" in card
-    assert "Sterk" in card and "Zwak" in card and "Niet vermeld in de bron" in card
+    form = _compact_review_form(card)
+    assert not any(item.get('name') in {'recommendation_strength', 'recommendation_direction', 'recommendation_strength_level'} for item in form['inputs'])
+    assert '<p class="ko-interpretation">' not in card
+    assert form['attrs']['data-can-approve'] == 'false'
+    assert 'De passage kan nu niet worden goedgekeurd.' in card
+    assert card.count('class="ko-question"') == 3
     assert "GRADE" not in card
     visible = _visible_text(card)
     assert not re.search(r"\b(weak|conditional)\b", visible, flags=re.I)
