@@ -961,7 +961,7 @@ def test_block_b_type_change_away_clears_active_strength_audit_may_keep(tmp_path
     assert any(row.get("confirmed_recommendation_strength") == "doen" for row in history)
 
 
-def test_block_b_machine_proposed_strength_stays_hidden_until_type_confirm(tmp_path: Path, *, production_app, production_console) -> None:
+def test_block_b_known_legacy_strength_is_shown_and_confirmed_by_three_answers(tmp_path: Path, *, production_app, production_console) -> None:
     console = _console(tmp_path, production_console=production_console)
     accounts = _accounts(console)
     receipt = _ingest(console, accounts)
@@ -986,12 +986,58 @@ def test_block_b_machine_proposed_strength_stays_hidden_until_type_confirm(tmp_p
         if obj["object_id"] == rec["object_id"]
     )
     assert recommendation_strength_ui_applies(planted) is False
-    html = _client(console, production_app=production_app).get(
-        f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}"
-    ).text
-    visible = _visible_text(html)
-    assert "Sterkte van de aanbeveling" not in visible
-    assert planted.get("proposed_recommendation_strength") == "doen"
+    client = _client(console, production_app=production_app)
+    page = client.get(f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}")
+    form = _compact_review_form(page.text)
+    assert 'Sterkte van de aanbeveling: DOEN — dit moet de zorgverlener doen.' in _visible_text(page.text)
+    assert form['attrs']['data-can-approve'] == 'true'
+    assert page.text.count('class="ko-question"') == 3
+    assert not any(item.get('name') in {'recommendation_strength', 'recommendation_direction',
+        'recommendation_strength_level', 'confirmed_object_type', 'type_action'} for item in form['inputs'])
+    # Reading the known proposal does not itself confirm a type or invent modern semantics.
+    assert console._current_object(receipt['snapshot_id'], rec['object_id']) == planted
+    assert not planted.get('confirmed_object_type')
+    assert 'proposed_recommendation_semantics' not in planted
+    assert 'confirmed_recommendation_semantics' not in planted
+
+    from tests.test_ko_new_pages import compact_submission
+    saved = client.post('/review', data=compact_submission(page), follow_redirects=False)
+    assert saved.status_code == 303, saved.text
+    confirmed = console._current_object(receipt['snapshot_id'], rec['object_id'])
+    assert confirmed['confirmed_object_type'] == 'recommendation'
+    assert confirmed['confirmed_recommendation_strength'] == 'doen'
+    assert 'proposed_recommendation_semantics' not in confirmed
+    assert 'confirmed_recommendation_semantics' not in confirmed
+
+
+@pytest.mark.parametrize('invalid_modern_record', [False, True])
+def test_compact_review_cannot_approve_unknown_or_invalid_modern_strength(
+    tmp_path: Path, invalid_modern_record, *, production_app, production_console,
+) -> None:
+    console = _console(tmp_path, production_console=production_console)
+    accounts = _accounts(console)
+    receipt = _ingest(console, accounts)
+    rec = next(obj for obj in _non_document(console.snapshot_objects(receipt['snapshot_id']))
+               if 'Bespreek' in _text_of(obj))
+    if invalid_modern_record:
+        rows = console._load_objects(receipt['snapshot_id'])
+        row = next(row for row in rows if row['object_id'] == rec['object_id'])
+        # An explicitly invalid modern record cannot fall back to an otherwise
+        # known legacy stamp. This is adversarial input, not source evidence.
+        row['proposed_recommendation_strength'] = 'doen'
+        row['proposed_recommendation_semantics'] = {}
+        from tests.semantic_fixture_support import install_fixture_history
+        install_fixture_history(console, receipt['snapshot_id'], rows)
+    client = _client(console, production_app=production_app)
+    page = client.get(f"/review?document={receipt['snapshot_id']}&object={rec['object_id']}")
+    assert _compact_review_form(page.text)['attrs']['data-can-approve'] == 'false'
+    assert 'Sterkte van de aanbeveling: DOEN' not in _visible_text(page.text)
+    from tests.test_ko_new_pages import compact_submission
+    from tests.test_review_command_bounded_http_v1 import physical_state
+    before = physical_state(console, receipt['snapshot_id'])
+    refused = client.post('/review', data=compact_submission(page), follow_redirects=False)
+    assert refused.status_code == 400
+    assert physical_state(console, receipt['snapshot_id']) == before
 
 
 def test_block_b_confirm_object_type_clears_active_strength(tmp_path: Path, *, production_console) -> None:
