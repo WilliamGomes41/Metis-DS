@@ -154,7 +154,7 @@ def test_bon_keeps_confirmed_condition_and_support_with_readable_exact_targets(t
     assert client.post('/login', data={'username': 'reviewer.d43', 'password': 'reviewer-secret'},
         follow_redirects=False).status_code == 303
     page = client.get('/review', params={'document': sid, 'object': obj['object_id']})
-    primary_context = re.search(r'<section data-essential-context[^>]*>(.*?)</section>', page.text, re.S)
+    primary_context = re.search(r'<table[^>]* data-essential-context[^>]*>(.*?)</table>', page.text, re.S)
     assert primary_context is not None
     assert COND in html.unescape(primary_context.group(1)) and EXPL in html.unescape(primary_context.group(1))
     assert 'Voorstel, nog niet bevestigd' in primary_context.group(1)

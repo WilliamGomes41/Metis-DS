@@ -27,7 +27,7 @@ Publieke presentatievormen zijn een read-only `SavedReviewReceipt` met exact eve
 
 ## Implementatie en bewijslast
 
-De drie hoofdvragen groeperen de bestaande vereiste invoer. Geen extra goedkeuring, universele tweede reviewer of nieuwe kerneltransitie. De bon vermeldt alleen bewezen eigen keuzes; ontbrekende antwoorden worden niet tot Ja aangevuld. Een latere wijziging wordt niet stil als de opgeslagen uitkomst getoond.
+De drie hoofdvragen vormen de nieuwe compacte invoer. De gedeelde display-/commandprojectie sluit de drie expliciete Ja-antwoorden aan op de bestaande vereiste bevestigingen. Geen extra goedkeuring, universele tweede reviewer of nieuwe kerneltransitie. De bon vermeldt alleen bewezen eigen keuzes; ontbrekende historische antwoorden worden niet tot Ja aangevuld. Een latere wijziging wordt niet stil als de opgeslagen uitkomst getoond.
 
 Blokkerende eerste stap is het vaststellen van bron-/eventeigenaren. Eén code-eigenaar verzorgt de gekoppelde renderer, POST en GET, zodat gedeelde bestanden geen gelijktijdige schrijvers hebben. Onafhankelijke grounding en verificatie lezen dezelfde patch. De kleinste veilige decompositie is bron-/kaartprojectie, bonprojectie en navigatie, gevolgd door HTTP-/browserbewijs. Geen schema- of migratiewerk hoort hierbij.
 
@@ -57,3 +57,25 @@ Een lokale smokeproef op de bestaande synthetische bron met 923 paragrafen en 92
 De volledigheidskop blijft zichtbaar wanneer een geschiktheidskeuze correctievragen sluit. De discrepantiecontrols volgen weer de bestaande correctiongroep, zodat JavaScript ze uitschakelt en uit FormData houdt; zonder JavaScript worden ze verborgen en blijft de bestaande kernel eigenaar van het negeren van vervallen antwoorden. De primaire context toont bekende voorgestelde relaties met de tekst ‘Voorstel, nog niet bevestigd’; de bon toont uitsluitend daadwerkelijk bevestigde relaties.
 
 Deze correctieronde is een functionele voorwaarde. Zij is geen acceptatie van de eerdere visuele uitvoering: de gebruiker heeft opnieuw expliciet twee nieuwe pagina’s volgens de goedgekeurde afbeeldingen gevraagd. De daaropvolgende UI-eigenaar voert die opdracht uit na deze afzonderlijk geteste commit.
+
+## Goedgekeurde nieuwe pagina's en expliciete beoordeling
+
+De gebruiker heeft de twee oorspronkelijke afbeeldingen opnieuw bevestigd als ontwerpmaatstaf en de implementatie hervat. De eerste formulieruitwerking is geen visuele oplevering. De gefocuste reviewroute krijgt een nieuwe paginaopbouw, eigen afgebakende stylesheet en drie Ja/Aanpassen-rijen. De bon wordt een zelfstandige resultaatpagina met een schema links en ‘Jouw beoordeling’ rechts. Het documentwerkbord blijft zijn bestaande bestemming houden.
+
+### Stateful Class B-overlay
+
+| Veld | Afspraak |
+| --- | --- |
+| Domain entity/aggregate | Bestaand kennisobject en de bestaande reviewinteractie. |
+| Invariant(s) | De kernel blijft eigenaar van toelating, bronintegriteit, semantiek, relaties, versie, bevoegdheden en bindingen. Antwoorden zijn aanvullend menselijk bewijs, geen nieuwe goedkeuringsautoriteit. |
+| Durable state before | De bestaande te beoordelen versie en bestaande audit/bindingen. |
+| Durable state after | Dezelfde bestaande reviewtransitie, met optioneel `review-assessment-v1` in hetzelfde opgeslagen interactiebewijs. |
+| Transaction boundary | Bestaande gezamenlijke object-, binding- en auditcommit via de reviewcommand. |
+| Failure/recovery result | Weigering of stale input schrijft geen assessment/besluit; herstart leest hetzelfde exacte event. |
+| Duplicate execution / idempotency result | Bestaande interactie-identiteit en precondities; een bon opnieuw lezen veroorzaakt geen review. |
+| Concurrency result | Bestaande native generation-/revisiecontrole en de vastgelegde commandinputs blijven gelden. |
+| Audit/evidence requirement | Drie daadwerkelijke antwoorden worden in bestaand interactiebewijs vastgelegd. Oud bewijs zonder antwoorden krijgt geen afgeleide vinkjes. |
+
+De gedeelde pure `DisplayedReviewDescriptor` vormt zowel de getoonde interpretatie als de invoer voor de compacte commandadapter. De nieuwe formulierintentie bevat alleen drie antwoorden, actie en bestaande identiteit/preconditie. Zij bevat geen tegenstrijdige verborgen oude bevestigingen. De adapter bevestigt uitsluitend de werkelijk getoonde, bekende en oplosbare waarden; onbekende semantiek of onoplosbare relaties vragen gerichte correctie. De tweede review wijzigt de eerder goedgekeurde canonieke tuple niet.
+
+De globale reviewclosure, publicatievoorwaarden, canonical hash en het onafhankelijke-reviewbeleid veranderen niet. Er komen geen receipt-store, tabel, status of tweede transitieautoriteit bij.

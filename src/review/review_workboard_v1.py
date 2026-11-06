@@ -706,6 +706,12 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
         account = _current_account(console, request)
         from src.review.review_participation_ui_v1 import overview, require_overview
         require_overview(account)
+        if document and receipt_interaction and receipt_object:
+            from src.review.ko_receipt_ui_v1 import read_saved_review, render_receipt_page
+            receipt = read_saved_review(console, account, document, receipt_object, receipt_interaction)
+            continuation = '/review?' + urlencode({'document': document, 'after': receipt_object,
+                'task': normalize_review_task(task)})
+            return render_receipt_page(account, receipt, document, continuation)
         if task.strip() in {"history", "decisions"}:
             # Retired page bookmarks navigate before any document/source/audit capture.
             params = {"document": document} if document else {}
@@ -801,14 +807,9 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
                 bindings=read_inputs.bindings, fragments=read_inputs.fragments)
             if not remaining:
                 return RedirectResponse('/review?' + urlencode({'document':document}), status_code=303)
-        receipt_html = ''
-        if chosen and receipt_interaction and receipt_object:
-            from src.review.ko_receipt_ui_v1 import read_saved_review, render_ko_receipt
-            receipt_html = render_ko_receipt(read_saved_review(console, account, chosen,
-                receipt_object, receipt_interaction))
         if not chosen or (not object.strip() and not chosen_task):
             rendered = _workboard_page(console, account=account, snapshot_id=chosen, q=q, page=page, theme=theme)
-            return rendered.replace('</header>', '</header>' + receipt_html, 1) if receipt_html else rendered
+            return rendered
         rendered = _render_review_room(
             console,
             account,
@@ -823,8 +824,6 @@ def install_review_workboard(app: FastAPI, console: OperationsConsole) -> None:
             review_revision=review_revision,
         )
 
-        if receipt_html:
-            rendered = rendered.replace('</header>', '</header>' + receipt_html, 1)
         back = "/review?" + urlencode({"document": chosen, "q": q, "page": page})
         if theme:
             back += '&' + urlencode({'theme': theme})

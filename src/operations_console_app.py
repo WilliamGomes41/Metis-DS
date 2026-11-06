@@ -3444,6 +3444,26 @@ def _render_review_room(
             obj = next((row for row in snapshot_objects if row["object_id"] == chosen_object_id), None)
             if obj is None:
                 raise ConsoleError("unknown_object")
+            from src.review.knowledge_object_state_v1 import is_knowledge_object
+            if is_knowledge_object(obj, review_path):
+                from src.review.ko_review_page_v1 import render_review_page
+                from src.review.review_passage_read_v1 import ReviewPassageInputs
+                focused_inputs = read_inputs
+                if focused_inputs is None:
+                    local_bindings = _review_bindings(console, chosen, objects=snapshot_objects) or []
+                    local_fragments = console.review_source_fragments(chosen)
+                    try:
+                        console.open_source_passage(snapshot_id=chosen, object_id=chosen_object_id)
+                        source_available = True
+                    except ConsoleError:
+                        source_available = False
+                    focused_inputs = ReviewPassageInputs(chosen_row, snapshot_objects, local_bindings,
+                        snapshot_revision, local_fragments, source_available)
+                route = reviewer_route_for(obj, review_path=review_path, reviewer_id=reviewer_id,
+                    bindings=focused_inputs.bindings, fragments=focused_inputs.fragments)
+                second = chosen_task == 'second_review' or bool(route and route.get('canonical_task') == 'second_review')
+                return render_review_page(console, account, focused_inputs, obj,
+                    task=chosen_task, second=second, draft=draft, conflict=conflict)
             objects_html += '<h2>Kennisvoorstellen beoordelen</h2>'
             if review_revision and review_revision != snapshot_revision:
                 objects_html += '<p class="banner warn" data-review-return-changed>De revisie is gewijzigd sinds je naar Vorming ging. Controleer het huidige voorstel en beoordeel deze versie opnieuw.</p>'
@@ -5440,8 +5460,18 @@ def create_console_app(
         return_task: str = Form(""),
         interaction_id: str = Form(""),
         source_discrepancy: list[str] = Form(default=[]),
+        review_ui: str = Form(""),
+        review_action: str = Form(""),
+        applicable: str = Form(""),
+        complete: str = Form(""),
+        placed_correctly: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
+        if review_ui == "compact-v1":
+            from src.review.ko_review_page_v1 import handle_compact_review
+            return handle_compact_review(state, account, snapshot_id, object_id,
+                snapshot_revision, interaction_id, normalize_review_task(return_task), review_action,
+                dict(applicable=applicable, complete=complete, placed_correctly=placed_correctly), comment)
         mapped = map_eindoordeel(eindoordeel, decision)
         if eindoordeel == "later_beoordelen" or mapped == "later":
             mapped = "later"
@@ -5864,11 +5894,21 @@ def create_console_app(
         snapshot_id: str = Form(...),
         object_id: str = Form(...),
         snapshot_revision: str = Form(""),
-        action: str = Form(...),
+        action: str = Form(""),
         comment: str = Form(""),
         interaction_id: str = Form(""),
+        review_ui: str = Form(""),
+        review_action: str = Form(""),
+        applicable: str = Form(""),
+        complete: str = Form(""),
+        placed_correctly: str = Form(""),
     ) -> RedirectResponse:
         account = _require(request)
+        if review_ui == "compact-v1":
+            from src.review.ko_review_page_v1 import handle_compact_review
+            return handle_compact_review(state, account, snapshot_id, object_id,
+                snapshot_revision, interaction_id, 'second_review', review_action,
+                dict(applicable=applicable, complete=complete, placed_correctly=placed_correctly), comment, second=True)
         if not snapshot_revision.strip():
             raise ConsoleError("snapshot_revision_required")
         from src.review.review_passage_read_v1 import resolve_review_revision

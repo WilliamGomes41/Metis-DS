@@ -18,6 +18,8 @@ class SavedReviewReceipt:
     related: tuple[dict, ...]
     current_version: str
     current_review_state: str
+    document_title: str = ""
+    publication_state: str = ""
 
 
 def receipt_location(location, interaction_id, object_id):
@@ -94,8 +96,13 @@ def _read_saved_review(console, account, snapshot_id, object_id, interaction_id)
     bindings = console.workflow_review_store.read_bindings([snapshot_id], object_ids=[object_id]).get(snapshot_id, [])
     state = derive_ko_state(current, review_path=review_path_for_klasse(envelope['class']),
                            bindings=bindings)['state'] or 'Broncontext of structuur'
+    try:
+        publication = console.document_release_serving_status(snapshot_id, envelope=envelope).get('release_status', '')
+    except ConsoleError:
+        publication = ''
     return SavedReviewReceipt(snapshot_id, event, canonical_object_payload(focal), related,
-                              str(current.get('object_version') or ''), state)
+                              str(current.get('object_version') or ''), state,
+                              str(envelope.get('title') or ''), publication)
 
 
 _RELATION_LABELS = {
@@ -262,3 +269,69 @@ def render_ko_receipt(receipt):
             + '<p class="field-help">Deze bon hoort bij de hierboven genoemde opgeslagen versie en handeling. '
               'Een reviewakkoord is geen publicatie. De actuele toestand staat bij de passage in het overzicht.</p>'
               '</section>')
+
+
+def render_receipt_page(account, receipt, snapshot_id, continuation):
+    from src.review.ko_review_page_v1 import review_page_shell, source_breadcrumb
+    from src.review.review_assessment_v1 import ReviewAssessment
+    from src.operations_console_app import _object_type_label
+    overview = '/review?' + urlencode({'document': snapshot_id})
+    if receipt is None:
+        return review_page_shell(account, '<h1>Opslag niet bevestigd</h1>'
+            + render_ko_receipt(None) + '<p><a href="' + escape(overview, quote=True)
+            + '">Terug naar overzicht</a></p>', title='Opslag niet bevestigd')
+    obj, event = receipt.object, receipt.event
+    kind = str(event['event_type'])
+    approved = kind.endswith('_review_approve') or kind == 'second_review_approve'
+    rejected = kind.endswith('_review_reject')
+    decision = 'goedgekeurd' if approved else 'afgewezen' if rejected else 'correctie gevraagd'
+    heading = 'Dit heb je goedgekeurd. Zo hangt het samen.' if approved else 'Dit heb je vastgelegd. Zo hangt het samen.'
+    saved_version = str(event.get('object_version') or '')
+    assessment = ReviewAssessment.from_evidence(((event.get('details') or {}).get('review_interaction') or {}).get('assessment'))
+    check = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10"/></svg>'
+    saved_answers = []
+    for key, label in (('applicable', 'Toepasbaar'), ('complete', 'Compleet'), ('placed_correctly', 'Juiste plek')):
+        value = getattr(assessment, key) if assessment is not None else None
+        icon = '<span class="ko-answer-icon">' + check + '</span>' if value == 'yes' else ''
+        state = '' if value == 'yes' else '<span class="ko-answer-unknown">' + ('Aanpassen' if value == 'adjust' else 'Niet afzonderlijk vastgelegd') + '</span>'
+        saved_answers.append('<div class="ko-saved-answer" data-saved-answer="' + key + '" data-answer="'
+            + (value or 'unrecorded') + '">' + icon + '<span>' + label + state + '</span></div>')
+    connections = _knowledge_connections(obj, [obj, *receipt.related])
+    branches = []
+    for label, title in (('Geldt wanneer', 'Voorwaarde'), ('Tenzij', 'Uitzondering'), ('Onderbouwd door', 'Gekoppelde onderbouwing')):
+        items = [row for row in connections if row.label == label]
+        text = ''.join('<p>' + escape(row.text) + '</p>'
+            + ('<small>' + escape(row.origin) + '</small>' if row.origin else '') for row in items)
+        if not text:
+            text = '<p class="ko-muted">Niet afzonderlijk vastgelegd. Dit betekent niet automatisch niet van toepassing.</p>'
+        branches.append('<li><span class="ko-branch-label">' + label.lower() + '</span>'
+            '<div class="ko-branch-body"><h3>' + title + '</h3>' + text + '</div></li>')
+    publication = {'none': 'Nog niet gepubliceerd', 'published': 'Gepubliceerd',
+                   'withdrawn': 'Ingetrokken', 'superseded': 'Vervangen'}.get(receipt.publication_state, 'Niet vastgesteld')
+    old_version = receipt.current_version != saved_version
+    current_note = ('<p class="ko-notice">Er is inmiddels een nieuwere versie ' + escape(receipt.current_version)
+        + '. Deze bon blijft horen bij de opgeslagen handeling op versie ' + escape(saved_version) + '.</p>') if old_version else ''
+    source = '/review/brondocument?' + urlencode({'document': snapshot_id, 'object': obj['object_id'], 'download': 'true'})
+    stage_note = ('<p class="ko-saved-version">Je eigen eerste akkoord bevestigt geen eventueel vereiste onafhankelijke tweede beoordeling.</p>'
+                  if approved and kind != 'second_review_approve' else '')
+    body = ('<div data-review-receipt><header class="ko-receipt-heading"><span class="ko-result-mark">' + check
+        + '</span><div><h1>Review opgeslagen</h1><p>' + heading + '</p></div></header>'
+        + source_breadcrumb(snapshot_id, obj, title=receipt.document_title) + current_note
+        + '<div class="ko-result-layout"><section class="ko-result-main"><dl class="ko-result-metadata">'
+        '<div><dt>Kennisobject</dt><dd><strong>' + escape((obj.get('structure') or {}).get('section_path', [''])[-1] if (obj.get('structure') or {}).get('section_path') else _object_type_label(str(obj.get('confirmed_object_type') or obj.get('object_type') or '')))
+        + '</strong></dd></div><div><dt>Actuele reviewstatus</dt><dd><span class="ko-status">' + escape(receipt.current_review_state)
+        + '</span></dd></div><div><dt>Opgeslagen versie</dt><dd>Versie ' + escape(saved_version)
+        + '</dd></div><div><dt>Publicatie document</dt><dd><span class="ko-status ko-status-neutral">' + escape(publication)
+        + '</span></dd></div></dl><section class="ko-result-diagram" aria-label="Samenhang van het opgeslagen kennisobject"><h2>Zo is het kennisobject vastgelegd</h2>'
+        '<div class="ko-result-claim"><span class="ko-type-badge">' + escape(_object_type_label(str(obj.get('confirmed_object_type') or obj.get('object_type') or '')))
+        + '</span><p data-full-knowledge-passage>' + escape(str((obj.get('content') or {}).get('clean_text') or '')) + '</p></div>'
+        '<ul class="ko-result-branches" data-knowledge-connections>' + ''.join(branches) + '</ul>'
+        '<div class="ko-source-band"><strong>Herkomst</strong><span>' + escape(found_under_path(obj))
+        + '</span><a href="' + escape(source, quote=True) + '">Open oorspronkelijke bron</a></div></section></section>'
+        '<aside class="ko-assessment-aside"><section class="ko-assessment-receipt"><h2>Jouw beoordeling</h2>' + ''.join(saved_answers)
+        + '<p class="ko-saved-decision">Besluit: <strong>' + decision + '</strong></p></section>'
+        '<p class="ko-saved-version">Dit overzicht hoort bij de opgeslagen versie ' + escape(saved_version) + '.</p>' + stage_note
+        + '</aside></div><div class="ko-result-actions"><a class="ko-primary" data-ko-next-passage href="'
+        + escape(continuation, quote=True) + '">Volgende passage</a><a data-ko-back-overview href="'
+        + escape(overview, quote=True) + '">Terug naar overzicht</a></div></div>')
+    return review_page_shell(account, body, title='Review opgeslagen')
