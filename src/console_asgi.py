@@ -175,7 +175,6 @@ def build_app() -> object:
     with console._store_write_lock():
         console._reload_store_locked()
         bootstrap_accounts(console)
-        console.migrate_legacy_revise_to_review()
         console.reconcile_durable_publications()
 
     return build_console_app(

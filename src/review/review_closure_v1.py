@@ -31,7 +31,6 @@ from src.operations_console_v1 import ConsoleError
 from src.publication.publication_readiness_v1 import PublicationReadinessMixin
 from src.review.review_ledger import append_event
 
-LEGACY_REVISE_REOPENED_EVENT = "legacy_revise_reopened"
 PUBLISHED_WORKING_REVISION_IMMUTABLE = "published_working_revision_immutable"
 _REPAIR_EVIDENCE: ContextVar[dict[str, Any] | None] = ContextVar(
     "metis_repair_evidence", default=None
@@ -220,42 +219,6 @@ class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewC
         with _repair_evidence(spec):
             return super().submit_review_resolution(**kwargs)
 
-    def migrate_legacy_revise_to_review(self) -> int:
-        """Reopen legacy revise work, but never reopen a published WorkingRevision."""
-        migrated = 0
-        for envelope in self.list_envelopes():
-            snapshot_id = str(envelope.get("snapshot_id") or "")
-            if self.snapshot_is_published(snapshot_id):
-                continue
-            current = self.snapshot_objects(snapshot_id)
-            object_ids = {
-                str(row.get("object_id") or "")
-                for row in current
-                if (row.get("governance") or {}).get("validation_status") == "revise"
-            }
-            object_ids.discard("")
-            if not object_ids:
-                continue
-            with self._atomic_snapshot_mutation(snapshot_id):
-                self._reopen_for_review(snapshot_id, object_ids)
-                for object_id in sorted(object_ids):
-                    self._clear_pending_review_metadata(
-                        snapshot_id=snapshot_id, object_id=object_id
-                    )
-                    current_obj = self._current_object(snapshot_id, object_id)
-                    append_event(
-                        self._ledger_path,
-                        event_type=LEGACY_REVISE_REOPENED_EVENT,
-                        object_id=object_id,
-                        object_version=str(current_obj.get("object_version") or ""),
-                        actor="migration",
-                        details={
-                            "snapshot_id": snapshot_id,
-                            "reason": "structured_review_repair_required",
-                        },
-                    )
-                    migrated += 1
-        return migrated
 
 
 def install_review_recovery_page(app: FastAPI, console: ReviewClosureConsole) -> None:

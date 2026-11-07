@@ -28,7 +28,6 @@ DELETED = (
 )
 
 KEPT = (
-    "publication/canonical_store.py",
     "service_app.py",
     "product_api_v1.py",
     "semantic_transform_generic_v1.py",
