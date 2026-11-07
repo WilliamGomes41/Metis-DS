@@ -1,0 +1,58 @@
+{
+  "base": "c4db3bd84bfe722ab235eff67d2ccf69b60a785b",
+  "head": "37d35f09d7e679050140d95a06f091e8b7e4c9e0",
+  "rounds": 5,
+  "order": [
+    [
+      1,
+      "base"
+    ],
+    [
+      1,
+      "head"
+    ],
+    [
+      2,
+      "head"
+    ],
+    [
+      2,
+      "base"
+    ],
+    [
+      3,
+      "base"
+    ],
+    [
+      3,
+      "head"
+    ],
+    [
+      4,
+      "head"
+    ],
+    [
+      4,
+      "base"
+    ],
+    [
+      5,
+      "base"
+    ],
+    [
+      5,
+      "head"
+    ]
+  ],
+  "original_probe_sha256": "68bf4847d0f2931a301cb45155fe9dc8729b3ef96bad0bb11b51de0da7ed8910",
+  "probe_sha256": "56e64cf63c04ae5255d4507b38249373e11e6634d896efd63c102aae0b15e564",
+  "python": "3.13.5 (main, Jul 15 2026, 20:25:40) [GCC 14.2.0]",
+  "local_only": true,
+  "scope": "full source-units resolution",
+  "budgets_ms": {
+    "post": 3000,
+    "outer_lock": 250,
+    "transaction": 500,
+    "complete_action": 5000
+  }
+}

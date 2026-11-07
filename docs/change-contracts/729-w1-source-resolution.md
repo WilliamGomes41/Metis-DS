@@ -31,7 +31,8 @@ Release and serving before/after: unchanged; canonical publication registry
 remains the sole serving authority. Live v1 may coexist with working v2; this
 operation cannot supersede, withdraw, republish or reopen a sealed revision.
 API/UI result: existing 303 on success, existing conflict/refusal on invalid or
-stale input, with unchanged target and destination. No UI change.
+stale input, with unchanged target and destination. The repair UI is unchanged;
+the read-only document-storage explanation records the prepared route.
 Failure result: all workflow participants roll back, including late SQL COMMIT
 failure. Concurrent committed state is preserved. Duplicate submitted revision
 is stale after successful repair; no new idempotency claim.

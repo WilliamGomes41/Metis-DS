@@ -1,7 +1,9 @@
 # W1 source-resolution implementation review
 
-Target: `c914bd8f1b9227082e31913d1b3deca436e61fa5` against
+Initial target: `c914bd8f1b9227082e31913d1b3deca436e61fa5` against
 `c4db3bd84bfe722ab235eff67d2ccf69b60a785b`, #729 / MET-36.
+The full-suite compatibility findings below were resolved and retested in
+`37d35f09d7e679050140d95a06f091e8b7e4c9e0`.
 This is a separate adversarial pass by the implementer, not an independent human
 approval. Quality method: Code Quality Review, QUALITY mode. Release readiness
 still requires the repository checks, review and separate deployment decision.
@@ -39,7 +41,8 @@ not change. Reverting the binary leaves ordinary committed rows readable.
 Exclusions: production/Azure latency, deliberate DBA disabling of integrity
 triggers, deployment, wider W2–W6 work and certification of every existing-data
 cutover. Performance and full-suite results belong to the accompanying evidence
-record, not to this static review verdict.
+record, not to this static review verdict. See the final
+[verification and performance evidence](../../evidence/729-w1/README.md).
 
 UI handoff: the existing document-storage explanation and composition diagram
 were updated. Impeccable context and detector ran (no detector findings).
