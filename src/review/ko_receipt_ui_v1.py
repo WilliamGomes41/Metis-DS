@@ -285,6 +285,7 @@ def render_receipt_page(account, receipt, snapshot_id, continuation):
             + render_ko_receipt(None) + '<p><a href="' + escape(overview, quote=True)
             + '">Terug naar overzicht</a></p>', title='Opslag niet bevestigd')
     obj, event = receipt.object, receipt.event
+    object_location = '/review?' + urlencode({'document': snapshot_id, 'object': obj['object_id'], 'task': 'inventory'})
     kind = str(event['event_type'])
     approved = kind.endswith('_review_approve') or kind == 'second_review_approve'
     rejected = kind.endswith('_review_reject')
@@ -345,6 +346,7 @@ def render_receipt_page(account, receipt, snapshot_id, continuation):
         + ('<p><strong>Jouw toelichting</strong> ' + escape(comment) + '</p>' if comment else '') + '</section>'
         '<p class="ko-saved-version">Dit overzicht hoort bij de opgeslagen versie ' + escape(saved_version) + '.</p>' + stage_note
         + '</aside></div><div class="ko-result-actions"><a class="ko-primary" data-ko-next-passage href="'
-        + escape(continuation, quote=True) + '">Volgende passage</a><a data-ko-back-overview href="'
+        + escape(continuation, quote=True) + '">Volgende passage</a><a data-ko-view-object href="'
+        + escape(object_location, quote=True) + '">Bekijk het huidige kennisobject</a><a data-ko-back-overview href="'
         + escape(overview, quote=True) + '">Terug naar overzicht</a></div></div>')
     return review_page_shell(account, body, title='Review opgeslagen')

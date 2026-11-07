@@ -1,5 +1,9 @@
 """Personal landing preserves escaped document identity and review access."""
-# release-control-evidence: scope/belofte toegang slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: toegang
+# release-control-evidence: kwaliteit
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urlsplit
 
@@ -28,13 +32,16 @@ def test_personal_card_escapes_document_and_search_without_an_extra_workplace():
     item['envelope']['title'] = 'Document <voorbeeld>'
     html = simplify_console_html('/review', _workboard_card(item, q='"><script>bad</script>', page=2))
     hrefs = [href for href in Links(html).hrefs if urlsplit(href).path == "/review"]
-    assert len(hrefs) == 1
+    assert len(hrefs) == 2
     assert 'Verklaring en bewijs in Inzicht' in html
     assert 'Document &lt;voorbeeld&gt;' in html and '<script>bad</script>' not in html
     target = urlsplit(hrefs[0])
     assert target.path == '/review'
     assert parse_qs(target.query) == {'document': ['snapshot&1'], 'task': ['contextual'],
                                      'q': ['"><script>bad</script>'], 'page': ['2']}
+    assert parse_qs(urlsplit(hrefs[1]).query) == {
+        'document': ['snapshot&1'], 'task': ['inventory'],
+    }
     assert 'data-open-work-ratio' not in html
 
 
