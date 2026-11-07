@@ -61,8 +61,8 @@ Dit is een leesprojectie van het bestaande domeinmodel, **geen nieuwe TLC-uitvoe
 |---|---|
 | Modelaanroepen, vieruursbudget, taaksaldo, modelrespons-fases op de primaire kaart | Verwijderen bij uitfasering van automatische prozavorming; infrastructuur voor andere bronklassen apart inventariseren. |
 | 436 'overige bronpassages' als herstelwerkvoorraad | Verwijderen uit deze route. Toon bronbereik en open selectievragen; geen impliciete claim dat onselecteerde tekst waardeloos is. |
-| Brongebruik verantwoorden als aparte bulkactie achter een knop | Vervangen door scope-afhandeling in documentoverzicht, plus gerichte bestaande bronverplichting waar de publicatiegate dat vereist. Een vinkje mag geen ontbrekende bron automatisch afsluiten. |
-| Koppen controleren als standaard losse ronde | Weg uit hoofdroute. Bronstructuur blijft als navigatie; een werkelijk onjuiste kop krijgt een gerichte correctie bij de bron. Bevestigingscontract eerst migreren. |
+| Brongebruik verantwoorden als aparte herstelwerkplek | De huidige AI-restpassagewerkplek vervalt na cutover. Bestaande bronverplichtingen en bevoegde disposition blijven afdwingbaar; de scopebevestiging alleen sluit ze niet. Toon uitsluitend de concrete nog open verplichting bij de betreffende bronpassage. |
+| Koppen controleren als standaard losse ronde | Alleen de losse hoofdroute verdwijnt na migratie van het bevestigingscontract. Bronstructuur blijft zichtbaar. Bevestiging of correctie die het bestaande contract nog eist, blijft als gerichte handeling bereikbaar totdat de nieuwe route hetzelfde bewijs levert. |
 | Vormingsproblemen als lijst van AI-afwijzingen en restpassages | Verwijderen voor proza. Toon alleen actuele extractie-, selectie-, opbouw- of Admission-fout met één herstelactie. |
 | Bekijk diagnose in Inzicht | Alleen in uitklapbare foutdetails; eigenaar van technisch bewijs blijft Inzicht. |
 | Naar Review | Na succesvolle bouw als primaire actie; nooit vóór actueel gebouwde kandidaten. |
@@ -84,3 +84,28 @@ De huidige code reserveert modelaanroepen per documenttaak en toont budget en wa
 7. Eén seal geeft één duurzame bouwopdracht; na bouw verschijnt Review conform ingest.
 8. Bestaande bronafsluiting, Admission, reviewer- en publicatievoorwaarden blijven aantoonbaar actief.
 9. Geen automatische prozavorming of oude herstelactie meer bereikbaar in de nieuwe route.
+
+
+## Beslisregister: bestaand contract en expliciete verwijdering
+
+**Geen wijziging van de vastgelegde kernkeuzes.** De ingestbeoordeling (personen, verplichte/optionele deelname en aantallen), de onveranderlijke bron, gerichte menselijke selectie, duurzame conceptopslag, documentoverzicht vóór seal, één materialiser, Admission, reviewer-oordeel, publicatiebevoegdheid en het afzonderlijke beslisboompad blijven. De nieuwe schermen wijzigen de *presentatie en de eigenaar van de eerste selectie*, niet de betekenis van review of publicatie.
+
+**Aanscherping 1 — scope is niet bronafsluiting.** De researcher bevestigt welke afgesproken secties zijn doorlopen. Dit bewijst niet dat iedere bestaande bronverplichting is afgehandeld. Wanneer de huidige publicatiegate een bronpassage, pagina of uitgesloten gebied expliciet verantwoord wil zien, blijft de bevoegde afhandeling nodig. Toon dat als gerichte vraag bij de bron; verwijder alleen de herstelwachtrij die door automatische AI-restpassages ontstond. Nul selecties kan uitsluitend na geldige scope- én bronafhandeling, en leidt niet vanzelf tot publicatie.
+
+**Aanscherping 2 — koppen.** Koppen zijn bronstructuur en blijven beschikbaar voor navigatie, citatie en context. Een apart generiek scherm met alle koppen kan pas verdwijnen nadat de vereiste bevestiging via de bronwerkplek of een gelijkwaardig bewezen pad plaatsvindt. Als het bestaande contract kopbevestiging vereist, mag een visuele vereenvoudiging die eis niet wegnemen.
+
+**Aanscherping 3 — herstel en kosten.** Technische extractiefouten, ongeldige offsets, Admission-blokkades en bouwfouten blijven echte hersteltoestanden. Geen aantallen over `source_passages` tonen als te classificeren AI-restvoorraad. De claim over minder modelcontext geldt alleen voor het verwijderde automatische prozaselectiepad; meting van calls/tokens/piekcontext/arbeid is vereist.
+
+| Verwijder bij de proza-cutover | Concreet productonderdeel | Voorwaarde vóór verwijdering |
+|---|---|---|
+| Automatische initiële kennisselectie | `pre_review_semantic_v1` prozabinding/spec, `console_asgi`-koppeling en oude proza-startactie | Menselijke annotatie → seal → enige materialiser werkt voor alle betrokken prozaklassen. |
+| Modelvormingsuitvoering en herstart | Prozaprompts, proposal/providerpad, `bounded_formation` en `recoverable_formation` waar exclusief proza, `processing_retry_v1`/replay/budgetvervolg voor proza | Gedeelde validatie en beslisboomafhankelijkheden verplaatst; onderbroken werk krijgt expliciete takeover. |
+| Oude Vorming-kaart en equivalent schrijfpad | Start/hervatformulier voor AI, de modelbudget-/pollingtekst en modelresultaatnamen in `source_selection_ui_v1`; oude dubbele POST-editors | Nieuwe documenttoestanden en een annotatie-eigenaar beschikbaar; historische navigatie hoogstens read-only redirect. |
+| Automatische restpassagewachtrij | `overige bronpassages` als generieke nieuwe werkvoorraad; modelafwijzingen als standaard Vormingsproblemen | Concrete bron-/Admission-/bouwblokkades blijven via de juiste eigenaar zichtbaar; publicatiegate blijft intact. |
+| Afzonderlijke standaardknoppen | `Brongebruik verantwoorden` als AI-restwerkroute, `Koppen controleren` als generieke tweede ronde | Bronverplichtingen en kopbevestiging hebben een werkend, getest pad in de nieuwe werkplek. |
+| Experimenten en configuratie voor oud proza | `route_comparison_app_v1.execute_arm`, `semantic_safety_app_v1`, `audit_semantic_safety_v1`, moduskeuzes en proza modelconfig | Geen uitvoerbare oude prozacreatie in runtime; historische bewijzen leesbaar. |
+| Oude tests/documentatie/config | Testverwachtingen van verplichte AI-prozavorming, imports, requirements, env, healthchecks | Vervang door human-only integratie-, bypass-, restart- en review/publicatieproeven. |
+
+**Behoud expliciet:** `knowledge_materialisation_v1` als enige maker; zuivere bronreconstructie en strikte veld-/Admission-controles; extractie-/bronidentiteit; bestaande workflow- en bewijsauthority, reviewerpolicy, publicatie/registry, technische diagnose in Inzicht en historische bewijzen als read-only. Verwijder geen gedeelde helper door de bestandsnaam alleen: de beslisboomroute importeert providerhelpers en de hashfunctie wordt breed gebruikt. Verplaats zulke helpers met equivalentiebewijs.
+
+Dit is een **verwijdercontract, geen uitgevoerde verwijdering**. Het bestaande architectuurplan §7 en §9 blijft de bron voor callermap, migratie, rollback en bewijs van afwezigheid van een tweede pad. Acceptatie vereist dat HTTP, CLI, retry/resume, herextractie, klassewijziging, startup en directe interne aanroepen geen oude prozacreatie meer bereiken.
