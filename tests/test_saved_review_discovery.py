@@ -21,6 +21,8 @@ from tests.test_ko_state_derivation_postgres import ready
 from tests.test_vsa_publish_document_v1 import TEST_PASSWORD
 from tests.test_ko3_publication_membership import publish as publish_canonical_fixture
 from tests.test_ko3_publication_membership import physical_state as canonical_state
+from tests.test_personal_review_workboard import mixed
+from tests.personal_review_fixture_support import PASSWORD as PERSONAL_PASSWORD
 from fastapi.testclient import TestClient
 
 
@@ -103,6 +105,33 @@ def test_saved_knowledge_view_keeps_the_named_reviewer_boundary(
     assert response.status_code == 303
     assert urlsplit(response.headers['location']).path == '/review/trajectory'
     assert 'data-ko-object-view' not in response.text
+    assert physical_state(console, sid) == before
+
+
+def test_own_saved_first_review_remains_readable_while_waiting_for_another_reviewer(mixed):
+    console, accounts, docs = mixed
+    sid, oid = docs['Wachten']['snapshot_id'], docs['Wachten']['context']
+    client = TestClient(console._metis_test_application)
+    assert client.post('/login', data={'username': accounts['a']['username'], 'password': PERSONAL_PASSWORD},
+                       follow_redirects=False).status_code == 303
+    before = physical_state(console, sid)
+    inventory = client.get('/review', params={'document': sid, 'task': 'inventory'})
+    row = re.search(r'<li data-passage-id="' + re.escape(oid) + r'".*?</li>', inventory.text, re.S)
+    assert row
+    target = html.unescape(re.search(r'<a class="review-row-title" href="([^"]+)"', row[0])[1])
+    assert parse_qs(urlsplit(target).query)['task'] == ['inventory']
+    opened = client.get(target)
+    assert opened.status_code == 200
+    assert 'data-ko-object-view' in opened.text
+    assert 'data-ko-state>Tweede review<' in opened.text
+    assert 'data-ko-assessment-form' not in opened.text
+    assert physical_state(console, sid) == before
+    assert client.post('/login', data={'username': accounts['b']['username'], 'password': PERSONAL_PASSWORD},
+                       follow_redirects=False).status_code == 303
+    second = client.get('/review', params={'document': sid, 'object': oid, 'task': 'second_review'})
+    assert second.status_code == 200
+    assert 'data-ko-assessment-form' in second.text
+    assert 'action="/review/second-review"' in second.text
     assert physical_state(console, sid) == before
 
 

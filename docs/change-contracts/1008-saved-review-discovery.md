@@ -17,6 +17,7 @@ Goedkeuring blijft de bestaande exacte binding en audit. De bon blijft de exacte
 ## Acceptatie
 
 - Na één akkoord blijft ander open werk bereikbaar én is de volledige inventaris zichtbaar.
+- Een eigen eerste akkoord dat op een andere reviewer wacht opent vanuit de inventaris ook de leesweergave. De bevoegde tweede reviewer behoudt zijn gewone beoordelingsingang.
 - Het opgeslagen object staat in de inventaris en opent met inhoud, actuele toestand en documentcontext.
 - De bon biedt een directe herkenbare link naar die huidige objectweergave.
 - Bekijken wijzigt geen objecten, bindingen of documenttoestand; een voltooid akkoord wordt niet opnieuw aangeboden als gewone goedkeuring.

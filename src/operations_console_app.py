@@ -2623,6 +2623,8 @@ def _review_inventory(
         if source_role:
             role_label = {"label": "Bevestigd bronlabel", "context": "Bevestigd contextfragment", "excluded": "Niet opgenomen met reden"}.get(source_role.get("role"), "Bronrol controleren")
             hint_html += f'<p data-confirmed-source-role>{_esc(role_label)} · {_esc(source_role.get("reason"))}</p>'
+        if task == "inventory" and category == "waiting" and is_knowledge_object(obj, review_path):
+            target_task = "inventory"
         workplace = ("/review/bronpassage" if category == "handled" and not is_knowledge_object(obj, review_path) else
                      "/source-selection" if target_task == "repair" else "/review")
         items.append(
