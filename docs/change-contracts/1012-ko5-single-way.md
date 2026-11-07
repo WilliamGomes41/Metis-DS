@@ -88,3 +88,21 @@ Twee onafhankelijke read-only onderzoeken op c26b01d0, gericht hercontroleerd op
 
 KO-5 verwijdert parallelle legacy review/publicatiepaden binnen de geïmplementeerde KO-4-kern. Dit realiseert de nog geplande #942-broncontextconsolidatie niet.
 
+## Uitvoering en begrensd bewijs
+
+De codecutover verwijdert startup-reviseherstel, de geblokkeerde publieke JSONL-reviewingang en de SQLite-publicatiepilot/wrapper. De private staged reviewtransformer blijft achter de bestaande KO-4-policy. Hashproeven gebruiken rechtstreeks de bestaande integriteitskern. Documentstatus, lijststatus en navigatiereview sluiten bij ontbrekende canonieke authority; een envelope kan serving niet activeren.
+
+Alle runtimebeslissingen uit de vier benoemde mirrors zijn vervangen door exacte bindingen, actuele objectfeiten of de bestaande canonieke registry. De boomroute zonder bindingen veronderstelt geen akkoord meer. De oude frontiercertificaatsleutel `historical_has_publication` blijft een inert compatibiliteitsveld; de bestaande registrycontrole onder de writerlock blijft de publicatieseal. De opslagdelta voor review synchroniseert geen envelope-reviewticks meer. Vereiste nieuwe-object-/opvolgervorm blijft tot KO-6 bestaan; een nieuwe opvolger reset een oud akkoordpatroon zonder reviewer, binding of completion te verzinnen. Historische payloads en fysieke clinical-kolom/serializers blijven behouden.
+
+De boomkamerbadge leidt open klinisch werk af uit actuele niet-documentobjecten met `needs_review`/`revise`, voor iedere klasse. Zowel klassewijziging binnen hetzelfde model als documentbrede correctie opent immers reviewwerk buiten `beslisboom`. Een oud true-vlaggetje op uitsluitend afgeronde objecten telt niet; een oud false-vlaggetje verbergt actueel open werk niet. Dit gebeurt in dezelfde bestaande aggregatiequery; verbindingsaantallen blijven door de bestaande prestatietest bewaakt.
+
+Gerichte native `test_ko_single_way.py` vervangt de centrale policy tijdelijk door één herkenbare weigering voor akkoord, direct basisakkoord, tweede review, correctie, directe basiscorrectie, type, relaties, afwijzen, later, steun, merge en echte voorbereide source_units. De proef vergelijkt fysieke object-/bindingrijen en auditevents, controleert bufferreset en bewijst voor de voorbereide bronroute `preparing=True`, lockdiepte nul en geen workflowtransactie. Een begrensde AST-proef ontdekt dubbele eindstatussets; de twee bestaande reparatielezers hergebruiken nu de bestaande constante. Kandidaatinitialisatie blijft bij de bestaande materialisator.
+
+Testmigratie bij verwijderde ingangen:
+
+- `test_storage_publication_v2.py` en de SQLite/CLI-sectie van `test_h2a_approvals_independent_v1.py` vervallen met de pilot. Native canonieke publicatie-, autorisatie-, onafhankelijkheids- en weigeringsproeven blijven behouden.
+- De geblokkeerde-JSONL-proef in `test_t9_review_knowledge_authority.py` vervalt met de publieke API; de native autoriteits- en hashproeven in dat bestand blijven behouden.
+- De startup-migratieproef in `test_review_closure_v1.py` vervalt met de migrator. Publicatie-/source-contextproeven roepen die verwijderde migrator niet meer aan; hun bestaande immutabiliteits- en lifecycleclaims blijven behouden.
+- Mirrordiagnostiek-, badge-, klassewijzigings-, tweede-review-, frontier- en opslagtests toetsen de bestaande autoriteit in plaats van mirrorcompletions. Concurrente verwerking gebruikt werkelijk duurzaam reviewwerk/bindingen in plaats van een los envelope-vlaggetje; de bestaande native review-tijdens-reextractproef blijft behouden.
+
+Dit lokale dossier bevat geen productiemetadata. Volledige CI (PostgreSQL 16), onafhankelijke native/live-/rollback-/prestatiecontrole en operatorreview blijven afzonderlijke exacte-head-poorten; lokale PostgreSQL 17-proeven zijn geen productie- of mergeclaim.

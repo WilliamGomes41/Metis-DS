@@ -80,7 +80,7 @@ Duplicate context commands use existing command_id/payload_hash; conflict is exp
 Rewrite target: versioned context admission and review projection in existing kernel, plus conservative reprocessing guard.
 Why local patching is insufficient: removing one flag waiver alone leaves include/link without realization and cards hiding durable context.
 Current authority/writer/reader map: source store -> dispatcher/spec -> transform -> admission -> object-bundle commit; review/correction/source-context commands -> same kernel/versioned store; CLI/ASGI -> dispatcher; UI/readiness/exports/MCP -> stored metadata. Graph commands/graph reviews remain their existing authority. PostgreSQL workflow+reviews, local compatibility and canonical publication/registry stay in place.
-Supported runtime topologies: existing one instance/one worker local compatibility; supported PostgreSQL one/two workers with shared commit lock. No added topology.
+Supported runtime topologies: PostgreSQL workflow/canonical authority, one/two workers with the existing shared commit lock; local or Azure immutable source adapter. File workflow runtime is retired (D6b); no added topology.
 Persisted-state impact: additive versioned admission/context-proposal metadata in existing JSONB; no SQL schema or automatic migration.
 Compatibility/migration plan: readers accept legacy and new records before new writers; stored legacy admission is not recomputed by read or startup. New runtime processing uses v2; original standalone v1 readers remain.
 Rollback/recovery plan: disable new processing with compatible reader; retain new context evidence and historical reviews; do not downgrade to binary that interprets scan flags as proof. Forward fix failed work; existing source/reviews preserved.
