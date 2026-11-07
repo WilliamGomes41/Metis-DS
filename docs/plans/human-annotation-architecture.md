@@ -40,6 +40,23 @@ Een beperkte opdracht mag nooit als complete verwerking van de hele richtlijn wo
 
 Voor technische preview mag dezelfde bronresolver tekst tonen en structurele fouten melden. Preview creëert geen object-ID, kandidaat, reviewbesluit of eigen opgeslagen bronwaarheid.
 
+### Pauzeren, concept bewaren en hervatten — aanvulling 7 november 2026
+
+Deze route hoeft niet in één browsersessie te worden afgerond. ‘Opslaan en later doorgaan’ is een eigen handeling en is niet hetzelfde als ‘Klaar met dit document’ of ‘Afronden en opbouwen’.
+
+- **Automatisch concept bewaren:** tijdens het aanwijzen worden onvolledige kernselecties, gekozen labels, context-/bewijsverbindingen en twijfels als concept van dezelfde annotatie-entry duurzaam opgeslagen. Onvolledige invoer mag als concept bestaan; bron-/extractie-identiteit en verwijzingen worden wel gevalideerd. Geen tweede conceptstore, kandidaatmaker of browser-only authority.
+- **Zichtbare opslagstatus:** toon ‘Niet opgeslagen’, ‘Opslaan…’, ‘Concept opgeslagen’ met bevestigde opslagtijd, of ‘Opslaan mislukt’. ‘Opgeslagen’ verschijnt uitsluitend na servercommit voor precies de getoonde entryrevisie. Geen belofte dat een nog onbevestigde laatste aanwijzing bij abrupt sluiten/netwerkverlies bewaard is.
+- **Expliciet pauzeren:** ‘Opslaan en later doorgaan’ verstuurt nog open wijzigingen en wacht op bevestiging vóór de app weg navigeert. Bij fout blijft de editor met het niet-opgeslagen werk zichtbaar en kan de gebruiker opnieuw proberen. Een sluit-/navigatiewaarschuwing is aanvullend; een unload-request is geen duurzaam opslagbewijs.
+- **Concept versus selectie gereed:** ‘Selectie opslaan’ verklaart de selectie gereed voor het documentoverzicht, na de vereiste invoercontrole. Dezelfde entry krijgt een nieuwe revisie; er wordt geen tweede kopie aangemaakt. Een automatisch concept is geen afgeronde selectie, reviewbesluit of goedkeuring.
+- **Hervatten:** na opnieuw inloggen/dezelfde werkversie openen toont Metis opgeslagen selecties én onafgemaakte concepten, plus open werk. Een hervatlink brengt de gebruiker naar het laatst geopende brondeel/concept waar mogelijk. Die navigatievoorkeur is per gebruiker afgeleide UI-informatie, geen domeinstatus of bewijs dat een brondeel is gecontroleerd.
+- **Documentafronding:** het overzicht onderscheidt gereed en concept. Open concepten moeten expliciet worden afgemaakt of teruggenomen voordat de betrokken annotatieset kan worden verzegeld. Automatische opslag rondt nooit een selectie, document, review of publicatie af.
+- **Na afronden/bouwen:** de bestaande duurzame seal en bouwopdracht blijven bestaan bij afmelden of browserafsluiting. Later openen leest diezelfde opdracht; geen dubbele bouw. Bij beoordeling blijven alleen daadwerkelijk opgeslagen oordelen behouden volgens de ingestkeuze.
+- **Races en rechten:** iedere autosave heeft command-ID, entryrevisie en bron-/extractie-identiteit. Een late autosave mag een nieuwere expliciete opslag, verwijdering, seal of gewijzigde rechten niet overschrijven. Bestaande CAS/transactie en actuele autorisatie zijn leidend. Meerdere tabs/apparaten geven bij stale invoer een zichtbaar conflict in plaats van last-write-wins.
+- **Gebundelde writes:** sla wijzigingen na een korte geconfigureerde rust of betekenisvolle selectiehandeling op, niet iedere muisbeweging. Werk de huidige entry gericht bij. Geen lange locks tijdens lezen/aanwijzen en geen complete-documentwrite voor een concept.
+- **Nieuwe bron/extractie:** een oud concept wordt niet stil op nieuwe offsets toegepast; toon de mismatch en gebruik de bestaande expliciete opvolger-/herstelroute.
+
+Vereiste proeven: onvolledig concept opslaan → procesherstart/nieuwe sessie → exact hervatten; server/netwerkfout geeft geen ‘opgeslagen’; expliciet pauzeren wacht op commit; late autosave tegenover selectie-afronding/seal geeft conflict; twee tabs kunnen elkaars nieuwere werk niet stil overschrijven; open concept blokkeert verzegelen; herhaald openen van een bouwreceipt start geen tweede job. Echte native opslag-/browserproeven zijn nog uit te voeren; de bestaande TLA-statechart bewijst deze autosave-details niet.
+
 ### Document afronden
 
 ‘Klaar met dit document’ is een leeshandeling: toon het overzicht van de actuele opgeslagen annotatieset, niet van browserformulierwaarden. Toon uitspraken en labels, verbonden passages, twijfels, open vereiste aanwijzingen, bronbereik en de afhandeling daarvan. De researcher kan alles nog aanpassen.
