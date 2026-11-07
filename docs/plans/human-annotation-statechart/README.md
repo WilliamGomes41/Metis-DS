@@ -6,6 +6,14 @@ Gemaakt met de echte pstack-statechart-CLI, bron WilliamGomes41/plugins commit `
 
 TLC-jar 1.7.4 SHA-256 `936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88`; Node 24.22.1, Java 21.0.13.
 
+## Aanvulling: pauzeren en conceptopslag
+
+Het [actuele annotatieontwerp](https://github.com/WilliamGomes41/Metis-DS/blob/c52e1278eb9981c33ba9c2a681dbb0f6a25558e3/docs/plans/human-annotation-architecture.md) bevat nu expliciete conceptopslag, ‘Opslaan en later doorgaan’, hervatten en de grens tussen automatisch bewaard concept en afgeronde selectie.
+
+In deze overzichts-statechart blijven die handelingen binnen ‘Selecties aanwijzen en opslaan’. Concepten tellen niet als afgeronde selectie of oordeel. ‘Klaar met dit document’ opent het overzicht, open concepten blokkeren verzegelen; ‘Afronden en opbouwen’ blijft een afzonderlijke command. Alleen door de server bevestigde opslag is duurzaam bewaard.
+
+**Bewijsgrens:** TLA-model, configuratie en de hieronder gerapporteerde controles zijn niet gewijzigd. Zij modelleren geen autosaveverzoeken, onbevestigde clientwijzigingen, meerdere tabs of tijdelijke netwerkfouten. De nieuwe opslagbelofte vraagt nog de native PostgreSQL-/browserproeven uit het ontwerp en #1015; de eerdere 80 modeltoestanden zijn geen nieuw bewijs daarvan.
+
 ## Gecontroleerde statechart
 
 Bij ingest kan één of kunnen twee beoordelaars verplicht zijn. Die keuze ligt vóór het begin van de route vast en verandert onderweg niet. De aanvullende beoordeling verschijnt alleen bij de ingestkeuze die haar vereist.
