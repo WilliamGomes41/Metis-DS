@@ -48,14 +48,14 @@ class Model:
 
 
 # References describe this inspected revision, never an inferred deployment.
-REFERENCE_REVISION = "c914bd8f1b9227082e31913d1b3deca436e61fa5"
+REFERENCE_REVISION = "5df87a987764bbcd60e44b34402ffe52b558118a"
 
 MODELS = (
     Model(
         "documentopslag", "Documentopslag en verwerkingsbewijs",
         "Hoe actueel reviewwerk verbonden blijft met het oorspronkelijke verwerkingsbewijs.",
         "Review moet bereikbaar blijven wanneer de verwerkingshistorie groeit.",
-        "De documentaggregate bewaart de actuele metadata en vaste verwijzingen naar bron en bewijs. Bronlezers, vormingscontroles en diagnose lezen elk hun eigen benodigde invoer. Reviewbatches en bronselectiecorrecties worden voorbereid zonder schrijflock; vóór opslag controleert de bestaande eigenaar opnieuw de actuele rechten, bron, afhankelijkheden en publicatiestatus. Besluiten, correcties en auditspoor worden samen opgeslagen of samen teruggedraaid. De volledige oorspronkelijke historie blijft afzonderlijk bewaard.",
+        "De documentaggregate bewaart de actuele metadata en vaste verwijzingen naar bron en bewijs. Bronlezers, vormingscontroles en diagnose lezen elk hun eigen benodigde invoer. Reviewbatches en bronselectiecorrecties worden voorbereid zonder schrijflock; vóór opslag controleert de bestaande eigenaar opnieuw de actuele rechten, bron, afhankelijkheden en publicatiestatus. Besluiten, correcties en auditspoor worden samen opgeslagen of samen teruggedraaid. Bij vorming worden nieuwe kennisobjecten in groepen opgeslagen, met dezelfde inhouds- en versiecontroles. Mislukt de definitieve opslag, dan blijven eerder afgeronde verwerkingstaken beschikbaar om te hervatten. De volledige oorspronkelijke historie blijft afzonderlijk bewaard.",
         "Deze scheiding voorkomt dat iedere gewone documenthandeling alle eerdere provideruitvoer en kwaliteitsmetingen moet ophalen en herschrijven.",
         ("Een bewijsverwijzing is geen goedkeuring of publicatiebesluit.",
          "Bestaande documenten worden alleen via expliciete voorbereiding en versiecontrole omgezet. Deze uitleg bewijst geen productiecutover."),
@@ -65,7 +65,8 @@ MODELS = (
          Reference("Wijzigingscontract MET-41", "docs/change-contracts/met41-operational-document-inputs.md"),
          Reference("Leesgrenzen van Review", "docs/architecture/review-input-scopes-951.md"),
          Reference("Begrensde reviewbeslissingen", "docs/architecture/bounded-review-mutations-729.md"),
-         Reference("Bronselectiecorrecties", "docs/change-contracts/729-w1-source-resolution.md")),
+         Reference("Bronselectiecorrecties", "docs/change-contracts/729-w1-source-resolution.md"),
+         Reference("Opslag bij hervatten van vorming", "docs/change-contracts/729-w4-formation-database-work.md")),
         ("verwerkingspoging", "auditspoor", "versiegebonden-beoordeling"),
         ("operationele opslag", "verwerkingsarchief"),
     ),
