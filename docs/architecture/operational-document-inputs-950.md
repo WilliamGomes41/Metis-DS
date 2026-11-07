@@ -29,6 +29,11 @@ flowchart TD
     PRODUCER[Producer: voorbereiden buiten transactielock] --> OWNER
     PRODUCER --> SOURCE
     PRODUCER --> CAS[Commit: actuele claim, bron, proof en revisie toetsen]
+    CAS --> OBJECTS[Bestaande objectwriter: nieuwe rijen in begrensde groepen]
+    OBJECTS --> CHECK[Exacte identiteit, positie, inhoud en mutatie-epochs toetsen]
+    OBJECTS --> GENERATION[Database: objectgeneratie ophogen met het aantal geraakte rijen]
+    GENERATION --> ROW
+    CHECK --> ACTIVATION[Volledige activatie in één transactie]
     CAS --> ROW
     CAS --> INPUTS
 ```
@@ -38,6 +43,14 @@ gegevens bereidt een afzonderlijke operatie de oorspronkelijke inputs voor; een
 CAS op dezelfde documentrij activeert de representatie. Reads migreren niets.
 Een geactiveerde compacte representatie blijft actief als nieuwe admission wordt
 uitgezet; oudere writers worden geweigerd.
+
+Bij vorming blijven afgeronde taken afzonderlijk opgeslagen. De uiteindelijke
+activatie groepeert alleen aangrenzende nieuwe objectrijen. Per SQL-statement
+verhoogt de database de bestaande objectgeneratie met het exacte aantal geraakte
+rijen; alle oorspronkelijke document- en objectcontroles blijven gelden. Een
+mislukte activatie draait in haar geheel terug, terwijl eerder afgeronde taken
+beschikbaar blijven voor hervatten. Ook bestaande schrijvers gebruiken dezelfde
+generatieteller. Zie [W4](../change-contracts/729-w4-formation-database-work.md).
 
 De beslisgraaf, reviewbesluiten en deelnameafspraken blijven actuele mutable
 gegevens. Broninventory, vormingsherkomst en constructiebewijs blijven exact

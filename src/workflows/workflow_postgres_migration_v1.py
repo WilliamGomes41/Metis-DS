@@ -38,6 +38,7 @@ MIGRATION_NAMES = (
     "030_operational_document_inputs.sql",
     "031_review_dependency_keys.sql",
     "032_object_revision_frontiers.sql",
+    "033_statement_object_generation.sql",
 )
 REQUIRED_TABLES = frozenset(
     {
