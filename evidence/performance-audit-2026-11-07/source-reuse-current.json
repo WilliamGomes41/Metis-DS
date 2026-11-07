@@ -1,0 +1,143 @@
+{
+  "audit_date": "2026-11-07",
+  "timezone": "Europe/Amsterdam",
+  "threshold_seconds": 5,
+  "metadata": {
+    "commit": "c4db3bd84bfe722ab235eff67d2ccf69b60a785b",
+    "python": "3.13.5",
+    "postgres": "17.11",
+    "logical_cores": 5,
+    "scope": "execute_source_selection resume of 130 tasks; deterministic provider; isolated native PostgreSQL; excludes fixture setup/reservation",
+    "measure_script_sha256": "257a70dfa59186245b045b2a257879253585791cbdbd9e3218d14e53edb35474",
+    "runs": [
+      {
+        "run": 2,
+        "load_before": "09:52:50 up 6 min,  0 users,  load average: 0.16, 0.08, 0.02",
+        "exit_code": 0
+      },
+      {
+        "run": 3,
+        "load_before": "09:53:17 up 7 min,  0 users,  load average: 0.55, 0.18, 0.06",
+        "exit_code": 0
+      },
+      {
+        "run": 4,
+        "load_before": "09:53:44 up 7 min,  0 users,  load average: 0.71, 0.25, 0.09",
+        "exit_code": 0
+      },
+      {
+        "run": 5,
+        "load_before": "09:54:10 up 8 min,  0 users,  load average: 0.81, 0.31, 0.11",
+        "exit_code": 0
+      }
+    ]
+  },
+  "repeats": 5,
+  "resume_seconds": {
+    "median": 24.689903,
+    "min": 24.309062,
+    "max": 25.291718,
+    "samples": [
+      24.689903,
+      24.390119,
+      25.095648,
+      24.309062,
+      25.291718
+    ]
+  },
+  "all_results_succeeded": true,
+  "expected_initial_interruption": "processing_fixture_interrupted",
+  "provider_calls_per_run": 131,
+  "external_provider_calls": 0,
+  "all_first_tasks_reused": true,
+  "all_first_result_hashes_unchanged": true,
+  "raw_runs": [
+    {
+      "tasks": 130,
+      "initial": {
+        "reconstructed_fragments": 1040,
+        "reconstruction_input_hashes": 0,
+        "seconds": 0.683
+      },
+      "resume": {
+        "reconstructed_fragments": 0,
+        "reconstruction_input_hashes": 0,
+        "seconds": 24.689903
+      },
+      "provider_calls": 131,
+      "first_committed_task_reused": true,
+      "first_result_hash_unchanged": true
+    },
+    {
+      "tasks": 130,
+      "initial": {
+        "reconstructed_fragments": 1040,
+        "reconstruction_input_hashes": 0,
+        "seconds": 0.599463
+      },
+      "resume": {
+        "reconstructed_fragments": 0,
+        "reconstruction_input_hashes": 0,
+        "seconds": 24.390119
+      },
+      "provider_calls": 131,
+      "first_committed_task_reused": true,
+      "first_result_hash_unchanged": true
+    },
+    {
+      "tasks": 130,
+      "initial": {
+        "reconstructed_fragments": 1040,
+        "reconstruction_input_hashes": 0,
+        "seconds": 0.603851
+      },
+      "resume": {
+        "reconstructed_fragments": 0,
+        "reconstruction_input_hashes": 0,
+        "seconds": 25.095648
+      },
+      "provider_calls": 131,
+      "first_committed_task_reused": true,
+      "first_result_hash_unchanged": true
+    },
+    {
+      "tasks": 130,
+      "initial": {
+        "reconstructed_fragments": 1040,
+        "reconstruction_input_hashes": 0,
+        "seconds": 0.575581
+      },
+      "resume": {
+        "reconstructed_fragments": 0,
+        "reconstruction_input_hashes": 0,
+        "seconds": 24.309062
+      },
+      "provider_calls": 131,
+      "first_committed_task_reused": true,
+      "first_result_hash_unchanged": true
+    },
+    {
+      "tasks": 130,
+      "initial": {
+        "reconstructed_fragments": 1040,
+        "reconstruction_input_hashes": 0,
+        "seconds": 0.626175
+      },
+      "resume": {
+        "reconstructed_fragments": 0,
+        "reconstruction_input_hashes": 0,
+        "seconds": 25.291718
+      },
+      "provider_calls": 131,
+      "first_committed_task_reused": true,
+      "first_result_hash_unchanged": true
+    }
+  ],
+  "limits": [
+    "Native local PG17.11, not Azure or PG16 validation.",
+    "Times cover execute_source_selection after reservation; fixture setup and reservation excluded.",
+    "Fresh process and isolated database for every run; no production corpus.",
+    "Separate profiled run excluded from these latency samples.",
+    "No old/new speedup claim; historical PG16 evidence differs."
+  ]
+}
