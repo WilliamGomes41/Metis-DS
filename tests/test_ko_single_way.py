@@ -217,3 +217,49 @@ def test_missing_canonical_store_never_infers_serving_from_envelope():
     badges.canonical_publication_store = None
     with pytest.raises(ConsoleError, match='durable_publication_store_required'):
         badges._canonical_list_release_rows(['published-looking'])
+
+
+@pytest.mark.parametrize('mode', ['legacy', 'compact'])
+def test_retired_document_badge_cannot_duplicate_review_work_or_context_headings(
+        tmp_path, production_console, monkeypatch, mode):
+    from tests.test_vsa_meaningful_document_status_v1 import _system, _complete_review
+    from src.vorming.passage_register_v1 import passage_register_of
+    from src.workflows.review_card_inputs_postgres_v1 import prepare_review_cards
+    console, accounts, receipt, _source = _system(tmp_path, production_console=production_console)
+    sid = receipt['snapshot_id']
+    console.review_card_read_mode = mode
+    if mode == 'compact':
+        prepare_review_cards(console.workflow_document_store, sid)
+    # Review remains the one personal work queue. Documenten is a catalogue,
+    # not a second global review counter, including for unassigned publishers.
+    for role, person in accounts.items():
+        counts = console.waiting_task_counts(person['account_id'])
+        assert counts['tree'] == 0
+        assert counts['review'] == (1 if role in {'researcher', 'reviewer'} else 0)
+    _complete_review(console, accounts, receipt)
+    ready = console.publication_readiness(sid)
+    assert ready['curation_ready'] and ready['review_complete'] and ready['source_passage_review_complete']
+    assert ready['publication_ready']
+    headings = [obj for obj in console.snapshot_objects(sid)
+                if obj['object_type'] == 'heading'
+                and passage_register_of(obj).get('status') == 'used_as_context'
+                and obj['governance']['validation_status'] == 'needs_review']
+    assert headings, 'Fixture must retain the raw-status trap from the independent repro'
+    envelope = console._envelope(sid)
+    envelope.update(clinical_rereview_required=True, review_passes={'forged': {'passed': True}})
+    console.workflow_document_store.write_bundle(envelope=envelope)
+    if mode == 'compact':
+        prepare_review_cards(console.workflow_document_store, sid)
+    # Navigation must not evaluate source durability or the publication gate.
+    with monkeypatch.context() as guard:
+        guard.setattr(console, 'publication_readiness', lambda *a, **k: pytest.fail('badge ran full readiness'))
+        guard.setattr(console, 'consider_publish', lambda *a, **k: pytest.fail('badge ran publication gate'))
+        for person in accounts.values():
+            assert console.waiting_task_counts(person['account_id'])['tree'] == 0
+        assert console.waiting_task_counts(accounts['reviewer']['account_id'])['review'] == 0
+    result = console.publish(actor_id=accounts['publisher']['account_id'], snapshot_id=sid)
+    assert result['status'] == 'PASS'
+    assert console.document_release_serving_status(sid)['serving_status'] == 'active'
+    for person in accounts.values():
+        assert console.waiting_task_counts(person['account_id'])['tree'] == 0
+    assert console.waiting_task_counts(accounts['reviewer']['account_id'])['review'] == 0

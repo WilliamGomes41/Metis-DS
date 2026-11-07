@@ -1023,7 +1023,6 @@ class OperationsConsole:
         ingest = 0
         review = 0
         publish = 0
-        tree = 0
         for envelope in envelopes:
             objects = self._load_objects(envelope["snapshot_id"], remember=False)
             statuses = {(row.get("governance") or {}).get("validation_status") for row in objects}
@@ -1040,11 +1039,6 @@ class OperationsConsole:
                     review += 1
                 elif "needs_review" in statuses:
                     review += 1
-            if (any(row.get("object_type") != "document" and
-                    (row.get("governance") or {}).get("validation_status") in {"needs_review", "revise"}
-                    for row in current_revisions(objects))
-                    and roles & {"researcher", "reviewer", "publisher"}):
-                tree += 1
             if (
                 "publisher" in roles
                 and envelope.get("state") == CAPTURED
@@ -1082,7 +1076,7 @@ class OperationsConsole:
             ingest = 0
         return {
             "ingest": ingest,
-            "tree": tree,
+            "tree": 0,  # Compatibility slot; review work belongs to the Review queue.
             "review": review,
             "publish": publish,
             "accounts": 0,

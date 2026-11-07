@@ -69,13 +69,7 @@ class _PostgresBadgeCountsMixin:
                                    FROM current_objects o
                                    WHERE o.snapshot_id=d.snapshot_id
                                      AND o.payload->'governance'->>'validation_status'='needs_review'
-                               ) AS has_needs_review,
-                               EXISTS (
-                                   SELECT 1 FROM current_objects o
-                                   WHERE o.snapshot_id=d.snapshot_id
-                                     AND COALESCE(o.payload->>'object_type','')<>'document'
-                                     AND o.payload->'governance'->>'validation_status' IN ('needs_review','revise')
-                               ) AS has_clinical_review
+                               ) AS has_needs_review
                         FROM workflow.documents d
                     )
                     SELECT COUNT(*) FILTER (
@@ -88,9 +82,6 @@ class _PostgresBadgeCountsMixin:
                            COUNT(*) FILTER (
                                WHERE r.snapshot_id IS NOT NULL AND s.has_explicit_policy
                            ) AS explicit_review_documents,
-                           COUNT(*) FILTER (
-                               WHERE s.has_clinical_review
-                           ) AS tree,
                            COALESCE(
                                ARRAY_AGG(s.snapshot_id) FILTER (
                                    WHERE s.state=%s
@@ -736,9 +727,9 @@ class _PostgresBadgeCountsMixin:
             review_count = self._navigation_review_count(account)
         return {
             "ingest": int(row.get("ingest") or 0) if "researcher" in roles else 0,
-            "tree": int(row.get("tree") or 0)
-            if roles & {"researcher", "reviewer", "publisher"}
-            else 0,
+            # Compatibility response slot only: Documenten has no review queue.
+            # Assigned review work is counted by the existing review projection.
+            "tree": 0,
             "review": review_count if "reviewer" in roles else 0,
             "publish": publish,
             "accounts": 0,
