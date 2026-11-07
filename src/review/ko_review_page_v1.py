@@ -183,7 +183,6 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     published = console.snapshot_is_published(sid)
     can_approve = bool(not published and inputs.source_available and route and route.get('actionable')
                        and descriptor.can_confirm and not conflict)
-    state = derive_ko_state(obj, review_path=path, bindings=inputs.bindings, fragments=inputs.fragments)['state']
     repair = '/source-selection?' + urlencode({'document': sid, 'object': obj['object_id'], 'task': 'repair',
                                               'review_revision': inputs.revision})
     parent = next((row for row in inputs.objects if row['object_id'] == descriptor.parent_id), None)
@@ -234,6 +233,12 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     context_html, context_open = _context_evidence(obj, inputs.objects, sid, inputs.revision, shown)
     if reading:
         from src.review.ko_transitions_v1 import recorded_not_applicable
+        from src.review.knowledge_object_state_v1 import object_release_status
+        from src.integrity_kernel import compute_canonical_object_hash
+        identity = (str(obj['object_id']), str(obj['object_version']), compute_canonical_object_hash(obj))
+        membership = console.canonical_publication_store.object_publication_membership(sid, [identity])
+        state = derive_ko_state(obj, review_path=path, bindings=inputs.bindings, fragments=inputs.fragments,
+                               release_status=object_release_status(obj, membership.get(identity, {})))['state']
         evidence_note = ('<p data-recorded-evidence-applicability="not_applicable">'
             'Bij de beoordeling van deze versie is onderbouwing expliciet niet van toepassing verklaard.</p>'
             if recorded_not_applicable(obj, inputs.bindings) else '')
@@ -258,6 +263,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             + ('<a href="' + escape(review, quote=True) + '">Dit kennisobject beoordelen</a>'
                if not published and route and route.get('actionable') else '') + '</div></div>')
         return review_page_shell(account, body, title='Kennisobject')
+    state = derive_ko_state(obj, review_path=path, bindings=inputs.bindings, fragments=inputs.fragments)['state']
     heading = 'Onafhankelijke tweede review' if second else 'Review'
     rejection = ('' if second else
         '<details class="ko-reject"><summary>Afwijzen</summary><label>Toelichting bij afwijzing<textarea name="comment">'

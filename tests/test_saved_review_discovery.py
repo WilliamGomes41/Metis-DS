@@ -9,6 +9,7 @@
 import html
 import re
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -16,6 +17,11 @@ import pytest
 from tests.test_ko_receipt_ui import prepared
 from tests.test_review_command_bounded_http_v1 import physical_state
 from tests.test_availability_repair import login
+from tests.test_ko_state_derivation_postgres import ready
+from tests.test_vsa_publish_document_v1 import TEST_PASSWORD
+from tests.test_ko3_publication_membership import publish as publish_canonical_fixture
+from tests.test_ko3_publication_membership import physical_state as canonical_state
+from fastapi.testclient import TestClient
 
 
 @pytest.mark.parametrize('entry', ['workboard', 'receipt', 'inventory'])
@@ -98,3 +104,50 @@ def test_saved_knowledge_view_keeps_the_named_reviewer_boundary(
     assert urlsplit(response.headers['location']).path == '/review/trajectory'
     assert 'data-ko-object-view' not in response.text
     assert physical_state(console, sid) == before
+
+
+@pytest.mark.parametrize('released', ['published', 'withdrawn', 'superseded', 'different_tuple'])
+def test_saved_view_uses_exact_canonical_publication_state(ready, released, monkeypatch):
+    console, accounts, sid, _ = ready
+    obj = next(row for row in console.snapshot_objects(sid)
+               if row.get('confirmed_object_type') == 'explanation')
+    store = console.canonical_publication_store
+    if released == 'different_tuple':
+        publish_canonical_fixture(store, sid='older-source', release='older-release',
+                                  oid=obj['object_id'], version='0.9.0')
+    else:
+        published = console.publish(actor_id=accounts['publisher']['account_id'], snapshot_id=sid)
+        assert published['status'] == 'PASS'
+    if released == 'withdrawn':
+        console.withdraw_document(actor_id=accounts['publisher']['account_id'], snapshot_id=sid,
+                                  expected_release_id=published['release_id'], reason='Synthetic read-view control')
+    elif released == 'superseded':
+        with store._connect() as connection:
+            at = connection.execute('SELECT published_at FROM publication_releases WHERE release_id=%s',
+                                    (published['release_id'],)).fetchone()['published_at']
+        publish_canonical_fixture(store, sid='successor-source',
+                                  release='successor-release', oid=obj['object_id'], version='2.0.0',
+                                  checksum='b' * 64, at=(at + timedelta(seconds=1)).isoformat())
+    client = TestClient(console._metis_test_application)
+    assert client.post('/login', data={'username': 'reviewer.bert', 'password': TEST_PASSWORD},
+                       follow_redirects=False).status_code == 303
+    before = physical_state(console, sid)
+    canonical_before = canonical_state(store)
+    reads = []
+    original = store.object_publication_membership
+    def bounded(snapshot_id, selected):
+        assert snapshot_id == sid
+        assert len(selected) == 1
+        assert selected[0][:2] == (obj['object_id'], obj['object_version'])
+        reads.append(selected)
+        return original(snapshot_id, selected)
+    monkeypatch.setattr(store, 'object_publication_membership', bounded)
+    result = client.get('/review', params={'document': sid, 'object': obj['object_id'], 'task': 'inventory'})
+    assert result.status_code == 200, result.text
+    expected = {'published': 'Gepubliceerd', 'withdrawn': 'Ingetrokken', 'superseded': 'Vervangen',
+                'different_tuple': 'Goedgekeurd'}[released]
+    assert f'data-ko-state>{expected}<' in result.text
+    assert 'data-ko-assessment-form' not in result.text
+    assert physical_state(console, sid) == before
+    assert len(reads) == 1
+    assert canonical_state(store) == canonical_before

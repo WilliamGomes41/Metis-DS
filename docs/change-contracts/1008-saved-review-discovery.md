@@ -12,7 +12,7 @@ Touches lifecycle invariants: no
 
 De wijziging houdt de bestaande inventaris altijd zichtbaar, voegt aan de bon een link naar de huidige KO-weergave toe en laat afgehandelde KO-titels diezelfde bestaande route openen. De inventaristaak rendert daar een leesweergave: huidige inhoud, versie, status, bronpositie en context, zonder nieuw beoordelingsformulier. Expliciete N/A wordt uitsluitend via de bestaande pure recorded_not_applicable-helper uit exacte geldige bindingen getoond. De afzonderlijke bronlink blijft bestaan. Structurele/bronrecords behouden hun bestaande bronroute.
 
-Goedkeuring blijft de bestaande exacte binding en audit. De bon blijft de exacte opgeslagen handeling en versie; de nieuwe link opent de huidige objectversie, zonder die twee te verwarren. `/review` behoudt bestaande account-, rol-, document- en broncontroles. Er komt geen nieuwe status, opslag, query, transactie, autorisatieregel of publicatieactie bij. GET schrijft geen reviewbesluit. Gepubliceerde objecten en bestaande reviewervereisten veranderen niet.
+Goedkeuring blijft de bestaande exacte binding en audit. De bon blijft de exacte opgeslagen handeling en versie; de nieuwe link opent de huidige objectversie, zonder die twee te verwarren. `/review` behoudt bestaande account-, rol-, document- en broncontroles. De leesweergave gebruikt één aanvullende, bestaande canonieke metadatalezing voor precies `(object_id, object_version, canonical_hash)` en dezelfde `object_release_status`-afleiding als KO-3. Daardoor blijven gepubliceerd, ingetrokken en vervangen zichtbaar; een andere versie of snapshot levert geen publicatiestempel op. Er komt geen nieuwe SQL-implementatie, status, opslag, transactie, autorisatieregel of publicatieactie bij. GET schrijft geen reviewbesluit. Gepubliceerde objecten en bestaande reviewervereisten veranderen niet.
 
 ## Acceptatie
 
@@ -21,6 +21,7 @@ Goedkeuring blijft de bestaande exacte binding en audit. De bon blijft de exacte
 - De bon biedt een directe herkenbare link naar die huidige objectweergave.
 - Bekijken wijzigt geen objecten, bindingen of documenttoestand; een voltooid akkoord wordt niet opnieuw aangeboden als gewone goedkeuring.
 - De bestaande reviewer-/documentisolatie en exacte historische bon blijven behouden.
+- Publicatiestatus komt uitsluitend uit de canonieke registratie voor de exacte getoonde versie; de extra metadata-aanroep blijft beperkt tot één geselecteerde tuple.
 - Desktop en mobiel tonen de links leesbaar en met toetsenbordbediening.
 
 Uitvoering: #1008. Onderdeel van #995/MET-56 en productacceptatie #990. Geen merge of deployment in deze opdracht.
