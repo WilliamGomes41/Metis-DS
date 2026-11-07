@@ -81,8 +81,8 @@ def knowledge_revision(obj):
 def historical_revision_inputs(rows):
     """Intrinsic inputs of unseen historical rows, not a publication verdict."""
     return {'historical_has_knowledge': any(knowledge_revision(row) for row in rows),
-            'historical_has_publication': any((row.get('governance') or {}).get('publication_status') == 'published'
-                                              for row in rows)}
+            # Compatibility certificate shape; canonical registry owns sealing.
+            'historical_has_publication': False}
 
 
 def _version(value):
@@ -272,17 +272,12 @@ def validate_revision_write(previous, submitted, *, snapshot_id):
                       and row["object_id"] in protected_ids]
     if len(new_identities) != len(set(new_identities)):
         raise ValueError("revision_identity_duplicate")
-    sealed = any((row.get("governance") or {}).get("publication_status") == "published" for row in previous)
-    if isinstance(previous, RevisionWindow):
-        sealed = sealed or any(prefix['historical_has_publication'] for prefix in previous.frontiers.values())
     write_current = dict(old_current)
     for identity, after in new.items():
         if identity in old:
             continue
         before = write_current.get(identity[0])
         if before is not None and (knowledge_revision(before) or knowledge_revision(after)):
-            if sealed:
-                raise ValueError("published_working_revision_immutable")
             if not lineage_evidence(after):
                 raise ValueError("revision_predecessor_required")
         write_current[identity[0]] = after

@@ -145,29 +145,20 @@ def mark_four_eyes_on_object(obj: dict[str, Any], *, confirmed_type: str | None 
         else:
             risk.setdefault("risk_level", "standard")
         risk["requires_second_review"] = True
+        # Schema compatibility until KO-6: content-bound risk requires the
+        # matching shape. Existing completion metadata is never synchronized.
         governance = obj.setdefault("governance", {})
-        second = governance.setdefault(
-            "second_review",
-            {
-                "required": True,
-                "status": "pending",
-                "reviewer": None,
-                "review_date": None,
-                "snapshot_hash": None,
-            },
-        )
-        second["required"] = True
-        if second.get("status") in {None, "not_required"}:
-            second["status"] = "pending"
+        second = governance.get("second_review")
+        if not isinstance(second, dict) or not second.get("required"):
+            governance["second_review"] = {
+                "required": True, "status": "pending", "reviewer": None,
+                "review_date": None, "snapshot_hash": None,
+            }
     else:
         risk.setdefault("risk_level", "standard")
         from src.review.review_policy_v1 import object_policy
         if object_policy(obj) is not None:
             risk["requires_second_review"] = False
-            obj.setdefault("governance", {})["second_review"] = {
-                "required": False, "status": "not_required", "reviewer": None,
-                "review_date": None, "snapshot_hash": None,
-            }
         else:
             risk.setdefault("requires_second_review", False)
 

@@ -153,7 +153,9 @@ def test_reservation_guards_do_not_change_existing_work(workflow_postgres, tmp_p
     if mutation == "published":
         envelope["published"] = True
     elif mutation == "reviews":
-        envelope["review_passes"] = {"existing": {"decision": "approve"}}
+        from tests.test_workflow_postgres_concurrency import _authorization
+        console.workflow_review_store.replace_snapshot_bindings(sid, [
+            _authorization(sid, "existing-a", console._envelope(sid)["named_reviewers"][0])])
     elif mutation == "objects":
         objects = [{"object_id": "existing", "object_version": "1", "content": {"raw_text": "Existing work"}}]
     if mutation in {"published", "reviews", "objects"}:

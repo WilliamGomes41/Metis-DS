@@ -500,7 +500,7 @@ def test_legacy_generic_correction_keeps_document_scoped_rereview_default(tmp_pa
         reviewer["account_id"]: {"passed": True, "at": "2026-09-24T20:00:00Z"}
     }
     envelope["clinical_rereview_required"] = False
-    console._save_envelopes()
+    console.workflow_document_store.write_bundle(envelope=envelope)
 
     console.correct_object(
         actor_id=researcher["account_id"],
@@ -518,5 +518,7 @@ def test_legacy_generic_correction_keeps_document_scoped_rereview_default(tmp_pa
         },
     )
 
-    assert console._envelope(snapshot_id)["review_passes"] == {}
-    assert console._envelope(snapshot_id)["clinical_rereview_required"] is True
+    # Stored mirrors are inert; the correction opens current review work.
+    assert console._envelope(snapshot_id)["review_passes"] == envelope["review_passes"]
+    assert console._envelope(snapshot_id)["clinical_rereview_required"] is False
+    assert console._current_object(snapshot_id, target["object_id"])["governance"]["validation_status"] == "needs_review"

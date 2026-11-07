@@ -2,7 +2,7 @@
 
 A ReviewDuty is not persisted. It is derived from the current KnowledgeObject
 state and existing review governance. Durable review authority remains the
-exact object version/hash review binding and second-review state.
+exact object version/hash review binding.
 
 This module deliberately performs no writes and creates no task store.
 """
@@ -145,24 +145,6 @@ def review_stage(
         and gate != GATE_ALLOWED
         and not (confirmed and not gate)
     ):
-        return None
-
-    if review_path == "boom" and bindings is None:
-        governance = obj.get("governance")
-        status = (
-            str(governance.get("validation_status") or "")
-            if isinstance(governance, dict)
-            else ""
-        )
-        if status not in {"approved"}:
-            return FIRST_REVIEW
-        second = governance.get("second_review") if isinstance(governance, dict) else {}
-        if (
-            isinstance(second, dict)
-            and bool(second.get("required"))
-            and str(second.get("status") or "") == "pending"
-        ):
-            return SECOND_REVIEW
         return None
 
     # Governance is a compatibility mirror, never exact-current approval authority.

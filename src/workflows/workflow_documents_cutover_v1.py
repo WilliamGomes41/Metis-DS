@@ -479,7 +479,6 @@ class PostgresWorkflowDocumentRuntimeStore(OperationalDocumentInputs, PostgresWo
                            d.class, d.state, d.publication_eligibility,
                            d.source_sha256 AS sha256,
                            workflow.current_document_envelope(d)->>'processing_blocker' AS processing_blocker,
-                           COALESCE(workflow.current_document_envelope(d)->'review_passes', '{}'::jsonb)<>'{}'::jsonb AS has_review_passes,
                            jsonb_strip_nulls(jsonb_build_object('consumed_by', workflow.current_document_envelope(d)->'processing_recovery'->'consumed_by',
                                'source_hash', workflow.current_document_envelope(d)->'processing_recovery'->'source_hash',
                                'source_version', workflow.current_document_envelope(d)->'processing_recovery'->'source_version')) AS processing_recovery,

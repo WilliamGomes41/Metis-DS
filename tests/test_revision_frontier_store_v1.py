@@ -190,7 +190,7 @@ def test_preparation_refuses_physical_payload_identity_disagreement(complete_pos
         frontiers.prepare(store, sid)
 
 
-def test_hidden_history_retains_protection_and_publication_inputs(complete_postgres):
+def test_hidden_history_retains_knowledge_protection_but_ignores_publication_mirror(complete_postgres):
     from src.review.revision_workflow import validate_revision_write
     store, _, sid, _ = seed(complete_postgres)
     rows = store.list_document_objects(sid)
@@ -205,16 +205,13 @@ def test_hidden_history_retains_protection_and_publication_inputs(complete_postg
     frontiers.prepare(store, sid)
     before = store.review_command_window(sid, ['delta-a'])
     assert before.frontiers['delta-a']['historical_has_knowledge']
-    assert before.frontiers['delta-a']['historical_has_publication']
+    assert not before.frontiers['delta-a']['historical_has_publication']
     changed = deepcopy(before)
     changed[0]['content'] = {'clean_text': 'Forbidden in-place meaning change'}
     with pytest.raises(ValueError, match='revision_content_changed_in_place'):
         validate_revision_write(before, changed, snapshot_id=sid)
-    proposed = deepcopy(before)
-    proposed.append({**deepcopy(before[0]), 'object_version': '1.2',
-        'metadata': {'semantic_passage': {'selection_origin': 'proposal_selected'}}})
-    with pytest.raises(ValueError, match='published_working_revision_immutable'):
-        validate_revision_write(before, proposed, snapshot_id=sid)
+    # A fake published mirror cannot seal work. Canonical publication history
+    # is checked by the native store, independently of the revision validator.
 
 
 def test_current_publication_mirror_is_not_sticky_hidden_history(complete_postgres):

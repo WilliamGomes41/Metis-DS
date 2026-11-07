@@ -88,7 +88,7 @@ def reserve_selection(console, *, actor_id, snapshot_id, command_id, expected_re
         if console._can_resume_formation(snapshot_id):
             kind = "resume"
         else:
-            if (objects or console._bindings.get(snapshot_id) or envelope.get("review_passes")
+            if (objects or console._bindings.get(snapshot_id)
                     or envelope.get("publication_eligibility") != PRE_REVIEW_BLOCKED):
                 raise ConsoleError("pre_review_retry_existing_work")
             # A received-but-unformed document may legitimately produce only

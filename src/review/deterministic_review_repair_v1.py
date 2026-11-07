@@ -20,6 +20,7 @@ from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from src.review.closed_review_loop_v1 import ClosedLoopReviewConsole
+from src.review.knowledge_object_state_v1 import FINAL_VALIDATION_STATUSES
 from src.integrity_kernel import schema_errors, stable_hash, stamp_canonical_hashes
 from src.review.review_command_state_v1 import review_bindings_view
 from src.operations_console_v1 import ConsoleError, OperationsConsole, SNAPSHOT_OBJECT_WRITE_CONFLICT
@@ -530,7 +531,6 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             updated = deepcopy(row)
             governance = updated.setdefault("governance", {})
             governance["validation_status"] = "superseded"
-            governance["publication_status"] = "unpublished"
             governance["superseded_by"] = superseded_by
             stamp_canonical_hashes(updated)
             from src.review.ko_transitions_v1 import apply_ko_event
@@ -581,9 +581,7 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             if target is None or target.get("object_type") in {"document", "heading"}:
                 raise ConsoleError("merge_target_not_repairable")
             governance = target.get("governance") or {}
-            if governance.get("validation_status") in {"approved", "rejected", "superseded"}:
-                raise ConsoleError("merge_target_not_repairable")
-            if governance.get("publication_status") == "published":
+            if governance.get("validation_status") in FINAL_VALIDATION_STATUSES:
                 raise ConsoleError("merge_target_not_repairable")
             if binding_relations(target):
                 raise ConsoleError("merge_target_has_confirmed_relations")
@@ -1009,9 +1007,9 @@ def _render_repair(console, request: Request, submission: dict[str, Any], *, rep
             if tuple((row.get("structure") or {}).get("section_path") or []) != section:
                 continue
             governance = row.get("governance") or {}
-            if governance.get("validation_status") in {"approved", "rejected", "superseded"}:
+            if governance.get("validation_status") in FINAL_VALIDATION_STATUSES:
                 continue
-            if governance.get("publication_status") == "published" or binding_relations(row):
+            if binding_relations(row):
                 continue
             text = str((row.get("content") or {}).get("clean_text") or row_id)
             options.append(

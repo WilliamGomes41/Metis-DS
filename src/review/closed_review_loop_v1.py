@@ -423,17 +423,6 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             governance["validated_by"] = None
             governance["validation_date"] = None
             governance["review_snapshot_hash"] = None
-            governance["publication_status"] = "unpublished"
-            second = governance.get("second_review")
-            if isinstance(second, dict) and second.get("required"):
-                second.update(
-                    {
-                        "status": "pending",
-                        "reviewer": None,
-                        "review_date": None,
-                        "snapshot_hash": None,
-                    }
-                )
         bindings = deepcopy(review_bindings_view(self))
         for oid in object_ids:
             bindings[snapshot_id] = invalidate_for_object(

@@ -57,7 +57,6 @@ INVALID_CODES = (
     "approved_provenance_unresolved",
     "approved_with_passage_not_assessed",
     "legacy_revise_persisted",
-    "second_review_mirror_disagrees",
     "approval_outside_suitability",
     "register_disagrees_with_review",
     "disposition_invalid",
@@ -211,8 +210,6 @@ def derive_ko_state(
     if has_recorded_approval(obj):
         if passage_register_of(obj).get("status") == "not_yet_assessed":
             invalid.append("approved_with_passage_not_assessed")
-        second = governance.get("second_review")
-        mirror_done = isinstance(second, dict) and second.get("status") == "approved"
         # Each check reads the bindings and the mirror on its own, not via the stage alone:
         # review_stage is None when lineage no longer resolves, yet an approval still needs
         # an exact current binding.
@@ -221,9 +218,6 @@ def derive_ko_state(
             invalid.append("approved_without_current_binding")
         elif stage == FIRST_REVIEW:
             invalid.append("approved_mirror_with_open_first_review")
-        # A completed second review needs two exact current approvers, open stage or not.
-        if mirror_done and (stage in (FIRST_REVIEW, SECOND_REVIEW) or len(approvers) < 2):
-            invalid.append("second_review_mirror_disagrees")
         if not provenance_resolves(obj, fragments):
             invalid.append("approved_provenance_unresolved")
         if stage == FIRST_REVIEW:

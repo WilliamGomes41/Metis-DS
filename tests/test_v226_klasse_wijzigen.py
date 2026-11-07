@@ -275,7 +275,8 @@ def test_same_model_uses_full_rereview_not_selective(tmp_path: Path, *, producti
         new_class="artikel",
     )
     assert changed["class"] == "artikel"
-    assert changed["clinical_rereview_required"] is True
+    assert all((obj.get("governance") or {}).get("validation_status") == "needs_review"
+               for obj in console.snapshot_objects(changed["snapshot_id"]))
     after = console.snapshot_objects(receipt["snapshot_id"])
     assert [row["object_id"] for row in after] == prior_ids
     assert all(obj["governance"]["validation_status"] == "needs_review" for obj in after)

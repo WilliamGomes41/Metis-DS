@@ -57,7 +57,6 @@ class _PostgresBadgeCountsMixin:
                                d.uploader_account_id,
                                d.state,
                                d.publication_eligibility,
-                               d.clinical_rereview_required,
                                workflow.current_document_envelope(d)->'review_policy' IS NOT NULL AS has_explicit_policy,
                                EXISTS (
                                    SELECT 1
@@ -70,7 +69,13 @@ class _PostgresBadgeCountsMixin:
                                    FROM current_objects o
                                    WHERE o.snapshot_id=d.snapshot_id
                                      AND o.payload->'governance'->>'validation_status'='needs_review'
-                               ) AS has_needs_review
+                               ) AS has_needs_review,
+                               EXISTS (
+                                   SELECT 1 FROM current_objects o
+                                   WHERE o.snapshot_id=d.snapshot_id
+                                     AND COALESCE(o.payload->>'object_type','')<>'document'
+                                     AND o.payload->'governance'->>'validation_status' IN ('needs_review','revise')
+                               ) AS has_clinical_review
                         FROM workflow.documents d
                     )
                     SELECT COUNT(*) FILTER (
@@ -84,7 +89,7 @@ class _PostgresBadgeCountsMixin:
                                WHERE r.snapshot_id IS NOT NULL AND s.has_explicit_policy
                            ) AS explicit_review_documents,
                            COUNT(*) FILTER (
-                               WHERE s.clinical_rereview_required
+                               WHERE s.has_clinical_review
                            ) AS tree,
                            COALESCE(
                                ARRAY_AGG(s.snapshot_id) FILTER (
@@ -168,8 +173,10 @@ class _PostgresBadgeCountsMixin:
         self,
         snapshot_ids: list[str],
     ) -> dict[str, dict[str, Any]]:
-        if not snapshot_ids or self.canonical_publication_store is None:
+        if not snapshot_ids:
             return {}
+        if self.canonical_publication_store is None:
+            raise ConsoleError("durable_publication_store_required")
         store = self.canonical_publication_store
         try:
             with store._connect() as con:
@@ -292,25 +299,10 @@ class _PostgresBadgeCountsMixin:
 
         out: dict[str, dict[str, str]] = {}
         for snapshot_id, row in workflow.items():
-            if self.canonical_publication_store is None:
-                state = str(row.get("state") or "")
-                if state == "withdrawn":
-                    release_status, serving_status = "withdrawn", "inactive"
-                elif state == "superseded":
-                    release_status, serving_status = "superseded", "inactive"
-                elif state == "published":
-                    release_status, serving_status = "published", "active"
-                else:
-                    release_status, serving_status = "none", "inactive"
-            else:
-                try:
-                    release_status, serving_status = self._release_dimensions(
-                        releases.get(snapshot_id)
-                    )
-                except CanonicalPublicationStoreError as exc:
-                    raise ConsoleError(
-                        "durable_lifecycle_status_read_failed", str(exc)
-                    ) from exc
+            try:
+                release_status, serving_status = self._release_dimensions(releases.get(snapshot_id))
+            except CanonicalPublicationStoreError as exc:
+                raise ConsoleError("durable_lifecycle_status_read_failed", str(exc)) from exc
 
             readiness: dict[str, Any] = {}
             if release_status == "none" and bool(row.get("has_open_review")):
@@ -583,12 +575,7 @@ class _PostgresBadgeCountsMixin:
             releases = self._canonical_list_release_rows(list(summaries))
             lifecycle: dict[str, dict[str, str]] = {}
             for sid, summary in summaries.items():
-                if self.canonical_publication_store is None:
-                    state = str(summary["envelope"].get("state") or "")
-                    release_status = state if state in {"published", "withdrawn", "superseded"} else "none"
-                    serving_status = "active" if release_status == "published" else "inactive"
-                else:
-                    release_status, serving_status = self._release_dimensions(releases.get(sid))
+                release_status, serving_status = self._release_dimensions(releases.get(sid))
                 lifecycle[sid] = derive_lifecycle_status(
                     readiness={}, release_status=release_status, serving_status=serving_status,
                 )
