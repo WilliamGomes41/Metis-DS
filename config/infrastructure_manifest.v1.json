@@ -111,21 +111,21 @@
       "environment": "local_development",
       "requirement_status": "required",
       "implementation_status": "implemented",
-      "current_implementation": "SQLite reference runtime",
-      "target_implementation": "SQLite only for local reproducibility",
+      "current_implementation": "PostgreSQL canonical publication runtime for local development; SQLite pilot retired by KO-5 (#1012)",
+      "target_implementation": "PostgreSQL for local reproducibility and native workflow/publication tests",
       "provider": "local",
       "data_classification": "canonical_knowledge_publication_state_and_audit",
       "region": "local",
-      "persistence": "local_durable_file_but_not_shared_production_store",
-      "identity_secret_boundary": "local filesystem permissions",
+      "persistence": "local_durable_transactional_postgresql_for_development",
+      "identity_secret_boundary": "local PostgreSQL role and connection environment; no committed secrets",
       "cost_model": "no_separate_managed_service_cost",
       "expected_cost_range": "0 incremental managed-service cost",
       "budget_owner": "not_applicable",
       "operational_owner": "developer",
       "decision_deadline_gate": "G8",
       "evidence": [
-        "src/publication/canonical_store.py",
-        "db/schema_v2.sql"
+        "src/publication/canonical_publication_postgres_v1.py",
+        "docs/change-contracts/d6b-postgres-only-runtime.md"
       ]
     },
     {
@@ -281,8 +281,8 @@
       "environment": "azure_dev",
       "requirement_status": "required",
       "implementation_status": "decision_open",
-      "current_implementation": "SQLite executable pilot; PostgreSQL reference schema only",
-      "target_implementation": "Managed PostgreSQL-compatible production store or approved equivalent preserving protocol semantics",
+      "current_implementation": "PostgreSQL canonical publication implementation; this manifest does not assert Azure provisioning",
+      "target_implementation": "Managed PostgreSQL using the existing canonical publication implementation and registry",
       "provider": "TBD",
       "data_classification": "canonical_knowledge_publication_registry_and_audit",
       "region": "TBD",
@@ -294,8 +294,8 @@
       "operational_owner": "TBD",
       "decision_deadline_gate": "G0-Azure-DEV before real shared state",
       "evidence": [
-        "src/publication/canonical_store.py",
-        "db/schema_v2.sql",
+        "src/publication/canonical_publication_postgres_v1.py",
+        "docs/change-contracts/d6b-postgres-only-runtime.md",
         "docs/history/FULL_TECHNICAL_AUDIT_2026-08-19.md"
       ]
     },

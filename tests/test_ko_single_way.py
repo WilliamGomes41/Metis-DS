@@ -263,3 +263,66 @@ def test_retired_document_badge_cannot_duplicate_review_work_or_context_headings
     for person in accounts.values():
         assert console.waiting_task_counts(person['account_id'])['tree'] == 0
     assert console.waiting_task_counts(accounts['reviewer']['account_id'])['review'] == 0
+
+
+def _offline_integrity_fixture(tmp_path):
+    import json
+    from src.integrity_kernel import stamp_canonical_hashes, exact_review_snapshot_hash, sha256_file, schema_errors
+    binary = tmp_path / 'synthetic.html'
+    binary.write_text('<html><body>Offline integrity fixture.</body></html>')
+    rows = [json.loads(line) for line in (ROOT / 'data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl').read_text().splitlines() if line.strip()]
+    obj = deepcopy(next(row for row in rows if row['object_type'] == 'document'))
+    obj['source'].update(source_type='html', source_checksum=sha256_file(binary), integrity_status='verified')
+    obj.update(parent_object_id=None, relations=[], uncertainty={'has_uncertainty': False, 'items': []})
+    obj['provenance']['source_fragments'] = []
+    obj['governance'].update(validation_status='approved', validated_by='Synthetic reviewer', validation_date='2026-11-07')
+    stamp_canonical_hashes(obj)
+    obj['governance']['review_snapshot_hash'] = exact_review_snapshot_hash(obj)
+    schema = ROOT / 'schemas/knowledge_object.schema.v1.1.json'
+    assert not schema_errors(obj, schema)
+    source = tmp_path / 'objects.jsonl'
+    source.write_text(json.dumps(obj) + '\n')
+    raw = tmp_path / 'raw.jsonl'
+    raw.write_text('')
+    registry = tmp_path / 'registry.json'
+    registry.write_text(json.dumps({'sources': [{'source_id': obj['source']['source_id'],
+        'source_checksum': sha256_file(binary), 'binary_path': str(binary), 'integrity_status': 'verified'}]}))
+    return obj, source, schema, raw, registry
+
+
+@pytest.mark.parametrize('entry', ['command', 'wrapper', 'package'])
+def test_offline_publication_verdict_is_retired_without_output_files(tmp_path, entry):
+    import subprocess
+    import sys
+    _obj, source, schema, raw, registry = _offline_integrity_fixture(tmp_path)
+    report = tmp_path / 'publication-verdict.json'
+    invocation = {'command': ['src.cli', 'prepublish'], 'wrapper': ['src.prepublication_gate_v3'],
+                  'package': ['src.publication.prepublication_gate_v3']}[entry]
+    result = subprocess.run([sys.executable, '-m', *invocation, '--input', str(source),
+        '--schema', str(schema), '--source-registry', str(registry), '--raw-extract', str(raw),
+        '--report', str(report)], cwd=ROOT, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert ('invalid choice' if entry == 'command' else 'No module named') in result.stderr
+    assert not report.exists()
+    assert not (ROOT / 'src/publication/eligibility_policy.py').exists()
+
+
+@pytest.mark.parametrize('tampered', [False, True])
+def test_offline_audit_keeps_integrity_checks_without_publication_verdict(tmp_path, tampered):
+    import json
+    import subprocess
+    import sys
+    obj, source, schema, raw, _registry = _offline_integrity_fixture(tmp_path)
+    if tampered:
+        obj['content']['clean_text'] += ' Unstamped alteration.'
+        source.write_text(json.dumps(obj) + '\n')
+    report = tmp_path / 'integrity-audit.json'
+    result = subprocess.run([sys.executable, '-m', 'src.cli', 'audit-current', '--input', str(source),
+        '--schema', str(schema), '--raw-extract', str(raw), '--report', str(report)],
+        cwd=ROOT, capture_output=True, text=True)
+    audit = json.loads(report.read_text())
+    assert result.returncode == (2 if tampered else 0)
+    assert audit['integrity_ok'] is not tampered
+    assert audit['status'] == ('BLOCKED' if tampered else 'PASS')
+    assert bool(audit['object_errors']) == tampered
+    assert 'publication_gate' not in audit and 'publication_blocker_count' not in audit

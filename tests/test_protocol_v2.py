@@ -10,7 +10,6 @@ from jsonschema import Draft202012Validator
 
 from src.vorming.extract_html_v1 import extract as extract_html
 from src.integrity_kernel import exact_review_snapshot_hash
-from src.publication.prepublication_gate_v3 import evaluate as prepublish
 from src.review.review_workflow_v3 import _apply_review_state as apply_reviews
 from src.vorming.semantic_transform_generic_v1 import transform as generic_transform
 
@@ -120,19 +119,6 @@ def test_source_manifest_blocks_publication_until_hash_verified():
     assert manifest['canonical_source']['integrity_status']=='binary_unavailable'
     assert manifest['canonical_source']['source_checksum'] is None
     assert manifest['canonical_source']['publication_eligibility']=='blocked_until_binary_hash_verified'
-
-
-def test_prepublication_gate_fails_closed(tmp_path: Path):
-    registry=tmp_path/'source_registry.json'
-    registry.write_text(json.dumps({'sources':[]}), encoding='utf-8')
-    report=prepublish(
-        current_rows(),
-        schema=CURRENT_SCHEMA,
-        source_registry=registry,
-        raw_extract=CURRENT_RAW,
-    )
-    assert report['status']=='BLOCKED'
-    assert report['errors']
 
 
 def test_review_snapshot_mismatch_detects_alcohol_fix(tmp_path: Path):
