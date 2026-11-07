@@ -93,3 +93,16 @@ Before implementation: existing native HTTP/restart test passed (2 tests) on
 Python 3.13.5/PostgreSQL 17.11. This environment has PG17, not the PG16 launcher
 default; `scripts/test_postgres.sh` verified the supplied local test server.
 The new regression must fail before production edits and be committed separately.
+
+The first large-fixture probe reduced correction POSTs to 0.70–0.89s but showed
+239–266ms outer locks. To remove repeat decoding/hashing inside that lock, reuse
+the document owner's existing mutation epochs: compare the full public m2 token
+once in repeatable-read capture, retain the whole ordered identity/epoch set in
+the request, and compare it again under the commit owner. Any changed/missing
+epoch falls back to the exact original full-token check; unsupported schemas
+retain full reads. Epochs cover all object DML (including native0 and retained
+rows), not just the selected heads. They are a request-local proof that the
+already-checked object set is unchanged, never a new public token or authority.
+Adversarial tests must change an unrelated object and a retained version between
+capture and commit, and compare the prepared result with the original serial
+kernel on the same rolled-back baseline.

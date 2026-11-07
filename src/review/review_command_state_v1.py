@@ -51,6 +51,7 @@ class ReviewCommandInputs:
     events: list | None = None
     ledger_head: str | None = None
     unpublished: bool | None = None
+    object_set_epochs: tuple[tuple[str, int], ...] | None = None
 
     def __post_init__(self) -> None:
         # Frozen fields alone do not detach the mutable records from the caller.

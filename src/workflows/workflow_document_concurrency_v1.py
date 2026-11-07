@@ -131,6 +131,21 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
     def objects_revision(self, snapshot_id: str) -> str:
         return self._revision_token(self.list_document_objects(snapshot_id))
 
+    def review_command_object_epochs(self, snapshot_id: str):
+        """Whole-set DML witness for an exact revision checked in the same capture.
+
+        Includes retained/deleted identities. Unlike document generation, the
+        existing frontier triggers also invalidate direct/native0 object writes.
+        Unsupported storage must compare the complete public revision again.
+        """
+        from src.workflows.revision_frontiers_postgres_v1 import supported
+        with self._connect() as con:
+            if not supported(self, con):
+                return None
+            rows = con.execute('SELECT object_id,mutation_epoch FROM workflow.object_revision_frontiers '
+                               'WHERE snapshot_id=%s ORDER BY object_id', (snapshot_id,)).fetchall()
+        return tuple((row['object_id'], row['mutation_epoch']) for row in rows)
+
     def review_command_histories(self, snapshot_id: str, object_ids: list[str]) -> list[dict[str, Any]]:
         """Raw append-order history for the command's explicit identity closure."""
         if not object_ids:

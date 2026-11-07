@@ -167,6 +167,18 @@ class ReviewClosureConsole(PublicationReadinessMixin, DeterministicRepairReviewC
         )
 
     def submit_review_resolution(self, **kwargs: Any) -> dict[str, Any]:
+        from src.review.review_command_state_v1 import active_review_command
+        from src.workflows.store_command_v1 import owned_store_command
+        if (kwargs.get('repair_kind') == REPAIR_SOURCE_UNITS
+                and kwargs.get('expected_revision')
+                and getattr(self, '_metis_workflow_review_authority', False)
+                and active_review_command(self) is None
+                and owned_store_command(self) is None):
+            from src.review.review_command_v1 import execute_source_resolution
+            return execute_source_resolution(self, kwargs, self._submit_review_resolution)
+        return self._submit_review_resolution(**kwargs)
+
+    def _submit_review_resolution(self, **kwargs: Any) -> dict[str, Any]:
         snapshot_id = str(kwargs.get("snapshot_id") or "")
         self._require_mutable_working_revision(snapshot_id)
         repair_kind = str(kwargs.get("repair_kind") or "")

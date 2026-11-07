@@ -113,6 +113,10 @@ class _PostgresWorkflowReviewMixin:
         self._bindings_baseline = deepcopy(current)
 
     def _reload_store_locked(self) -> None:
+        from src.review.review_command_state_v1 import active_review_command
+        prepared = active_review_command(self)
+        if prepared is not None and prepared.preparing:
+            return
         command = owned_store_command(self)
         if command is not None and command.fresh:
             # #678 U1: the owner reloaded under the store lock; the command keeps
@@ -272,6 +276,12 @@ class _PostgresWorkflowReviewMixin:
     @contextmanager
     def _reprocessing_transaction(self, snapshot_id: str) -> Iterator[None]:
         """Own or join the command with the document row lock, without an event buffer."""
+        from src.review.review_command_state_v1 import active_review_command
+        command = active_review_command(self, snapshot_id)
+        if command is not None and command.preparing:
+            with command.savepoint():
+                yield
+            return
         self._require_review_store_configured()
         if not self._store_command_applies():
             # A raw transaction has no command owner to recover reprocessing safely.

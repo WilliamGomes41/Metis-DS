@@ -765,6 +765,12 @@ class OperationsConsole:
         the durable commit, not for heavy parse/transform. Re-entrant for
         ``_save_envelopes`` / ``_save_bindings`` called from ``_commit_prepared_store``.
         """
+        command = active_review_command(self)
+        if command is not None and command.preparing:
+            # Request-local staging has no durable writes. Its executor owns
+            # the actual outer lock after preparation and current-input guards.
+            yield
+            return
         lock_path = self.runtime / "store.lock"
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         waited = diagnostic_clock()
