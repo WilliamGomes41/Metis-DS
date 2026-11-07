@@ -39,6 +39,9 @@ Restart/recovery result: fresh production composition reads the same committed
 successor and evidence or unchanged state; discarded preparation is not durable.
 Legacy-data result: unprepared histories and nested commands retain the existing
 serial path. Exact m2 object-set semantics are not replaced by a generation token.
+Historical source records without a pinned prepared extraction also retain the
+serial path. In particular, historical Docling evidence uses the original full
+envelope reader; the compact command header cannot invent its extraction pin.
 Required black-box scenario: real HTTP repair, independent restarted readback,
 stale replay, competing current-input change before commit and final-participant
 failure; neither partial evidence nor publication escalation may survive.

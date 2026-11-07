@@ -452,6 +452,10 @@ def _execute_prepared_command(console, command, invoke, *, compact=False, admiss
     with detached_document_reads():
         console._require_role(command['actor_id'], 'reviewer')
         envelope = _command_envelope(store, sid)
+        if source_resolution and not envelope.get('prepared_source_extraction'):
+            # Historical source recovery needs the original complete envelope;
+            # a compact header is not an authoritative extraction checkpoint.
+            return serial()
         if command['actor_id'] not in envelope.get('named_reviewers', []):
             raise ConsoleError('reviewer_not_named_on_snapshot')
         console._require_mutable_working_revision(sid, current=True)
