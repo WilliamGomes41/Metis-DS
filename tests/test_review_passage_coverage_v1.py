@@ -39,7 +39,10 @@ def test_343_to_5_keeps_all_338_missing_admission_passages_reachable():
     assert 'task=contextual' in card
     assert '338' not in card  # Source handling is owned by Vorming, not personal review.
     assert 'task=disposition' not in card
-    assert 'task=inventory' not in card
+    primary = re.search(r'<a[^>]*data-personal-review-action[^>]*href="([^"]+)"', card)
+    assert primary and 'task=contextual' in primary.group(1)
+    inventory = re.search(r'<a[^>]*data-review-inventory[^>]*href="([^"]+)"', card)
+    assert inventory and inventory.group(1) == '/review?document=snap-test&amp;task=inventory'
 
     contextual = _render_review_index("snap-test", objects, "tekst", task="contextual", bindings=[], fragments=_allowed_source())
     assert "allowed-0" in contextual
