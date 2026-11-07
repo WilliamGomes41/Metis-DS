@@ -48,7 +48,7 @@ class Model:
 
 
 # References describe this inspected revision, never an inferred deployment.
-REFERENCE_REVISION = "b1d4d982a633becbeee272e640a8543dbf47901a"
+REFERENCE_REVISION = "c914bd8f1b9227082e31913d1b3deca436e61fa5"
 
 MODELS = (
     Model(

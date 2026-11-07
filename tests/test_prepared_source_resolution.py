@@ -108,8 +108,8 @@ def test_current_dependency_change_preserves_concurrent_winner(tmp_path, monkeyp
     with pytest.raises(ConsoleError):
         console.submit_review_resolution(**command)
     assert fired and winner
-    # Deliberately corrupted retained history must not become readable at
-    # restart; compare the raw authoritative records through the existing store.
+    # For deliberate retained-row tampering, compare raw durable records rather
+    # than requiring the ordinary restart reader to accept the changed history.
     assert durable(console if change == 'retained_version' else fresh(), sid) == winner[0]
     assert console.workflow_review_store._buffer.get() is None
 

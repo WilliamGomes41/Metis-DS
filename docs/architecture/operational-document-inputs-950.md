@@ -21,7 +21,7 @@ flowchart TD
     H --> OWNER
     H --> ORIGINAL[Behouden oorspronkelijke envelope en volledige historie]
     UI --> CMD[Bestaande review- en publicatiecommando's]
-    CMD --> PREP[Review en bronselectiecorrectie voorbereiden zonder schrijflock]
+    CMD -->|review met voorbereide invoer en bronselectiecorrectie| PREP[Voorbereiden zonder schrijflock]
     PREP --> GUARD[Actuele rechten, bron en revisie controleren onder opslaglock]
     GUARD --> COMMIT[Correctie, bindings, feiten en audit in één workflowtransactie]
     CMD --> ROW
