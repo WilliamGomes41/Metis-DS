@@ -126,3 +126,17 @@ single/multi-row INSERT/UPDATE/DELETE and zero rows, concurrent checkpoint/write
 deferred COMMIT rollback, initial/final task failures, retained-task retry,
 schema-before/binary-before upgrade and rollback, restricted old writer,
 both production compositions and optional-card absence.
+
+## Executed result
+
+The five matched pairs at the runtime implementation commit
+`5df87a987764bbcd60e44b34402ffe52b558118a` reduce median resume from
+24.374409s to 9.555206s; the worst head run is 9.783557s. Instrumented object
+insertion drops from 16.140029s to 0.304127s. The original acceptance budgets
+above remain unchanged. All runs still exceed five seconds; this slice does
+not close the broader audit or establish a production SLO.
+
+The [evidence record](../../evidence/729-w4/README.md) contains every sample,
+post-timer restart proof, server/driver profile and final verification outcome.
+The separate [adversarial self-review](../audit/w4-formation-database-review-2026-11-07.md)
+records boundary coverage, the injected-check-removal counterexample and limits.

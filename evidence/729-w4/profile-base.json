@@ -1,0 +1,2763 @@
+{
+  "scope": "Successful resume only; separate instrumented observation, not latency acceptance",
+  "seconds": 26.039771996998752,
+  "client_queries": [
+    {
+      "query": "INSERT INTO workflow.document_objects (snapshot_id,object_id,object_version,payload,position) VALUES(%s,%s,%s,%s::jsonb,%s) RETURNING snapshot_id,object_id,object_version,position,payload",
+      "calls": 261,
+      "seconds": 16.02680726203471
+    },
+    {
+      "query": "UPDATE workflow.processing_attempts SET payload=%s::jsonb,record_version=record_version+1 WHERE attempt_id=%s",
+      "calls": 400,
+      "seconds": 1.7820834549711435
+    },
+    {
+      "query": "INSERT INTO workflow.processing_archives (archive_id,layout,snapshot_id,kind,record_key,binding,revision_hash,payload_hash,payload_text,observed_revision) VALUES(%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+      "calls": 131,
+      "seconds": 0.3369081519958854
+    },
+    {
+      "query": "SELECT snapshot_id,source_sha256 AS sha256,source_version AS version,document_id,state,working_revision_id,object_generation,processing_storage_version FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
+      "calls": 399,
+      "seconds": 0.2570458739355672
+    },
+    {
+      "query": "SELECT rel.release_id, rel.release_version, rel.release_owner, rel.status, rel.published_at FROM audit_events ev JOIN publication_releases rel ON rel.release_id=ev.entity_id WHERE ev.entity_type='release' AND ev.event_type='release_published' AND ev.details->>'snapshot_id'=%s AND rel.status IN ('published','withdrawn') ORDER BY rel.published_at DESC NULLS LAST LIMIT 1",
+      "calls": 401,
+      "seconds": 0.24631902095643454
+    },
+    {
+      "query": "SELECT archive_id,layout,snapshot_id,kind,record_key,binding,revision_hash,payload_hash,payload_text,observed_revision FROM workflow.processing_archives WHERE archive_id=%s",
+      "calls": 262,
+      "seconds": 0.20912215296266368
+    },
+    {
+      "query": "INSERT INTO workflow.processing_checkpoints(attempt_id,phase,payload) VALUES(%s,%s,%s::jsonb)",
+      "calls": 266,
+      "seconds": 0.15158423301545554
+    },
+    {
+      "query": "INSERT INTO workflow.formation_task_results(context_id,ranges_hash,source_ranges,result_hash,payload,attempt_id,claim_token) VALUES(%s,%s,%s::jsonb,%s,%s::jsonb,%s,%s) ON CONFLICT DO NOTHING RETURNING ranges_hash",
+      "calls": 129,
+      "seconds": 0.14523423198261298
+    },
+    {
+      "query": "SELECT payload,object_generation FROM workflow.processing_attempts WHERE snapshot_id=%s AND attempt_id=%s FOR UPDATE",
+      "calls": 400,
+      "seconds": 0.14402728903951356
+    },
+    {
+      "query": "UPDATE workflow.processing_document_summaries SET payload=jsonb_set(payload,'{processing_attempts,0}',%s::jsonb) WHERE snapshot_id=%s",
+      "calls": 400,
+      "seconds": 0.1153755479681422
+    },
+    {
+      "query": "SELECT set_config('metis.document_storage_writer','v1',true)",
+      "calls": 400,
+      "seconds": 0.10631438999553211
+    },
+    {
+      "query": "UPDATE workflow.documents SET source_id=%s,document_id=%s,title=%s,family=%s,topic_id=%s,class=%s,state=%s,publication_eligibility=%s,content_kind=%s,ingest_kind=%s,source_version=%s,source_date=%s,source_sha256=%s,source_locator=%s,immutable_storage_locator=%s,live_url=%s,uploader_account_id=%s,replaces_snapshot_id=%s,object_diff=%s::jsonb,clinical_rereview_required=%s,acquired_at=%s,console_version=%s,envelope_payload=%s::jsonb,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE snapshot_id=%s",
+      "calls": 1,
+      "seconds": 0.10090860100171994
+    },
+    {
+      "query": "SELECT account_id,roles,retirement FROM workflow.accounts WHERE account_id=%s FOR SHARE",
+      "calls": 401,
+      "seconds": 0.09374376599589596
+    },
+    {
+      "query": "UPDATE workflow.processing_document_summaries SET payload=jsonb_set(payload,'{formation_progress}',%s::jsonb) WHERE snapshot_id=%s",
+      "calls": 400,
+      "seconds": 0.09274924899727921
+    },
+    {
+      "query": "UPDATE workflow.formation_contexts SET completed_task_count=completed_task_count+%s, final_result_hash=NULL,final_validation=NULL WHERE context_id=%s",
+      "calls": 129,
+      "seconds": 0.09023750001142616
+    },
+    {
+      "query": "SELECT planned_task_count,completed_task_count FROM workflow.formation_contexts WHERE context_id=%s",
+      "calls": 401,
+      "seconds": 0.0699611640193325
+    },
+    {
+      "query": "UPDATE workflow.object_revision_frontiers SET certificate=%s::jsonb,certificate_hash=encode(sha256(convert_to((%s::jsonb)::text,'UTF8')),'hex') WHERE snapshot_id=%s AND object_id=%s AND mutation_epoch=%s",
+      "calls": 261,
+      "seconds": 0.06855021102091996
+    },
+    {
+      "query": "SELECT account_id FROM workflow.document_reviewers WHERE snapshot_id=%s",
+      "calls": 401,
+      "seconds": 0.0677364300172485
+    },
+    {
+      "query": "UPDATE workflow.documents SET review_source_ref=%s::jsonb WHERE snapshot_id=%s",
+      "calls": 1,
+      "seconds": 0.057171706001099665
+    },
+    {
+      "query": "SELECT to_regclass('workflow.formation_evidence_roots') AS name",
+      "calls": 136,
+      "seconds": 0.0547994699809351
+    },
+    {
+      "query": "SELECT to_regclass('publication_releases') AS releases, to_regclass('audit_events') AS events",
+      "calls": 401,
+      "seconds": 0.04786428896841244
+    },
+    {
+      "query": "SELECT d.snapshot_id,d.topic_id,workflow.current_document_envelope(d) AS envelope_payload,t.display_name FROM workflow.documents d LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id WHERE d.snapshot_id=%s",
+      "calls": 14,
+      "seconds": 0.031160573995293817
+    },
+    {
+      "query": "SELECT r.extraction_hash,r.header,r.header_hash,r.sealed , COALESCE((SELECT jsonb_agg(to_jsonb(b) ORDER BY b.view_name,b.ordinal) FROM workflow.source_read_blocks b WHERE b.views_id=r.views_id),'[]'::jsonb) AS read_blocks, COALESCE((SELECT jsonb_agg(to_jsonb(m)) FROM workflow.source_read_block_fragments m WHERE m.views_id=r.views_id),'[]'::jsonb) AS read_members, COALESCE((SELECT jsonb_agg(to_jsonb(f) ORDER BY f.ordinal) FROM workflow.source_read_fragments f WHERE f.views_id=r.views_id),'[]'::jsonb) AS read_fragments FROM workflow.source_read_roots r WHERE r.views_id=%s",
+      "calls": 2,
+      "seconds": 0.030479233999358257
+    },
+    {
+      "query": "SET LOCAL lock_timeout='5s'",
+      "calls": 400,
+      "seconds": 0.027787409992015455
+    },
+    {
+      "query": "SELECT ranges_hash,result_hash,payload FROM workflow.formation_task_results WHERE context_id=%s ORDER BY ranges_hash",
+      "calls": 2,
+      "seconds": 0.02770198800135404
+    },
+    {
+      "query": "SELECT checkpoint_id,phase,payload FROM workflow.processing_checkpoints WHERE attempt_id=%s AND phase IN ('formation_accounted','task_rejected','joint_validation_rejected','budget_exhausted','formation_call_basis','formation_call') ORDER BY checkpoint_id",
+      "calls": 2,
+      "seconds": 0.02691158600282506
+    },
+    {
+      "query": "SELECT archive_id,layout,snapshot_id,kind,record_key,binding,revision_hash,payload_hash FROM workflow.processing_archives WHERE snapshot_id=%s AND kind=%s AND record_key=%s",
+      "calls": 131,
+      "seconds": 0.02574693700807984
+    },
+    {
+      "query": "INSERT INTO workflow.review_object_facts(snapshot_id,object_id,history_count,dirty,current_version,object_order,record,record_hash) SELECT %s,v->>'object_id',(v->>'n')::integer,false,v#>>'{record,fields,object_version}',(v->>'first')::integer,v->'record',encode(sha256(convert_to((v->'record')::text,'UTF8')),'hex') FROM jsonb_array_elements(%s::jsonb) v ON CONFLICT(snapshot_id,object_id) DO UPDATE SET history_count=EXCLUDED.history_count,dirty=false,current_version=EXCLUDED.current_version,object_order=EXCLUDED.object_order,record=EXCLUDED.record,record_hash=EXCLUDED.record_hash",
+      "calls": 1,
+      "seconds": 0.023735753002256388
+    },
+    {
+      "query": "SELECT extraction_hash,payload_hash,payload FROM workflow.formation_source_views WHERE views_id=%s",
+      "calls": 1,
+      "seconds": 0.00736439899992547
+    },
+    {
+      "query": "SELECT payload,record_version FROM workflow.processing_attempts WHERE snapshot_id=%s ORDER BY started_at,attempt_id",
+      "calls": 14,
+      "seconds": 0.005123612998431781
+    },
+    {
+      "query": "SELECT i.payload,e.payload AS extraction FROM workflow.formation_inputs i JOIN workflow.prepared_extraction_versions e ON e.record_hash=i.extraction_hash WHERE i.artifact_id=%s",
+      "calls": 3,
+      "seconds": 0.005114712999784388
+    },
+    {
+      "query": "UPDATE workflow.documents SET formation_evidence_id=%s,review_source_ref=%s::jsonb WHERE snapshot_id=%s",
+      "calls": 1,
+      "seconds": 0.0046202129997254815
+    },
+    {
+      "query": "INSERT INTO workflow.formation_evidence_roots (proof_id,snapshot_id,context_id,extraction_hash,header) VALUES(%s,%s,%s,%s,%s::jsonb) ON CONFLICT DO NOTHING",
+      "calls": 1,
+      "seconds": 0.004503277999901911
+    },
+    {
+      "query": "INSERT INTO workflow.processing_attempts(attempt_id,snapshot_id,command_id,started_at,object_generation,payload) SELECT %s,snapshot_id,%s,%s,object_generation,%s::jsonb FROM workflow.documents WHERE snapshot_id=%s ON CONFLICT(attempt_id) DO UPDATE SET payload=EXCLUDED.payload,record_version=workflow.processing_attempts.record_version+1",
+      "calls": 1,
+      "seconds": 0.00440667300063069
+    },
+    {
+      "query": "SELECT rel.release_id, rel.release_version, rel.release_owner, rel.published_at, ev.details FROM audit_events ev JOIN publication_releases rel ON rel.release_id=ev.entity_id WHERE ev.entity_type='release' AND ev.event_type='release_published' AND ev.details->>'snapshot_id'=%s ORDER BY rel.published_at DESC LIMIT 1",
+      "calls": 3,
+      "seconds": 0.004072061001352267
+    },
+    {
+      "query": "SELECT d.snapshot_id,d.topic_id,CASE WHEN d.document_storage_version=1 THEN workflow.current_document_envelope(d) ELSE COALESCE(CASE WHEN d.class<>'beslisboom' THEN d.review_read_envelope END,workflow.document_scalar_envelope(d)||jsonb_build_object('named_reviewers',ARRAY(SELECT account_id FROM workflow.document_reviewers WHERE snapshot_id=d.snapshot_id ORDER BY account_id),'_metadata_header_unprepared',true)) END AS envelope_payload,t.display_name FROM workflow.documents d LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id ORDER BY d.acquired_at,d.snapshot_id",
+      "calls": 3,
+      "seconds": 0.00374287099839421
+    },
+    {
+      "query": "SELECT account_id FROM workflow.document_reviewers WHERE snapshot_id=%s ORDER BY account_id",
+      "calls": 17,
+      "seconds": 0.0034029420021397527
+    },
+    {
+      "query": "SELECT position,payload FROM workflow.document_objects WHERE snapshot_id=%s ORDER BY position",
+      "calls": 4,
+      "seconds": 0.0030102140008239076
+    },
+    {
+      "query": "SELECT wanted.object_id,o.object_version,f.mutation_epoch,f.certificate,f.certificate_hash=encode(sha256(convert_to(f.certificate::text,'UTF8')),'hex') AS intact,o.position,o.payload FROM (SELECT f.object_id FROM workflow.object_revision_frontiers f WHERE f.snapshot_id=%s AND EXISTS(SELECT 1 FROM workflow.document_objects o WHERE o.snapshot_id=f.snapshot_id AND o.object_id=f.object_id)) wanted(object_id) LEFT JOIN LATERAL (SELECT object_version,position,payload FROM workflow.document_objects WHERE snapshot_id=%s AND object_id=wanted.object_id ORDER BY position DESC LIMIT 1) o ON true LEFT JOIN workflow.object_revision_frontiers f ON f.snapshot_id=%s AND f.object_id=wanted.object_id",
+      "calls": 2,
+      "seconds": 0.0027296739972371142
+    },
+    {
+      "query": "SELECT snapshot_id,artifact_id,semantic_identity,semantic_hash,expected_revision,final_validation FROM workflow.formation_contexts WHERE context_id=%s",
+      "calls": 4,
+      "seconds": 0.002534482002374716
+    },
+    {
+      "query": "SELECT CASE WHEN d.document_storage_version=1 THEN i.payload ELSE a.payload END AS payload FROM workflow.processing_attempts a JOIN workflow.documents d USING(snapshot_id) LEFT JOIN workflow.processing_attempt_inputs i ON i.attempt_id=a.attempt_id WHERE a.snapshot_id=%s AND d.processing_storage_version=1 AND a.attempt_id=%s ORDER BY a.started_at DESC LIMIT 1",
+      "calls": 1,
+      "seconds": 0.0025247080011467915
+    },
+    {
+      "query": "SELECT plan_hash,payload FROM workflow.formation_task_plans WHERE context_id=%s",
+      "calls": 3,
+      "seconds": 0.0023186589969554916
+    },
+    {
+      "query": "SELECT payload#>'{provider_evidence,formation_progress}' AS progress FROM workflow.processing_checkpoints WHERE attempt_id=%s AND phase='formation_accounted' ORDER BY checkpoint_id DESC LIMIT 1",
+      "calls": 1,
+      "seconds": 0.002220942998974351
+    },
+    {
+      "query": "SELECT ranges_hash,result_hash FROM workflow.formation_task_results WHERE context_id=%s ORDER BY ranges_hash",
+      "calls": 4,
+      "seconds": 0.0019753359993046615
+    },
+    {
+      "query": "UPDATE workflow.formation_contexts SET planned_task_count=GREATEST(planned_task_count,%s) WHERE context_id=%s",
+      "calls": 2,
+      "seconds": 0.0017451109997637104
+    },
+    {
+      "query": "SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
+      "calls": 3,
+      "seconds": 0.0016683969988662284
+    },
+    {
+      "query": "UPDATE workflow.formation_evidence_roots SET sealed=true WHERE proof_id=%s",
+      "calls": 1,
+      "seconds": 0.0015619469995726831
+    },
+    {
+      "query": "SELECT snapshot_id,envelope_payload,processing_storage_version FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
+      "calls": 1,
+      "seconds": 0.0015523620022577234
+    },
+    {
+      "query": "SELECT r.ranges_hash,r.source_ranges,r.result_hash,r.payload FROM workflow.formation_task_results r WHERE r.context_id=%s AND NOT EXISTS(SELECT 1 FROM workflow.formation_task_findings f WHERE f.context_id=r.context_id AND f.ranges_hash=r.ranges_hash AND f.result_hash=r.result_hash) ORDER BY r.committed_at,r.ranges_hash",
+      "calls": 2,
+      "seconds": 0.0015301989988074638
+    },
+    {
+      "query": "SELECT payload FROM workflow.processing_checkpoints WHERE attempt_id=%s AND phase='task_rejected' ORDER BY checkpoint_id",
+      "calls": 2,
+      "seconds": 0.0014772499998798594
+    },
+    {
+      "query": "SELECT snapshot_id,object_id,object_version,canonical_object_hash,confirmed_object_type,reviewer_account_id,reviewer_display_name,decision,valid,authorization_payload FROM workflow.publish_authorizations ORDER BY snapshot_id,position NULLS LAST,authorization_id",
+      "calls": 5,
+      "seconds": 0.0014206650012056343
+    },
+    {
+      "query": "SELECT to_regclass('workflow.source_read_roots') AS table_name",
+      "calls": 2,
+      "seconds": 0.0013823789959133137
+    },
+    {
+      "query": "SELECT artifact_id,semantic_hash,semantic_identity,expected_revision FROM workflow.formation_contexts WHERE context_id=%s",
+      "calls": 2,
+      "seconds": 0.001373094000882702
+    },
+    {
+      "query": "SELECT payload FROM workflow.processing_attempts WHERE attempt_id=%s AND snapshot_id=%s",
+      "calls": 4,
+      "seconds": 0.0013153790023352485
+    },
+    {
+      "query": "UPDATE workflow.formation_contexts SET final_result_hash=%s,final_validation=%s::jsonb WHERE context_id=%s",
+      "calls": 1,
+      "seconds": 0.0012385529989842325
+    },
+    {
+      "query": "SELECT d.processing_storage_version,a.payload FROM workflow.documents d LEFT JOIN workflow.processing_attempts a ON a.snapshot_id=d.snapshot_id AND a.attempt_id=%s WHERE d.snapshot_id=%s",
+      "calls": 1,
+      "seconds": 0.0011625200022535864
+    },
+    {
+      "query": "SELECT object_id,min(position) AS first_position,count(*) AS n,bool_and(position IS NOT NULL) AS positioned FROM workflow.document_objects WHERE snapshot_id=%s AND object_id=ANY(%s) GROUP BY object_id",
+      "calls": 1,
+      "seconds": 0.0011092299973824993
+    },
+    {
+      "query": "SELECT revision,review_source_ref,formation_evidence_id,source_sha256,source_version FROM workflow.documents WHERE snapshot_id=%s",
+      "calls": 4,
+      "seconds": 0.0010844319986063056
+    },
+    {
+      "query": "UPDATE workflow.formation_contexts SET final_validation=%s::jsonb WHERE context_id=%s",
+      "calls": 1,
+      "seconds": 0.0010365809976065066
+    },
+    {
+      "query": "SELECT to_regclass('workflow.review_fact_state') AS name",
+      "calls": 2,
+      "seconds": 0.0010353990037401672
+    },
+    {
+      "query": "SELECT object_id,mutation_epoch FROM workflow.object_revision_frontiers WHERE snapshot_id=%s ORDER BY object_id FOR UPDATE",
+      "calls": 2,
+      "seconds": 0.0010233000029984396
+    },
+    {
+      "query": "INSERT INTO workflow.prepared_extraction_versions(record_hash,snapshot_id,payload) VALUES(%s,%s,%s::jsonb) ON CONFLICT DO NOTHING",
+      "calls": 1,
+      "seconds": 0.0008847339995554648
+    },
+    {
+      "query": "SELECT payload FROM workflow.processing_attempts WHERE snapshot_id=%s AND attempt_id=%s",
+      "calls": 1,
+      "seconds": 0.0008502119999320712
+    },
+    {
+      "query": "SELECT COALESCE(d.review_card_envelope,(workflow.review_card_envelope_for(workflow.current_document_envelope(d)) || jsonb_build_object('snapshot_id',d.snapshot_id,'document_id',d.document_id, 'source_id',d.source_id,'title',d.title,'class',d.class,'state',d.state, 'date',to_char(d.source_date,'YYYY-MM-DD'),'version',d.source_version, 'sha256',d.source_sha256,'content_kind',d.content_kind, 'publication_eligibility',d.publication_eligibility) || jsonb_build_object( '_source_identity',jsonb_build_object('snapshot_id',d.snapshot_id,'source_id',d.source_id,'document_id',d.document_id, 'sha256',d.source_sha256,'version',d.source_version,'content_kind',d.content_kind, 'extraction',workflow.current_document_envelope(d)#>'{prepared_source_extraction,record_hash}', 'extraction_header',workflow.review_card_envelope_for(workflow.current_document_envelope(d))->'prepared_source_extraction', 'source_ref',d.review_source_ref)))) AS envelope FROM workflow.documents d WHERE snapshot_id=%s",
+      "calls": 2,
+      "seconds": 0.0008341690045199357
+    },
+    {
+      "query": "SELECT d.snapshot_id,d.topic_id,workflow.current_document_envelope(d) AS envelope_payload,t.display_name FROM workflow.documents d LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id WHERE d.snapshot_id=%s FOR UPDATE OF d",
+      "calls": 1,
+      "seconds": 0.0008249840029748157
+    },
+    {
+      "query": "SELECT checkpoint_id,phase FROM workflow.processing_checkpoints WHERE attempt_id=%s AND phase IN ('formation_accounted','task_rejected','joint_validation_rejected','budget_exhausted','formation_call_basis','formation_call') ORDER BY checkpoint_id",
+      "calls": 2,
+      "seconds": 0.0008123459992930293
+    },
+    {
+      "query": "SELECT account_id,username,display_name,roles,password_salt,password_hash,created_at,to_jsonb(accounts)->'retirement' AS retirement FROM workflow.accounts WHERE account_id=%s FOR SHARE",
+      "calls": 3,
+      "seconds": 0.0008114140000543557
+    },
+    {
+      "query": "SELECT pg_advisory_xact_lock(%s)",
+      "calls": 3,
+      "seconds": 0.0007827009976608679
+    },
+    {
+      "query": "UPDATE workflow.review_object_facts SET dirty=false,history_count=0,current_version=NULL,record=NULL,record_hash=NULL WHERE snapshot_id=%s AND NOT(object_id=ANY(%s))",
+      "calls": 1,
+      "seconds": 0.0007654450018890202
+    },
+    {
+      "query": "SELECT header,header_hash,sealed FROM workflow.source_read_roots WHERE views_id=%s",
+      "calls": 1,
+      "seconds": 0.0007278490011231042
+    },
+    {
+      "query": "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+      "calls": 4,
+      "seconds": 0.0007215090008685365
+    },
+    {
+      "query": "SELECT snapshot_id,source_id,document_id,source_sha256 AS sha256,source_version AS version,content_kind,logical_document_id,working_revision_id FROM workflow.documents WHERE snapshot_id=%s",
+      "calls": 1,
+      "seconds": 0.0007136880012694746
+    },
+    {
+      "query": "DELETE FROM workflow.document_reviewers WHERE snapshot_id=%s",
+      "calls": 1,
+      "seconds": 0.0006843740011390764
+    },
+    {
+      "query": "SELECT snapshot_id,source_sha256 AS sha256,source_version AS version,object_generation,processing_storage_version FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
+      "calls": 1,
+      "seconds": 0.0005871579996892251
+    },
+    {
+      "query": "SELECT payload FROM workflow.prepared_extraction_versions WHERE record_hash=%s",
+      "calls": 1,
+      "seconds": 0.00047400999756064266
+    },
+    {
+      "query": "SELECT r.header FROM workflow.documents d JOIN workflow.formation_evidence_roots r ON r.proof_id=d.formation_evidence_id WHERE d.snapshot_id=%s",
+      "calls": 1,
+      "seconds": 0.0004716059993370436
+    },
+    {
+      "query": "SELECT header,sealed,extraction_hash FROM workflow.formation_evidence_roots WHERE proof_id=%s",
+      "calls": 1,
+      "seconds": 0.0004670590024034027
+    },
+    {
+      "query": "SELECT header,sealed FROM workflow.formation_evidence_roots WHERE proof_id=%s FOR UPDATE",
+      "calls": 1,
+      "seconds": 0.00044951199743081816
+    },
+    {
+      "query": "SELECT snapshot_id,command_id,payload,record_version FROM workflow.processing_attempts WHERE attempt_id=%s FOR UPDATE",
+      "calls": 2,
+      "seconds": 0.00043013400500058196
+    },
+    {
+      "query": "SELECT header,sealed FROM workflow.formation_evidence_roots WHERE proof_id=%s",
+      "calls": 1,
+      "seconds": 0.0004036739992443472
+    },
+    {
+      "query": "UPDATE workflow.review_fact_state s SET prepared_epoch=input_epoch WHERE snapshot_id=%s AND initialized AND source_identity=%s::jsonb AND NOT EXISTS(SELECT 1 FROM workflow.review_object_facts f WHERE f.snapshot_id=s.snapshot_id AND dirty)",
+      "calls": 1,
+      "seconds": 0.0003859879980154801
+    },
+    {
+      "query": "INSERT INTO workflow.review_fact_state(snapshot_id,initialized,expected_heads,source_identity) VALUES(%s,true,%s,%s::jsonb) ON CONFLICT(snapshot_id) DO UPDATE SET initialized=true,expected_heads=EXCLUDED.expected_heads,source_identity=EXCLUDED.source_identity",
+      "calls": 1,
+      "seconds": 0.0003655969994724728
+    },
+    {
+      "query": "SELECT plan_hash FROM workflow.formation_task_plans WHERE context_id=%s",
+      "calls": 2,
+      "seconds": 0.0003481720013951417
+    },
+    {
+      "query": "INSERT INTO workflow.document_reviewers(snapshot_id,account_id) VALUES(%s,%s)",
+      "calls": 1,
+      "seconds": 0.00030522700035362504
+    },
+    {
+      "query": "SELECT object_id,object_version,position FROM workflow.document_objects WHERE snapshot_id=%s ORDER BY position",
+      "calls": 1,
+      "seconds": 0.0002922469975601416
+    },
+    {
+      "query": "INSERT INTO workflow.processing_document_summaries(snapshot_id,payload) VALUES(%s,%s::jsonb) ON CONFLICT(snapshot_id) DO UPDATE SET payload=EXCLUDED.payload",
+      "calls": 1,
+      "seconds": 0.00025560300127835944
+    },
+    {
+      "query": "SELECT payload FROM workflow.processing_attempts WHERE snapshot_id=%s ORDER BY started_at DESC,attempt_id DESC LIMIT 1",
+      "calls": 1,
+      "seconds": 0.0002551520010456443
+    },
+    {
+      "query": "INSERT INTO workflow.source_read_roots(views_id,extraction_hash,header,header_hash) VALUES(%s,%s,%s::jsonb,%s) ON CONFLICT DO NOTHING",
+      "calls": 1,
+      "seconds": 0.00025302800349891186
+    },
+    {
+      "query": "SELECT source_identity FROM workflow.review_fact_state WHERE snapshot_id=%s",
+      "calls": 1,
+      "seconds": 0.00022323399753076956
+    },
+    {
+      "query": "SELECT semantic_identity FROM workflow.formation_contexts WHERE context_id=%s",
+      "calls": 1,
+      "seconds": 0.00020951300029992126
+    },
+    {
+      "query": "SELECT formation_evidence_id FROM workflow.documents WHERE snapshot_id=%s",
+      "calls": 2,
+      "seconds": 0.0001973350008483976
+    },
+    {
+      "query": "SELECT document_storage_version FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE",
+      "calls": 1,
+      "seconds": 0.0001855470000009518
+    },
+    {
+      "query": "SELECT object_id,object_version,position,payload FROM workflow.document_objects WHERE snapshot_id=%s ORDER BY position FOR UPDATE",
+      "calls": 1,
+      "seconds": 0.0001680410023254808
+    },
+    {
+      "query": "INSERT INTO workflow.topics(topic_id,identity_key,display_name) VALUES(%s,%s,%s) ON CONFLICT DO NOTHING",
+      "calls": 1,
+      "seconds": 0.00013767600103165023
+    },
+    {
+      "query": "SELECT extraction_hash,header_hash,header,sealed FROM workflow.source_read_roots WHERE views_id=%s FOR UPDATE",
+      "calls": 1,
+      "seconds": 0.0001326080018770881
+    },
+    {
+      "query": "SELECT document_storage_version FROM workflow.documents WHERE snapshot_id=%s",
+      "calls": 1,
+      "seconds": 0.00012120200335630216
+    },
+    {
+      "query": "SET LOCAL statement_timeout='5s'",
+      "calls": 2,
+      "seconds": 0.00011317900134599768
+    },
+    {
+      "query": "SELECT final_validation FROM workflow.formation_contexts WHERE context_id=%s",
+      "calls": 1,
+      "seconds": 0.00011014499978045933
+    },
+    {
+      "query": "SELECT topic_id,identity_key,display_name FROM workflow.topics WHERE identity_key=%s",
+      "calls": 1,
+      "seconds": 9.08759975573048e-05
+    },
+    {
+      "query": "SET LOCAL idle_in_transaction_session_timeout='5s'",
+      "calls": 2,
+      "seconds": 6.726100036757998e-05
+    }
+  ],
+  "phases": {
+    "formation.checkpoint": {
+      "calls": 266,
+      "seconds": 0.18100540199520765
+    },
+    "object_delta.write": {
+      "calls": 1,
+      "seconds": 16.140028811001685
+    },
+    "object_delta.seal": {
+      "calls": 1,
+      "seconds": 0.13102307999724871
+    }
+  },
+  "server_queries": [
+    {
+      "query": "INSERT INTO workflow.document_objects (snapshot_id,object_id,object_version,payload,position) VALUES($1,$2,$3,$4::jsonb,$5) RETURNING snapshot_id,object_id,object_version,position,payload",
+      "calls": 261,
+      "total_plan_time": 0.201372,
+      "total_exec_time": 15918.244170999995,
+      "rows": 261,
+      "shared_blks_hit": 893405,
+      "shared_blks_read": 22,
+      "wal_bytes": "314000241"
+    },
+    {
+      "query": "UPDATE workflow.documents SET object_generation=object_generation+$16\n    WHERE snapshot_id=CASE WHEN TG_OP=$17 THEN OLD.snapshot_id ELSE NEW.snapshot_id END\n      AND processing_storage_version=$18",
+      "calls": 261,
+      "total_plan_time": 0.09356,
+      "total_exec_time": 15611.072826000003,
+      "rows": 261,
+      "shared_blks_hit": 814293,
+      "shared_blks_read": 0,
+      "wal_bytes": "311485428"
+    },
+    {
+      "query": "UPDATE workflow.processing_attempts SET payload=$1::jsonb,record_version=record_version+$3 WHERE attempt_id=$2",
+      "calls": 400,
+      "total_plan_time": 9.299187,
+      "total_exec_time": 1687.2944479999999,
+      "rows": 400,
+      "shared_blks_hit": 249085,
+      "shared_blks_read": 0,
+      "wal_bytes": "4907968"
+    },
+    {
+      "query": "(SELECT count(*) FROM json_each(expected))=(SELECT count(*) FROM json_each(actual)) AND NOT EXISTS(\n            SELECT $4 FROM json_each(expected) e FULL JOIN json_each(actual) a USING(key)\n            WHERE e.key IS NULL OR a.key IS NULL OR NOT workflow.exact_archive_json(e.value,a.value,decoded_numbers))",
+      "calls": 12048,
+      "total_plan_time": 85.79361100000013,
+      "total_exec_time": 1207.8364610000096,
+      "rows": 12048,
+      "shared_blks_hit": 12431,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT COALESCE((SELECT jsonb_object_agg(k,compact->k)\n      FROM unnest(ARRAY[$2,$3,$4,$5,$6,$7,\n        $8,$9,$10,$11,$12,$13,$14,\n        $15,$16,$17,$18,\n        $19,$20,\n        $21,$22,$23,\n        $24,$25,$26]) k WHERE compact ? k),$27::jsonb)\n      || CASE WHEN payload ? $28 THEN jsonb_build_object($29,\n        jsonb_build_object($30,payload#>$31,\n          $32,CASE WHEN jsonb_typeof(payload#>$33)=$34 THEN (\n            SELECT COALESCE(jsonb_object_agg(e.key,\n              (SELECT COALESCE(jsonb_object_agg(k,e.value->k),$35::jsonb)\n               FROM unnest(ARRAY[$36,$37,$38]) k WHERE e.value ? k)\n              || jsonb_build_object($39,CASE WHEN jsonb_typeof(e.value->$40)=$41\n                 THEN encode(sha256(convert_to(e.value->>$42,$43)),$44) ELSE $45 END)), $46)\n            FROM jsonb_each(payload#>$47) e)\n            ELSE payload#>$48 END)) ELSE $49::jsonb END\n    FROM (SELECT CASE WHEN payload ? $50 THEN payload ELSE workflow.review_read_envelope_for(payload) END AS compact) s",
+      "calls": 264,
+      "total_plan_time": 0.141932,
+      "total_exec_time": 1095.8309389999993,
+      "rows": 264,
+      "shared_blks_hit": 9,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "INSERT INTO workflow.processing_attempt_inputs(attempt_id,snapshot_id,command_id,started_at,record_version,state,kind,progress_made,payload)\n        VALUES(NEW.attempt_id,NEW.snapshot_id,NEW.command_id,NEW.started_at,NEW.record_version,\n            NEW.payload->>$20,NEW.payload->>$21,NEW.payload->$22=$23::jsonb,\n            workflow.processing_attempt_input_for(NEW.payload))\n        ON CONFLICT(attempt_id) DO UPDATE SET record_version=EXCLUDED.record_version,payload=EXCLUDED.payload,\n            state=EXCLUDED.state,kind=EXCLUDED.kind,progress_made=EXCLUDED.progress_made",
+      "calls": 401,
+      "total_plan_time": 197.37702799999983,
+      "total_exec_time": 1095.2016380000005,
+      "rows": 401,
+      "shared_blks_hit": 183183,
+      "shared_blks_read": 0,
+      "wal_bytes": "2327017"
+    },
+    {
+      "query": "SELECT (payload - ARRAY[$2,$3,$4,$5])\n      || CASE WHEN payload ? $6 THEN\n           jsonb_build_object($7,\n             CASE WHEN jsonb_typeof(payload->$8)=$9\n                  THEN (payload->$10) - ARRAY[$11,$12]\n                  ELSE payload->$13 END)\n         ELSE $14::jsonb END\n      || jsonb_build_object($15,jsonb_build_object($16,\n           jsonb_build_object($17,payload#>$18)),\n           $19,COALESCE(payload->$20 NOT IN ($21::jsonb,$22::jsonb),$23))",
+      "calls": 11881,
+      "total_plan_time": 12.18247200000001,
+      "total_exec_time": 1037.2715029999904,
+      "rows": 11881,
+      "shared_blks_hit": 6,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "INSERT INTO workflow.processing_archives (archive_id,layout,snapshot_id,kind,record_key,binding,revision_hash,payload_hash,payload_text,observed_revision) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10) ON CONFLICT DO NOTHING",
+      "calls": 131,
+      "total_plan_time": 8.042406,
+      "total_exec_time": 253.101237,
+      "rows": 131,
+      "shared_blks_hit": 63272,
+      "shared_blks_read": 0,
+      "wal_bytes": "2085669"
+    },
+    {
+      "query": "NOT FOUND OR NOT proof.sealed OR proof.snapshot_id<>document.snapshot_id\n       OR proof.header#>$56 IS DISTINCT FROM document.review_source_ref\n       OR proof.extraction_hash IS DISTINCT FROM document.envelope_payload#>>$57\n       OR proof.header->$58 IS DISTINCT FROM jsonb_build_object($59,document.snapshot_id,\n           $60,document.source_id,$61,document.document_id,$62,document.source_sha256,\n           $63,document.source_version,$64,document.content_kind,\n           $65,document.logical_document_id,$66,document.working_revision_id)\n       OR NOT EXISTS(SELECT $67 FROM workflow.formation_evidence_members WHERE proof_id=proof.proof_id\n           AND role=$68 AND member_key=$69\n           AND (payload_text::jsonb #- $70)=document.envelope_payload->$71)",
+      "calls": 2,
+      "total_plan_time": 8.367069,
+      "total_exec_time": 161.18275899999998,
+      "rows": 2,
+      "shared_blks_hit": 765,
+      "shared_blks_read": 134,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT (value-$2) || CASE WHEN value ? $3 THEN jsonb_build_object($4,\n      COALESCE((SELECT jsonb_object_agg(e.key,e.value) FROM jsonb_each(COALESCE(NULLIF(value->$5,$6::jsonb),$7::jsonb)) e\n        WHERE e.key=ANY(ARRAY[$8,$9,$10,$11,$12,\n          $13,$14,$15,$16,$17,\n          $18,$19,$20,$21,$22,\n          $23,$24,$25,$26,$27,$28,\n          $29,$30,$31,$32,$33])),\n        $34::jsonb)) ELSE $35::jsonb END",
+      "calls": 1203,
+      "total_plan_time": 36.150932000000026,
+      "total_exec_time": 112.32537499999982,
+      "rows": 1203,
+      "shared_blks_hit": 13689,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "INSERT INTO workflow.formation_evidence_members (proof_id,role,member_key,payload_hash,payload_text) VALUES($1,$2,$3,$4,$5)",
+      "calls": 265,
+      "total_plan_time": 0.016274,
+      "total_exec_time": 91.69749200000001,
+      "rows": 265,
+      "shared_blks_hit": 7852,
+      "shared_blks_read": 3,
+      "wal_bytes": "3081817"
+    },
+    {
+      "query": "INSERT INTO workflow.formation_task_results(context_id,ranges_hash,source_ranges,result_hash,payload,attempt_id,claim_token) VALUES($1,$2,$3::jsonb,$4,$5::jsonb,$6,$7) ON CONFLICT DO NOTHING RETURNING ranges_hash",
+      "calls": 129,
+      "total_plan_time": 2.130843999999999,
+      "total_exec_time": 90.98782099999995,
+      "rows": 129,
+      "shared_blks_hit": 24698,
+      "shared_blks_read": 0,
+      "wal_bytes": "1280061"
+    },
+    {
+      "query": "UPDATE workflow.processing_document_summaries SET payload=jsonb_set(payload,$3,$1::jsonb) WHERE snapshot_id=$2",
+      "calls": 800,
+      "total_plan_time": 23.67204900000002,
+      "total_exec_time": 71.714735,
+      "rows": 800,
+      "shared_blks_hit": 16679,
+      "shared_blks_read": 0,
+      "wal_bytes": "1060700"
+    },
+    {
+      "query": "INSERT INTO workflow.processing_checkpoints(attempt_id,phase,payload) VALUES($1,$2,$3::jsonb)",
+      "calls": 266,
+      "total_plan_time": 2.7593590000000003,
+      "total_exec_time": 71.16147699999998,
+      "rows": 266,
+      "shared_blks_hit": 15693,
+      "shared_blks_read": 0,
+      "wal_bytes": "1272501"
+    },
+    {
+      "query": "UPDATE workflow.formation_contexts SET completed_task_count=completed_task_count+$1, final_result_hash=$3,final_validation=$4 WHERE context_id=$2",
+      "calls": 129,
+      "total_plan_time": 1.9818739999999997,
+      "total_exec_time": 66.26261099999999,
+      "rows": 129,
+      "shared_blks_hit": 7353,
+      "shared_blks_read": 0,
+      "wal_bytes": "17157"
+    },
+    {
+      "query": "UPDATE workflow.documents SET source_id=$1,document_id=$2,title=$3,family=$4,topic_id=$5,class=$6,state=$7,publication_eligibility=$8,content_kind=$9,ingest_kind=$10,source_version=$11,source_date=$12,source_sha256=$13,source_locator=$14,immutable_storage_locator=$15,live_url=$16,uploader_account_id=$17,replaces_snapshot_id=$18,object_diff=$19::jsonb,clinical_rereview_required=$20,acquired_at=$21,console_version=$22,envelope_payload=$23::jsonb,revision=revision+$25,updated_at=CURRENT_TIMESTAMP WHERE snapshot_id=$24",
+      "calls": 1,
+      "total_plan_time": 0.959916,
+      "total_exec_time": 65.77366900000001,
+      "rows": 1,
+      "shared_blks_hit": 1721,
+      "shared_blks_read": 0,
+      "wal_bytes": "1164585"
+    },
+    {
+      "query": "SELECT workflow.invalidate_review_object(NEW.snapshot_id,NEW.object_id,$16)",
+      "calls": 261,
+      "total_plan_time": 0.038278,
+      "total_exec_time": 59.75928699999998,
+      "rows": 261,
+      "shared_blks_hit": 32748,
+      "shared_blks_read": 6,
+      "wal_bytes": "249552"
+    },
+    {
+      "query": "UPDATE workflow.documents SET review_source_ref=$1::jsonb WHERE snapshot_id=$2",
+      "calls": 1,
+      "total_plan_time": 0.019189,
+      "total_exec_time": 56.899879,
+      "rows": 1,
+      "shared_blks_hit": 3063,
+      "shared_blks_read": 0,
+      "wal_bytes": "1193483"
+    },
+    {
+      "query": "SELECT state,wait_event_type,wait_event FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid()",
+      "calls": 982,
+      "total_plan_time": 1.00901,
+      "total_exec_time": 54.92345699999995,
+      "rows": 865,
+      "shared_blks_hit": 1128,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT archive_id,layout,snapshot_id,kind,record_key,binding,revision_hash,payload_hash,payload_text,observed_revision FROM workflow.processing_archives WHERE archive_id=$1",
+      "calls": 262,
+      "total_plan_time": 50.673896,
+      "total_exec_time": 43.53437499999996,
+      "rows": 262,
+      "shared_blks_hit": 34020,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT workflow.invalidate_revision_frontier(NEW.snapshot_id,NEW.object_id)",
+      "calls": 261,
+      "total_plan_time": 0.04022,
+      "total_exec_time": 41.994276,
+      "rows": 261,
+      "shared_blks_hit": 21216,
+      "shared_blks_read": 4,
+      "wal_bytes": "140669"
+    },
+    {
+      "query": "SELECT payload,object_generation FROM workflow.processing_attempts WHERE snapshot_id=$1 AND attempt_id=$2 FOR UPDATE",
+      "calls": 400,
+      "total_plan_time": 47.72164799999999,
+      "total_exec_time": 39.408072000000004,
+      "rows": 400,
+      "shared_blks_hit": 47873,
+      "shared_blks_read": 0,
+      "wal_bytes": "41144"
+    },
+    {
+      "query": "UPDATE workflow.object_revision_frontiers SET certificate=$1::jsonb,certificate_hash=encode(sha256(convert_to(($2::jsonb)::text,$6)),$7) WHERE snapshot_id=$3 AND object_id=$4 AND mutation_epoch=$5",
+      "calls": 261,
+      "total_plan_time": 0.329442,
+      "total_exec_time": 38.76572999999999,
+      "rows": 261,
+      "shared_blks_hit": 21584,
+      "shared_blks_read": 10,
+      "wal_bytes": "331061"
+    },
+    {
+      "query": "INSERT INTO workflow.object_revision_frontiers(snapshot_id,object_id,mutation_epoch)\n      VALUES(sid,oid,$3) ON CONFLICT(snapshot_id,object_id) DO UPDATE\n      SET mutation_epoch=workflow.object_revision_frontiers.mutation_epoch+$4,\n          certificate=$5,certificate_hash=$6",
+      "calls": 261,
+      "total_plan_time": 0.042142,
+      "total_exec_time": 34.98434800000001,
+      "rows": 261,
+      "shared_blks_hit": 11590,
+      "shared_blks_read": 4,
+      "wal_bytes": "140669"
+    },
+    {
+      "query": "SELECT r.extraction_hash,r.header,r.header_hash,r.sealed  ,\n            COALESCE((SELECT jsonb_agg(to_jsonb(b) ORDER BY b.view_name,b.ordinal)\n                FROM workflow.source_read_blocks b WHERE b.views_id=r.views_id),$2::jsonb) AS read_blocks,\n            COALESCE((SELECT jsonb_agg(to_jsonb(m)) FROM workflow.source_read_block_fragments m\n                WHERE m.views_id=r.views_id),$3::jsonb) AS read_members,\n            COALESCE((SELECT jsonb_agg(to_jsonb(f) ORDER BY f.ordinal)\n                FROM workflow.source_read_fragments f WHERE f.views_id=r.views_id),$4::jsonb) AS read_fragments\n            FROM workflow.source_read_roots r WHERE r.views_id=$1",
+      "calls": 2,
+      "total_plan_time": 0.940997,
+      "total_exec_time": 27.492865000000002,
+      "rows": 2,
+      "shared_blks_hit": 1038,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT ranges_hash,result_hash,payload FROM workflow.formation_task_results WHERE context_id=$1 ORDER BY ranges_hash",
+      "calls": 2,
+      "total_plan_time": 0.167491,
+      "total_exec_time": 26.943106999999998,
+      "rows": 260,
+      "shared_blks_hit": 1222,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT checkpoint_id,phase,payload FROM workflow.processing_checkpoints WHERE attempt_id=$1 AND phase IN ($2,$3,$4,$5,$6,$7) ORDER BY checkpoint_id",
+      "calls": 2,
+      "total_plan_time": 0.239218,
+      "total_exec_time": 25.774794,
+      "rows": 262,
+      "shared_blks_hit": 472,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT d.snapshot_id,d.topic_id,workflow.current_document_envelope(d) AS envelope_payload,t.display_name FROM workflow.documents d LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id WHERE d.snapshot_id=$1",
+      "calls": 14,
+      "total_plan_time": 3.2195770000000006,
+      "total_exec_time": 19.820985,
+      "rows": 14,
+      "shared_blks_hit": 3073,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT $2 FROM ONLY \"workflow\".\"documents\" x WHERE \"snapshot_id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",
+      "calls": 1579,
+      "total_plan_time": 10.720856000000008,
+      "total_exec_time": 18.951133999999982,
+      "rows": 1579,
+      "shared_blks_hit": 48754,
+      "shared_blks_read": 0,
+      "wal_bytes": "54"
+    },
+    {
+      "query": "INSERT INTO workflow.review_object_facts(snapshot_id,object_id,history_count,dirty,current_version,object_order,record,record_hash) SELECT $1,v->>$3,(v->>$4)::integer,$5,v#>>$6,(v->>$7)::integer,v->$8,encode(sha256(convert_to((v->$9)::text,$10)),$11) FROM jsonb_array_elements($2::jsonb) v ON CONFLICT(snapshot_id,object_id) DO UPDATE SET history_count=EXCLUDED.history_count,dirty=$12,current_version=EXCLUDED.current_version,object_order=EXCLUDED.object_order,record=EXCLUDED.record,record_hash=EXCLUDED.record_hash",
+      "calls": 1,
+      "total_plan_time": 0.181371,
+      "total_exec_time": 17.271191,
+      "rows": 261,
+      "shared_blks_hit": 9522,
+      "shared_blks_read": 19,
+      "wal_bytes": "945645"
+    },
+    {
+      "query": "SELECT snapshot_id,source_sha256 AS sha256,source_version AS version,document_id,state,working_revision_id,object_generation,processing_storage_version FROM workflow.documents WHERE snapshot_id=$1 FOR UPDATE",
+      "calls": 399,
+      "total_plan_time": 107.14911500000007,
+      "total_exec_time": 14.036840000000002,
+      "rows": 399,
+      "shared_blks_hit": 90174,
+      "shared_blks_read": 0,
+      "wal_bytes": "21546"
+    },
+    {
+      "query": "NOT EXISTS(SELECT $2 FROM workflow.documents WHERE snapshot_id=sid)",
+      "calls": 261,
+      "total_plan_time": 0.300481,
+      "total_exec_time": 11.583699999999995,
+      "rows": 261,
+      "shared_blks_hit": 9363,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "INSERT INTO workflow.review_object_facts(snapshot_id,object_id,history_count,dirty)\n      VALUES(sid,oid,following_count,$7) ON CONFLICT(snapshot_id,object_id)\n      DO UPDATE SET history_count=EXCLUDED.history_count,dirty=$8",
+      "calls": 261,
+      "total_plan_time": 0.035405,
+      "total_exec_time": 10.639469000000002,
+      "rows": 261,
+      "shared_blks_hit": 4870,
+      "shared_blks_read": 6,
+      "wal_bytes": "205062"
+    },
+    {
+      "query": "EXISTS(SELECT $15 FROM workflow.documents WHERE snapshot_id=sid AND document_storage_version=$16)\n       AND current_setting($17,$18) IS DISTINCT FROM $19",
+      "calls": 663,
+      "total_plan_time": 17.064716,
+      "total_exec_time": 9.146280000000008,
+      "rows": 663,
+      "shared_blks_hit": 12104,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "UPDATE workflow.review_fact_state SET input_epoch=input_epoch+$7,\n      expected_heads=GREATEST($8,expected_heads+(following_count>$9)::integer-(previous_count>$10)::integer)\n      WHERE snapshot_id=sid",
+      "calls": 261,
+      "total_plan_time": 0.059458,
+      "total_exec_time": 9.040449999999996,
+      "rows": 261,
+      "shared_blks_hit": 13238,
+      "shared_blks_read": 0,
+      "wal_bytes": "30330"
+    },
+    {
+      "query": "SELECT to_regclass($1) AS releases, to_regclass($2) AS events",
+      "calls": 401,
+      "total_plan_time": 1.6975640000000014,
+      "total_exec_time": 8.216892999999999,
+      "rows": 401,
+      "shared_blks_hit": 6416,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "INSERT INTO workflow.review_fact_state(snapshot_id) VALUES(sid) ON CONFLICT DO NOTHING",
+      "calls": 261,
+      "total_plan_time": 0.044296,
+      "total_exec_time": 8.102419,
+      "rows": 0,
+      "shared_blks_hit": 2203,
+      "shared_blks_read": 0,
+      "wal_bytes": "66"
+    },
+    {
+      "query": "WITH object_links AS (\n    SELECT edge->$2 AS target\n    FROM unnest(ARRAY[\n        value->$3, value->$4,\n        value->$5, value->$6\n    ]) AS family(links)\n    CROSS JOIN LATERAL jsonb_array_elements(\n        CASE WHEN jsonb_typeof(links)=$7 THEN links ELSE $8::jsonb END\n    ) AS edge\n    UNION ALL\n    SELECT edge->$9\n    FROM jsonb_array_elements(CASE\n        WHEN jsonb_typeof(value#>$10)=$11\n        THEN value#>$12 ELSE $13::jsonb END) AS edge\n), block_links AS (\n    SELECT entry#>$14 AS target\n    FROM jsonb_array_elements(CASE\n        WHEN jsonb_typeof(value#>$15)=$16\n        THEN value#>$17 ELSE $18::jsonb END) AS entry\n)\nSELECT jsonb_build_object(\n    $19, (SELECT COALESCE(jsonb_agg(DISTINCT target ORDER BY target),$20::jsonb)\n                FROM object_links WHERE target IS NOT NULL),\n    $21, (SELECT COALESCE(jsonb_agg(DISTINCT target ORDER BY target),$22::jsonb)\n               FROM block_links WHERE target IS NOT NULL)\n)",
+      "calls": 261,
+      "total_plan_time": 40.304375999999976,
+      "total_exec_time": 6.8135110000000045,
+      "rows": 261,
+      "shared_blks_hit": 8,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT jsonb_build_object(\n        $2, $3,\n        $4, e.binary_path,\n        $5, e.received_source,\n        $6, e.processing_configuration,\n        $7, jsonb_build_object($8, jsonb_build_object(\n            $9, e.semantic_replay->$10->$11,\n            $12, e.semantic_replay->$13->$14)),\n        $15, jsonb_array_length(COALESCE(NULLIF(\n            e.semantic_replay->$16->$17, $18::jsonb), $19::jsonb)),\n        $20, CASE WHEN jsonb_array_length(COALESCE(NULLIF(\n            e.quality_processing_runs, $21::jsonb), $22::jsonb)) > $23\n            THEN jsonb_array_length(COALESCE(NULLIF(\n                e.quality_processing_runs->$24->$25, $26::jsonb), $27::jsonb))\n            ELSE $28 END,\n        $29, CASE WHEN jsonb_array_length(COALESCE(NULLIF(\n            e.processing_attempts, $30::jsonb), $31::jsonb)) > $32\n            THEN jsonb_build_array(jsonb_build_object(\n                $33, e.processing_attempts->$34->$35,\n                $36, e.processing_attempts->$37->$38,\n                $39, e.processing_attempts->$40->$41,\n                $42, e.processing_attempts->$43->$44,\n                $45, e.processing_attempts->$46->$47,\n                $48, e.processing_attempts->$49->$50,\n                $51, jsonb_build_object($52, e.processing_attempts->$53->$54->$55),\n                $56, jsonb_build_object($57, e.processing_attempts->$58->$59->$60)))\n            ELSE $61::jsonb END,\n        -- Preserve every observation used by the existing estimator, without\n        -- copying failed/resume histories, diagnoses, proposals or fragments.\n        $62, COALESCE((SELECT jsonb_agg(jsonb_build_object(\n            $63, a->$64, $65, a->$66) ORDER BY n)\n            FROM jsonb_array_elements(COALESCE(NULLIF(e.processing_attempts, $67::jsonb), $68::jsonb))\n                WITH ORDINALITY AS attempts(a,n)\n            WHERE a->>$69 = $70 AND a->>$71 = $72), $73::jsonb)\n    ) || CASE WHEN payload ? $74\n              THEN jsonb_build_object($75, payload->$76)\n              ELSE $77::jsonb END\n    FROM jsonb_to_record(payload) AS e(binary_path TEXT, received_source JSONB,\n        processing_configuration JSONB, semantic_replay JSONB,\n        quality_processing_runs JSONB, processing_attempts JSONB)",
+      "calls": 1,
+      "total_plan_time": 0.06682,
+      "total_exec_time": 6.572055000000001,
+      "rows": 1,
+      "shared_blks_hit": 6,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT extraction_hash,payload_hash,payload FROM workflow.formation_source_views WHERE views_id=$1",
+      "calls": 1,
+      "total_plan_time": 0.15402,
+      "total_exec_time": 6.545273,
+      "rows": 1,
+      "shared_blks_hit": 124,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT jsonb_build_object($18,snapshot_id,$19,source_id,\n        $20,document_id,$21,source_sha256,$22,source_version,\n        $23,content_kind,$24,logical_document_id,\n        $25,working_revision_id)\n                            FROM workflow.documents WHERE snapshot_id=NEW.snapshot_id FOR SHARE",
+      "calls": 131,
+      "total_plan_time": 31.810785999999997,
+      "total_exec_time": 5.377347000000002,
+      "rows": 131,
+      "shared_blks_hit": 27379,
+      "shared_blks_read": 0,
+      "wal_bytes": "7074"
+    },
+    {
+      "query": "SELECT set_config($1,$2,$3)",
+      "calls": 400,
+      "total_plan_time": 13.699207000000005,
+      "total_exec_time": 5.355027999999999,
+      "rows": 400,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT rel.release_id,\n                   rel.release_version,\n                   rel.release_owner,\n                   rel.status,\n                   rel.published_at\n            FROM audit_events ev\n            JOIN publication_releases rel ON rel.release_id=ev.entity_id\n            WHERE ev.entity_type=$2\n              AND ev.event_type=$3\n              AND ev.details->>$4=$1\n              AND rel.status IN ($5,$6)\n            ORDER BY rel.published_at DESC NULLS LAST\n            LIMIT $7",
+      "calls": 401,
+      "total_plan_time": 117.65254100000007,
+      "total_exec_time": 5.265061999999996,
+      "rows": 0,
+      "shared_blks_hit": 94525,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT account_id,roles,retirement FROM workflow.accounts WHERE account_id=$1 FOR SHARE",
+      "calls": 401,
+      "total_plan_time": 26.329804999999993,
+      "total_exec_time": 4.845007000000001,
+      "rows": 401,
+      "shared_blks_hit": 18803,
+      "shared_blks_read": 0,
+      "wal_bytes": "21600"
+    },
+    {
+      "query": "SELECT to_regclass($1) AS name",
+      "calls": 140,
+      "total_plan_time": 5.298123999999998,
+      "total_exec_time": 4.616605000000001,
+      "rows": 140,
+      "shared_blks_hit": 1650,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "EXISTS(SELECT $15 FROM workflow.documents d WHERE d.snapshot_id=NEW.snapshot_id AND d.document_storage_version=$16)\n       AND NOT EXISTS(SELECT $17 FROM workflow.document_inputs WHERE snapshot_id=NEW.snapshot_id)",
+      "calls": 264,
+      "total_plan_time": 0.440549,
+      "total_exec_time": 4.334408999999999,
+      "rows": 264,
+      "shared_blks_hit": 17990,
+      "shared_blks_read": 1,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "UPDATE workflow.documents SET formation_evidence_id=$1,review_source_ref=$2::jsonb WHERE snapshot_id=$3",
+      "calls": 1,
+      "total_plan_time": 0.043395,
+      "total_exec_time": 4.258972,
+      "rows": 1,
+      "shared_blks_hit": 358,
+      "shared_blks_read": 0,
+      "wal_bytes": "36334"
+    },
+    {
+      "query": "INSERT INTO workflow.processing_attempts(attempt_id,snapshot_id,command_id,started_at,object_generation,payload) SELECT $1,snapshot_id,$2,$3,object_generation,$4::jsonb FROM workflow.documents WHERE snapshot_id=$5 ON CONFLICT(attempt_id) DO UPDATE SET payload=EXCLUDED.payload,record_version=workflow.processing_attempts.record_version+$6",
+      "calls": 1,
+      "total_plan_time": 0.040561,
+      "total_exec_time": 4.055287,
+      "rows": 1,
+      "shared_blks_hit": 521,
+      "shared_blks_read": 0,
+      "wal_bytes": "18599"
+    },
+    {
+      "query": "SELECT account_id FROM workflow.document_reviewers WHERE snapshot_id=$1",
+      "calls": 401,
+      "total_plan_time": 16.436581999999994,
+      "total_exec_time": 3.837343999999997,
+      "rows": 401,
+      "shared_blks_hit": 10802,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "INSERT INTO workflow.formation_evidence_roots (proof_id,snapshot_id,context_id,extraction_hash,header) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT DO NOTHING",
+      "calls": 1,
+      "total_plan_time": 0.094121,
+      "total_exec_time": 3.1716159999999998,
+      "rows": 1,
+      "shared_blks_hit": 490,
+      "shared_blks_read": 2,
+      "wal_bytes": "55310"
+    },
+    {
+      "query": "SELECT *               FROM workflow.processing_attempts WHERE attempt_id=NEW.attempt_id",
+      "calls": 802,
+      "total_plan_time": 18.05522300000001,
+      "total_exec_time": 2.9073179999999974,
+      "rows": 802,
+      "shared_blks_hit": 1606,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT $2 FROM ONLY \"workflow\".\"accounts\" x WHERE \"account_id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",
+      "calls": 264,
+      "total_plan_time": 0.404945,
+      "total_exec_time": 2.2589169999999994,
+      "rows": 264,
+      "shared_blks_hit": 792,
+      "shared_blks_read": 0,
+      "wal_bytes": "54"
+    },
+    {
+      "query": "SELECT $2 FROM ONLY \"workflow\".\"review_fact_state\" x WHERE \"snapshot_id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",
+      "calls": 522,
+      "total_plan_time": 0.036304,
+      "total_exec_time": 2.249076,
+      "rows": 522,
+      "shared_blks_hit": 6623,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT $2 FROM workflow.documents WHERE snapshot_id=sid FOR UPDATE",
+      "calls": 261,
+      "total_plan_time": 0.054462,
+      "total_exec_time": 2.234897,
+      "rows": 261,
+      "shared_blks_hit": 9624,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT payload#>$2 AS progress FROM workflow.processing_checkpoints WHERE attempt_id=$1 AND phase=$3 ORDER BY checkpoint_id DESC LIMIT $4",
+      "calls": 1,
+      "total_plan_time": 0.032859,
+      "total_exec_time": 2.030309,
+      "rows": 1,
+      "shared_blks_hit": 180,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT planned_task_count,completed_task_count FROM workflow.formation_contexts WHERE context_id=$1",
+      "calls": 401,
+      "total_plan_time": 21.93321700000001,
+      "total_exec_time": 2.0153270000000014,
+      "rows": 401,
+      "shared_blks_hit": 18358,
+      "shared_blks_read": 0,
+      "wal_bytes": "4286"
+    },
+    {
+      "query": "SELECT payload,record_version FROM workflow.processing_attempts WHERE snapshot_id=$1 ORDER BY started_at,attempt_id",
+      "calls": 14,
+      "total_plan_time": 1.247005,
+      "total_exec_time": 1.92003,
+      "rows": 28,
+      "shared_blks_hit": 1214,
+      "shared_blks_read": 10,
+      "wal_bytes": "178"
+    },
+    {
+      "query": "SELECT $2 FROM ONLY \"workflow\".\"processing_attempts\" x WHERE \"attempt_id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",
+      "calls": 395,
+      "total_plan_time": 7.471207000000005,
+      "total_exec_time": 1.894653,
+      "rows": 395,
+      "shared_blks_hit": 1185,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "BEGIN",
+      "calls": 963,
+      "total_plan_time": 0.0,
+      "total_exec_time": 1.736581000000003,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT i.payload,e.payload AS extraction FROM workflow.formation_inputs i JOIN workflow.prepared_extraction_versions e ON e.record_hash=i.extraction_hash WHERE i.artifact_id=$1",
+      "calls": 3,
+      "total_plan_time": 1.573915,
+      "total_exec_time": 1.7108210000000001,
+      "rows": 3,
+      "shared_blks_hit": 807,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SET LOCAL lock_timeout='5s'",
+      "calls": 400,
+      "total_plan_time": 0.0,
+      "total_exec_time": 1.6927280000000005,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT history_count                     FROM workflow.review_object_facts\n      WHERE snapshot_id=sid AND object_id=oid FOR UPDATE",
+      "calls": 261,
+      "total_plan_time": 0.171707,
+      "total_exec_time": 1.6350889999999996,
+      "rows": 0,
+      "shared_blks_hit": 527,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT $2 FROM workflow.review_fact_state WHERE snapshot_id=sid FOR UPDATE",
+      "calls": 261,
+      "total_plan_time": 0.086001,
+      "total_exec_time": 1.361059,
+      "rows": 261,
+      "shared_blks_hit": 2461,
+      "shared_blks_read": 0,
+      "wal_bytes": "14094"
+    },
+    {
+      "query": "UPDATE workflow.formation_evidence_roots SET sealed=$2 WHERE proof_id=$1",
+      "calls": 1,
+      "total_plan_time": 0.06001,
+      "total_exec_time": 1.154107,
+      "rows": 1,
+      "shared_blks_hit": 224,
+      "shared_blks_read": 0,
+      "wal_bytes": "123"
+    },
+    {
+      "query": "UPDATE workflow.formation_contexts SET planned_task_count=GREATEST(planned_task_count,$1) WHERE context_id=$2",
+      "calls": 2,
+      "total_plan_time": 0.14216299999999998,
+      "total_exec_time": 1.127167,
+      "rows": 2,
+      "shared_blks_hit": 262,
+      "shared_blks_read": 0,
+      "wal_bytes": "260"
+    },
+    {
+      "query": "SELECT archive_id,layout,snapshot_id,kind,record_key,binding,revision_hash,payload_hash FROM workflow.processing_archives WHERE snapshot_id=$1 AND kind=$2 AND record_key=$3",
+      "calls": 131,
+      "total_plan_time": 6.6287720000000006,
+      "total_exec_time": 1.1222659999999995,
+      "rows": 131,
+      "shared_blks_hit": 3232,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT $2 FROM ONLY \"workflow\".\"topics\" x WHERE \"topic_id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",
+      "calls": 263,
+      "total_plan_time": 0.079589,
+      "total_exec_time": 1.0213700000000001,
+      "rows": 263,
+      "shared_blks_hit": 789,
+      "shared_blks_read": 0,
+      "wal_bytes": "54"
+    },
+    {
+      "query": "UPDATE workflow.formation_contexts SET final_result_hash=$1,final_validation=$2::jsonb WHERE context_id=$3",
+      "calls": 1,
+      "total_plan_time": 0.07329,
+      "total_exec_time": 0.932745,
+      "rows": 1,
+      "shared_blks_hit": 162,
+      "shared_blks_read": 1,
+      "wal_bytes": "2970"
+    },
+    {
+      "query": "SELECT plan_hash,payload FROM workflow.formation_task_plans WHERE context_id=$1",
+      "calls": 3,
+      "total_plan_time": 0.34689899999999996,
+      "total_exec_time": 0.9250360000000001,
+      "rows": 3,
+      "shared_blks_hit": 208,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT $2 FROM ONLY \"workflow\".\"formation_contexts\" x WHERE \"context_id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",
+      "calls": 129,
+      "total_plan_time": 9.612525000000002,
+      "total_exec_time": 0.8343799999999997,
+      "rows": 129,
+      "shared_blks_hit": 8901,
+      "shared_blks_read": 0,
+      "wal_bytes": "6966"
+    },
+    {
+      "query": "UPDATE workflow.formation_contexts SET final_validation=$1::jsonb WHERE context_id=$2",
+      "calls": 1,
+      "total_plan_time": 0.017897,
+      "total_exec_time": 0.8317450000000001,
+      "rows": 1,
+      "shared_blks_hit": 77,
+      "shared_blks_read": 0,
+      "wal_bytes": "3078"
+    },
+    {
+      "query": "NEW.payload->>$16=$17\n       AND COALESCE(NEW.payload#>>$18,$19)<>$20\n       AND EXISTS(SELECT $21 FROM workflow.documents WHERE snapshot_id=NEW.snapshot_id AND formation_evidence_id IS NOT NULL)",
+      "calls": 402,
+      "total_plan_time": 5.322065999999997,
+      "total_exec_time": 0.663919,
+      "rows": 402,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT $3 FROM ONLY \"workflow\".\"object_revision_frontiers\" x WHERE \"snapshot_id\" OPERATOR(pg_catalog.=) $1 AND \"object_id\" OPERATOR(pg_catalog.=) $2 FOR KEY SHARE OF x",
+      "calls": 261,
+      "total_plan_time": 0.057475000000000005,
+      "total_exec_time": 0.632821,
+      "rows": 261,
+      "shared_blks_hit": 1305,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT ranges_hash,result_hash FROM workflow.formation_task_results WHERE context_id=$1 ORDER BY ranges_hash",
+      "calls": 4,
+      "total_plan_time": 0.658305,
+      "total_exec_time": 0.581151,
+      "rows": 520,
+      "shared_blks_hit": 311,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT d.snapshot_id,d.topic_id,workflow.current_document_envelope(d) AS envelope_payload,t.display_name FROM workflow.documents d LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id WHERE d.snapshot_id=$1 FOR UPDATE OF d",
+      "calls": 1,
+      "total_plan_time": 0.078788,
+      "total_exec_time": 0.57407,
+      "rows": 1,
+      "shared_blks_hit": 14,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT CASE WHEN jsonb_typeof(value->$2)=$3\n                THEN (value->>$4)::numeric ELSE $5 END",
+      "calls": 522,
+      "total_plan_time": 1.883436,
+      "total_exec_time": 0.4863330000000002,
+      "rows": 522,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT snapshot_id,envelope_payload,processing_storage_version FROM workflow.documents WHERE snapshot_id=$1 FOR UPDATE",
+      "calls": 1,
+      "total_plan_time": 0.105578,
+      "total_exec_time": 0.452837,
+      "rows": 1,
+      "shared_blks_hit": 9,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "COMMIT",
+      "calls": 963,
+      "total_plan_time": 0.0,
+      "total_exec_time": 0.44533700000000037,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT checkpoint_id,phase FROM workflow.processing_checkpoints WHERE attempt_id=$1 AND phase IN ($2,$3,$4,$5,$6,$7) ORDER BY checkpoint_id",
+      "calls": 2,
+      "total_plan_time": 0.123114,
+      "total_exec_time": 0.42869199999999996,
+      "rows": 262,
+      "shared_blks_hit": 146,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT r.ranges_hash,r.source_ranges,r.result_hash,r.payload FROM workflow.formation_task_results r WHERE r.context_id=$1 AND NOT EXISTS(SELECT $2 FROM workflow.formation_task_findings f WHERE f.context_id=r.context_id AND f.ranges_hash=r.ranges_hash AND f.result_hash=r.result_hash) ORDER BY r.committed_at,r.ranges_hash",
+      "calls": 2,
+      "total_plan_time": 0.435342,
+      "total_exec_time": 0.42100899999999997,
+      "rows": 2,
+      "shared_blks_hit": 290,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT payload FROM workflow.processing_attempts WHERE attempt_id=$1 AND snapshot_id=$2",
+      "calls": 4,
+      "total_plan_time": 0.344785,
+      "total_exec_time": 0.395152,
+      "rows": 4,
+      "shared_blks_hit": 261,
+      "shared_blks_read": 0,
+      "wal_bytes": "60"
+    },
+    {
+      "query": "SELECT d.snapshot_id,d.topic_id,CASE WHEN d.document_storage_version=$1 THEN workflow.current_document_envelope(d) ELSE COALESCE(CASE WHEN d.class<>$2 THEN d.review_read_envelope END,workflow.document_scalar_envelope(d)||jsonb_build_object($3,ARRAY(SELECT account_id FROM workflow.document_reviewers WHERE snapshot_id=d.snapshot_id ORDER BY account_id),$4,$5)) END AS envelope_payload,t.display_name FROM workflow.documents d LEFT JOIN workflow.topics t ON t.topic_id=d.topic_id ORDER BY d.acquired_at,d.snapshot_id",
+      "calls": 3,
+      "total_plan_time": 0.804044,
+      "total_exec_time": 0.391606,
+      "rows": 3,
+      "shared_blks_hit": 420,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "(SELECT COALESCE(jsonb_agg(jsonb_build_array(role,member_key,payload_hash) ORDER BY role,member_key),$22::jsonb)\n        FROM workflow.formation_evidence_members WHERE proof_id=NEW.proof_id)\n        IS DISTINCT FROM NEW.header->$23",
+      "calls": 1,
+      "total_plan_time": 0.162193,
+      "total_exec_time": 0.357405,
+      "rows": 1,
+      "shared_blks_hit": 56,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT payload FROM workflow.prepared_extraction_versions WHERE record_hash=$1",
+      "calls": 1,
+      "total_plan_time": 0.04039,
+      "total_exec_time": 0.34233199999999997,
+      "rows": 1,
+      "shared_blks_hit": 38,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT account_id FROM workflow.document_reviewers WHERE snapshot_id=$1 ORDER BY account_id",
+      "calls": 17,
+      "total_plan_time": 0.65458,
+      "total_exec_time": 0.282544,
+      "rows": 17,
+      "shared_blks_hit": 230,
+      "shared_blks_read": 2,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT header,sealed,extraction_hash FROM workflow.formation_evidence_roots WHERE proof_id=$1",
+      "calls": 1,
+      "total_plan_time": 0.041833,
+      "total_exec_time": 0.278036,
+      "rows": 1,
+      "shared_blks_hit": 61,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT object_id,mutation_epoch FROM workflow.object_revision_frontiers WHERE snapshot_id=$1 ORDER BY object_id FOR UPDATE",
+      "calls": 2,
+      "total_plan_time": 0.320019,
+      "total_exec_time": 0.267961,
+      "rows": 261,
+      "shared_blks_hit": 375,
+      "shared_blks_read": 6,
+      "wal_bytes": "14094"
+    },
+    {
+      "query": "SELECT sealed                FROM workflow.formation_evidence_roots\n        WHERE proof_id=CASE WHEN TG_OP=$18 THEN NEW.proof_id ELSE OLD.proof_id END FOR UPDATE",
+      "calls": 265,
+      "total_plan_time": 0.043085,
+      "total_exec_time": 0.2668979999999998,
+      "rows": 265,
+      "shared_blks_hit": 795,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT snapshot_id,artifact_id,semantic_identity,semantic_hash,expected_revision,final_validation FROM workflow.formation_contexts WHERE context_id=$1",
+      "calls": 4,
+      "total_plan_time": 0.7462670000000001,
+      "total_exec_time": 0.26672,
+      "rows": 4,
+      "shared_blks_hit": 470,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT header,sealed FROM workflow.formation_evidence_roots WHERE proof_id=$1",
+      "calls": 1,
+      "total_plan_time": 0.037026,
+      "total_exec_time": 0.259337,
+      "rows": 1,
+      "shared_blks_hit": 61,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT r.header FROM workflow.documents d JOIN workflow.formation_evidence_roots r ON r.proof_id=d.formation_evidence_id WHERE d.snapshot_id=$1",
+      "calls": 1,
+      "total_plan_time": 0.07993,
+      "total_exec_time": 0.252587,
+      "rows": 1,
+      "shared_blks_hit": 17,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT object_id,min(position) AS first_position,count(*) AS n,bool_and(position IS NOT NULL) AS positioned FROM workflow.document_objects WHERE snapshot_id=$1 AND object_id=ANY($2) GROUP BY object_id",
+      "calls": 1,
+      "total_plan_time": 0.10714,
+      "total_exec_time": 0.24749000000000002,
+      "rows": 261,
+      "shared_blks_hit": 8,
+      "shared_blks_read": 7,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT $2 FROM ONLY \"workflow\".\"formation_evidence_roots\" x WHERE \"proof_id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",
+      "calls": 265,
+      "total_plan_time": 0.031287999999999996,
+      "total_exec_time": 0.236784,
+      "rows": 265,
+      "shared_blks_hit": 795,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT header,sealed FROM workflow.formation_evidence_roots WHERE proof_id=$1 FOR UPDATE",
+      "calls": 1,
+      "total_plan_time": 0.028303,
+      "total_exec_time": 0.22111999999999998,
+      "rows": 1,
+      "shared_blks_hit": 26,
+      "shared_blks_read": 0,
+      "wal_bytes": "54"
+    },
+    {
+      "query": "SELECT *               FROM workflow.documents WHERE snapshot_id=NEW.snapshot_id",
+      "calls": 2,
+      "total_plan_time": 0.083274,
+      "total_exec_time": 0.18177100000000002,
+      "rows": 2,
+      "shared_blks_hit": 136,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT payload FROM workflow.processing_attempts WHERE snapshot_id=$1 AND attempt_id=$2",
+      "calls": 1,
+      "total_plan_time": 0.295783,
+      "total_exec_time": 0.171647,
+      "rows": 1,
+      "shared_blks_hit": 171,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT pg_stat_statements_reset()",
+      "calls": 1,
+      "total_plan_time": 0.0,
+      "total_exec_time": 0.15301900000000002,
+      "rows": 1,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT snapshot_id,command_id,payload,record_version FROM workflow.processing_attempts WHERE attempt_id=$1 FOR UPDATE",
+      "calls": 2,
+      "total_plan_time": 0.034943,
+      "total_exec_time": 0.150775,
+      "rows": 2,
+      "shared_blks_hit": 14,
+      "shared_blks_read": 0,
+      "wal_bytes": "108"
+    },
+    {
+      "query": "NEW.final_validation IS NOT NULL AND COALESCE((NEW.final_validation->>$16)::integer,$17)<$18\n       AND EXISTS(SELECT $19 FROM workflow.documents WHERE snapshot_id=NEW.snapshot_id AND formation_evidence_id IS NOT NULL)",
+      "calls": 133,
+      "total_plan_time": 1.8686820000000006,
+      "total_exec_time": 0.14314000000000004,
+      "rows": 133,
+      "shared_blks_hit": 804,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "INSERT INTO workflow.review_fact_state(snapshot_id,initialized,expected_heads,source_identity) VALUES($1,$4,$2,$3::jsonb) ON CONFLICT(snapshot_id) DO UPDATE SET initialized=$5,expected_heads=EXCLUDED.expected_heads,source_identity=EXCLUDED.source_identity",
+      "calls": 1,
+      "total_plan_time": 0.014282,
+      "total_exec_time": 0.13854699999999998,
+      "rows": 1,
+      "shared_blks_hit": 89,
+      "shared_blks_read": 0,
+      "wal_bytes": "1339"
+    },
+    {
+      "query": "INSERT INTO workflow.document_reviewers(snapshot_id,account_id) VALUES($1,$2)",
+      "calls": 1,
+      "total_plan_time": 0.005959,
+      "total_exec_time": 0.13528300000000001,
+      "rows": 1,
+      "shared_blks_hit": 15,
+      "shared_blks_read": 0,
+      "wal_bytes": "269"
+    },
+    {
+      "query": "SELECT CASE WHEN d.document_storage_version=$3 THEN i.payload ELSE a.payload END AS payload FROM workflow.processing_attempts a JOIN workflow.documents d USING(snapshot_id) LEFT JOIN workflow.processing_attempt_inputs i ON i.attempt_id=a.attempt_id WHERE a.snapshot_id=$1 AND d.processing_storage_version=$4 AND a.attempt_id=$2 ORDER BY a.started_at DESC LIMIT $5",
+      "calls": 1,
+      "total_plan_time": 0.559246,
+      "total_exec_time": 0.132498,
+      "rows": 1,
+      "shared_blks_hit": 555,
+      "shared_blks_read": 0,
+      "wal_bytes": "82"
+    },
+    {
+      "query": "UPDATE workflow.review_fact_state s SET prepared_epoch=input_epoch WHERE snapshot_id=$1 AND initialized AND source_identity=$2::jsonb AND NOT EXISTS(SELECT $3 FROM workflow.review_object_facts f WHERE f.snapshot_id=s.snapshot_id AND dirty)",
+      "calls": 1,
+      "total_plan_time": 0.104767,
+      "total_exec_time": 0.126249,
+      "rows": 1,
+      "shared_blks_hit": 114,
+      "shared_blks_read": 4,
+      "wal_bytes": "1481"
+    },
+    {
+      "query": "SELECT object_id,object_version,position FROM workflow.document_objects WHERE snapshot_id=$1 ORDER BY position",
+      "calls": 1,
+      "total_plan_time": 0.037566,
+      "total_exec_time": 0.10964399999999999,
+      "rows": 261,
+      "shared_blks_hit": 9,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=$1 FOR UPDATE",
+      "calls": 3,
+      "total_plan_time": 0.729582,
+      "total_exec_time": 0.10411599999999999,
+      "rows": 3,
+      "shared_blks_hit": 687,
+      "shared_blks_read": 0,
+      "wal_bytes": "162"
+    },
+    {
+      "query": "SELECT COALESCE(d.review_card_envelope,(workflow.review_card_envelope_for(workflow.current_document_envelope(d))\n      || jsonb_build_object($2,d.snapshot_id,$3,d.document_id,\n        $4,d.source_id,$5,d.title,$6,d.class,$7,d.state,\n        $8,to_char(d.source_date,$9),$10,d.source_version,\n        $11,d.source_sha256,$12,d.content_kind,\n        $13,d.publication_eligibility) || jsonb_build_object(\n        $14,jsonb_build_object($15,d.snapshot_id,$16,d.source_id,$17,d.document_id,\n        $18,d.source_sha256,$19,d.source_version,$20,d.content_kind,\n        $21,workflow.current_document_envelope(d)#>$22,\n        $23,workflow.review_card_envelope_for(workflow.current_document_envelope(d))->$24,\n        $25,d.review_source_ref)))) AS envelope FROM workflow.documents d WHERE snapshot_id=$1",
+      "calls": 2,
+      "total_plan_time": 0.332087,
+      "total_exec_time": 0.096966,
+      "rows": 2,
+      "shared_blks_hit": 77,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT d.processing_storage_version,a.payload FROM workflow.documents d LEFT JOIN workflow.processing_attempts a ON a.snapshot_id=d.snapshot_id AND a.attempt_id=$1 WHERE d.snapshot_id=$2",
+      "calls": 1,
+      "total_plan_time": 0.548891,
+      "total_exec_time": 0.09379,
+      "rows": 1,
+      "shared_blks_hit": 447,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT account_id,username,display_name,roles,password_salt,password_hash,created_at,to_jsonb(accounts)->$2 AS retirement FROM workflow.accounts WHERE account_id=$1 FOR SHARE",
+      "calls": 3,
+      "total_plan_time": 0.163925,
+      "total_exec_time": 0.091527,
+      "rows": 3,
+      "shared_blks_hit": 141,
+      "shared_blks_read": 0,
+      "wal_bytes": "162"
+    },
+    {
+      "query": "INSERT INTO workflow.source_read_roots(views_id,extraction_hash,header,header_hash) VALUES($1,$2,$3::jsonb,$4) ON CONFLICT DO NOTHING",
+      "calls": 1,
+      "total_plan_time": 0.005478,
+      "total_exec_time": 0.089745,
+      "rows": 0,
+      "shared_blks_hit": 22,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "INSERT INTO workflow.prepared_extraction_versions(record_hash,snapshot_id,payload) VALUES($1,$2,$3::jsonb) ON CONFLICT DO NOTHING",
+      "calls": 1,
+      "total_plan_time": 0.030296,
+      "total_exec_time": 0.089724,
+      "rows": 0,
+      "shared_blks_hit": 16,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT position,payload FROM workflow.document_objects WHERE snapshot_id=$1 ORDER BY position",
+      "calls": 4,
+      "total_plan_time": 1.01567,
+      "total_exec_time": 0.07979,
+      "rows": 0,
+      "shared_blks_hit": 691,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT rel.release_id,\n                           rel.release_version,\n                           rel.release_owner,\n                           rel.published_at,\n                           ev.details\n                    FROM audit_events ev\n                    JOIN publication_releases rel ON rel.release_id=ev.entity_id\n                    WHERE ev.entity_type=$2\n                      AND ev.event_type=$3\n                      AND ev.details->>$4=$1\n                    ORDER BY rel.published_at DESC\n                    LIMIT $5",
+      "calls": 3,
+      "total_plan_time": 1.5055930000000002,
+      "total_exec_time": 0.075031,
+      "rows": 0,
+      "shared_blks_hit": 846,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT pg_stat_reset()",
+      "calls": 1,
+      "total_plan_time": 0.003905,
+      "total_exec_time": 0.07345,
+      "rows": 1,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT revision,review_source_ref,formation_evidence_id,source_sha256,source_version FROM workflow.documents WHERE snapshot_id=$1",
+      "calls": 4,
+      "total_plan_time": 0.405918,
+      "total_exec_time": 0.063235,
+      "rows": 4,
+      "shared_blks_hit": 344,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT payload FROM workflow.processing_attempts WHERE snapshot_id=$1 ORDER BY started_at DESC,attempt_id DESC LIMIT $2",
+      "calls": 1,
+      "total_plan_time": 0.043405,
+      "total_exec_time": 0.061703,
+      "rows": 1,
+      "shared_blks_hit": 11,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "UPDATE workflow.review_object_facts SET dirty=$3,history_count=$4,current_version=$5,record=$6,record_hash=$7 WHERE snapshot_id=$1 AND NOT(object_id=ANY($2))",
+      "calls": 1,
+      "total_plan_time": 0.074432,
+      "total_exec_time": 0.056195,
+      "rows": 0,
+      "shared_blks_hit": 20,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "INSERT INTO workflow.processing_document_summaries(snapshot_id,payload) VALUES($1,$2::jsonb) ON CONFLICT(snapshot_id) DO UPDATE SET payload=EXCLUDED.payload",
+      "calls": 1,
+      "total_plan_time": 0.019699,
+      "total_exec_time": 0.054351000000000003,
+      "rows": 1,
+      "shared_blks_hit": 20,
+      "shared_blks_read": 0,
+      "wal_bytes": "2107"
+    },
+    {
+      "query": "SELECT artifact_id,semantic_hash,semantic_identity,expected_revision FROM workflow.formation_contexts WHERE context_id=$1",
+      "calls": 2,
+      "total_plan_time": 0.359608,
+      "total_exec_time": 0.047081,
+      "rows": 2,
+      "shared_blks_hit": 224,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT payload FROM workflow.processing_checkpoints WHERE attempt_id=$1 AND phase=$2 ORDER BY checkpoint_id",
+      "calls": 2,
+      "total_plan_time": 0.364615,
+      "total_exec_time": 0.046709,
+      "rows": 0,
+      "shared_blks_hit": 218,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT header,header_hash,sealed FROM workflow.source_read_roots WHERE views_id=$1",
+      "calls": 1,
+      "total_plan_time": 0.178316,
+      "total_exec_time": 0.036925000000000006,
+      "rows": 1,
+      "shared_blks_hit": 69,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT snapshot_id,object_id,object_version,canonical_object_hash,confirmed_object_type,reviewer_account_id,reviewer_display_name,decision,valid,authorization_payload FROM workflow.publish_authorizations ORDER BY snapshot_id,position NULLS LAST,authorization_id",
+      "calls": 5,
+      "total_plan_time": 0.45352099999999995,
+      "total_exec_time": 0.036855,
+      "rows": 0,
+      "shared_blks_hit": 418,
+      "shared_blks_read": 4,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT snapshot_id,source_sha256 AS sha256,source_version AS version,object_generation,processing_storage_version FROM workflow.documents WHERE snapshot_id=$1 FOR UPDATE",
+      "calls": 1,
+      "total_plan_time": 0.273309,
+      "total_exec_time": 0.032638999999999994,
+      "rows": 1,
+      "shared_blks_hit": 226,
+      "shared_blks_read": 0,
+      "wal_bytes": "54"
+    },
+    {
+      "query": "SELECT source_identity FROM workflow.review_fact_state WHERE snapshot_id=$1",
+      "calls": 1,
+      "total_plan_time": 0.024647,
+      "total_exec_time": 0.02658,
+      "rows": 1,
+      "shared_blks_hit": 15,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "INSERT INTO workflow.topics(topic_id,identity_key,display_name) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",
+      "calls": 1,
+      "total_plan_time": 0.005378,
+      "total_exec_time": 0.025709,
+      "rows": 0,
+      "shared_blks_hit": 5,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+      "calls": 4,
+      "total_plan_time": 0.0,
+      "total_exec_time": 0.022874000000000002,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT pg_advisory_xact_lock($1)",
+      "calls": 3,
+      "total_plan_time": 0.091536,
+      "total_exec_time": 0.020852,
+      "rows": 3,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT document_storage_version FROM workflow.documents WHERE snapshot_id=$1 FOR UPDATE",
+      "calls": 1,
+      "total_plan_time": 0.028403,
+      "total_exec_time": 0.019309,
+      "rows": 1,
+      "shared_blks_hit": 4,
+      "shared_blks_read": 0,
+      "wal_bytes": "174"
+    },
+    {
+      "query": "SELECT snapshot_id,source_id,document_id,source_sha256 AS sha256,source_version AS version,content_kind,logical_document_id,working_revision_id FROM workflow.documents WHERE snapshot_id=$1",
+      "calls": 1,
+      "total_plan_time": 0.235502,
+      "total_exec_time": 0.017405999999999998,
+      "rows": 1,
+      "shared_blks_hit": 228,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT wanted.object_id,o.object_version,f.mutation_epoch,f.certificate,f.certificate_hash=encode(sha256(convert_to(f.certificate::text,$4)),$5) AS intact,o.position,o.payload FROM (SELECT f.object_id FROM workflow.object_revision_frontiers f WHERE f.snapshot_id=$1 AND EXISTS(SELECT $6 FROM workflow.document_objects o WHERE o.snapshot_id=f.snapshot_id AND o.object_id=f.object_id)) wanted(object_id) LEFT JOIN LATERAL (SELECT object_version,position,payload FROM workflow.document_objects WHERE snapshot_id=$2 AND object_id=wanted.object_id ORDER BY position DESC LIMIT $7) o ON $8 LEFT JOIN workflow.object_revision_frontiers f ON f.snapshot_id=$3 AND f.object_id=wanted.object_id",
+      "calls": 2,
+      "total_plan_time": 1.4515419999999999,
+      "total_exec_time": 0.015374,
+      "rows": 0,
+      "shared_blks_hit": 814,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT extraction_hash,header_hash,header,sealed FROM workflow.source_read_roots WHERE views_id=$1 FOR UPDATE",
+      "calls": 1,
+      "total_plan_time": 0.03327,
+      "total_exec_time": 0.014642,
+      "rows": 1,
+      "shared_blks_hit": 15,
+      "shared_blks_read": 0,
+      "wal_bytes": "54"
+    },
+    {
+      "query": "DELETE FROM workflow.document_reviewers WHERE snapshot_id=$1",
+      "calls": 1,
+      "total_plan_time": 0.038748,
+      "total_exec_time": 0.01426,
+      "rows": 1,
+      "shared_blks_hit": 3,
+      "shared_blks_read": 0,
+      "wal_bytes": "54"
+    },
+    {
+      "query": "SELECT plan_hash FROM workflow.formation_task_plans WHERE context_id=$1",
+      "calls": 2,
+      "total_plan_time": 0.078137,
+      "total_exec_time": 0.013389999999999999,
+      "rows": 2,
+      "shared_blks_hit": 52,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT *            FROM workflow.formation_evidence_roots WHERE proof_id=document.formation_evidence_id",
+      "calls": 2,
+      "total_plan_time": 0.020520999999999998,
+      "total_exec_time": 0.013179999999999999,
+      "rows": 2,
+      "shared_blks_hit": 2,
+      "shared_blks_read": 2,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT final_validation FROM workflow.formation_contexts WHERE context_id=$1",
+      "calls": 1,
+      "total_plan_time": 0.007381,
+      "total_exec_time": 0.011987999999999999,
+      "rows": 1,
+      "shared_blks_hit": 4,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT formation_evidence_id FROM workflow.documents WHERE snapshot_id=$1",
+      "calls": 2,
+      "total_plan_time": 0.041832,
+      "total_exec_time": 0.009745,
+      "rows": 2,
+      "shared_blks_hit": 4,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT $2 FROM ONLY \"workflow\".\"formation_evidence_roots\" x WHERE \"proof_id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",
+      "calls": 1,
+      "total_plan_time": 0.020671,
+      "total_exec_time": 0.008513,
+      "rows": 1,
+      "shared_blks_hit": 3,
+      "shared_blks_read": 0,
+      "wal_bytes": "54"
+    },
+    {
+      "query": "SELECT semantic_identity FROM workflow.formation_contexts WHERE context_id=$1",
+      "calls": 1,
+      "total_plan_time": 0.063004,
+      "total_exec_time": 0.007882,
+      "rows": 1,
+      "shared_blks_hit": 68,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT $2 FROM ONLY \"workflow\".\"prepared_extraction_versions\" x WHERE \"record_hash\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",
+      "calls": 1,
+      "total_plan_time": 0.028974,
+      "total_exec_time": 0.007631000000000001,
+      "rows": 1,
+      "shared_blks_hit": 25,
+      "shared_blks_read": 0,
+      "wal_bytes": "54"
+    },
+    {
+      "query": "SET LOCAL statement_timeout='5s'",
+      "calls": 2,
+      "total_plan_time": 0.0,
+      "total_exec_time": 0.006189,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT $2 FROM ONLY \"workflow\".\"formation_contexts\" x WHERE \"context_id\" OPERATOR(pg_catalog.=) $1 FOR KEY SHARE OF x",
+      "calls": 1,
+      "total_plan_time": 0.10024,
+      "total_exec_time": 0.005187,
+      "rows": 1,
+      "shared_blks_hit": 69,
+      "shared_blks_read": 0,
+      "wal_bytes": "54"
+    },
+    {
+      "query": "SELECT document_storage_version FROM workflow.documents WHERE snapshot_id=$1",
+      "calls": 1,
+      "total_plan_time": 0.01387,
+      "total_exec_time": 0.004507000000000001,
+      "rows": 1,
+      "shared_blks_hit": 3,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "RELEASE $1",
+      "calls": 2,
+      "total_plan_time": 0.0,
+      "total_exec_time": 0.004507000000000001,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SET LOCAL idle_in_transaction_session_timeout='5s'",
+      "calls": 2,
+      "total_plan_time": 0.0,
+      "total_exec_time": 0.0040160000000000005,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT topic_id,identity_key,display_name FROM workflow.topics WHERE identity_key=$1",
+      "calls": 1,
+      "total_plan_time": 0.017115,
+      "total_exec_time": 0.003555,
+      "rows": 1,
+      "shared_blks_hit": 2,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT object_id,object_version,position,payload FROM workflow.document_objects WHERE snapshot_id=$1 ORDER BY position FOR UPDATE",
+      "calls": 1,
+      "total_plan_time": 0.040481,
+      "total_exec_time": 0.003125,
+      "rows": 0,
+      "shared_blks_hit": 6,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "EXISTS(SELECT $15 FROM workflow.formation_evidence_roots WHERE proof_id=NEW.proof_id AND NOT sealed)",
+      "calls": 1,
+      "total_plan_time": 0.024597,
+      "total_exec_time": 0.0030740000000000003,
+      "rows": 1,
+      "shared_blks_hit": 2,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SAVEPOINT $1",
+      "calls": 2,
+      "total_plan_time": 0.0,
+      "total_exec_time": 0.0011710000000000002,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "NEW.envelope_payload IS DISTINCT FROM OLD.envelope_payload AND NEW.revision<=OLD.revision",
+      "calls": 0,
+      "total_plan_time": 0.002824,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "NEW.document_storage_version=$30 AND NEW.envelope_payload IS NOT NULL",
+      "calls": 0,
+      "total_plan_time": 0.001572,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "previous_count:=$1",
+      "calls": 0,
+      "total_plan_time": 0.000782,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "NEW.document_storage_version=$18 AND tree_ref IS NOT NULL AND tree_ref<>$19::jsonb",
+      "calls": 0,
+      "total_plan_time": 0.002273,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "NEW.sealed OR NEW.header->>$19 IS DISTINCT FROM $20\n           OR NEW.header#>>$21 IS DISTINCT FROM NEW.snapshot_id\n           OR NEW.header#>>$22 IS DISTINCT FROM NEW.context_id\n           OR NEW.header->>$23 IS DISTINCT FROM NEW.extraction_hash",
+      "calls": 0,
+      "total_plan_time": 0.003685,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "NEW.document_storage_version=$15",
+      "calls": 0,
+      "total_plan_time": 0.016235,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "protected OR TG_OP=$15 OR (NOT FOUND AND TG_OP<>$16)",
+      "calls": 0,
+      "total_plan_time": 0.003465,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "expected IS NULL OR actual IS NULL",
+      "calls": 0,
+      "total_plan_time": 2.0593169999999983,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "NOT FOUND",
+      "calls": 0,
+      "total_plan_time": 0.001171,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "SELECT query,calls,total_plan_time,total_exec_time,rows,shared_blks_hit,shared_blks_read,wal_bytes FROM pg_stat_statements WHERE dbid=(SELECT oid FROM pg_database WHERE datname=current_database()) ORDER BY total_exec_time DESC",
+      "calls": 0,
+      "total_plan_time": 0.364596,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 53,
+      "shared_blks_read": 14,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "COALESCE(NEW,OLD)",
+      "calls": 0,
+      "total_plan_time": 0.003705,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "CASE WHEN TG_OP=$7 THEN OLD ELSE NEW END",
+      "calls": 0,
+      "total_plan_time": 0.001672,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "CASE WHEN TG_OP=$7 THEN OLD ELSE NEW END",
+      "calls": 0,
+      "total_plan_time": 0.001852,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "d.envelope_payload",
+      "calls": 0,
+      "total_plan_time": 0.009684,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "expected::jsonb=actual::jsonb AND ((expected::text ~ $3)=(actual::text ~ $4))",
+      "calls": 0,
+      "total_plan_time": 2.3745700000000003,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "TG_OP=$7",
+      "calls": 0,
+      "total_plan_time": 1.8138830000000024,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "OLD.sealed OR NOT NEW.sealed OR NEW.proof_id<>OLD.proof_id OR NEW.snapshot_id<>OLD.snapshot_id\n       OR NEW.context_id<>OLD.context_id OR NEW.extraction_hash<>OLD.extraction_hash OR NEW.header<>OLD.header",
+      "calls": 0,
+      "total_plan_time": 0.003625,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "tree_ref:=NEW.review_read_envelope#>$19",
+      "calls": 0,
+      "total_plan_time": 0.002464,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "category IS DISTINCT FROM json_typeof(actual)",
+      "calls": 0,
+      "total_plan_time": 0.6812250000000002,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "NOT FOUND OR document.formation_evidence_id IS NULL",
+      "calls": 0,
+      "total_plan_time": 0.001842,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "TG_OP=$19 AND OLD.formation_evidence_id IS NOT NULL AND NEW.formation_evidence_id IS NULL",
+      "calls": 0,
+      "total_plan_time": 0.002704,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "TG_OP=$22 AND (NEW.snapshot_id,NEW.object_id,NEW.object_version,NEW.position)\n       IS NOT DISTINCT FROM (OLD.snapshot_id,OLD.object_id,OLD.object_version,OLD.position)",
+      "calls": 0,
+      "total_plan_time": 0.006339,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "category:=json_typeof(expected)",
+      "calls": 0,
+      "total_plan_time": 0.5023010000000001,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "TG_OP=$7 OR TG_OP=$8",
+      "calls": 0,
+      "total_plan_time": 0.8786889999999996,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "OLD.processing_storage_version=$18 AND (NEW.processing_storage_version IS DISTINCT FROM $19\n        OR NEW.envelope_payload->>$20 IS DISTINCT FROM $21\n        OR NEW.envelope_payload ? $22)",
+      "calls": 0,
+      "total_plan_time": 0.003695,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "CASE WHEN TG_OP=$7 THEN OLD ELSE NEW END",
+      "calls": 0,
+      "total_plan_time": 0.7585069999999999,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "actual_binding IS NULL OR NEW.binding IS DISTINCT FROM actual_binding",
+      "calls": 0,
+      "total_plan_time": 0.6088910000000003,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "NEW.logical_document_id IS DISTINCT FROM OLD.logical_document_id\n           OR NEW.working_revision_id IS DISTINCT FROM OLD.working_revision_id\n           OR NEW.working_revision_number IS DISTINCT FROM OLD.working_revision_number\n           OR NEW.replaces_snapshot_id IS DISTINCT FROM OLD.replaces_snapshot_id",
+      "calls": 0,
+      "total_plan_time": 0.001862,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "sid:=CASE WHEN TG_OP=$17 THEN OLD.snapshot_id ELSE NEW.snapshot_id END",
+      "calls": 0,
+      "total_plan_time": 0.8967349999999998,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "NEW.review_read_envelope := workflow.review_read_envelope_for(NEW.envelope_payload)",
+      "calls": 0,
+      "total_plan_time": 0.085518,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 32,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "NEW.review_card_envelope := workflow.review_card_envelope_for(CASE WHEN NEW.document_storage_version=$32 THEN NEW.review_read_envelope ELSE NEW.envelope_payload END)\n      || jsonb_build_object($33,NEW.snapshot_id,$34,NEW.document_id,\n        $35,NEW.source_id,$36,NEW.title,$37,NEW.class,$38,NEW.state,\n        $39,to_char(NEW.source_date,$40),$41,NEW.source_version,\n        $42,NEW.source_sha256,$43,NEW.content_kind,\n        $44,NEW.publication_eligibility)\n      || jsonb_build_object($45,jsonb_build_object(\n        $46,NEW.snapshot_id,$47,NEW.source_id,$48,NEW.document_id,$49,NEW.source_sha256,\n        $50,NEW.source_version,$51,NEW.content_kind,\n        $52,NEW.review_read_envelope#>$53,\n        $54,NEW.review_read_envelope->$55,\n        $56,NEW.review_source_ref))",
+      "calls": 0,
+      "total_plan_time": 0.176203,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 63,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "category=$6",
+      "calls": 0,
+      "total_plan_time": 1.467106999999998,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "$1",
+      "calls": 0,
+      "total_plan_time": 0.033470999999999994,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "NEW.source_selection_summary := workflow.source_selection_summary_for(NEW.envelope_payload)",
+      "calls": 0,
+      "total_plan_time": 0.189183,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 55,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "NEW.sealed",
+      "calls": 0,
+      "total_plan_time": 0.000961,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "d.document_storage_version=$6",
+      "calls": 0,
+      "total_plan_time": 0.04692899999999999,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "NEW.document_storage_version=$17",
+      "calls": 0,
+      "total_plan_time": 0.00637,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "TG_OP IN ($7,$8)",
+      "calls": 0,
+      "total_plan_time": 0.007302,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "NEW.payload IS DISTINCT FROM OLD.payload AND NEW.record_version<=OLD.record_version",
+      "calls": 0,
+      "total_plan_time": 1.9779029999999984,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "$1",
+      "calls": 0,
+      "total_plan_time": 1.8049649999999997,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "NOT FOUND OR (NEW.snapshot_id,NEW.command_id,NEW.started_at,NEW.record_version)\n            IS DISTINCT FROM (original.snapshot_id,original.command_id,original.started_at,original.record_version)\n       OR NEW.state IS DISTINCT FROM original.payload->>$30\n       OR NEW.kind IS DISTINCT FROM original.payload->>$31\n       OR NEW.progress_made IS DISTINCT FROM (original.payload->$32=$33::jsonb)\n       OR NOT workflow.exact_archive_json(NEW.payload::text::json,\n            workflow.processing_attempt_input_for(original.payload)::text::json,$34)",
+      "calls": 0,
+      "total_plan_time": 21.075978000000024,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 4404,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "expected::jsonb=actual::jsonb",
+      "calls": 0,
+      "total_plan_time": 3.2527480000000004,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 2406,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "previous_count IS NULL",
+      "calls": 0,
+      "total_plan_time": 0.002013,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "NEW.envelope_payload := NEW.envelope_payload || jsonb_build_object(\n            $31, NEW.logical_document_id,\n            $32, NEW.snapshot_id,\n            $33, NEW.source_version,\n            $34, NEW.working_revision_id,\n            $35, NEW.working_revision_number\n        )",
+      "calls": 0,
+      "total_plan_time": 0.002253,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "delta<=$4",
+      "calls": 0,
+      "total_plan_time": 0.001172,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "decoded_numbers",
+      "calls": 0,
+      "total_plan_time": 0.693213,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "(NEW.review_card_envelope->$17)::text IS DISTINCT FROM\n          (OLD.review_card_envelope->$18)::text",
+      "calls": 0,
+      "total_plan_time": 0.008012,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 6,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "TG_OP=$54 AND NEW.formation_evidence_id IS NOT DISTINCT FROM OLD.formation_evidence_id\n       AND NEW.review_source_ref IS NOT DISTINCT FROM OLD.review_source_ref\n       AND NEW.envelope_payload#>>$55\n           IS NOT DISTINCT FROM OLD.envelope_payload#>>$56\n       AND NEW.envelope_payload->$57 IS NOT DISTINCT FROM OLD.envelope_payload->$58\n       AND (NEW.snapshot_id,NEW.source_id,NEW.document_id,NEW.source_sha256,NEW.source_version,\n            NEW.content_kind,NEW.logical_document_id,NEW.working_revision_id)\n           IS NOT DISTINCT FROM\n           (OLD.snapshot_id,OLD.source_id,OLD.document_id,OLD.source_sha256,OLD.source_version,\n            OLD.content_kind,OLD.logical_document_id,OLD.working_revision_id)",
+      "calls": 0,
+      "total_plan_time": 0.00712,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    },
+    {
+      "query": "following_count:=GREATEST($6,previous_count+delta)",
+      "calls": 0,
+      "total_plan_time": 0.001432,
+      "total_exec_time": 0.0,
+      "rows": 0,
+      "shared_blks_hit": 0,
+      "shared_blks_read": 0,
+      "wal_bytes": "0"
+    }
+  ],
+  "server_functions": [
+    {
+      "schemaname": "workflow",
+      "funcname": "advance_object_generation",
+      "calls": 261,
+      "total_time": 15617.386,
+      "self_time": 9442.385
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "assign_lifecycle_identity",
+      "calls": 264,
+      "total_time": 3859.936,
+      "self_time": 3859.936
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "refresh_processing_attempt_input",
+      "calls": 401,
+      "total_time": 1351.952,
+      "self_time": 197.06
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "refresh_review_card_envelope",
+      "calls": 264,
+      "total_time": 1191.916,
+      "self_time": 82.785
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "review_read_envelope_for",
+      "calls": 11881,
+      "total_time": 1131.118,
+      "self_time": 1131.118
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "review_card_envelope_for",
+      "calls": 264,
+      "total_time": 1109.131,
+      "self_time": 30.803
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "guard_processing_storage",
+      "calls": 264,
+      "total_time": 1026.549,
+      "self_time": 1026.549
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "guard_processing_attempt_input",
+      "calls": 802,
+      "total_time": 1004.254,
+      "self_time": 178.586
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "exact_archive_json",
+      "calls": 98910,
+      "total_time": 711.792,
+      "self_time": 711.792
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "processing_attempt_input_for",
+      "calls": 1203,
+      "total_time": 263.926,
+      "self_time": 263.926
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "guard_active_formation_evidence",
+      "calls": 3,
+      "total_time": 188.525,
+      "self_time": 188.525
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "refresh_review_read_envelope",
+      "calls": 264,
+      "total_time": 137.172,
+      "self_time": 84.382
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "guard_processing_archive",
+      "calls": 131,
+      "total_time": 88.654,
+      "self_time": 88.654
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "require_operational_writer",
+      "calls": 663,
+      "total_time": 73.96,
+      "self_time": 73.96
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "review_dependency_keys",
+      "calls": 261,
+      "total_time": 65.468,
+      "self_time": 65.468
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "review_card_object_change",
+      "calls": 261,
+      "total_time": 63.289,
+      "self_time": 3.978
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "invalidate_review_object",
+      "calls": 261,
+      "total_time": 59.31,
+      "self_time": 59.31
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "advance_attempt_record_version",
+      "calls": 401,
+      "total_time": 48.343,
+      "self_time": 48.343
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "object_revision_frontier_change",
+      "calls": 261,
+      "total_time": 44.391,
+      "self_time": 2.669
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "invalidate_revision_frontier",
+      "calls": 261,
+      "total_time": 41.722,
+      "self_time": 41.722
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "guard_active_evidence_attempt",
+      "calls": 402,
+      "total_time": 34.139,
+      "self_time": 34.139
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "guard_evidence_validator_compatibility",
+      "calls": 133,
+      "total_time": 16.182,
+      "self_time": 16.182
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "review_card_document_change",
+      "calls": 264,
+      "total_time": 11.042,
+      "self_time": 11.042
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "refresh_source_selection_summary",
+      "calls": 1,
+      "total_time": 8.054,
+      "self_time": 0.854
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "source_selection_summary_for",
+      "calls": 1,
+      "total_time": 7.2,
+      "self_time": 7.2
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "revision_source_sequence",
+      "calls": 522,
+      "total_time": 6.86,
+      "self_time": 6.86
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "require_operational_inputs",
+      "calls": 264,
+      "total_time": 5.703,
+      "self_time": 5.703
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "current_document_envelope",
+      "calls": 15,
+      "total_time": 2.118,
+      "self_time": 2.118
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "guard_formation_evidence_root",
+      "calls": 2,
+      "total_time": 1.433,
+      "self_time": 1.433
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "guard_formation_evidence_member",
+      "calls": 265,
+      "total_time": 1.394,
+      "self_time": 1.394
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "guard_operational_envelope_write",
+      "calls": 1,
+      "total_time": 0.275,
+      "self_time": 0.275
+    },
+    {
+      "schemaname": "public",
+      "funcname": "pg_stat_statements_reset",
+      "calls": 1,
+      "total_time": 0.14,
+      "self_time": 0.14
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "require_sealed_formation_evidence",
+      "calls": 1,
+      "total_time": 0.105,
+      "self_time": 0.105
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "guard_source_read_root",
+      "calls": 1,
+      "total_time": 0.059,
+      "self_time": 0.059
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "guard_source_read_member",
+      "calls": 0,
+      "total_time": 0.0,
+      "self_time": 0.0
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "guard_account_retirement",
+      "calls": 0,
+      "total_time": 0.0,
+      "self_time": 0.0
+    },
+    {
+      "schemaname": "public",
+      "funcname": "pg_stat_statements",
+      "calls": 0,
+      "total_time": 0.0,
+      "self_time": 0.0
+    },
+    {
+      "schemaname": "workflow",
+      "funcname": "require_sealed_source_read_root",
+      "calls": 0,
+      "total_time": 0.0,
+      "self_time": 0.0
+    }
+  ],
+  "wait_samples_25ms": {
+    "idle/Client/ClientRead": 6,
+    "active/IO/WalSync": 11,
+    "idle in transaction/Client/ClientRead": 51,
+    "active/None/None": 750,
+    "idle/None/None": 1,
+    "idle in transaction/None/None": 2,
+    "active/IO/WalInitWrite": 21,
+    "None/None/None": 1,
+    "active/IO/WalInitSync": 3,
+    "active/LWLock/WALWrite": 4,
+    "active/IO/DataFileExtend": 15
+  }
+}

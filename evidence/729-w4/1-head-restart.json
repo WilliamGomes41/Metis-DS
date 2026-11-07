@@ -1,0 +1,12 @@
+[
+  {
+    "task_count": 130,
+    "object_count": 261,
+    "object_generation": 261,
+    "ordered_objects_sha256": "104f8dbdc02f8cec953d34e4ec784f57e6f6426dd0b0ff9e794680a6b3e4f04a",
+    "committed_tasks_sha256": "8ecbe7b8a1f2503d18d9ac9e23c0119d7cb79d701ac803ec4c65873f59cd8b0c",
+    "source_sha256": "b4a61474bb120eebd47422846cb97f1758c2d486bb886cb139b01f7b472ff1a1",
+    "restart_exact_objects_tasks_source": true,
+    "publish_allowed": false
+  }
+]

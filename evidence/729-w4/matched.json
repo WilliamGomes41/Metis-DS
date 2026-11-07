@@ -1,0 +1,87 @@
+{
+  "python": "3.13.5",
+  "fixture": "130 tasks; deterministic provider; original harness + post-timer restart proof",
+  "pairs": [
+    {
+      "pair": 1,
+      "kind": "baseline",
+      "resume_seconds": 24.907843,
+      "proof_file": "1-baseline.json",
+      "restart_proof": "1-baseline-restart.json"
+    },
+    {
+      "pair": 1,
+      "kind": "head",
+      "resume_seconds": 9.555206,
+      "proof_file": "1-head.json",
+      "restart_proof": "1-head-restart.json"
+    },
+    {
+      "pair": 2,
+      "kind": "baseline",
+      "resume_seconds": 24.068415,
+      "proof_file": "2-baseline.json",
+      "restart_proof": "2-baseline-restart.json"
+    },
+    {
+      "pair": 2,
+      "kind": "head",
+      "resume_seconds": 9.783557,
+      "proof_file": "2-head.json",
+      "restart_proof": "2-head-restart.json"
+    },
+    {
+      "pair": 3,
+      "kind": "baseline",
+      "resume_seconds": 24.374409,
+      "proof_file": "3-baseline.json",
+      "restart_proof": "3-baseline-restart.json"
+    },
+    {
+      "pair": 3,
+      "kind": "head",
+      "resume_seconds": 9.648111,
+      "proof_file": "3-head.json",
+      "restart_proof": "3-head-restart.json"
+    },
+    {
+      "pair": 4,
+      "kind": "baseline",
+      "resume_seconds": 24.755935,
+      "proof_file": "4-baseline.json",
+      "restart_proof": "4-baseline-restart.json"
+    },
+    {
+      "pair": 4,
+      "kind": "head",
+      "resume_seconds": 9.298082,
+      "proof_file": "4-head.json",
+      "restart_proof": "4-head-restart.json"
+    },
+    {
+      "pair": 5,
+      "kind": "baseline",
+      "resume_seconds": 24.186551,
+      "proof_file": "5-baseline.json",
+      "restart_proof": "5-baseline-restart.json"
+    },
+    {
+      "pair": 5,
+      "kind": "head",
+      "resume_seconds": 9.443391,
+      "proof_file": "5-head.json",
+      "restart_proof": "5-head-restart.json"
+    }
+  ],
+  "revisions": {
+    "baseline": {
+      "sha": "e6e008c671bfdaa780b1df6cd3b44a661643f7ce",
+      "harness_sha256": "257a70dfa59186245b045b2a257879253585791cbdbd9e3218d14e53edb35474"
+    },
+    "head": {
+      "sha": "5df87a987764bbcd60e44b34402ffe52b558118a",
+      "harness_sha256": "257a70dfa59186245b045b2a257879253585791cbdbd9e3218d14e53edb35474"
+    }
+  },
+  "postgresql": "17.11 (Debian 17.11-0+deb13u1)"
+}
