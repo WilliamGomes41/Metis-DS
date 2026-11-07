@@ -5,7 +5,7 @@ Class B; Rewrite risk: none. Lokale synthetische PostgreSQL/Chromium-proef op de
 ## Aangetoond
 
 - De oorspronkelijke drie HTTP-tegenvoorbeelden faalden: inventarislink ontbreekt naast open werk; bon heeft geen objectlink; afgehandelde KO-titel opent alleen de bron.
-- De gerichte suite slaagt met **33 uitgevoerde tests in 42,72s, geen skips**:32native/HTTP-/architectuurcontroles en1werkelijke browserproef. Python3.13.5, PostgreSQL17.11, Chromium met Playwright1.58.2.
+- De gerichte native/HTTP-/architectuurcontroles en werkelijke browserproef worden op de definitieve patch uitgevoerd. Python3.13.5, PostgreSQL17.11, Chromium met Playwright1.58.2. De eerste volledige set van33controles slaagde in42,72s; daarna is een aanvullende toegangscontrole voor de leesweergave toegevoegd.
 - Werkelijke opslag → bon → object lezen; overzicht → alle passages → opgeslagen KO lezen. Ook met ander open werk blijft de inventaris bereikbaar.
 - De leesweergave toont huidige inhoud, versie, afgeleide status, broncontext en actuele geregistreerde N/A; zij bevat geen beoordelingsformulier. Historische bon en huidige objectversie blijven onderscheiden.
 - Na een echte correctie opent de oude bonlink de nieuwe huidige versie; het oude akkoord en de oude N/A worden daar niet overgenomen. De historische bon blijft intact, ook na herstart.

@@ -1,6 +1,10 @@
 """Saved KOs remain reachable while the reviewer still has open work.
 
-# release-control-evidence: scope/belofte opslag concurrent stale toegang kwaliteit slop releasebewijs
+# release-control-evidence: scope/belofte
+# release-control-evidence: opslag concurrent stale
+# release-control-evidence: toegang
+# release-control-evidence: slop
+# release-control-evidence: releasebewijs
 """
 import html
 import re
@@ -11,6 +15,7 @@ import pytest
 
 from tests.test_ko_receipt_ui import prepared
 from tests.test_review_command_bounded_http_v1 import physical_state
+from tests.test_availability_repair import login
 
 
 @pytest.mark.parametrize('entry', ['workboard', 'receipt', 'inventory'])
@@ -74,3 +79,22 @@ def test_concurrent_saved_object_and_workboard_reads_preserve_the_decision(
     assert 'data-ko-object-view' in results[1].text
     assert physical_state(console, sid) == before
     assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
+
+
+def test_saved_knowledge_view_keeps_the_named_reviewer_boundary(
+    tmp_path, production_console, monkeypatch,
+):
+    console, sid, reviewer, obj, client, page, data = prepared(
+        tmp_path, production_console, monkeypatch)
+    saved = client.post('/review', data=data, follow_redirects=False)
+    assert saved.status_code == 303
+    console.create_account(username='outside-review', password='fixture-only',
+                           roles=('reviewer',), display_name='Andere reviewer')
+    login(client, 'outside-review')
+    before = physical_state(console, sid)
+    response = client.get('/review', params={'document': sid, 'object': obj['object_id'],
+                          'task': 'inventory'}, follow_redirects=False)
+    assert response.status_code == 303
+    assert urlsplit(response.headers['location']).path == '/review/trajectory'
+    assert 'data-ko-object-view' not in response.text
+    assert physical_state(console, sid) == before
