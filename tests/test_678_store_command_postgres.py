@@ -198,6 +198,16 @@ def test_u4_correct_object_original_error_survives_failing_recovery(workflow_pos
     before = _state(console, sid)
     flag = threading.Event()
     _inject_fault(monkeypatch, flag)
+    # Source resolution now uses the existing prepared commit entry point.
+    # Inject after its actual native write as well as the serial legacy owner.
+    prepared = console.workflow_document_store.apply_prepared_review_changes
+
+    def fail_prepared(*args, **kwargs):
+        prepared(*args, **kwargs)
+        flag.set()
+        raise RuntimeError("r2_injected_fault")
+
+    monkeypatch.setattr(console.workflow_document_store, "apply_prepared_review_changes", fail_prepared)
 
     def failing_remirror():
         raise RuntimeError("remirror_down")

@@ -80,6 +80,10 @@ def capture_histories(console, snapshot_id, object_id, command, *, admission_con
     pending = {object_id}
     focals = set(command.get('_focal_ids') or [object_id])
     pending.update(command.get('_dependency_ids') or [])
+    # A source correction can select a different block from the old target.
+    # These IDs only discover dependencies; the original source-unit kernel
+    # validates their existence, contiguity and immutable source mapping.
+    pending.update(store.review_neighbor_ids(snapshot_id, [], command.get('_source_block_ids') or []))
     if command.get('parent_choice'):
         pending.add(str(command['parent_choice']))
     # Parent inference uses the existing global heading/TOC disambiguation rule.
@@ -376,13 +380,22 @@ def execute_review_batch(console, submitted, invoke, *, headings=False):
     return execute_review_command(console, captured, run, list_result_is_snapshot=False)
 
 
-def _batch_state(console, command, prepared_envelope, generation, *, admission_context=True):
+def _batch_state(console, command, prepared_envelope, generation, *, admission_context=True,
+                 source_resolution=False, object_set_epochs=None):
     """Actual current dependencies; called in each owner's consistent SQL phase."""
     sid, oid = command['snapshot_id'], command['object_id']
     store, reviews = console.workflow_document_store, console.workflow_review_store
     current, counters = store.review_document_input(sid, command=True)
-    if counters != generation or _source_identity(current) != _source_identity(prepared_envelope):
+    if ((generation is not None and counters != generation)
+            or _source_identity(current) != _source_identity(prepared_envelope)):
         raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
+    if source_resolution and (object_set_epochs is None
+            or store.review_command_object_epochs(sid) != object_set_epochs):
+        # Preserve the public whole-objectset precondition, including unrelated
+        # identities and retained versions. Never translate it to GEN counters.
+        revision = store.objects_revision(sid)
+        if revision != command['expected_revision']:
+            raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=revision)
     if command['actor_id'] not in current.get('named_reviewers', []):
         raise ConsoleError('reviewer_not_named_on_snapshot')
     if 'decision_graph_evidence' in prepared_envelope:
@@ -398,10 +411,27 @@ def _batch_state(console, command, prepared_envelope, generation, *, admission_c
     return current, histories, bindings, events
 
 
-def _execute_prepared_command(console, command, invoke, *, compact=False, admission_context=True):
-    """Original GEN kernel without SQL; short current-guarded native commit.
+def execute_source_resolution(console, submitted, invoke):
+    """Prepare the entire existing source-repair MRO, including its evidence."""
+    submitted = deepcopy(submitted)
+    command = dict(submitted)
+    command['_original_ids'] = [command['object_id']]
+    command['_all_headings'] = True
+    command['_source_block_ids'] = sorted({str(unit).strip().rsplit('::s', 1)[0]
+                                          for unit in command.get('source_unit_ids') or []})
 
-    Public m2/None and receipt commands retain their serial implementation.
+    def run(internal):
+        return invoke(**{**submitted, 'expected_revision': internal['expected_revision']})
+
+    return _execute_prepared_command(console, command, run, source_resolution=True)
+
+
+def _execute_prepared_command(console, command, invoke, *, compact=False, admission_context=True,
+                              source_resolution=False):
+    """Original review/repair kernel without SQL; current-guarded native commit.
+
+    Ordinary m2/None and receipt commands retain their serial implementation.
+    Source resolution checks its exact whole-objectset token in both phases.
     The pending buffer exits successfully ONLY inside the write transaction.
     Any earlier exception discards it through normal exceptional unwinding.
     """
@@ -410,9 +440,11 @@ def _execute_prepared_command(console, command, invoke, *, compact=False, admiss
     from src.workflows.workflow_transaction_v1 import workflow_read_transaction, without_workflow_io, workflow_transaction_active
     from src.workflows.workflow_documents_postgres_v1 import _json_text
     sid, oid = command['snapshot_id'], command['object_id']
-    generation = generation_precondition(sid, command.get('expected_revision'))
+    generation = None if source_resolution else generation_precondition(sid, command.get('expected_revision'))
     store, reviews = console.workflow_document_store, console.workflow_review_store
     def serial():
+        if source_resolution:
+            return invoke(command)
         return execute_review_command(console, {**command, '_compact_result': compact}, invoke,
                                       list_result_is_snapshot=False, prepare=False)
     if reviews._buffer.get() is not None or workflow_transaction_active():
@@ -420,29 +452,38 @@ def _execute_prepared_command(console, command, invoke, *, compact=False, admiss
     with detached_document_reads():
         console._require_role(command['actor_id'], 'reviewer')
         envelope = _command_envelope(store, sid)
+        if source_resolution and not envelope.get('prepared_source_extraction'):
+            # Historical source recovery needs the original complete envelope;
+            # a compact header is not an authoritative extraction checkpoint.
+            return serial()
         if command['actor_id'] not in envelope.get('named_reviewers', []):
             raise ConsoleError('reviewer_not_named_on_snapshot')
         console._require_mutable_working_revision(sid, current=True)
-        _refuse_static_disposition(command)
+        if not source_resolution:
+            _refuse_static_disposition(command)
         envelope, path, frozen, fragments, source_error, originals = _prepare_review_source_inputs(
             console, envelope, command.get('_original_ids'))
         try:
             with workflow_read_transaction(reviews):
                 current, histories, bindings, events = _batch_state(console, command, envelope, generation,
-                    admission_context=admission_context)
+                    admission_context=admission_context, source_resolution=source_resolution)
                 account = console._require_role(command['actor_id'], 'reviewer')
                 ledger_head = reviews._last_hash()
+                object_set_epochs = store.review_command_object_epochs(sid) if source_resolution else None
             if not isinstance(histories, RevisionWindow):
                 # Explicit existing-data compatibility until its own preparation.
                 return serial()
             interaction_id = str(command.get('_interaction_id') or (command.get('interaction_evidence') or {}).get('interaction_id') or '')
             inputs = ReviewCommandInputs(console, sid, current, histories, bindings, fragments,
-                frozen, path, oid, interaction_id, GenerationPrecondition(sid, generation),
-                source_error, originals, console._public_account(account), events, ledger_head, True)
+                frozen, path, oid, interaction_id,
+                ObjectSetPrecondition(command['expected_revision']) if source_resolution else GenerationPrecondition(sid, generation),
+                source_error, originals, console._public_account(account), events, ledger_head, True,
+                object_set_epochs=object_set_epochs)
             with ExitStack() as pending:
                 intent_buffer = pending.enter_context(reviews.prepared_batch_events(ledger_head))
                 with review_command_scope(inputs, preparing=True) as changes, without_workflow_io():
-                    result = _invoke_review_kernel(console, command, invoke, inputs, changes, compact=compact)
+                    result = (invoke({**command, 'expected_revision': changes.revision}) if source_resolution
+                              else _invoke_review_kernel(console, command, invoke, inputs, changes, compact=compact))
                     plan = (store.prepare_review_changes(sid, inputs.histories, changes.histories,
                         inputs.envelope, changes.envelope, changes.commit_count,
                         transitions=changes.object_transitions) if changes.commit_count else None)
@@ -461,7 +502,8 @@ def _execute_prepared_command(console, command, invoke, *, compact=False, admiss
                             # final audit order after the current-input guards.
                             reviews._lock_review_ledger(con)
                             live = _batch_state(console, command, envelope, generation,
-                                admission_context=admission_context)
+                                admission_context=admission_context, source_resolution=source_resolution,
+                                object_set_epochs=inputs.object_set_epochs)
                             before = (inputs.envelope, inputs.histories, inputs.bindings, inputs.events)
                             if (not isinstance(live[1], RevisionWindow)
                                     or any(_json_text(a) != _json_text(b) for a, b in zip(live, before))

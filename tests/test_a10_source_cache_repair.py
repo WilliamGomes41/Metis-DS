@@ -332,16 +332,19 @@ with pytest.MonkeyPatch.context() as patch:
 
 
 def test_mapping_change_during_preparation_preserves_winner(backend, tmp_path, monkeypatch):
+    from contextlib import contextmanager
+    from src.review.review_command_state_v1 import active_review_command
     _, initial, _, sid, target, _ = seed(tmp_path, backend, "selected-html", monkeypatch)
     units = initial.source_units(snapshot_id=sid, object_id=target["object_id"])
     shutil.rmtree(tmp_path / "cache-old")
     app, console = installed(tmp_path, tmp_path / "cache-new", backend, monkeypatch)
-    original = console.source_units
-    reads, winner = [], []
-    def change_after_read(**kwargs):
-        result = original(**kwargs)
-        reads.append(1)
-        if len(reads) == 2:  # closure evidence first, command preparation second
+    original = console._store_write_lock
+    winner = []
+    @contextmanager
+    def change_before_commit():
+        # Native mutation after preparation, before the real outer commit lock.
+        # The preparation kernel itself deliberately refuses workflow SQL.
+        if active_review_command(console) is None and not winner:
             envelope = deepcopy(console._envelope(sid))
             record = envelope[KEY]
             ref_id = target["provenance"]["source_fragments"][0]["raw_object_id"]
@@ -351,8 +354,9 @@ def test_mapping_change_during_preparation_preserves_winner(backend, tmp_path, m
             record["record_hash"] = stable_hash({key: value for key, value in record.items() if key != "record_hash"})
             replace_envelope(console, sid, envelope)
             winner.append(state(console, sid))
-        return result
-    monkeypatch.setattr(console, "source_units", change_after_read)
+        with original():
+            yield
+    monkeypatch.setattr(console, "_store_write_lock", change_before_commit)
     assert resolve(client_for(app), console, sid, target, selected(units, target)).status_code >= 400
     assert winner
     _, fresh = installed(tmp_path, tmp_path / "cache-new", backend, monkeypatch)

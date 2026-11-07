@@ -1,0 +1,195 @@
+{
+  "version": 1,
+  "sha": "c4db3bd84bfe722ab235eff67d2ccf69b60a785b",
+  "side": "base",
+  "round": 2,
+  "fixture": {
+    "paragraphs": 923,
+    "raw_source_fragments": 924,
+    "candidates": 92,
+    "approval_tasks_with_real_support": 4,
+    "correction_tasks": 4
+  },
+  "metrics": {
+    "approve": [
+      {
+        "sample": 1,
+        "object_id": "console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-418c0b9023c1be72",
+        "wall_ms": 401.990347998435,
+        "status": 303,
+        "location": "/review?document=snap-d1e2dc2815ec51d5-21e6d3de&after=console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-418c0b9023c1be72&receipt_interaction=ri_6a752cbc5d1747698ed71e00d6602e67&receipt_object=console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-418c0b9023c1be72",
+        "request_id": "c76e88fca824410db4f8a6fad4767f63",
+        "response_bytes": 0,
+        "server_ms": 400.717,
+        "db_queries": 69,
+        "db_json_bytes": 5843363,
+        "physical_connections": 12,
+        "outer_lock_ms": 134.183,
+        "transaction_ms": 134.082
+      },
+      {
+        "sample": 2,
+        "object_id": "console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-ef5a0d328942b826",
+        "wall_ms": 399.1186810017098,
+        "status": 303,
+        "location": "/review?document=snap-d1e2dc2815ec51d5-21e6d3de&after=console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-ef5a0d328942b826&receipt_interaction=ri_2339914429c746ed92c92f30088aab4e&receipt_object=console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-ef5a0d328942b826",
+        "request_id": "29378bc7ed5045a388be91dcc1c4d19c",
+        "response_bytes": 0,
+        "server_ms": 396.161,
+        "db_queries": 69,
+        "db_json_bytes": 5845804,
+        "physical_connections": 12,
+        "outer_lock_ms": 134.828,
+        "transaction_ms": 134.806
+      },
+      {
+        "sample": 3,
+        "object_id": "console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-9c604d47a7a32040",
+        "wall_ms": 409.5194950004952,
+        "status": 303,
+        "location": "/review?document=snap-d1e2dc2815ec51d5-21e6d3de&after=console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-9c604d47a7a32040&receipt_interaction=ri_2816d0a5a0c345d5936be26a52cf72b0&receipt_object=console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-9c604d47a7a32040",
+        "request_id": "e847ad4dba8c4786824d2381de02fa4f",
+        "response_bytes": 0,
+        "server_ms": 406.419,
+        "db_queries": 69,
+        "db_json_bytes": 5845804,
+        "physical_connections": 12,
+        "outer_lock_ms": 145.339,
+        "transaction_ms": 145.318
+      },
+      {
+        "sample": 4,
+        "object_id": "console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-3fe4f4e0979f979a",
+        "wall_ms": 542.0628589999978,
+        "status": 303,
+        "location": "/review?document=snap-d1e2dc2815ec51d5-21e6d3de&after=console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-3fe4f4e0979f979a&receipt_interaction=ri_5b1a0494e0814e6a9fee1f4366c76bad&receipt_object=console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-3fe4f4e0979f979a",
+        "request_id": "240bd92811284563ac22c1943c1ea112",
+        "response_bytes": 0,
+        "server_ms": 540.964,
+        "db_queries": 69,
+        "db_json_bytes": 5845804,
+        "physical_connections": 12,
+        "outer_lock_ms": 135.878,
+        "transaction_ms": 135.856
+      }
+    ],
+    "correct": [
+      {
+        "sample": 1,
+        "object_id": "console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-6bd8eed8f7477011",
+        "wall_ms": 6220.623601000625,
+        "status": 303,
+        "location": "/source-selection?document=snap-d1e2dc2815ec51d5-21e6d3de&object=console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-6bd8eed8f7477011&task=repair&repair_saved=yes",
+        "request_id": "0a8fbe08b8394a9596b677f57994914f",
+        "response_bytes": 0,
+        "form_get_ms": 543.4872660007386,
+        "redirect_get_ms": 791.2490950002393,
+        "reopen_get_ms": 586.3843120005185,
+        "complete_action_ms": 8141.7573540002195,
+        "server_ms": 6218.285,
+        "db_queries": 1087,
+        "db_json_bytes": 259634510,
+        "physical_connections": 36,
+        "outer_lock_ms": 3554.59,
+        "transaction_ms": 3554.549
+      },
+      {
+        "sample": 2,
+        "object_id": "console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-0ac01433f40639dd",
+        "wall_ms": 6486.356192999665,
+        "status": 303,
+        "location": "/source-selection?document=snap-d1e2dc2815ec51d5-21e6d3de&object=console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-0ac01433f40639dd&task=repair&repair_saved=yes",
+        "request_id": "d6280bdad9a7494f97a7dea9e04076ae",
+        "response_bytes": 0,
+        "form_get_ms": 743.21753500044,
+        "redirect_get_ms": 623.2492889994319,
+        "reopen_get_ms": 708.6829110012332,
+        "complete_action_ms": 8561.514622000686,
+        "server_ms": 6484.15,
+        "db_queries": 1087,
+        "db_json_bytes": 259722525,
+        "physical_connections": 36,
+        "outer_lock_ms": 3539.975,
+        "transaction_ms": 3539.938
+      },
+      {
+        "sample": 3,
+        "object_id": "console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-321ac6ececedc94a",
+        "wall_ms": 6712.599479998971,
+        "status": 303,
+        "location": "/source-selection?document=snap-d1e2dc2815ec51d5-21e6d3de&object=console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-321ac6ececedc94a&task=repair&repair_saved=yes",
+        "request_id": "cf7bf0a6c011405693fae0d49a7101c0",
+        "response_bytes": 0,
+        "form_get_ms": 745.0390579997475,
+        "redirect_get_ms": 607.3045979992457,
+        "reopen_get_ms": 802.0673089995398,
+        "complete_action_ms": 8867.018617998838,
+        "server_ms": 6709.199,
+        "db_queries": 1087,
+        "db_json_bytes": 259810584,
+        "physical_connections": 36,
+        "outer_lock_ms": 3755.259,
+        "transaction_ms": 3755.237
+      },
+      {
+        "sample": 4,
+        "object_id": "console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-e4522adf5939db0a",
+        "wall_ms": 6347.559767000348,
+        "status": 303,
+        "location": "/source-selection?document=snap-d1e2dc2815ec51d5-21e6d3de&object=console-ko4-perf-ko4-performance-synthetic-1-0-d1e2dc28-sem-e4522adf5939db0a&task=repair&repair_saved=yes",
+        "request_id": "7e15315028f04b2fbf296e30b23d5251",
+        "response_bytes": 0,
+        "form_get_ms": 852.3818800003937,
+        "redirect_get_ms": 749.9083900002006,
+        "reopen_get_ms": 788.9327209995827,
+        "complete_action_ms": 8738.790318999236,
+        "server_ms": 6343.996,
+        "db_queries": 1087,
+        "db_json_bytes": 259898750,
+        "physical_connections": 36,
+        "outer_lock_ms": 3394.724,
+        "transaction_ms": 3394.701
+      }
+    ]
+  },
+  "workers": [
+    {
+      "pid": 406941,
+      "parent_pid": 406940,
+      "sha": "c4db3bd84bfe722ab235eff67d2ccf69b60a785b",
+      "gc_enabled": true,
+      "gc_threshold": [
+        2000,
+        10,
+        10
+      ],
+      "gunicorn_default_timeout_seconds": 30,
+      "console_type": "FastBadgePostgresCompleteWorkflowDurablePublicationConsole"
+    },
+    {
+      "pid": 407046,
+      "parent_pid": 407045,
+      "sha": "c4db3bd84bfe722ab235eff67d2ccf69b60a785b",
+      "gc_enabled": true,
+      "gc_threshold": [
+        2000,
+        10,
+        10
+      ],
+      "gunicorn_default_timeout_seconds": 30,
+      "console_type": "FastBadgePostgresCompleteWorkflowDurablePublicationConsole"
+    }
+  ],
+  "proofs": {
+    "approved_exact_bindings": 4,
+    "new_open_corrections": 4,
+    "three_yes_recorded": true,
+    "untargeted_objects_unchanged": true,
+    "source_files_unchanged": true,
+    "canonical_store_unchanged": true,
+    "persisted_after_restart": true,
+    "no_persisted_revise": true
+  },
+  "measurement_scope": "POST response separately; correction also measures form GET, redirect GET and reopen GET without user think time",
+  "observer_scope": "All business proofs and finalized log parsing after both timed paths; no forced GC."
+}
