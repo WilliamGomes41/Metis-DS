@@ -1,0 +1,7 @@
+{
+  "baseline_median_seconds": 24.374409,
+  "head_median_seconds": 9.555206,
+  "head_max_seconds": 9.783557,
+  "reduction_percent": 60.798,
+  "all_head_runs_still_over_five_seconds": true
+}

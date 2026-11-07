@@ -1,0 +1,123 @@
+{
+  "date_utc": "2026-11-07",
+  "base": "e6e008c671bfdaa780b1df6cd3b44a661643f7ce",
+  "runtime": "5df87a987764bbcd60e44b34402ffe52b558118a",
+  "environment": {
+    "python": "3.13.5",
+    "postgresql": "17.11",
+    "pytest_workers": 4,
+    "xdist": "local test environment only; no repository dependency change"
+  },
+  "red_regression": {
+    "commit": "a5474899f5526e1109961f8c2a57fbec661f5f1e",
+    "result": "expected failure: 261 document updates > maximum 4; exact rows and +261 generation passed first"
+  },
+  "focused_development": {
+    "command": "python -m pytest -q tests/test_formation_activation_database_work.py tests/test_full_writer_delta_proof.py tests/test_formation_task_store_postgres.py tests/test_source_resume_acceptance.py tests/test_revision_frontier_migration_v1.py tests/test_workflow_postgres_migration_v1.py tests/test_prepared_review_batches.py tests/test_prepared_source_resolution.py",
+    "passed": 157,
+    "failed": 1,
+    "failure": "New restricted-role fixture omitted SELECT on document_inputs, already required by old generation trigger. Added existing grant and proved both old/new triggers with the same grants. No product grant change."
+  },
+  "native_final": {
+    "command": "python -m pytest -q tests/test_formation_activation_database_work.py",
+    "passed": 15,
+    "failed": 0,
+    "seconds": 8.61
+  },
+  "browser_content_architecture": {
+    "command": "python -m pytest -q tests/test_browser_metis_explained.py tests/test_metis_explained_content.py tests/test_architecture_invariants.py",
+    "passed": 9,
+    "failed": 0,
+    "seconds": 6.35,
+    "browser": "Existing Chromium probe locally targets Documentopslag, waits for fragment navigation; 1440/390px light/dark, keyboard, no-JS. 8 captures; mobile light and desktop dark visually inspected. No harness modification retained."
+  },
+  "adversarial_mutation": {
+    "target": "Remove exact returned payload comparison from object_delta_postgres_v1.verify in disposable worktree",
+    "test": "test_fault_in_later_insert_group_rolls_back_every_participant[rewrite]",
+    "mutated": "failed: DID NOT RAISE WorkflowDocumentStoreError",
+    "restored": "1 passed in 0.74s",
+    "worktree_restored": true
+  },
+  "checks": {
+    "repository_preflight": "PASS",
+    "architecture_boundaries": "PASS",
+    "compileall_src": "PASS",
+    "release_control_preflight": "PASS after correcting evidence category marker formatting; no gate change",
+    "impeccable_detector": []
+  },
+  "full_suite": {
+    "status": "passed",
+    "sha": "e91213ae053869c440bda6e072923b166af0b372",
+    "command": "python -m pytest -q -n 4 --dist loadfile --junitxml=/tmp/w4-full.xml",
+    "passed": 8347,
+    "skipped": 45,
+    "xfailed": 3,
+    "subtests_passed": 32,
+    "failed": 0,
+    "seconds": 1103.05,
+    "postgresql_skips": 0,
+    "summary": "8347 passed, 45 skipped, 3 xfailed and 32 subtests passed in 1103.05s; zero PostgreSQL skips",
+    "skip_reasons": [
+      {
+        "kind": "pytest.skip",
+        "reason": "Configure Playwright and Chromium for the authenticated browser proof",
+        "count": 1
+      },
+      {
+        "kind": "pytest.skip",
+        "reason": "Chromium browser verification is opt-in",
+        "count": 15
+      },
+      {
+        "kind": "pytest.skip",
+        "reason": "Real Docling/models acceptance environment required; not proven by unit tests",
+        "count": 12
+      },
+      {
+        "kind": "pytest.xfail",
+        "reason": "B23 nog niet ge\u00efmplementeerd op main (Forge)",
+        "count": 3
+      },
+      {
+        "kind": "pytest.skip",
+        "reason": "Required browser acceptance job supplies Chromium",
+        "count": 2
+      },
+      {
+        "kind": "pytest.skip",
+        "reason": "Bend is optional outside its dedicated CI job",
+        "count": 7
+      },
+      {
+        "kind": "pytest.skip",
+        "reason": "Optional Bend toolchain is not installed",
+        "count": 4
+      },
+      {
+        "kind": "pytest.skip",
+        "reason": "Chromium verification is opt-in",
+        "count": 2
+      },
+      {
+        "kind": "pytest.skip",
+        "reason": "Chromium must be supplied for browser verification",
+        "count": 1
+      },
+      {
+        "kind": "pytest.skip",
+        "reason": "Browser proof runs in the required GitHub acceptance job",
+        "count": 1
+      }
+    ]
+  },
+  "limits": [
+    "PostgreSQL16 CI not represented by local PostgreSQL17 evidence",
+    "No external model requests, production data, deployment or production latency measurement",
+    "Background resume still exceeds five seconds in every measured run"
+  ],
+  "measured_runtime_sha256": {
+    "db/migrations/033_statement_object_generation.sql": "8ee2e0234eeaf96917f3bd66bbf9d1cc05840aeb37090884b9ba032ebb05be54",
+    "src/workflows/object_delta_postgres_v1.py": "07ef3d6b943eac584f9b44baa783ec0a5f46479a0f440c2fa9e3f14afb05bb08",
+    "src/workflows/workflow_postgres_migration_v1.py": "9ec4d94d75d130e8a9edc1ad9b11da7676fc214f39b0d7a5b2a8a453cec6bd8e"
+  }
+}

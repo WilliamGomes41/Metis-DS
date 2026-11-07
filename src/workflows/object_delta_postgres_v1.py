@@ -95,27 +95,53 @@ def write(store, con, sid, before, following):
     kept = {(obj['object_id'], obj['object_version']) for obj in following}
     affected = Counter()
 
-    def verify(cursor, identity, position, raw):
-        row = cursor.fetchone()
-        if (cursor.rowcount != 1 or row is None
-                or (row['snapshot_id'], row['object_id'], row['object_version']) != (sid, *identity)
-                or row['position'] != position or _json_text(row['payload']) != raw):
+    def verify(cursor, planned):
+        rows = cursor.fetchall()
+        if cursor.rowcount != len(planned) or len(rows) != len(planned):
             raise WorkflowDocumentStoreError(CONFLICT)
-        affected[identity[0]] += 1
+        seen = set()
+        for row in rows:
+            identity = (row['object_id'], row['object_version'])
+            if identity not in planned or identity in seen:
+                raise WorkflowDocumentStoreError(CONFLICT)
+            position, raw = planned[identity]
+            if (row['snapshot_id'] != sid or row['position'] != position
+                    or _json_text(row['payload']) != raw):
+                raise WorkflowDocumentStoreError(CONFLICT)
+            seen.add(identity)
+            affected[identity[0]] += 1
 
     returning = ' RETURNING snapshot_id,object_id,object_version,position,payload'
     for identity in sorted(set(stored) - kept):
         cursor = con.execute('DELETE FROM workflow.document_objects WHERE snapshot_id=%s '
             'AND object_id=%s AND object_version=%s' + returning, (sid, *identity))
-        verify(cursor, identity, *stored[identity])
+        verify(cursor, {identity: stored[identity]})
+    additions = {}
+
+    def insert_pending():
+        if not additions:
+            return
+        params = [value for identity, (position, raw) in additions.items()
+                  for value in (sid, *identity, raw, position)]
+        cursor = con.execute('INSERT INTO workflow.document_objects '
+            '(snapshot_id,object_id,object_version,payload,position) VALUES '
+            + ','.join(['(%s,%s,%s,%s::jsonb,%s)'] * len(additions)) + returning, params)
+        verify(cursor, additions)
+        additions.clear()
+
     for position, obj in enumerate(following):
         identity = (obj['object_id'], obj['object_version'])
         raw = _json_text(obj)
         if identity not in stored:
-            cursor = con.execute('INSERT INTO workflow.document_objects '
-                '(snapshot_id,object_id,object_version,payload,position) VALUES(%s,%s,%s,%s::jsonb,%s)' + returning,
-                (sid, *identity, raw, position))
-        elif stored[identity][1] != raw:
+            if identity in additions:
+                raise WorkflowDocumentStoreError(CONFLICT)
+            additions[identity] = (position, raw)
+            # Bound parameters/transition-table memory and retain write order.
+            if len(additions) == 128:
+                insert_pending()
+            continue
+        insert_pending()
+        if stored[identity][1] != raw:
             cursor = con.execute('UPDATE workflow.document_objects SET payload=%s::jsonb,position=%s,'
                 'revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE snapshot_id=%s '
                 'AND object_id=%s AND object_version=%s' + returning, (raw, position, sid, *identity))
@@ -124,5 +150,6 @@ def write(store, con, sid, before, following):
                 'AND object_id=%s AND object_version=%s' + returning, (position, sid, *identity))
         else:
             continue
-        verify(cursor, identity, position, raw)
+        verify(cursor, {identity: (position, raw)})
+    insert_pending()
     return VerifiedObjectDelta(before, following, affected)

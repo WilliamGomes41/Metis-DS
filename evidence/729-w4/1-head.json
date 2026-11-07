@@ -1,0 +1,18 @@
+[
+  {
+    "tasks": 130,
+    "initial": {
+      "reconstructed_fragments": 1040,
+      "reconstruction_input_hashes": 0,
+      "seconds": 0.58638
+    },
+    "resume": {
+      "reconstructed_fragments": 0,
+      "reconstruction_input_hashes": 0,
+      "seconds": 9.555206
+    },
+    "provider_calls": 131,
+    "first_committed_task_reused": true,
+    "first_result_hash_unchanged": true
+  }
+]
