@@ -1,0 +1,116 @@
+{
+  "scope": "Separate cProfile run of full harness incl setup, first interrupted attempt and successful resume. Do not sum nested cumulative times or use for unprofiled latency.",
+  "total_profile_seconds": 31.05070672799989,
+  "total_calls": 27343003,
+  "profiled_resume_seconds": 28.389625,
+  "rows": [
+    {
+      "file": "src/operations_console_v1.py",
+      "line": 1915,
+      "function": "execute_source_selection",
+      "calls": 2,
+      "primitive_calls": 2,
+      "self_seconds": 4e-05,
+      "cumulative_seconds": 29.437357
+    },
+    {
+      "file": "src/operations_console_v1.py",
+      "line": 2295,
+      "function": "_execute_source_attempt",
+      "calls": 2,
+      "primitive_calls": 2,
+      "self_seconds": 0.014105,
+      "cumulative_seconds": 29.406591
+    },
+    {
+      "file": "site-packages/psycopg/connection.py",
+      "line": 476,
+      "function": "wait",
+      "calls": 9207,
+      "primitive_calls": 9207,
+      "self_seconds": 19.955381,
+      "cumulative_seconds": 20.587646
+    },
+    {
+      "file": "site-packages/psycopg/connection.py",
+      "line": 277,
+      "function": "execute",
+      "calls": 7243,
+      "primitive_calls": 7243,
+      "self_seconds": 0.008373,
+      "cumulative_seconds": 20.04735
+    },
+    {
+      "file": "site-packages/psycopg/cursor.py",
+      "line": 100,
+      "function": "execute",
+      "calls": 7243,
+      "primitive_calls": 7243,
+      "self_seconds": 0.009231,
+      "cumulative_seconds": 19.98224
+    },
+    {
+      "file": "src/workflows/workflow_review_cutover_v1.py",
+      "line": 289,
+      "function": "_commit_prepared_store",
+      "calls": 5,
+      "primitive_calls": 5,
+      "self_seconds": 0.004634,
+      "cumulative_seconds": 16.722944
+    },
+    {
+      "file": "src/workflows/workflow_documents_cutover_v1.py",
+      "line": 1160,
+      "function": "_commit_prepared_store",
+      "calls": 5,
+      "primitive_calls": 5,
+      "self_seconds": 0.00302,
+      "cumulative_seconds": 16.711879
+    },
+    {
+      "file": "src/workflows/object_delta_postgres_v1.py",
+      "line": 86,
+      "function": "write",
+      "calls": 2,
+      "primitive_calls": 2,
+      "self_seconds": 0.00687,
+      "cumulative_seconds": 15.267176
+    },
+    {
+      "file": "src/vorming/bounded_formation_v1.py",
+      "line": 254,
+      "function": "execute",
+      "calls": 2,
+      "primitive_calls": 2,
+      "self_seconds": 0.008912,
+      "cumulative_seconds": 7.039762
+    },
+    {
+      "file": "src/vorming/formation_checkpoint_v1.py",
+      "line": 67,
+      "function": "_locked",
+      "calls": 826,
+      "primitive_calls": 826,
+      "self_seconds": 0.01719,
+      "cumulative_seconds": 4.052774
+    },
+    {
+      "file": "lib/python3.13/copy.py",
+      "line": 119,
+      "function": "deepcopy",
+      "calls": 2919741,
+      "primitive_calls": 212642,
+      "self_seconds": 1.520465,
+      "cumulative_seconds": 3.383694
+    },
+    {
+      "file": "python3.13/json/encoder.py",
+      "line": 205,
+      "function": "iterencode",
+      "calls": 30740,
+      "primitive_calls": 30740,
+      "self_seconds": 1.345771,
+      "cumulative_seconds": 1.345774
+    }
+  ]
+}
