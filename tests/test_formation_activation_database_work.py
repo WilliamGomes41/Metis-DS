@@ -1,7 +1,12 @@
 """W4 native generation accounting and bounded activation work.
 
-# release-control-evidence: scope/belofte opslag concurrent stale recovery
-# release-control-evidence: toegang beschikbaarheid kwaliteit slop releasebewijs
+# release-control-evidence: scope/belofte same durable result with bounded activation writes
+# release-control-evidence: opslag concurrent stale recovery exact row generations
+# release-control-evidence: toegang existing restricted writer privileges
+# release-control-evidence: beschikbaarheid interrupt resume without repeated provider calls
+# release-control-evidence: kwaliteit exact ordered objects and retained task results
+# release-control-evidence: slop existing document owner and task authority, no parallel store
+# release-control-evidence: releasebewijs native database rollback and restart proofs
 """
 from copy import deepcopy
 from pathlib import Path
