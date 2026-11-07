@@ -1,0 +1,102 @@
+{
+  "sha": "28024ef3a1bcb2c29a27934e77e7d54a7f3d7eb1",
+  "excluded": true,
+  "rows": [
+    {
+      "file": "<frozen importlib._bootstrap>",
+      "line": 1349,
+      "name": "_find_and_load",
+      "calls": 1046,
+      "self_seconds": 0.003631407,
+      "cumulative_seconds": 1.0784359620000001
+    },
+    {
+      "file": "connection.py",
+      "line": 277,
+      "name": "execute",
+      "calls": 503,
+      "self_seconds": 0.001128501,
+      "cumulative_seconds": 0.844800847
+    },
+    {
+      "file": "connection.py",
+      "line": 476,
+      "name": "wait",
+      "calls": 689,
+      "self_seconds": 0.653170444,
+      "cumulative_seconds": 0.8143263550000001
+    },
+    {
+      "file": "cursor.py",
+      "line": 100,
+      "name": "execute",
+      "calls": 503,
+      "self_seconds": 0.001910407,
+      "cumulative_seconds": 0.782847833
+    },
+    {
+      "file": "console_performance_v1.py",
+      "line": 75,
+      "name": "execute",
+      "calls": 466,
+      "self_seconds": 0.002522921,
+      "cumulative_seconds": 0.7775067640000001
+    },
+    {
+      "file": "console_asgi.py",
+      "line": 165,
+      "name": "build_app",
+      "calls": 1,
+      "self_seconds": 4.7002e-05,
+      "cumulative_seconds": 0.49222379800000005
+    },
+    {
+      "file": "console_performance_v1.py",
+      "line": 63,
+      "name": "connect_postgres",
+      "calls": 144,
+      "self_seconds": 0.002248495,
+      "cumulative_seconds": 0.325022372
+    },
+    {
+      "file": "threading.py",
+      "line": 327,
+      "name": "wait",
+      "calls": 285,
+      "self_seconds": 0.0010922380000000001,
+      "cumulative_seconds": 0.18028555200000002
+    },
+    {
+      "file": "threading.py",
+      "line": 641,
+      "name": "wait",
+      "calls": 86,
+      "self_seconds": 0.0004960310000000001,
+      "cumulative_seconds": 0.01301234
+    },
+    {
+      "file": "_asyncio.py",
+      "line": 1932,
+      "name": "wait",
+      "calls": 752,
+      "self_seconds": 0.00040083100000000004,
+      "cumulative_seconds": 0.00232102
+    },
+    {
+      "file": "locks.py",
+      "line": 200,
+      "name": "wait",
+      "calls": 752,
+      "self_seconds": 0.0006877820000000001,
+      "cumulative_seconds": 0.001748764
+    },
+    {
+      "file": "subprocess.py",
+      "line": 1275,
+      "name": "wait",
+      "calls": 4,
+      "self_seconds": 6.831e-06,
+      "cumulative_seconds": 3.7998000000000004e-05
+    }
+  ]
+}

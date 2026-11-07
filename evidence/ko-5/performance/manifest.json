@@ -1,0 +1,81 @@
+{
+  "baseline_sha": "07db5080666f0428a454f5a705e50825a4fc5506",
+  "head_sha": "9cf974518d2e82939247f47e0f0ba59172131346",
+  "checkouts": {
+    "base": "/workspace/Metis-ko5-base",
+    "head": "/workspace/Metis-ko5-final-verify"
+  },
+  "planned_order": [
+    {
+      "round": 1,
+      "side": "base",
+      "pair_order": "AB"
+    },
+    {
+      "round": 1,
+      "side": "head",
+      "pair_order": "AB"
+    },
+    {
+      "round": 2,
+      "side": "head",
+      "pair_order": "BA"
+    },
+    {
+      "round": 2,
+      "side": "base",
+      "pair_order": "BA"
+    },
+    {
+      "round": 3,
+      "side": "base",
+      "pair_order": "AB"
+    },
+    {
+      "round": 3,
+      "side": "head",
+      "pair_order": "AB"
+    },
+    {
+      "round": 4,
+      "side": "head",
+      "pair_order": "BA"
+    },
+    {
+      "round": 4,
+      "side": "base",
+      "pair_order": "BA"
+    },
+    {
+      "round": 5,
+      "side": "base",
+      "pair_order": "AB"
+    },
+    {
+      "round": 5,
+      "side": "head",
+      "pair_order": "AB"
+    }
+  ],
+  "frozen_hashes": {
+    "probe.py": "b061c2aebd53632299036d3ad3519e949bcad55cb225c38fef514678ef854529",
+    "runner.py": "cc474bfb2e7150eca033e11792b0ab57bdbe9db97fff90073a4723a2830dabef",
+    "seed.py": "37ec8fe5ac45c382ea9347bedc25ded3bf30e0024337e7319429889e220604be",
+    "protocol.json": "a11b4e69a5935976a531846771b7189891a014b02be3edea029fd755bd68a105"
+  },
+  "python": "3.13.5 (main, Jul 15 2026, 20:25:40) [GCC 14.2.0]",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "started": "2026-11-07T23:52:16.843837+00:00",
+  "fixture": {
+    "dsn": "postgresql://postgres@127.0.0.1:55440/ko5_perf_final_fixture_v1",
+    "database": "ko5_perf_final_fixture_v1",
+    "snapshot_id": "snap-d1e2dc2815ec51d5-e7efd6a0",
+    "object_id": "console-ko5-perf-ko5-synthetic-performance-1-0-d1e2dc28-sem-50d47fa1e12f534b",
+    "objects": 925,
+    "root": "/workspace/ko5-perf-final-evidence/fixture",
+    "postgres": "PostgreSQL 17.11 (Debian 17.11-0+deb13u1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "baseline_sha": "07db5080666f0428a454f5a705e50825a4fc5506",
+    "base_dsn": "postgresql://postgres@127.0.0.1:55440/ko5_perf_final_base_v1",
+    "head_dsn": "postgresql://postgres@127.0.0.1:55440/ko5_perf_final_head_v1"
+  }
+}
