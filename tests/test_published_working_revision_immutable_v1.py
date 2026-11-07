@@ -99,7 +99,7 @@ def test_canonical_release_seals_review_before_workflow_envelope_reconciliation(
     assert console._envelope(snapshot_id)["state"] == "captured_not_published"
     assert console.snapshot_is_published(snapshot_id) is True
 
-    assert console.migrate_legacy_revise_to_review() == 0
+    assert not hasattr(console, "migrate_legacy_revise_to_review")
     with pytest.raises(ConsoleError) as caught:
         console.review_object(
             actor_id=reviewer["account_id"],
@@ -117,7 +117,8 @@ def test_canonical_release_seals_review_before_workflow_envelope_reconciliation(
     restarted = production_console(processing_binder=bind_fixture_selections)
     assert restarted._envelope(snapshot_id)["state"] == "published"
     assert restarted.snapshot_is_published(snapshot_id) is True
-    assert restarted.migrate_legacy_revise_to_review() == 0
+    assert not hasattr(restarted, "migrate_legacy_revise_to_review")
+    assert restarted.snapshot_objects(snapshot_id) == before_objects
     assert restarted.objects_revision(snapshot_id) == before_revision
     assert restarted._current_object(snapshot_id, target["object_id"])["governance"]["validation_status"] == "revise"
 
