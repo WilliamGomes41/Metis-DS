@@ -192,3 +192,21 @@ def test_unprepared_history_uses_existing_serial_contract(tmp_path, monkeypatch,
     result = console.submit_review_resolution(**command)
     assert calls == [None]
     assert assert_complete(fresh(), sid, obj['object_id']) == result
+
+
+def test_source_selection_is_detached_before_dependency_capture(tmp_path, monkeypatch, production_console):
+    from src.review import review_command_v1 as executor
+    console, sid, obj, reviewer, fresh = setup_repair(tmp_path, production_console=production_console)
+    units = console.source_units(snapshot_id=sid, object_id=obj['object_id'])
+    command = command_for(console, sid, obj, reviewer, units[:1])
+    prepare = executor._prepare_review_source_inputs
+
+    def mutate_caller(*args, **kwargs):
+        command['source_unit_ids'][:] = [units[-1]['unit_id']]
+        return prepare(*args, **kwargs)
+
+    monkeypatch.setattr(executor, '_prepare_review_source_inputs', mutate_caller)
+    result = console.submit_review_resolution(**command)
+    assert command['source_unit_ids'] == [units[-1]['unit_id']]
+    assert result['content']['clean_text'] == units[0]['text']
+    assert assert_complete(fresh(), sid, obj['object_id']) == result

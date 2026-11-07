@@ -413,6 +413,7 @@ def _batch_state(console, command, prepared_envelope, generation, *, admission_c
 
 def execute_source_resolution(console, submitted, invoke):
     """Prepare the entire existing source-repair MRO, including its evidence."""
+    submitted = deepcopy(submitted)
     command = dict(submitted)
     command['_original_ids'] = [command['object_id']]
     command['_all_headings'] = True
@@ -427,9 +428,10 @@ def execute_source_resolution(console, submitted, invoke):
 
 def _execute_prepared_command(console, command, invoke, *, compact=False, admission_context=True,
                               source_resolution=False):
-    """Original GEN kernel without SQL; short current-guarded native commit.
+    """Original review/repair kernel without SQL; current-guarded native commit.
 
-    Public m2/None and receipt commands retain their serial implementation.
+    Ordinary m2/None and receipt commands retain their serial implementation.
+    Source resolution checks its exact whole-objectset token in both phases.
     The pending buffer exits successfully ONLY inside the write transaction.
     Any earlier exception discards it through normal exceptional unwinding.
     """
