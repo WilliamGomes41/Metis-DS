@@ -1,4 +1,4 @@
-// release-control-evidence: scope/belofte opslag toegang slop releasebewijs
+// release-control-evidence: scope/belofte opslag concurrent stale toegang slop releasebewijs
 const {chromium} = require(process.env.METIS_PLAYWRIGHT_MODULE || 'playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -227,6 +227,33 @@ const crypto = require('node:crypto');
     await viewport(page, 'na-receipt-' + width);
   }
   await page.setViewportSize({width: 1440, height: 1000});
+  await page.locator('[data-ko-view-object]').focus();
+  await Promise.all([page.waitForNavigation({waitUntil: 'domcontentloaded'}), page.keyboard.press('Enter')]);
+  assert.equal(new URL(page.url()).searchParams.get('object'), na.object_id);
+  assert.equal(await page.locator('[data-ko-state]').innerText(), 'Goedgekeurd');
+  assert.equal(await page.locator('[data-ko-object-view]').count(), 1);
+  assert.equal(await form(page).count(), 0, 'viewing saved knowledge does not start another review');
+  assert.equal(await page.locator('[data-recorded-evidence-applicability="not_applicable"]').count(), 1);
+  for (const width of [375, 1440]) {
+    await page.setViewportSize({width, height: 1000});
+    await viewport(page, 'saved-object-' + width);
+  }
+  await page.goto(oldReceipt);
+  await page.locator('[data-ko-back-overview]').click();
+  const savedDocument = page.locator(`[data-workboard-document="${na.snapshot_id}"]`);
+  for (const width of [375, 1440]) {
+    await page.setViewportSize({width, height: 1000});
+    await viewport(page, 'saved-workboard-' + width);
+  }
+  await savedDocument.locator('[data-review-inventory]').click();
+  const savedRow = page.locator(`[data-passage-id="${na.object_id}"]`);
+  await savedRow.locator('.review-row-title').click();
+  assert.equal(new URL(page.url()).pathname, '/review');
+  assert.equal(new URL(page.url()).searchParams.get('object'), na.object_id);
+  assert.equal(await page.locator('[data-ko-state]').innerText(), 'Goedgekeurd');
+  assert.equal(await page.locator('[data-ko-object-view]').count(), 1);
+  assert.equal(await form(page).count(), 0);
+  unchanged(approvedNA, await proof('not-applicable'));
   await page.goto(card(na));
   await page.getByRole('link', {name: 'Correctie nodig', exact: true}).click();
   const sourceRepair = page.locator('form[action="/review/resolve"]');
@@ -254,6 +281,13 @@ const crypto = require('node:crypto');
   await naReceipt(page);
   assert.match(await page.locator('body').innerText(), /inmiddels een nieuwere versie/);
   await shoot(page, 'old-receipt');
+  await page.locator('[data-ko-view-object]').click();
+  assert.equal(await page.locator('[data-ko-object-view]').count(), 1);
+  assert.equal(await page.locator('[data-reviewed-version]').getAttribute('data-reviewed-version'), newObject.object_version);
+  assert.notEqual(await page.locator('[data-ko-state]').innerText(), 'Goedgekeurd');
+  assert.equal(await page.locator('[data-recorded-evidence-applicability="not_applicable"]').count(), 0,
+    'the current version never borrows N/A from the historical receipt');
+  unchanged(corrected, await proof('not-applicable'));
 
   const second = manifest.documents.second;
   const secondaryContext = await browser.newContext({viewport: {width: 1440, height: 1000}});

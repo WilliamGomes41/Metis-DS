@@ -545,12 +545,16 @@ def _workboard_card(item: dict[str, Any], *, started: bool = False,
     envelope, lifecycle = item['envelope'], item['lifecycle_status']
     view = _personal_review_view(item)
     sid = str(item['snapshot_id'])
+    inventory = ('<a data-review-inventory href="/review?' +
+                 _esc(urlencode({'document': sid, 'task': 'inventory'})) +
+                 '">Alle passages en beoordelingen bekijken</a>')
     if view['href']:
         href = view['href'] + '&' + urlencode({'q': q, 'page': page})
         title = 'Verder beoordelen' if started else 'Beginnen'
-        action = f'<a class="btn-primary" data-personal-review-action href="{_esc(href)}">{title}</a>'
+        action = (f'<a class="btn-primary" data-personal-review-action href="{_esc(href)}">{title}</a>'
+                  + '<p>' + inventory + '</p>')
     else:
-        action = '<a href="/review?' + _esc(urlencode({'document': sid, 'task': 'inventory'})) + '">Alle passages bekijken</a>'
+        action = inventory
     if view['state'] == 'waiting':
         summary = '<p class="lead">Wachten op een andere reviewer.</p>'
     elif view['state'] == 'complete':

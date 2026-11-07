@@ -173,9 +173,10 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     path = review_path_for_klasse(inputs.envelope['class'])
     route = reviewer_route_for(obj, review_path=path, reviewer_id=account['account_id'],
                               bindings=inputs.bindings, fragments=inputs.fragments)
+    reading = task == 'inventory'
     canonical_task = str((route or {}).get('canonical_task') or '')
     second = canonical_task == 'second_review'
-    if second or task == 'second_review':
+    if not reading and (second or task == 'second_review'):
         task = canonical_task
     descriptor = displayed_review_descriptor(obj, inputs.objects, path, bindings=inputs.bindings,
         fragments=inputs.fragments, stage='second_review' if second else None)
@@ -231,6 +232,32 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     rows = summary_rows(obj, inputs.objects, descriptor, review_path=path)
     shown = {text for values in rows.values() for text, _status, _origin in values}
     context_html, context_open = _context_evidence(obj, inputs.objects, sid, inputs.revision, shown)
+    if reading:
+        from src.review.ko_transitions_v1 import recorded_not_applicable
+        evidence_note = ('<p data-recorded-evidence-applicability="not_applicable">'
+            'Bij de beoordeling van deze versie is onderbouwing expliciet niet van toepassing verklaard.</p>'
+            if recorded_not_applicable(obj, inputs.bindings) else '')
+        inventory = '/review?' + urlencode({'document': sid, 'task': 'inventory'})
+        review = '/review?' + urlencode({'document': sid, 'object': obj['object_id']})
+        body = ('<div data-ko-object-view><header class="ko-page-heading"><h1>Kennisobject</h1>'
+            + source_breadcrumb(sid, obj, title=inputs.envelope.get('title') or '', task='inventory')
+            + '<p class="ko-progress">Huidige versie ' + escape(descriptor.object_version)
+            + ' <span aria-hidden="true">·</span> <strong data-ko-state>'
+            + escape(state or 'Broncontext') + '</strong></p></header>'
+            + '<div class="ko-review-layout">' + _source_panel(console, inputs, obj, task='inventory')
+            + '<section class="ko-object-panel" aria-labelledby="ko-object-title">'
+            '<h2 id="ko-object-title">Vastgelegd kennisobject</h2>'
+            '<p class="ko-claim" data-full-knowledge-passage data-reviewed-version="'
+            + escape(descriptor.object_version, quote=True) + '">' + escape(descriptor.text)
+            + '</p><p class="ko-type">' + escape(_object_type_label(descriptor.object_type)) + '</p>'
+            + semantics + _summary_table(rows) + evidence_note + '<p>' + placement + '</p>'
+            + '<details class="ko-evidence"><summary>Bekijk gekoppelde onderbouwing, broncontext en bronbewijs</summary>'
+            + context_html + _additional_relations(descriptor) + _source_bound_fields_html(obj)
+            + '</details></section></div><div class="ko-result-actions">'
+            + '<a href="' + escape(inventory, quote=True) + '">Alle passages en beoordelingen bekijken</a>'
+            + ('<a href="' + escape(review, quote=True) + '">Dit kennisobject beoordelen</a>'
+               if not published and route and route.get('actionable') else '') + '</div></div>')
+        return review_page_shell(account, body, title='Kennisobject')
     heading = 'Onafhankelijke tweede review' if second else 'Review'
     rejection = ('' if second else
         '<details class="ko-reject"><summary>Afwijzen</summary><label>Toelichting bij afwijzing<textarea name="comment">'

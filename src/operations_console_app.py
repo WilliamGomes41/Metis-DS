@@ -2462,6 +2462,7 @@ def _review_inventory(
     """Every current passage remains reachable; no admission or finality writes."""
     from src.vorming.source_containers_v1 import source_accountability, partition
     from src.review.review_duty_v1 import review_repair_duties
+    from src.review.knowledge_object_state_v1 import is_knowledge_object
     projection = source_accountability(objects, review_path=review_path, bindings=bindings, fragments=fragments)
     followups = review_followup_queues(objects, review_path=review_path, projection=projection)
     followup_tasks = {
@@ -2622,7 +2623,7 @@ def _review_inventory(
         if source_role:
             role_label = {"label": "Bevestigd bronlabel", "context": "Bevestigd contextfragment", "excluded": "Niet opgenomen met reden"}.get(source_role.get("role"), "Bronrol controleren")
             hint_html += f'<p data-confirmed-source-role>{_esc(role_label)} · {_esc(source_role.get("reason"))}</p>'
-        workplace = ("/review/bronpassage" if category == "handled" else
+        workplace = ("/review/bronpassage" if category == "handled" and not is_knowledge_object(obj, review_path) else
                      "/source-selection" if target_task == "repair" else "/review")
         items.append(
             f'<li data-passage-id="{_esc(object_id)}" data-passage-category="{_esc(category)}">'
