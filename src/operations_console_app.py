@@ -18,7 +18,7 @@ import uuid
 from typing import Any
 from urllib.parse import quote, urlencode, urlsplit
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
@@ -5434,6 +5434,13 @@ def create_console_app(
             },
         )
 
+    async def submitted_review_assessment(request: Request) -> dict[str, Any] | None:
+        form = await request.form()
+        fields = ('applicable', 'complete', 'placed_correctly')
+        if not any(field in form for field in fields):
+            return None
+        return {'version': 'review-assessment-v1', **{field: form.get(field) or None for field in fields}}
+
     @app.post("/review")
     def review_post(
         request: Request,
@@ -5464,13 +5471,16 @@ def create_console_app(
         applicable: str = Form(""),
         complete: str = Form(""),
         placed_correctly: str = Form(""),
+        evidence_not_applicable: str = Form(""),
+        submitted_assessment: dict[str, Any] | None = Depends(submitted_review_assessment),
     ) -> RedirectResponse:
         account = _require(request)
         if review_ui == "compact-v1":
             from src.review.ko_review_page_v1 import handle_compact_review
             return handle_compact_review(state, account, snapshot_id, object_id,
                 snapshot_revision, interaction_id, normalize_review_task(return_task), review_action,
-                dict(applicable=applicable, complete=complete, placed_correctly=placed_correctly), comment)
+                dict(applicable=applicable, complete=complete, placed_correctly=placed_correctly), comment,
+                evidence_not_applicable=evidence_not_applicable == 'yes')
         mapped = map_eindoordeel(eindoordeel, decision)
         if eindoordeel == "later_beoordelen" or mapped == "later":
             mapped = "later"
@@ -5523,6 +5533,8 @@ def create_console_app(
                 actor_id=account["account_id"],
                 snapshot_id=snapshot_id,
                 object_id=object_id,
+                assessment=submitted_assessment,
+                evidence_not_applicable=evidence_not_applicable == 'yes',
                 decision=mapped,
                 comment=comment,
                 proposed_correction=proposed_correction,
@@ -5901,13 +5913,16 @@ def create_console_app(
         applicable: str = Form(""),
         complete: str = Form(""),
         placed_correctly: str = Form(""),
+        evidence_not_applicable: str = Form(""),
+        submitted_assessment: dict[str, Any] | None = Depends(submitted_review_assessment),
     ) -> RedirectResponse:
         account = _require(request)
         if review_ui == "compact-v1":
             from src.review.ko_review_page_v1 import handle_compact_review
             return handle_compact_review(state, account, snapshot_id, object_id,
                 snapshot_revision, interaction_id, 'second_review', review_action,
-                dict(applicable=applicable, complete=complete, placed_correctly=placed_correctly), comment, second=True)
+                dict(applicable=applicable, complete=complete, placed_correctly=placed_correctly), comment, second=True,
+                evidence_not_applicable=evidence_not_applicable == 'yes')
         if not snapshot_revision.strip():
             raise ConsoleError("snapshot_revision_required")
         from src.review.review_passage_read_v1 import resolve_review_revision
@@ -5941,6 +5956,8 @@ def create_console_app(
                 object_id=object_id,
                 expected_revision=snapshot_revision.strip() or None,
                 interaction_evidence=evidence,
+                assessment=submitted_assessment,
+                evidence_not_applicable=evidence_not_applicable == 'yes',
             )
         elif action == "revise":
             if not comment.strip():

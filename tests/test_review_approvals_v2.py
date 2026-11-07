@@ -12,6 +12,8 @@ inhoudsgebonden vier ogen kan de eis alleen verhogen. v1 blijft ongewijzigd.
 """
 from __future__ import annotations
 
+from tests.ko_review_fixture_support import affirmative_assessment
+
 import pytest
 
 from src.review.four_eyes_v1 import historical_requires_four_eyes, publish_authorization_contract, requires_four_eyes
@@ -262,13 +264,14 @@ def test_kernel_revise_by_the_other_designated_person_is_not_overridden(kernel):
     console, ids = kernel
     sid = _ingest(console, ids, _choice("two_others", [ids["bert"], ids["carla"]]))["snapshot_id"]
     target = next(o for o in console.snapshot_objects(sid) if o.get("object_type") == "unclassified")
-    console.review_object(actor_id=ids["carla"], snapshot_id=sid, object_id=target["object_id"],
-                          decision="revise", comment="Klopt niet met de bron.")
-    try:
+    reviewed_revision = console.objects_revision(sid)
+    console.correct_object(actor_id=ids['carla'], snapshot_id=sid, object_id=target['object_id'],
+        expected_revision=reviewed_revision, patch={'reason': 'Klopt niet met de bron.', 'operations': [
+            {'op': 'set', 'path': 'uncertainty.has_uncertainty', 'value': True}]})
+    with pytest.raises(ConsoleError, match='snapshot_object_write_conflict'):
         console.review_object(actor_id=ids["bert"], snapshot_id=sid, object_id=target["object_id"],
-                              decision="approve", confirmed_object_type="explanation")
-    except ConsoleError:
-        pass
+            decision="approve", confirmed_object_type="explanation", expected_revision=reviewed_revision,
+            assessment=affirmative_assessment(), evidence_not_applicable=True)
     current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == target["object_id"])
     assert (current.get("governance") or {}).get("validation_status") != "approved"
     assert console.publication_readiness(sid)["publish_allowed"] is False
@@ -281,7 +284,7 @@ def test_kernel_concurrent_reviews_on_one_revision_conflict(kernel):
     target = next(o for o in console.snapshot_objects(sid) if o.get("object_type") == "unclassified")
     revision = console.objects_revision(sid)
     console.review_object(actor_id=ids["bert"], snapshot_id=sid, object_id=target["object_id"],
-                          decision="approve", confirmed_object_type="explanation", expected_revision=revision)
+                          decision="approve", confirmed_object_type="explanation", expected_revision=revision, assessment=affirmative_assessment(), evidence_not_applicable=True)
     with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
         console.review_object(actor_id=ids["carla"], snapshot_id=sid, object_id=target["object_id"],
                               decision="revise", comment="Gelijktijdig.", expected_revision=revision)
@@ -323,7 +326,7 @@ def _approve_as_exception(console, sid, reviewer):
     from src.review.review_disposition_v1 import definitive_review_disposition
     target = next(o for o in console.snapshot_objects(sid) if o.get("object_type") == "unclassified")
     console.review_object(actor_id=reviewer, snapshot_id=sid, object_id=target["object_id"],
-                          decision="approve", confirmed_object_type="exception")
+                          decision="approve", confirmed_object_type="exception", assessment=affirmative_assessment(), evidence_not_applicable=True)
     for obj in console.snapshot_objects(sid):
         if obj["object_id"] == target["object_id"]:
             continue
@@ -354,7 +357,7 @@ def test_kernel_content_four_eyes_without_four_eyes_choice_needs_the_other_perso
     sid = _ingest(console, ids, _choice(option, [ids[r] for r in reviewers]))["snapshot_id"]
     object_id = _approve_as_exception(console, sid, ids[first])
     assert "four_eyes_required" in console.publication_readiness(sid)["blockers"]
-    console.approve_second_review(actor_id=ids[second], snapshot_id=sid, object_id=object_id)
+    console.approve_second_review(actor_id=ids[second], snapshot_id=sid, object_id=object_id, assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert not REVIEW_BLOCKERS & set(console.publication_readiness(sid)["blockers"])
     publisher = console.create_account(username="pub", password="fixture-only-pub", roles=("publisher",))
     assert console.publish(actor_id=publisher["account_id"], snapshot_id=sid)["published_items"]
@@ -375,7 +378,7 @@ def test_kernel_content_four_eyes_under_one_reviewer_policy_routes_through_parti
                                     command_id="tweede-beoordelaar", expected_revision=console.objects_revision(sid),
                                     reason="Inhoud vraagt vier ogen.", action="add_required", reviewer_id=ids["dirk"])
     assert "required_policy_review_missing" in console.publication_readiness(sid)["blockers"]
-    console.approve_second_review(actor_id=ids["dirk"], snapshot_id=sid, object_id=object_id)
+    console.approve_second_review(actor_id=ids["dirk"], snapshot_id=sid, object_id=object_id, assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert not REVIEW_BLOCKERS & set(console.publication_readiness(sid)["blockers"])
     assert console.publish(actor_id=publisher["account_id"], snapshot_id=sid)["published_items"]
 
@@ -387,5 +390,92 @@ def test_kernel_content_four_eyes_optional_participant_can_give_the_second_revie
     sid = _ingest(console, ids, {}, review_choice=None, review_policy=policy)["snapshot_id"]
     object_id = _approve_as_exception(console, sid, ids["bert"])
     assert "four_eyes_required" in console.publication_readiness(sid)["blockers"]
-    console.approve_second_review(actor_id=ids["carla"], snapshot_id=sid, object_id=object_id)
+    console.approve_second_review(actor_id=ids["carla"], snapshot_id=sid, object_id=object_id, assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert not REVIEW_BLOCKERS & set(console.publication_readiness(sid)["blockers"])
+
+
+def test_every_required_reviewer_supplies_own_answers_and_evidence_choice(kernel):
+    from copy import deepcopy
+    from src.review.knowledge_object_state_v1 import derive_ko_state
+    from tests.test_review_command_bounded_http_v1 import physical_state
+    console, ids = kernel
+    policy = {'contract': POLICY, 'revision': 1, 'primary': ids['bert'],
+              'assignments': [{'reviewer_id': ids[name], 'participation': 'required'}
+                              for name in ('carla', 'dirk')]}
+    sid = _ingest(console, ids, {}, review_choice=None, review_policy=policy)['snapshot_id']
+    object_id = _approve_as_exception(console, sid, ids['bert'])
+
+    def state():
+        obj = next(row for row in console.snapshot_objects(sid) if row['object_id'] == object_id)
+        return derive_ko_state(obj, review_path='richtlijn', bindings=console.object_review_bindings(sid),
+            fragments=console.review_source_fragments(sid))['state']
+
+    assert state() == 'Tweede review'
+    for values, code in [({}, 'review_assessment_required'),
+                         ({'assessment': affirmative_assessment()}, 'knowledge_evidence_required')]:
+        before = deepcopy(physical_state(console, sid))
+        events = console.workflow_review_store.read_events_for_snapshots([sid])
+        with pytest.raises(ConsoleError) as refused:
+            console.approve_second_review(actor_id=ids['carla'], snapshot_id=sid,
+                object_id=object_id, **values)
+        assert refused.value.code == code
+        assert physical_state(console, sid) == before
+
+        assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
+    for actor, expected in [('carla', 'Tweede review'), ('dirk', 'Goedgekeurd')]:
+        console.approve_second_review(actor_id=ids[actor], snapshot_id=sid, object_id=object_id,
+            assessment=affirmative_assessment(), evidence_not_applicable=True)
+        assert state() == expected
+        binding = next(row for row in console.object_review_bindings(sid)
+                       if row['object_id'] == object_id and row['reviewer_id'] == ids[actor])
+        assert binding['supporting_evidence']['applicability'] == 'not_applicable'
+        before = deepcopy(physical_state(console, sid))
+        with pytest.raises(ConsoleError) as refused:
+            console.approve_second_review(actor_id=ids[actor], snapshot_id=sid, object_id=object_id,
+                assessment={**affirmative_assessment(), 'complete': 'adjust'}, evidence_not_applicable=True)
+        assert refused.value.code == 'review_assessment_requires_three_yes'
+        assert physical_state(console, sid) == before
+
+
+@pytest.mark.parametrize('invalid_kind', ['explains', 'supersedes', 'linked_na'])
+def test_second_review_na_respects_confirmed_relation_validity_and_applicability(kernel, invalid_kind):
+    from copy import deepcopy
+    from src.integrity_kernel import compute_canonical_object_hash, stamp_canonical_hashes
+    from src.knowledge_relations_v1 import build_knowledge_relation, canonicalize_knowledge_relation_set
+    from tests.semantic_fixture_support import install_fixture_history
+    from tests.test_review_command_bounded_http_v1 import physical_state
+    console, ids = kernel
+    sid = _ingest(console, ids, _choice('two_others', [ids['bert'], ids['carla']], four_eyes=True))['snapshot_id']
+    object_id = _approve_as_exception(console, sid, ids['bert'])
+    history = console._load_objects(sid)
+    claim = next(row for row in reversed(history) if row['object_id'] == object_id)
+    peer = next(row for row in console.snapshot_objects(sid)
+                if row['object_id'] != object_id and row.get('object_type') not in {'document', 'heading'})
+    for row in history:
+        if (row['object_id'], row['object_version']) == (peer['object_id'], peer['object_version']):
+            row['confirmed_object_type'] = 'definition'
+            row['governance']['validation_status'] = 'needs_review'
+            stamp_canonical_hashes(row)
+    kinds = (['supported_by'] if invalid_kind == 'linked_na' else
+             [invalid_kind] if invalid_kind == 'explains' else ['supported_by', invalid_kind])
+    claim['confirmed_knowledge_relations'] = canonicalize_knowledge_relation_set([
+        build_knowledge_relation(source_object_id=object_id, source_object_version=claim['object_version'],
+            relation_type=kind, target_object_id=peer['object_id'], target_object_version=peer['object_version'])
+        for kind in kinds], source_object_id=object_id, source_object_version=claim['object_version'])
+    stamp_canonical_hashes(claim)
+    claim['governance']['review_snapshot_hash'] = compute_canonical_object_hash(claim)
+    bindings = console.object_review_bindings(sid)
+    for binding in bindings:
+        if binding['object_id'] == object_id:
+            binding['canonical_object_hash'] = compute_canonical_object_hash(claim)
+    install_fixture_history(console, sid, history)
+    console.workflow_review_store.replace_snapshot_bindings(sid, bindings)
+    before = deepcopy(physical_state(console, sid))
+    events = console.workflow_review_store.read_events_for_snapshots([sid])
+    with pytest.raises(ConsoleError) as refused:
+        console.approve_second_review(actor_id=ids['carla'], snapshot_id=sid, object_id=object_id,
+            assessment=affirmative_assessment(), evidence_not_applicable=True)
+    assert refused.value.code == ('supporting_evidence_choice_conflict' if invalid_kind == 'linked_na'
+                                 else 'knowledge_relation_endpoint_type_invalid')
+    assert physical_state(console, sid) == before
+    assert console.workflow_review_store.read_events_for_snapshots([sid]) == events

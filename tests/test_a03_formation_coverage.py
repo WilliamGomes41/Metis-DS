@@ -9,6 +9,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 import json
 
@@ -123,7 +125,7 @@ def inject_failure(state, sid, *, requires_review=True, spans=None):
 def approve(state, sid, reviewer, obj):
     state.review_object(actor_id=reviewer, snapshot_id=sid, object_id=obj["object_id"], decision="approve",
         confirmed_object_type="recommendation", recommendation_direction="for",
-        recommendation_strength_level="not_stated")
+        recommendation_strength_level="not_stated", assessment=affirmative_assessment(), evidence_not_applicable=True)
 
 
 def candidates(state, sid):

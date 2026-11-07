@@ -26,6 +26,8 @@ _config_identity values (dsn) are compared only; NOOIT printed or used in assert
 """
 from __future__ import annotations
 
+from tests.ko_review_fixture_support import affirmative_assessment
+
 import inspect
 import importlib
 import os
@@ -113,7 +115,7 @@ def _ingest(console, accounts=None, *, title="Begrippen", family="begrippen", fi
 def _approve(console, rid, sid, obj):
     return console.review_object(actor_id=rid, snapshot_id=sid, object_id=obj["object_id"], decision="approve",
                                  confirmed_object_type=_batch_type(obj), suitability="ja",
-                                 eindoordeel="goedkeuren", type_action="dit_klopt")
+                                 eindoordeel="goedkeuren", type_action="dit_klopt", assessment=affirmative_assessment(), evidence_not_applicable=True)
 
 
 def _document_state(config, sid):
@@ -535,7 +537,7 @@ def test_t9_tier_r_batch_second_member_fault_leaves_state_unchanged(workflow_pos
         return original(**kwargs)
     monkeypatch.setattr(console, "_commit_prepared_store", second_fails)
     with pytest.raises(RuntimeError, match="t9_injected"):
-        console.batch_review_normal_risk(actor_id=rid, snapshot_id=sid, object_ids=[o["object_id"] for o in queue])
+        console.batch_review_normal_risk(actor_id=rid, snapshot_id=sid, object_ids=[o["object_id"] for o in queue], assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert _durable(console, workflow_postgres, sid) == before
 
 
@@ -652,9 +654,7 @@ def _scenario_review_flow(request, tmp_path, monkeypatch):
     sid, rid, queue = _ingest(console, accounts)
     first, second = queue[0], queue[1]
     _approve(console, rid, sid, first)
-    text = second["content"]["clean_text"].rstrip(".")
-    console.review_object(actor_id=rid, snapshot_id=sid, object_id=second["object_id"], decision="revise",
-                          comment="Corrigeer.", proposed_correction=text)
+    text = second["content"]["clean_text"]
     console.correct_object(actor_id=rid, snapshot_id=sid, object_id=second["object_id"],
                            patch={"reason": "t13", "operations": [
                                {"op": "set", "path": "content.clean_text", "value": text}]})
@@ -746,8 +746,8 @@ def test_t13_numeric_version_order_and_non_numeric_category(workflow_postgres, t
     console = _review_tier(tmp_path, workflow_postgres)
     sid, rid, queue = _ingest(console)
     second = queue[1]
-    console.review_object(actor_id=rid, snapshot_id=sid, object_id=second["object_id"], decision="revise",
-                          comment="Corrigeer.", proposed_correction=second["content"]["clean_text"].rstrip("."))
+    console.review_object(actor_id=rid, snapshot_id=sid, object_id=second["object_id"], decision="reject",
+                          comment="Afgewezen; wel een reviewevent, geen goedkeuringsbinding.")
     _insert_version(workflow_postgres, sid, second["object_id"], "1.0.9")
     _insert_version(workflow_postgres, sid, second["object_id"], "1.0.10")
     _copy_event_to_version(workflow_postgres, sid, second["object_id"], "1.0.9")

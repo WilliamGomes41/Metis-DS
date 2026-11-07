@@ -1,3 +1,5 @@
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 import os
@@ -77,7 +79,7 @@ def test_pdf_requires_passage_and_graph_review_after_restart(tmp_path, participa
     for o in console.snapshot_objects(sid):
         if o["object_type"] != "document":
             console.review_object(actor_id=accounts["researcher"]["account_id"], snapshot_id=sid,
-                                  object_id=o["object_id"], decision="approve", confirmed_object_type="node")
+                                  object_id=o["object_id"], decision="approve", confirmed_object_type="node", assessment=affirmative_assessment(), evidence_not_applicable=True)
     graph = complete_graph(console, sid)
     cmd = command(console, accounts, sid, "graph-1", graph=graph)
     console.update_decision_graph(**cmd)
@@ -98,7 +100,7 @@ def test_pdf_requires_passage_and_graph_review_after_restart(tmp_path, participa
             console.confirm_decision_graph(**cmd)
         for o in console.snapshot_objects(sid):
             if o["object_type"] != "document":
-                console.approve_second_review(actor_id=secondary, snapshot_id=sid, object_id=o["object_id"])
+                console.approve_second_review(actor_id=secondary, snapshot_id=sid, object_id=o["object_id"], assessment=affirmative_assessment(), evidence_not_applicable=True)
         cmd["expected_revision"] = console.objects_revision(sid)
         console.confirm_decision_graph(**cmd)
         result = console.consider_publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=sid)
@@ -163,7 +165,7 @@ def finish(console, accounts, sid):
     for o in console.snapshot_objects(sid):
         if o["object_type"] != "document":
             console.review_object(actor_id=accounts["researcher"]["account_id"], snapshot_id=sid,
-                                  object_id=o["object_id"], decision="approve", confirmed_object_type="node")
+                                  object_id=o["object_id"], decision="approve", confirmed_object_type="node", assessment=affirmative_assessment(), evidence_not_applicable=True)
     console.update_decision_graph(**command(console, accounts, sid, "endpoints", graph=complete_graph(console, sid)))
     console.confirm_decision_graph(**command(console, accounts, sid, "confirmed"))
 

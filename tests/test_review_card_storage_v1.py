@@ -8,6 +8,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -195,7 +197,7 @@ def test_preparation_cas_cannot_overwrite_a_concurrent_review(prepared,monkeypat
         assert ready.wait(20)
         try:
             console.review_object(actor_id=users['reviewer_a']['account_id'],snapshot_id=sid,
-                                  object_id=oid,decision='approve',confirmed_object_type='definition')
+                                  object_id=oid,decision='approve',confirmed_object_type='definition', assessment=affirmative_assessment(), evidence_not_applicable=True)
         finally:
             resume.set()
         with pytest.raises(WorkflowDocumentStoreError,match='preparation_conflict'):

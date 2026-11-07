@@ -7,6 +7,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 import hashlib
 import json
@@ -154,7 +156,7 @@ def test_real_ingest_review_and_restart_keep_selected_identity_and_source(tmp_pa
     for row in selected:
         assert source_lineage_resolves(row, fragments=fragments)
         state.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
-            object_id=row["object_id"], decision="approve", confirmed_object_type="definition")
+            object_id=row["object_id"], decision="approve", confirmed_object_type="definition", assessment=affirmative_assessment(), evidence_not_applicable=True)
     stored_rows = state.snapshot_objects(sid)
     stored_bindings = state.object_review_bindings(sid)
     restored = console()

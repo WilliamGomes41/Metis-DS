@@ -14,6 +14,8 @@ T6: a legacy remirror failure logs codes, ids and error types only.
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 import json
 import threading
 from contextlib import contextmanager
@@ -62,6 +64,7 @@ def _approve(console, actor, sid, obj):
         actor_id=actor, snapshot_id=sid, object_id=obj["object_id"], decision="approve",
         confirmed_object_type=_batch_type(obj), suitability="ja", eindoordeel="goedkeuren",
         type_action="dit_klopt",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
 
 

@@ -127,12 +127,17 @@ def test_publication_source_blocker_opens_its_blocked_candidates(tmp_path, *, pr
 
 def test_publication_repair_blocker_opens_requested_revision(tmp_path, *, production_console, production_app):
     from fastapi.testclient import TestClient
-    from tests.test_closed_review_loop_v1 import _system as setup, _review
+    from tests.test_closed_review_loop_v1 import _system as setup
     console, _, reviewer, sid, ids = setup(tmp_path, production_console=production_console)
     console.create_account(username='publisher.862', password='publisher-862-secret', roles=('publisher',))
     oid = ids[0]
-    _review(console, reviewer, sid, oid, decision='revise', suitability='mist_context',
-            eindoordeel='goedkeuren_na_correctie', comment='Context ontbreekt.')
+    from tests.semantic_fixture_support import install_fixture_history
+    rows = console._load_objects(sid)
+    current = console._current_object(sid, oid)
+    legacy = next(row for row in rows if (row['object_id'], row['object_version']) ==
+                  (oid, current['object_version']))
+    legacy['governance']['validation_status'] = 'revise'
+    install_fixture_history(console, sid, rows)
     readiness = console.publication_readiness(sid)
     assert oid in readiness['review_repair_object_ids']
     publisher = TestClient(production_app(console), base_url='https://testserver')

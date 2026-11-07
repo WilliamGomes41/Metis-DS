@@ -6,6 +6,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 import json
 
@@ -105,7 +107,7 @@ def partial_story(tmp_path, make_console=None, *, production_console):
     # Existing review authority remains exact; recovery cannot replace it.
     final.review_object(actor_id=reviewer, snapshot_id=sid, object_id=first['object_id'],
                         decision='approve', confirmed_object_type='recommendation',
-                        recommendation_direction='for', recommendation_strength_level='not_stated')
+                        recommendation_direction='for', recommendation_strength_level='not_stated', assessment=affirmative_assessment(), evidence_not_applicable=True)
     with pytest.raises(ConsoleError, match='pre_review_retry_existing_work'):
         final.resume_formation(**{**command, 'command_id': 'resume-reviewed',
                                 'expected_revision': final.objects_revision(sid)})
@@ -219,7 +221,7 @@ def test_recover_review_publish_restart_and_published_projection(tmp_path, compl
         if obj.get('proposed_object_type') == 'recommendation':
             state.review_object(actor_id=reviewer, snapshot_id=sid, object_id=obj['object_id'],
                 decision='approve', confirmed_object_type='recommendation', recommendation_direction='for',
-                recommendation_strength_level='not_stated')
+                recommendation_strength_level='not_stated', assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert state.publication_readiness(sid)['publication_ready']
     assert state.publish(actor_id=reviewer, snapshot_id=sid)['status'] == 'PASS'
     projection = state._projection_from_authority()

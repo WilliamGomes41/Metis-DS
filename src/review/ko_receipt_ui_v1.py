@@ -110,7 +110,7 @@ def _read_saved_review(console, account, snapshot_id, object_id, interaction_id)
 
 _RELATION_LABELS = {
     'applies_if': 'Geldt wanneer', 'except_if': 'Tenzij',
-    'supported_by': 'Onderbouwd door', 'explains': 'Licht toe',
+    'supported_by': 'Onderbouwd door', 'explains': 'Onderbouwd door',
     'defines': 'Definieert', 'supersedes': 'Vervangt',
 }
 _CONTEXT_LABELS = {'condition': 'Geldt wanneer', 'exception': 'Tenzij',
@@ -185,7 +185,7 @@ def _knowledge_connections(obj, objects, *, include_proposals=False):
             target = (by_key.get((relation.get('target_object_id'), relation.get('target_object_version')))
                       if own else source)
             label = _RELATION_LABELS[kind] if own else {
-                'explains': 'Onderbouwd door', 'supported_by': 'Onderbouwt',
+                'explains': 'Onderbouwt', 'supported_by': 'Onderbouwt',
                 'defines': 'Gedefinieerd door', 'applies_if': 'Voorwaarde voor',
                 'except_if': 'Uitzondering voor', 'supersedes': 'Vervangen door',
             }[kind]
@@ -292,7 +292,9 @@ def render_receipt_page(account, receipt, snapshot_id, continuation):
     comment = str((event.get('details') or {}).get('comment') or '')
     heading = 'Dit heb je goedgekeurd. Zo hangt het samen.' if approved else 'Dit heb je vastgelegd. Zo hangt het samen.'
     saved_version = str(event.get('object_version') or '')
-    assessment = ReviewAssessment.from_evidence(((event.get('details') or {}).get('review_interaction') or {}).get('assessment'))
+    details = event.get('details') or {}
+    assessment = ReviewAssessment.from_evidence(details.get('assessment') or (details.get('review_interaction') or {}).get('assessment'))
+    evidence_not_applicable = (details.get('supporting_evidence') or {}).get('applicability') == 'not_applicable'
     check = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10"/></svg>'
     saved_answers = []
     for key, label in (('applicable', 'Toepasbaar'), ('complete', 'Compleet'), ('placed_correctly', 'Juiste plek')):
@@ -308,7 +310,9 @@ def render_receipt_page(account, receipt, snapshot_id, continuation):
         text = ''.join('<p>' + escape(row.text) + '</p>'
             + ('<small>' + escape(row.origin) + '</small>' if row.origin else '')
             + ('<p class="ko-connection-status">' + escape(row.status) + '</p>' if row.status else '') for row in items)
-        if not text:
+        if label == 'Onderbouwd door' and evidence_not_applicable:
+            text = '<p data-saved-evidence-applicability="not_applicable">Bij deze beoordeling expliciet niet van toepassing verklaard.</p>'
+        elif not text:
             text = '<p class="ko-muted">Niet afzonderlijk vastgelegd. Dit betekent niet automatisch niet van toepassing.</p>'
         branches.append('<li><span class="ko-branch-label">' + label.lower() + '</span>'
             '<div class="ko-branch-body"><h3>' + title + '</h3>' + text + '</div></li>')

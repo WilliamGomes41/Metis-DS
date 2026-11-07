@@ -8,6 +8,8 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 
 from pathlib import Path
@@ -274,6 +276,7 @@ def test_contextual_review_commits_interaction_evidence_with_existing_decision_e
         confirmed_object_type="definition",
         expected_revision=console.objects_revision(snapshot_id),
         interaction_evidence=evidence,
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
 
     events = read_events(console._ledger_path)
@@ -346,6 +349,7 @@ def test_second_review_uses_same_evidence_store_without_changing_object_tuple(tm
         object_id=object_id,
         expected_revision=console.objects_revision(snapshot_id),
         interaction_evidence=evidence,
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
 
     after = next(row for row in console.snapshot_objects(snapshot_id) if row["object_id"] == object_id)
@@ -366,7 +370,7 @@ def test_second_review_uses_same_evidence_store_without_changing_object_tuple(tm
     before_events = deepcopy(read_events(console._ledger_path))
     console.approve_second_review(actor_id=accounts["reviewer_b"]["account_id"],
         snapshot_id=snapshot_id, object_id=object_id,
-        expected_revision=console.objects_revision(snapshot_id), interaction_evidence=evidence)
+        expected_revision=console.objects_revision(snapshot_id), interaction_evidence=evidence, assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert console._load_objects(snapshot_id, remember=False) == before_retry
     assert console.object_review_bindings(snapshot_id) == before_bindings
     assert read_events(console._ledger_path) == before_events

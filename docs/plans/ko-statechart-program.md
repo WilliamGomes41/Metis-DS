@@ -23,7 +23,7 @@ Governance in this repository overrides pstack where they differ. Class A with `
 
 - [ ] State the protocol and this plan to the operator, then stop. Start execution only on the operator's explicit go.
 - [ ] Record the operator's answers to the three product decisions in Appendix C before KO-3 and KO-4 start.
-  - [ ] Is supporting evidence mandatory per object type, and does an explicit "niet van toepassing" close it.
+  - [x] Supporting evidence is mandatory for every type; explicit N/A is permitted when no applicable supporting evidence exists. The rule applies to every next approval of existing unpublished KOs (operator decision 6 November 2026).
   - [ ] Is publication per object or per document (#991).
   - [ ] Is the Athena package derived on read or stored as an aggregate.
 - [ ] Read these from trunk at program start. Re-read them at every tick.
@@ -294,22 +294,24 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 
 **Files.**
 
-- [ ] Create `src/review/ko_transitions_v1.py`.
-- [ ] Edit `src/review/review_workflow_v3.py`.
-- [ ] Edit `src/review/closed_review_loop_v1.py`.
-- [ ] Edit `src/review/deterministic_review_repair_v1.py`.
+- [x] Create `src/review/ko_transitions_v1.py`.
+- [x] Edit `src/review/review_workflow_v3.py`.
+- [x] Edit `src/review/closed_review_loop_v1.py`.
+- [x] Edit `src/review/deterministic_review_repair_v1.py`.
 - [ ] Edit `src/review/source_context_review_v1.py`.
-- [ ] Edit `src/operations_console_v1.py` (`review_object`, `approve_second_review`, `correct_object`, `confirm_object_type` only).
-- [ ] Create `tests/test_ko_transitions_postgres.py`.
+- [x] Edit the existing command boundaries in `src/operations_console_v1.py`, including public relation confirmation and deferral, per the bounded #1006 contract.
+- [x] Create `tests/test_ko_transitions_postgres.py` and the independent matrix in `tests/test_ko_transition_matrix.py`.
+- [x] Reuse `src/review/revision_workflow.py` for explicit structural-heading to non-boom KO successors; preserve history/source identity and open the new revision instead of retaining structural approval.
 
 **Build.**
 
 - [ ] Define `TRANSITIONS`, a table of `(from_state, event, to_state, guard)` that matches the statechart in the KO statechart document. Correction is an event that creates a new revision that starts as Kandidaat, never a stored `revise`. The derived state of that revision then follows the guards.
-- [ ] Add `apply_ko_event(console, object_id, event, payload)` that derives the current state, checks the table and the guard, then calls the existing writer. It raises one refusal type with the state and event in Dutch.
+- [ ] Add a pure `apply_ko_event` policy over the current and prepared objects, captured bindings, source and cohort inside each existing atomic command. It checks the permitted event, explicit review facts and actual derived post-state before the existing writer commits; it adds no dispatcher, transaction or state storage. Refusals use the existing ConsoleError with a stable code and Dutch state/event message.
 - [ ] Route `review_object`, `approve_second_review`, `correct_object`, `confirm_object_type`, `resolve_support_relation`, `_supersede_merge_targets` and the source-context commands through `apply_ko_event`.
-- [ ] Express `ALLOWED_FINAL_BY_SUITABILITY`, `require_allowed_review_disposition` and `without_closed_follow_up` as guards in the table and delete their ad-hoc call sites.
-- [ ] Add the Bewijs open guard per the operator's answer. A recommendation leaves Bewijs open only with linked evidence, or with an explicit "niet van toepassing" if the operator allowed it.
-- [ ] Stop writing `validation_status="revise"`. A correction writes `needs_review` on the new revision, as `revise_object` already does.
+- [ ] Centralise the existing `ALLOWED_FINAL_BY_SUITABILITY`, `require_allowed_review_disposition` and `without_closed_follow_up` policy without replacing existing preflight/atomic command ownership.
+- [ ] Require three explicit Yes answers and confirmed current supporting evidence or the reviewer's own explicit recorded "niet van toepassing" for every new KO approval, including existing unpublished KOs and second-review decisions. Bind these facts to the exact saved tuple and audit event; never infer missing answers or N/A. Historical publication remains immutable.
+- [ ] Classify both current and final prepared objects: non-KO to non-KO remains structural, non-KO to KO enters the KO guards, KO to KO uses its current transition, and KO to non-KO retains the current-state/event guard without inventing a KO post-state. No caller-specific bypass.
+- [ ] Stop persisting `validation_status="revise"`. Existing pure revision-builder inputs may remain transient; correction commits an open successor and invalidates earlier authority. Genuine legacy revise readers remain separate. Source-context consolidation stays pending on #942.
 
 **You see.**
 
@@ -318,9 +320,9 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] `tests/test_ko_transitions_postgres.py` enumerates every `(state, event)` pair and asserts either the table's target or the refusal, with no write on refusal. Run `scripts/test_postgres.sh python -m pytest tests/test_ko_transitions_postgres.py -q`.
+- [ ] `tests/test_ko_transition_matrix.py` tests an independent state/event/post-state oracle; `tests/test_ko_transitions_postgres.py` proves real command mutations, refusals without writes, replay, final classification and rollback boundaries. Pure matrix coverage is not native persistence coverage. Run the PostgreSQL helper before both suites.
 - [ ] The P3, P4c and P4d suites pass unchanged in behaviour. Run `scripts/test_postgres.sh python -m pytest tests/test_review_disposition_choices.py tests/test_review_disposition_precheck.py tests/test_review_closure_v1.py tests/test_deterministic_review_repair_v1.py -q`.
-- [ ] `grep -rn "\"revise\"" src/review src/operations_console_v1.py` finds no writer.
+- [ ] Inspect every revise reference: no new persisted writer, with transient revision-builder input and genuine legacy readers explicitly distinguished.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on `grok-4.7-xhigh-fast` at the PR head, per the boot recipe.
 
@@ -337,10 +339,9 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] Metric. Review save time p95 for approve and for revise, at trunk and head.
-- [ ] Probe. `evidence/974-p4b/run_p4b.sh` save probes, interleaved trunk and head, five rounds.
-- [ ] Baseline. Record the trunk p95 first.
-- [ ] Rule. Head above trunk by more than 10 percent fails. Any save above the gunicorn timeout fails outright.
+- [ ] Metric. Actual approval-save and correction-save POST wall p95, using `evidence/ko-4/performance/protocol.json` and its frozen scripts, with five alternating AB/BA pairs and all 80 raw observations retained.
+- [ ] Baseline. Pin the actual KO2/KO3 integration 837b115f and an immutable final KO4 head; accept timings only after the orchestrator's quiet GO. Earlier setup smoke is not acceptance.
+- [ ] Rule. Either save p95 above baseline by more than 10 percent fails. Any individual save above the existing 30-second Gunicorn timeout fails. No retries, discarded observations, timeout overrides or budget changes.
 
 **Review gate.** The operator reviews before merge.
 
@@ -500,7 +501,7 @@ Measured facts this plan relies on come from the read-only map of 5 November 202
 - KO-1. The derivation may disagree with `definitive_review_disposition` on edge cases. The owner pins both in the same test and treats any disagreement as a finding, not a tolerance.
 - KO-2. Receipt rendering can slow the post-save response, and state presentation can slow the card. The #974 worker timeouts make both relevant: measure card reads and the complete save/navigation action; the perf rule holds each at 10 percent.
 - KO-3. The per-object decision is open. Without it KO-3 builds per-document readiness only.
-- KO-4. The Bewijs open guard can block existing recommendations that have no linked evidence. The owner reports the KO-1 production count before KO-4 merges, and the operator decides whether existing KOs are grandfathered.
+- KO-4. The Bewijs open guard can block existing recommendations that have no linked evidence. Operator decision on 2026-11-06: every next approval of an existing unpublished KO follows the same evidence-or-explicit-N/A rule; no grandfathering. Existing published history remains immutable. The production inventory remains an operator pre-deployment check.
 - KO-4. Two workers can race on one KO. Lane 6 and the revision CAS cover it.
 - KO-5. A reader of a mirror field may be missed. The architecture test and the adversarial audit lane hunt for it.
 - KO-6. The migration is destructive. Only the operator runs it, after a backup and a restore drill.

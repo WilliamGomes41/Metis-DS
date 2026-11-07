@@ -1,0 +1,12 @@
+{"sha": "2621773f545bf61816125a4028f0e3d3e53724a4", "mode": "unresolved_pdf", "before_state": {"state": "Kandidaat", "reasons": ["admission_blocked"], "invalid": []}, "before_is_ko": true, "admission": {"gate_result": "blocked", "source_hash": "f760b8495e1148ff2ead82dc745da7738d56e47a2027b9a59744827846545987", "reason_codes": ["decision_unit_graph_unresolved"], "candidate_text": "Bespreek de situatie.", "document_version": "1.0", "admission_version": "decision-tree-construction-v1"}, "result": "REFUSED", "code": "ko_transition_refused", "unchanged": true}
+.{"sha": "2621773f545bf61816125a4028f0e3d3e53724a4", "mode": "resolved_pdf", "before_state": {"state": "Bewijs open", "reasons": ["no_supporting_evidence"], "invalid": []}, "before_is_ko": true, "admission": {"gate_result": "allowed", "source_hash": "72bf5ab65e365dfac9ab8d92ef6a9bd0cf2d9b8fc93ac2ef9a769dcfb6207385", "reason_codes": [], "candidate_text": "Bespreek de situatie.", "document_version": "1.0", "admission_version": "decision-tree-construction-v1"}, "result": "APPROVED", "after_state": {"state": "Goedgekeurd", "reasons": ["approved"], "invalid": []}}
+.{"sha": "2621773f545bf61816125a4028f0e3d3e53724a4", "mode": "historical_html", "before_state": {"state": "Bewijs open", "reasons": ["no_supporting_evidence"], "invalid": []}, "before_is_ko": true, "admission": null, "result": "APPROVED", "after_state": {"state": "Goedgekeurd", "reasons": ["approved"], "invalid": []}}
+.{"sha": "2621773f545bf61816125a4028f0e3d3e53724a4", "mode": "structural_conversion", "before_state": {"state": null, "reasons": ["not_knowledge_object"], "invalid": []}, "before_is_ko": false, "admission": null, "result": "APPROVED", "after_state": {"state": "Goedgekeurd", "reasons": ["approved"], "invalid": []}}
+.
+=============================== warnings summary ===============================
+../.venvs/metis-ds/lib/python3.13/site-packages/starlette/testclient.py:45
+  /workspace/.venvs/metis-ds/lib/python3.13/site-packages/starlette/testclient.py:45: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+4 passed, 1 warning in 1.82s

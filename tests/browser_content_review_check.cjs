@@ -33,6 +33,10 @@ const assert = require('node:assert/strict');
     // The existing explicit group selection sends one existing command.
     await batch.locator('[name=object_ids]').first().check();
     await batch.locator('[name=object_ids]').nth(1).check();
+    for (const question of ['applicable','complete','placed_correctly']) {
+      await batch.locator(`[name=${question}][value=yes]`).check();
+    }
+    await batch.locator('[name=evidence_not_applicable]').check();
     assert.deepEqual(await state(),before,'GET and selection cannot write');
     await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded'}),batch.locator('button[type=submit]').click()]);
     const committed=await state();
@@ -55,6 +59,7 @@ const assert = require('node:assert/strict');
       assert.equal(await review.locator(`[name=${question}]:checked`).count(),0);
       await review.locator(`[name=${question}][value=yes]`).check();
     }
+    await review.locator('[name=evidence_not_applicable]').check();
     const approve=review.locator('[name=review_action][value=approve]');
     assert.equal(await approve.isEnabled(),true,'The displayed fixture proposal must be confirmable');
     await proof('content-individual',width);
@@ -75,6 +80,7 @@ const assert = require('node:assert/strict');
       assert.equal(await second.locator(`[name=${question}]:checked`).count(),0);
       await second.locator(`[name=${question}][value=yes]`).check();
     }
+    await second.locator('[name=evidence_not_applicable]').check();
     await Promise.all([page.waitForNavigation({waitUntil:'domcontentloaded'}),second.locator('[name=review_action][value=approve]').click()]);
     assert.equal(await page.locator('[data-review-receipt]').count(),1);
     assert.equal(await page.locator('[data-saved-answer][data-answer=yes]').count(),3);

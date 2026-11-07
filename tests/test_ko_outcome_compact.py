@@ -5,6 +5,7 @@
 """
 import json
 import re
+from copy import deepcopy
 
 import pytest
 from fastapi.testclient import TestClient
@@ -29,6 +30,15 @@ def outcome_system(tmp_path, production_console, *, required=False, no_action=Fa
     sid = _ingest_boom(console, accounts, data=json.dumps(source).encode(), **options)['snapshot_id']
     obj = next(row for row in console.snapshot_objects(sid) if row.get('proposed_object_type') == 'outcome')
     _confirm_applies_if(console, accounts, sid, obj)
+    if required:
+        from tests.test_decision_graph_chain import command
+        graph = deepcopy(console._envelope(sid)['decision_graph'])
+        current = {row['object_id']: row for row in console.snapshot_objects(sid)}
+        for node in graph['nodes']:
+            node['object_version'] = current[node['object_id']]['object_version']
+            node['mode'] = 'terminal' if node['object_id'] == obj['object_id'] else 'context'
+        graph.update(entrypoints=[obj['object_id']], edges=[], unresolved=[])
+        console.update_decision_graph(**command(console, accounts, sid, 'prepare-outcome-graph', graph=graph))
     client = TestClient(console._metis_test_application)
     return console, accounts, sid, obj, client
 

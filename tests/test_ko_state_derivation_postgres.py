@@ -12,6 +12,8 @@ counts only.
 """
 from __future__ import annotations
 
+from tests.ko_review_fixture_support import affirmative_assessment
+
 import json
 import runpy
 import sys
@@ -144,7 +146,7 @@ def test_fresh_ingest_is_before_approval_and_approval_moves_one_object(tmp_path,
     target = next(obj["object_id"] for obj in console.snapshot_objects(snapshot_id)
                   if obj.get("object_type") == "unclassified")
     console.review_object(actor_id=reviewer["account_id"], snapshot_id=snapshot_id, object_id=target,
-                          decision="approve", confirmed_object_type="explanation")
+                          decision="approve", confirmed_object_type="explanation", assessment=affirmative_assessment(), evidence_not_applicable=True)
     after = _states(console, snapshot_id)
     assert after[target]["state"] in {ko.GOEDGEKEURD, ko.TWEEDE_REVIEW}
     assert after[target]["invalid"] == []

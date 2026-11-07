@@ -555,7 +555,9 @@ def test_proposed_relation_is_readable_beside_three_explicit_answer_rows(tmp_pat
     assert {item['name'] for item in radios} == {'applicable', 'complete', 'placed_correctly'}
     assert all('checked' not in item for item in radios)
     assert not any(item.get('name') == 'relation_choice' for item in form['inputs'])
-    assert re.search(r'<li><strong>licht toe</strong>: ' + re.escape(goal), html)
+    supporting = re.search(r'<tr><th scope="row">Onderbouwing</th><td>(.*?)</td></tr>', html, re.S)
+    assert supporting is not None and goal in supporting.group(1)
+    assert 'Voorstel, nog niet bevestigd' in supporting.group(1)
     assert 'Voorstel, nog niet bevestigd' in html
     assert len(re.findall(r'<label><input type="radio"[^>]*> (?:Ja|Aanpassen)</label>', html)) == 6
 

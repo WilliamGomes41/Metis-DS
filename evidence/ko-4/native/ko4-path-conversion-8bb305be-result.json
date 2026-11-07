@@ -1,0 +1,52 @@
+{
+  "sha": "8bb305be63e95712a51d2a719f95cd431978ce66",
+  "before_type": "unclassified",
+  "before_authoritative_type": "path",
+  "before_version": "1.0",
+  "input_assessment": null,
+  "input_na": false,
+  "result": "APPROVED",
+  "after_type": "node",
+  "after_version": "1.0.1",
+  "after_is_ko": true,
+  "governance": {
+    "release_date": null,
+    "review_track": "clinical",
+    "validated_by": "reviewer.bert",
+    "release_owner": null,
+    "second_review": {
+      "status": "not_required",
+      "required": false,
+      "reviewer": null,
+      "review_date": null,
+      "snapshot_hash": null
+    },
+    "superseded_by": null,
+    "validation_date": "2026-11-06",
+    "validation_status": "approved",
+    "publication_status": "unpublished",
+    "review_snapshot_hash": "d7ba28f203557c568ecd38b99b6c123031d9fed15d52e760542b93d24cd1f7b6"
+  },
+  "bindings": [
+    {
+      "valid": true,
+      "decision": "approve",
+      "reviewer": "reviewer.bert",
+      "object_id": "console-valrisico-valrisico-boom-1-0-3feda6de-sem-952a2d542d8e5f89",
+      "eindoordeel": "",
+      "reviewed_at": "2026-11-06T15:06:45Z",
+      "reviewer_id": "acc-167b157753e9",
+      "suitability": "",
+      "review_domain": "decision_tree",
+      "object_version": "1.0.1",
+      "documentpositie": {
+        "path": "path",
+        "parent_object_id": ""
+      },
+      "review_command_hash": "acc6341aba587aac5490e630bfbbdcbc1958e6b3922b319c5ec02f5cfa46f275",
+      "canonical_object_hash": "d7ba28f203557c568ecd38b99b6c123031d9fed15d52e760542b93d24cd1f7b6",
+      "confirmed_object_type": "node"
+    }
+  ],
+  "events_added": 1
+}

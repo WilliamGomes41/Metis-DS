@@ -533,6 +533,9 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
             governance["publication_status"] = "unpublished"
             governance["superseded_by"] = superseded_by
             stamp_canonical_hashes(updated)
+            from src.review.ko_transitions_v1 import apply_ko_event
+            apply_ko_event(current=row, prepared=updated, event='supersede_merge',
+                review_path=review_path_for_klasse(self._envelope(snapshot_id)['class']))
             errors = schema_errors(updated, self.schema_path)
             if errors:
                 raise ConsoleError("revision_schema_invalid", " | ".join(errors))
@@ -785,7 +788,8 @@ class DeterministicRepairReviewConsole(ClosedLoopReviewConsole):
         transaction = (self._reprocessing_transaction(snapshot_id)
                        if getattr(self, "workflow_document_store", None) is not None
                        else self._store_write_lock())
-        with transaction, self._atomic_snapshot_mutation(snapshot_id):
+        from src.review.ko_transitions_v1 import validated_repair
+        with transaction, self._atomic_snapshot_mutation(snapshot_id), validated_repair(submission):
             self._preflight_structured_repair(submission)
             if repair_kind in {REPAIR_SOURCE_UNITS, REPAIR_MERGE_OBJECTS}:
                 self._assert_source_work_unchanged(

@@ -1,0 +1,53 @@
+{"sha": "8bb305be63e95712a51d2a719f95cd431978ce66", "before_type": "unclassified", "before_authoritative_type": "path", "before_version": "1.0", "input_assessment": null, "input_na": false, "result": "APPROVED", "after_type": "node", "after_version": "1.0.1", "after_is_ko": true, "governance": {"release_date": null, "review_track": "clinical", "validated_by": "reviewer.bert", "release_owner": null, "second_review": {"status": "not_required", "required": false, "reviewer": null, "review_date": null, "snapshot_hash": null}, "superseded_by": null, "validation_date": "2026-11-06", "validation_status": "approved", "publication_status": "unpublished", "review_snapshot_hash": "d7ba28f203557c568ecd38b99b6c123031d9fed15d52e760542b93d24cd1f7b6"}, "bindings": [{"valid": true, "decision": "approve", "reviewer": "reviewer.bert", "object_id": "console-valrisico-valrisico-boom-1-0-3feda6de-sem-952a2d542d8e5f89", "eindoordeel": "", "reviewed_at": "2026-11-06T15:06:45Z", "reviewer_id": "acc-167b157753e9", "suitability": "", "review_domain": "decision_tree", "object_version": "1.0.1", "documentpositie": {"path": "path", "parent_object_id": ""}, "review_command_hash": "acc6341aba587aac5490e630bfbbdcbc1958e6b3922b319c5ec02f5cfa46f275", "canonical_object_hash": "d7ba28f203557c568ecd38b99b6c123031d9fed15d52e760542b93d24cd1f7b6", "confirmed_object_type": "node"}], "events_added": 1}
+F
+=================================== FAILURES ===================================
+_________________ test_real_boom_path_to_node_missing_answers __________________
+
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-337/test_real_boom_path_to_node_mi0')
+production_console = <function production_console.<locals>.factory at 0x7fb5a2b7b920>
+
+    def test_real_boom_path_to_node_missing_answers(tmp_path, production_console):
+        console = _console(tmp_path, production_console=production_console)
+        accounts = _accounts(console)
+        sid = _ingest_boom(console, accounts)['snapshot_id']
+        target = next(o for o in console.snapshot_objects(sid) if authoritative_review_type(o) == 'path')
+        assert not is_knowledge_object(target, 'boom')
+        revision = console.objects_revision(sid)
+        before = state(console, sid)
+        output = {'sha': '8bb305be63e95712a51d2a719f95cd431978ce66', 'before_type': target['object_type'], 'before_authoritative_type': authoritative_review_type(target),
+                  'before_version': target['object_version'], 'input_assessment': None, 'input_na': False}
+        try:
+            console.review_object(actor_id=accounts['reviewer']['account_id'], snapshot_id=sid,
+                object_id=target['object_id'], decision='approve', confirmed_object_type='node',
+                type_action='type_wijzigen', expected_revision=revision)
+        except ConsoleError as refused:
+            output.update(result='REFUSED', code=refused.code, message=str(refused), unchanged=state(console, sid) == before)
+            Path('/tmp/ko4-path-conversion-result.json').write_text(json.dumps(output, indent=2))
+            assert output['unchanged'] is True
+            print(json.dumps(output))
+            return
+        saved = next(o for o in console.snapshot_objects(sid) if o['object_id'] == target['object_id'])
+        binding = [b for b in console.object_review_bindings(sid) if b['object_id'] == target['object_id'] and b.get('valid')]
+        output.update(result='APPROVED', after_type=saved['object_type'], after_version=saved['object_version'],
+            after_is_ko=is_knowledge_object(saved, 'boom'), governance=saved['governance'], bindings=binding,
+            events_added=len(state(console, sid)['events'])-len(before['events']))
+        Path('/tmp/ko4-path-conversion-result.json').write_text(json.dumps(output, indent=2))
+        print(json.dumps(output))
+>       assert not (saved['governance']['validation_status'] == 'approved' and is_knowledge_object(saved, 'boom')), \
+            'Native path-to-node approval bypassed required answers/evidence by checking only current non-KO'
+E       AssertionError: Native path-to-node approval bypassed required answers/evidence by checking only current non-KO
+E       assert not ('approved' == 'approved'
+E         
+E           approved and True)
+E        +  where True = is_knowledge_object({'confirmed_object_type': 'node', 'confirmed_relations': [], 'content': {'care_setting': [], 'clean_text': 'Screening op valrisico', 'context_text': None, 'raw_text': 'Screening op valrisico', ...}, 'decision_graph': None, ...}, 'boom')
+
+tests/ko4_path_conversion_probe_tmp.py:42: AssertionError
+=============================== warnings summary ===============================
+../.venvs/metis-ds/lib/python3.13/site-packages/starlette/testclient.py:45
+  /workspace/.venvs/metis-ds/lib/python3.13/site-packages/starlette/testclient.py:45: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/ko4_path_conversion_probe_tmp.py::test_real_boom_path_to_node_missing_answers
+1 failed, 1 warning in 0.77s

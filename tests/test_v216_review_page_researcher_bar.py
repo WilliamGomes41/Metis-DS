@@ -6,6 +6,8 @@ new extract of unpublished Continentie. Tests are the specification.
 PROTOCOL.md and docs/PROTOCOL_V2_* are not edited here.
 """
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 from tests.test_v215_ingest_date_version_review_lanes import _compact_review_form
 
@@ -484,6 +486,7 @@ def test_human_confirms_strength_on_recommendation_not_heading(tmp_path: Path, *
         decision="approve",
         confirmed_object_type="recommendation",
         recommendation_strength="doen",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     row = next(obj for obj in confirmed if obj["object_id"] == rec["object_id"])
     assert row["confirmed_object_type"] == "recommendation"
@@ -496,6 +499,7 @@ def test_human_confirms_strength_on_recommendation_not_heading(tmp_path: Path, *
             decision="approve",
             confirmed_object_type="heading",
             recommendation_strength="doen",
+            assessment=affirmative_assessment(), evidence_not_applicable=True,
         )
 
 

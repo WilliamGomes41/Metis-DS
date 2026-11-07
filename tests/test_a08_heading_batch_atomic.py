@@ -16,6 +16,7 @@ from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLI
 from tests.complete_workflow_support import complete_postgres as workflow_postgres  # noqa: F401
 from src.review.review_ledger import read_events
 from tests.test_v219_review_duty_queue import _console, _accounts, _ingest
+from tests.ko_review_fixture_support import affirmative_assessment
 
 
 def _setup(root, factory=None, *, production_console):
@@ -564,6 +565,7 @@ def test_native_batch_and_single_review_use_consistent_lock_order(workflow_postg
     with ThreadPoolExecutor(max_workers=2) as pool:
         winner = pool.submit(single.review_object, actor_id=accounts["reviewer"]["account_id"],
             snapshot_id=sid, object_id=content_id, decision="approve", confirmed_object_type=_batch_type(content),
+            assessment=affirmative_assessment(), evidence_not_applicable=True,
             expected_revision=revision)
         try:
             assert auth_locked.wait(10)

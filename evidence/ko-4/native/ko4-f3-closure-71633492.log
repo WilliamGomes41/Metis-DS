@@ -1,0 +1,9 @@
+{"sha": "7163349276730d8b1892a691bcea603461b862bd", "before_type": "unclassified", "before_authoritative_type": "path", "before_version": "1.0", "input_assessment": null, "input_na": false, "result": "REFUSED", "code": "review_assessment_required", "message": "Beantwoord de drie vragen voordat je goedkeurt.", "unchanged": true}
+.....
+=============================== warnings summary ===============================
+../.venvs/metis-ds/lib/python3.13/site-packages/starlette/testclient.py:45
+  /workspace/.venvs/metis-ds/lib/python3.13/site-packages/starlette/testclient.py:45: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+5 passed, 1 warning in 2.07s

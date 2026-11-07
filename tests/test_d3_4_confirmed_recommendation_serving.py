@@ -9,6 +9,8 @@ real source -> review confirmation -> retrieval projection -> Product API.
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 
 import copy
@@ -138,6 +140,7 @@ def _reviewed_source_objects(tmp_path: Path, *, direction: str, strength_choice:
         recommendation_direction=direction,
         recommendation_strength_level=strength_choice,
         expected_revision=console.objects_revision(snapshot_id),
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
 
     live = console.snapshot_objects(snapshot_id)

@@ -35,13 +35,10 @@ from src.serving_relations_v1 import binding_relations
 
 REVIEW_AUDIT_EVIDENCE_EVENT = "review_audit_evidence"
 REVIEW_DISPOSITION_INCONSISTENT = "review_disposition_inconsistent"
-ALLOWED_FINAL_BY_SUITABILITY = {
-    "ja": {"approve", "revise", "reject"},
-    "mist_context": {"revise", "reject"},
-    "samenvoegen": {"revise", "reject"},
-    "alleen_onderbouwing": {"revise", "approve", "reject"},
-    "geen_kenniseenheid": {"reject"},
-}
+from src.review.ko_transitions_v1 import (
+    ALLOWED_FINAL_BY_SUITABILITY, APPROVAL_ONLY_FIELDS,
+    require_allowed_review_disposition, without_closed_follow_up,
+)
 
 
 class ReviewDispositionConflict(ConsoleError):
@@ -61,57 +58,10 @@ def allowed_eindoordelen(suitability: str) -> tuple[str, ...]:
     return tuple(value for value in EINDOORDEEL_VALUES if EINDOORDEEL_TO_DECISION[value] in allowed)
 
 
-def require_allowed_review_disposition(submission: dict[str, Any]) -> None:
-    """Refuse a decision that the stated suitability never permits.
-
-    Reads no stored state, so the review command can apply it before it
-    prepares any input. ``later`` with a suitability is deferred, not refused.
-    """
-    suitability = str(submission.get("suitability") or "").strip()
-    if not suitability:
-        return
-    decision = map_eindoordeel(
-        str(submission.get("eindoordeel") or ""),
-        str(submission.get("decision") or ""),
-    )
-    if decision == "later":
-        return
-    allowed = ALLOWED_FINAL_BY_SUITABILITY.get(suitability)
-    if allowed is None or decision not in allowed:
-        raise ReviewDispositionConflict(suitability, decision)
-
-
-# Steps of the review card that only matter for one kind of final decision.
-APPROVAL_ONLY_FIELDS = (
-    "confirmed_object_type", "recommendation_strength", "recommendation_direction",
-    "recommendation_strength_level", "documentpositie_action", "parent_choice", "type_action",
-)
-
-
 def suitabilities_allowing(decision: str) -> tuple[str, ...]:
     """Suitabilities whose follow-up steps for ``decision`` stay open, in form order."""
     from src.review.review_cockpit_v1 import SUITABILITY_VALUES
     return tuple(s for s in SUITABILITY_VALUES if decision in ALLOWED_FINAL_BY_SUITABILITY.get(s, ()))
-
-
-def without_closed_follow_up(submission: dict[str, Any]) -> dict[str, Any]:
-    """Drop answers to steps the stated suitability closes.
-
-    Heading, type, strength and relations only confirm an approval; a source
-    discrepancy only matters while a correction is possible. A form without
-    JavaScript can still send such answers from hidden steps.
-    """
-    allowed = ALLOWED_FINAL_BY_SUITABILITY.get(str(submission.get("suitability") or "").strip())
-    if allowed is None:
-        return dict(submission)
-    kept = dict(submission)
-    if "approve" not in allowed:
-        kept.update(dict.fromkeys(APPROVAL_ONLY_FIELDS))
-        kept["relation_choices"] = None
-        kept["relation_review_ack"] = False
-    if "revise" not in allowed:
-        kept["source_discrepancy"] = None
-    return kept
 
 
 def _norm(value: str) -> str:
@@ -268,7 +218,7 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
         if updated is None:
             raise ConsoleError("unknown_object")
         return self._commit_knowledge_change(snapshot_id, live, updated,
-            reason="review repair context", actor="repair-command", retain_revise=True)
+            reason="review repair context", actor="repair-command")
 
     def review_object(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
         if args:
@@ -334,7 +284,8 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                 raise ConsoleError("unknown_object")
             prior_status = str(passage_register_of(before).get("status") or "")
             super().review_object(**delegated)
-            if decision == "revise":
+            from src.review.ko_transitions_v1 import active_repair
+            if decision == "revise" and active_repair(actor_id, snapshot_id, object_id) is None:
                 self._restore_original_review_input(
                     snapshot_id=snapshot_id,
                     object_id=object_id,
@@ -543,15 +494,20 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
             claim = current.get(claim_object_id)
             if support is None or claim is None or support_object_id == claim_object_id:
                 raise ConsoleError("unknown_object")
-            if (support.get("governance") or {}).get("validation_status") != "revise":
-                raise ConsoleError("support_object_not_in_revise")
-            pending = self._latest_review_signal(support_object_id, decision="revise")
-            original = str(
-                ((pending or {}).get("details") or {}).get("original_suitability")
-                or ""
-            )
-            if original != "alleen_onderbouwing":
-                raise ConsoleError("support_disposition_required")
+            from src.review.ko_transitions_v1 import active_repair, apply_ko_event
+            context = active_repair(actor_id, snapshot_id, support_object_id)
+            if context is not None:
+                original = context.suitability
+            else:
+                if (support.get('governance') or {}).get('validation_status') != 'revise':
+                    raise ConsoleError('support_object_not_in_revise')
+                pending = self._latest_review_signal(support_object_id, decision='revise')
+                original = str(((pending or {}).get('details') or {}).get('original_suitability') or '')
+            if original != 'alleen_onderbouwing':
+                raise ConsoleError('support_disposition_required')
+            self._require_mutable_working_revision(snapshot_id)
+            from src.review.beslisboom_path_v1 import review_path_for_klasse
+            path = review_path_for_klasse(envelope['class'])
             relations = list(binding_relations(claim))
             if not any(
                 rel.get("relation_type") == "supported_by"
@@ -577,6 +533,27 @@ class ClosedLoopReviewConsole(ProportionateReviewConsole):
                 snapshot_id=snapshot_id, support_object_id=support_object_id
             )
             current_support = self._current_object(snapshot_id, support_object_id)
+            from src.knowledge_relations_v1 import build_knowledge_relation, CONFIRMED_FIELD
+            from src.review.knowledge_relation_review_v1 import legacy_confirmed_mirror
+            peers = {row['object_id']: row for row in self.snapshot_objects(snapshot_id)}
+            current_claim = peers[claim_object_id]
+            prepared_claim = deepcopy(current_claim)
+            confirmed = []
+            for relation in binding_relations(current_claim):
+                target_id = str(relation.get('target_object_id') or '')
+                if target_id not in peers:
+                    raise ConsoleError('knowledge_relation_target_missing')
+                confirmed.append(build_knowledge_relation(
+                    source_object_id=claim_object_id,
+                    source_object_version=str(current_claim['object_version']),
+                    relation_type=relation['relation_type'], target_object_id=target_id,
+                    target_object_version=str(peers[target_id]['object_version'])))
+            prepared_claim[CONFIRMED_FIELD] = confirmed
+            prepared_claim['confirmed_relations'] = legacy_confirmed_mirror(confirmed)
+            saved_claim = self._commit_knowledge_change(snapshot_id, current_claim, prepared_claim,
+                reason='reviewed support relation', actor=self._account(actor_id)['username'])
+            apply_ko_event(current=claim, prepared=saved_claim, event='link_support', review_path=path)
+            apply_ko_event(current=support, prepared=current_support, event='link_support', review_path=path)
             self._append_audit_evidence(
                 actor_id=actor_id,
                 snapshot_id=snapshot_id,

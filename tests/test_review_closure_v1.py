@@ -13,7 +13,7 @@ from tests.semantic_fixture_support import bind_fixture_selections
 import pytest
 from fastapi.testclient import TestClient
 
-from src.review.closed_review_loop_v1 import ClosedLoopReviewConsole, install_closed_review_routes
+from src.review.closed_review_loop_v1 import install_closed_review_routes
 from src.review.deterministic_review_repair_v1 import (
     DeterministicRepairReviewConsole,
     REPAIR_MERGE_OBJECTS,
@@ -245,18 +245,13 @@ def test_startup_migration_reopens_legacy_revise_without_editing_content(tmp_pat
     obj = objects[0]
     before_text = str((obj.get("content") or {}).get("clean_text") or "")
 
-    # Simulate a persisted pre-closure revise row through the previous policy.
-    ClosedLoopReviewConsole.review_object(
-        console,
-        actor_id=reviewer["account_id"],
-        snapshot_id=sid,
-        object_id=obj["object_id"],
-        decision="revise",
-        suitability="mist_context",
-        eindoordeel="goedkeuren_na_correctie",
-        comment="legacy revise",
-        expected_revision=console.objects_revision(sid),
-    )
+    from tests.semantic_fixture_support import install_fixture_history
+
+    rows = console._load_objects(sid, remember=False)
+    historical = next(row for row in rows if row["object_id"] == obj["object_id"]
+                      and row["object_version"] == obj["object_version"])
+    historical["governance"]["validation_status"] = "revise"
+    install_fixture_history(console, sid, rows)
     assert console._current_object(sid, obj["object_id"])["governance"]["validation_status"] == "revise"
 
     migrated = console.migrate_legacy_revise_to_review()
@@ -308,7 +303,8 @@ def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_p
     assert "Passages herstellen" in inventory.text
 
     approval_payload = _review_payload(console, sid, target)
-    approval_payload.update(suitability="ja", eindoordeel="goedkeuren")
+    approval_payload.update(suitability="ja", eindoordeel="goedkeuren", applicable="yes",
+                            complete="yes", placed_correctly="yes", evidence_not_applicable="yes")
     rejected = client.post("/review", data=approval_payload)
     assert rejected.status_code == 400
     assert "blocked_candidate_not_reviewable" in rejected.text

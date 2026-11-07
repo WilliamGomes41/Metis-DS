@@ -1,0 +1,118 @@
+{
+  "feature": "KO4 review/correction core #1006",
+  "method_version": 1,
+  "status": "PREPARED; NOT MEASURED; acceptance needs immutable final head and explicit quiet GO",
+  "baseline_sha": "837b115f213bcfd0e9f4a71a1010231d2040365e",
+  "baseline_reason": "Current main plus KO2/KO3 integration and receipt-comment fix, PR1005; KO4 depends on this actual runtime.",
+  "head_pin": "Require full KO4_HEAD_SHA and KO4_QUIET_GO=1; no moving source may be timed.",
+  "fixture": {
+    "paragraphs": 923,
+    "raw_source_fragments": 924,
+    "definition_candidates": 92,
+    "approval_tasks": 4,
+    "correction_tasks": 4
+  },
+  "setup": "Synthetic model relation proposals are fixture inputs only. Real authenticated compact HTTP approvals confirm four typed supported_by relations; real native type confirmations create four new open successor explanations retaining exact supporting references. All setup is outside timing. Four other candidates are selected for actual source-unit corrections.",
+  "approval_metric": "Actual authenticated compact-form POST /review with three explicit yes answers; response303 wall time p95<=1.10baseline.",
+  "correction_metric": "Actual authenticated POST /review/resolve selecting a literal source unit; response303 wall time p95<=1.10baseline; new version+changed literal text+needs_review must persist.",
+  "timeout_gate": "Every measured save wall time<=30,000ms; ordinary installed Gunicorn default30s, matching startup script without timeout override. No GUNICORN_CMD_ARGS.",
+  "attribution_only": [
+    "server_ms",
+    "db_queries",
+    "db_json_bytes",
+    "physical_connections",
+    "response_bytes"
+  ],
+  "scope_limit": "POST save response only, not following receipt or correction redirect. Authentic preparatory form GET/auth/startup outside measured POST. N/A approval and every review policy are correctness lanes, not separately timed workloads.",
+  "rounds": 5,
+  "pair_balance": {
+    "AB": 3,
+    "BA": 2
+  },
+  "pair_balance_reason": "Five requested rounds is odd; alternate AB/BA, start baseline; retain3AB/2BA without inventing a sixth round.",
+  "samples_per_operation_side": 20,
+  "samples_per_execution_operation": 4,
+  "p95": "nearest-rankceil(.95*20)=19; retain all20 values; maximum timeout gate separately covers every observation.",
+  "runtime": "Actual production application with nativePG17, Gunicorn UvicornWorker1worker, HTTPS with standard localhost TLS verification, actual reviewer account/session, defaultGC. No kernel/writer mocks, forcedGC or timeout changes.",
+  "processes": "Two fresh Gunicorn workers per execution, one for four approval GET/POST pairs and one for four correction GET/POST pairs.20productionworkers across10executions.",
+  "observer": "Setup/source/canonical/untargeted-object baseline before timed children; all proof reads and finalized diagnostic-log parsing after both timed paths. Native form GETs are real preparation; no business-proof/JSONcollector IO between POST samples.",
+  "proofs": "Exactly4validcurrentapprovalbindings+4three-yesdecisionevents, exactly4newopenchanged-textcorrections with no currentvalidbinding, untargetedcurrentobjects/sourcebytes/publiccanonicaltables unchanged, real production restart preserves results, no persistedrevise. Deliberate login sessions are expected auth writes, not domain decisions.",
+  "fault_handling": "No retries or outlier filtering. Runner never overwrites an evidence directory; failed response/observation/log and failed execution-order event retained. Failed execution stops acceptance.",
+  "expected_executions": 10,
+  "expected_production_workers": 20,
+  "expected_measured_saves": 80,
+  "planned_order": [
+    {
+      "sequence": 1,
+      "round": 1,
+      "side": "base",
+      "pair_order": "AB"
+    },
+    {
+      "sequence": 2,
+      "round": 1,
+      "side": "head",
+      "pair_order": "AB"
+    },
+    {
+      "sequence": 3,
+      "round": 2,
+      "side": "head",
+      "pair_order": "BA"
+    },
+    {
+      "sequence": 4,
+      "round": 2,
+      "side": "base",
+      "pair_order": "BA"
+    },
+    {
+      "sequence": 5,
+      "round": 3,
+      "side": "base",
+      "pair_order": "AB"
+    },
+    {
+      "sequence": 6,
+      "round": 3,
+      "side": "head",
+      "pair_order": "AB"
+    },
+    {
+      "sequence": 7,
+      "round": 4,
+      "side": "head",
+      "pair_order": "BA"
+    },
+    {
+      "sequence": 8,
+      "round": 4,
+      "side": "base",
+      "pair_order": "BA"
+    },
+    {
+      "sequence": 9,
+      "round": 5,
+      "side": "base",
+      "pair_order": "AB"
+    },
+    {
+      "sequence": 10,
+      "round": 5,
+      "side": "head",
+      "pair_order": "AB"
+    }
+  ],
+  "source_hashes": {
+    "probe.py": "68bf4847d0f2931a301cb45155fe9dc8729b3ef96bad0bb11b51de0da7ed8910",
+    "server.py": "0f9aaed0438351fe4699da2cb389da74d6c64063f6fccf6ef7c9702ef9993c75",
+    "runner.py": "835ead1e1c2bca02dac0b82d2f2a5e8da538d40374575a3a5ec94cd5a04e8e9b",
+    "summarize.py": "9cabfd0d5df820f94e23a4aba3ca595a487d37aeaecc927afa3cb0946cb6629a"
+  },
+  "setup_smoke": {
+    "label": "NONACCEPTANCE baseline-only under concurrent local work; no observations reused",
+    "sha": "837b115f213bcfd0e9f4a71a1010231d2040365e",
+    "result": "1 passed in69.82s; no skipped tests",
+    "log": "/workspace/ko4-perf-evidence/prep-baseline-smoke-v1/setup.log"
+  }
+}

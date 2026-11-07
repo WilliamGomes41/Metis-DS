@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 
 # release-control-evidence: scope/belofte
@@ -208,6 +210,7 @@ def test_one_batch_interaction_delegates_to_individual_object_reviews(batch_cons
         snapshot_id=console.test_snapshot_id,
         object_ids=["d1", "d2"],
         expected_revision=console.initial_revision,
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     assert console.preflight_open_count == 2
     assert console.opened == ["d1", "d2", "d1", "d2"]
@@ -229,6 +232,7 @@ def test_batch_preflights_all_objects_before_writing(batch_console) -> None:
             actor_id=console.test_reviewer_id,
             snapshot_id=console.test_snapshot_id,
             object_ids=["d1", "high"],
+            assessment=affirmative_assessment(), evidence_not_applicable=True,
         )
     assert console.calls == []
     assert console.opened == []
@@ -244,6 +248,7 @@ def test_batch_cannot_cross_sections(batch_console) -> None:
             actor_id=console.test_reviewer_id,
             snapshot_id=console.test_snapshot_id,
             object_ids=["d1", "d2"],
+            assessment=affirmative_assessment(), evidence_not_applicable=True,
         )
     assert console.calls == []
 
@@ -258,6 +263,7 @@ def test_batch_cannot_mix_definition_and_explanation(batch_console) -> None:
             actor_id=console.test_reviewer_id,
             snapshot_id=console.test_snapshot_id,
             object_ids=["d1", "e1"],
+            assessment=affirmative_assessment(), evidence_not_applicable=True,
         )
     assert console.calls == []
     assert console.opened == []
@@ -271,6 +277,7 @@ def test_batch_has_hard_maximum_of_twenty_objects(batch_console) -> None:
             actor_id=console.test_reviewer_id,
             snapshot_id=console.test_snapshot_id,
             object_ids=[row["object_id"] for row in rows],
+            assessment=affirmative_assessment(), evidence_not_applicable=True,
         )
     assert console.calls == []
     assert console.opened == []
@@ -298,14 +305,14 @@ def test_batch_never_overwrites_authoritative_action_type(human_type: str, field
     row[field] = human_type
     console = batch_console([row])
     with pytest.raises(ConsoleError, match="normal_risk_batch_ineligible"):
-        console.batch_review_normal_risk(actor_id=console.test_reviewer_id, snapshot_id=console.test_snapshot_id, object_ids=["d1"])
+        console.batch_review_normal_risk(actor_id=console.test_reviewer_id, snapshot_id=console.test_snapshot_id, object_ids=["d1"], assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert console.calls == []
 
 
 def test_sectionless_single_object_is_not_batchable(batch_console) -> None:
     console = batch_console([_obj("d1", "definition", section=())])
     with pytest.raises(ConsoleError, match="normal_risk_batch_ineligible"):
-        console.batch_review_normal_risk(actor_id=console.test_reviewer_id, snapshot_id=console.test_snapshot_id, object_ids=["d1"])
+        console.batch_review_normal_risk(actor_id=console.test_reviewer_id, snapshot_id=console.test_snapshot_id, object_ids=["d1"], assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert console.calls == []
 
 
@@ -323,7 +330,7 @@ def test_nonbatch_content_and_batch_members_have_individual_routes(batch_console
 def test_stale_batch_fails_before_any_review_or_source_open(batch_console) -> None:
     console = batch_console([_obj("d1", "definition")])
     with pytest.raises(ConsoleError, match="snapshot_object_write_conflict"):
-        console.batch_review_normal_risk(actor_id=console.test_reviewer_id, snapshot_id=console.test_snapshot_id, object_ids=["d1"], expected_revision="old")
+        console.batch_review_normal_risk(actor_id=console.test_reviewer_id, snapshot_id=console.test_snapshot_id, object_ids=["d1"], expected_revision="old", assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert console.calls == []
     assert console.opened == []
 

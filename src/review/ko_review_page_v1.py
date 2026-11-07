@@ -62,19 +62,12 @@ def summary_rows(obj, objects, descriptor=None, *, review_path='richtlijn'):
                                 '' if item.get('status') == 'bound' else 'Nog te controleren', ''))
     relations = descriptor.relations if descriptor is not None else ()
     for item in relations:
-        label = {'applies_if': 'Voorwaarde', 'except_if': 'Uitzondering', 'supported_by': 'Onderbouwing'}.get(item.get('relation_type'))
+        label = {'applies_if': 'Voorwaarde', 'except_if': 'Uitzondering', 'supported_by': 'Onderbouwing', 'explains': 'Onderbouwing'}.get(item.get('relation_type'))
         if not label:
             continue
         target = item.get('target') or {}
         rows[label].append((str(target.get('text') or item.get('text') or 'Gekoppelde tekst ontbreekt.'),
                             'Voorstel, nog niet bevestigd' if item.get('authority') == 'proposed' else '', ''))
-    from src.review.review_context_v1 import review_context
-    context = review_context(obj, objects=objects, review_path=review_path)
-    for item in context['links']:
-        if item.get('direction') == 'incoming' and item.get('relation_type') == 'explains':
-            source = item['source']
-            rows['Onderbouwing'].append((source.get('text') or 'Gekoppelde tekst ontbreekt.',
-                'Voorstel, nog niet bevestigd' if item.get('authority') == 'proposed' else '', ''))
     return {label: list(dict.fromkeys(values)) for label, values in rows.items()}
 
 
@@ -104,7 +97,7 @@ def _additional_relations(descriptor):
     items = []
     for relation in descriptor.relations:
         kind = relation['relation_type']
-        if kind in {'applies_if', 'except_if', 'supported_by'}:
+        if kind in {'applies_if', 'except_if', 'supported_by', 'explains'}:
             continue
         target = relation['target']
         items.append('<li><strong>' + escape(RELATION_LABELS.get(kind, kind)) + '</strong>: '
@@ -175,7 +168,7 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
     draft = draft or {}
     origin_changed = bool(origin_revision and origin_revision != inputs.revision)
     if origin_changed:
-        draft = {key: value for key, value in draft.items() if key not in {'applicable', 'complete', 'placed_correctly'}}
+        draft = {key: value for key, value in draft.items() if key not in {'applicable', 'complete', 'placed_correctly', 'evidence_not_applicable'}}
     sid = inputs.envelope['snapshot_id']
     path = review_path_for_klasse(inputs.envelope['class'])
     route = reviewer_route_for(obj, review_path=path, reviewer_id=account['account_id'],
@@ -261,6 +254,11 @@ def render_review_page(console, account, inputs, obj, *, task='', draft=None, er
             + '<form method="post" action="' + ('/review/second-review' if second else '/review')
             + '" class="ko-assessment-form" data-ko-assessment-form data-can-approve="' + str(can_approve).lower() + '">'
             + hidden
+            + ('<p class="ko-evidence-choice"><label><input type="checkbox" name="evidence_not_applicable" value="yes"'
+               + (' checked' if draft.get('evidence_not_applicable') else '')
+               + '> Onderbouwing is voor dit kennisobject niet van toepassing.</label></p>'
+               if not any(row.get('relation_type') in {'supported_by', 'explains'}
+                          and row.get('resolution') == 'current' for row in descriptor.relations) else '')
             + _question('applicable', 'Is dit toepasbaar?', draft.get('applicable'))
             + _question('complete', 'Is dit compleet?', draft.get('complete'))
             + _question('placed_correctly', 'Staat dit op de juiste plek?', draft.get('placed_correctly'), subline=place)
@@ -300,6 +298,9 @@ def compact_review_error(console, account, snapshot_id, object_id, revision, tas
     inputs = replace(inputs, revision=revision)
     messages = {
         'review_assessment_required': 'Beantwoord de drie vragen voordat je goedkeurt.',
+        'knowledge_evidence_required': 'Dit kennisobject heeft nog geen onderbouwing. Koppel onderbouwing via Correctie nodig of kies expliciet niet van toepassing.',
+        'supporting_evidence_choice_invalid': 'Kies expliciet of onderbouwing niet van toepassing is.',
+        'supporting_evidence_choice_conflict': 'Er is onderbouwing gekoppeld. Beoordeel of corrigeer de koppeling voordat je goedkeurt.',
         'review_assessment_answer_invalid': 'Kies bij iedere vraag Ja of Aanpassen.',
         'review_assessment_requires_three_yes': 'Voor goedkeuren moeten de drie antwoorden Ja zijn. Kies anders Correctie nodig.',
         'review_assessment_unresolved_proposal': 'De getoonde interpretatie kan nog niet volledig worden bevestigd. Kies Correctie nodig.',
@@ -312,7 +313,7 @@ def compact_review_error(console, account, snapshot_id, object_id, revision, tas
 
 
 def handle_compact_review(console, account, snapshot_id, object_id, revision, interaction_id, task,
-                          action, values, comment='', *, second=False):
+                          action, values, comment='', *, second=False, evidence_not_applicable=False):
     from fastapi.responses import RedirectResponse
     from src.operations_console_v1 import ConsoleError
     from src.review.review_assessment_v1 import ReviewAssessment, displayed_review_descriptor, compact_approval_arguments
@@ -320,7 +321,7 @@ def handle_compact_review(console, account, snapshot_id, object_id, revision, in
     from src.review.review_interaction_v1 import build_review_interaction_evidence, REVIEW_INTERACTION_PREFIX
     from src.review.beslisboom_path_v1 import review_path_for_klasse
     from src.review.ko_receipt_ui_v1 import receipt_location
-    draft = {**values, 'comment': comment}
+    draft = {**values, 'comment': comment, 'evidence_not_applicable': evidence_not_applicable}
     try:
         if not revision.strip():
             raise ConsoleError('snapshot_revision_required')
@@ -364,21 +365,22 @@ def handle_compact_review(console, account, snapshot_id, object_id, revision, in
             if second:
                 expected = resolve_review_revision(console, snapshot_id, revision)
                 console.approve_second_review(actor_id=account['account_id'], snapshot_id=snapshot_id,
-                    object_id=object_id, expected_revision=expected, interaction_evidence=evidence)
+                    object_id=object_id, expected_revision=expected, interaction_evidence=evidence,
+                    evidence_not_applicable=evidence_not_applicable)
             else:
                 kwargs = compact_approval_arguments(assessment, descriptor) if action == 'approve' else {
                     'suitability': 'geen_kenniseenheid', 'eindoordeel': 'afwijzen'}
                 console.review_object(actor_id=account['account_id'], snapshot_id=snapshot_id,
                     object_id=object_id, decision=action, comment=comment,
                     expected_revision=resolve_review_revision(console, snapshot_id, revision),
-                    interaction_evidence=evidence, **kwargs)
+                    interaction_evidence=evidence, evidence_not_applicable=evidence_not_applicable, **kwargs)
         else:
             console.review_object(actor_id=account['account_id'], snapshot_id=snapshot_id,
                 object_id=object_id, decision=action, comment=comment,
                 suitability='ja' if action == 'approve' else 'geen_kenniseenheid',
                 eindoordeel='goedkeuren' if action == 'approve' else 'afwijzen',
                 expected_revision=revision, _compact_result=True, _interaction_id=interaction_id,
-                _review_assessment=assessment)
+                _review_assessment=assessment, evidence_not_applicable=evidence_not_applicable)
     except ConsoleError as error:
         return compact_review_error(console, account, snapshot_id, object_id, revision, task, draft, error)
     location = '/review?' + urlencode({'document': snapshot_id, 'after': object_id, 'task': task})

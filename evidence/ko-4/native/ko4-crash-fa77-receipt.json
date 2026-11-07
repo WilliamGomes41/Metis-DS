@@ -1,0 +1,11 @@
+{
+  "phase": {
+    "phase": "real SQL object+binding written, outer transaction uncommitted",
+    "backend_pid": 1962815,
+    "object_version": "1.0.1"
+  },
+  "worker_exit": -9,
+  "separate_connection_uncommitted_invisible": true,
+  "sha": "fa77d584aa0ca129e1adea944fbd30d2a0f0e867",
+  "restart_exact_rollback": true
+}

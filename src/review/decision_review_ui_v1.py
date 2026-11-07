@@ -78,11 +78,11 @@ def render_graph(console, actor, document, *, editing=False):
     common = f'<input type="hidden" name="document" value="{esc(document)}"><input type="hidden" name="expected_revision" value="{esc(revision)}">'
     co_review = ""
     if not editing and actor["account_id"] != env["review_policy"]["primary"]:
-        co_review = "<h2>Passages mede-beoordelen</h2>" + "".join(
-            f'<form method="post" action="/review/decision-passage">{common}'
-            f'<p>{esc(o["content"]["clean_text"])}</p><input type="hidden" name="object_id" value="{esc(o["object_id"])}">'
-            '<button>Deze actuele passage bevestigen</button></form>' for o in rows
-            if not (o.get("metadata") or {}).get("decision_unit_construction", {}).get("role") == "branch_label")
+        co_review = '<h2>Passages mede-beoordelen</h2>' + ''.join(
+            '<p><a href="/review?' + urlencode({'document': document, 'object': o['object_id']})
+            + '">' + esc(o['content']['clean_text']) + '</a></p>' for o in rows
+            if not (o.get('metadata') or {}).get('decision_unit_construction', {}).get('role') == 'branch_label')
+
     unresolved = [u for u in graph.get("unresolved", []) if u != "human_route_confirmation_required"]
     proposal_note = (f'<p>{len(unresolved)} verbindingen of rollen zijn niet uit de bron te binden en blijven open. '
                      'Voorgestelde verbindingen zijn nog niet bevestigd; controleer ook verbindingen die ontbreken.</p>'
@@ -192,7 +192,11 @@ def install_decision_review_routes(app, console, require, page):
         if not revision:
             raise ConsoleError("decision_review_command_required")
         console.approve_second_review(actor_id=actor["account_id"], snapshot_id=sid,
-            object_id=str(form.get("object_id") or ""), expected_revision=revision)
+            object_id=str(form.get("object_id") or ""), expected_revision=revision,
+            assessment={'version': 'review-assessment-v1', **{key: str(form.get(key) or '') or None
+                for key in ('applicable', 'complete', 'placed_correctly')}}
+                if any(key in form for key in ('applicable', 'complete', 'placed_correctly')) else None,
+            evidence_not_applicable=form.get('evidence_not_applicable') == 'yes')
         return RedirectResponse(f"/review/decision-graph?document={sid}", status_code=303)
 
     @app.post("/review/decision-graph")

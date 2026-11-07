@@ -3,6 +3,8 @@
 # release-control-evidence: scope/belofte opslag concurrent stale recovery
 # release-control-evidence: toegang kwaliteit slop releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
@@ -63,7 +65,7 @@ def durable(console, sid):
 
 def approve(console, accounts, sid, focal, **extra):
     return console.review_object(actor_id=accounts['researcher']['account_id'], snapshot_id=sid,
-        object_id=focal['object_id'], decision='approve', confirmed_object_type='definition', **extra)
+        object_id=focal['object_id'], decision='approve', confirmed_object_type='definition', assessment=affirmative_assessment(), evidence_not_applicable=True, **extra)
 
 
 @contextmanager
@@ -208,7 +210,7 @@ def test_same_version_binding_winner_preserves_each_public_precondition(system, 
         future = pool.submit(approve, a, accounts, sid, focal, expected_revision=token)
         assert prepared.wait(15)
         b.approve_second_review(actor_id=accounts['reviewer']['account_id'],
-                                snapshot_id=sid, object_id=focal['object_id'])
+                                snapshot_id=sid, object_id=focal['object_id'], assessment=affirmative_assessment(), evidence_not_applicable=True)
         after = next(o for o in b.snapshot_objects(sid) if o['object_id'] == focal['object_id'])
         assert after['object_version'] == before_version  # governance/binding-only race
         assert compute_canonical_object_hash(after) == compute_canonical_object_hash(focal)

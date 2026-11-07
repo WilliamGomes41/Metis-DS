@@ -7,6 +7,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 import re
 import json
 
@@ -22,7 +24,9 @@ def form(client, sid, oid):
     return {'snapshot_id': sid, 'object_id': oid, 'snapshot_revision': revision,
             'suitability': 'ja', 'documentpositie_action': 'dit_klopt',
             'type_action': 'dit_klopt', 'confirmed_object_type': 'definition',
-            'eindoordeel': 'goedkeuren', 'decision': 'approve', 'relation_review_ack': '1'}
+            'eindoordeel': 'goedkeuren', 'decision': 'approve', 'relation_review_ack': '1',
+            'applicable': 'yes', 'complete': 'yes', 'placed_correctly': 'yes',
+            'evidence_not_applicable': 'yes'}
 
 
 def test_ordinary_http_kernel_runs_without_write_lock_or_workflow_io(review_system, monkeypatch):
@@ -187,7 +191,7 @@ def test_ordinary_prepared_save_rechecks_current_dependencies(review_system, mon
     with pytest.raises(ConsoleError):
         console.review_object(actor_id=actor, snapshot_id=sid, object_id=ids[0], decision='approve',
                               confirmed_object_type='definition', expected_revision=_revision(sid, generation),
-                              _compact_result=True)
+                              _compact_result=True, assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert winner and durable(console, sid) == winner[0]
     assert durable(restart_production(console), sid) == winner[0]
     assert console.workflow_review_store._buffer.get() is None

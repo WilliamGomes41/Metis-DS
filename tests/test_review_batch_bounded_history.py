@@ -3,6 +3,8 @@
 # release-control-evidence: scope/belofte opslag concurrent stale recovery
 # release-control-evidence: toegang kwaliteit metrics slop releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 from contextlib import contextmanager
 from time import perf_counter
@@ -83,7 +85,7 @@ def test_native_normal_batch_is_one_bounded_command_and_returns_only_selected(re
         patch.setattr(store, 'list_document_objects', no_full)
         patch.setattr(store, 'write_bundle', no_full)
         result = console.batch_review_normal_risk(actor_id=actor, snapshot_id=sid,
-            object_ids=ids, expected_revision=_revision(sid, generation))
+            object_ids=ids, expected_revision=_revision(sid, generation), assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert {obj['object_id'] for obj in result} == set(ids)
     assert len(result) == len(ids)
     assert all(obj['governance']['validation_status'] == 'approved' for obj in result)
@@ -135,6 +137,7 @@ def test_twenty_member_batch_uses_actual_compact_http_form(review_client, monkey
     form = next(row for row in Forms(page.text).forms
                 if row['attrs'].get('action') == '/review/normal-risk/batch-confirm')
     data = {row['name']:row.get('value','') for row in form['inputs'] if row.get('type') == 'hidden'}
+    data.update(applicable='yes', complete='yes', placed_correctly='yes', evidence_not_applicable='yes')
     ids = [row['value'] for row in form['inputs'] if row.get('name') == 'object_ids']
     assert len(ids) == 20
     assert data['snapshot_revision'].startswith('review-generation-v1:')

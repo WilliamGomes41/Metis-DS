@@ -1,0 +1,32 @@
+{
+  "sha": "5b8fa397047dcbbd4becf5b0ab5f644dd380a898",
+  "mode": "unresolved_pdf",
+  "before_state": {
+    "state": "Kandidaat",
+    "reasons": [
+      "admission_blocked"
+    ],
+    "invalid": []
+  },
+  "before_is_ko": true,
+  "admission": {
+    "gate_result": "blocked",
+    "source_hash": "bd708b0c968f42809dce9fa311042659fd67dd35453a12f4c9b4ee1a2fa3186f",
+    "reason_codes": [
+      "decision_unit_graph_unresolved"
+    ],
+    "candidate_text": "Bespreek de situatie.",
+    "document_version": "1.0",
+    "admission_version": "decision-tree-construction-v1"
+  },
+  "result": "APPROVED",
+  "after_state": {
+    "state": "Goedgekeurd",
+    "reasons": [
+      "approved"
+    ],
+    "invalid": [
+      "approved_with_passage_not_assessed"
+    ]
+  }
+}

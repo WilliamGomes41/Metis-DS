@@ -10,6 +10,7 @@ PASSWORD="browser-fixture-secret"
 from src.vorming.pre_review_semantic_v1 import bind_pre_review_semantic_processing
 from src.vorming.source_bound_fields_v2 import MODE, FIELDS
 from tests.context_test_support import bind_detected_context
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.test_decision_graph_structure import structure
 from tests.test_decision_graph_chain import _console as graph_console
 from tests.browser_postgres_support import browser_application
@@ -57,7 +58,7 @@ def paths():
 
 @app.post('/browser-approve-first')
 def approve_first():
-    state=console.review_object(actor_id=accounts['reviewer_a']['account_id'],snapshot_id=sid,object_id=obj['object_id'],decision='approve',confirmed_object_type='definition',relation_review_ack=True)
+    state=console.review_object(actor_id=accounts['reviewer_a']['account_id'],snapshot_id=sid,object_id=obj['object_id'],decision='approve',confirmed_object_type='definition',relation_review_ack=True,assessment=affirmative_assessment(),evidence_not_applicable=True)
     current=next(o for o in console.snapshot_objects(sid) if o['object_id']==obj['object_id'])
     exact=next(b for b in console.object_review_bindings(sid) if b['valid'] and b['object_id']==obj['object_id'])
     assert exact['object_version']==current['object_version']

@@ -4,6 +4,8 @@
 # release-control-evidence: toegang
 # release-control-evidence: scope/belofte
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 import fitz
 import pytest
@@ -42,7 +44,7 @@ def test_pdf_bundle_needs_each_member_review_and_preserves_source(tmp_path, back
     for obj in [container, members[0]]:
         console.review_object(actor_id=accounts["researcher"]["account_id"], snapshot_id=sid,
             object_id=obj["object_id"], decision="approve", confirmed_object_type="path" if obj == container else "outcome",
-            recommendation_strength=None if obj == container else "doen")
+            recommendation_strength=None if obj == container else "doen", assessment=affirmative_assessment(), evidence_not_applicable=True)
     def refresh_graph():
         updated = deepcopy(console._envelope(sid)["decision_graph"])
         versions = {o["object_id"]: o["object_version"] for o in console.snapshot_objects(sid)}
@@ -53,7 +55,7 @@ def test_pdf_bundle_needs_each_member_review_and_preserves_source(tmp_path, back
     with pytest.raises(ConsoleError, match="decision_graph_passage_review_required"):
         console.confirm_decision_graph(**command(console, accounts, sid, "missing-member"))
     console.review_object(actor_id=accounts["researcher"]["account_id"], snapshot_id=sid,
-        object_id=members[1]["object_id"], decision="approve", confirmed_object_type="outcome", recommendation_strength="doen")
+        object_id=members[1]["object_id"], decision="approve", confirmed_object_type="outcome", recommendation_strength="doen", assessment=affirmative_assessment(), evidence_not_applicable=True)
     console.update_decision_graph(**command(console, accounts, sid, "bundle-final", graph=refresh_graph()))
     console.confirm_decision_graph(**command(console, accounts, sid, "bundle-confirm"))
     env = console._envelope(sid)

@@ -6,6 +6,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 from html.parser import HTMLParser
@@ -121,7 +123,7 @@ def test_passage_first_navigation_preserves_existing_targets_and_reopens_reviews
     assert 'Context toevoegen uit de bron' in after.text  # More than one context source remains possible.
     state.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=target['object_id'],
                         decision='approve', confirmed_object_type='definition', relation_review_ack=True,
-                        expected_revision=state.objects_revision(sid))
+                        expected_revision=state.objects_revision(sid), assessment=affirmative_assessment(), evidence_not_applicable=True)
     other = next(row for row in state.snapshot_objects(sid)
                  if 'bespreekt passende ondersteuning' in row.get('content', {}).get('clean_text', ''))
     pair = client.get('/source-selection', params={'document': sid, 'object': source['object_id'], 'context_target': other['object_id']})

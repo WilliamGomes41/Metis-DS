@@ -8,6 +8,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 from dataclasses import replace
 import json
@@ -168,7 +170,7 @@ def test_actual_reextract_producer_seals_and_activates_without_manual_proof_call
     target = next(row for row in console.snapshot_objects(sid) if row.get('object_type') not in {'document','heading'})
     console.review_object(actor_id=users['reviewer_a']['account_id'], snapshot_id=sid,
         object_id=target['object_id'], decision='approve', confirmed_object_type='definition',
-        expected_revision=console.objects_revision(sid))
+        expected_revision=console.objects_revision(sid), assessment=affirmative_assessment(), evidence_not_applicable=True)
     with store.documents._connect() as con:
         assert con.execute('SELECT formation_evidence_id FROM workflow.documents WHERE snapshot_id=%s',
                            (sid,)).fetchone()['formation_evidence_id'] == ref['proof_id']

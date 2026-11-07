@@ -14,6 +14,8 @@ Foreign consoles MAG NIET join an open command.
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 import json
 import logging
 import pathlib
@@ -111,6 +113,7 @@ def test_u1_batch_reloads_constant_in_k(workflow_postgres, tmp_path, monkeypatch
     result = console.batch_review_normal_risk(
         actor_id=rid, snapshot_id=sid, object_ids=[obj["object_id"] for obj in selected],
         expected_revision=console.objects_revision(sid),
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     print("U1_BATCH_RELOADS", len(reloads), "CAPTURES", len(captures), "k", len(selected))
     assert reloads == [], 'A bounded batch must not reload shared document maps'

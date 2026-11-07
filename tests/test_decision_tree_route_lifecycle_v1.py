@@ -7,6 +7,8 @@
 # release-control-evidence: slop
 """
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 
 import ast
@@ -92,7 +94,7 @@ def test_released_route_graph_is_read_whole_and_tampering_is_rejected(tmp_path, 
     console.update_decision_graph(**command(console, accounts, sid, "graph", graph=complete_graph(console, sid)))
     for obj in _objects(console, sid):
         console.review_object(actor_id=accounts["researcher"]["account_id"], snapshot_id=sid,
-                              object_id=obj["object_id"], decision="approve", confirmed_object_type="node")
+                              object_id=obj["object_id"], decision="approve", confirmed_object_type="node", assessment=affirmative_assessment(), evidence_not_applicable=True)
     console.update_decision_graph(**command(console, accounts, sid, "graph-2", graph=complete_graph(console, sid)))
     console.confirm_decision_graph(**command(console, accounts, sid, "confirm"))
     result = console.publish(actor_id=accounts["publisher"]["account_id"], snapshot_id=sid)
@@ -175,8 +177,6 @@ def test_retired_route_work_stays_readable_but_is_never_re_formed(tmp_path, monk
     for obj in _objects(console, sid):
         assert unit_issues(obj) in ([], ["decision_unit_incomplete"])
     target = _objects(console, sid)[0]
-    console.review_object(actor_id=accounts["researcher"]["account_id"], snapshot_id=sid,
-                          object_id=target["object_id"], decision="revise", comment="Bronselectie aanpassen.")
     before = deepcopy(console.snapshot_objects(sid))
     with pytest.raises(ConsoleError, match="decision_unit_legacy_revision_retired"):
         console.correct_object(actor_id=accounts["researcher"]["account_id"], snapshot_id=sid,

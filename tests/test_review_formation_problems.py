@@ -3,6 +3,8 @@
 # release-control-evidence: scope/belofte opslag concurrent stale recovery
 # release-control-evidence: toegang beschikbaarheid kwaliteit metrics slop releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 import json
 import os
@@ -141,7 +143,7 @@ def test_review_does_not_hide_remaining_problems_or_allow_reextract(tmp_path, pr
     first = next(o for o in console.snapshot_objects(sid) if o.get('proposed_object_type') == 'recommendation')
     console.review_object(actor_id=reviewer, snapshot_id=sid, object_id=first['object_id'],
         decision='approve', confirmed_object_type='recommendation',
-        recommendation_direction='against', recommendation_strength_level='not_stated')
+        recommendation_direction='against', recommendation_strength_level='not_stated', assessment=affirmative_assessment(), evidence_not_applicable=True)
     reviewed = console.snapshot_objects(sid)
     report = collect(console, actor_id=reviewer, snapshot_id=sid)
     assert any(r['code'] == 'semantic_evidence_literal_not_found' for r in report['problems'])

@@ -16,6 +16,7 @@ from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLI
 from src.review.review_ledger import unregister_backend, verify_ledger
 from tests.complete_workflow_support import complete_console, complete_postgres  # noqa: F401
 from tests.semantic_fixture_support import bind_fixture_selections
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.test_pg_console_without_disk_mirrors import CONSOLES, MirrorAccess
 from tests.test_vsa_publish_readiness_ui_v1 import HTML_FIXTURE, MemorySourceStore
 
@@ -61,6 +62,7 @@ def test_two_worker_review_conflicts_without_any_disk_mirror(complete_postgres, 
             sid = receipt['snapshot_id']
             target = next(obj for obj in console.snapshot_objects(sid) if obj.get('object_type') == 'unclassified')
             command = dict(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=target['object_id'],
+                assessment=affirmative_assessment(), evidence_not_applicable=True,
                 decision='approve', confirmed_object_type='explanation', expected_revision=console.objects_revision(sid))
             before = console.workflow_review_store.read_events()
         spawn = multiprocessing.get_context('spawn')

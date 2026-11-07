@@ -11,6 +11,8 @@
 Only the native test needs METIS_TEST_POSTGRES_DSN. The imported fixture owns
 and drops a separate temporary database; no supplied database is reset.
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from contextlib import contextmanager
 from copy import deepcopy
 import builtins
@@ -323,8 +325,8 @@ def _run(config, root, guard, monkeypatch, checkpoints, completed, expected=None
             current = next(row for row in console.snapshot_objects(sid) if row["object_id"] == target["object_id"])
             assert exact_current_approver_ids(current, console.object_review_bindings(sid)) == (accounts["reviewer"]["account_id"],)
             with pytest.raises(ConsoleError, match="^independent_second_reviewer_required$"):
-                console.approve_second_review(actor_id=accounts["reviewer"]["account_id"], snapshot_id=sid, object_id=target["object_id"])
-            console.approve_second_review(actor_id=accounts["second"]["account_id"], snapshot_id=sid, object_id=target["object_id"])
+                console.approve_second_review(actor_id=accounts["reviewer"]["account_id"], snapshot_id=sid, object_id=target["object_id"], assessment=affirmative_assessment(), evidence_not_applicable=True)
+            console.approve_second_review(actor_id=accounts["second"]["account_id"], snapshot_id=sid, object_id=target["object_id"], assessment=affirmative_assessment(), evidence_not_applicable=True)
             current = next(row for row in console.snapshot_objects(sid) if row["object_id"] == target["object_id"])
             assert set(exact_current_approver_ids(current, console.object_review_bindings(sid))) == {
                 accounts["reviewer"]["account_id"], accounts["second"]["account_id"]}

@@ -7,6 +7,8 @@
 # release-control-evidence: concurrent stale
 """
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 
 from pathlib import Path
@@ -113,6 +115,7 @@ def _complete_review(
         snapshot_id=snapshot_id,
         object_id=target["object_id"],
         decision="approve",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
         confirmed_object_type="explanation",
     )
 

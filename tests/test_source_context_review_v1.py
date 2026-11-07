@@ -7,6 +7,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 import json
 
@@ -137,13 +139,13 @@ def test_replacing_context_reopens_approval_and_preserves_unmodified_review_type
     state, _, reviewer, source, target, command = _system(tmp_path, production_console=production_console)
     sid = command['snapshot_id']
     state.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=target['object_id'],
-                        decision='approve', confirmed_object_type='definition', relation_review_ack=True)
+                        decision='approve', confirmed_object_type='definition', relation_review_ack=True, assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert any(row.get('valid') for row in state.object_review_bindings(sid) if row['object_id'] == target['object_id'])
     command['expected_revision'] = state.objects_revision(sid)
     state.confirm_source_context(**command)
     assert not any(row.get('valid') for row in state.object_review_bindings(sid) if row['object_id'] == target['object_id'])
     state.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=target['object_id'],
-                        decision='approve', confirmed_object_type='definition', relation_review_ack=True)
+                        decision='approve', confirmed_object_type='definition', relation_review_ack=True, assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert not context_issues(state.snapshot_objects(sid))
     state.confirm_source_context(**{**command, 'command_id': 'context-test-2', 'expected_revision': state.objects_revision(sid),
                                    'role': 'excluded', 'target_object_ids': [], 'reason': 'Het label hoort niet bij deze passage.'})
@@ -205,7 +207,7 @@ def _close_context_review(state, reviewer, sid, target_id):
     from src.review.review_disposition_v1 import definitive_review_disposition
     from src.operations_console_v1 import review_lane
     state.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=target_id,
-                        decision='approve', confirmed_object_type='definition', relation_review_ack=True)
+                        decision='approve', confirmed_object_type='definition', relation_review_ack=True, assessment=affirmative_assessment(), evidence_not_applicable=True)
     for obj in state.snapshot_objects(sid):
         if obj['object_id'] == target_id or obj.get('object_type') == 'document' or review_lane(obj) == 'fast':
             continue
@@ -367,7 +369,7 @@ def test_reviewer_can_correct_a_wrong_source_role_without_restoring_old_approval
     sid = command['snapshot_id']
     state.confirm_source_context(**command)
     state.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=target['object_id'],
-                        decision='approve', confirmed_object_type='definition', relation_review_ack=True)
+                        decision='approve', confirmed_object_type='definition', relation_review_ack=True, assessment=affirmative_assessment(), evidence_not_applicable=True)
     previous = deepcopy(state.snapshot_objects(sid))
     result = state.confirm_source_context(**{**command, 'role': 'reset', 'target_object_ids': [],
         'command_id': 'correct-role', 'reason': 'Deze eerdere bronrol was onjuist; opnieuw beoordelen.',
@@ -419,8 +421,6 @@ def test_native_correction_deferred_commit_failure_preserves_revision_reviews_an
     root=tmp_path/'native-correction'; root.mkdir()
     state, _, reviewer, _, target, command = _system(root, production_console(root=root, processing_binder=lambda console: None, azure=True, immutable_source_store=FakeBlobStore(), environment={"CONSOLE_PUBLIC_ORIGIN": "https://testserver"}), production_console=production_console)
     sid=command['snapshot_id']
-    state.review_object(actor_id=reviewer['account_id'],snapshot_id=sid,object_id=target['object_id'],
-                        decision='revise',comment='Controleer broncontext.')
     before=deepcopy(state.snapshot_objects(sid)); events=deepcopy(read_events(state._ledger_path))
     bindings=deepcopy(state.object_review_bindings(sid)); revision=state.objects_revision(sid)
     patch={'reason':'Expliciete brongebonden correctie.', 'operations':[{'op':'set','path':'content.clean_text',

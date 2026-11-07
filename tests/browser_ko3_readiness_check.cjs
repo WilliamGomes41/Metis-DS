@@ -129,6 +129,7 @@ const path = require('node:path');
     for (const question of ['applicable', 'complete', 'placed_correctly']) {
       await form.locator(`[name="${question}"][value="yes"]`).check();
     }
+    await form.locator('[name=evidence_not_applicable]').check();
     const [reviewResponse] = await Promise.all([reviewer.waitForNavigation(),
       form.locator('[name=review_action][value=approve]').click()]);
     assert.ok(reviewResponse.status() < 400, await reviewer.content());

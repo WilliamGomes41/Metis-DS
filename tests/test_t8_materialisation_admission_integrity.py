@@ -258,8 +258,6 @@ def test_revision_materialisation_discards_unselected_additional_refs(tmp_path, 
     rows = state.snapshot_objects(sid)
     first = next(row for row in rows if row["content"]["clean_text"] == FIRST)
     second = next(row for row in rows if row["content"]["clean_text"] == SECOND)
-    state.review_object(actor_id=reviewer, snapshot_id=sid, object_id=first["object_id"],
-                        decision="revise", comment="Bronselectie opnieuw materialiseren.")
     revised = state.correct_object(actor_id=actor, snapshot_id=sid, object_id=first["object_id"],
         patch={"reason": "Behoud alleen de geselecteerde provenance", "operations": [
             {"op": "set", "path": "content.clean_text", "value": FIRST}]},

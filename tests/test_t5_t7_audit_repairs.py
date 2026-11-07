@@ -7,6 +7,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 import hashlib
@@ -136,6 +138,7 @@ def test_consider_publish_passes_explicit_boom_path(tmp_path, *, production_cons
     rows = console.review_object(
         actor_id=accounts["reviewer"]["account_id"], snapshot_id=snapshot,
         object_id=target["object_id"], decision="approve", confirmed_object_type="node",
+        assessment=affirmative_assessment(), evidence_not_applicable=True,
     )
     considered = console.consider_publish(
         actor_id=accounts["publisher"]["account_id"], snapshot_id=snapshot
@@ -231,7 +234,7 @@ def test_reviewed_selected_candidate_repeat_is_safe_but_cannot_reclassify(tmp_pa
     def approve(type_):
         console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
             object_id=candidate["object_id"], decision="approve", confirmed_object_type=type_,
-            expected_revision=console.objects_revision(sid))
+            expected_revision=console.objects_revision(sid), assessment=affirmative_assessment(), evidence_not_applicable=True)
         return next(o for o in console.snapshot_objects(sid) if o["object_id"] == candidate["object_id"])
     first = approve("definition")
     repeated = approve("definition")
@@ -244,7 +247,7 @@ def test_reviewed_selected_candidate_repeat_is_safe_but_cannot_reclassify(tmp_pa
     with pytest.raises(ConsoleError) as caught:
         console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
             object_id=candidate["object_id"], decision="approve", confirmed_object_type="explanation",
-            expected_revision="stale")
+            expected_revision="stale", assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert caught.value.code == SNAPSHOT_OBJECT_WRITE_CONFLICT
     assert console.snapshot_objects(sid) == before
     assert console.object_review_bindings(sid) == bindings

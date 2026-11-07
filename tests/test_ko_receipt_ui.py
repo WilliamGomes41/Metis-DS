@@ -41,6 +41,9 @@ def test_card_then_exact_receipt_after_durable_save_and_restart(tmp_path, produc
     assert 'Is dit toepasbaar?' in page.text and 'Is dit compleet?' in page.text
     assert 'Staat dit op de juiste plek?' in page.text
     assert not re.search(r'<input[^>]+type="radio"[^>]+checked', page.text)
+    choice = re.search(r'<input[^>]+name="evidence_not_applicable"[^>]*>', page.text)
+    assert choice is not None and 'checked' not in choice.group(0)
+    assert data['evidence_not_applicable'] == 'yes'
     response = client.post('/review', data=data, follow_redirects=False)
     assert response.status_code == 303, response.text
     assert parse_qs(urlsplit(response.headers['location']).query)['receipt_interaction'] == [data['interaction_id']]
@@ -53,6 +56,8 @@ def test_card_then_exact_receipt_after_durable_save_and_restart(tmp_path, produc
     assert 'Dit heb je goedgekeurd' in result.text
     assert 'Zo is het kennisobject vastgelegd' in result.text
     assert 'data-knowledge-connections' in result.text
+    assert 'data-saved-evidence-applicability="not_applicable"' in result.text
+    assert direct.event['details']['supporting_evidence']['applicability'] == 'not_applicable'
     receipt = read_saved_review(console, console._account(reviewer), sid, obj['object_id'], data['interaction_id'])
     assert receipt is not None
     restarted = restart_production(console)
@@ -76,6 +81,32 @@ def test_unknown_or_foreign_interaction_cannot_claim_success(tmp_path, productio
     assert altered.status_code == 200
     assert 'data-review-receipt' not in altered.text
     assert 'data-review-outcome-unconfirmed' in altered.text
+
+
+def test_conflicting_command_and_interaction_answers_refuse_without_writes(tmp_path, production_console, monkeypatch):
+    from copy import deepcopy
+    from src.operations_console_v1 import ConsoleError
+    from tests.test_review_command_bounded_http_v1 import physical_state
+    console, sid, reviewer, obj, client, page, data = prepared(tmp_path, production_console, monkeypatch)
+    before = deepcopy(physical_state(console, sid))
+    events = console.workflow_review_store.read_events_for_snapshots([sid])
+    original = console.review_object
+    failures = []
+    def conflicting(**kwargs):
+        kwargs['assessment'] = {'version': 'review-assessment-v1', 'applicable': 'yes',
+            'complete': 'adjust', 'placed_correctly': 'yes'}
+        kwargs['interaction_evidence'] = {'assessment': {**kwargs['assessment'], 'complete': 'yes'}}
+        try:
+            return original(**kwargs)
+        except ConsoleError as exc:
+            failures.append(exc.code)
+            raise
+    monkeypatch.setattr(console, 'review_object', conflicting)
+    response = client.post('/review', data=data, follow_redirects=False)
+    assert response.status_code != 303
+    assert failures and set(failures) == {'review_assessment_conflict'}
+    assert physical_state(console, sid) == before
+    assert console.workflow_review_store.read_events_for_snapshots([sid]) == events
 
 
 def test_stale_save_has_no_receipt_and_complete_context_is_read_only(tmp_path, production_console, monkeypatch):
@@ -166,6 +197,7 @@ def test_bon_keeps_confirmed_condition_and_support_with_readable_exact_targets(t
     assert 'Voorstel, nog niet bevestigd' in primary_context.group(1)
     assert 'Geen afzonderlijke onderbouwing gekoppeld.' not in primary_context.group(1)
     data = submission(page, sid, obj)
+    data.pop('evidence_not_applicable')
     data['interaction_id'] = re.search(r'name="interaction_id" value="([^"]+)"', page.text).group(1)
     data['relation_choice'] = [relation_choice_value(row) for row in proposals]
     saved = client.post('/review', data=data, follow_redirects=False)

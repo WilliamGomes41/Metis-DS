@@ -7,6 +7,8 @@
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 import json
 from copy import deepcopy
 from pathlib import Path
@@ -164,7 +166,7 @@ def test_old_approval_is_retained_and_invalidated(repair_setup, *, production_ap
     console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=obj['object_id'],
         decision='approve', confirmed_object_type='recommendation', recommendation_direction='against',
-        recommendation_strength_level='not_stated', comment='Bron gecontroleerd.')
+        recommendation_strength_level='not_stated', comment='Bron gecontroleerd.', assessment=affirmative_assessment(), evidence_not_applicable=True)
     bindings = deepcopy(console.object_review_bindings(sid))
     assert any(b['valid'] for b in bindings)
     events = read_events(console._ledger_path)
@@ -208,7 +210,7 @@ def test_failed_http_commit_rolls_back_objects_bindings_and_audit(repair_setup, 
     console, sid, obj, reviewer, fresh = repair_setup(secondary="Bespreek de opties." if kind == "merge" else None, production_console=production_console)
     console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid, object_id=obj["object_id"],
         decision="approve", confirmed_object_type="recommendation", recommendation_direction="against",
-        recommendation_strength_level="not_stated", comment="Bron gecontroleerd.")
+        recommendation_strength_level="not_stated", comment="Bron gecontroleerd.", assessment=affirmative_assessment(), evidence_not_applicable=True)
     units = console.source_units(snapshot_id=sid, object_id=obj['object_id'])
     before_objects = deepcopy(console._load_objects(sid, remember=False))
     before_bindings = deepcopy(console.object_review_bindings(sid))
@@ -258,8 +260,6 @@ def test_direct_kernel_rejects_partial_materialisation_before_storage(repair_set
     from src.operations_console_v1 import OperationsConsole, ConsoleError
     from src.review.review_ledger import read_events
     console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
-    console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=obj['object_id'],
-                         decision='revise', comment='Correctie nodig.')
     before = deepcopy(console._load_objects(sid, remember=False))
     events = read_events(console._ledger_path)
     patch = {'reason':'Expliciete correctie', 'operations':[{'op':'set', 'path':'content.clean_text',
@@ -307,8 +307,6 @@ def test_source_identity_rechecked_at_actual_commit(repair_setup, monkeypatch, *
     from src.review.review_ledger import read_events
     console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     # The supported direct kernel entrance has preparation outside the lock.
-    console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=obj['object_id'],
-                         decision='revise', comment='Correctie nodig.')
     before = deepcopy(console._load_objects(sid, remember=False))
     before_events = read_events(console._ledger_path)
     def corrupt_source(previous, revised, *, fragments):
@@ -333,9 +331,7 @@ def test_authorization_revoked_during_preparation_cannot_commit(repair_setup, mo
     from src.review.review_ledger import read_events
     console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
     publisher = console.create_account(username='publisher', password=PASSWORD, roles=('publisher',))
-    peer = fresh()  # Start before creating the legacy revise fixture.
-    console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=obj['object_id'],
-                         decision='revise', comment='Correctie nodig.')
+    peer = fresh()
     before = deepcopy(console._load_objects(sid, remember=False))
     before_events = read_events(console._ledger_path)
     def revoke(previous, revised, *, fragments):
@@ -373,8 +369,6 @@ def test_http_merge_reconstructs_shared_block_in_source_order(repair_setup, late
 def test_direct_correction_cannot_save_inconsistent_raw_text(repair_setup, entrance, *, production_console):
     from src.operations_console_v1 import OperationsConsole, ConsoleError
     console, sid, obj, reviewer, fresh = repair_setup(production_console=production_console)
-    console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=obj['object_id'],
-                         decision='revise', comment='Correctie nodig.')
     before = deepcopy(console._load_objects(sid, remember=False))
     kwargs = dict(actor_id=reviewer['account_id'], snapshot_id=sid, object_id=obj['object_id'],
                   expected_revision=console.objects_revision(sid),

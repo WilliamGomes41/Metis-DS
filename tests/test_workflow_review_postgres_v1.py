@@ -7,6 +7,8 @@
 # release-control-evidence: releasebewijs
 """
 from __future__ import annotations
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 
 import json
@@ -292,7 +294,7 @@ def test_postgres_review_startup_leaves_corrupt_binding_mirror_unused(tmp_path: 
         class_='richtlijn',family='fixture',named_reviewers=[reviewer['account_id']])['snapshot_id']
     obj = next(o for o in console.snapshot_objects(sid) if o.get('proposed_object_type')=='definition')
     console.review_object(actor_id=reviewer['account_id'], snapshot_id=sid,object_id=obj['object_id'],
-                          decision='approve',confirmed_object_type='definition')
+                          decision='approve',confirmed_object_type='definition', assessment=affirmative_assessment(), evidence_not_applicable=True)
     bindings = console.object_review_bindings(sid)
     events = read_events(console._ledger_path)
     assert bindings and events

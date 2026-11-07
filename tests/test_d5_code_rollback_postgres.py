@@ -74,7 +74,35 @@ def test_code_rollback_rebuilds_copies_and_preserves_pg_and_product_api(complete
             result = subprocess.run([sys.executable, str(ROOT / 'tests/d5_rollback_support.py'), str(payload), str(output)],
                                     cwd=code, env=env, capture_output=True, text=True, timeout=90)
             assert result.returncode == 0, result.stderr[-5000:]
-            outcome = _normalise(json.loads(output.read_text()), root)
+            raw = json.loads(output.read_text())
+            prior_events = {row['event_id']: row for row in before['workflow_tables']['review_events']}
+            actual_events = {row['event_id']: row for row in raw['state']['workflow_tables']['review_events']}
+            assert prior_events.keys() <= actual_events.keys()
+            for event_id, event in prior_events.items():
+                assert actual_events[event_id] == event
+            new_approvals = [row for event_id, row in actual_events.items()
+                             if event_id not in prior_events and row['event_type'] == 'clinical_review_approve']
+            assert new_approvals
+            decision_evidence = {
+                'assessment': {'version': 'review-assessment-v1', 'applicable': 'yes',
+                               'complete': 'yes', 'placed_correctly': 'yes'},
+                'supporting_evidence': {'version': 'ko-supporting-evidence-v1', 'applicability': 'not_applicable'},
+            }
+            for event in new_approvals:
+                assert event['snapshot_id'] == receipt['snapshot_id']
+                for details in (event['details'], event['event_payload']['details']):
+                    if name == 'current':
+                        assert all(details[key] == value for key, value in decision_evidence.items())
+                    else:
+                        assert not decision_evidence.keys() & details.keys()
+            outcome = _normalise(raw, root)
+            if name == 'current':
+                new_approval_ids = {row['event_id'] for row in new_approvals}
+                for event in outcome['state']['workflow_tables']['review_events']:
+                    if event['event_id'] in new_approval_ids:
+                        for details in (event['details'], event['event_payload']['details']):
+                            for key in decision_evidence:
+                                details.pop(key)
             # This is a rollback proof for legacy, unpinned documents. Format 8
             # adds formation/source backup records that the pinned binary
             # cannot export. Compare the common durable/product state exactly;
@@ -91,7 +119,7 @@ def test_code_rollback_rebuilds_copies_and_preserves_pg_and_product_api(complete
             for row in outcome['state']['workflow_tables']['document_objects']:
                 # WP6 updates retained rows; the pinned full-set writer deletes
                 # and reinserts them, resetting this physical write counter.
-                # Object versions/hashes, all audit evidence and every other
+                # Object versions/hashes, existing audit evidence and every other
                 # durable field remain in the exact comparison below.
                 assert type(row['revision']) is int and row['revision'] >= 1
                 row.pop('revision')

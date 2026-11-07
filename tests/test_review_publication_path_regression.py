@@ -31,7 +31,8 @@ def test_large_review_get_post_redirect_reopen_preserves_unrelated_work(review_c
     data = {'snapshot_id': sid, 'object_id': focal['object_id'], 'snapshot_revision': revision.group(1),
             'suitability': 'ja', 'documentpositie_action': 'dit_klopt', 'type_action': 'dit_klopt',
             'confirmed_object_type': 'definition', 'eindoordeel': 'goedkeuren', 'decision': 'approve',
-            'relation_review_ack': '1'}
+            'relation_review_ack': '1', 'applicable': 'yes', 'complete': 'yes',
+            'placed_correctly': 'yes', 'evidence_not_applicable': 'yes'}
     response = measured('save', 'post', '/review', data=data, follow_redirects=False)
     assert response.status_code == 303, response.text
     redirected = measured('redirect', 'get', response.headers['location'])

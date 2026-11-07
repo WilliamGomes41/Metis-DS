@@ -811,14 +811,6 @@ def test_correct_object_reruns_admission_gate(tmp_path: Path, *, production_cons
         "adviseert de verpleegkundige",
     )
     assert _admission(adviseert)["gate_result"] == GATE_ALLOWED
-    console.review_object(
-        actor_id=accounts["reviewer"]["account_id"],
-        snapshot_id=receipt["snapshot_id"],
-        object_id=adviseert["object_id"],
-        decision="revise",
-        comment="Corrigeer de zin.",
-        proposed_correction=ONE_WORD,
-    )
     before = console._load_objects(receipt["snapshot_id"], remember=False)
     with pytest.raises(ConsoleError, match="correction_not_source_bound"):
         revised = console.correct_object(

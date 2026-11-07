@@ -1,0 +1,16 @@
+{
+  "source_sha": "837b115f213bcfd0e9f4a71a1010231d2040365e",
+  "source_label": "base837",
+  "participation": "required",
+  "retry": "exact",
+  "before_state": {
+    "state": "Tweede review",
+    "reasons": [
+      "review_stage_second"
+    ],
+    "invalid": []
+  },
+  "result": "REFUSED",
+  "code": "second_review_command_required",
+  "unchanged": true
+}

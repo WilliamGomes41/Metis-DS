@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+from tests.ko_review_fixture_support import affirmative_assessment
+
 import hashlib
 import json
 from copy import deepcopy
@@ -157,6 +159,8 @@ def _review(
         snapshot_id=snapshot_id,
         object_id=object_id,
         decision=decision,
+        assessment=affirmative_assessment() if decision == "approve" else None,
+        evidence_not_applicable=decision == "approve",
         comment=comment,
         confirmed_object_type=confirmable_proposed_type(obj) or None,
         suitability="ja",

@@ -1,0 +1,17 @@
+{
+  "sha": "2621773f545bf61816125a4028f0e3d3e53724a4",
+  "scenario": "second_contradiction",
+  "has_confirmed_support": true,
+  "explicit_na": true,
+  "result": "APPROVED",
+  "stored_facts": [
+    {
+      "version": "ko-supporting-evidence-v1",
+      "applicability": "linked"
+    },
+    {
+      "version": "ko-supporting-evidence-v1",
+      "applicability": "not_applicable"
+    }
+  ]
+}

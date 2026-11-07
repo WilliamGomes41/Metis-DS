@@ -25,7 +25,7 @@ def command(console, sid, reviewer, obj, data, assessment, *, compact=True):
     console.review_object(actor_id=reviewer, snapshot_id=sid, object_id=obj['object_id'],
         decision='approve', eindoordeel='goedkeuren', suitability='ja',
         expected_revision=data['snapshot_revision'], _compact_result=compact,
-        _interaction_id=interaction, _review_assessment=assessment,
+        _interaction_id=interaction, _review_assessment=assessment, evidence_not_applicable=True,
         confirmed_object_type='definition', recommendation_direction='for')
     return interaction
 

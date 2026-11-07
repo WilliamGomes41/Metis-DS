@@ -2,6 +2,8 @@
 
 # release-control-evidence: scope/belofte opslag kwaliteit slop releasebewijs toegang
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from tests.semantic_fixture_support import bind_fixture_selections
 from copy import deepcopy
 import pytest
@@ -120,7 +122,7 @@ def test_real_neighbor_bindings_resolve_only_after_both_source_contexts(tmp_path
     assert admission_of(target())['gate_result']=='blocked'
     with pytest.raises(ConsoleError, match='blocked_candidate_not_reviewable'):
         state.review_object(actor_id=reviewer['account_id'],snapshot_id=sid,object_id=target()['object_id'],
-                            decision='approve',confirmed_object_type='definition')
+                            decision='approve',confirmed_object_type='definition', assessment=affirmative_assessment(), evidence_not_applicable=True)
     commands=[]
     for index, text in enumerate([CONDITION,EXCEPTION]):
         source=next(o for o in state.snapshot_objects(sid) if o['content']['clean_text']==text)
@@ -136,7 +138,7 @@ def test_real_neighbor_bindings_resolve_only_after_both_source_contexts(tmp_path
         state.confirm_source_context(**{**commands[0],'command_id':'stale'})
     assert all(row in state._load_objects(sid,remember=False) for row in before)
     state.review_object(actor_id=reviewer['account_id'],snapshot_id=sid,object_id=target()['object_id'],
-                        decision='approve',confirmed_object_type='definition')
+                        decision='approve',confirmed_object_type='definition', assessment=affirmative_assessment(), evidence_not_applicable=True)
     binding=next(b for b in state.object_review_bindings(sid) if b['valid'] and b['object_id']==target()['object_id'])
     reviewed_version=target()['object_version']
     assert binding['object_version']==reviewed_version

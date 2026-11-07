@@ -8,6 +8,8 @@ RED/GREEN classification is recorded in the change contract after baseline CI.
 # release-control-evidence: slop
 # release-control-evidence: releasebewijs
 """
+
+from tests.ko_review_fixture_support import affirmative_assessment
 from copy import deepcopy
 
 import pytest
@@ -40,7 +42,7 @@ def _console(tmp_path, *, production_console, title="Begrippen"):
 
 def _approve(console, reviewer, sid, obj, **kwargs):
     return console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
-        object_id=obj["object_id"], decision="approve", confirmed_object_type="definition", **kwargs)
+        object_id=obj["object_id"], decision="approve", confirmed_object_type="definition", assessment=affirmative_assessment(), evidence_not_applicable=True, **kwargs)
 
 
 @pytest.mark.parametrize("kind", ["blocked", "deterministic", "coverage", "heading", "malformed"])
@@ -265,7 +267,8 @@ def _http(console, *, production_app):
 def _post_review(client, sid, obj, revision):
     return client.post("/review", data={"snapshot_id": sid, "object_id": obj["object_id"],
         "decision": "approve", "confirmed_object_type": "definition", "suitability": "ja",
-        "snapshot_revision": revision}, follow_redirects=False)
+        "snapshot_revision": revision, "applicable": "yes", "complete": "yes",
+        "placed_correctly": "yes", "evidence_not_applicable": "yes"}, follow_redirects=False)
 
 
 def test_direct_post_cannot_force_blocked_content_review(tmp_path, *, production_app, production_console):
@@ -301,9 +304,15 @@ def test_stale_browser_post_commits_no_object_binding_or_event(tmp_path, *, prod
 @pytest.mark.parametrize("decision", ["later", "revise", "reject"])
 def test_nonapproval_decisions_never_grant_approval(tmp_path, decision, *, production_console):
     console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
-    console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid, object_id=obj["object_id"],
-        decision=decision, comment="Beoordeling blijft zonder approval.",
-        expected_revision=console.objects_revision(sid))
+    if decision == 'revise':
+        console.correct_object(actor_id=reviewer['account_id'], snapshot_id=sid,
+            object_id=obj['object_id'], expected_revision=console.objects_revision(sid),
+            patch={'reason': 'Beoordeling vraagt een nieuwe open versie.', 'operations': [
+                {'op': 'set', 'path': 'uncertainty.has_uncertainty', 'value': True}]})
+    else:
+        console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid, object_id=obj["object_id"],
+            decision=decision, comment="Beoordeling blijft zonder approval.",
+            expected_revision=console.objects_revision(sid))
     current = next(o for o in console.snapshot_objects(sid) if o["object_id"] == obj["object_id"])
     assert current["metadata"]["admission"]["gate_result"] == "allowed"
     assert exact_current_approver_ids(current, console.object_review_bindings(sid)) == ()
@@ -449,10 +458,10 @@ def test_actual_four_eyes_commands_require_an_independent_second_human(tmp_path,
     before = _state(console, sid)
     with pytest.raises(ConsoleError, match="independent_second_reviewer_required"):
         console.approve_second_review(actor_id=reviewer["account_id"], snapshot_id=sid,
-            object_id=obj["object_id"], expected_revision=console.objects_revision(sid))
+            object_id=obj["object_id"], expected_revision=console.objects_revision(sid), assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert _state(console, sid) == before
     approved = console.approve_second_review(actor_id=second["account_id"], snapshot_id=sid,
-        object_id=obj["object_id"], expected_revision=console.objects_revision(sid))
+        object_id=obj["object_id"], expected_revision=console.objects_revision(sid), assessment=affirmative_assessment(), evidence_not_applicable=True)
     assert approved["object_version"] == current["object_version"]
     assert exact_review_snapshot_hash(approved) == exact_review_snapshot_hash(current)
     args["bindings"] = console.object_review_bindings(sid)
@@ -511,7 +520,9 @@ def test_second_review_post_requires_the_reviewed_revision(tmp_path, pin, *, pro
     client = _http(console, production_app=production_app)
     client.post("/login", data={"username": "carla", "password": "carla-secret"})
     before = _state(console, sid)
-    payload = {"snapshot_id": sid, "object_id": obj["object_id"], "action": "approve"}
+    payload = {"snapshot_id": sid, "object_id": obj["object_id"], "action": "approve",
+               "applicable": "yes", "complete": "yes", "placed_correctly": "yes",
+               "evidence_not_applicable": "yes"}
     if pin is not None:
         payload["snapshot_revision"] = console.objects_revision(sid) if pin == "current" else pin
     response = client.post("/review/second-review", data=payload, follow_redirects=False)
@@ -538,8 +549,7 @@ def test_completed_content_candidate_cannot_be_reopened_by_revise(tmp_path, *, p
 
 
 @pytest.mark.parametrize("independent", [False, True])
-def test_second_stage_revise_requires_an_actionable_independent_reviewer(tmp_path, independent, *, production_console):
-    """RED for the first approver; GREEN GUARD for the authorized second human."""
+def test_second_stage_review_refuses_self_but_independent_correction_reopens(tmp_path, independent, *, production_console):
     from src.review.review_duty_v1 import review_stage, SECOND_REVIEW
     console, reviewer, sid, obj = _console(tmp_path, production_console=production_console)
     second = console.create_account(username="carla", password="carla-secret", roles=("reviewer",))
@@ -558,6 +568,14 @@ def test_second_stage_revise_requires_an_actionable_independent_reviewer(tmp_pat
     before = _state(console, sid)
     actor = second if independent else reviewer
     def submit():
+        if independent:
+            units = console.source_units(snapshot_id=sid, object_id=obj['object_id'])
+            selected = next(unit['unit_id'] for unit in units
+                            if unit['text'] == obj['content']['clean_text'])
+            return console.submit_review_resolution(actor_id=actor['account_id'], snapshot_id=sid,
+                object_id=obj['object_id'], expected_revision=console.objects_revision(sid),
+                suitability='ja', comment='Tweede review: herzien', repair_kind='source_units',
+                source_unit_ids=[selected])
         return console.review_object(actor_id=actor["account_id"], snapshot_id=sid,
             object_id=obj["object_id"], decision="revise", comment="Tweede review: herzien",
             expected_revision=console.objects_revision(sid))

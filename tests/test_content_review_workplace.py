@@ -62,6 +62,7 @@ def test_one_mixed_workplace_actor_routes_exact_commands_and_restart(tmp_path, m
     assert snapshot(console, docs) == before
     batch = form_data(page, '/review/normal-risk/batch-confirm')
     batch['object_ids'] = doc['batch']
+    batch.update(applicable='yes', complete='yes', placed_correctly='yes', evidence_not_applicable='yes')
     # No silently relaxed selection: contextual/high-assurance object is ineligible.
     invalid = a.post('/review/normal-risk/batch-confirm', data={**batch, 'object_ids': [doc['context']]})
     assert invalid.status_code == 400
