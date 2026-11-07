@@ -106,3 +106,17 @@ Testmigratie bij verwijderde ingangen:
 - Mirrordiagnostiek-, badge-, klassewijzigings-, tweede-review-, frontier- en opslagtests toetsen de bestaande autoriteit in plaats van mirrorcompletions. Concurrente verwerking gebruikt werkelijk duurzaam reviewwerk/bindingen in plaats van een los envelope-vlaggetje; de bestaande native review-tijdens-reextractproef blijft behouden.
 
 Dit lokale dossier bevat geen productiemetadata. Volledige CI (PostgreSQL 16), onafhankelijke native/live-/rollback-/prestatiecontrole en operatorreview blijven afzonderlijke exacte-head-poorten; lokale PostgreSQL 17-proeven zijn geen productie- of mergeclaim.
+
+Actuele compositie na de codecutover (geen nieuwe owner):
+
+```mermaid
+flowchart LR
+  H[Menselijke KO-command] --> P[Bestaande apply_ko_event policy]
+  P --> W[Bestaande staged workflowwriter en CAS]
+  W --> B[Exacte reviewbindingen en audit]
+  B --> D[Bestaande reviewplicht en readiness]
+  O[Actuele objectfeiten] --> D
+  R[Canonieke publicatieregistry] --> S[Serving en publicatiestatus]
+  D --> U[Consoleprojecties]
+  S --> U
+```
