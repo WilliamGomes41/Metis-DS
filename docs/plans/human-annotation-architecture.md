@@ -44,6 +44,46 @@ Een beperkte opdracht mag nooit als complete verwerking van de hele richtlijn wo
 
 Voor technische preview mag dezelfde bronresolver tekst tonen en structurele fouten melden. Preview creëert geen object-ID, kandidaat, reviewbesluit of eigen opgeslagen bronwaarheid.
 
+### Bronankers en betekenisrelaties — lessen uit W3C Web Annotation
+
+Het [W3C Web Annotation Data Model](https://www.w3.org/TR/annotation-model/) is hier een **ontwerpbron voor bronverwijzingen en uitwisseling**, niet de nieuwe opslag-, workflow- of KO-autoriteit. Metis houdt de annotatie-entry binnen de bestaande WorkingRevision, de enige materialiser en de ingest-reviewketen. Een W3C-compatible export of JSON-LD-conformiteit wordt pas geclaimd na afzonderlijke mapping- en conformanceproeven; de eerste productroute hoeft geen JSON-LD in de database te bewaren.
+
+| W3C-begrip | Metis-projectie, als uitwisseling nodig is | Grens |
+|---|---|---|
+| `Annotation` met `body` en `target` | De vastgelegde relatie tussen een Metis-annotatie-entry en haar bronpassage(s) | Een Metis-KO is niet zonder meer een W3C Annotation |
+| `SpecificResource` en `selector` | Een exact gemarkeerd segment uit één bronrepresentatie | Interne snapshot-/blok-ID's vragen een stabiele, toegangsgecontroleerde URI-mapping voor export |
+| `TextPositionSelector` | Begin/einde in dezelfde genormaliseerde tekst | Positie zonder gepinde representatie is kwetsbaar; intern blijft hash + blok-ID leidend |
+| `TextQuoteSelector` | Exacte tekst en begrensde prefix/suffix als extra controlegetuige waar toegestaan | Herhaalde quote is geen uniek anker; licentie kan tekstexport beperken |
+| `State` | Bedoelde versie van de bronrepresentatie | Metis' snapshot-/extractiehash en revisiecontrole zijn lokale contracten, geen standaard-W3C-hashveld |
+| `motivation`/`purpose` en auteur/tijd | Herkomst van een markering en algemeen annotatiedoel | Klinische rollen, reviewerbesluiten en gebruiksrechten vragen eigen gecontroleerde domeinvelden en guards |
+
+De export mag alleen de inhoud en rechten tonen die de huidige toegang toestaat. De mapping is een **projectie van bestaande autoriteit** en mag geen nieuwe manier worden om een annotatie, reviewbesluit of kandidaat te schrijven.
+
+**Logische gegevensvorm (fysieke tabellen en migratie volgen in HA-2):**
+
+| Concept | Vast te leggen | Betekenis |
+|---|---|---|
+| `SourceAnchor` | SourceSnapshot-ID/hash, extractieversie/hash, stabiele bronblok-ID, begin inclusief/einde exclusief, offsetsysteem/normalisatieversie, optioneel gecontroleerd tekstgetuige | Verwijst naar precies één segment van precies één bronrepresentatie; nooit naar de laatst beschikbare bron |
+| `AnnotationEntry` | Stabiele annotation-ID, entryrevisie, geordende kernankers, gekozen bestaand type, concept/gereed/twijfel, actor en command-ID | Een voorgestelde inhoudelijke eenheid; geen kandidaatobject of reviewerbesluit |
+| `RoleLink` | Annotation-ID/revisie, bronanker of bestaande ankerreferentie, rol, volgorde, waar nodig functie en `required_for_meaning` | Verbindt context of bewijs met deze uitspraak; dezelfde passage kan elders een andere rol hebben |
+| `AnnotationSet` | WorkingRevision, opdracht/scope, setgeneratie, bron-/extractie-identiteit, geordende entries | De enige bewerkbare invoerset vóór seal; na seal immutable invoerbewijs |
+
+De rollen komen uit het Metis-domeincontract, niet automatisch uit W3C's algemene `motivation` of `purpose`. Kern, doelgroep, voorwaarde, uitzondering, toelichting en onderbouwing blijven per **relatie** onderscheiden. Een essentiële voorwaarde of uitzondering krijgt `required_for_meaning` en moet in elke kandidaat-, review- en hergebruikweergave bij de claim beschikbaar blijven. Dit beslist nog niet of #986 haar fysiek in hetzelfde KO of als gekoppeld object opslaat. Een onderbouwende bronpassage is zonder eigen inhoudelijk besluit geen zelfstandig KO. De functie van onderbouwing (bijvoorbeeld onderzoeksbevinding, afweging of verklaring) is een gecontroleerde keuze waarvoor #986 en de bestaande bewijsvelden de definitieve waarden bepalen; geen vrije tekst of nieuwe objecttaxonomie door dit document.
+
+**Waarom een platte lijst niet volstaat:** in het normatieve W3C-basismodel met meerdere targets geldt de body voor elk target afzonderlijk. Dat drukt niet uit dat twee kernbereiken **samen** één claim vormen of dat een uitzondering alleen de eerste claim begrenst. De W3C-bijlage bespreekt `Composite` en `List` voor samenhang/volgorde, maar is expliciet niet-normatief en noemt de bediening moeilijk. Metis bewaart daarom intern een geordende kerngroep én afzonderlijke getypeerde relaties met eigen eigenaar; een eventuele export gebruikt een gedocumenteerde Metis-extensie of aparte annotaties en mag samenhang niet reduceren tot een gewone `target`-array. Een W3C `RangeSelector` kan over interne grenzen lopen; dat is geen verplichting om één muisdrag over alinea's te ondersteunen. Eén markeeractie per gepind bronblok blijft de eerste bediening; meerdere ankers vormen samen de invoer.
+
+**Resolver bij opslaan, heropenen en bouwen:**
+
+1. Valideer actuele actor/rechten, WorkingRevision en verwachte entry-/setrevisie. Lees alleen de gepinde SourceSnapshot en extractieversie. De browser stuurt referenties en een door hem getoonde selectie; de server bepaalt de tekst uit de bron.
+2. Controleer dat blok en bereik bestaan, begin < einde, grenzen niet midden in een grapheme vallen en de opgegeven offsets overeenkomen met het vastgelegde normalisatiecontract. W3C TextPositionSelector telt Unicode-codepoints in genormaliseerde logische tekst; JavaScript DOM-offsets tellen UTF-16-code-units. Converteer expliciet en test onder meer emoji, samengestelde tekens en rechts-naar-links-tekst.
+3. Vergelijk de door de UI getoonde exacte tekst en, waar toegestaan, een begrensde prefix/suffix met het door de server berekende segment. De quote is controlegetuige, niet de bronautoriteit. Een `TextQuoteSelector` kan bij herhaalde tekst meerdere matches opleveren. Twee identieke passages op verschillende geldige posities mogen elk worden geselecteerd: de gepinde blok-ID en positie maken de gekozen vindplaats expliciet. Als die positie niet meer klopt, mag Metis niet op basis van de quote één van de matches kiezen; dan volgt een gerichte mismatch- of herankeringsbevinding zonder stille fuzzy match.
+4. Bij gewijzigde bron of extractie: bestaande annotaties blijven naar hun oude representatie verwijzen. Toon zo nodig een voorstel voor herankering in een expliciete opvolgversie met oude/nieuwe tekst en structuur naast elkaar; pas het pas na menselijke bevestiging en nieuwe entry-/setgeneratie toe. Geen automatische verplaatsing van een voorwaarde, uitzondering of bewijs.
+5. Een save commit ankers, rolrelaties, entryrevisie, setgeneratie, audit en idempotent commandresultaat atomair via de bestaande workflowautoriteit. Voor een concept mag de inhoud nog incompleet zijn, maar elke aanwezige bronverwijzing moet valide zijn. `Selectie gereed`, seal en bouw controleren vervolgens de actuele relatie- en scopeverplichtingen.
+
+De W3C-`State` maakt duidelijk *welke representatie* bedoeld is; Metis' immutable snapshot-/extractiehash en eigen CAS zijn hiervoor de sterkere lokale garantie. De standaard regelt geen inhoudelijke juistheid, één-claim-afbakening, reviewerbevoegdheid, publicatie of herstarttransacties. Een technisch correct anker bewijst dus alleen brongetrouwheid van die markering, geen betekenisgetrouwheid van de gevormde claim.
+
+**Bediening en rechten:** na markeren toont de kaart de exacte passage en vraagt één relevante rolkeuze; ‘nog een kernbereik’ of een rolknop voegt een andere alinea toe. Toon elk anker bij zijn bronkop en versie, met ‘open in bron’, verwijderen/herkoppelen en directe controle van de complete uitspraak vóór gereed. Waarschuw bij identieke tekst op meerdere plaatsen, twee mogelijk zelfstandige claims, ontbrekende essentiële context en onbevestigde herankering; de researcher beslist, Metis verzint geen betekenis. Toets toetsenbord-/touchbediening en selectie zonder precieze drag. W3C noemt dat gekopieerde quotes rechtenrisico's kunnen hebben: houd volledige brontekst binnen de bestaande toegangsgrens, beperk tekstgetuigen/export volgens de bij ingest vastgelegde gebruiksrechten en verwar een `rights`-verwijzing in metadata niet met juridische toestemming.
+
 ### Pauzeren, concept bewaren en hervatten — aanvulling 7 november 2026
 
 Deze route hoeft niet in één browsersessie te worden afgerond. ‘Opslaan en later doorgaan’ is een eigen handeling en is niet hetzelfde als ‘Klaar met dit document’ of ‘Afronden en opbouwen’.
@@ -167,7 +207,9 @@ revise_annotation(
 
 Dezelfde command-ID met dezelfde payload levert hetzelfde opgeslagen resultaat. Een andere payload met dezelfde ID conflicteert. Een verouderd overzicht, andere bronrepresentatie, ontbrekende rechten, onbekend bereik of gepubliceerde werkrevisie wordt geweigerd zonder gedeeltelijke writes. UI toont deze bevinding bij de selectie; geen succesvol bonnetje vóór commit.
 
-Browserselectie en backendoffsets moeten dezelfde tekencodering gebruiken: JavaScript UTF-16-offsets mogen niet onbehandeld als Python-codepointoffsets worden geïnterpreteerd. Server-resolutie op de gepinde bloktekst is leidend; Unicode, herhaalde identieke tekst, tabellen en lijsten krijgen negatieve bewijsgevallen.
+Het `selection`-argument bevat bronankers plus rolrelaties, niet de nieuwe kandidaattekst. Een anker verwijst naar snapshot, extractie, blok en halfopen `[start,end)` in de genormaliseerde logische tekst. De server berekent de exacte tekst, toetst een eventuele quote/prefix/suffix als getuige en geeft een afzonderlijke `anchor_mismatch`, `anchor_ambiguous`, `representation_stale` of `selection_invalid`-bevinding terug zonder gedeeltelijke writes. Dit zijn voorgestelde contractcodes; implementeer ze pas na aansluiting op de bestaande foutcodetaxonomie. De response bevat gecommitteerde entry-/setrevisie en een bronprojectie voor directe UI-feedback. JSON-LD-export is een afgeleide representatie, geen tweede write-API.
+
+Browserselectie en backendoffsets moeten hetzelfde expliciete normalisatie-/codepointcontract gebruiken: JavaScript UTF-16-offsets mogen niet onbehandeld als Python-codepointoffsets worden geïnterpreteerd. Server-resolutie op de gepinde bloktekst is leidend; Unicode, herhaalde identieke tekst, tabellen en lijsten krijgen negatieve bewijsgevallen.
 
 ## 6. Datavorm en eigenaarschap vóór logica
 
@@ -177,7 +219,9 @@ Browserselectie en backendoffsets moeten dezelfde tekencodering gebruiken: JavaS
 | Extractie | Bestaand `prepared_extraction_versions`-record/hash + source views | Workflowopslag; exact gepinde representatie, niet modelconfig |
 | Selectietaak | Doel/gebruik, scope-bereiken, selectiecriteria, opdrachtversie | Binnen WorkingRevision; wijziging maakt eerder overzicht/seal niet actueel |
 | Annotatieset | WorkingRevision-ID, bron-/extractiehash, contractversie, generatie | Bestaande PostgreSQL-workflowautoriteit |
-| Annotatie | Stabiele annotation-ID, eigen revisie, geordende kernbereiken (elk binnen één gepind bronblok), type, rolgebonden context-/bewijsbereiken of verwijzingen en twijfel | Rijgerichte gegevens binnen diezelfde autoriteit; geen kandidaat-ID; meerdere alinea’s per annotatie toegestaan |
+| Bronanker | Waarde: snapshot/extractie, blok, halfopen codepointbereik, normalisatieversie en beperkte controlegetuige waar toegestaan | In de annotatieautoriteit; verwijst uitsluitend naar immutable gepinde bron/extractie; geen eigen kandidaatstatus |
+| Annotatie | Stabiele annotation-ID, eigen revisie, geordende kernankers, type, concept/gereed/twijfel | Rijgerichte gegevens binnen diezelfde autoriteit; geen kandidaat-ID; meerdere alinea’s per annotatie toegestaan |
+| Rolrelatie | Annotation-ID/revisie, anker of herbruikbare ankerref, rol, volgorde, eventueel functie en betekenisverplichting | Schrijfeigendom van annotatie-entry; dezelfde passage kan per uitspraak anders worden gebruikt, zonder tweede bronwaarheid |
 | Afrondingsbewijs | Scope-afhandeling, geordende leden met hashes, actor, tijd, sealhash | Immutable invoerbewijs; nieuwe generatie bij wijziging |
 | Bouwopdracht | Command-ID, sealhash, verwachte objectrevisie, contractversie, claim | Bestaande duurzame opdracht-/dispatchautoriteit |
 | Kandidaat/revisie | Bestaande materialiser-ID, tekst, mapping, content hash | Bestaande object-/revisieopslag |
@@ -185,7 +229,7 @@ Browserselectie en backendoffsets moeten dezelfde tekencodering gebruiken: JavaS
 | Oordeel | Bestaande exacte reviewbinding + ingestpolicy | Bestaande reviewautoriteit, nooit annotatieopslag |
 | Publicatie en serving | Bestaande release/objectlidmaatschap + registry | Canonieke publicatie en één servingregistry |
 
-Benodigde nieuwe productdata zijn annotatie-invoer; geen nieuwe database/service/algemene job-engine. Voorstel: kleine header per set, rijgerichte entries met versiehistorie, immutable sealleden en bestaande commandresultaten. Concrete tabelnamen en migratienummer bepalen bij de opslagslice; ze zijn niet reeds geïmplementeerd. Een groeiende lijst annotaties als JSON in de operationele document-envelope is afgewezen: iedere selectie zou documentbrede serialisatie en write-amplification veroorzaken.
+Bronanker en rolrelatie zijn logische typen, geen opdracht voor aparte tabellen, stores of publieke URI's. Bewaar per relatie de functionele rol en de benodigde samenhang; kopieer bij hergebruik geen brontekst als nieuwe bronautoriteit. W3C-serialisatie wordt alleen uit dezelfde gegevens afgeleid, waar de gebruiksrechten export toelaten. Benodigde nieuwe productdata zijn annotatie-invoer; geen nieuwe database/service/algemene job-engine. Voorstel: kleine header per set, rijgerichte entries met versiehistorie, immutable sealleden en bestaande commandresultaten. Concrete tabelnamen en migratienummer bepalen bij de opslagslice; ze zijn niet reeds geïmplementeerd. Een groeiende lijst annotaties als JSON in de operationele document-envelope is afgewezen: iedere selectie zou documentbrede serialisatie en write-amplification veroorzaken.
 
 De invoer-uitvoerkoppeling is noodzakelijk: bij eerste bouw bepaalt alleen de materialiser de object-ID; bij correctie behoudt de bestaande revisieoperatie de toepasselijke object-ID en legt de nieuwe versie vast. Relaties tussen annotaties worden pas naar echte object-ID's/versies vertaald nadat de materialiser alle betreffende eindpunten heeft opgeleverd. Geen vooraf geraden object-ID's of tekstmatching. De koppeling en de bestaande relatiegraaf bepalen de geraakte afhankelijkheden voor herreview, inclusief gedeelde context en onderbouwing.
 
@@ -251,7 +295,7 @@ Decommission is pas voltooid wanneer nieuwe proza-invoer, herextractie, retry/re
 
 ## 8. Transacties, herstel en concurrerende acties
 
-- Opslaan: autoriseren, huidige bron/representatie en entryrevisie controleren; entryversie, setgeneratie, audit en commandresultaat atomair in bestaande workflowtransactie. Geen heel document herschrijven voor één highlight.
+- Opslaan: autoriseren, gepinde bron/representatie, normalisatie en alle aanwezige ankers/rolrelaties server-side valideren; entryrevisie en setgeneratie controleren; entryversie, setgeneratie, audit en commandresultaat atomair in bestaande workflowtransactie. Ambigue/mismatched bronverwijzing faalt gesloten met gerichte herstelbevinding. Geen heel document herschrijven voor één highlight.
 - Afsluiten: korte lock op de bestaande document-/WorkingRevision-grens; overzicht/setgeneratie/objectrevisie controleren; seal en duurzame opdracht samen vastleggen. Geen lock tijdens gebruikerscontrole.
 - Voorbereiden/bouwen: buiten gedeelde lock en lange SQL-transactie. Exacte seal en extractie worden geverifieerd; kandidaatvorming via één materialiser. Voor eerste activatie geen zichtbare half opgebouwde kandidaatset.
 - Activeren: opnieuw actuele rechten, claim, bron-/extractiehash, seal, setgeneratie en verwachte objectrevisie controleren. Kandidaten, bewijsverwijzing, register, relationele mapping en commandresultaat atomair via bestaande workflowwriter. Een oudere builder kan een nieuwere annotatiegeneratie nooit overschrijven.
@@ -266,9 +310,9 @@ Geen big-bang-uitwisseling en geen permanente parallelle runtime. Tijdelijke coe
 
 | Slice | Gebruikersbelofte en concreet bouwwerk | Verwijder-/bewijsvoorwaarde |
 |---|---|---|
-| HA-1: contract | Opdracht/scope, selectievorm, vereiste aanwijzingen, seal en overgangsregels vastleggen; dit document is het ontwerp | Huidige AI-verplichtingsbesluit expliciet vervangen vóór gedragscutover; geen runtimebeleid via chat afleiden |
-| HA-2a: bron en opslag | Eén richtlijn ontvangen, extractie bekijken, één selectie duurzaam opslaan en hervatten | Rijgerichte annotatiedata en huidige rechten/CAS bewijzen; nog geen productiecutover |
-| HA-2b: document tot kandidaten | Meer selecties, overzicht, seal + job, deterministisch bouwen en bestaande Admission | Human activatiebewijs/versioned schema, geen provider nodig; volledige verticale proef |
+| HA-1: contract | Opdracht/scope, bronanker- en normalisatiecontract, rolrelaties/essentiële context, vereiste aanwijzingen, seal en overgangsregels vastleggen; dit document is het ontwerp | Huidige AI-verplichtingsbesluit expliciet vervangen vóór gedragscutover; W3C is ontwerpbron, geen vervangende autoriteit |
+| HA-2a: bron en opslag | Eén richtlijn ontvangen, gepinde extractie bekijken, bronankers en rolrelaties per entry opslaan, exact heropenen en hervatten | Codepoints/normalisatie, dubbele tekst, mismatch, rechten en huidige CAS native bewijzen; nog geen productiecutover |
+| HA-2b: document tot kandidaten | Meerdere kernbereiken en rolrelaties, expliciete samenhang, overzicht, seal + job, deterministisch bouwen en bestaande Admission | Essentiële context reist mee; human activatiebewijs/versioned schema, geen provider nodig; volledige verticale proef |
 | HA-3: beoordeling/correctie | Exact de ingestkeuze uitvoeren; broncorrectie via dezelfde selectie-editor en revisieowner | Geen dubbele auteurspaden; bestaande hash-/review-/publicatieguards aantoonbaar behouden |
 | HA-4a: praktijk/cutover | Zelfde corpus, fouten en totale arbeid meten; productiegeschikte opvolgversie gecontroleerd activeren | Geen winst claimen uit fixtures; code-SHA, config, echte gebruikers- en opslagproeven |
 | HA-4b: contract/removal | Alle vervangen proza-ingangen en configuraties verwijderen, historische evidence read-only | Oude proza-executie niet bereikbaar/importeerbaar waar vervangen; dependency- en directe-bypassproeven; cleanupregister op nul |
@@ -292,15 +336,16 @@ Rollback vóór definitieve contractfase gebruikt het vastgelegde software-/data
 ## 10. Acceptatie: wat daadwerkelijk bewezen moet worden
 
 1. **Zonder proza-providerconfig:** upload → extractie → twee gekoppelde selecties → herstart → overzicht → seal → bouw → ingestbeoordeling → publicatie → API/MCP. Geen modelcall in het prozapad.
-2. **Brongetrouw:** verkeerde snapshot/extractie, ongeldige offsets, herhaalde tekst op andere locatie, Unicode, lijst zonder items en tabel zonder kopcontext worden geweigerd of expliciet onbeslist; geen verzonnen tekst. Test één claim met kernbereiken in twee alinea’s, een voorwaarde elders, een gedeeld bewijsbereik voor twee claims en een door extractie gesplitste zin. De opslag houdt bereik, rol en volgorde afzonderlijk; een drag over blokken wordt niet stil tot één bereik gemaakt.
-3. **Betekenisbehoud:** drie echte aanbevelingen en vervolgens representatief corpus met doelgroep, negatie, modaliteit, voorwaarden elders, gedeelde uitzondering en onderbouwing. Onafhankelijke referentie; niet alleen de annotator beoordeelt eigen werk.
+2. **Brongetrouw:** verkeerde snapshot/extractie, ongeldige offsets, herhaalde tekst op andere locatie, Unicode-codepoint versus UTF-16, graphemegrens, normalisatie, lijst zonder items en tabel zonder kopcontext worden geweigerd of expliciet onbeslist; geen verzonnen tekst. Test één claim met kernbereiken in twee alinea’s, een voorwaarde elders, een gedeeld bewijsbereik voor twee claims en een door extractie gesplitste zin. De opslag houdt bereik, rol en volgorde afzonderlijk; een drag over blokken wordt niet stil tot één bereik gemaakt. Exacte positie + quotegetuige worden op de gepinde representatie vergeleken; twee identieke passages met verschillende geldige posities zijn afzonderlijk selecteerbaar, maar een ongeldige positie wordt niet via een quote-only match stil gerepareerd.
+3. **Betekenisbehoud:** drie echte aanbevelingen en vervolgens representatief corpus met doelgroep, negatie, modaliteit, voorwaarden elders, gedeelde uitzondering en onderbouwing. Test dat een vlakke multi-target-export geen gezamenlijke kerngroep of rolrelaties als onafhankelijke targets laat lijken; essentiële voorwaarden en uitzonderingen komen in kandidaat, review en hergebruikweergave mee. Onafhankelijke referentie; niet alleen de annotator beoordeelt eigen werk.
 4. **Ingestbeoordeling:** bestaande opties en deelnemers exact behouden, inclusief verplichte extra reviewer. Researcher zonder reviewerrol kan geen oordeel schrijven; ‘klaar’ en annoteren geven geen vrijgave.
 5. **Volledigheid:** ongemarkeerde sectie, open twijfel en scopewijziging zijn zichtbaar; onvolledige scope kan niet als volledig afgehandeld slagen. Buiten-scope is geen generieke niet-kennisclassificatie.
 6. **Native PostgreSQL:** duplicate command met gelijk/anders payload, twee gelijktijdige editors, stale overview, crash na seal vóór workerclaim, fout tijdens activatie, herstart na activatie en correctie versus publicatie. Geen mocks/PG-skips als vervangend bewijs.
 7. **Lifecycle:** publiceren v1 → herstart → policy-/bronopvolger met open v2 terwijl v1 actief blijft → beoordelen v2 → atomisch opvolgen → herstart → intrekken → herstart; geen heractivering of historische mutatie.
 8. **Gerichte correctie:** alleen werkelijk geraakte objecten/afhankelijkheden worden herzien; ongewijzigde exacte oordelen blijven slechts behouden via bestaande hashregels. Split/merge en terugnemen krijgen expliciete lineage.
 9. **Geen tweede pad:** HTTP, CLI, interne strategy, retry/resume, klassewijziging, settings-experimenten en startup kunnen geen oude prozacreatie starten. Verwijderde functies hebben geen callers; gedeelde helperverplaatsing behoudt overige ondersteunde klassen. Directe-bypassproef naast statische scan.
-10. **Praktijk en last:** annotatie-, beoordelings- en correctietijd plus fouten na afronding apart rapporteren; geen succesclaim uit minder correcties alleen. Bronviewer, losse save en overzicht meten zonder documentbrede serialisatie per entry.
+10. **Praktijk en last:** annotatie-, beoordelings- en correctietijd plus fouten na afronding apart rapporteren; geen succesclaim uit minder correcties alleen. Vergelijk één drag per bronblok en toevoegen uit andere alinea’s met een echte researcher-taak; meet verloren context en extra handelingen. Bewijs toetsenbord-/touchselectie, ‘open in bron’, zichtbare versie en herstel bij dubbelzinnige match. Bronviewer, losse save en overzicht meten zonder documentbrede serialisatie per entry.
+11. **Rechten en uitwisseling:** exporteer geen volledige gelicentieerde bronquote zonder toepasselijke gebruiksrechten; W3C-`rights`-metadata alleen is geen toestemming. Als interoperabele W3C-projectie wordt gebouwd, toets normatieve selector-/state-/motivationvelden en de Metis-uitbreiding voor samenhang/rol tegen de W3C-specificatie; claim tot die tijd geen conformance.
 
 ## 11. Levenscycluscontract voor de eerste volledige bouwslice
 
@@ -315,7 +360,7 @@ Lifecycle transition: open annotatie → verzegelde invoer en gereserveerde buil
 Initial durable state: ontvangen immutable bron en WorkingRevision met ingestbeoordeling, geverifieerde extractie en opgeslagen selecties; nog geen nieuwe kandidaatset.
 Trigger: bevoegde researcher bevestigt het actuele documentoverzicht met ‘Afronden en opbouwen’.
 Authorization: actuele researcherrechten voor annotatie/bouwen; bestaande reviewers/publicatierechten blijven afzonderlijk.
-Validation: bron/extractiehash, scope-afhandeling, selection contract, closure, overview/sealhash, claim en verwachte annotatie-/objectrevisies.
+Validation: bron/extractiehash, blok-ID, Unicode-codepointbereik en normalisatie, quotegetuige/ambiguïteit, rolrelaties en essentiële context, scope-afhandeling, selection contract, closure, overview/sealhash, claim en verwachte annotatie-/objectrevisies.
 Mutable entities: annotatiegeneraties/entries, command/job, gerichte werkobjecten, register en nieuwe vormingsbewijsverwijzing via bestaande workflowwriter.
 Immutable entities: bronbytes, verzegelde invoer, historische entry-/objectversies en reviewbesluiten, gepubliceerde releases.
 Workflow state before: processing.
@@ -348,9 +393,9 @@ Adversarial proof matrix: §10; afzonderlijke reviewpass op alternatieve writers
 ## 12. Wat nog niet bewezen of besloten is
 
 - Geen gemeten verbetering in inhoudelijke fouten of totale arbeid. Dat blijft HA-4.
-- De werkelijke annotatielast voor verplichte v3-velden vraagt een proef met echte researchers; vijf globale markeervragen kunnen onvoldoende zijn. Het systeem mag dit niet verbergen.
+- De werkelijke annotatielast voor verplichte v3-velden vraagt een proef met echte researchers; vijf globale markeervragen kunnen onvoldoende zijn. Eén markeeractie per bronblok is een eerste bedieningskeuze, geen definitieve inhoudelijke beperking; toets haar op PDF's met gebroken alinea's en bij toetsenbord/touch.
 - De scope-/selectieopdracht en het corpus moeten inhoudelijk worden vastgesteld; dit ontwerp legt geen verpleegkundige bronkeuzes vast.
-- Exacte schema-/commandmigratie en de productieinventaris zijn implementatievoorbereiding; dit document is geen geteste SQL-migratie.
+- Exacte schema-/commandmigratie, rechtenmatrix voor brontekstgetuigen/export, normalisatieconventie per extractie en de productieinventaris zijn implementatievoorbereiding; dit document is geen geteste SQL-migratie of W3C-conformiteitsclaim.
 - Bestaande #986/#995/#942/#729/#952/#953/#1012 blijven eigenaar van hun werk; raakvlakken worden per slice gekoppeld, niet opnieuw gebouwd of stil gesloten.
 
 ## 13. Bewijs en voortgang
@@ -361,7 +406,7 @@ Adversarial proof matrix: §10; afzonderlijke reviewpass op alternatieve writers
 - Implement: alleen dit ontwerpdocument en projectplanning; geen productcode, database, ingestconfiguratie, reviewbeleid of productie gewijzigd.
 - Scrap: concrete verwijderlijst en eindige cutover beschreven; nog niets uit de productcode verwijderd.
 - Eerder in deze sessie: synthetische bouwerproef zonder modelcall gaf exacte verwachte tekst en bronmapping; `human_selected` werd terecht door het huidige contract geweigerd. Geen volledige runtime- of inhoudelijke acceptatie.
-- In deze ontwerpfase geen producttests/native PostgreSQL-/browser-/providerproeven uitgevoerd. Referenties naar bestaande tests zijn te hergebruiken bewijssurfaces, geen nieuwe geslaagde runs.
+- In deze ontwerpfase geen producttests/native PostgreSQL-/browser-/providerproeven uitgevoerd. Referenties naar bestaande tests zijn te hergebruiken bewijssurfaces, geen nieuwe geslaagde runs. De W3C-lezing scherpt bronankers, rolrelaties en exportsemantiek aan; zij bewijst geen Metis-bron- of betekenisbetrouwbaarheid.
 - Een afzonderlijke adversariële ontwerplezing leverde drie aangescherpte grenzen op: taakscope geeft geen publicatievrijstelling; annotatie→objectversie krijgt een expliciete immutable koppeling; reviewerbevestigingen hebben eigen veldeigendom zonder reverse-sync. Dit is ontwerpreview, geen bewijs van geïmplementeerde handhaving.
 
 Belangrijkste referenties: `AGENTS.md`, `docs/agents/lifecycle-vsa.md`, `docs/agents/continuous-development.md`, `docs/agents/abstraction-boundaries.md`, `docs/change-contracts/semantic-only-formation.md`, `docs/SOURCE_CONTEXT_REVIEW_CONTRACT.md`; code-eigenaars in §7. GitHub #1013–#1017 / Linear MET-57–MET-61 bevatten projectscope en uitvoeringstaken.
