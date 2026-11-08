@@ -71,7 +71,8 @@ def _capture(con, snapshot_id, store, actor_id):
         (snapshot_id,)).fetchall()
     basis = {key: row[key] for key in ('snapshot_id', 'working_revision_id', 'extraction_hash',
                                      'source_identity', 'objects_revision', 'normalization', 'generation', 'context')}
-    basis.update(version=MODE, entries=[{key: entry[key] for key in
+    from src.vorming.source_accountability_v1 import CONTAINERS_VERSION
+    basis.update(version=MODE, source_accountability_version=CONTAINERS_VERSION, entries=[{key: entry[key] for key in
                                        ('annotation_id', 'revision', 'payload_hash')} for entry in entries])
     producer = con.execute('SELECT formation_evidence_id FROM workflow.documents WHERE snapshot_id=%s', (snapshot_id,)).fetchone()['formation_evidence_id']
     if producer:

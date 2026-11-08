@@ -349,7 +349,8 @@ def apply_annotation_revisions(generated, basis, *, snapshot_id, fragments, cont
     from src.vorming.human_annotation_projection_v1 import context_record
     from src.vorming.admission_gate_v1 import apply_admission_gate
     from src.vorming.passage_register_v1 import apply_passage_register
-    if basis.get('version') != 'human-annotation-revision-v1':
+    if (set(basis) != {'version', 'proof_id', 'actor_id', 'objects'}
+            or basis.get('version') != 'human-annotation-revision-v1'):
         raise ValueError('annotation_revision_contract_invalid')
     previous = basis['objects']
     by_id = {row['object_id']: row for row in previous}

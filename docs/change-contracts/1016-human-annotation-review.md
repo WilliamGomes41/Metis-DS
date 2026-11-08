@@ -112,8 +112,11 @@ naar de bestaande canonieke voorganger. Ruwe materialiseruitvoer en toegepaste
 revisie mogen niet tot één oncontroleerbaar callerrecord worden vervlakt.
 Dominante reads zijn huidige set/objectbasis bij seal, immutable proof bij
 historische controle en één entry bij save. Volumes zijn niet gemeten; geen
-nieuwe cache/index/performanceclaim. Historie wordt niet telkens in iedere
-save gekopieerd. Voorbereiding blijft buiten de schrijftransactie; activatie
+nieuwe cache/index/performanceclaim. Eerste annotatiesaves schrijven alleen
+rijgerichte input. Correcties na activatie gebruiken de bestaande objectfrontier
+en historyvalidatie met native delta-DML; hun lees-/serialisatiekosten bij grote
+documenten zijn nog niet gemeten en worden niet als begrensde latency beloofd.
+Voorbereiding blijft buiten de schrijftransactie; activatie
 controleert de echte actuele basis opnieuw.
 
 ## Herschrijfrisico en overgang
@@ -168,6 +171,16 @@ die herkomst als niet-kennis berekende, mag niet onder het nieuwe contract
 worden vertrouwd. De bestaande owner valt terug op volledige historische
 validatie en verzegelt daarna opnieuw zijn afgeleide frontier; geen canonieke
 backfill, nieuwe lineage of curatorbeslissing bij startup.
+
+De volledige upload-HTTP-proef vond nog een bestaande HA-2-aansluitfout:
+nieuwe human-bronresten gebruikten de legacy v1-dispositionpolicy, waardoor
+zelfs exact gekoppelde en beoordeelde context opnieuw om een bronbesluit vroeg.
+Nieuwe seals pinnen daarom `source_accountability_version=source-accountability-v2`
+en gebruiken de bestaande T10-owner voor dekking en sluiting. Zonder die pin
+blijft de oorspronkelijke v1-uitvoer exact reproduceerbaar; bestaande seals en
+proofs worden niet herschreven of opnieuw beoordeeld. Een onbekende policy faalt
+expliciet. Deze versiekeuze sluit uitsluitend bewezen brongebruik; ze keurt geen
+claim goed en sluit ongekozen of ongedekte inhoud niet stilzwijgend af.
 
 Archief v12 / formation-sectie v5 bewaart ook de bestaande
 `publish_authorizations.authorization_payload` volledig. De oude v11-export

@@ -36,6 +36,12 @@ RETURNS TABLE(object_id TEXT) LANGUAGE SQL STABLE AS $body$
    UNION
    SELECT o.object_id FROM current_rows o JOIN pending p
      ON o.review_dependency_keys @> jsonb_build_object('objects',jsonb_build_array(p.object_id))
+     AND (EXISTS(SELECT 1 FROM unnest(ARRAY[o.payload->'proposed_knowledge_relations',
+       o.payload->'confirmed_knowledge_relations',o.payload->'relations',o.payload->'confirmed_relations']) family(links)
+       CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(links)='array' THEN links ELSE '[]'::jsonb END) edge
+       WHERE edge->>'target_object_id'=p.object_id AND edge->>'relation_type' NOT IN ('parent','child','child_of'))
+       OR o.payload @> jsonb_build_object('metadata',jsonb_build_object('confirmed_source_context',
+         jsonb_build_array(jsonb_build_object('source_object_id',p.object_id)))))
  ) SELECT pending.object_id FROM pending
 $body$;
 
@@ -70,7 +76,8 @@ BEGIN
    WHERE p.snapshot_id=NEW.snapshot_id AND p.sealed AND p.header->>'layout'='2' AND a.payload->>'state'='succeeded';
  IF first_generation IS NOT NULL AND EXISTS(SELECT 1 FROM workflow.annotation_commands c
    WHERE c.snapshot_id=NEW.snapshot_id AND c.result->>'annotation_id'=NEW.annotation_id
-     AND c.result->>'revision'=NEW.revision::text AND (c.result->>'generation')::bigint>first_generation)
+     AND c.result->>'revision'=NEW.revision::text AND (c.result->>'generation')::bigint>first_generation
+     AND c.result->'unchanged' IS DISTINCT FROM 'true'::jsonb)
    AND NOT EXISTS(SELECT 1 FROM workflow.formation_evidence_roots p JOIN workflow.formation_evidence_members m USING(proof_id)
      WHERE p.snapshot_id=NEW.snapshot_id AND p.sealed AND m.role='result'
        AND m.payload_text::jsonb#>>'{metadata,human_annotation,annotation_id}'=NEW.annotation_id) THEN
@@ -93,7 +100,9 @@ BEGIN
  b:=NEW.payload->'revision_basis';
  IF b IS NULL THEN RETURN NULL; END IF;
  IF b->>'version' IS DISTINCT FROM 'human-annotation-revision-v1'
-   OR jsonb_typeof(b->'objects')<>'array' OR NOT EXISTS(
+   OR b->>'actor_id' IS DISTINCT FROM NEW.created_by
+   OR (SELECT count(*) FROM jsonb_object_keys(b))<>4
+   OR jsonb_typeof(b->'objects') IS DISTINCT FROM 'array' OR NOT EXISTS(
    SELECT 1 FROM workflow.formation_evidence_roots p
    WHERE p.proof_id=b->>'proof_id' AND p.snapshot_id=NEW.snapshot_id AND p.sealed AND p.header->>'layout'='2')
    OR NOT EXISTS(SELECT 1 FROM workflow.accounts WHERE account_id=b->>'actor_id') THEN

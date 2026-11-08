@@ -546,3 +546,132 @@ def test_v11_human_proof_upgrade_preserves_absent_review_payload_without_inventi
     assert all(row['authorization_payload'] is None for row in upgraded['workflow_tables']['publish_authorizations'])
     assert upgraded['formation_recovery'] == state['formation_recovery']
     assert 'authorization_payload' not in old['workflow_tables']['publish_authorizations'][0]
+
+
+def test_structural_dependency_does_not_revoke_an_unchanged_claim_review(production_console, tmp_path):
+    console, actor, sid, original = saved_source(production_console, tmp_path, context_function='supported_by')
+    second = save_second_claim(console, actor, sid)
+    execute_build(console, actor, sid)
+    reviewer = console._envelope(sid)['named_reviewers'][0]
+    objects = {o['metadata']['human_annotation']['annotation_id']: o for o in console.snapshot_objects(sid)
+               if (o.get('metadata') or {}).get('human_annotation')}
+    first_id, second_id = objects[original['annotation_id']]['object_id'], objects[second['annotation_id']]['object_id']
+    console.confirm_relations(actor_id=reviewer, snapshot_id=sid, object_id=first_id,
+        relations=[{'relation_type':'parent', 'target_object_id':second_id}],
+        expected_revision=console.objects_revision(sid))
+    for oid in (first_id, second_id):
+        approve(console, sid, oid, reviewer)
+    first_binding = [b for b in console.object_review_bindings(sid) if b['object_id'] == first_id]
+    request = correction_request(console, sid, second)
+    next(a for a in request['selection']['ranges'] if a['role'] == 'evidence')['evidence_function'] = 'explains'
+    annotation.save(console, actor_id=reviewer, **request)
+    assert [b for b in console.object_review_bindings(sid) if b['object_id'] == first_id] == first_binding
+    execute_build(console, reviewer, sid)
+    assert [b for b in console.object_review_bindings(sid) if b['object_id'] == first_id] == first_binding
+
+
+def test_full_http_upload_pause_correction_build_review_publish_api_mcp_chain(production_console, tmp_path):
+    from time import monotonic, sleep
+    from urllib.parse import urlsplit, parse_qs
+    from starlette.testclient import TestClient
+    from tests.production_support import application_for
+    from tests.test_vsa_publish_readiness_ui_v1 import MemorySourceStore
+    from tests.test_ko_new_pages import compact_submission
+    from tests.test_formation_repair_workplace import form_data
+    console = production_console(root=tmp_path, immutable_source_store=MemorySourceStore())
+    actor = console.create_account(username='http-human', password='http-human-secret', roles=('researcher','reviewer'))['account_id']
+    publisher = console.create_account(username='publisher', password='http-publish-secret', roles=('publisher',))
+    html = ('<html><body><p>De kwetsbare huid verklaart de pijn.</p><p>Alleen bij klachten.</p>'
+            '<p>Onderzoek beschrijft dit verband.</p><p>De beoordeling betreft volwassenen.</p></body></html>')
+    def login(client):
+        assert client.post('/login', data={'username':'http-human','password':'http-human-secret'}, follow_redirects=False).status_code == 303
+    with TestClient(application_for(console)) as client:
+        login(client)
+        uploaded = client.post('/ingest', data={'ingest_kind':'new','title':'Volledige menselijke HTTP-keten',
+            'version':'1.0','date':'2026-11-08','class_':'richtlijn','family':'test','review_mode':'choice',
+            'review_option':'uploader_sole','source_status':'established'}, files={'file':('human.html',html.encode(),'text/html')})
+        assert uploaded.status_code == 200, uploaded.text
+        sid = parse_qs(urlsplit(str(uploaded.url)).query)['document'][0]
+        opened = client.post('/annotations/source', data={'document':sid,'expected_revision':console.objects_revision(sid)})
+        assert opened.status_code == 200
+        view = client.get('/annotations/api', params={'document':sid}).json()
+        core = anchor(view, 'De kwetsbare')
+        condition = anchor(view, 'Alleen', role='condition')
+        fields = {key:{'span':None,'missing_reason':'not_applicable'} for key in FIELDS}
+        for field, selected, text in [('subject_span',core,'De kwetsbare huid'), ('predicate_span',core,'verklaart'),
+                ('supported_object',core,'de pijn'), ('condition_span',condition,condition['quote'])]:
+            start = selected['quote'].index(text)
+            fields[field] = {'span':{'block_id':selected['block_id'],'start':start,'end':start+len(text)},'missing_reason':None,'quote':text}
+        fields.update(type_evidence_spans={'core':True},support_span={'core':True})
+        request = command(view, ranges=[core,condition,anchor(view,'Onderzoek',role='evidence',function='supported_by'),
+            anchor(view,'De beoordeling',role='context')], status='ready')
+        request['selection'].update(object_type='explanation', evidence_not_applicable=False,field_evidence=fields,required_links=[])
+        saved = client.post('/annotations/api', json=request)
+        assert saved.status_code == 200, saved.text
+    resumed = restart_production(console)
+    with TestClient(application_for(resumed)) as client:
+        login(client)
+        assert client.get('/annotations/api',params={'document':sid}).json()['entries'][0]['annotation_id'] == request['annotation_id']
+        for cycle in range(2):
+            page = client.get('/annotations', params={'document':sid,'overview':'true'})
+            assert page.status_code == 200 and 'Alleen bij klachten.' in page.text
+            closed = client.post('/annotations/finalize', data=form_data(page, '/annotations/finalize'))
+            assert closed.status_code == 200, closed.text
+            attempt = parse_qs(urlsplit(str(closed.url)).query)['attempt'][0]
+            deadline = monotonic()+10
+            while monotonic()<deadline:
+                state = client.get('/annotations/build/api',params={'document':sid,'attempt':attempt}).json()
+                if state['state'] != 'running':
+                    break
+                sleep(.05)
+            assert state['state'] == 'succeeded', state
+            if cycle == 0:
+                corrected = correction_request(resumed, sid, request)
+                next(a for a in corrected['selection']['ranges'] if a['role']=='evidence')['evidence_function'] = 'explains'
+                assert client.post('/annotations/api',json=corrected).status_code == 200
+        obj = candidate(resumed, sid)
+        review = client.get('/review', params={'document':sid,'object':obj['object_id']})
+        assert review.status_code == 200 and 'Verklaart de uitspraak' in review.text
+        judgment = compact_submission(review)
+        judgment.pop('evidence_not_applicable')
+        saved = client.post('/review', data=judgment)
+        assert saved.status_code == 200 and 'data-review-receipt' in saved.text
+        assert 'data-ko-assessment-form' not in client.get('/review',params={'document':sid,'object':obj['object_id']}).text
+    readiness = resumed.publication_readiness(sid)
+    assert readiness['publication_ready'], readiness['blockers']
+    release = resumed.publish(actor_id=publisher['account_id'], snapshot_id=sid)
+    from src.product_api_v1 import create_product_app
+    from tests.test_product_api_v1 import paths, registry, headers
+    public = TestClient(create_product_app('real', paths=paths(tmp_path), tenant_registry=registry(docs=('*',)),
+        canonical_publication_store=resumed.canonical_publication_store,immutable_source_store=resumed.immutable_source_store))
+    result = public.get('/v1/knowledge/'+obj['object_id'],headers=headers())
+    assert result.status_code == 200 and result.json()['release']['release_id'] == release['release_id']
+    assert 'Verklaart de uitspraak' in result.json()['content']
+    from src.settings.metis_mcp_queries_v1 import McpQueries
+    queries = McpQueries(restart_production(resumed), 'https://testserver')
+    status = queries.read(publisher, 'get_publication_status', {'snapshot_id':sid})
+    assert status['active_registry_object_count'] == release['published_items']
+    passages = queries.read(publisher, 'get_passages', {'snapshot_id':sid,'object_id':obj['object_id']})
+    assert passages['items'][0]['object_version'] == candidate(resumed, sid)['object_version']
+
+
+def test_source_policy_is_pinned_and_legacy_seals_keep_their_original_output(production_console, tmp_path):
+    from src.vorming.human_annotation_materialisation_v1 import build_objects
+    from src.vorming.source_accountability_v1 import evidence_of, is_source_record, VERSION, CONTAINERS_VERSION
+    console, actor, sid, _ = saved_source(production_console, tmp_path, context_function='supported_by')
+    receipt = execute_build(console, actor, sid)
+    with console.workflow_document_store._connect() as con:
+        seal = con.execute('SELECT payload FROM workflow.annotation_seals WHERE seal_id=%s', (receipt['seal_id'],)).fetchone()['payload']
+        entries = con.execute('SELECT v.annotation_id,v.revision,v.payload,v.payload_hash FROM workflow.annotation_heads h JOIN workflow.annotation_versions v USING(snapshot_id,annotation_id,revision) WHERE h.snapshot_id=%s ORDER BY h.position', (sid,)).fetchall()
+    fragments = console.review_source_fragments(sid)
+    current = build_objects(seal, entries, fragments=fragments)
+    assert {evidence_of(o)['version'] for o in current if is_source_record(o)} == {CONTAINERS_VERSION}
+    legacy = deepcopy(seal)
+    legacy.pop('source_accountability_version')
+    original = build_objects(legacy, entries, fragments=fragments)
+    assert {evidence_of(o)['version'] for o in original if is_source_record(o)} == {VERSION}
+    assert build_objects(legacy, entries, fragments=fragments) == original
+    assert [o['content'] for o in original] == [o['content'] for o in current]
+    invalid = {**seal, 'source_accountability_version':'unknown-policy'}
+    with pytest.raises(ValueError, match='annotation_source_policy_invalid'):
+        build_objects(invalid, entries, fragments=fragments)
