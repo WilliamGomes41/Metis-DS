@@ -39,9 +39,11 @@ MIGRATION_NAMES = (
     "031_review_dependency_keys.sql",
     "032_object_revision_frontiers.sql",
     "033_statement_object_generation.sql",
+    "034_human_annotations.sql",
 )
 REQUIRED_TABLES = frozenset(
     {
+        "annotation_sets", "annotation_versions", "annotation_heads", "annotation_commands",
         "document_inputs", "document_processing_records", "processing_archive_inputs",
         "object_revision_frontiers",
         "processing_archive_input_members", "processing_attempt_inputs",
@@ -108,6 +110,10 @@ REQUIRED_COLUMNS = frozenset(
 # (#930). `GRANT ... ON ALL TABLES` misses later tables, so verify checks these explicitly.
 _S, _I, _U, _D = "SELECT", "INSERT", "UPDATE", "DELETE"
 RUNTIME_TABLE_PRIVILEGES = {
+    "annotation_sets": (_S, _I, _U),
+    "annotation_versions": (_S, _I),
+    "annotation_heads": (_S, _I, _U),
+    "annotation_commands": (_S, _I),
     "accounts": (_S, _I, _U),
     "sessions": (_S, _I, _U, _D),
     "documents": (_S, _I, _U, _D),

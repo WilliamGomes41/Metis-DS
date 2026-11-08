@@ -2940,6 +2940,9 @@ class OperationsConsole:
     def _fragments_and_spec(self, kind, path, **command):
         """Explicit mutation-only formation boundary, preserving legacy callers."""
         context = command.get("formation_context") or {}
+        from src.vorming.human_annotation_v1 import owns_source
+        if owns_source(self, context.get('snapshot_id')):
+            raise ConsoleError('annotation_source_owned')
         reuse = context.get("extraction_reuse_summary")
         diagnostic = context.get("diagnostic_checkpoint")
         if reuse is not None and diagnostic:

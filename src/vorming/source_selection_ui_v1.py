@@ -512,6 +512,10 @@ def install(app, console, require, page, nav, esc):
                       repair_kind: str = 'source_units', repair_saved: str = '', graph_saved: str = '', review_revision: str = ''):
         with diagnostic_phase("authorization"):
             actor = require(request)
+        if document:
+            from src.vorming.human_annotation_v1 import owns_source
+            if owns_source(console, document):
+                return RedirectResponse('/annotations?' + urlencode({'document':document}), status_code=303)
         if task == 'structure' and document:
             return render_structure(console, actor, document, q=q, page=review_page)
         if task == 'graph' and document:
@@ -604,6 +608,8 @@ def install(app, console, require, page, nav, esc):
             else:
                 action = '<p>Hervatten is nu niet beschikbaar. Bekijk de vormingsproblemen hieronder voor de vervolgstap.</p>'
             progress = ''
+            if envelope.get('received_source') and envelope.get('class') != 'beslisboom' and result['state'] == 'nog niet gestart':
+                action += '<p><a class="btn-secondary" href="/annotations?' + esc(urlencode({'document':sid})) + '">Bron aanwijzen en later hervatten</a></p>'
             if result['state'] == 'bezig':
                 elapsed = result['elapsed_seconds']
                 phase = {'source_and_validation': 'Bron lezen en controleren', 'reserved': 'Gereserveerd',
