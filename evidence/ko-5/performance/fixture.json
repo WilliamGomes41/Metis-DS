@@ -1,0 +1,12 @@
+{
+  "dsn": "postgresql://postgres@127.0.0.1:55440/ko5_perf_final_fixture_v1",
+  "database": "ko5_perf_final_fixture_v1",
+  "snapshot_id": "snap-d1e2dc2815ec51d5-e7efd6a0",
+  "object_id": "console-ko5-perf-ko5-synthetic-performance-1-0-d1e2dc28-sem-50d47fa1e12f534b",
+  "objects": 925,
+  "root": "/workspace/ko5-perf-final-evidence/fixture",
+  "postgres": "PostgreSQL 17.11 (Debian 17.11-0+deb13u1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+  "baseline_sha": "07db5080666f0428a454f5a705e50825a4fc5506",
+  "base_dsn": "postgresql://postgres@127.0.0.1:55440/ko5_perf_final_base_v1",
+  "head_dsn": "postgresql://postgres@127.0.0.1:55440/ko5_perf_final_head_v1"
+}

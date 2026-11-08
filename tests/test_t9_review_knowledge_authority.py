@@ -19,7 +19,6 @@ from src.review.knowledge_path_v1 import content_reviewable
 from src.operations_console_v1 import ConsoleError, SNAPSHOT_OBJECT_WRITE_CONFLICT
 from src.review.proportionate_review_v1 import regular_review_queue
 from src.review.review_duty_v1 import exact_current_approver_ids, reviewer_route_for
-from src.review.review_workflow_v3 import apply_reviews
 from src.review.review_ledger import read_events
 from tests.semantic_fixture_support import bind_fixture_selections
 from test_t4_single_knowledge_path_invariants import _allowed_candidate, _allowed_source, _binding
@@ -43,33 +42,6 @@ def _console(tmp_path, *, production_console, title="Begrippen"):
 def _approve(console, reviewer, sid, obj, **kwargs):
     return console.review_object(actor_id=reviewer["account_id"], snapshot_id=sid,
         object_id=obj["object_id"], decision="approve", confirmed_object_type="definition", assessment=affirmative_assessment(), evidence_not_applicable=True, **kwargs)
-
-
-@pytest.mark.parametrize("kind", ["blocked", "deterministic", "coverage", "heading", "malformed"])
-def test_direct_workflow_cannot_create_content_authority_without_candidate(tmp_path, kind, *, production_console):
-    console, reviewer, sid, candidate = _console(tmp_path, production_console=production_console)
-    obj = deepcopy(candidate)
-    semantic = obj["metadata"]["semantic_passage"]
-    if kind == "blocked":
-        obj["metadata"]["admission"]["gate_result"] = "blocked"
-    elif kind == "deterministic":
-        obj["metadata"].pop("semantic_passage")
-    elif kind == "coverage":
-        semantic["selection_origin"] = "coverage_remainder"
-    elif kind == "heading":
-        obj["object_type"] = "heading"
-        obj["proposed_object_type"] = "heading"
-    else:
-        semantic["spans"][0]["end"] = -1
-    stamp_canonical_hashes(obj)
-    ledger = tmp_path / "isolated-review.jsonl"
-    before = deepcopy(obj)
-    updated, report = apply_reviews([obj], [{"object_id": obj["object_id"], "decision": "approve",
-        "reviewer": reviewer["username"], "reviewed_canonical_object_hash": exact_review_snapshot_hash(obj)}],
-        track=obj["governance"]["review_track"], schema_path=console.schema_path, ledger_path=ledger)
-    assert report["errors"], "Direct workflow must refuse content review"
-    assert updated == [before]
-    assert not ledger.exists() or not ledger.read_text().strip()
 
 
 @pytest.mark.parametrize("field", ["text", "spans", "context", "type", "relations"])

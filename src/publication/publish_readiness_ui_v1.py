@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse
 
 from src.publication.canonical_publication_postgres_v1 import CanonicalPublicationStoreError, PostgresCanonicalPublicationStore
 from src.publication.durable_publication_console_v1 import DurablePublicationConsole
-from src.documents.document_status_v1 import derive_document_status
+from src.documents.document_status_v1 import derive_lifecycle_status
 
 from src.operations_console_app import (
     BLOCKER_LABELS,
@@ -432,10 +432,9 @@ def install_publish_readiness_ui(app: FastAPI, console: OperationsConsole) -> No
                 considered=considered,
             )
             _apply_release_state(console, envelope, view)
-            display_status = _RELEASE_DISPLAY.get(view["overall_state"]) or derive_document_status(
-                envelope_state="captured_not_published",
-                readiness=considered,
-            )
+            display_status = _RELEASE_DISPLAY.get(view["overall_state"]) or derive_lifecycle_status(
+                release_status="none", serving_status="inactive", readiness=considered,
+            )["presentation_status"]
             rows.append(_card(envelope, view, display_status))
 
         if rows and other_rows:

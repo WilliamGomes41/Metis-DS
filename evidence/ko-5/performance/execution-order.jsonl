@@ -1,0 +1,10 @@
+{"sequence": 1, "round": 1, "side": "base", "pair_order": "AB", "started": "2026-11-07T23:52:16.849364+00:00", "load": "23:52:16 up 16:55,  0 users,  load average: 0.84, 1.15, 0.82"}
+{"sequence": 2, "round": 1, "side": "head", "pair_order": "AB", "started": "2026-11-07T23:52:19.020546+00:00", "load": "23:52:19 up 16:55,  0 users,  load average: 0.84, 1.15, 0.82"}
+{"sequence": 3, "round": 2, "side": "head", "pair_order": "BA", "started": "2026-11-07T23:52:20.698581+00:00", "load": "23:52:20 up 16:55,  0 users,  load average: 0.84, 1.15, 0.82"}
+{"sequence": 4, "round": 2, "side": "base", "pair_order": "BA", "started": "2026-11-07T23:52:22.400849+00:00", "load": "23:52:22 up 16:55,  0 users,  load average: 0.77, 1.13, 0.82"}
+{"sequence": 5, "round": 3, "side": "base", "pair_order": "AB", "started": "2026-11-07T23:52:24.338312+00:00", "load": "23:52:24 up 16:55,  0 users,  load average: 0.77, 1.13, 0.82"}
+{"sequence": 6, "round": 3, "side": "head", "pair_order": "AB", "started": "2026-11-07T23:52:26.249266+00:00", "load": "23:52:26 up 16:55,  0 users,  load average: 0.77, 1.13, 0.82"}
+{"sequence": 7, "round": 4, "side": "head", "pair_order": "BA", "started": "2026-11-07T23:52:27.966411+00:00", "load": "23:52:27 up 16:55,  0 users,  load average: 0.79, 1.13, 0.82"}
+{"sequence": 8, "round": 4, "side": "base", "pair_order": "BA", "started": "2026-11-07T23:52:29.624289+00:00", "load": "23:52:29 up 16:55,  0 users,  load average: 0.79, 1.13, 0.82"}
+{"sequence": 9, "round": 5, "side": "base", "pair_order": "AB", "started": "2026-11-07T23:52:31.494629+00:00", "load": "23:52:31 up 16:55,  0 users,  load average: 0.79, 1.13, 0.82"}
+{"sequence": 10, "round": 5, "side": "head", "pair_order": "AB", "started": "2026-11-07T23:52:33.324824+00:00", "load": "23:52:33 up 16:55,  0 users,  load average: 0.81, 1.13, 0.82"}

@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 
 from src.documents.document_status_v1 import (
     DocumentStatusReadinessMixin,
-    derive_document_status,
+    derive_lifecycle_status,
 )
 from src.publication.durable_publication_console_v1 import DurablePublicationConsole
 from src.g2_source_store import G2SourceStoreError, build_g2_locator
@@ -205,26 +205,26 @@ def _assert_room_statuses(
 
 
 def test_status_precedence_is_deterministic_and_fail_closed() -> None:
-    assert derive_document_status(
-        envelope_state="published",
+    assert derive_lifecycle_status(
+        release_status="published", serving_status="active",
         readiness={"publication_ready": False},
-    ) == "published"
-    assert derive_document_status(
-        envelope_state="captured_not_published",
+    )["presentation_status"] == "published"
+    assert derive_lifecycle_status(
+        release_status="none", serving_status="inactive",
         readiness={"publication_ready": True},
-    ) == "ready_for_publication"
-    assert derive_document_status(
-        envelope_state="captured_not_published",
+    )["presentation_status"] == "ready_for_publication"
+    assert derive_lifecycle_status(
+        release_status="none", serving_status="inactive",
         readiness={"curation_ready": True, "technical_ready": False},
-    ) == "blocked"
-    assert derive_document_status(
-        envelope_state="captured_not_published",
+    )["presentation_status"] == "blocked"
+    assert derive_lifecycle_status(
+        release_status="none", serving_status="inactive",
         readiness={"curation_ready": False, "technical_ready": True},
-    ) == "in_review"
-    assert derive_document_status(
-        envelope_state="captured_not_published",
+    )["presentation_status"] == "in_review"
+    assert derive_lifecycle_status(
+        release_status="none", serving_status="inactive",
         readiness={},
-    ) == "processing"
+    )["presentation_status"] == "processing"
 
 
 def test_read_only_status_does_not_widen_publisher_authority(tmp_path: Path, *, production_console) -> None:

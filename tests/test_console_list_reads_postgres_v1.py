@@ -198,7 +198,9 @@ def _closed_objects(snapshot_id: str) -> list[dict[str, Any]]:
 class _ListReadSubject(_PostgresBadgeCountsMixin, ProportionateReviewConsole):
     def __init__(self, store: PostgresWorkflowDocumentRuntimeStore, account_id: str) -> None:
         self.workflow_document_store = store
-        self.canonical_publication_store = None
+        # Explicit empty canonical authority; this fixture measures workflow reads.
+        from tests.test_console_badge_counts_postgres_v1 import _CanonicalStore
+        self.canonical_publication_store = _CanonicalStore(set())
         self.account_id = account_id
         from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
         self.workflow_review_store = PostgresWorkflowReviewStore(store.config)

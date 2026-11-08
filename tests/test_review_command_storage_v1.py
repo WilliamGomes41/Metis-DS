@@ -51,7 +51,7 @@ def test_native_review_delta_retains_unrelated_physical_rows_and_appends(complet
     after[-1]["text"] = "A reviewed"
     after.append({**after[-1], "object_version": "1.2", "text": "A successor"})
     envelope = documents.get_envelope(sid)
-    updated = {**envelope, "review_passes": {reviewer: {"passed": True, "object_id": "delta-a"}}}
+    updated = deepcopy(envelope)
     documents.apply_review_changes(sid, before, after, envelope, updated, commit_count=2)
     current = object_storage(documents, sid)
     assert current[0] == stored[0]  # Retained predecessor, not rewritten.
@@ -61,7 +61,7 @@ def test_native_review_delta_retains_unrelated_physical_rows_and_appends(complet
     assert current[3]["position"] == 3
     assert documents.review_command_histories(sid, ["delta-a"]) == after
     assert document_counters(documents, sid)["revision"] == counters["revision"] + 2
-    assert documents.get_envelope(sid)["review_passes"] == updated["review_passes"]
+    assert documents.get_envelope(sid).get("review_passes") == envelope.get("review_passes")
     # A completed later command preserves its compact-form invalidation effect.
     stable = object_storage(documents, sid)
     current_envelope = documents.get_envelope(sid)

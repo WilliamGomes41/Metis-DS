@@ -154,18 +154,23 @@ def test_response_cannot_activate_after_concurrent_change(workflow_postgres,tmp_
         elif change=='source':
             console._source_cache_path(envelope).write_bytes(b'changed-source')
         else:
-            envelope['review_passes']={'retained-review':{'decision':'approve','object_revision':'prior'}}
-            second.workflow_document_store.write_bundle(envelope=envelope)
+            from tests.test_workflow_postgres_concurrency import _authorization
+            second.workflow_document_store.write_bundle(envelope=envelope, objects=[{
+                'object_id': 'existing-a', 'object_version': '1.0',
+                'governance': {'validation_status': 'approved'}}])
+            second.workflow_review_store.replace_snapshot_bindings(envelope['snapshot_id'], [
+                _authorization(envelope['snapshot_id'], 'existing-a', envelope['named_reviewers'][0])])
         return response(payload)
     with peer(body=changed) as (url,_):
         bind(console,monkeypatch,url,slow=True)
         with pytest.raises(ConsoleError):console.ingest(**command(actor,reviewer))
     final=_console(tmp_path,workflow_postgres)
     envelope=final._processing_history_envelope(final.list_envelopes()[0]['snapshot_id'])
-    assert final.snapshot_objects(envelope['snapshot_id'])==[]
+    assert bool(final.snapshot_objects(envelope['snapshot_id'])) == (change == 'review')
     assert envelope['processing_attempts'][-1]['state']=='failed'
     assert envelope['publication_eligibility']==PRE_REVIEW_BLOCKED
-    if change=='review':assert envelope['review_passes']['retained-review']['decision']=='approve'
+    if change=='review':
+        assert final.object_review_bindings(envelope['snapshot_id'])[0]['decision']=='approve'
 
 
 def test_reviewer_decision_during_native_reextract_survives_stale_activation(workflow_postgres,tmp_path,monkeypatch):

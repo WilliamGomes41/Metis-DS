@@ -79,14 +79,11 @@ def test_html_provenance_contract_retains_source_locator():
 
 
 def test_canonical_store_uses_integrity_kernel_hashes():
-    from src.publication.canonical_store import first_review_snapshot_hash, recompute_content_hash
     from src.integrity_kernel import compute_canonical_object_hash, exact_review_snapshot_hash
 
     records = _read_jsonl(FIXTURES / "fractuurpreventie_page15_semantic_v21.jsonl")
     obj = records[0]
-    assert recompute_content_hash(obj) == compute_canonical_object_hash(obj)
-    assert first_review_snapshot_hash(obj) == exact_review_snapshot_hash(obj)
-    assert recompute_content_hash(obj) == first_review_snapshot_hash(obj)
+    assert compute_canonical_object_hash(obj) == exact_review_snapshot_hash(obj)
     tampered = dict(obj)
     tampered["source"] = dict(obj["source"], title="tampered")
-    assert recompute_content_hash(tampered) != recompute_content_hash(obj)
+    assert compute_canonical_object_hash(tampered) != compute_canonical_object_hash(obj)

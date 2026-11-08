@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Authoritative CLI for the V&VN Data Services pilot."""
+"""Repository inspection, source preparation and PostgreSQL console CLI."""
 from __future__ import annotations
 import argparse, json
 from pathlib import Path
@@ -7,7 +7,6 @@ from pathlib import Path
 import os
 
 from src.review.build_review_queue_v3 import build as build_review_queue, read_jsonl
-from src.publication.prepublication_gate_v3 import evaluate as evaluate_prepublication
 from src.ingest.source_registry import register_source
 from src.ingest.bind_source_manifest import bind as bind_source_manifest
 from src.vorming.extract_html_v1 import extract as extract_html, validate as validate_html_raw
@@ -64,10 +63,6 @@ def cmd_semantic_generic(a: argparse.Namespace) -> dict:
         "schema_errors": errors,
         "out": str(a.out),
     }
-def cmd_prepublish(a:argparse.Namespace)->dict:
-    return evaluate_prepublication(read_jsonl(a.input),schema=a.schema,source_registry=a.source_registry,raw_extract=a.raw_extract)
-
-
 def cmd_audit_current(a:argparse.Namespace)->dict:
     from src.integrity_kernel import load_raw_objects, schema_errors, validate_hashes, validate_source_fragments, validate_parent_relations
     rows=read_jsonl(a.input); raw=load_raw_objects(a.raw_extract)
@@ -76,10 +71,8 @@ def cmd_audit_current(a:argparse.Namespace)->dict:
         e=schema_errors(o,a.schema)+validate_hashes(o)+validate_source_fragments(o,raw)
         if e: object_errors.append({'object_id':o['object_id'],'errors':e})
     relation_errors=validate_parent_relations(rows)
-    pre=evaluate_prepublication(rows,schema=a.schema,source_registry=a.source_registry,raw_extract=a.raw_extract)
     integrity_ok=not object_errors and not relation_errors
-    return {'status':'PASS' if integrity_ok else 'BLOCKED','integrity_ok':integrity_ok,'object_count':len(rows),'object_errors':object_errors,'relation_errors':relation_errors,
-            'publication_gate':pre['status'],'publication_blocker_count':len(pre['errors'])}
+    return {'status':'PASS' if integrity_ok else 'BLOCKED','integrity_ok':integrity_ok,'object_count':len(rows),'object_errors':object_errors,'relation_errors':relation_errors}
 
 
 
@@ -133,11 +126,10 @@ def cmd_processing_retry(a: argparse.Namespace) -> dict:
 
 def main()->int:
     ap=argparse.ArgumentParser(prog='vvn-data-service'); sub=ap.add_subparsers(dest='cmd',required=True)
-    p=sub.add_parser('audit-current'); p.add_argument('--input',type=Path,default=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl'); p.add_argument('--schema',type=Path,default=ROOT/'schemas/knowledge_object.schema.v1.1.json'); p.add_argument('--source-registry',type=Path,default=ROOT/'data/source_registry.json'); p.add_argument('--raw-extract',type=Path,default=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_raw.jsonl'); p.add_argument('--report',type=Path)
+    p=sub.add_parser('audit-current'); p.add_argument('--input',type=Path,default=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_semantic_v21.jsonl'); p.add_argument('--schema',type=Path,default=ROOT/'schemas/knowledge_object.schema.v1.1.json'); p.add_argument('--raw-extract',type=Path,default=ROOT/'data/fixtures/baseline_v0_1/fractuurpreventie_page15_raw.jsonl'); p.add_argument('--report',type=Path)
     p=sub.add_parser('review-queue'); p.add_argument('--input',type=Path,required=True); p.add_argument('--track',choices=['clinical','technical'],required=True); p.add_argument('--out',type=Path,required=True); p.add_argument('--report',type=Path); p.add_argument('--raw-extract',type=Path,required=True); p.add_argument('--bindings',type=Path,required=True); p.add_argument('--review-path',choices=['richtlijn','boom'],default='richtlijn')
     p=sub.add_parser('source-register'); p.add_argument('--source-id',required=True); p.add_argument('--binary',type=Path,required=True); p.add_argument('--source-url',required=True); p.add_argument('--version'); p.add_argument('--out',type=Path,required=True); p.add_argument('--report',type=Path)
     p=sub.add_parser('source-bind'); p.add_argument('--manifest',type=Path,required=True); p.add_argument('--source-registry',type=Path,required=True); p.add_argument('--out',type=Path,required=True); p.add_argument('--report',type=Path)
-    p=sub.add_parser('prepublish'); p.add_argument('--input',type=Path,required=True); p.add_argument('--schema',type=Path,required=True); p.add_argument('--source-registry',type=Path,required=True); p.add_argument('--raw-extract',type=Path,required=True); p.add_argument('--report',type=Path)
     p=sub.add_parser('extract-html'); p.add_argument('--input',type=Path,required=True); p.add_argument('--document-id',required=True); p.add_argument('--source-id',required=True); p.add_argument('--schema',type=Path,default=ROOT/'schemas/raw_fragment.schema.v1.1.json'); p.add_argument('--out',type=Path,required=True); p.add_argument('--report',type=Path)
     p=sub.add_parser('semantic-generic'); p.add_argument('--spec',type=Path,required=True); p.add_argument('--manifest',type=Path,required=True); p.add_argument('--raw',type=Path,required=True); p.add_argument('--schema',type=Path,default=ROOT/'schemas/knowledge_object.schema.v1.2.json'); p.add_argument('--out',type=Path,required=True); p.add_argument('--report',type=Path)
     p=sub.add_parser('serve'); p.add_argument('--mode',choices=['real','fixture'],default='real'); p.add_argument('--host',default='0.0.0.0'); p.add_argument('--port',type=int,default=8000)
@@ -154,7 +146,6 @@ def main()->int:
         elif a.cmd=='review-queue': rep=cmd_review_queue(a)
         elif a.cmd=='source-register': rep=cmd_source_register(a)
         elif a.cmd=='source-bind': rep=cmd_source_bind(a)
-        elif a.cmd=='prepublish': rep=cmd_prepublish(a)
         elif a.cmd=='extract-html': rep=cmd_extract_html(a)
         elif a.cmd=='semantic-generic': rep=cmd_semantic_generic(a)
         elif a.cmd=='serve': rep=cmd_serve(a)

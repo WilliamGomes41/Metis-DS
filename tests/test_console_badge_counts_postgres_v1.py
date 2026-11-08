@@ -319,7 +319,7 @@ def test_badges_use_constant_round_trips_and_reflect_next_read() -> None:
         first = subject.waiting_task_counts(account_id)
         assert first == {
             "ingest": 1,
-            "tree": 1,
+            "tree": 0,
             "review": 1,
             "publish": 2,
             "accounts": 0,

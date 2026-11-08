@@ -68,7 +68,10 @@ class _BoundaryConsole(
     PublicationReadinessMixin,
     _TechnicalGate,
 ):
-    pass
+    def document_release_serving_status(self, snapshot_id, *, envelope=None):
+        # Unit input from the canonical owner, independent of envelope state.
+        assert snapshot_id == 'snap-test'
+        return {'release_status': 'none', 'serving_status': 'inactive'}
 
 
 def test_document_status_has_no_publisher_impersonation_boundary() -> None:

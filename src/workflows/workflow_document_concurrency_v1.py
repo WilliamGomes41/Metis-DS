@@ -317,7 +317,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
         changed_fields = {key for key in set(envelope_before) | set(envelope_after)
                           if (key in envelope_before) != (key in envelope_after)
                           or _json_text(envelope_before.get(key)) != _json_text(envelope_after.get(key))}
-        if changed_fields - {"review_passes"}:
+        if changed_fields:
             raise WorkflowDocumentStoreError("workflow_review_envelope_delta_unsupported")
         if commit_count == 0 and (_json_text(list(before_objects)) != _json_text(list(after_objects)) or changed_fields):
             raise WorkflowDocumentStoreError("workflow_review_commit_count_invalid")
@@ -341,7 +341,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
 
         The caller owns review semantics and its precondition. This storage
         boundary independently protects sealing, captured history, append order
-        and the only supported envelope delta (review-pass evidence).
+        and an unchanged captured envelope.
         """
         from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
 
@@ -354,9 +354,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                     con.execute("SELECT set_config('metis.document_storage_writer','v1',true)")
                     PostgresWorkflowReviewStore._lock_authorizations(con)
                     document = con.execute(
-                        "SELECT state,document_storage_version,CASE WHEN document_storage_version=1 THEN "
-                        "(SELECT metadata->'review_passes' FROM workflow.document_inputs i WHERE i.snapshot_id=d.snapshot_id) "
-                        "ELSE envelope_payload->'review_passes' END AS review_passes "
+                        "SELECT state,document_storage_version "
                         "FROM workflow.documents d WHERE snapshot_id=%s FOR UPDATE", (snapshot_id,),
                     ).fetchone()
                     if document is None:
@@ -475,35 +473,7 @@ class PostgresConcurrentWorkflowDocumentStore(PostgresWorkflowDocumentRuntimeSto
                                 )
                                 verify_written(changed, obj, tail + offset)
                                 affected[obj['object_id']] += changed.rowcount
-                    if "review_passes" in changed_fields:
-                        previous = envelope_before.get("review_passes") or {}
-                        following = envelope_after.get("review_passes") or {}
-                        current_passes = document["review_passes"] or {}
-                        if not all(isinstance(value, dict) for value in (previous, following, current_passes)):
-                            raise WorkflowDocumentStoreError("workflow_review_envelope_delta_unsupported")
-                        if set(previous) - set(following):
-                            raise WorkflowDocumentStoreError("workflow_review_envelope_delta_unsupported")
-                        changes = {actor: value for actor, value in following.items()
-                                   if actor not in previous or previous[actor] != value}
-                        for actor in changes:
-                            if ((actor in current_passes) != (actor in previous)
-                                    or current_passes.get(actor) != previous.get(actor)):
-                                raise WorkflowDocumentStoreError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
-                        if document['document_storage_version']==1:
-                            con.execute("UPDATE workflow.document_inputs SET metadata=jsonb_set(metadata,'{review_passes}',"
-                                "COALESCE(NULLIF(metadata->'review_passes','null'::jsonb),'{}'::jsonb)||%s::jsonb,true) "
-                                "WHERE snapshot_id=%s",(_json_text(changes),snapshot_id))
-                            if commit_count>1:
-                                con.execute('UPDATE workflow.documents SET revision=revision+%s WHERE snapshot_id=%s',
-                                    (commit_count-1,snapshot_id))
-                        else:
-                            con.execute(
-                                "UPDATE workflow.documents SET revision=revision+%s,updated_at=CURRENT_TIMESTAMP, "
-                                "envelope_payload=jsonb_set(envelope_payload,"
-                                "'{review_passes}',COALESCE(NULLIF(envelope_payload->'review_passes','null'::jsonb),"
-                                "'{}'::jsonb)||%s::jsonb,true) WHERE snapshot_id=%s", (commit_count, _json_text(changes), snapshot_id),
-                            )
-                    elif commit_count:
+                    if commit_count:
                         con.execute(
                             "UPDATE workflow.documents SET revision=revision+%s,updated_at=CURRENT_TIMESTAMP "
                             "WHERE snapshot_id=%s", (commit_count, snapshot_id),

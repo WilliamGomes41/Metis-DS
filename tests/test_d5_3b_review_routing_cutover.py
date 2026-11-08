@@ -225,8 +225,7 @@ def test_second_review_approval_preserves_canonical_tuple_and_is_idempotent(tmp_
     after = next(row for row in console.snapshot_objects(snapshot_id) if row["object_id"] == object_id)
     assert after["object_version"] == before_version
     assert compute_canonical_object_hash(after) == before_hash
-    assert after["governance"]["second_review"]["status"] == "approved"
-    assert after["governance"]["second_review"]["reviewer"] == accounts["reviewer_b"]["username"]
+    assert after["governance"]["second_review"] == before["governance"]["second_review"]
 
     bindings = console.object_review_bindings(snapshot_id)
     assert set(exact_current_approver_ids(after, bindings)) == {

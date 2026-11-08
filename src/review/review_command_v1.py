@@ -180,9 +180,9 @@ def _prepare_review_source_inputs(console, envelope, original_ids):
     return envelope, source_path, frozen, fragments, source_failure, original_checks
 
 
-def _command_envelope(documents, snapshot_id):
+def _command_input(documents, snapshot_id):
     try:
-        return documents.review_document_input(snapshot_id, command=True)[0]
+        return documents.review_document_input(snapshot_id, command=True)
     except WorkflowDocumentStoreError as exc:
         code = 'unknown_snapshot' if str(exc) == 'unknown_snapshot' else 'workflow_document_unavailable'
         raise ConsoleError(code) from exc
@@ -274,7 +274,7 @@ def execute_review_command(console, submitted, invoke, *, completed_command=None
     changes = None
     with detached_document_reads():
         console._require_role(command['actor_id'], 'reviewer')
-        envelope = _command_envelope(documents, sid)
+        envelope, preparation_counters = _command_input(documents, sid)
         if command['actor_id'] not in envelope.get('named_reviewers', []):
             raise ConsoleError('reviewer_not_named_on_snapshot')
         console._require_mutable_working_revision(sid)
@@ -306,6 +306,11 @@ def execute_review_command(console, submitted, invoke, *, completed_command=None
                                 if completed is not None:
                                     return completed
                         elif expected is not None:
+                            # m2 still witnesses the complete object set. Reuse
+                            # the captured document counters to also refuse an
+                            # intervening binding-only winner during preparation.
+                            if counters != preparation_counters:
+                                raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT)
                             # Explicit old-token compatibility; the compact POST
                             # never enters this whole-objectset equality adapter.
                             actual = documents.objects_revision(sid)
@@ -451,7 +456,7 @@ def _execute_prepared_command(console, command, invoke, *, compact=False, admiss
         return serial()
     with detached_document_reads():
         console._require_role(command['actor_id'], 'reviewer')
-        envelope = _command_envelope(store, sid)
+        envelope, _ = _command_input(store, sid)
         if source_resolution and not envelope.get('prepared_source_extraction'):
             # Historical source recovery needs the original complete envelope;
             # a compact header is not an authoritative extraction checkpoint.

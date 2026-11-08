@@ -1023,7 +1023,6 @@ class OperationsConsole:
         ingest = 0
         review = 0
         publish = 0
-        tree = 0
         for envelope in envelopes:
             objects = self._load_objects(envelope["snapshot_id"], remember=False)
             statuses = {(row.get("governance") or {}).get("validation_status") for row in objects}
@@ -1040,8 +1039,6 @@ class OperationsConsole:
                     review += 1
                 elif "needs_review" in statuses:
                     review += 1
-            if envelope.get("clinical_rereview_required") and roles & {"researcher", "reviewer", "publisher"}:
-                tree += 1
             if (
                 "publisher" in roles
                 and envelope.get("state") == CAPTURED
@@ -1079,7 +1076,7 @@ class OperationsConsole:
             ingest = 0
         return {
             "ingest": ingest,
-            "tree": tree,
+            "tree": 0,  # Compatibility slot; review work belongs to the Review queue.
             "review": review,
             "publish": publish,
             "accounts": 0,
@@ -1652,12 +1649,10 @@ class OperationsConsole:
             "named_reviewers": reviewers,
             "uploader_account_id": actor_id,
             "source_declaration": {"status": source_status, "declared_by": actor_id, "declared_at": utc_now()},
-            "review_passes": {},
             "is_live_capture": ingest_kind == "new",
             "replaces_snapshot_id": replaces_snapshot_id,
             "revision_reason": revision_reason,
             "object_diff": None,
-            "clinical_rereview_required": False,
             "acquired_at": utc_now(),
             "console_version": CONSOLE_VERSION,
         }
@@ -2006,7 +2001,7 @@ class OperationsConsole:
         result = status(envelope, policy=self._processing_limits())
         if (self.snapshot_is_published(snapshot_id)
                 or self._read_current_objects(snapshot_id)
-                or self.object_review_bindings(snapshot_id, objects=self._read_current_objects(snapshot_id)) or envelope.get("review_passes")):
+                or self.object_review_bindings(snapshot_id, objects=self._read_current_objects(snapshot_id))):
             result["retry_allowed"] = False
         from src.vorming.recoverable_formation_v1 import incomplete
         stored_incomplete = incomplete(envelope)
@@ -2109,7 +2104,7 @@ class OperationsConsole:
         # cutover. Preserve the existing human-work guard for both formats.
         return bool(pending
             and not self.snapshot_is_published(snapshot_id)
-            and not self.object_review_bindings(snapshot_id) and not envelope.get("review_passes")
+            and not self.object_review_bindings(snapshot_id)
             and not any(((row.get("governance") or {}).get("validation_status") not in {None, "needs_review"}
                      and not ((row.get("governance") or {}).get("validation_status") == "superseded"
                               and (lineage_evidence(row) or {}).get("reason") == "same-source candidate retirement"))
@@ -2201,7 +2196,7 @@ class OperationsConsole:
             objects, revision = self.snapshot_objects_and_revision(snapshot_id, include_blocked=True)
             if (not self._can_resume_formation(snapshot_id)
                     and (envelope.get("publication_eligibility") != PRE_REVIEW_BLOCKED or objects
-                         or self._bindings.get(snapshot_id) or envelope.get("review_passes"))):
+                         or self._bindings.get(snapshot_id))):
                 raise ConsoleError("pre_review_retry_existing_work")
             expire_running(envelope, now())
             attempts = envelope.get("processing_attempts") or []
@@ -2342,7 +2337,7 @@ class OperationsConsole:
             if not duplicate:
                 if envelope.get("publication_eligibility") != PRE_REVIEW_BLOCKED:
                     raise ConsoleError("pre_review_reprocess_not_required")
-                if objects or self._bindings.get(snapshot_id) or envelope.get("review_passes"):
+                if objects or self._bindings.get(snapshot_id):
                     raise ConsoleError("pre_review_retry_existing_work")
                 # Reservation MOET read the configuration in force now; fail closed if unreadable.
                 try:
@@ -2399,11 +2394,10 @@ class OperationsConsole:
             if attempt["expected_revision"] != expected_revision:
                 raise ConsoleError(SNAPSHOT_OBJECT_WRITE_CONFLICT, current_revision=expected_revision)
             if (attempt.get("kind", "retry") == "retry" and (envelope.get("publication_eligibility") != PRE_REVIEW_BLOCKED
-                    or self.snapshot_objects(snapshot_id) or self._bindings.get(snapshot_id)
-                    or envelope.get("review_passes"))):
+                    or self.snapshot_objects(snapshot_id) or self._bindings.get(snapshot_id))):
                 raise ConsoleError("pre_review_retry_existing_work")
         from src.review.source_context_review_v1 import ROLE_KEY, LINKS_KEY
-        if (self._bindings.get(snapshot_id) or envelope.get("review_passes") or
+        if (self._bindings.get(snapshot_id) or
                 any(((row.get("governance") or {}).get("validation_status") not in {None, "needs_review"}
                      and not ((row.get("governance") or {}).get("validation_status") == "superseded"
                               and (lineage_evidence(row) or {}).get("reason") == "same-source candidate retirement"))
@@ -2503,7 +2497,6 @@ class OperationsConsole:
                                               actor=actor_id, with_graph=bool(envelope.get("review_policy"))))
         if isinstance(replay_record, dict):
             prepared_envelope["semantic_replay"] = deepcopy(replay_record)
-        prepared_envelope["review_passes"] = {}
         prepared_envelope["state"] = CAPTURED
         prepared_envelope["publication_eligibility"] = (
             "eligible_for_transform_and_review"
@@ -3103,7 +3096,6 @@ class OperationsConsole:
             family = self.resolve_family_label(new_family)
             envelope = deepcopy(self._envelope(snapshot_id))
             envelope["family"] = family
-            envelope["clinical_rereview_required"] = False
             self._commit_prepared_store(
                 envelopes={snapshot_id: envelope},
                 snapshot_id=snapshot_id,
@@ -3117,7 +3109,6 @@ class OperationsConsole:
             governance["validated_by"] = None
             governance["validation_date"] = None
             governance["review_snapshot_hash"] = None
-            governance["publication_status"] = "unpublished"
 
     def _record_class_change_event(
         self,
@@ -3176,8 +3167,6 @@ class OperationsConsole:
         new_bindings = deepcopy(review_bindings_view(self))
         rows = deepcopy(original_rows)
         envelope["class"] = new_class
-        envelope["clinical_rereview_required"] = True
-        envelope["review_passes"] = {}
         self._full_rereview_rows(rows)
         new_envelopes[snapshot_id] = envelope
         new_bindings[snapshot_id] = invalidate_for_object(new_bindings.get(snapshot_id, []), "")
@@ -3825,16 +3814,6 @@ class OperationsConsole:
             new_envelopes = None
             new_bindings = deepcopy(relation_bindings if relation_bindings is not None else review_bindings_view(self))
             if decision == "approve":
-                new_envelopes = deepcopy(review_envelopes_view(self))
-                new_envelopes[snapshot_id] = deepcopy(envelope)
-                new_envelopes[snapshot_id]["review_passes"] = dict(
-                    new_envelopes[snapshot_id].get("review_passes") or {}
-                )
-                new_envelopes[snapshot_id]["review_passes"][actor_id] = {
-                    "passed": True,
-                    "at": utc_now(),
-                    "object_id": object_id,
-                }
                 binding = tuple_record(
                     object_id=object_id,
                     object_version=updated_target["object_version"],
@@ -3922,7 +3901,7 @@ class OperationsConsole:
 
         This mutation does not change canonical knowledge content, object
         version or canonical hash. It only adds the second exact review
-        authorization and updates the compatibility second_review mirror plus
+        authorization and records
         audit evidence in the same store transaction.
         """
 
@@ -4019,18 +3998,6 @@ class OperationsConsole:
                 if row.get("object_id") == object_id
                 and row.get("object_version") == target.get("object_version")
             )
-            governance = current_target.setdefault("governance", {})
-            second = governance.setdefault("second_review", {})
-            second.update(
-                {
-                    "required": True,
-                    "status": "approved",
-                    "reviewer": reviewer["username"],
-                    "review_date": date.today().isoformat(),
-                    "snapshot_hash": canonical_hash,
-                }
-            )
-
             from src.review.ko_transitions_v1 import apply_ko_event
             transition_evidence = apply_ko_event(current=target, prepared=current_target,
                 event='approve_second', review_path=review_path, bindings=bindings,
@@ -4307,8 +4274,6 @@ class OperationsConsole:
         if rereview_scope == "document":
             new_envelopes = deepcopy(review_envelopes_view(self))
             new_envelope = deepcopy(envelope)
-            new_envelope["review_passes"] = {}
-            new_envelope["clinical_rereview_required"] = True
             if '_document_inputs' in new_envelope:
                 from src.workflows.processing_archives_v1 import TREE_FIELDS
                 new_envelope={k:v for k,v in new_envelope.items() if k not in TREE_FIELDS}
@@ -4639,7 +4604,6 @@ class OperationsConsole:
                 bindings=bindings,
                 uploader_id=uploader,
                 immutable_locator=envelope.get("immutable_storage_locator"),
-                envelope_review_passes=envelope.get("review_passes"),
                 review_path=review_path,
                 fragments=fragments,
                 review_configuration=review_configuration,

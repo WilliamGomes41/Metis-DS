@@ -213,7 +213,6 @@ def test_http_withdrawal_complete_recovery_and_open_work_resume(recovery_postgre
     _assert_review_projection(console, review_client, v1["snapshot_id"])
     r1 = _publish_http(console, client, accounts, v1)
     published_v1 = deepcopy(console.snapshot_objects(v1["snapshot_id"]))
-    console.migrate_legacy_revise_to_review()
     assert console.snapshot_objects(v1["snapshot_id"]) == published_v1
     v2 = _ingest(console, accounts, "document-a", "2.0", v1["snapshot_id"])
     _assert_review_projection(console, review_client, v2["snapshot_id"])

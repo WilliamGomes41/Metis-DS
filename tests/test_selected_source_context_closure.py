@@ -94,25 +94,20 @@ def test_selected_context_follows_current_target_and_survives_restart(tmp_path, 
     assert not is_source_record(next(o for o in before if o["object_id"] == source["object_id"]))
     starts = (lambda: console, lambda: production_console(processing_binder=bind_fixture_selections,
               root=tmp_path, source_store=tmp_path / "sources", runtime=tmp_path / "runtime"))
-    for index, start in enumerate(starts):
+    for start in starts:
         state = start()
-        # Production startup reopens legacy revise work for review.
-        expected_closure = "waiting_on_target" if status == "revise" and index else closure
-        expected_action = "none" if status == "revise" and index else action
+        # KO-5 startup does not invent a new decision or reopen legacy work.
         projection = _projection(state, sid)
         row = projection[source["object_id"]]
-        assert row["closure"] == expected_closure
-        assert row["human_action"] == expected_action
+        assert row["closure"] == closure
+        assert row["human_action"] == action
         assert len(row["target_ids"]) == 2
         assert row["accounted"] == (status == "approved")
         summary = source_passage_closure(state.snapshot_objects(sid), projection=projection)
         assert (source["object_id"] in summary["unresolved_source_passage_ids"]) == (status != "approved")
         queues = review_followup_queues(state.snapshot_objects(sid), review_path="richtlijn", projection=projection)
-        assert (source["object_id"] in {o["object_id"] for o in queues["disposition"]}) == (expected_action == "source_disposition")
-        if status != "revise" or not index:
-            assert state.snapshot_objects(sid) == before
-        else:
-            assert state._current_object(sid, target["object_id"])["governance"]["validation_status"] == "needs_review"
+        assert (source["object_id"] in {o["object_id"] for o in queues["disposition"]}) == (action == "source_disposition")
+        assert state.snapshot_objects(sid) == before
     assert console.confirm_source_context(**command)["idempotent"] is True
 
 

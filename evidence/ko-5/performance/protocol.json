@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "frozen_before_measurements": "2026-11-07",
+  "baseline_sha": "07db5080666f0428a454f5a705e50825a4fc5506",
+  "head_sha": "9cf974518d2e82939247f47e0f0ba59172131346",
+  "environment": "Actual Codex agent, shared Linux VM, Python /workspace/.venvs/metis-ds/bin/python, real disposable PostgreSQL17 UTF8 on127.0.0.1:55440; local immutable source directory; no production data",
+  "fixture": "One native HTML ingest using deterministic fixture proposals,923 synthetic paragraphs,92 selected candidates. Synthetic author/reviewer accounts. Baseline seeds an owned database; base/head clones share exact persisted fixture bytes and source files. Zero legacy revise. No lifecycle writes in timed requests.",
+  "cold_start": {
+    "metric": "Fresh interpreter entry before application imports through actual console_asgi.build_app completion, in ms. tests.production_support.production_application configures native PostgreSQL stores and calls build_app, including lock/reload/bootstrap/legacy repair on baseline/reconcile and route installation. Not factory-import latency.",
+    "samples": "10 interleaved starts total:5 per side; AB,BA,AB,BA,AB pairs; first baseline recorded before first head",
+    "aggregation": "arithmetic mean of all5 cold process starts per side; also report all raw, median and max",
+    "boundary": "New process each time, warm OS/PG caches; no cache drop or claim of machine cold boot. Interpreter launch prelude and process exit excluded. Child timer begins before importing application/test transport. Fixture seed/schema creation excluded."
+  },
+  "review_card": {
+    "metric": "App request_finished elapsed_ms for authenticated GET /review?document=<sid>&object=<first candidate>&task=individual, status200 and expected candidate card; ordinary read only. Also retain TestClient wall_ms and diagnostic database metrics.",
+    "samples": "Same5 alternating AB/BA rounds. Each fresh app logs in outside timing; one untimed warm GET then20 measured GETs.100 raw measured card reads per side; no retries, discarded observations or outlier removal.",
+    "aggregation": "Nearest rank p95:sorted100 samples rank95; pool all5 rounds. Also report each round p95 and full raw observations.",
+    "p4b_scope": "Existing974-p4b probe is revise POST and repair GET, not ordinary card. This dedicated native ordinary-card probe is the appropriate metric correction; no repair-page timing is represented as ordinary card."
+  },
+  "fixed_gate": "FAIL if head cold mean/base cold mean>1.05 OR head ordinary review-card server p95/base p95>1.05; never relax threshold. Invalid/failed driver blocks proof, not product regression. Any necessary driver correction recorded and new protocol version frozen before measurements.",
+  "integrity": "Immutable clean detached checkouts for both sides; retained probe hashes and fixture/database provenance; pin checked each execution. Script/source data held under owned evidence path only. No models, browsers, Cursor/Grok or isolated VMs claimed. Shared-host load recorded, no unnecessary80-save suite.",
+  "initial_baseline": "No calibration in this new iteration; first baseline precedes first head in same quiet matched run.",
+  "iteration": "Final runtime iteration after CLI retirement and prepared m2 concurrency fix. Prior545 and44de raw evidence retained unchanged. Driver changes limited to output paths and owned fixture namespace. Same seeded synthetic fixture, sample/order/aggregation/5% gates. One separately labelled28024 cProfile probe is excluded from every metric and runner resets owned clones before decisive samples."
+}

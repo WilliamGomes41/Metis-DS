@@ -1,0 +1,87 @@
+{
+  "untimed": true,
+  "sha": "07db5080666f0428a454f5a705e50825a4fc5506",
+  "checkout": "/workspace/Metis-ko5-base",
+  "side": "base",
+  "status": 200,
+  "url": "/review?document=snap-d1e2dc2815ec51d5-e7efd6a0&object=console-ko5-perf-ko5-synthetic-performance-1-0-d1e2dc28-sem-50d47fa1e12f534b&task=individual",
+  "object_id": "console-ko5-perf-ko5-synthetic-performance-1-0-d1e2dc28-sem-50d47fa1e12f534b",
+  "snapshot_id": "snap-d1e2dc2815ec51d5-e7efd6a0",
+  "purpose": "DOM view confirmation only; no new performance metric",
+  "dom": {
+    "h1": [
+      "Review"
+    ],
+    "form": {
+      "method": "post",
+      "action": "/review",
+      "canApprove": "true",
+      "legends": [
+        "Is dit toepasbaar?",
+        "Is dit compleet?",
+        "Staat dit op de juiste plek?"
+      ],
+      "answers": {
+        "applicable": [
+          {
+            "value": "yes",
+            "checked": false,
+            "disabled": false
+          },
+          {
+            "value": "adjust",
+            "checked": false,
+            "disabled": false
+          }
+        ],
+        "complete": [
+          {
+            "value": "yes",
+            "checked": false,
+            "disabled": false
+          },
+          {
+            "value": "adjust",
+            "checked": false,
+            "disabled": false
+          }
+        ],
+        "placed_correctly": [
+          {
+            "value": "yes",
+            "checked": false,
+            "disabled": false
+          },
+          {
+            "value": "adjust",
+            "checked": false,
+            "disabled": false
+          }
+        ]
+      },
+      "identity": {
+        "snapshot_id": "snap-d1e2dc2815ec51d5-e7efd6a0",
+        "object_id": "console-ko5-perf-ko5-synthetic-performance-1-0-d1e2dc28-sem-50d47fa1e12f534b"
+      },
+      "approve": [
+        {
+          "text": "Goedkeuren en opslaan",
+          "disabled": true
+        }
+      ],
+      "later": [
+        "Later beoordelen"
+      ]
+    },
+    "sourcePanel": {
+      "selector": "ko-document-context",
+      "text": "Bekijk in documentcontextPlek in het documentKoppen uit de vastgelegde oorspronkelijke bron.Richtlijn · bronsectie van de passageVindplaats RichtlijnBronpassage en omliggende tekstGeen voorafgaande alinea in het vastgelegde passagevenster.Geselecteerde passageBegrip 0 is een beschrijving van een afzonderlijke waarneming in de zorg. De verpleegkundige legt waarneming 0 vast.Volgende bronpassageBegrip 1 is een beschrijving van een afzonderlijke waarneming in de zorg. De verpleegkundige legt waarneming 1 vast.Naburige passages onder deze kopBegrip 1 is een beschrijving van een afzonderlijke waarneming in de zorg. De verpleegkundige legt waarneming 1 vast.Toon hele sectie en naburige passagesOpen volledige bron"
+    },
+    "passage": [
+      "Begrip 0 is een beschrijving van een afzonderlijke waarneming in de zorg. De verpleegkundige legt waarneming 0 vast."
+    ],
+    "readonlyObjectView": false,
+    "errorBanner": false,
+    "receipt": false
+  }
+}
