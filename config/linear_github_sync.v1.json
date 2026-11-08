@@ -206,6 +206,26 @@
     {
       "github_issue": 1017,
       "linear_issue": "MET-61"
+    },
+    {
+      "github_issue": 1026,
+      "linear_issue": "MET-62"
+    },
+    {
+      "github_issue": 1025,
+      "linear_issue": "MET-63"
+    },
+    {
+      "github_issue": 1024,
+      "linear_issue": "MET-64"
+    },
+    {
+      "github_issue": 1028,
+      "linear_issue": "MET-65"
+    },
+    {
+      "github_issue": 1027,
+      "linear_issue": "MET-66"
     }
   ]
 }
