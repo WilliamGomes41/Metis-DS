@@ -131,7 +131,7 @@ def _validate_annotations(con):
     """
     from uuid import UUID
     from src.integrity_kernel import stable_hash
-    from src.vorming.human_annotation_v1 import NORMALIZATION, validate_stored_selection
+    from src.vorming.human_annotation_v1 import NORMALIZATION, validate_stored_selection, _relationship_history
     from src.vorming.source_preparation_context_v1 import stored_extraction
     for source in con.execute('SELECT s.*,e.payload AS extraction,d.source_id,d.document_id,'
         'd.source_sha256,d.source_version,d.content_kind,d.working_revision_id AS current_working_revision '
@@ -159,7 +159,12 @@ def _validate_annotations(con):
             if (str(UUID(key)) != key or row['revision'] != latest.get(key,0)+1
                     or row['status'] != row['payload']['status'] or stable_hash(row['payload']) != row['payload_hash']):
                 fail('annotation_history_invalid')
-            validate_stored_selection(row['payload'],fragments=fragments)
+            validate_stored_selection(row['payload'],fragments=fragments,annotation_id=row['annotation_id'])
+            previous = history.get((key,row['revision']-1))
+            if previous and previous['payload'].get('selection_version') and not row['payload'].get('selection_version'):
+                fail('annotation_client_contract_stale')
+            if row['payload'].get('selection_version'):
+                _relationship_history(previous['payload'] if previous else None,deepcopy(row['payload']),key)
             latest[key] = row['revision']
             history[key,row['revision']] = row
         if len(heads) != len(latest) or {h['annotation_id']:h['revision'] for h in heads} != latest:

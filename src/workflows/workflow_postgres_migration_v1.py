@@ -40,6 +40,7 @@ MIGRATION_NAMES = (
     "032_object_revision_frontiers.sql",
     "033_statement_object_generation.sql",
     "034_human_annotations.sql",
+    "035_annotation_meaning_input.sql",
 )
 REQUIRED_TABLES = frozenset(
     {

@@ -30,6 +30,21 @@ const assert = require('node:assert/strict');
   assert.match(await page.locator('#annotation-selection').innerText(),/Controleer 👩🏽‍⚕️/);
   await page.locator('#annotation-add').click();
   await page.locator('#annotation-type').selectOption('recommendation');
+  // Point at meaning rather than typing it. Only fields for this type appear.
+  await page.getByText('Betekenis van de uitspraak aanwijzen',{exact:true}).click();
+  assert.equal(await page.locator('#annotation-field option[value=defined_term]').count(),0);
+  await page.locator('#annotation-field').selectOption('recommended_action');
+  const coreInput=page.locator('section.annotation-source-block').filter({hasText:'Controleer'}).locator('[data-source-input]');
+  await coreInput.evaluate(input => {
+    input.setSelectionRange(0,'Controleer'.length);input.dispatchEvent(new Event('select'));
+  });
+  await page.locator('#annotation-bind-field').click();
+  await page.locator('#annotation-recommendation summary').click();
+  await page.locator('#annotation-direction').selectOption('for');
+  await coreInput.evaluate(input => {input.setSelectionRange(0,10);input.dispatchEvent(new Event('select'));});
+  await page.locator('#annotation-direction-evidence').click();
+  await page.locator('#annotation-strength-status').selectOption('not_stated');
+  assert.equal(await page.locator('#annotation-direction-proof').innerText(),'Controleer');
   await page.locator('#annotation-role').selectOption('condition');
   await page.locator('#annotation-essential').check();
   await page.locator('section.annotation-source-block').filter({hasText:'Alleen bij klachten.'}).locator('[data-select-block]').click();
@@ -40,6 +55,10 @@ const assert = require('node:assert/strict');
   assert.equal(saved.entries[0].ranges[0].quote,'Controleer 👩🏽‍⚕️');
   assert.equal(saved.entries[0].ranges[1].required_for_meaning,true);
   assert.equal(saved.entries[0].ranges[1].quote,'Alleen bij klachten.');
+  assert.deepEqual(saved.entries[0].field_evidence.recommended_action.span,{block_id:saved.entries[0].ranges[0].block_id,start:0,end:10});
+  assert.ok(saved.entries[0].ranges[1].relationship_id.startsWith('link-v1:'));
+  assert.equal(saved.entries[0].recommendation_semantics.direction,'for');
+  assert.equal(saved.entries[0].recommendation_semantics.strength_status,'not_stated');
   // Network failure cannot yield a false saved label or navigation on Pause.
   await page.route('**/annotations/api',route => route.abort());
   await page.locator('#annotation-na').check();
@@ -59,6 +78,21 @@ const assert = require('node:assert/strict');
   await page.locator('#annotation-entry').selectOption(saved.entries[0].annotation_id);
   assert.equal(await page.locator('#annotation-type').inputValue(),'definition');
   assert.equal(await page.locator('#annotation-ranges li').count(),2);
+  const resumed=await page.evaluate(async sid => (await fetch('/annotations/api?document='+sid)).json(),m.document);
+  assert.deepEqual(resumed.entries[0].field_evidence.recommended_action,saved.entries[0].field_evidence.recommended_action);
+  // Removing essential context leaves a durable duty; ready cannot conceal it.
+  await page.locator('#annotation-ranges li').nth(1).getByRole('button',{name:'Bereik verwijderen'}).click();
+  await page.waitForFunction(() => document.getElementById('annotation-status').textContent==='Concept opgeslagen.');
+  await page.locator('#annotation-ready').click();
+  await page.waitForFunction(() => document.getElementById('annotation-status').textContent.includes('essentieel verband ontbreekt'));
+  await page.reload();
+  await page.locator('#annotation-entry').selectOption(saved.entries[0].annotation_id);
+  assert.match(await page.locator('#annotation-required-links').innerText(),/Essentieel verband ontbreekt/);
+  await page.getByRole('button',{name:'Dit verband opnieuw aanwijzen'}).click();
+  await page.locator('section.annotation-source-block').filter({hasText:'Alleen bij klachten.'}).locator('[data-select-block]').click();
+  assert.equal(await page.locator('#annotation-role').isDisabled(),true);
+  await page.locator('#annotation-add').click();
+  await page.waitForFunction(() => document.getElementById('annotation-status').textContent==='Concept opgeslagen.');
   await page.locator('#annotation-ready').click();
   await page.waitForFunction(() => document.getElementById('annotation-status').textContent==='Selectie gereed en opgeslagen.');
   await page.locator('#annotation-overview').click();
@@ -69,6 +103,27 @@ const assert = require('node:assert/strict');
   for (const width of [1440,390]) {
     await page.setViewportSize({width,height:1000});
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth>innerWidth),false);
+    if(width===390) {
+      const sourceSection=page.locator('section.annotation-source-block').filter({hasText:'Alleen bij klachten.'});
+      await sourceSection.locator('[data-select-block]').click();
+      for(const id of ['annotation-to-controls','annotation-to-source']) {
+        assert.equal(await page.locator('#'+id).evaluate(a => {
+          const r=a.getBoundingClientRect();
+          const top=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);
+          return r.top>=0 && r.bottom<=innerHeight && (top===a || a.contains(top));
+        }),true,'Mobile navigation must be visible and uncovered: '+id);
+      }
+      await page.screenshot({path:`${output}/annotation-390-selected.png`});
+      await page.locator('#annotation-to-controls').click();
+      assert.equal(await page.evaluate(() => document.activeElement.id),'annotation-controls');
+      await page.locator('#annotation-to-source').click();
+      assert.equal(await page.evaluate(() => document.activeElement.id),await sourceSection.getAttribute('id'));
+      await page.locator('#annotation-to-controls').click();
+      await page.locator('#annotation-discard').click();
+      await page.waitForFunction(() => document.getElementById('annotation-status').textContent==='Concept opgeslagen.');
+    }
+    await page.evaluate(() => {window.scrollTo(0,0);document.getElementById('annotation-controls').scrollTop=0;});
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await page.screenshot({path:`${output}/annotation-${width}.png`,fullPage:true});
   }
   // Keyboard/touch alternative retains the same source-reference contract.
@@ -81,7 +136,26 @@ const assert = require('node:assert/strict');
   await page.reload();
   await page.locator('#annotation-entry').selectOption(saved.entries[0].annotation_id);
   assert.match(await page.locator('#annotation-selection').innerText(),/Nog te koppelen: Gelijke/);
+  await page.locator('#annotation-discard').click();
+  await page.locator('#annotation-ranges li').nth(1).getByRole('button',{name:'Bereik verwijderen'}).click();
+  await page.locator('#annotation-required-links input').fill('Dit verband was per vergissing essentieel gemarkeerd.');
+  await page.getByRole('button',{name:'Verplichting met deze reden terugnemen'}).click();
+  await page.locator('#annotation-ready').click();
+  await page.waitForFunction(() => document.getElementById('annotation-status').textContent==='Selectie gereed en opgeslagen.');
+  await page.locator('#annotation-overview').click();
+  await page.waitForURL(u => u.searchParams.get('overview')==='true');
+  assert.match(await page.locator('body').innerText(),/verplichting teruggenomen: Dit verband was per vergissing/);
+  await page.getByRole('link',{name:'Verder aanwijzen'}).click();
+  await page.locator('#annotation-type').selectOption('source_disposition');
+  await page.locator('#annotation-source-reason').selectOption('metadata:document_metadata');
+  await page.locator('[data-select-block]').first().click();
+  await page.locator('#annotation-add').click();
+  await page.locator('#annotation-ready').click();
+  await page.waitForFunction(() => document.getElementById('annotation-status').textContent==='Selectie gereed en opgeslagen.');
+  await page.locator('#annotation-overview').click();
+  await page.waitForURL(u => u.searchParams.get('overview')==='true');
+  assert.match(await page.locator('body').innerText(),/Brongebruik: Documentgegevens/);
   assert.deepEqual(errors,[]);
-  fs.writeFileSync(output+'/result.json',JSON.stringify({mouse:true,unicode:true,multipleRanges:true,serverFailure:true,pauseCommit:true,newSession:true,overview:true,keyboard:true,widths:[1440,390]},null,2));
+  fs.writeFileSync(output+'/result.json',JSON.stringify({mouse:true,unicode:true,multipleRanges:true,meaningFields:true,recommendationWitness:true,essentialDuty:true,reanchor:true,explicitDischarge:true,sourceProposal:true,mobileSourceNavigation:true,serverFailure:true,pauseCommit:true,newSession:true,overview:true,keyboard:true,widths:[1440,390]},null,2));
   await browser.close();
 })().catch(e => {console.error(e);process.exit(1);});
