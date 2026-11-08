@@ -4,6 +4,19 @@ Status: werkende bron-/conceptslice, **geen complete annotatie-tot-publicatie-ro
 Basis: main `e0a3b09a`; ontwerpbranch `1fb0e097`.
 Contract: [1015-human-annotation-source.md](1015-human-annotation-source.md).
 
+Aanvulling na de hieronder beschreven tussenruns: de complete herhaling op
+`c23933d2` eindigde met **8352 passed, 46 skipped, 3 xfailed en 32 geslaagde
+subtests; exit 0** (`pytest -q -n 4 -rs --tb=short`, echte PG16 per worker).
+De 23 browsergevallen waren afzonderlijk daadwerkelijk uitgevoerd en slagen.
+De 12 echte Docling/PDF-acceptatiegevallen en 11 optionele Bend-proeven waren
+niet uitgevoerd; geen PDF-/releaseacceptatie afgeleid uit skips. Dit resultaat
+staat ook in draft PR #1021. Vervolgwijzigingen hebben hun eigen bewijs nodig.
+
+De vervolginventarisatie vond een herstelgat buiten procesherstart: annotaties
+ontbraken in de workflowketenback-up. Reparatie en nieuwe proeven staan in het
+[herstelcontract](1015-human-annotation-recovery.md). De resterende uitvoerbare
+vormings-/cutovergrenzen staan in het [uitvoeringscontract](1015-human-annotation-execution.md).
+
 ## Uitgevoerd
 
 - Lokale echte PostgreSQL **16.4**, via `scripts/test_postgres.sh`; geen PG-skip.

@@ -43,7 +43,7 @@ from src.publication.publication_chain_recovery_v1 import (
     check_chain_integrity,
 )
 
-WORKFLOW_RECOVERY_VERSION = 9  # 9: compact document inputs and exact archive input membership (MET-41)
+WORKFLOW_RECOVERY_VERSION = 10  # 10: exact annotation history, heads and command receipts (#1015)
 API_ACCESS_TABLES = tuple(API_ACCESS_COLUMNS)
 _API_ACCESS_ORDER_BY = {
     table: ",".join(columns)
@@ -144,8 +144,14 @@ def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:
     """Upgrade legacy workflow recovery state without inventing domain decisions."""
     version = int(state.get("workflow_recovery_version") or 0)
     if version == WORKFLOW_RECOVERY_VERSION:
+        # Current exports always include the complete formation capability.
+        # A missing section must not silently discard annotation ownership.
+        from src.workflows.formation_recovery_v1 import validate
+        if state.get('formation_recovery') is None:
+            raise PublicationChainRecoveryError('workflow_formation_backup_missing_reexport_required')
+        validate(state)
         return deepcopy(dict(state))
-    if version in {7,8}:
+    if version in {7,8,9}:
         from src.workflows.formation_recovery_v1 import upgrade_legacy
         upgraded = upgrade_legacy(dict(state))
         upgraded['workflow_recovery_version'] = WORKFLOW_RECOVERY_VERSION
@@ -204,6 +210,7 @@ def _add_empty_refusals(upgraded: dict[str, Any]) -> dict[str, Any]:
     if "publication_refusals" in tables:
         raise PublicationChainRecoveryError("workflow_backup_refusal_version_conflict")
     tables["publication_refusals"] = []
+    upgraded.setdefault('formation_recovery', None)  # Explicit absent legacy capability.
     upgraded["workflow_recovery_version"] = WORKFLOW_RECOVERY_VERSION
     return upgraded
 
@@ -628,10 +635,14 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
     def restore_state(self, state: Mapping[str, Any]) -> None:
         from src.publication.publication_chain_recovery_v1 import _validate_database_backup_shape, _table_rows
 
+        original_state = state
         state = _upgrade_workflow_state(state)
         _validate_database_backup_shape(state)
         _validate_workflow_shape(state)
-        workflow_report = check_workflow_integrity(state)
+        # The legacy capability check must inspect the original format. An
+        # internal v9->v10 upgrade with no producer records is not a new v10
+        # archive whose entire formation section may be silently discarded.
+        workflow_report = check_workflow_integrity(original_state)
         if not workflow_report["ok"]:
             raise PublicationChainRecoveryError("workflow_restore_integrity_failed:" + ";".join(workflow_report["errors"]))
         self.assert_empty()

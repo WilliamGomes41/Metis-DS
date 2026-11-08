@@ -154,6 +154,10 @@ class _SchemaCon:
             return _Res(self.columns)
         if 'pg_constraint' in sql:
             return _Res(([self.constraint_row] if self.constraint else []) + [
+                {'conname': 'guard_annotation_input_transition', 'table_name': 'annotation_versions',
+                 'contype': 't', 'columns': []},
+                {'conname': 'guard_annotation_head_transition', 'table_name': 'annotation_heads',
+                 'contype': 't', 'columns': []},
                 {'conname': 'object_revision_frontiers_pkey', 'table_name': 'object_revision_frontiers',
                  'contype': 'p', 'columns': ['snapshot_id', 'object_id']},
                 {'conname': 'workflow_object_revision_frontier_fk', 'table_name': 'document_objects',

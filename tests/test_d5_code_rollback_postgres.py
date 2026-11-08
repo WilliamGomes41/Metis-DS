@@ -140,8 +140,11 @@ def test_code_rollback_rebuilds_copies_and_preserves_pg_and_product_api(complete
             # never interpret this legacy scenario as a rollback of proof-v3.
             state = outcome['state']
             if name == 'current':
-                assert state.pop('workflow_recovery_version') == 9
+                assert state.pop('workflow_recovery_version') == 10
                 formation = state.pop('formation_recovery')
+                assert formation['version'] == 3
+                for table in ('annotation_sets','annotation_versions','annotation_heads','annotation_commands'):
+                    assert formation['tables'][table] == []  # Legacy work is never silently taken over.
                 assert not formation['tables']['formation_evidence_roots']
                 assert all(d['formation_evidence_id'] is None for d in formation['documents'])
             else:

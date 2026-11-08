@@ -58,7 +58,7 @@ def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_pat
                 pytest.fail((tmp_path/'server.log').read_text())
             subprocess.run([env.get('METIS_BROWSER_NODE', 'node'), str(root/'tests'/script)],
                            env=env, cwd=root, check=True, timeout=90)
-            expected_screenshots = 2 if script == 'browser_human_annotation_check.cjs' else 6
+            expected_screenshots = 3 if script == 'browser_human_annotation_check.cjs' else 6
             assert len(list(tmp_path.glob('*.png'))) == expected_screenshots
         finally:
             server.terminate()
