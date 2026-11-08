@@ -97,7 +97,23 @@ migration018-stub kende de vier nieuwe036-constraints niet. Alleen de stub is
 aangevuld met de expliciete constraintmetadata; de negatieve tests blijven
 weigeren bij een ontbrekende/verkeerde publication-refusalconstraint. Samen
 met de migratieproeven:19 passed,1.40s. De onvolledige runs zijn geen geslaagde
-full-suite. Productcode is sinds a2b3c29e ongewijzigd; volledige finale run volgt.
+full-suite. Productcode is sinds a2b3c29e ongewijzigd. De volledige finale run op
+`57035849d70a694441fb34c5fdc2d4e943469408` slaagt met exit0:
+
+```sh
+env -u METIS_TEST_POSTGRES_DSN PGBIN=/tmp/metis-pg16/bin \
+  PATH=/tmp/metis-pg-client/usr/lib/postgresql/17/bin:$PATH \
+  /workspace/Metis-DS/.venv/bin/python -m pytest \
+  -vv -n 4 -rs --tb=short --show-capture=no
+```
+
+**8432 passed,47 skipped,3 xfailed,32 subtests passed**,1487.65s,exit0.
+Geen native PostgreSQL-skip. De47 skips zijn24 opt-in-browsergevallen,
+12 echte Docling/PDF-acceptatiegevallen en11 optionele Bend-proeven. De twee
+gewijzigde browserketens zijn afzonderlijk werkelijk uitgevoerd zoals hierboven;
+de andere overgeslagen proeven zijn geen geslaagd acceptatiebewijs.
+Log lokaal:/tmp/ha2b-full-final.log. Alle product- en testcode in deze commit is
+uitgevoerd; de latere bewijscommit wijzigt uitsluitend deze uitslagnotitie.
 
 Normale controles op gecommitteerde main-diff: repositorypreflight PASS2303 (lokale captures buiten repository),
 release-control PASS (alle vereiste categorieën hebben bewijs), compileall PASS,
