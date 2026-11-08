@@ -30,11 +30,15 @@ Een beperkte opdracht mag nooit als complete verwerking van de hele richtlijn wo
 ### Annoteren
 
 1. Bron en geëxtraheerde tekst openen; relevante koppen, labels, lijsten en tabellen blijven beschikbaar.
-2. Volledige uitspraak markeren. Eén selectie kan meerdere exact gelokaliseerde bronbereiken omvatten.
+2. Markeer de kernuitspraak. Eén markeeractie omvat in de eerste editor één aaneengesloten bereik binnen een stabiel bronblok; wijs een volgend bereik apart aan en voeg het aan dezelfde annotatie-entry toe. Meerdere bereiken kunnen samen één uitspraak dragen, ook als ze in verschillende alinea’s staan. Eén inhoudelijke claim blijft de maatstaf, niet één alinea.
 3. Type aanklikken uit de werkelijke huidige taxonomy; geen nieuwe objecttypen introduceren omdat het voorbeeld die noemt.
 4. Bijbehorende passages markeren en verbinden als context/voorwaarde/uitzondering/toelichting/onderbouwing. Eén passage mag bij meerdere uitspraken horen; geen kopieën door de gebruiker laten maken.
 5. Waar huidige veldcontroles extra aanwijzingen nodig hebben, alleen de relevante vervolgmarkering vragen, bijvoorbeeld ‘wijs de aanbevolen handeling aan’. Geen verborgen AI-invulling of stilzwijgende versoepeling van Admission.
 6. ‘Selectie opslaan’, ‘Nog onvolledig’ of ‘Twijfel’ kiezen. Begin daarna de volgende selectie of open een eerdere.
+
+**Selectie over alinea’s:** de grens van één markeergebaar is een bedieningskeuze van de eerste editor, geen domeinregel dat een kennisobject binnen één alinea past. Een `SourceRange` verwijst naar één gepind bronblok en een exact begin/einde daarin. Een annotatie-entry bevat geordende kernbereiken en nul of meer rolgebonden context-/bewijsbereiken of verwijzingen. Bij tekst in een andere alinea kiest de researcher ‘nog een bereik’ of de passende rol op dezelfde kaart; een extra alinea maakt geen tweede kennisobject noodzakelijk. Dezelfde bronpassage kan met een expliciete rol aan meerdere uitspraken zijn gekoppeld. Het systeem bewaart de bronvolgorde en de afzonderlijke vindplaatsen; het voegt passages niet stil samen tot een nieuwe, inhoudelijk herschreven zin. Wanneer twee beweringen afzonderlijk beoordeeld of herzien kunnen worden, maakt de researcher twee annotaties. Een onderbouwende of toelichtende passage wordt door koppeling niet automatisch een zelfstandig kennisobject en de reviewer beoordeelt de betekenis en draagkracht van de koppeling.
+
+‘Bronblok’ is een identiteit van de gepinde extractie, geen aanname dat een PDF-alinea altijd goed is herkend. Als één zin door extractie over blokken is verdeeld, kan zij met twee exacte bereiken worden aangewezen; de viewer toont de grens en laat de researcher de samenhang controleren. Selectie mag niet ongemerkt over koppen, lijsten of tabelcellen heen doorlopen. Als de extractie zelf onjuist is, herstel de representatie via een expliciete opvolgversie en herankering. De server valideert elk bereik, bronidentiteit en rol; de browser mag geen canonieke tekst of veldbetekenis verzinnen. Toegankelijke bediening moet dezelfde afzonderlijke bereiken kunnen aanwijzen zonder uitsluitend een precieze muisdrag te vereisen.
 
 ‘Geen passage gevonden’ en ‘niet van toepassing’ zijn verschillende feiten. De eerste is onzekerheid; de tweede is een expliciete keuze die alleen op de juiste plek en door de bevoegde actor de bestaande bewijsverplichting kan afhandelen. Annoteren sluit die verplichting niet automatisch.
 
@@ -173,7 +177,7 @@ Browserselectie en backendoffsets moeten dezelfde tekencodering gebruiken: JavaS
 | Extractie | Bestaand `prepared_extraction_versions`-record/hash + source views | Workflowopslag; exact gepinde representatie, niet modelconfig |
 | Selectietaak | Doel/gebruik, scope-bereiken, selectiecriteria, opdrachtversie | Binnen WorkingRevision; wijziging maakt eerder overzicht/seal niet actueel |
 | Annotatieset | WorkingRevision-ID, bron-/extractiehash, contractversie, generatie | Bestaande PostgreSQL-workflowautoriteit |
-| Annotatie | Stabiele annotation-ID, eigen revisie, kernspans, type, veldspans, context-/bewijsrefs en twijfel | Rijgerichte gegevens binnen diezelfde autoriteit; geen kandidaat-ID |
+| Annotatie | Stabiele annotation-ID, eigen revisie, geordende kernbereiken (elk binnen één gepind bronblok), type, rolgebonden context-/bewijsbereiken of verwijzingen en twijfel | Rijgerichte gegevens binnen diezelfde autoriteit; geen kandidaat-ID; meerdere alinea’s per annotatie toegestaan |
 | Afrondingsbewijs | Scope-afhandeling, geordende leden met hashes, actor, tijd, sealhash | Immutable invoerbewijs; nieuwe generatie bij wijziging |
 | Bouwopdracht | Command-ID, sealhash, verwachte objectrevisie, contractversie, claim | Bestaande duurzame opdracht-/dispatchautoriteit |
 | Kandidaat/revisie | Bestaande materialiser-ID, tekst, mapping, content hash | Bestaande object-/revisieopslag |
@@ -288,7 +292,7 @@ Rollback vóór definitieve contractfase gebruikt het vastgelegde software-/data
 ## 10. Acceptatie: wat daadwerkelijk bewezen moet worden
 
 1. **Zonder proza-providerconfig:** upload → extractie → twee gekoppelde selecties → herstart → overzicht → seal → bouw → ingestbeoordeling → publicatie → API/MCP. Geen modelcall in het prozapad.
-2. **Brongetrouw:** verkeerde snapshot/extractie, ongeldige offsets, herhaalde tekst op andere locatie, Unicode, lijst zonder items en tabel zonder kopcontext worden geweigerd of expliciet onbeslist; geen verzonnen tekst.
+2. **Brongetrouw:** verkeerde snapshot/extractie, ongeldige offsets, herhaalde tekst op andere locatie, Unicode, lijst zonder items en tabel zonder kopcontext worden geweigerd of expliciet onbeslist; geen verzonnen tekst. Test één claim met kernbereiken in twee alinea’s, een voorwaarde elders, een gedeeld bewijsbereik voor twee claims en een door extractie gesplitste zin. De opslag houdt bereik, rol en volgorde afzonderlijk; een drag over blokken wordt niet stil tot één bereik gemaakt.
 3. **Betekenisbehoud:** drie echte aanbevelingen en vervolgens representatief corpus met doelgroep, negatie, modaliteit, voorwaarden elders, gedeelde uitzondering en onderbouwing. Onafhankelijke referentie; niet alleen de annotator beoordeelt eigen werk.
 4. **Ingestbeoordeling:** bestaande opties en deelnemers exact behouden, inclusief verplichte extra reviewer. Researcher zonder reviewerrol kan geen oordeel schrijven; ‘klaar’ en annoteren geven geen vrijgave.
 5. **Volledigheid:** ongemarkeerde sectie, open twijfel en scopewijziging zijn zichtbaar; onvolledige scope kan niet als volledig afgehandeld slagen. Buiten-scope is geen generieke niet-kennisclassificatie.
