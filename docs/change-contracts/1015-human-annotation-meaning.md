@@ -2,7 +2,7 @@
 
 Change class: A
 Promise: De researcher bewaart exacte betekenisvelden en bronrolvoorstellen en herstelt of verantwoordt een ontbrekend essentieel verband, zonder overschrijven van claims of stil verlies bij hervatten, oudere clients en workflowherstel.
-Proof: native PostgreSQL, HTTP en echte browser; resultaten hieronder pas na uitvoering.
+Proof:47 native annotatieproeven,19 migratieverificatieproeven en1 echte browserketen groen; volledige suite8389 passed/46 skipped/3 xfailed/32 subtests, exit0, PostgreSQL16.4 opb828be2a.
 Touches lifecycle invariants: yes
 Rewrite risk: high
 
@@ -86,9 +86,9 @@ Adversarial proof matrix: oudere client tegen v2, direct SQL v2-degradatie/relat
 
 ## Bewijs
 
-Nog niet voltooid. Voor PR volgen gerichte native proeven, browser op desktop en
-mobiel, aparte adversariële pass en de verplichte repositorychecks/volledige
-suite. Geen technische fixture als praktijkacceptatie presenteren.
+De afgebakende inputprerequisite is technisch geverifieerd. De resterende
+HA-2b-afsluit-/bouwroute en de volledige projectketen zijn daarmee niet gereed.
+Onderstaande resultaten zijn technische proeven, geen researcherpraktijkacceptatie.
 
 ### Uitgevoerde gerichte verificatie
 
@@ -196,3 +196,36 @@ capabilities, verlies van essentiële relaties/velden, stale head, onderbroken
 herstelmarkering, ontbrekende/uitgeschakelde migratie, beide documentlayouts,
 self-consistente historische corruptie, reverse restore en oude AI-/objectwrites.
 De onafhankelijke tweede agent heeft uitsluitend UI/captures beoordeeld.
+
+
+## Definitief full-suite-bewijs
+
+Productcode **b828be2a851b21dbf217bf93c738fd31a53bcd11**:
+**8389 passed,46 skipped,3 xfailed,16 warnings,32 subtests passed; exit0**
+in1496.77sec (24:56). Laatste commit hierna legt uitsluitend dit bewijs vast;
+geen productcode of tests gewijzigd na de geslaagde run.
+
+Commando vanuit de featureworktree:
+
+```bash
+env -u METIS_TEST_POSTGRES_DSN PGBIN=/tmp/metis-pg16/bin \
+  PATH="/tmp/metis-pg-client/usr/lib/postgresql/17/bin:$PATH" \
+  /workspace/Metis-DS/.venv/bin/python -m pytest -q -n 4 -rs --tb=short --show-capture=no
+```
+
+Echte PostgreSQL16.4 per worker; vier workers op de gemeten vier-CPU-quota.
+Lokaal log:/tmp/metis-meaning-full-verified.log. Geen native PostgreSQL-skip.
+De46 skips zijn23 opt-in-browsers,12 echte Docling/PDF-acceptatiegevallen en11
+optionele Bend-proeven. De gewijzigde annotatiebrowser is afzonderlijk echt
+uitgevoerd (67 gerichte gevallen samen groen); de overige browser-, echte
+PDF-/Bend- en praktijkproeven zijn met deze run niet als geslaagd aangemerkt.
+
+Repositorypreflight, release-control tegen actuele origin/main, compileall,
+architecture checker,6 architectuurtests en diff/JS-check:PASS. De geregistreerde
+migratie035 vereist nog het bestaande menselijke release-/migratiebesluit;
+geen migratie op Azure/productie uitgevoerd, geen eigen PR gemerged.
+
+Geen oude prozacallers verwijderd in deze prerequisite; de native034-fences
+blijven aan. Seal/job/activatie (036), HA-3, HA-4, de volledige
+upload->publicatie->API/MCP-keten en de onafhankelijke praktijktoets blijven
+open. Deze bewijscommit is geen parent-Done of releaseacceptatie.
