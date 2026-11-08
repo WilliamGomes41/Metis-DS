@@ -110,12 +110,14 @@ def _complete_review(
         for obj in console.snapshot_objects(snapshot_id)
         if obj.get("object_type") == "unclassified"
     )
+    from src.vorming.human_annotation_projection_v1 import has_literal_support
+    literal_support = has_literal_support(target, console.review_source_fragments(snapshot_id))
     console.review_object(
         actor_id=accounts["reviewer"]["account_id"],
         snapshot_id=snapshot_id,
         object_id=target["object_id"],
         decision="approve",
-        assessment=affirmative_assessment(), evidence_not_applicable=True,
+        assessment=affirmative_assessment(), evidence_not_applicable=not literal_support,
         confirmed_object_type="explanation",
     )
 

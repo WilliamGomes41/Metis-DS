@@ -19,16 +19,19 @@ from tests.production_support import restart_production
 from tests.test_human_annotation_postgres import anchor, command
 
 
-def saved_source(production_console, tmp_path, *, review_option=None, source_status="unknown", context_function=None, **options):
+def saved_source(production_console, tmp_path, *, review_option=None, four_eyes=False, source_status="unknown", context_function=None, **options):
     console = production_console(root=tmp_path, **options)
     actor = console.create_account(username='builder', password='human-build-secret', roles=('researcher', 'reviewer'))['account_id']
     reviewer = console.create_account(username='reviewer', password='human-build-secret', roles=('reviewer',))['account_id']
+    reviewers = [reviewer]
+    if review_option == 'two_others':
+        reviewers.append(console.create_account(username='reviewer2', password='human-build-secret', roles=('reviewer',))['account_id'])
     sid = console.receive_source(actor_id=actor, filename='human.html', content_type='text/html',
         data=('<html><body><p>De kwetsbare huid verklaart de pijn.</p>'+('<p>Alleen bij klachten.</p><p>Onderzoek beschrijft dit verband.</p><p>De beoordeling betreft volwassenen.</p>' if context_function else '')+'</body></html>').encode(),
         ingest_kind='new', title='Menselijke opbouw', version='1.0', date='2026-11-08', live_url='',
         class_='richtlijn', family='test', named_reviewers=[reviewer] if review_option is None else [],
-        review_choice={'contract':'review-configuration-v2','option':review_option,'four_eyes_required':False,
-                       'reviewers':[] if review_option=='uploader_sole' else [reviewer], 'readers':[]} if review_option else None,
+        review_choice={'contract':'review-configuration-v2','option':review_option,'four_eyes_required':four_eyes,
+                       'reviewers':[] if review_option=='uploader_sole' else reviewers, 'readers':[]} if review_option else None,
         source_status=source_status)['snapshot_id']
     view = annotation.prepare(console, actor_id=actor, snapshot_id=sid, expected_revision=console.objects_revision(sid))
     core = anchor(view, 'De kwetsbare')

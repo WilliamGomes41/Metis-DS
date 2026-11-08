@@ -43,7 +43,18 @@ def require_storage(con):
         annotations.fail('annotation_build_storage_not_ready')
 
 
-def _capture(con, snapshot_id):
+def require_revision_storage(con):
+    row = con.execute("SELECT to_regprocedure('workflow.annotation_pending_objects(text)') AS name, "
+        "(SELECT count(*) FROM pg_trigger WHERE tgenabled IN ('O','A') AND "
+        "((tgrelid='workflow.annotation_seals'::regclass AND tgname='guard_annotation_revision_basis' AND tgdeferrable AND tginitdeferred) "
+        "OR (tgrelid='workflow.annotation_heads'::regclass AND tgname='guard_annotation_current_input' AND tgdeferrable AND tginitdeferred) "
+        "OR (tgrelid='workflow.formation_evidence_roots'::regclass AND tgname='guard_annotation_revision_producer') "
+        "OR (tgrelid='workflow.publish_authorizations'::regclass AND tgname='guard_annotation_pending_approval'))) AS guards").fetchone()
+    if row['name'] is None or row['guards'] != 4:
+        annotations.fail('annotation_revision_storage_not_ready')
+
+
+def _capture(con, snapshot_id, store, actor_id):
     require_storage(con)
     row = con.execute('SELECT s.*,e.payload AS extraction,'
         'workflow.annotation_materialization_context(d) AS context '
@@ -62,6 +73,15 @@ def _capture(con, snapshot_id):
                                      'source_identity', 'objects_revision', 'normalization', 'generation', 'context')}
     basis.update(version=MODE, entries=[{key: entry[key] for key in
                                        ('annotation_id', 'revision', 'payload_hash')} for entry in entries])
+    producer = con.execute('SELECT formation_evidence_id FROM workflow.documents WHERE snapshot_id=%s', (snapshot_id,)).fetchone()['formation_evidence_id']
+    if producer:
+        require_revision_storage(con)
+        from src.review.revision_workflow import current_revisions
+        history = [r['payload'] for r in con.execute('SELECT payload FROM workflow.document_objects WHERE snapshot_id=%s ORDER BY position', (snapshot_id,)).fetchall()]
+        row['objects_revision'] = store.revision_for_rows(history)
+        basis.update(objects_revision=row['objects_revision'], revision_basis={
+            'version': 'human-annotation-revision-v1', 'proof_id': producer, 'actor_id': actor_id,
+            'objects': current_revisions(history, snapshot_id=snapshot_id)})
     return row, entries, {**basis, 'overview_hash': stable_hash(basis)}
 
 
@@ -69,7 +89,7 @@ def overview(console, *, actor_id, snapshot_id):
     annotations.authorize(console, actor_id, console._envelope(snapshot_id))
     with console.workflow_document_store._connect() as con:
         con.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
-        row, entries, basis = _capture(con, snapshot_id)
+        row, entries, basis = _capture(con, snapshot_id, console.workflow_document_store, actor_id)
         active = con.execute("SELECT a.attempt_id,a.payload->>'state' AS state FROM workflow.annotation_build_commands c "
             "JOIN workflow.processing_attempts a ON a.attempt_id=c.attempt_id WHERE c.snapshot_id=%s "
             "ORDER BY a.started_at DESC,a.attempt_id DESC LIMIT 1", (snapshot_id,)).fetchone()
@@ -114,10 +134,10 @@ def finalize(console, *, actor_id, snapshot_id, command_id, overview_hash,
         if view['current_build'] and view['current_build']['state'] == 'running':
             annotations.fail('processing_attempt_in_progress')
         annotations.fail('annotation_document_incomplete')
-    with workflow_transaction(console.workflow_document_store) as con:
+    with console._store_write_lock(), workflow_transaction(console.workflow_document_store) as con:
         annotations._locked(console, con, actor_id, snapshot_id)
         con.execute('SELECT snapshot_id FROM workflow.annotation_sets WHERE snapshot_id=%s FOR UPDATE', (snapshot_id,))
-        row, _, basis = _capture(con, snapshot_id)
+        row, _, basis = _capture(con, snapshot_id, console.workflow_document_store, actor_id)
         receipt = con.execute('SELECT request_hash,result FROM workflow.annotation_build_commands '
             'WHERE snapshot_id=%s AND command_id=%s', (snapshot_id, command_id)).fetchone()
         if receipt:
@@ -183,6 +203,12 @@ def execute(console, *, actor_id, snapshot_id, attempt, deadline):
     proof_ref = store.publish_formation_evidence(envelope, prepared)
     import json
     objects = [json.loads(payload) for role, _, _, payload in prepared.members if role == 'result']
+    if seal.get('revision_basis'):
+        from src.review.revision_workflow import with_current_revision, knowledge_revision
+        history = [deepcopy(r) for r in console._load_objects(snapshot_id, remember=False) if knowledge_revision(r)]
+        for obj in objects:
+            history = with_current_revision(history, obj)
+        objects = history
     with locked(console, snapshot_id, attempt['attempt_id']) as (con, document, row, active):
         validate(console, con, document, row, active)
         if active['dispatch'].get('token') != attempt['dispatch']['token']:
@@ -223,7 +249,20 @@ def execute(console, *, actor_id, snapshot_id, attempt, deadline):
         from src.vorming.attempt_diagnostics_v1 import merge_diagnostics
         merge_diagnostics(prepared_envelope, current)
         finish(prepared_envelope, attempt['attempt_id'], state='succeeded')
+        bindings = console.object_review_bindings(snapshot_id) if seal.get('revision_basis') else []
+        def record_revisions():
+            from src.review.review_ledger import append_event
+            from src.review.revision_workflow import current_revisions
+            prior = {obj['object_id']: obj for obj in (seal.get('revision_basis') or {}).get('objects', [])}
+            for obj in current_revisions(objects, snapshot_id=snapshot_id):
+                previous = prior.get(obj['object_id'])
+                if previous and previous['object_version'] != obj['object_version']:
+                    append_event(console._ledger_path, event_type='revision_created', object_id=obj['object_id'],
+                        object_version=obj['object_version'], actor=actor_id,
+                        details={'snapshot_id': snapshot_id, 'previous_object_version': previous['object_version'],
+                            'reason': 'human annotation correction', 'annotation_seal_id': attempt['annotation_seal_id'],
+                            'formation_evidence_ref': proof_ref, 'annotation': obj['metadata'].get('human_annotation')})
         console._commit_prepared_store(objects=(snapshot_id, objects), envelopes={snapshot_id: prepared_envelope},
-            bindings={snapshot_id: []}, expected_revision=seal['objects_revision'],
-            review_card_preparation=review_preparation, formation_activation_ref=proof_ref)
+            bindings={snapshot_id: bindings}, expected_revision=seal['objects_revision'],
+            review_card_preparation=review_preparation, formation_activation_ref=proof_ref, ledger_fn=record_revisions)
     return console._receipt(console._envelope(snapshot_id))

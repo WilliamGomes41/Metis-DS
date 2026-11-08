@@ -139,6 +139,44 @@ Dezelfde afgeleide pending-set weigert nieuwe approvalbindings op de oude
 versie; geen duurzame tweede pending-status. Onveranderd opslaan maakt geen
 nieuwe inhoudelijke correctie. Split/merge/terugname van al geactiveerde claims
 blijven expliciet geweigerd zolang hun aparte vervangingscommand ontbreekt.
+Deze correctieslice behoudt het geactiveerde claimlidmaatschap: na eerste bouw
+worden alleen oorspronkelijke annotation-ID's met een bewezen canonieke claim
+inhoudelijk aangepast. Nieuwe claims, omzetting van bron-dispositions, splitsen,
+samenvoegen en terugnemen vragen de afzonderlijke expliciete vervangingscyclus.
+Zonder die grens zou een nieuw ongeactiveerd entry geen geraakte huidige claim
+hebben en bij de bestaande publicatiesluiting ongemerkt buiten beeld kunnen
+blijven. Dit is een expliciete scopegrens; geen claim dat een algemene heropening
+van het gehele geselecteerde document hier is geleverd.
+
+Aanvullende concrete aansluiting gevonden in de echte browserketen: de bestaande
+KO-evidencegate kende alleen relaties naar een zelfstandig bewijsobject. Een
+geldig aangewezen bewijsbereik binnen hetzelfde human-KO werd daardoor niet als
+onderbouwing gelezen; een test kon alleen met de expliciete keuze NVT publiceren.
+Dat is geen bewijs van correcte aansluiting. #986/MET-49 en de annotatiearchitectuur
+vereisen juist bronbewijs zonder dat aanwijzen een tweede KO maakt. De bestaande
+KO-owner krijgt daarom een adapter voor exact gevalideerde human-bewijsbereiken
+met functie supported_by/explains. Pas het expliciete bevoegde eindoordeel bindt
+dit bewijs aan de exacte objecthash als de bestaande waarde `linked`. Een
+annotatie of readfact is geen goedkeuring; NVT bij werkelijk gekoppeld bewijs
+blijft een conflict. Geen extra KO, nieuwe reviewvraag of nieuwe approvalengine.
+Readfacts pinnen deze nieuwe bronafhankelijkheid onder hun bestaande producer-
+compatibiliteit; onbegrijpende oude facts vallen terug op de bestaande volledige
+bronlezing, zonder historische reviews/publicaties te heropenen.
+Ook de bestaande revision-frontier-producerversie verandert: haar afgeleide
+`historical_has_knowledge` omvat nu menselijke claimvorming. Een oude cache die
+die herkomst als niet-kennis berekende, mag niet onder het nieuwe contract
+worden vertrouwd. De bestaande owner valt terug op volledige historische
+validatie en verzegelt daarna opnieuw zijn afgeleide frontier; geen canonieke
+backfill, nieuwe lineage of curatorbeslissing bij startup.
+
+Archief v12 / formation-sectie v5 bewaart ook de bestaande
+`publish_authorizations.authorization_payload` volledig. De oude v11-export
+liet die kolom weg en kon daardoor wel het tuple maar niet de drie antwoorden,
+bewijskeuze en commandbinding exact terugzetten. Oude archieven krijgen alleen
+een expliciete null voor deze ontbrekende capability; er wordt geen historisch
+oordeel bij verzonnen. Nieuwe exports/herstel moeten volledige bindings exact
+behouden, ook tijdens een open correctie. Deferred headvalidatie weigert bij
+restore een oud oordeel dat strijdig is met de actuele annotatie-invoer.
 
 Rewrite target: postactivatie-correctie en exacte human producer-/reviewbinding, zonder de bestaande revisie- of servingauthority te vervangen.
 Why local patching is insufficient: 036 bevriest set.objects_revision en vergelijkt ook historische objectversies met uitsluitend het actieve producerresultaat; de oude algemene correctie wist bevestigde classificatie. Een open saveknop zou stale publicatie en oncontroleerbare bronwijziging toelaten.

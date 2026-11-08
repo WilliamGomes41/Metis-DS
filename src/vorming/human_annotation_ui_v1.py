@@ -30,7 +30,10 @@ SOURCE_LABELS={'document_metadata':'Documentgegevens','page_furniture':'Kop- of 
     'unformed_meaning':'Nog niet tot een uitspraak gevormd','uncertain_source_role':'Bronfunctie nog onzeker'}
 ERRORS = {
     'annotation_core_duplicate':'Deze kernbereiken horen al bij een andere annotatie. Verwijder het dubbele kernbereik of wijs andere kernbereiken aan om dit concept te bewaren. De oorspronkelijke annotatie blijft bewaard.',
-    'annotation_objects_stale':'Dit document is al opgebouwd. Open de bouwopdracht en de toepasselijke beoordeling.',
+    'annotation_objects_stale':'De objectversie of beoordeling is gewijzigd. Open de opgeslagen annotatie opnieuw; je huidige aanwijzingen blijven hier zichtbaar.',
+    'annotation_revision_storage_not_ready':'Broncorrecties kunnen nog niet worden opgeslagen. Laat de beheerder de annotatieopslag bijwerken; de huidige versie blijft bewaard.',
+    'annotation_replacement_required':'Een opgebouwd kennisobject kan niet zo worden teruggenomen of vervangen. Behoud deze annotatie en gebruik de expliciete opvolgerroute.',
+    'annotation_identity_conflict':'Deze selectie botst met de identiteit van een eerder opgebouwd kennisobject. Pas de oorspronkelijke annotatie aan; maak hiervoor geen nieuwe annotatie.',
     'annotation_overview_stale':'De opgeslagen keuzes of documentgegevens zijn gewijzigd. Controleer het vernieuwde documentoverzicht voordat je afsluit.',
     'annotation_document_incomplete':'Er ontbreken nog keuzes of er is nog bronmateriaal niet verantwoord. Controleer het documentoverzicht.',
     'annotation_build_storage_not_ready':'Het document kan nog niet worden afgesloten. De beheerder moet de annotatieopslag eerst bijwerken. Je opgeslagen annotaties blijven bewaard.',
@@ -188,6 +191,7 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
 <nav class="annotation-mobile-nav" aria-label="Wisselen tussen bron en annotatie"><a id="annotation-to-controls" href="#annotation-controls">Naar huidige annotatie</a><a id="annotation-to-source" href="#'''+esc(state['blocks'][0]['block_id'] if state['blocks'] else '')+'''">Terug naar bron</a></nav>
 <div class="annotation-workplace"><div aria-label="Bron in leesvolgorde">'''+blocks+'''</div>
 <aside id="annotation-controls" tabindex="-1" aria-label="Huidige annotatie"><label for="annotation-entry">Opgeslagen annotatie</label><select id="annotation-entry"><option value="">Nieuwe annotatie</option></select>
+<section id="annotation-current-object" hidden aria-labelledby="annotation-current-version"><h2 id="annotation-current-version"></h2><p id="annotation-current-text"></p><p id="annotation-current-state" role="status"></p><a id="annotation-current-review" target="_blank" rel="noopener">Open deze versie in Review</a></section>
 <label for="annotation-type">Type uitspraak</label><select id="annotation-type">'''+type_options+'''</select>
 <div id="annotation-source-disposition" hidden><label for="annotation-source-reason">Functie van dit bronstuk</label><select id="annotation-source-reason"></select><p>Dit bewaart een bronrolvoorstel, geen kennisobject of goedkeuring.</p></div>
 <label for="annotation-role">Functie van het volgende bereik</label><select id="annotation-role">'''+role_options+'''</select>
@@ -309,7 +313,8 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
             body = await request.json()
         except ValueError:
             return JSONResponse({'error':'annotation_command_invalid','message':'Open de annotatie opnieuw.'},status_code=422)
-        if not isinstance(body,dict) or set(body) != {'snapshot_id','command_id','annotation_id','expected_revision','expected_generation','extraction_hash','normalization','selection'}:
+        required = {'snapshot_id','command_id','annotation_id','expected_revision','expected_generation','extraction_hash','normalization','selection'}
+        if not isinstance(body,dict) or not required <= set(body) or set(body) - required - {'expected_objects_revision'}:
             return JSONResponse({'error':'annotation_command_invalid','message':'Open de annotatie opnieuw.'},status_code=422)
         try:
             result = domain.save(console,actor_id=actor['account_id'],**body)

@@ -92,6 +92,16 @@
   }
   function render() {
     renderFields();
+    const binding = state.object_bindings?.[entry.annotation_id];
+    el('current-object').hidden = !binding;
+    if (binding) {
+      el('current-version').textContent = 'Huidige objectversie ' + binding.object_version;
+      el('current-text').textContent = binding.text;
+      el('current-state').textContent = binding.pending ? 'De opgeslagen broncorrectie moet nog worden opgebouwd en beoordeeld.' :
+        'Een broncorrectie trekt de geraakte beoordelingen in. Na opbouw beoordeelt de aangewezen reviewer de nieuwe versie.';
+      el('current-review').href = '/review?' + new URLSearchParams({document:state.snapshot_id,object:binding.object_id});
+    }
+    el('withdraw').hidden = !!binding;
     el('required-links').replaceChildren();
     for(const link of entry.required_links.filter(l => l.required_for_meaning)) {
       const section=document.createElement('section');
@@ -139,6 +149,7 @@
     const ranges = entry.ranges.map(reference);
     return {snapshot_id:state.snapshot_id,command_id:crypto.randomUUID(),annotation_id:entry.annotation_id,
       expected_revision:entry.revision,expected_generation:state.generation,extraction_hash:state.extraction_hash,normalization:state.normalization,
+      expected_objects_revision:state.objects_revision,
       selection:{status:entry.status,object_type:entry.object_type,ranges,pending_range:entry.pending_range ? reference(entry.pending_range) : null,evidence_not_applicable:entry.evidence_not_applicable,
         required_links:clone(entry.required_links),
         ...(entry.disposition ? {disposition:clone(entry.disposition)} : {
@@ -170,6 +181,11 @@
             const error = new Error(data.message || 'Opslaan mislukt.'); error.validation = response.status === 422; throw error;
           }
           entry.revision = data.revision; state.generation = data.generation;
+          if (data.objects_revision) state.objects_revision = data.objects_revision;
+          if (state.object_bindings?.[entry.annotation_id] && data.revision > body.expected_revision) {
+            state.object_bindings[entry.annotation_id].pending = true;
+            el('current-state').textContent = 'De opgeslagen broncorrectie moet nog worden opgebouwd en beoordeeld.';
+          }
           // Only the sent snapshot is committed; edits made during fetch remain dirty.
           const saved = {...clone(entry),...body.selection,revision:data.revision};
           const index = state.entries.findIndex(e => e.annotation_id === entry.annotation_id);

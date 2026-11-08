@@ -1,4 +1,4 @@
-"""Researcher source selections, before candidate creation or review.
+"""Durable human source selections for initial formation and exact corrections.
 
 The workflow database owns every saved choice. Quotes are transient witnesses;
 this module never creates candidate text, identities, review or publication.
@@ -336,13 +336,14 @@ def _relationship_history(previous, payload, annotation_id):
 
 
 def save(console, *, actor_id, snapshot_id, command_id, annotation_id, expected_revision,
-         expected_generation, extraction_hash, normalization, selection):
+         expected_generation, extraction_hash, normalization, selection, expected_objects_revision=None):
     if not isinstance(snapshot_id,str) or not 1<=len(snapshot_id)<=512 or '\x00' in snapshot_id:
         fail('annotation_command_invalid')
     authorize(console, actor_id, console._envelope(snapshot_id))
     if (not isinstance(command_id,str) or not 1<=len(command_id)<=128 or '\x00' in command_id
             or type(expected_revision) is not int or expected_revision<0
-            or type(expected_generation) is not int or expected_generation<0):
+            or type(expected_generation) is not int or expected_generation<0
+            or (expected_objects_revision is not None and not isinstance(expected_objects_revision,str))):
         fail('annotation_command_invalid')
     try:
         if str(UUID(annotation_id)) != annotation_id:
@@ -363,7 +364,9 @@ def save(console, *, actor_id, snapshot_id, command_id, annotation_id, expected_
             raise ConsoleError('annotation_core_source_invalid') from exc
     request_hash = stable_hash({'actor_id':actor_id,'annotation_id':annotation_id,'expected_revision':expected_revision,
         'expected_generation':expected_generation,'extraction_hash':extraction_hash,'normalization':normalization,'selection':payload})
-    with workflow_transaction(console.workflow_document_store) as con:
+    if expected_objects_revision is not None:
+        request_hash = stable_hash({'request': request_hash, 'objects_revision': expected_objects_revision})
+    with console._store_write_lock(), workflow_transaction(console.workflow_document_store) as con:
         current = _locked(console, con, actor_id, snapshot_id)
         active = con.execute('SELECT * FROM workflow.annotation_sets WHERE snapshot_id=%s FOR UPDATE', (snapshot_id,)).fetchone()
         if _identity(current) != active['source_identity'] or current['working_revision_id'] != active['working_revision_id']:
@@ -373,7 +376,12 @@ def save(console, *, actor_id, snapshot_id, command_id, annotation_id, expected_
             if receipt['request_hash'] != request_hash:
                 fail('annotation_command_conflict')
             return receipt['result']
-        if console.workflow_document_store.objects_revision(snapshot_id) != active['objects_revision']:
+        producer = con.execute('SELECT formation_evidence_id FROM workflow.documents WHERE snapshot_id=%s', (snapshot_id,)).fetchone()['formation_evidence_id']
+        frontier = console.workflow_document_store.objects_revision(snapshot_id)
+        if producer:
+            from src.vorming.human_annotation_build_v1 import require_revision_storage
+            require_revision_storage(con)
+        if frontier != (expected_objects_revision if producer else active['objects_revision']):
             fail('annotation_objects_stale')
         head = con.execute('SELECT h.revision,h.position,v.payload FROM workflow.annotation_heads h JOIN workflow.annotation_versions v '
             'USING(snapshot_id,annotation_id,revision) WHERE h.snapshot_id=%s AND h.annotation_id=%s', (snapshot_id,annotation_id)).fetchone()
@@ -382,6 +390,23 @@ def save(console, *, actor_id, snapshot_id, command_id, annotation_id, expected_
         if head and head['payload'].get('selection_version') and payload.get('selection_version')!=head['payload']['selection_version']:
             fail('annotation_client_contract_stale')
         _relationship_history(head['payload'] if head else None,payload,annotation_id)
+        if producer and head and head['payload'] == payload:
+            result = {'annotation_id': annotation_id, 'revision': head['revision'],
+                      'generation': active['generation'], 'status': payload['status']}
+            result['unchanged'] = True
+            result['input_precondition'] = {'entry_revision': expected_revision,
+                'generation': expected_generation, 'objects_revision': expected_objects_revision}
+            if producer:
+                result['objects_revision'] = frontier
+            con.execute('INSERT INTO workflow.annotation_commands(snapshot_id,command_id,actor_id,request_hash,result) VALUES(%s,%s,%s,%s,%s::jsonb)',
+                (snapshot_id,command_id,actor_id,request_hash,_json_text(result)))
+            return result
+        if producer:
+            bound = con.execute("SELECT payload FROM workflow.document_objects WHERE snapshot_id=%s "
+                "AND payload#>>'{metadata,human_annotation,annotation_id}'=%s ORDER BY position DESC LIMIT 1",
+                (snapshot_id, annotation_id)).fetchone()
+            if bound and (payload['status'] == 'withdrawn' or payload.get('disposition') is not None):
+                fail('annotation_replacement_required')
         if core and payload['status'] != 'withdrawn' and payload.get('disposition') is None:
             duplicate = con.execute("SELECT h.annotation_id FROM workflow.annotation_heads h "
                 "JOIN workflow.annotation_versions v USING(snapshot_id,annotation_id,revision) "
@@ -393,6 +418,8 @@ def save(console, *, actor_id, snapshot_id, command_id, annotation_id, expected_
                 (snapshot_id,annotation_id,_json_text(core))).fetchone()
             if duplicate:
                 raise AnnotationCoreConflict(duplicate['annotation_id'])
+        if producer and not bound:
+            fail('annotation_replacement_required')
         revision, generation = expected_revision+1, expected_generation+1
         con.execute('INSERT INTO workflow.annotation_versions(snapshot_id,annotation_id,revision,status,author_id,payload,payload_hash) '
             'VALUES(%s,%s,%s,%s,%s,%s::jsonb,%s)',
@@ -402,7 +429,34 @@ def save(console, *, actor_id, snapshot_id, command_id, annotation_id, expected_
             (snapshot_id,annotation_id,revision,head['position'] if head else generation))
         has_seals=con.execute("SELECT to_regclass('workflow.annotation_seals') AS name").fetchone()['name'] is not None
         con.execute('UPDATE workflow.annotation_sets SET generation=%s'+(',current_seal_id=NULL' if has_seals else '')+' WHERE snapshot_id=%s', (generation,snapshot_id))
+        if producer:
+            affected = [r['object_id'] for r in con.execute('SELECT object_id FROM workflow.annotation_pending_objects(%s)', (snapshot_id,)).fetchall()]
+            if affected:
+                from src.publication.publish_authorization_v1 import invalidate_for_object
+                bindings = console.workflow_review_store.read_bindings([snapshot_id]).get(snapshot_id, [])
+                for oid in affected:
+                    bindings = invalidate_for_object(bindings, oid)
+                # Input and withdrawn approval authority share the outer native
+                # transaction. No source/canonical field changes before build.
+                from src.review.revision_workflow import current_revisions, reset_review_state
+                history = deepcopy(console._load_objects(snapshot_id, remember=False))
+                current_versions = {r['object_id']: r['object_version'] for r in current_revisions(history, snapshot_id=snapshot_id)}
+                for obj in history:
+                    if obj['object_id'] not in affected or obj['object_version'] != current_versions[obj['object_id']]:
+                        continue
+                    reset_review_state(obj)
+                from src.review.review_ledger import append_event
+                console._commit_prepared_store(objects=(snapshot_id, history), bindings={snapshot_id: bindings},
+                    expected_revision=frontier,
+                    ledger_fn=lambda: append_event(console._ledger_path, event_type='annotation_correction_saved',
+                        object_id=annotation_id, object_version=str(revision), actor=actor_id,
+                        details={'snapshot_id': snapshot_id, 'generation': generation, 'affected_objects': affected}))
         result = {'annotation_id':annotation_id,'revision':revision,'generation':generation,'status':payload['status']}
+        if expected_objects_revision is not None:
+            result['input_precondition'] = {'entry_revision': expected_revision,
+                'generation': expected_generation, 'objects_revision': expected_objects_revision}
+        if producer:
+            result['objects_revision'] = console.workflow_document_store.objects_revision(snapshot_id)
         con.execute('INSERT INTO workflow.annotation_commands(snapshot_id,command_id,actor_id,request_hash,result) VALUES(%s,%s,%s,%s,%s::jsonb)',
             (snapshot_id,command_id,actor_id,request_hash,_json_text(result)))
     return result
@@ -457,12 +511,16 @@ def overview(console, *, actor_id, snapshot_id):
     by_id = {b['block_id']:b for b in blocks}
     # One statement captures heads and generation together, including two-tab writes.
     with console.workflow_document_store._connect() as con:
+        con.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
         capture = con.execute('SELECT s.generation,COALESCE(jsonb_agg(jsonb_build_object('
             "'annotation_id',v.annotation_id,'revision',v.revision,'author_id',v.author_id,'payload',v.payload,'payload_hash',v.payload_hash) "
             "ORDER BY h.position) FILTER (WHERE v.annotation_id IS NOT NULL),'[]'::jsonb) AS entries "
             'FROM workflow.annotation_sets s LEFT JOIN workflow.annotation_heads h USING(snapshot_id) '
             'LEFT JOIN workflow.annotation_versions v ON (v.snapshot_id,v.annotation_id,v.revision)=(h.snapshot_id,h.annotation_id,h.revision) '
             'WHERE s.snapshot_id=%s GROUP BY s.generation', (snapshot_id,)).fetchone()
+        history = [r['payload'] for r in con.execute('SELECT payload FROM workflow.document_objects WHERE snapshot_id=%s ORDER BY position', (snapshot_id,)).fetchall()]
+        revision_supported = con.execute("SELECT to_regprocedure('workflow.annotation_pending_objects(text)') AS name").fetchone()['name'] is not None
+        pending = {r['object_id'] for r in con.execute('SELECT object_id FROM workflow.annotation_pending_objects(%s)', (snapshot_id,)).fetchall()} if revision_supported else set()
     entries = capture['entries']
     for entry in entries:
         if stable_hash(entry['payload']) != entry.pop('payload_hash'):
@@ -480,4 +538,10 @@ def overview(console, *, actor_id, snapshot_id):
         'source_identity':row['source_identity'],'extraction_hash':row['extraction_hash'],
         'normalization':row['normalization'],'generation':capture['generation'],'entries':entries}
     summary['overview_hash'] = stable_hash(summary)
-    return {**summary,'title':envelope['title'],'blocks':blocks,'objects_revision':console.objects_revision(snapshot_id)}
+    from src.review.revision_workflow import current_revisions
+    objects = {obj['metadata']['human_annotation']['annotation_id']: {
+        'object_id': obj['object_id'], 'object_version': obj['object_version'],
+        'text': obj['content']['clean_text'], 'pending': obj['object_id'] in pending}
+        for obj in current_revisions(history, snapshot_id=snapshot_id) if (obj.get('metadata') or {}).get('human_annotation')}
+    return {**summary,'title':envelope['title'],'blocks':blocks,
+            'objects_revision':console.workflow_document_store.revision_for_rows(history), 'object_bindings': objects}

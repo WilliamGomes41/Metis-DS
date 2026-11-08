@@ -32,6 +32,15 @@ class ReviewCommandResult:
     object_id: str
 
 
+def _review_write_error(exc):
+    error = exc
+    while error is not None:
+        if str(error).splitlines()[0] == 'annotation_correction_pending':
+            return ConsoleError('annotation_correction_pending')
+        error = error.__cause__
+    return ConsoleError('workflow_review_write_failed')
+
+
 def generation_precondition(snapshot_id, token):
     """Decode only; authoritative counter comparison belongs under the lock."""
     from src.review.review_passage_read_v1 import PREFIX
@@ -341,7 +350,7 @@ def execute_review_command(console, submitted, invoke, *, completed_command=None
                 finally:
                     close_store_command(token)
         except WorkflowReviewStoreError as exc:
-            raise ConsoleError('workflow_review_write_failed') from exc
+            raise _review_write_error(exc) from exc
         except WorkflowDocumentStoreError as exc:
             code = str(exc)
             if code not in {SNAPSHOT_OBJECT_WRITE_CONFLICT, 'published_working_revision_immutable'}:
@@ -530,7 +539,7 @@ def _execute_prepared_command(console, command, invoke, *, compact=False, admiss
                         close_store_command(token)
             return ReviewCommandResult(sid, oid) if compact else result
         except WorkflowReviewStoreError as exc:
-            raise ConsoleError('workflow_review_write_failed') from exc
+            raise _review_write_error(exc) from exc
         except WorkflowDocumentStoreError as exc:
             code = str(exc)
             if code not in {SNAPSHOT_OBJECT_WRITE_CONFLICT, 'published_working_revision_immutable'}:

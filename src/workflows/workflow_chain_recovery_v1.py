@@ -43,7 +43,7 @@ from src.publication.publication_chain_recovery_v1 import (
     check_chain_integrity,
 )
 
-WORKFLOW_RECOVERY_VERSION = 11  # 11: exact annotation seals and human producer evidence (#1015)
+WORKFLOW_RECOVERY_VERSION = 12  # 12: sealed human corrections and exact/no-op receipts (#1016)
 API_ACCESS_TABLES = tuple(API_ACCESS_COLUMNS)
 _API_ACCESS_ORDER_BY = {
     table: ",".join(columns)
@@ -99,6 +99,7 @@ _WORKFLOW_COLUMNS: dict[str, tuple[str, ...]] = {
         "authorization_id", "snapshot_id", "object_id", "object_version",
         "canonical_object_hash", "confirmed_object_type", "reviewer_account_id",
         "reviewer_display_name", "decision", "valid", "created_at", "position",
+        "authorization_payload",
     ),
     "audit_records": (
         "audit_id", "audit_type", "title", "created_by", "created_at", "updated_at",
@@ -129,6 +130,7 @@ _WORKFLOW_JSON_COLUMNS = {
     "documents": {"object_diff", "envelope_payload"},
     "document_objects": {"payload"},
     "review_events": {"details", "event_payload"},
+    "publish_authorizations": {"authorization_payload"},
     "audit_records": {"payload"},
     "audit_secrets": {"secret_payload"},
     "publication_refusals": {"reason_codes"},
@@ -151,12 +153,13 @@ def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:
             raise PublicationChainRecoveryError('workflow_formation_backup_missing_reexport_required')
         validate(state)
         return deepcopy(dict(state))
-    if version == 10 and state.get('formation_recovery') is None:
+    if version in {10, 11} and state.get('formation_recovery') is None:
         raise PublicationChainRecoveryError('workflow_formation_backup_missing_reexport_required')
-    if version in {7,8,9,10}:
+    if version in {7,8,9,10,11}:
         from src.workflows.formation_recovery_v1 import upgrade_legacy
         upgraded = upgrade_legacy(dict(state))
         upgraded['workflow_recovery_version'] = WORKFLOW_RECOVERY_VERSION
+        _retain_legacy_review_capability(upgraded)
         from src.workflows.formation_recovery_v1 import validate
         validate(upgraded)
         return upgraded
@@ -214,7 +217,15 @@ def _add_empty_refusals(upgraded: dict[str, Any]) -> dict[str, Any]:
     tables["publication_refusals"] = []
     upgraded.setdefault('formation_recovery', None)  # Explicit absent legacy capability.
     upgraded["workflow_recovery_version"] = WORKFLOW_RECOVERY_VERSION
+    _retain_legacy_review_capability(upgraded)
     return upgraded
+
+
+def _retain_legacy_review_capability(state):
+    # Old archives lost this optional exact decision payload. Keep that absence
+    # explicit; never manufacture assessment answers or an evidence decision.
+    for row in state.get('workflow_tables', {}).get('publish_authorizations', []):
+        row.setdefault('authorization_payload', None)
 
 
 def _rows(state: Mapping[str, Any], table: str, *, group: str = "workflow") -> list[dict[str, Any]]:
@@ -467,6 +478,17 @@ def check_workflow_integrity(state: Mapping[str, Any]) -> dict[str, Any]:
     authorization_positions: set[tuple[str, int]] = set()
     for row in _rows(state, "publish_authorizations"):
         sid = str(row.get("snapshot_id") or "")
+        if 'authorization_payload' not in row:
+            errors.append(f'workflow_authorization_payload_missing:{sid}')
+        elif row['authorization_payload'] is not None:
+            from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+            try:
+                if (not isinstance(row['authorization_payload'], dict)
+                        or PostgresWorkflowReviewStore._binding_projection(row) !=
+                           PostgresWorkflowReviewStore._binding_projection(row['authorization_payload'])):
+                    errors.append(f'workflow_authorization_payload_invalid:{sid}')
+            except (KeyError, TypeError, ValueError):
+                errors.append(f'workflow_authorization_payload_invalid:{sid}')
         if sid not in snapshots:
             errors.append(f"workflow_authorization_snapshot_missing:{sid}")
         if str(row.get("reviewer_account_id") or "") not in accounts:

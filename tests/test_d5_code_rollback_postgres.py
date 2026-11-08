@@ -140,9 +140,24 @@ def test_code_rollback_rebuilds_copies_and_preserves_pg_and_product_api(complete
             # never interpret this legacy scenario as a rollback of proof-v3.
             state = outcome['state']
             if name == 'current':
-                assert state.pop('workflow_recovery_version') == 11
+                assert state.pop('workflow_recovery_version') == 12
+                # v12 now exports the complete existing decision payload. The
+                # pinned v7 binary cannot export this column. Validate it
+                # independently before comparing their common projection.
+                from src.workflows.workflow_review_postgres_v1 import PostgresWorkflowReviewStore
+                previous_payloads = {r['authorization_id']: r['authorization_payload']
+                                     for r in before['workflow_tables']['publish_authorizations']}
+                for row in raw['state']['workflow_tables']['publish_authorizations']:
+                    binding_payload = row['authorization_payload']
+                    assert PostgresWorkflowReviewStore._binding_projection(binding_payload) == PostgresWorkflowReviewStore._binding_projection(row)
+                    if row['authorization_id'] in previous_payloads:
+                        assert binding_payload == previous_payloads[row['authorization_id']]
+                    else:
+                        assert all(binding_payload[key] == value for key, value in decision_evidence.items())
+                for row in state['workflow_tables']['publish_authorizations']:
+                    row.pop('authorization_payload')
                 formation = state.pop('formation_recovery')
-                assert formation['version'] == 4
+                assert formation['version'] == 5
                 for table in ('annotation_sets','annotation_versions','annotation_heads','annotation_commands',
                               'annotation_seals','annotation_build_commands'):
                     assert formation['tables'][table] == []  # Legacy work is never silently taken over.
