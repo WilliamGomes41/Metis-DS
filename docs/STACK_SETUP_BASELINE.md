@@ -2,6 +2,7 @@
 
 **Status:** working technical inventory
 **Date:** 2026-08-24
+**Storage-route refresh:** 2026-11-08, KO-5 (#1012); repository implementation only, no provisioning or deployment assertion.
 **Scope:** current repository baseline and infrastructure dependencies visible in code/protocol
 **Purpose:** make setup, vendor, account, persistence and cost dependencies visible before they become implementation blockers or budget surprises.
 
@@ -19,14 +20,14 @@ FastAPI + Uvicorn Product API
         |
         +--> local/derived retrieval files
         +--> local char-TFIDF retrieval provider
-        +--> local SQLite canonical/publication store
+        +--> PostgreSQL canonical/publication store and serving registry
         +--> local SQLite usage ledger
         +--> in-process rate limiter
         +--> locally mounted canonical source binaries
-        +--> local operations console (FastAPI HTML; G0 identity under output/runtime/)
+        +--> operations console (FastAPI HTML; PostgreSQL workflow/identity/review state)
 
-Target external/Azure operation requires replacing several local pilot components
-with durable, shared and operationally managed services.
+External/Azure operation still requires explicit hosting, capacity and operational
+configuration; this repository inventory does not assert that resources are provisioned.
 ```
 
 The G0 local operations console MVP is implemented in this repository (`vvn-data-service serve-console`). Protocol v2.6 authorizes that internal operations console as scope. Protocol v2.7 keeps those console rules and records: No LLM in the MVP; the Product API is object-level retrieve-and-abstain and MUST NOT generate prose. Protocol v2.8 keeps those rules and records: do not build a mockup; Continentie bron 2 enters through that console; local `sources/private/` is the G0 stand-in until G0 Azure DEV; the Product API already exists and MUST NOT be rebuilt first; RAG on kennisplatform HTML is not the product. Protocol v2.9 adds researcher-task UX and V&VN digital stylesheet rules; that rewrite is now in code (PR #25), including the official beeldmerk. Protocol v2.10 adds Documentenhierarchie (UI heading; kernel remains family × class), waiting-task badges, and an Accounts room (publisher as MVP identity admin; closed role set); that follow-up remains required and is not the next implementation after Protocol v2.12. Protocol v2.11 requires official first-wave HTML as an uploaded freeze file, rejects live URL-HTML at ingest, requires source locators on knowledge objects, and fail-closes Product API `supported` without a locator; that kernel work is not implemented in this protocol change. Protocol v2.12 adds object-type default unclassified, answerability as question type × object type, publish binding to the object tuple, and serving from an atomically replaced published projection; that follow-up is not implemented in this protocol change. Azure/G2 stay out of this delta. The Product API contains no LLM/generation layer. Vercel, Neon and a hosted LLM are therefore **not** current V&VN Data Services requirements. No identity vendor is selected. No Vercel, Neon, or LLM vendor.
@@ -43,8 +44,8 @@ The G0 local operations console MVP is implemented in this repository (`vvn-data
 | Product API | FastAPI + Uvicorn | Externally reachable machine-to-machine API | G8 | Included in runtime; network/ingress may add cost | Implemented locally |
 | Canonical source binaries | Local file supplied to source registry; binaries excluded from Git. Local `sources/private/` is the G0 Local substitute and is explicitly not production. Azure Blob `aidataservice` / private container `canonical-sources` (West Europe) is the G2 store; locator `azure://aidataservice/canonical-sources/{sha256}/{filename}`; adapter in `src/g2_source_store.py`; runtime SDK `azure-identity==1.25.3` and `azure-storage-blob==12.30.1` required; container empty as of 2026-09-01; G2 remains BLOCKED; `publish()` remains fail-closed | Controlled immutable source store on **Azure Blob Storage**. Console ingest (Protocol v2.6) requires this store | G2/G8 / console ingest | Existing V&VN Azure subscription; storage cost after first source | Adapter exists; SDK in runtime deps; Blob store provisioned empty; G2 BLOCKED; G0 Azure DEV remains BLOCKED |
 | Internal operations console UI | Implemented locally: FastAPI HTML console in this repository (`vvn-data-service serve-console`; ingest, family tree, review return-loop; publish room fail-closed without G2). Not a care-app frontend, chatbot, EPD/ECD UI or public website. Chat is not a room. Primary users are guideline researchers, not nurses | Keep the in-repo HTML console for G0 Local. Azure host **TBD**; Vercel is not required. Local `sources/private/` is the G0 stand-in | Protocol v2.6 / v2.8; G0 Local implemented; G2 still BLOCKED | **0 incremental hosted-UI cost locally**; Azure hosting cost TBD | G0 local implemented; G0 Azure DEV remains BLOCKED; no vendor is selected for Azure |
-| Console identity (accounts/roles) | Implemented locally: researcher, reviewer, publisher; no shared login; uploader independence enforced in accounts. Runtime under gitignored `output/runtime/` | Internal identity, not public signup. Azure provider **TBD** and subject to G0. Does not close G8 or provision Azure AD | Protocol v2.6 C5 / G0 / G8 | **0 current identity-service cost**; Azure identity cost TBD | G0 local implemented; no vendor is selected for Azure; G0 Azure DEV remains BLOCKED |
-| Canonical/publication database | SQLite reference runtime; PostgreSQL schema exists in `db/schema_v2.sql` | Production database adapter and durable relational store; current reference target is PostgreSQL | G8 | **New managed database cost** | Adapter/integration not implemented |
+| Console identity (accounts/roles) | Implemented locally: researcher, reviewer, publisher; no shared login; uploader independence enforced in accounts. Runtime identity authority is PostgreSQL `workflow`; the gitignored `output/runtime/` directory is not its state store | Internal identity, not public signup. Azure provider **TBD** and subject to G0. Does not close G8 or provision Azure AD | Protocol v2.6 C5 / G0 / G8 | **0 current identity-service cost**; Azure identity cost TBD | G0 local implemented; no vendor is selected for Azure; G0 Azure DEV remains BLOCKED |
+| Canonical/publication database | Existing PostgreSQL canonical object/release store and serving registry in `src/publication/canonical_publication_postgres_v1.py`; console workflow/review authority is also PostgreSQL. The SQLite publication pilot is retired by KO-5 | Managed database hosting, sizing, retention and operational configuration for the selected deployment | G8 | **Managed database cost must be budgeted** | Runtime implementation exists; no provisioning/deployment claim |
 | Usage ledger | Local SQLite | Shared durable usage/audit backend for multi-replica production | G8 | Could share production DB or use separate observability/data service | Decision open |
 | Tenant registry | Local JSON containing only API-key hashes; real tenant config excluded from Git | Production tenant/config store and controlled secret provisioning | G8 | Secret/config service may add cost | Decision open |
 | Secrets and workload identity | Environment/managed-identity boundary described in provider contract; no production implementation | Select V&VN-approved secret management and workload identity; no plaintext repository secrets | G8 | Possible secret-management cost | Decision open |
@@ -53,7 +54,7 @@ The G0 local operations console MVP is implemented in this repository (`vvn-data
 | Retrieval embeddings | Deterministic local char-TFIDF; no remote credentials | Hosted embedding provider is optional future C4 work, not required for current Product API | G6+ / future C4 | Usage-based model/API cost if adopted | **Not required now** |
 | LLM / Answer-RAG | None in Product API | Separate optional future layer governed by G7/C6 | G7 only | Usage-based model cost if later approved | **Not required now** |
 | Monitoring/alerting | No production monitoring implementation | Monitoring, incident visibility and operational alerting are mandatory for G8 | G8 | May add Azure monitoring/log-retention cost | Decision open |
-| Backup/recovery | Local files/SQLite only | Managed backup/restore and tested recovery for durable stores | G8 | Storage/retention cost | Decision open |
+| Backup/recovery | Existing PostgreSQL workflow and publication-chain backup, restore and integrity owners; immutable source bytes retain their source-store authority. See `docs/RUNTIME_DATA_RECOVERY.md` | Configure and verify backup storage, retention and recovery for the selected deployment; local files are not workflow/publication authority | G8 | Storage/retention cost | Recovery implementation exists; operational configuration and verification remain deployment-specific |
 | Domain/TLS | Local API endpoints | Azure-managed endpoint may suffice for pilot; custom domain/DNS/certificate only if governance/product requires it | G8 if externally exposed | Conditional | Not yet required |
 | Infrastructure as code | No Bicep/Terraform/`azd` deployment baseline found | Deployment resources/configuration should become reproducible before production | G8 | Engineering/setup effort; service costs captured above | Not implemented |
 
@@ -109,7 +110,7 @@ The Dockerfiles prove the service is container-ready, but they do not select or 
 They solve different problems:
 
 1. **Object/file storage** for the exact canonical PDF/HTML/binary source bytes. The target architecture already names Azure Blob Storage.
-2. **Relational database storage** for canonical object versions, releases, publication registry and audit state. Local SQLite is explicitly a pilot/reference implementation; PostgreSQL is the production reference schema.
+2. **Relational database storage** for canonical object versions, releases, publication registry, workflow/review and audit state. PostgreSQL is the existing runtime authority, not only a reference schema; the SQLite publication pilot has been retired. The separate local SQLite usage ledger is not canonical/publication storage.
 
 One does not replace the other.
 
@@ -160,9 +161,10 @@ This inventory is derived from the current repository, especially:
 - `docs/PROTOCOL_V2_12_OBJECT_TYPE_REVIEW_PROJECTION_DELTA.md` — unclassified default, closed object-type set, answerability × type, object-tuple publish binding, atomic published projection; Azure/G2 out of this delta.
 - `Dockerfile` and `Dockerfile.product-api` — Python/container runtime;
 - `pyproject.toml` and lockfiles — pinned Python stack;
-- `src/operations_console_v1.py` and `src/operations_console_app.py` — G0 local operations console MVP and identity store;
-- `src/publication/canonical_store.py` and `db/schema_v2.sql` — SQLite pilot versus PostgreSQL production reference;
-- `src/product_api_v1.py` and `src/usage_ledger_v1.py` — local file/SQLite runtime state;
+- `src/operations_console_v1.py` and `src/operations_console_app.py` — PostgreSQL-backed console orchestration and HTML routes;
+- `src/publication/canonical_publication_postgres_v1.py` and `src/workflows/workflow_document_concurrency_v1.py` — existing PostgreSQL canonical/publication and workflow authorities;
+- `src/workflows/workflow_chain_recovery_v1.py`, `src/publication/publication_chain_recovery_v1.py`, `scripts/publication_chain_recovery.py` and `docs/RUNTIME_DATA_RECOVERY.md` — workflow/publication backup, restore and integrity owners;
+- `src/product_api_v1.py` — registry-backed Product API serving; `src/usage_ledger_v1.py` — separate local SQLite usage accounting;
 - `src/product_security_v1.py` — in-process rate limiting and APIM/Redis replacement boundary;
 - `src/retrieval/semantic_vector_retrieval_v1.py` and `config/vector_retrieval_v1.json` — active local deterministic character TF-IDF retrieval; no hosted embedding provider or credentials are used;
 - `CONTRIBUTING.md` and `docs/REPOSITORY_CONVENTIONS.md` — controlled source binaries outside Git and Azure Blob target;
