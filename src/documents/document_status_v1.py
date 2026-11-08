@@ -81,31 +81,6 @@ def derive_lifecycle_status(
     }
 
 
-def _local_release_serving_status(envelope_state: str) -> tuple[str, str]:
-    """Compatibility authority for runtimes without canonical PostgreSQL."""
-    if envelope_state == "withdrawn":
-        return "withdrawn", "inactive"
-    if envelope_state == "superseded":
-        return "superseded", "inactive"
-    if envelope_state == "published":
-        return "published", "active"
-    return "none", "inactive"
-
-
-def derive_document_status(
-    *,
-    envelope_state: str,
-    readiness: dict[str, Any],
-) -> str:
-    """Backward-compatible presentation helper for non-canonical/local callers."""
-    release_status, serving_status = _local_release_serving_status(envelope_state)
-    return derive_lifecycle_status(
-        readiness=readiness,
-        release_status=release_status,
-        serving_status=serving_status,
-    )["presentation_status"]
-
-
 class DocumentStatusReadinessMixin:
     """Expose one read-only lifecycle model without widening action authority."""
 
@@ -119,15 +94,9 @@ class DocumentStatusReadinessMixin:
         *,
         envelope: dict[str, Any] | None = None,
     ) -> dict[str, str]:
-        """Compatibility fallback when no canonical publication store is configured."""
-        current = envelope if envelope is not None else self._envelope(snapshot_id)  # type: ignore[attr-defined]
-        release_status, serving_status = _local_release_serving_status(
-            str(current.get("state") or "")
-        )
-        return {
-            "release_status": release_status,
-            "serving_status": serving_status,
-        }
+        """Supported runtimes must use their canonical registry implementation."""
+        from src.operations_console_v1 import ConsoleError
+        raise ConsoleError("durable_publication_store_required")
 
     def document_lifecycle_status(self, snapshot_id: str) -> dict[str, str]:
         envelope = self._envelope(snapshot_id)  # type: ignore[attr-defined]

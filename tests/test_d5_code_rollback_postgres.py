@@ -95,7 +95,38 @@ def test_code_rollback_rebuilds_copies_and_preserves_pg_and_product_api(complete
                         assert all(details[key] == value for key, value in decision_evidence.items())
                     else:
                         assert not decision_evidence.keys() & details.keys()
+            # KO-5 stops the obsolete envelope tick; the pinned image still
+            # writes it for this one approval. Validate both behaviors before
+            # comparing all remaining durable/product state exactly.
+            prior_envelope = next(row['envelope_payload'] for row in before['workflow_tables']['documents']
+                                  if row['snapshot_id'] == receipt['snapshot_id'])
+            actual_envelope = next(row['envelope_payload'] for row in raw['state']['workflow_tables']['documents']
+                                   if row['snapshot_id'] == receipt['snapshot_id'])
+            assert prior_envelope.get('review_passes', {}) == {}
+            if name == 'current':
+                assert ('review_passes' in actual_envelope) == ('review_passes' in prior_envelope)
+                assert actual_envelope.get('review_passes') == prior_envelope.get('review_passes')
+            else:
+                from datetime import datetime
+                assert len(new_approvals) == 1
+                expected_actor = accounts['reviewer']['account_id']
+                assert new_approvals[0]['details']['reviewer_id'] == expected_actor
+                passes = actual_envelope['review_passes']
+                assert set(passes) == {expected_actor}
+                tick = passes[expected_actor]
+                assert set(tick) == {'at', 'passed', 'object_id'}
+                assert tick['passed'] is True
+                assert tick['object_id'] == new_approvals[0]['object_id']
+                assert isinstance(tick['at'], str) and tick['at']
+                assert datetime.fromisoformat(tick['at'].replace('Z', '+00:00')).tzinfo is not None
             outcome = _normalise(raw, root)
+            compared_envelope = next(row['envelope_payload'] for row in outcome['state']['workflow_tables']['documents']
+                                     if row['snapshot_id'] == receipt['snapshot_id'])
+            if name == 'rollback':
+                if 'review_passes' in prior_envelope:
+                    compared_envelope['review_passes'] = prior_envelope['review_passes']
+                else:
+                    compared_envelope.pop('review_passes')
             if name == 'current':
                 new_approval_ids = {row['event_id'] for row in new_approvals}
                 for event in outcome['state']['workflow_tables']['review_events']:

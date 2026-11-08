@@ -241,9 +241,11 @@ def source_role_version(source: dict[str, Any], *, role: str, command_id: str, a
                       validated_by=None if role == "reset" else reviewer,
                       validation_date=None if role == "reset" else now[:10], review_snapshot_hash=None,
                       publication_status="unpublished")
-    second = governance.get("second_review")
-    if isinstance(second, dict) and second.get("required"):
-        second.update(status="pending", reviewer=None, review_date=None, snapshot_hash=None)
+    # New-version compatibility shape, never review authority (until KO-6).
+    required = bool((updated.get("risk") or {}).get("requires_second_review"))
+    governance["second_review"] = {"required": required,
+        "status": "pending" if required else "not_required", "reviewer": None,
+        "review_date": None, "snapshot_hash": None}
     return updated
 
 
@@ -628,9 +630,11 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
                           validated_by=None if role == "reset" else reviewer["username"],
                           validation_date=None if role == "reset" else now[:10], review_snapshot_hash=None,
                           publication_status="unpublished")
-        second = governance.get("second_review")
-        if isinstance(second, dict) and second.get("required"):
-            second.update(status="pending", reviewer=None, review_date=None, snapshot_hash=None)
+        # New-version compatibility shape, never review authority (until KO-6).
+        required = bool((source_after.get("risk") or {}).get("requires_second_review"))
+        governance["second_review"] = {"required": required,
+            "status": "pending" if required else "not_required", "reviewer": None,
+            "review_date": None, "snapshot_hash": None}
         changed[source_object_id] = source_after
         for oid, original in by_id.items():
             previous = links_of(original)
@@ -657,9 +661,11 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
             governance = updated.setdefault("governance", {})
             governance.update(validation_status="needs_review", validated_by=None,
                               validation_date=None, review_snapshot_hash=None, publication_status="unpublished")
-            second = governance.get("second_review")
-            if isinstance(second, dict) and second.get("required"):
-                second.update(status="pending", reviewer=None, review_date=None, snapshot_hash=None)
+            # New-version compatibility shape, never review authority (until KO-6).
+            required = bool((updated.get("risk") or {}).get("requires_second_review"))
+            governance["second_review"] = {"required": required,
+                "status": "pending" if required else "not_required", "reviewer": None,
+                "review_date": None, "snapshot_hash": None}
             changed[oid] = updated
         # Re-admit only the explicitly changed targets against verified source.
         # This is part of the same object/binding/audit transaction, no backfill.

@@ -76,7 +76,7 @@ CASES = [
     ("approved, passage not assessed", _obj("approved", register="not_yet_assessed"), None, "admitted", "none",
      ko.GOEDGEKEURD, ["approved_with_passage_not_assessed"]),
     ("second-review mirror says done", _obj("approved", second={"required": True, "status": "approved"}),
-     SECOND_REVIEW, "admitted", "none", ko.TWEEDE_REVIEW, ["second_review_mirror_disagrees"]),
+     SECOND_REVIEW, "admitted", "none", ko.TWEEDE_REVIEW, []),
 ]
 
 
@@ -183,15 +183,14 @@ def test_boom_path_is_structure_not_a_knowledge_object(fixed):
     assert ko.derive_ko_state(node, review_path="boom")["state"] is not None
 
 
-def test_replaced_primary_keeps_the_other_binding_and_reports_the_mirror(fixed, monkeypatch):
-    # Codex on #996: a still-valid second binding is not "no current binding", and the
-    # second-review mirror is checked independently of the open stage.
+def test_replaced_primary_keeps_the_other_binding_and_reports_open_first_review(fixed, monkeypatch):
+    # A still-valid second binding is not no-current-binding; mirrors are inert.
     fixed(FIRST_REVIEW)
     monkeypatch.setattr(ko, "exact_current_approver_ids", lambda obj, bindings: ("secondary",))
     obj = _obj("approved", second={"required": True, "status": "approved"})
     result = _state(obj)
     assert result["state"] == ko.IN_REVIEW
-    assert result["invalid"] == ["approved_mirror_with_open_first_review", "second_review_mirror_disagrees"]
+    assert result["invalid"] == ["approved_mirror_with_open_first_review"]
     monkeypatch.setattr(ko, "exact_current_approver_ids", lambda obj, bindings: ())
     assert "approved_without_current_binding" in _state(obj)["invalid"]
 
@@ -232,12 +231,12 @@ def test_prepared_source_carrier_is_passed_through_unchanged(fixed, monkeypatch)
     assert seen == [carrier]
 
 
-def test_second_review_mirror_is_checked_against_exact_approvers(fixed, monkeypatch):
-    # Codex on #996: with no open stage, an approved mirror backed by one approver disagrees.
+def test_second_review_mirror_does_not_change_exact_approval_diagnostics(fixed, monkeypatch):
+    # Exact bindings and the duty owner decide; poisoned mirror completion is inert.
     fixed(None)
     monkeypatch.setattr(ko, "exact_current_approver_ids", lambda obj, bindings: ("first",))
     obj = _obj("approved", second={"required": True, "status": "approved"})
-    assert _state(obj)["invalid"] == ["second_review_mirror_disagrees"]
+    assert _state(obj)["invalid"] == []
     monkeypatch.setattr(ko, "exact_current_approver_ids", lambda obj, bindings: ("first", "second"))
     assert _state(obj)["invalid"] == []
 

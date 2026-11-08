@@ -4,7 +4,7 @@
 This module is deliberately downstream of the canonical publication registry.
 It does not approve, publish, embed, or mutate canonical knowledge objects.
 
-Input format is the JSONL envelope produced by canonical_store.export_published():
+Input format is the JSONL envelope produced by the canonical PostgreSQL publication export:
     {"knowledge_object": {...}, "publication": {...}}
 
 Safety properties:
@@ -431,7 +431,7 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--input", type=Path, required=True, help="Published JSONL export from canonical_store.py")
+    ap.add_argument("--input", type=Path, required=True, help="Published JSONL export from canonical PostgreSQL")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--report", type=Path, required=True)
     args = ap.parse_args()

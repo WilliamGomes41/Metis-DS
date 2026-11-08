@@ -367,8 +367,11 @@ def test_reprocessing_retains_nonknowledge_ancestor_of_promoted_candidate(tmp_pa
 
 
 def test_legacy_published_history_remains_readable_but_cannot_gain_successor(tmp_path, *, production_console):
-    from src.review.revision_workflow import revise_object, validate_revision_write, current_revisions
-    _, _, sid, candidate = _console(tmp_path, production_console=production_console)
+    from src.review.revision_workflow import revise_object, current_revisions
+    from src.workflows.workflow_documents_postgres_v1 import WorkflowDocumentStoreError
+    from tests.complete_workflow_support import seed_canonical_release
+    from tests.test_review_command_bounded_http_v1 import physical_state
+    state, _, sid, candidate = _console(tmp_path, production_console=production_console)
     published = deepcopy(candidate)
     published["governance"]["publication_status"] = "published"
     before = deepcopy(published)
@@ -376,8 +379,16 @@ def test_legacy_published_history_remains_readable_but_cannot_gain_successor(tmp
     proposed = deepcopy(published)
     proposed["content"]["clean_text"] += " Correction."
     successor = revise_object(published, proposed, snapshot_id=sid, actor="reviewer", reason="correction")
-    with pytest.raises(ValueError, match="published_working_revision_immutable"):
-        validate_revision_write([published], [published, successor], snapshot_id=sid)
+    # Legacy mirrors remain readable; actual immutable release history, rather
+    # than that mirror, must reject the successor at the locked native writer.
+    seed_canonical_release(state.workflow_document_store, snapshot_id=sid, token="legacy-lineage-seal")
+    history = deepcopy(state._load_objects(sid, remember=False))
+    envelope = state._envelope(sid)
+    physical_before = physical_state(state, sid)
+    with pytest.raises(WorkflowDocumentStoreError, match="published_working_revision_immutable"):
+        state.workflow_document_store.apply_review_changes(sid, history, [*history, successor], envelope, envelope)
+    assert state._load_objects(sid, remember=False) == history
+    assert physical_state(state, sid) == physical_before
     assert published == before
 
 

@@ -19,8 +19,7 @@ All paths below are relative to `src/publication/`.
 | `publication_evidence_v1.py` | Operational publication evidence from existing publish boundaries; read by the incident-export script. |
 | `publication_chain_recovery_v1.py`, `publication_chain_recovery_guard_v1.py` | Existing publication backup, integrity and guarded restore; composed by the workflow recovery adapter. |
 | `legacy_canonical_recovery_v1.py` | Legacy-release proof and recovery through the existing publication store; used by `scripts/publication_chain_recovery.py`. |
-| `prepublication_gate_v3.py`, `eligibility_policy.py` | Pre-publication evaluation and its publication-only eligibility policy; used by `src.cli` and the gate CLI. |
-| `canonical_store.py` | Legacy SQLite pilot publication kernel and CLI; production remains PostgreSQL. |
+| Retired by KO-5 (#1012) | SQLite `canonical_store.py` and the offline JSONL `prepublication_gate_v3.py` / `eligibility_policy.py` verdict paths are removed. Publication readiness and authorization use the existing PostgreSQL console owners above. `audit-current` remains an integrity-only inspection command. |
 
 Shared composition (`console_asgi.py`, `operations_console_v1.py`,
 `operations_console_app.py`), source stores (`g2_source_store.py`), integrity
@@ -34,11 +33,7 @@ records protocol-document approvals rather than knowledge publication.
 ## Compatibility and proof
 
 Repository imports and live source-path checks use `src.publication`. The package
-is explicitly included in the distribution. Existing operator scripts, the
-`vvn-data-service` entry point and HTTP routes keep their names. The historical
-`python -m src.canonical_store` and `python -m src.prepublication_gate_v3` CLI
-entry points delegate to the moved implementation. New module entry points also
-work. Internal Python import locations move; no serialized Python module identity
+is explicitly included in the distribution. Existing PostgreSQL operator scripts, the `vvn-data-service` entry point and HTTP routes keep their names. KO-5 retires `python -m src.canonical_store`, `python -m src.prepublication_gate_v3`, their package implementation entrypoints and `vvn-data-service prepublish`; they cannot authorize publication from offline files. `vvn-data-service audit-current` retains schema/hash/source-fragment/parent integrity checks and does not report a publication verdict. Internal Python import locations move; no serialized Python module identity
 is used by the publication JSON/SQL/backup formats. Stored schema, hashes, backup
 format identifiers and source locators are unchanged. Historical evidence and
 protocol records retain their original source paths.

@@ -251,7 +251,6 @@ def test_native_context_publication_successor_withdrawal_and_restart(recovery_po
     assert record['metadata'][LINKS_KEY][0]['text'] == 'DOEN'
     with pytest.raises(ConsoleError, match='published_working_revision_immutable'):
         state.confirm_source_context(**command)
-    state.migrate_legacy_revise_to_review()
     assert state.snapshot_objects(sid) == old_objects
 
     # A new source version gets fresh objects and no inherited label decision.

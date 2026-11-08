@@ -240,28 +240,6 @@ def test_source_repair_keeps_revision_patch_hash_and_records_exact_selection(tmp
     ]
 
 
-def test_startup_migration_reopens_legacy_revise_without_editing_content(tmp_path, *, production_app, production_console):
-    console, _client, _researcher, reviewer, sid, objects = _system(tmp_path, production_app=production_app, production_console=production_console)
-    obj = objects[0]
-    before_text = str((obj.get("content") or {}).get("clean_text") or "")
-
-    from tests.semantic_fixture_support import install_fixture_history
-
-    rows = console._load_objects(sid, remember=False)
-    historical = next(row for row in rows if row["object_id"] == obj["object_id"]
-                      and row["object_version"] == obj["object_version"])
-    historical["governance"]["validation_status"] = "revise"
-    install_fixture_history(console, sid, rows)
-    assert console._current_object(sid, obj["object_id"])["governance"]["validation_status"] == "revise"
-
-    migrated = console.migrate_legacy_revise_to_review()
-    current = console._current_object(sid, obj["object_id"])
-    assert migrated == 1
-    assert current["governance"]["validation_status"] == "needs_review"
-    assert str((current.get("content") or {}).get("clean_text") or "") == before_text
-    assert console.migrate_legacy_revise_to_review() == 0
-
-
 @pytest.mark.parametrize("backend", ["local", "postgres"])
 def test_blocked_passage_ui_leads_to_source_repair_and_new_pending_version(tmp_path, backend, request, *, production_app, production_console):
     from html.parser import HTMLParser

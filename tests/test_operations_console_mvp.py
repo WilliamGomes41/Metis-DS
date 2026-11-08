@@ -206,7 +206,7 @@ def test_family_set_at_ingest_move_does_not_rehash_or_require_rereview(tmp_path:
     )
     assert moved["family"] == "decubitus"
     assert moved["sha256"] == sha_before
-    assert moved["clinical_rereview_required"] is False
+    assert not moved.get("clinical_rereview_required")
     objects_after = console.snapshot_objects(receipt["snapshot_id"])
     hashes_after = {row["object_id"]: compute_canonical_object_hash(row) for row in objects_after}
     assert hashes_after == hashes_before
@@ -257,7 +257,7 @@ def test_move_family_reuses_equivalent_existing_family_without_rehash(tmp_path: 
     )
 
     assert moved["family"] == "Delier"
-    assert moved["clinical_rereview_required"] is False
+    assert not moved.get("clinical_rereview_required")
     hashes_after = {
         row["object_id"]: compute_canonical_object_hash(row)
         for row in console.snapshot_objects(target["snapshot_id"])
@@ -354,7 +354,8 @@ def test_class_promotion_requires_review(tmp_path: Path, *, production_console) 
     )
     assert promoted["class"] == "richtlijn"
     assert promoted["sha256"] == receipt["sha256"]
-    assert promoted["clinical_rereview_required"] is True
+    assert all((obj.get("governance") or {}).get("validation_status") == "needs_review"
+               for obj in console.snapshot_objects(promoted["snapshot_id"]))
     objects = console.snapshot_objects(receipt["snapshot_id"])
     assert objects
     assert all(obj["governance"]["validation_status"] == "needs_review" for obj in objects)
@@ -962,4 +963,4 @@ def test_document_keyed_move_wrapper_does_not_rehash(tmp_path: Path, *, producti
     )
     assert moved["family"] == "decubitus"
     assert moved["sha256"] == receipt["sha256"]
-    assert moved["clinical_rereview_required"] is False
+    assert not moved.get("clinical_rereview_required")

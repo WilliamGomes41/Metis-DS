@@ -373,8 +373,8 @@ Each live lane runs on its own cloud VM at the PR head. Drive through `control-u
 **Build.**
 
 - [ ] Remove each listed path in its own commit, callers first, per the migrate-callers-then-delete principle.
-- [ ] Stop writing the four mirror fields. Readers already ignore them, so stored values become inert. Do not strip stored values here.
-- [ ] Add `tests/test_ko_single_way.py`, an architecture test that fails when a module outside `ko_transitions_v1.py` writes `validation_status` or when a duplicate final set appears.
+- [ ] Migrate every mirror reader to exact bindings, current review facts or the publication registry, then remove completion/mirror synchronization. Preserve schema-required constructor/new-successor shape until KO-6; stored historical fields remain inert and are not stripped here.
+- [ ] Add `tests/test_ko_single_way.py`: native commands must pass the central `apply_ko_event` policy before their existing atomic staged commit. Distinctive policy refusal must leave physical objects, bindings and events unchanged; prepared source commands retain W1. Deterministic candidate initialization and staged assignments remain legitimate. Bound retired API and duplicate final-set checks; no generic writer allowlist.
 
 **You see.**
 

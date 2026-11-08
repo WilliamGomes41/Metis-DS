@@ -1,0 +1,50 @@
+{
+  "scope": "root independent raw recalculation, exact9cf runtime",
+  "metrics": {
+    "base": {
+      "cold_mean_ms": 822.6234048022889,
+      "cold_median_ms": 810.6204959985917,
+      "cold_range_ms": [
+        749.1192180023063,
+        934.578248001344
+      ],
+      "card_p95_ms": 48.233,
+      "card_range_ms": [
+        36.495,
+        56.059
+      ],
+      "starts": 5,
+      "requests": 100
+    },
+    "head": {
+      "cold_mean_ms": 561.3404979987536,
+      "cold_median_ms": 557.7479860003223,
+      "cold_range_ms": [
+        531.3811649975833,
+        596.5742080006748
+      ],
+      "card_p95_ms": 44.664,
+      "card_range_ms": [
+        36.171,
+        58.731
+      ],
+      "starts": 5,
+      "requests": 100
+    }
+  },
+  "distinct_processes": 10,
+  "requests": 200,
+  "db_shapes": [
+    [
+      6,
+      22,
+      26770
+    ]
+  ],
+  "frozen_hashes_unchanged": true,
+  "gate": "PASS",
+  "head_base_ratios": {
+    "cold_mean_ms": 0.6823784671354779,
+    "card_p95_ms": 0.9260050173117991
+  }
+}

@@ -29,7 +29,6 @@ import pytest
 from src.operations_console_v1 import ConsoleError
 from tests import test_v220_unpublished_document_delete as delete_fixture
 from tests import test_legacy_canonical_recovery_v1 as recovery_fixture
-from tests import test_storage_publication_v2 as cli_fixture
 
 pytestmark = [pytest.mark.release_control_opslag, pytest.mark.release_control_toegang,
               pytest.mark.release_control_scope_belofte, pytest.mark.release_control_slop,
@@ -185,82 +184,6 @@ def test_recovery_refuses_missing_uploader_identity(tmp_path):
     prepare = _recovery(tmp_path, approvers=[("Reviewer", "reviewer-1")], uploader="")
     with pytest.raises(LegacyCanonicalRecoveryError, match="legacy_release_uploader_missing"):
         prepare()
-
-
-# --- D-SEC-2: CLI ------------------------------------------------------------------
-
-def _cli(args, env_mode, module="src.publication.canonical_store"):
-    import os
-    env = {k: v for k, v in os.environ.items() if k != "METIS_RUNTIME_MODE"}
-    if env_mode:
-        env["METIS_RUNTIME_MODE"] = env_mode
-    return subprocess.run([sys.executable, "-m", module, *args], cwd=ROOT, env=env,
-                          capture_output=True, text=True)
-
-
-@pytest.mark.parametrize("module", ["src.canonical_store", "src.publication.canonical_store"])
-@pytest.mark.parametrize("mode", [None, "production", "azure"])
-def test_cli_fails_closed_outside_pilot_or_dev(tmp_path, mode, module):
-    result = _cli(["init", "--db", str(tmp_path / "s.db")], mode, module)
-    assert result.returncode == 2
-    assert "canonical_store_cli_disabled_outside_pilot" in result.stdout + result.stderr
-    assert not (tmp_path / "s.db").exists()
-
-
-@pytest.mark.parametrize("module", ["src.canonical_store", "src.publication.canonical_store"])
-@pytest.mark.parametrize("mode", ["pilot", "dev"])
-def test_cli_runs_in_pilot_or_dev(tmp_path, mode, module):
-    assert _cli(["init", "--db", str(tmp_path / "s.db")], mode, module).returncode == 0
-
-
-def _accounts_file(tmp_path, rows):
-    path = tmp_path / "accounts.json"
-    path.write_text(json.dumps(rows))
-    return path
-
-
-def _import(tmp_path, obj, accounts):
-    from src.publication.canonical_store import import_approved
-    inp = tmp_path / "in.jsonl"
-    cli_fixture.write_jsonl(inp, [obj])
-    return import_approved(tmp_path / "s.db", inp, cli_fixture.SCHEMA_PATH, "technical-test",
-                           accounts=_accounts_file(tmp_path, accounts))
-
-
-ACCOUNTS = [
-    {"account_id": "acct-a", "username": "Reviewer A", "roles": ["reviewer"]},
-    {"account_id": "acct-b", "username": "Reviewer B", "roles": ["reviewer"]},
-]
-
-
-def _approved(**governance):
-    obj = cli_fixture.make_approved()
-    obj["governance"]["validated_by"] = "acct-a"
-    obj["governance"].update(governance)
-    return obj
-
-
-def test_cli_import_accepts_known_account_id(tmp_path):
-    assert _import(tmp_path, _approved(), ACCOUNTS)["imported_objects"] == 1
-
-
-def test_cli_import_refuses_name_instead_of_account_id(tmp_path):
-    report = _import(tmp_path, _approved(validated_by="Reviewer A"), ACCOUNTS)
-    assert report["imported_objects"] == 0
-    assert "reviewer_account_id_unknown" in report["blocked"][0]["errors"]
-
-
-def test_cli_import_refuses_agent_account(tmp_path):
-    accounts = [{"account_id": "acct-a", "username": "Grok Bot", "roles": ["reviewer"]}]
-    report = _import(tmp_path, _approved(), accounts)
-    assert "forbidden_reviewer_identity" in report["blocked"][0]["errors"]
-
-
-def test_cli_import_compares_creator_and_reviewer_on_account_id(tmp_path):
-    obj = _approved()
-    obj["provenance"]["created_by"] = "acct-a"
-    report = _import(tmp_path, obj, ACCOUNTS)
-    assert "reviewer_must_differ_from_creator" in report["blocked"][0]["errors"]
 
 
 # --- D-SEC-3: publicatiepoort in het contract (RT3) ---------------------------------

@@ -5,7 +5,6 @@ A decision is valid only for the exact canonical object hash supplied to the
 reviewer. This module never applies proposed corrections in place.
 """
 from __future__ import annotations
-import argparse, json
 from copy import deepcopy
 from datetime import date
 from pathlib import Path
@@ -14,11 +13,6 @@ from src.integrity_kernel import exact_review_snapshot_hash, schema_errors, stam
 from src.review.review_ledger import append_event
 
 ALLOWED={"approve","revise","reject"}
-
-def read_jsonl(p:Path)->list[dict[str,Any]]:
-    return [json.loads(x) for x in p.read_text(encoding='utf-8').splitlines() if x.strip()]
-def write_jsonl(p:Path,rows:list[dict[str,Any]])->None:
-    p.parent.mkdir(parents=True,exist_ok=True); p.write_text(''.join(json.dumps(x,ensure_ascii=False,sort_keys=True)+'\n' for x in rows),encoding='utf-8')
 
 def _apply_review_state(objects:list[dict[str,Any]], decisions:list[dict[str,Any]], *, track:str, schema_path:Path,
                   ledger_path:Path|None=None)->tuple[list[dict[str,Any]],dict[str,Any]]:
@@ -47,7 +41,6 @@ def _apply_review_state(objects:list[dict[str,Any]], decisions:list[dict[str,Any
         g['validated_by']=reviewer; g['validation_date']=rdate; g['review_snapshot_hash']=current
         if decision=='approve':
             g['validation_status']='approved'; stats['approved']+=1
-            if o['risk']['requires_second_review']: g['second_review']['status']='pending'
         elif decision=='revise':
             g['validation_status']='needs_review'; stats['revise']+=1
         else:
@@ -71,23 +64,3 @@ def _apply_review_state(objects:list[dict[str,Any]], decisions:list[dict[str,Any
             'complete':stats['pending']==0 and stats['snapshot_mismatch']==0 and not errors}
     return out,report
 
-def apply_reviews(objects:list[dict[str,Any]], decisions:list[dict[str,Any]], *, track:str, schema_path:Path,
-                  ledger_path:Path|None=None)->tuple[list[dict[str,Any]],dict[str,Any]]:
-    """Raw JSONL is not a current WorkingRevision and cannot authorize review.
-
-    Live first review must enter OperationsConsole.review_object, which owns
-    source/duty/actor validation and the atomic exact-binding transaction.
-    The private transformer only prepares governance inside that command.
-    """
-    errors = [{"object_id": decision.get("object_id"),
-               "error": "working_revision_review_command_required"} for decision in decisions]
-    return deepcopy(objects), {"track": track, "input_objects": len(objects),
-        "decision_rows": len(decisions), "stats": {}, "errors": errors, "complete": False}
-
-def main()->int:
-    ap=argparse.ArgumentParser(); ap.add_argument('--input',type=Path,required=True); ap.add_argument('--decisions',type=Path,required=True)
-    ap.add_argument('--track',choices=['clinical','technical'],required=True); ap.add_argument('--schema',type=Path,required=True); ap.add_argument('--out',type=Path,required=True)
-    ap.add_argument('--report',type=Path,required=True); ap.add_argument('--ledger',type=Path)
-    a=ap.parse_args(); objs=read_jsonl(a.input); ds=read_jsonl(a.decisions); out,rep=apply_reviews(objs,ds,track=a.track,schema_path=a.schema,ledger_path=a.ledger)
-    write_jsonl(a.out,out); a.report.parent.mkdir(parents=True,exist_ok=True); a.report.write_text(json.dumps(rep,ensure_ascii=False,indent=2),encoding='utf-8'); print(json.dumps(rep,ensure_ascii=False,indent=2)); return 0 if rep['complete'] else 2
-if __name__=='__main__': raise SystemExit(main())

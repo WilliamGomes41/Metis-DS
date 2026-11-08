@@ -433,7 +433,7 @@ def test_a_review_tuple_required_envelope_tick_insufficient(tmp_path: Path, *, p
     accounts = _accounts(console)
     receipt = _ingest_html(console, accounts)
     envelope = console._envelope(receipt["snapshot_id"])
-    envelope["review_passes"][accounts["reviewer"]["account_id"]] = {
+    envelope.setdefault("review_passes", {})[accounts["reviewer"]["account_id"]] = {
         "passed": True,
         "at": "2026-08-28T00:00:00Z",
         "object_id": "ignored",

@@ -53,8 +53,7 @@ class DocumentOverviewInputs:
         inputs = self.diagnostics[sid]
         processing = self.processing[sid]
         result = status(processing, policy=self.state._processing_limits())
-        if (sid in self.published or inputs['objects'] or inputs['has_bindings']
-                or processing.get('has_review_passes')):
+        if (sid in self.published or inputs['objects'] or inputs['has_bindings']):
             result['retry_allowed'] = False
         return result, processing_diagnostics(inputs['objects'])
 

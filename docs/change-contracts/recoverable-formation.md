@@ -9,7 +9,7 @@ Explicit assignment: William authorized implementation of the preceding domain/l
 Rewrite target: V3 proposal acceptance/recovery boundary in existing WorkingRevision.
 Why local patching is insufficient: One invalid field currently aborts independent validated work; copying a word or weakening exact matching does not repair failure scope.
 Current authority/writer/reader map: Immutable source store -> pre_review_semantic_v1/provider -> source_evidence_resolution_v1 -> semantic_passage_v1 -> transform/admission -> OperationsConsole ingest/reextract/retry -> existing workflow transaction/CAS. Diagnostics, processing exports and review projections read existing records. PublicationReadiness/source closure -> durable publication -> registry -> Product API remain sole owners.
-Supported runtime topologies: local compatibility store and PostgreSQL workflow store composed with Azure immutable source/publication adapters; no new store or worker.
+Supported runtime topologies: PostgreSQL workflow/canonical authority composed with local or Azure immutable source adapters, one/two workers. File workflow runtime is retired (D6b); no new store or worker.
 Persisted-state impact: additive versioned formation evidence in existing semantic replay/provider records; current source work remains exact remainder records. No SQL migration or backfill.
 Compatibility/migration plan: V3 contract identity versioned; legacy v1/v2 unchanged and historical reviews immutable. New contract applies to new authorized work only.
 Rollback/recovery plan: compatible reader, explicit configuration rollback for future formation; retain existing records and releases. Recovery of unreviewed work uses existing guarded command; reviewed/published work uses explicit successor.
@@ -61,6 +61,8 @@ and blocks four on existing reference/context/abbreviation gates. All 639 source
 accountability records remain. Twelve conflicting supplemental reselections
 remain unresolved and block publication. No wording was repaired. These counts
 do not establish that all clinically relevant knowledge was extracted.
+
+Historical implementation evidence below records the original topology and measurements; it does not describe the current PostgreSQL-only runtime.
 
 Black-box tests cover partial ingest, durable restart, bounded targeted recovery,
 unchanged candidate hashes, duplicate/stale/concurrent commands, actor guards,

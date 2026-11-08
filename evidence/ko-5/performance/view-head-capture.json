@@ -1,0 +1,11 @@
+{
+  "untimed": true,
+  "sha": "9cf974518d2e82939247f47e0f0ba59172131346",
+  "checkout": "/workspace/Metis-ko5-final-verify",
+  "side": "head",
+  "status": 200,
+  "url": "/review?document=snap-d1e2dc2815ec51d5-e7efd6a0&object=console-ko5-perf-ko5-synthetic-performance-1-0-d1e2dc28-sem-50d47fa1e12f534b&task=individual",
+  "object_id": "console-ko5-perf-ko5-synthetic-performance-1-0-d1e2dc28-sem-50d47fa1e12f534b",
+  "snapshot_id": "snap-d1e2dc2815ec51d5-e7efd6a0",
+  "purpose": "DOM view confirmation only; no new performance metric"
+}
