@@ -261,7 +261,8 @@ def materialise_knowledge_candidates(
                 raise MaterialisationError("materialiser_requires_selection_decision")
             if "object_id" in decision or "clean_text" in decision:
                 raise MaterialisationError("selection_decision_is_not_a_candidate")
-            if decision.get("selection_origin") != SELECTION_ORIGIN_PROPOSAL:
+            from src.vorming.human_annotation_projection_v1 import ORIGIN as HUMAN_ORIGIN
+            if decision.get("selection_origin") not in {SELECTION_ORIGIN_PROPOSAL,HUMAN_ORIGIN}:
                 raise MaterialisationError("materialiser_requires_proposal_selection")
             resolved = resolve_source_selection(decision.get("spans"), fragments=fragments, source_blocks=source_blocks)
             source_text = resolved["source_text"]
@@ -282,7 +283,7 @@ def materialise_knowledge_candidates(
                 "semantic_passage": {
                     "version": SEMANTIC_PASSAGE_VERSION,
                     "source_bound": True,
-                    "selection_origin": SELECTION_ORIGIN_PROPOSAL,
+                    "selection_origin": decision['selection_origin'],
                     "spans": [
                         {"block_id": span["block_id"], "start": span["start"], "end": span["end"]}
                         for span in decision["spans"]
@@ -304,6 +305,9 @@ def materialise_knowledge_candidates(
                 candidate[PROPOSED_FIELD] = decision[PROPOSED_FIELD]
             if "recommendation_semantics_evidence" in decision:
                 candidate["recommendation_semantics_evidence"] = decision["recommendation_semantics_evidence"]
+            if decision['selection_origin']==HUMAN_ORIGIN:
+                from src.vorming.human_annotation_projection_v1 import bind_candidate
+                bind_candidate(candidate,decision,fragments=fragments)
             candidates.append(candidate)
         except MaterialisationError as exc:
             exc.finding["candidate_index"] = index

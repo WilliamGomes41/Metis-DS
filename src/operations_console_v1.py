@@ -241,6 +241,27 @@ def docling_console_error(exc):
     return error
 
 
+def canonical_source_manifest(envelope):
+    """Project the frozen source metadata for every deterministic transform."""
+    manifest = {
+        "canonical_source": {
+            "source_id": envelope["source_id"],
+            "title": envelope["title"],
+            "publisher": "V&VN",
+            "source_url": envelope.get("live_url") or f"urn:vvn:freeze:{envelope['sha256']}",
+            "source_type": "interactive_tree" if envelope["content_kind"] == "boom" else envelope["content_kind"],
+            "source_level": 1,
+            "canonicality": "canonical",
+            "source_checksum": envelope["sha256"],
+            "checksum_algorithm": "sha256",
+            "integrity_status": "verified",
+            "publication_date": envelope["date"],
+            "version": envelope["version"],
+        }
+    }
+    return manifest
+
+
 def transform_generic(spec, manifest, fragments):
     """Keep materialisation failures in the existing command error channel."""
     from src.vorming.knowledge_materialisation_v1 import MaterialisationError
@@ -2308,10 +2329,13 @@ class OperationsConsole:
             if stored["actor_id"] != actor_id or any(
                 attempt.get(key) != stored.get(key) for key in
                 ("actor_id", "source_hash", "source_version", "expected_revision",
-                 "command_id", "kind", "processing_configuration")
+                 "command_id", "kind", "processing_configuration", "annotation_seal_id", "producer_contract")
             ):
                 raise ConsoleError("processing_command_conflict")
         with self._source_attempt_failure(snapshot_id, attempt["attempt_id"],claim_token=(attempt.get("dispatch") or {}).get("token")):
+            if attempt.get('kind') == 'human_annotation_build':
+                from src.vorming.human_annotation_build_v1 import execute
+                return execute(self, actor_id=actor_id, snapshot_id=snapshot_id, attempt=attempt, deadline=deadline)
             if attempt.get("processing_configuration"):
                 from src.vorming.source_selection_v1 import configuration
                 if attempt["processing_configuration"] != configuration(self):
@@ -2449,22 +2473,7 @@ class OperationsConsole:
         replay_record = spec.pop(SEMANTIC_REPLAY_SPEC_KEY, None)
         from src.vorming.decision_tree_route_v1 import SPEC_KEY as DECISION_TREE_SPEC_KEY
         decision_tree_record = spec.pop(DECISION_TREE_SPEC_KEY, None)
-        manifest = {
-            "canonical_source": {
-                "source_id": envelope["source_id"],
-                "title": envelope["title"],
-                "publisher": "V&VN",
-                "source_url": envelope.get("live_url") or f"urn:vvn:freeze:{envelope['sha256']}",
-                "source_type": "interactive_tree" if envelope["content_kind"] == "boom" else envelope["content_kind"],
-                "source_level": 1,
-                "canonicality": "canonical",
-                "source_checksum": envelope["sha256"],
-                "checksum_algorithm": "sha256",
-                "integrity_status": "verified",
-                "publication_date": envelope["date"],
-                "version": envelope["version"],
-            }
-        }
+        manifest = canonical_source_manifest(envelope)
         objects = transform_generic(spec, manifest, fragments)
         if envelope["class"] == "beslisboom":
             stamp_boom_flags(objects, fragments)

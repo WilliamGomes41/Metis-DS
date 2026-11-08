@@ -10,14 +10,14 @@ from src.publication.publication_chain_recovery_v1 import PublicationChainRecove
 
 # Dependency order; these identifiers never come from the archive.
 TABLES = (
-    'processing_attempts', 'processing_document_summaries', 'processing_checkpoints',
-    'prepared_extraction_versions', 'formation_inputs', 'formation_contexts',
+    'prepared_extraction_versions', 'annotation_sets','annotation_versions','annotation_heads','annotation_commands',
+    'annotation_seals','annotation_build_commands',
+    'processing_attempts', 'processing_document_summaries', 'processing_checkpoints', 'formation_inputs', 'formation_contexts',
     'formation_task_results', 'formation_task_findings', 'formation_task_result_history',
     'formation_task_plans', 'formation_source_views', 'source_read_roots',
     'source_read_fragments', 'source_read_blocks', 'source_read_block_fragments',
     'processing_archives', 'formation_evidence_roots', 'formation_evidence_members',
     'processing_archive_inputs','processing_archive_input_members','document_inputs','document_processing_records',
-    'annotation_sets','annotation_versions','annotation_heads','annotation_commands',
 )
 FACT_TABLES = ('review_fact_state', 'review_object_facts')
 DOCUMENT_COLUMNS = ('snapshot_id', 'processing_storage_version', 'object_generation',
@@ -26,7 +26,9 @@ ROOTS = {'source_read_roots':'views_id', 'formation_evidence_roots':'proof_id','
 OPERATIONAL_TABLES=('document_processing_records','document_inputs')
 NEW_TABLES=('processing_archive_inputs','processing_archive_input_members',*OPERATIONAL_TABLES)
 ANNOTATION_TABLES=('annotation_sets','annotation_versions','annotation_heads','annotation_commands')
+BUILD_TABLES=('annotation_seals','annotation_build_commands')
 ORDER = {
+    'annotation_seals':'seal_id', 'annotation_build_commands':'snapshot_id,command_id',
     'processing_attempts':'attempt_id', 'processing_document_summaries':'snapshot_id',
     'processing_checkpoints':'checkpoint_id', 'prepared_extraction_versions':'record_hash',
     'formation_inputs':'artifact_id', 'formation_contexts':'context_id',
@@ -65,7 +67,7 @@ def upgrade_legacy(state):
     result.setdefault('formation_recovery',None)
     section=result.get('formation_recovery')
     if section is not None and section.get('version')==1:
-        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(NEW_TABLES)-set(ANNOTATION_TABLES):
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(NEW_TABLES)-set(ANNOTATION_TABLES)-set(BUILD_TABLES):
             fail('shape_invalid')
         section['version']=2
         for table in NEW_TABLES:
@@ -73,11 +75,21 @@ def upgrade_legacy(state):
         for document in section['documents']:
             document['document_storage_version']=0
     if section is not None and section.get('version')==2:
-        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(ANNOTATION_TABLES):
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(ANNOTATION_TABLES)-set(BUILD_TABLES):
             fail('shape_invalid')
         section['version']=3
         for table in ANNOTATION_TABLES:
             section['tables'][table]=[]
+    if section is not None and section.get('version')==3:
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(BUILD_TABLES):
+            fail('shape_invalid')
+        section['version']=4
+        for table in BUILD_TABLES:
+            section['tables'][table]=[]
+        for row in section['tables']['annotation_sets']:
+            row['current_seal_id']=None
+        for row in section['tables']['formation_evidence_roots']:
+            row['annotation_seal_id']=None
     return result
 
 
@@ -88,7 +100,7 @@ def validate(state):
                for d in (state.get('workflow_tables') or {}).get('documents', [])):
             fail('missing_reexport_required')
         return None
-    if (not isinstance(section, dict) or section.get('version') != 3
+    if (not isinstance(section, dict) or section.get('version') != 4
             or set(section.get('tables') or {}) != set(TABLES + FACT_TABLES)
             or not isinstance(section.get('documents'), list)):
         fail('shape_invalid')
@@ -107,7 +119,7 @@ def validate(state):
 def export(con):
     if not available(con):
         return None
-    return {'version':3,
+    return {'version':4,
             'documents':[_json_safe(dict(r)) for r in con.execute(
                 'SELECT '+','.join(DOCUMENT_COLUMNS)+' FROM workflow.documents ORDER BY snapshot_id').fetchall()],
             'tables':{table:[_json_safe(dict(r)) for r in con.execute(
@@ -194,6 +206,35 @@ def _validate_annotations(con):
         if generations != set(range(1,source['generation']+1)) or any(h['position'] != first[h['annotation_id']] for h in heads):
             fail('annotation_history_invalid')
 
+        from src.vorming.human_annotation_preview_v1 import inspect_document
+        from src.workflows.processing_archives_v1 import encoded
+        seals=con.execute('SELECT * FROM workflow.annotation_seals WHERE snapshot_id=%s', (sid,)).fetchall()
+        if seals:
+            from src.vorming.human_annotation_build_v1 import require_storage
+            require_storage(con)
+        for seal in seals:
+            body=seal['payload']
+            if (stable_hash(body)!=seal['seal_id'] or encoded(body)!=seal['payload_text']
+                    or stable_hash({k:v for k,v in body.items() if k!='overview_hash'})!=seal['overview_hash']):
+                fail('annotation_seal_invalid')
+            entries=[]
+            for ref in body['entries']:
+                entry=history.get((ref['annotation_id'],ref['revision']))
+                if not entry or entry['payload_hash']!=ref['payload_hash']:
+                    fail('annotation_seal_invalid')
+                entries.append(entry)
+            if inspect_document(entries,fragments=fragments)['findings']:
+                fail('annotation_seal_incomplete')
+            if source['current_seal_id']==seal['seal_id'] and seal['generation']!=source['generation']:
+                fail('annotation_seal_stale')
+        for command in con.execute('SELECT c.*,s.payload AS seal FROM workflow.annotation_build_commands c '
+                'JOIN workflow.annotation_seals s USING(seal_id) WHERE c.snapshot_id=%s',(sid,)).fetchall():
+            body=command['seal']
+            expected=stable_hash({'actor_id':command['actor_id'],'overview_hash':body['overview_hash'],
+                'generation':body['generation'],'objects_revision':body['objects_revision']})
+            if command['request_hash']!=expected:
+                fail('annotation_build_command_invalid')
+
 
 def restore(con, state, store):
     section = validate(state)
@@ -256,7 +297,7 @@ def restore(con, state, store):
     envelopes = {r['snapshot_id']:r['envelope_payload'] for r in state['workflow_tables']['documents']}
     try:
         for root in section['tables']['formation_evidence_roots']:
-            task_store.read_formation_evidence({'layout':1,'proof_id':root['proof_id']},
+            task_store.read_formation_evidence({'layout':root['header']['layout'],'proof_id':root['proof_id']},
                 envelope=envelopes[root['snapshot_id']])
         _validate_annotations(con)
     except WorkflowDocumentStoreError as error:

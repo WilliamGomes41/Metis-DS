@@ -18,6 +18,19 @@ ROLES = {
 }
 
 
+def uncovered_ranges(length, ranges):
+    """Complement of validated block-local ranges, preserving exact offsets."""
+    cursor = 0
+    result = []
+    for start, end in sorted(ranges):
+        if cursor < start:
+            result.append((cursor, start))
+        cursor = max(cursor, end)
+    if cursor < length:
+        result.append((cursor, length))
+    return result
+
+
 def assessment_schema(span):
     return {"type": "array", "maxItems": 8192, "items": {
         "type": "object", "additionalProperties": False,

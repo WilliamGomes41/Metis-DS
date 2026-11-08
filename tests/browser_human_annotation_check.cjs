@@ -111,7 +111,9 @@ const assert = require('node:assert/strict');
     if(width===390) {
       const sourceSection=page.locator('section.annotation-source-block').filter({hasText:'Alleen bij klachten.'});
       await sourceSection.locator('[data-select-block]').click();
+      // Navigation stays in document flow so it cannot obscure annotation controls.
       for(const id of ['annotation-to-controls','annotation-to-source']) {
+        await page.locator('#'+id).scrollIntoViewIfNeeded();
         assert.equal(await page.locator('#'+id).evaluate(a => {
           const r=a.getBoundingClientRect();
           const top=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);

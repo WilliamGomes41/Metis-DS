@@ -6,7 +6,17 @@ Promise: De researcher bouwt één claim met brongebonden context en bewijs uit 
 Touches lifecycle invariants: yes
 Proof: de native en volledige ketenproeven hieronder zijn oplevervoorwaarden, geen reeds behaalde resultaten.
 
-## Bronnen en feitelijke stand
+## Actuele vervolgstap
+
+Na merge van #1021/#1022/#1030 is de basis main
+`94e3bf7878cfcda0f752403214ea37480cd7106b`. Het actuele uitvoeringscontract voor
+HA-2b staat in [1015-human-annotation-build.md](1015-human-annotation-build.md);
+[de bewijsnotitie](1015-human-annotation-build-evidence.md) maakt onderscheid
+tussen huidige codeproeven en de historische uitgangsinventaris hieronder.
+Optie 1 uit de sessie: aparte actieve annotaties met exact dezelfde geordende
+kernranges weigeren zonder samenvoegen. Gedeeld bewijs/context blijft toegestaan.
+
+## Bronnen en historische uitgangsstand
 
 Opnieuw gecontroleerd op 8 november 2026: main `e0a3b09ac23a0c226d1546d19fb66885006131bd`,
 HA-2a `c23933d23442ac0f54ca8b3523b00d9354c23a04`, ontwerpbranch

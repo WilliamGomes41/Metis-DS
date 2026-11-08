@@ -1038,6 +1038,29 @@ def semantic_units_before_review(
     return units
 
 
+def document_spec(*, document_id, title, family, class_, content_kind, units):
+    """Structural envelope shared by producers; candidate units come from their owner."""
+    objects: list[dict[str, Any]] = [
+        {
+            "object_id": f"{document_id}-document",
+            "object_type": "document",
+            "text": title,
+            "review_track": "technical",
+        }
+    ]
+    objects.extend(units)
+    spec = {
+        "spec_version": "console-ingest-1.0",
+        "document_id": document_id,
+        "object_version": "1.0",
+        "target_group": [],
+        "care_setting": [],
+        "topic": [family, f"class:{class_}", f"source-kind:{content_kind}"],
+        "objects": objects,
+    }
+    return spec
+
+
 def semantic_spec_from_fragments(
     *,
     document_id: str,
@@ -1097,24 +1120,8 @@ def semantic_spec_from_fragments(
                     reference, snapshot_id, time.monotonic() - started)
     finally:
         _PROCESSING_REFERENCE.reset(token)
-    objects: list[dict[str, Any]] = [
-        {
-            "object_id": f"{document_id}-document",
-            "object_type": "document",
-            "text": title,
-            "review_track": "technical",
-        }
-    ]
-    objects.extend(units)
-    spec = {
-        "spec_version": "console-ingest-1.0",
-        "document_id": document_id,
-        "object_version": "1.0",
-        "target_group": [],
-        "care_setting": [],
-        "topic": [family, f"class:{class_}", f"source-kind:{content_kind}"],
-        "objects": objects,
-    }
+    spec = document_spec(document_id=document_id, title=title, family=family,
+                         class_=class_, content_kind=content_kind, units=units)
     if replay_record is not None:
         spec[SEMANTIC_REPLAY_SPEC_KEY] = replay_record
     return spec

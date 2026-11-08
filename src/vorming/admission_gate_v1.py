@@ -227,7 +227,8 @@ def is_inhoudelijk_candidate(obj: dict[str, Any]) -> bool:
         semantic = obj.get("semantic_passage")
     if not isinstance(semantic, dict):
         return False
-    if str(semantic.get("selection_origin") or "") != "proposal_selected":
+    from src.vorming.semantic_passage_v1 import CANDIDATE_SELECTION_ORIGINS
+    if str(semantic.get("selection_origin") or "") not in CANDIDATE_SELECTION_ORIGINS:
         return False
     from src.review.knowledge_path_v1 import spans_are_exact
     return spans_are_exact(semantic.get("spans"))
@@ -520,7 +521,7 @@ def _recommendation_semantics_codes(
 
     if (
         proposed != "recommendation"
-        or str(row.get("semantic_selection_origin") or "") != "proposal_selected"
+        or str(row.get("semantic_selection_origin") or "") not in {"proposal_selected","human_annotation"}
     ):
         return []
 
@@ -613,9 +614,50 @@ def _recommendation_source_codes(row, realization, object_revision, source_fragm
         obj=object_revision, fragments=source_fragments))
     if object_revision is not None and source_fragments is not None:
         try:
-            validate_object_fields(object_revision, source_fragments)
+            if (object_revision.get('metadata') or {}).get('semantic_passage',{}).get('selection_origin')=='human_annotation':
+                pass  # All human types revalidate their exact field anchors in admit_candidate.
+            else:
+                validate_object_fields(object_revision, source_fragments)
         except (ValueError, KeyError, TypeError) as exc:
             codes.append(str(exc) if str(exc).startswith("source_bound_") else "source_bound_fields_invalid")
+    return codes
+
+
+def literal_field_codes(row, *, v3, check_locator=True):
+    """Shared literal/type obligations for input preview and final Admission.
+
+    This validates source-bound values only. It grants no Admission, creates no
+    candidate and cannot replace the later context/source/review checks.
+    """
+    codes = []
+    corpus = _localize_corpus(row)
+    text = str(row.get("candidate_text") or row.get("source_text_exact") or "")
+    proposed = str(row.get("proposed_type") or "")
+    recommendation_v3 = v3 and proposed == "recommendation"
+    _require_literal(row.get("predicate_span"), corpus, "predicate_missing", codes)
+    if not recommendation_v3:
+        _require_literal(row.get("subject_span"), corpus, "subject_missing", codes)
+        if _word_count(text) < 3:
+            codes.append("incomplete_sentence")
+            codes.append("no_independent_claim")
+        if not has_terminal_sentence_boundary(text):
+            codes.append("incomplete_sentence")
+        if _has_sentence_continuation(row):
+            codes.append("incomplete_sentence")
+    if check_locator and (not str(row.get("source_locator_start") or "").strip() or not str(row.get("source_locator_end") or "").strip()):
+        codes.append("locator_invalid")
+    evidence = [span for span in (row.get("type_evidence_spans") or []) if str(span or "").strip()]
+    if not evidence:
+        codes.append("type_evidence_missing")
+    elif corpus and any(not _literal(span, corpus) for span in evidence):
+        codes.extend(("type_evidence_missing", "span_not_in_source", "source_fidelity_failure"))
+
+    codes.extend(_type_contract_codes(row, proposed, corpus, v3=v3))
+
+    if recommendation_v3:
+        from src.vorming.source_bound_fields_v3 import recommendation_codes
+        codes.extend(recommendation_codes(row, context=row.get("source_bound_context_entries") or []))
+
     return codes
 
 
@@ -643,7 +685,20 @@ def admit_candidate(
     context_objects = list(context_objects)
     codes: list[str] = _apply_bound_fields(row, object_revision, context_objects) if v2 else []
     from src.vorming.source_bound_fields_v3 import VERSION as V3_VERSION, MODE as V3_MODE
-    v3 = isinstance(row.get(FIELD_EVIDENCE_KEY), dict) and row[FIELD_EVIDENCE_KEY].get("version") == V3_VERSION
+    from src.vorming.human_annotation_projection_v1 import MODE as HUMAN_MODE,FIELDS_VERSION as HUMAN_FIELDS
+    version=(row.get(FIELD_EVIDENCE_KEY) or {}).get('version')
+    v3 = version in {V3_VERSION,HUMAN_FIELDS}
+    if row.get('field_formation_mode')==HUMAN_MODE and version!=HUMAN_FIELDS:
+        codes.append('source_bound_fields_contract_mismatch')
+    if row.get('field_formation_mode')==HUMAN_MODE:
+        if object_revision is None or source_fragments is None:
+            codes.append('source_bound_fields_source_required')
+        else:
+            try:
+                from src.vorming.human_annotation_projection_v1 import validate_object_fields as validate_human
+                validate_human(object_revision,source_fragments)
+            except (ValueError,KeyError,TypeError) as error:
+                codes.append(str(error))
     if row.get("field_formation_mode") == V3_MODE and not v3:
         codes.append("source_bound_fields_contract_mismatch")
     if not v2:
@@ -678,29 +733,8 @@ def admit_candidate(
     for field in absent_required:
         codes.append(_ABSENT_FIELD_CODES.get(field, "type_contract_incomplete"))
     recommendation_v3 = v3 and proposed == "recommendation"
-    _require_literal(row.get("predicate_span"), corpus, "predicate_missing", codes)
-    if not recommendation_v3:
-        _require_literal(row.get("subject_span"), corpus, "subject_missing", codes)
-        if _word_count(text) < 3:
-            codes.append("incomplete_sentence")
-            codes.append("no_independent_claim")
-        if not has_terminal_sentence_boundary(text):
-            codes.append("incomplete_sentence")
-        if _has_sentence_continuation(row):
-            codes.append("incomplete_sentence")
-    if not str(row.get("source_locator_start") or "").strip() or not str(row.get("source_locator_end") or "").strip():
-        codes.append("locator_invalid")
-    evidence = [span for span in (row.get("type_evidence_spans") or []) if str(span or "").strip()]
-    if not evidence:
-        codes.append("type_evidence_missing")
-    elif corpus and any(not _literal(span, corpus) for span in evidence):
-        codes.extend(("type_evidence_missing", "span_not_in_source", "source_fidelity_failure"))
-
-    codes.extend(_type_contract_codes(row, proposed, corpus, v3=v3))
-
+    codes.extend(literal_field_codes(row, v3=v3))
     if recommendation_v3:
-        from src.vorming.source_bound_fields_v3 import recommendation_codes
-        codes.extend(recommendation_codes(row, context=row.get("source_bound_context_entries") or []))
         row["admission_version"] = "recommendation-core-admission-v3"
 
     if _recommendation_evidence_missing(row, proposed, source):
@@ -895,11 +929,12 @@ def candidate_from_object(
     metadata = obj.get("metadata") or {}
     from src.vorming.source_bound_fields_v2 import MODE
     from src.vorming.source_bound_fields_v3 import MODE as V3_MODE
+    from src.vorming.human_annotation_projection_v1 import MODE as HUMAN_MODE
     fields["recommendation_coverage"] = metadata.get("recommendation_coverage") or {}
     fields["field_formation_mode"] = (metadata.get("semantic_passage") or {}).get("formation_mode")
-    if fields["field_formation_mode"] == V3_MODE:
+    if fields["field_formation_mode"] in {V3_MODE,HUMAN_MODE}:
         fields["source_bound_context_entries"] = (metadata.get("source_bound_context") or {}).get("entries") or []
-    if FIELD_EVIDENCE_KEY in metadata or (metadata.get("semantic_passage") or {}).get("formation_mode") in {MODE, V3_MODE}:
+    if FIELD_EVIDENCE_KEY in metadata or (metadata.get("semantic_passage") or {}).get("formation_mode") in {MODE, V3_MODE,HUMAN_MODE}:
         fields[FIELD_EVIDENCE_KEY] = metadata.get(FIELD_EVIDENCE_KEY)
     return build_candidate_record(**fields)
 
@@ -940,7 +975,7 @@ def apply_admission_gate(
         metadata = dict(row.get("metadata") or {})
         metadata["candidate_eligibility"] = eligibility.as_metadata()
         semantic = metadata.get("semantic_passage") if isinstance(metadata.get("semantic_passage"), dict) else {}
-        semantic_candidate = str(semantic.get("selection_origin") or "") == "proposal_selected"
+        semantic_candidate = str(semantic.get("selection_origin") or "") in {"proposal_selected","human_annotation"}
 
         source_valid = False
         if eligibility.eligible and semantic_candidate:

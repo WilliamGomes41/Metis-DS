@@ -78,6 +78,7 @@
       el('function').value=selected.evidence_function || 'supported_by';
     }
     dirty = committed = 0;
+    if (el('conflict')) el('conflict').hidden = true;
     el('type').value = entry.disposition ? 'source_disposition' : entry.object_type || '';
     el('na').checked = entry.evidence_not_applicable;
     render();
@@ -159,7 +160,12 @@
         try {
           const response = await fetch('/annotations/api',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
           const data = await response.json();
+          if (el('conflict')) el('conflict').hidden = true;
           if (!response.ok) {
+            if (data.error === 'annotation_core_duplicate' && data.conflicting_annotation_id && el('conflict-link')) {
+              el('conflict-link').href = '/annotations?' + new URLSearchParams({document:state.snapshot_id,annotation:data.conflicting_annotation_id});
+              el('conflict').hidden = false;
+            }
             if (response.status === 422) { retryRequest = null; }
             const error = new Error(data.message || 'Opslaan mislukt.'); error.validation = response.status === 422; throw error;
           }

@@ -583,6 +583,11 @@ def _confirm_source_context(console: Any, *, actor_id: str, snapshot_id: str,
         envelope = console._envelope(snapshot_id)
         if actor_id not in (envelope.get("named_reviewers") or []):
             raise ConsoleError("reviewer_not_named_on_snapshot")
+        if role in {'label', 'context'} and (envelope.get('human_formation_ref')
+                or (envelope.get('_document_inputs') or {}).get('formation_variant') == 'human'):
+            # Denial only: the native producer projection independently freezes
+            # legacy context additions even for an older writer without this read.
+            raise ConsoleError('annotation_source_owned')
         if console.snapshot_is_published(snapshot_id):
             raise ConsoleError("published_working_revision_immutable")
         for event in [] if scoped is not None else read_events(console._ledger_path):

@@ -81,6 +81,9 @@ def assess_candidate_eligibility(obj: dict[str, Any]) -> CandidateEligibility:
 
     existing = candidate_eligibility_of(obj)
     origin = _semantic_origin(obj)
+    from src.vorming.human_annotation_projection_v1 import ORIGIN as HUMAN_ORIGIN
+    if origin == HUMAN_ORIGIN:
+        return CandidateEligibility(True,'human_annotation_selected','human')
     if origin == SELECTION_ORIGIN_PROPOSAL:
         if existing.get("eligible") is True:
             return CandidateEligibility(

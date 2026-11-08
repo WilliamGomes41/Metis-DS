@@ -57,6 +57,43 @@ def activation_replay(replay):
     return result
 
 
+def human_reference(envelope):
+    from src.workflows.operational_document_inputs_v1 import PreparedOperationalWrite
+    prepared = envelope.get('_prepared_document_write')
+    pins = json.loads(prepared.next_refs_text) if isinstance(prepared, PreparedOperationalWrite) else envelope.get('_document_inputs')
+    reference = (pins or {}).get('human') if pins is not None else envelope.get('human_formation_ref')
+    if reference is not None and (not isinstance(reference, dict) or set(reference) != {'layout', 'proof_id'}
+            or type(reference['layout']) is not int or reference['layout'] != 2):
+        fail('human_reference_invalid')
+    return reference
+
+
+def human_capture(con, snapshot_id, attempt_id):
+    row = con.execute('SELECT payload FROM workflow.processing_attempts WHERE snapshot_id=%s AND attempt_id=%s',
+                      (snapshot_id, attempt_id)).fetchone()
+    if not row or row['payload'].get('kind') != 'human_annotation_build':
+        fail('human_attempt_required')
+    attempt = row['payload']
+    seal = con.execute('SELECT payload FROM workflow.annotation_seals WHERE snapshot_id=%s AND seal_id=%s',
+                       (snapshot_id, attempt.get('annotation_seal_id'))).fetchone()
+    if seal is None or stable_json_hash(seal['payload']) != attempt['annotation_seal_id']:
+        fail('human_seal_missing')
+    payload = seal['payload']
+    entries = []
+    for ref in payload['entries']:
+        entry = con.execute('SELECT annotation_id,revision,payload_hash,author_id,payload FROM workflow.annotation_versions '
+            'WHERE snapshot_id=%s AND annotation_id=%s AND revision=%s',
+            (snapshot_id, ref['annotation_id'], ref['revision'])).fetchone()
+        if not entry or entry['payload_hash'] != ref['payload_hash'] or stable_json_hash(entry['payload']) != ref['payload_hash']:
+            fail('human_entry_changed')
+        entries.append(dict(entry))
+    summary = {'annotation_seal_id': attempt['annotation_seal_id'], 'attempt_id': attempt_id,
+               'claim_token': (attempt.get('dispatch') or {}).get('token'), 'actor_id': attempt['actor_id'],
+               'activation_revision': attempt['expected_revision'],
+               'source_ref': (attempt.get('diagnostic') or {}).get('review_source_ref')}
+    return summary, payload, entries, attempt
+
+
 def retain_active_evidence(con, envelope, proof_id):
     """Ordinary curation retains immutable input, independent of new task work."""
     row = con.execute('SELECT header,sealed FROM workflow.formation_evidence_roots WHERE proof_id=%s', (proof_id,)).fetchone()
@@ -69,6 +106,10 @@ def retain_active_evidence(con, envelope, proof_id):
                          (envelope['snapshot_id'],)).fetchone()
     if not source or source['review_source_ref'] != header['capture']['source_ref']:
         fail('source_basis_mismatch')
+    if header.get('layout') == 2:
+        if human_reference(envelope) != {'layout':2, 'proof_id':proof_id}:
+            fail('human_reference_changed')
+        return
     pins=envelope.get('_document_inputs')
     if pins is not None:
         ref=pins.get('replay')
@@ -147,6 +188,55 @@ def capture(con, context_id, attempt_id, *, payloads=False):
 
 
 class FormationEvidence:
+    def _prepare_human_evidence(self, envelope, attempt_id):
+        with self.documents._connect() as con:
+            con.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+            summary, seal, entries, attempt = human_capture(con, envelope['snapshot_id'], attempt_id)
+            current = con.execute('SELECT workflow.annotation_seal_current(%s,%s) AS valid',
+                (envelope['snapshot_id'], summary['annotation_seal_id'])).fetchone()['valid']
+        if not current or not summary['source_ref'] or not summary['claim_token']:
+            fail('human_capture_changed')
+        from src.vorming.processing_retry_v1 import assert_active, now
+        assert_active({'processing_attempts': [attempt]}, attempt_id, now())
+        extraction = self.retained_extraction(envelope, seal['extraction_hash'])
+        from src.vorming.source_preparation_context_v1 import stored_extraction
+        fragments = stored_extraction({**envelope, 'prepared_source_extraction': extraction})
+        from src.vorming.human_annotation_materialisation_v1 import build_objects
+        extraction_header = {k:v for k,v in extraction.items() if k not in {'fragments', 'docling_record'}}
+        fragments = self.read_review_source({**envelope, 'prepared_source_extraction': extraction_header,
+                                             '_review_source_ref': summary['source_ref']})
+        if fragments is None:
+            fail('source_basis_missing')
+        objects = build_objects(seal, entries, fragments=fragments)
+        members = [('input', '0', seal), ('source', '0', {'reference': summary['source_ref'], 'extraction_header': extraction_header})]
+        members += [('annotation', entry['annotation_id'], entry) for entry in entries]
+        members += [('result', obj['object_id'], obj) for obj in objects]
+        records = tuple((role, key, stable_json_hash(value), encoded(value)) for role, key, value in sorted(members))
+        header = {'layout': 2, 'variant': 'human-annotation-v1', 'source': source_binding(envelope),
+                  'extraction_hash': seal['extraction_hash'], 'capture': summary,
+                  'manifest': [[role, key, digest] for role, key, digest, _ in records]}
+        return PreparedFormationEvidence(encoded(header), records)
+
+    def _validate_human_members(self, header, members):
+        seal = next((value for role, _, value in members if role == 'input'), None)
+        if not seal or stable_json_hash(seal) != header['capture']['annotation_seal_id']:
+            fail('human_seal_changed')
+        entries_by_id = {key:value for role, key, value in members if role == 'annotation'}
+        if set(entries_by_id) != {ref['annotation_id'] for ref in seal['entries']}:
+            fail('human_entry_changed')
+        entries = [entries_by_id[ref['annotation_id']] for ref in seal['entries']]
+        if any({k:entry[k] for k in ('annotation_id', 'revision', 'payload_hash')} != ref
+               for entry, ref in zip(entries, seal['entries'])):
+            fail('human_entry_changed')
+        extraction = self.retained_extraction(header['source'], header['extraction_hash'])
+        from src.vorming.source_preparation_context_v1 import stored_extraction
+        from src.vorming.human_annotation_materialisation_v1 import build_objects
+        objects = build_objects(seal, entries, fragments=stored_extraction(
+            {**header['source'], 'prepared_source_extraction': extraction}))
+        actual = {key:value for role, key, value in members if role == 'result'}
+        if actual != {obj['object_id']:obj for obj in objects}:
+            fail('human_result_changed')
+
     def activation_envelope(self, envelope, attempt_id):
         """Prepare the selected immutable extraction outside the activation lock."""
         if attempt_id is None:
@@ -178,9 +268,11 @@ class FormationEvidence:
         stored_extraction(result)
         return result
 
-    def prepare_formation_evidence(self, envelope, *, context_id, attempt_id):
+    def prepare_formation_evidence(self, envelope, *, context_id=None, attempt_id):
         if workflow_transaction_active():
             fail('requires_independent_transaction')
+        if context_id is None:
+            return self._prepare_human_evidence(envelope, attempt_id)
         # One snapshot for owner-derived membership, not caller-supplied counts.
         with self.documents._connect() as con:
             con.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
@@ -286,15 +378,21 @@ class FormationEvidence:
         # Re-derive expected membership from the fenced owner capture. A trimmed
         # carrier with self-consistent replacement hashes is still rejected.
         expected = self.prepare_formation_evidence(envelope,
-            context_id=header['capture']['context_id'], attempt_id=header['capture']['attempt_id'])
+            context_id=header['capture'].get('context_id'), attempt_id=header['capture']['attempt_id'])
         if prepared != expected:
             fail('preparation_changed')
         proof_id = stable_json_hash(header)
         with self.documents._connect() as con:
-            con.execute('INSERT INTO workflow.formation_evidence_roots '
-                '(proof_id,snapshot_id,context_id,extraction_hash,header) VALUES(%s,%s,%s,%s,%s::jsonb) '
-                'ON CONFLICT DO NOTHING', (proof_id, envelope['snapshot_id'], header['capture']['context_id'],
-                                          header['extraction_hash'], prepared.header_text))
+            if header['layout'] == 2:
+                con.execute('INSERT INTO workflow.formation_evidence_roots '
+                    '(proof_id,snapshot_id,context_id,extraction_hash,annotation_seal_id,header) VALUES(%s,%s,NULL,%s,%s,%s::jsonb) '
+                    'ON CONFLICT DO NOTHING', (proof_id, envelope['snapshot_id'], header['extraction_hash'],
+                        header['capture']['annotation_seal_id'], prepared.header_text))
+            else:
+                con.execute('INSERT INTO workflow.formation_evidence_roots '
+                    '(proof_id,snapshot_id,context_id,extraction_hash,header) VALUES(%s,%s,%s,%s,%s::jsonb) '
+                    'ON CONFLICT DO NOTHING', (proof_id, envelope['snapshot_id'], header['capture']['context_id'],
+                        header['extraction_hash'], prepared.header_text))
             row = con.execute('SELECT header,sealed FROM workflow.formation_evidence_roots WHERE proof_id=%s FOR UPDATE',
                               (proof_id,)).fetchone()
             if encoded(row['header']) != prepared.header_text:
@@ -305,10 +403,10 @@ class FormationEvidence:
                         '(proof_id,role,member_key,payload_hash,payload_text) VALUES(%s,%s,%s,%s,%s)',
                         [(proof_id, *record) for record in prepared.members])
                 con.execute('UPDATE workflow.formation_evidence_roots SET sealed=true WHERE proof_id=%s', (proof_id,))
-        return {'layout': 1, 'proof_id': proof_id}
+        return {'layout': header['layout'], 'proof_id': proof_id}
 
     def read_formation_evidence(self, reference, *, envelope):
-        if not isinstance(reference, dict) or reference.get('layout') != 1:
+        if not isinstance(reference, dict) or type(reference.get('layout')) is not int or reference['layout'] not in {1, 2}:
             fail('layout_unsupported')
         with self.documents._connect() as con:
             row = con.execute('SELECT header,sealed FROM workflow.formation_evidence_roots WHERE proof_id=%s',
@@ -318,6 +416,8 @@ class FormationEvidence:
         if row is None:
             fail('missing')
         header = row['header']
+        if header.get('layout') != reference['layout']:
+            fail('layout_unsupported')
         if not row['sealed'] or stable_json_hash(header) != reference['proof_id']:
             fail('integrity_failed')
         if header['source'] != source_binding(envelope):
@@ -334,7 +434,54 @@ class FormationEvidence:
         if not basis or self.read_review_source({**envelope, 'prepared_source_extraction':basis['extraction_header'],
                                                 '_review_source_ref':basis['reference']}) is None:
             fail('source_basis_missing')
+        if header['layout'] == 2:
+            self._validate_human_members(header, result)
         return {'header': header, 'members': result}
+
+
+def assert_human_activation(con, envelope, reference, *, objects):
+    from src.vorming.human_annotation_build_v1 import require_storage
+    require_storage(con)
+    latest = next(reversed(envelope.get('processing_attempts') or []), {})
+    diagnostic = latest.get('diagnostic') or {}
+    gate = diagnostic.get('final_validation') or {}
+    if (objects is None or envelope.get('processing_storage') != 'task-v1'
+            or gate.get('version') != 3 or gate.get('stage') != 'sealed'
+            or gate.get('formation_evidence_ref') != reference
+            or diagnostic.get('formation_evidence_ref') != reference
+            or human_reference(envelope) != reference):
+        fail('sealed_capture_required')
+    row = con.execute('SELECT header,sealed FROM workflow.formation_evidence_roots WHERE proof_id=%s',
+                      (reference.get('proof_id'),)).fetchone()
+    if not row or not row['sealed'] or stable_json_hash(row['header']) != reference.get('proof_id'):
+        fail('integrity_failed')
+    header = row['header']
+    current, seal, _, attempt = human_capture(con, envelope['snapshot_id'], latest.get('attempt_id'))
+    valid = con.execute('SELECT workflow.annotation_seal_current(%s,%s) AS valid',
+                        (envelope['snapshot_id'], current['annotation_seal_id'])).fetchone()['valid']
+    if (header.get('layout') != 2 or header.get('variant') != 'human-annotation-v1' or not valid
+            or header['source'] != source_binding(envelope) or current != header['capture']
+            or latest.get('annotation_seal_id') != current['annotation_seal_id']
+            or latest.get('expected_revision') != seal['objects_revision']):
+        fail('activation_changed')
+    expected = {key:digest for role, key, digest in header['manifest'] if role == 'result'}
+    if len(objects) != len(expected) or {obj['object_id']:stable_json_hash(obj) for obj in objects} != expected:
+        fail('human_result_changed')
+    from src.vorming.processing_retry_v1 import assert_active, now
+    from src.vorming.source_selection_v1 import authorize_account
+    assert_active({'processing_attempts': [attempt]}, attempt['attempt_id'], now())
+    if (attempt.get('dispatch') or {}).get('state') != 'claimed' or not current['claim_token']:
+        fail('claim_changed')
+    account = con.execute('SELECT account_id,roles,retirement FROM workflow.accounts WHERE account_id=%s FOR SHARE',
+                          (attempt['actor_id'],)).fetchone()
+    if not account:
+        fail('authorization_changed')
+    reviewers = [r['account_id'] for r in con.execute('SELECT account_id FROM workflow.document_reviewers WHERE snapshot_id=%s',
+                                                    (envelope['snapshot_id'],)).fetchall()]
+    authorize_account(account, {'named_reviewers': reviewers})
+    assert_active({'processing_attempts': [attempt]}, attempt['attempt_id'], now())
+    con.execute('UPDATE workflow.documents SET formation_evidence_id=%s,review_source_ref=%s::jsonb WHERE snapshot_id=%s',
+                (reference['proof_id'], encoded(current['source_ref']), envelope['snapshot_id']))
 
 
 def assert_activation(con, envelope):

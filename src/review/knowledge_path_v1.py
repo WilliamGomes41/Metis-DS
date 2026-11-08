@@ -129,7 +129,8 @@ def content_reviewable(obj: dict[str, Any]) -> bool:
     from src.vorming.source_accountability_v1 import is_source_record
     if is_source_record(obj):
         return False
-    if _origin(obj) != SELECTION_ORIGIN_PROPOSAL:
+    from src.vorming.semantic_passage_v1 import CANDIDATE_SELECTION_ORIGINS
+    if _origin(obj) not in CANDIDATE_SELECTION_ORIGINS:
         return False
     return _gate(obj) == GATE_ALLOWED and has_exact_source_spans(obj)
 
@@ -142,7 +143,8 @@ def candidate_lifecycle(obj: dict[str, Any]) -> str:
     from src.vorming.source_accountability_v1 import is_source_record
     if is_source_record(obj) or _origin(obj) == SELECTION_ORIGIN_COVERAGE:
         return "source"
-    if _origin(obj) == SELECTION_ORIGIN_PROPOSAL and not has_exact_source_spans(obj):
+    from src.vorming.semantic_passage_v1 import CANDIDATE_SELECTION_ORIGINS
+    if _origin(obj) in CANDIDATE_SELECTION_ORIGINS and not has_exact_source_spans(obj):
         return "materialisation_failed"
     if _gate(obj) == GATE_BLOCKED:
         return "blocked"

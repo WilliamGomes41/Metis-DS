@@ -229,3 +229,12 @@ Geen oude prozacallers verwijderd in deze prerequisite; de native034-fences
 blijven aan. Seal/job/activatie (036), HA-3, HA-4, de volledige
 upload->publicatie->API/MCP-keten en de onafhankelijke praktijktoets blijven
 open. Deze bewijscommit is geen parent-Done of releaseacceptatie.
+
+## Vervolg na merge #1030
+
+Deze notitie beschrijft de op main geleverde veld-/rolinput. HA-2b-seal, job en
+activatie zijn nu op de vervolgbranch geïmplementeerd onder
+[het bouwcontract](1015-human-annotation-build.md). De actuele
+[bewijsnotitie](1015-human-annotation-build-evidence.md) vervangt voor die nieuwe
+code geen van de historische resultaten hierboven. HA-3/HA-4, MET-58 en de
+onafhankelijke praktijktoets blijven afzonderlijke open oplevervoorwaarden.

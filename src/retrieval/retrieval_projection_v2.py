@@ -302,12 +302,12 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
         # Source-bound context is part of the exact reviewed canonical object,
         # just like reviewer-linked context. It must travel with its anchor to
         # the Product API; a source record is never published separately.
-        from src.vorming.source_bound_fields_v2 import CONTEXT_KEY, CONTEXT_ROLES, context_matches_target
+        from src.vorming.source_bound_fields_v2 import CONTEXT_KEY, context_roles_for, context_matches_target
         bound_record = (obj.get("metadata") or {}).get(CONTEXT_KEY)
         bound_context = bound_record.get("entries", []) if isinstance(bound_record, dict) else []
         if CONTEXT_KEY in (obj.get("metadata") or {}) and (
             not context_matches_target(obj)
-            or any(not isinstance(entry, dict) or entry.get("role") not in CONTEXT_ROLES
+            or any(not isinstance(entry, dict) or entry.get("role") not in context_roles_for(bound_record)
                    or entry.get("unresolved_reason") is not None
                    or not isinstance(entry.get("text"), str) or not entry["text"].strip()
                    or not isinstance(entry.get("span"), dict)
@@ -360,7 +360,10 @@ def build_projection(envelopes: list[dict[str, Any]]) -> tuple[list[dict[str, An
             label = "Bronlabel" if link["role"] == "label" else "Broncontext"
             text_parts.append(f"{label}: {link['text']}")
         for entry in bound_context:
-            text_parts.append(f"Broncontext ({entry['role']}): {entry['text']}")
+            label = ("Onderbouwt de uitspraak" if entry.get('evidence_function') == 'supported_by' else
+                     "Verklaart de uitspraak" if entry.get('evidence_function') == 'explains' else
+                     f"Broncontext ({entry['role']})")
+            text_parts.append(f"{label}: {entry['text']}")
         if content.get("clean_text"):
             text_parts.append(content["clean_text"].strip())
         text_parts.extend(_logic_text(obj.get("logic")))
