@@ -207,7 +207,7 @@ BEGIN
        OR NEW.context_id IS DISTINCT FROM OLD.context_id OR NEW.annotation_seal_id IS DISTINCT FROM OLD.annotation_seal_id OR NEW.extraction_hash<>OLD.extraction_hash OR NEW.header<>OLD.header THEN
         RAISE EXCEPTION 'formation_evidence_immutable';
     END IF;
-    IF (SELECT COALESCE(jsonb_agg(jsonb_build_array(role,member_key,payload_hash) ORDER BY role,member_key),'[]'::jsonb)
+    IF (SELECT COALESCE(jsonb_agg(jsonb_build_array(role,member_key,payload_hash) ORDER BY role COLLATE "C",member_key COLLATE "C"),'[]'::jsonb)
         FROM workflow.formation_evidence_members WHERE proof_id=NEW.proof_id)
         IS DISTINCT FROM NEW.header->'manifest' THEN
         RAISE EXCEPTION 'formation_evidence_membership_incomplete';
@@ -326,9 +326,9 @@ BEGIN
               OR (document.document_storage_version<>1 AND (document.envelope_payload#>>'{human_formation_ref,proof_id}'
                 IS DISTINCT FROM proof.proof_id OR document.envelope_payload#>>'{prepared_source_extraction,record_hash}'
                 IS DISTINCT FROM proof.extraction_hash))
-              OR (SELECT COALESCE(jsonb_agg(DISTINCT object_id ORDER BY object_id),'[]'::jsonb)
+              OR (SELECT COALESCE(jsonb_agg(DISTINCT object_id COLLATE "C" ORDER BY object_id COLLATE "C"),'[]'::jsonb)
                 FROM workflow.document_objects WHERE snapshot_id=document.snapshot_id)
-                IS DISTINCT FROM (SELECT COALESCE(jsonb_agg(member_key ORDER BY member_key),'[]'::jsonb)
+                IS DISTINCT FROM (SELECT COALESCE(jsonb_agg(member_key ORDER BY member_key COLLATE "C"),'[]'::jsonb)
                 FROM workflow.formation_evidence_members WHERE proof_id=proof.proof_id AND role='result') THEN
                 RAISE EXCEPTION 'formation_evidence_active_binding_changed';
             END IF;

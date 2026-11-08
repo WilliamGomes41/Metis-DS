@@ -412,7 +412,7 @@ class FormationEvidence:
             row = con.execute('SELECT header,sealed FROM workflow.formation_evidence_roots WHERE proof_id=%s',
                               (reference.get('proof_id'),)).fetchone()
             members = con.execute('SELECT role,member_key,payload_hash,payload_text FROM workflow.formation_evidence_members '
-                'WHERE proof_id=%s ORDER BY role,member_key', (reference.get('proof_id'),)).fetchall()
+                'WHERE proof_id=%s ORDER BY role COLLATE "C",member_key COLLATE "C"', (reference.get('proof_id'),)).fetchall()
         if row is None:
             fail('missing')
         header = row['header']

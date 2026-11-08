@@ -292,8 +292,15 @@ def test_self_consistent_altered_proof_is_refused_before_activation(tmp_path, pr
     assert annotation.overview(console, actor_id=actor, snapshot_id=sid)['generation'] == 1
 
 
-def test_multiple_core_ranges_across_paragraphs_build_one_claim_with_essential_context(tmp_path, production_console):
+@pytest.mark.parametrize('member_collation', ['C', 'en_US.utf8'])
+def test_multiple_core_ranges_across_paragraphs_build_one_claim_with_essential_context(tmp_path, production_console, member_collation):
     console = production_console(root=tmp_path)
+    # CI's en_US ordering ignores punctuation; proof order must match the
+    # producer's canonical ordering regardless of the database's locale.
+    from psycopg import sql
+    with console.workflow_document_store._connect() as con:
+        con.execute(sql.SQL('ALTER TABLE workflow.formation_evidence_members '
+            'ALTER COLUMN member_key TYPE text COLLATE {}').format(sql.Identifier(member_collation)))
     actor = console.create_account(username='multi', password='human-multi-secret', roles=('researcher','reviewer'))['account_id']
     sid = console.receive_source(actor_id=actor, filename='multi.html', content_type='text/html',
         data=b'<html><body><p>De kwetsbare huid</p><p>Alleen bij klachten.</p><p>verklaart de pijn.</p></body></html>',
@@ -321,6 +328,14 @@ def test_multiple_core_ranges_across_paragraphs_build_one_claim_with_essential_c
     assert len(claims[0]['metadata']['semantic_passage']['spans']) == 2
     assert claims[0]['metadata']['source_bound_context']['entries'][0]['required_for_meaning'] is True
     assert claims[0]['metadata']['source_bound_context']['entries'][0]['text'] == 'Alleen bij klachten.'
+    resumed = restart_production(console)
+    from src.workflows.formation_task_store_v1 import FormationTaskStore
+    with resumed.workflow_document_store._connect() as con:
+        proof_id = con.execute('SELECT formation_evidence_id FROM workflow.documents '
+            'WHERE snapshot_id=%s', (sid,)).fetchone()['formation_evidence_id']
+    evidence = FormationTaskStore(resumed.workflow_document_store).read_formation_evidence(
+        {'layout': 2, 'proof_id': proof_id}, envelope=resumed._envelope(sid))
+    assert claims[0]['object_id'] in {key for role, key, _ in evidence['members'] if role == 'result'}
 
 
 def test_expired_worker_cannot_activate_after_same_job_is_handed_over(tmp_path, production_console):

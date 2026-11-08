@@ -137,3 +137,40 @@ MET-58 blijft formeel geblokkeerd op referentiedocument/selectietaak.
 Compositiecatalogusupdate wordt bij HA-4 (#1017) afgerond samen met de globale
 routeverwijdering; dit contract legt de huidige additieve humanroute vast.
 Geen parent-Done, researcherpraktijkacceptatie, release of productieclaims.
+
+## Correctie van de CI-failure op PR #1031
+
+Op head4c269169 faalde CI shard0 op zowel Python3.12 als3.13 in de
+meerbereikenketen met formation_evidence_membership_incomplete. De overige
+suitepartities en topology/source-processing/Docling/Bend-proeven slaagden.
+De ontbrekende XML-bestanden in de verzameljobs waren gevolgmeldingen van die
+failure, geen reden om de bewijsvoorwaarden te versoepelen.
+
+Oorzaak: Python schrijft het bewijsmanifest in canonieke lexicografische volgorde;
+PostgreSQL gebruikte voor de native vergelijking en lezer de databasecollatie.
+De lokale C-database sorteert anders dan CI's en_US bij leestekens in object-ID's.
+De nieuwe native regressieproef reproduceerde vóór de productfix dezelfde fout:
+1 passed (C),1 failed (en_US.utf8),2.98s. Dit is dus geen Pythonversieprobleem.
+
+De sealcontrole, object-ID-setvergelijking bij activatie en bewijslezer gebruiken
+nu expliciet C-sortering. Proofhash, inhoud, lidmaatschap en immutablehistorie
+veranderen niet. De regressieproef zet de bewijssleutelkolom in het eigen lege
+fixturedoel op C/en_US; geen productiecollatie wordt gewijzigd en niets wordt
+in de test overgeslagen. Ook lezen na herstart wordt werkelijk getoetst.
+
+Uitgevoerd op de correctie:
+
+```sh
+env -u METIS_TEST_POSTGRES_DSN PGBIN=/tmp/metis-pg16/bin \
+  PATH=/tmp/metis-pg-client/usr/lib/postgresql/17/bin:$PATH \
+  /workspace/Metis-DS/.venv/bin/python -m pytest \
+  tests/test_human_annotation_build_postgres.py \
+  tests/test_formation_evidence_postgres.py -xq --tb=short
+```
+
+**89 passed**,geen skips,115.85s,PostgreSQL16.4. Omvat de oorspronkelijke
+meerbereikenketen onder beide collaties, herstart/herlezen, echte human/model-
+proofs, beide inputlayouts en negatieve onvolledige/vervalste bewijs-/restore-
+proeven. De historische volledige8432-run hierboven gebruikte C-sortering;
+deze is geen bewijs voor de toen nog defecte en_US-route. Nieuwe volledige
+Python3.12/3.13-verificatie gebeurt op de gepushte correctie via CI.

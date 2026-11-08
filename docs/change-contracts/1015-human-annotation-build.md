@@ -228,3 +228,20 @@ Nog buiten deze slice: correctie na eerste activatie met gerichte reviewinvalida
 (HA-3), volledige verwijdering van oude prozawriters/configuratie (HA-4), formele
 referentie-/selectietaak MET-58, researcherpraktijktoets, merge en deployment.
 Geen parent-Done of globale omschakeling op grond van deze featurebranch.
+
+## CI-correctie #1031 — canonieke bewijsvolgorde
+
+Class A/high-risk binnen hetzelfde contract; geen nieuwe lifecyclebeslissing.
+De bestaande Pythonproducer sorteert manifestleden lexicografisch op role/key.
+Native sealcontrole en bewijslezer moeten exact die canonieke volgorde gebruiken,
+onafhankelijk van databasecollatie. PostgreSQL en_US negeert leestekens bij
+sorteren en kan een volledig juist meerbereikenbewijs daarom ten onrechte als
+onvolledig weigeren. De C- en en_US-native proef reproduceert dit verschil.
+
+Gerichte wijziging: expliciete C-collatie voor role/member_key in de036-seal-
+controle, de object-ID-setvergelijking bij activatie en de bestaande
+FormationEvidence-lezer. Bronselectie, kandidaat-ID's,
+proofhash/manifest, autorisatie, transacties en publicatievoorwaarden veranderen
+niet. 036 is nog niet in productie uitgevoerd; geen037 of historische datamigratie.
+Bewijs: dezelfde meerbereikenketen onder beide collaties, herlezen na herstart,
+negatieve onvolledige/vervalste proofproeven en bestaande layout-/restoreproeven.
