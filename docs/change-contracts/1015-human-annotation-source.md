@@ -42,8 +42,10 @@ functies `supported_by` en `explains`, zonder nieuwe KO-taxonomie. De rol en
 `required_for_meaning` horen bij de relatie binnen een entry; hergebruik van
 een anker tussen entries behoudt afzonderlijke relaties. Gereed verlangt kern,
 bestaand type en expliciet bewijs of een expliciete NVT-keuze; dit is geen
-reviewbevestiging. Voorwaarden/uitzonderingen zijn hier bronrelaties; hun
-uiteindelijke fysieke KO-opslag blijft bij #986/#995. Geen nieuw besluit daarover.
+reviewbevestiging. Voorwaarden/uitzonderingen zijn hier bronrelaties. De latere
+keuze A in deze sessie houdt die context bij dezelfde claim; zie het
+[uitvoeringscontract](1015-human-annotation-execution.md). HA-2a maakt nog geen
+kandidaatprojectie van dat besluit.
 
 ## Lifecycletransitie
 
@@ -110,7 +112,7 @@ zijn geen human-bewijs. Geen activatie implementeren door die controles weg te l
 Voor praktijkacceptatie zijn de bron/opdracht, inhoudelijke eigenaar en onafhankelijke
 referentie bij de gebruiker uitgevraagd. Technische fixtures gelden niet als antwoord.
 
-De nog open fysieke contextkeuze uit #986/MET-49 is aan de gebruiker voorgelegd:
+De fysieke contextkeuze uit #986/MET-49 is aan de gebruiker voorgelegd:
 
 | Optie | Gevolg | Advies |
 |---|---|---|
@@ -118,4 +120,11 @@ De nog open fysieke contextkeuze uit #986/MET-49 is aan de gebruiker voorgelegd:
 | Afzonderlijke, zichtbaar gekoppelde kennisobjecten | Eigen inhoudelijke afbakening, identiteit, bewijs en review per zelfstandig object nodig | Houdbaar als #986 dit besluit; niet automatisch afleiden uit het markeren van een bereik |
 
 De ingevoerde annotatieankers en rollen blijven bij beide opties bruikbaar.
-Tot het besluit is er geen kandidaatprojectie die stil één optie tot domeinregel maakt.
+William koos vervolgens A (“Ga met A door”): brongebonden context bij dezelfde
+claim. Vastlegging en gevolg voor de verdere bouw staan in het
+[uitvoeringscontract](1015-human-annotation-execution.md). De overige open
+inhoudelijke vragen uit #986 worden daarmee niet als besloten beschouwd.
+
+De caller-/recovery-inventarisatie vond vervolgens dat ketenback-up nog geen
+annotatietabellen bevatte; procesherstartbewijs dekt dat niet af. De reparatie
+heeft een eigen [Class A-herstelcontract](1015-human-annotation-recovery.md).

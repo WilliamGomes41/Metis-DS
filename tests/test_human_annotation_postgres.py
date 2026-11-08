@@ -274,3 +274,110 @@ def test_existing_unpublished_delete_cleans_annotation_input_atomically(tmp_path
     with console.workflow_document_store._connect() as con:
         for table in ('annotation_sets','annotation_versions','annotation_heads','annotation_commands'):
             assert con.execute(f'SELECT count(*) AS n FROM workflow.{table} WHERE snapshot_id=%s',(sid,)).fetchone()['n']==0
+
+
+@pytest.mark.parametrize('storage',['legacy','v1'])
+def test_annotation_backup_restores_history_pending_commands_and_ownership(tmp_path, production_console, monkeypatch, storage):
+    from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+    from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter
+    from tests.postgres_support import database, install_schema
+    from tests.production_support import production_application
+    monkeypatch.setenv('METIS_DOCUMENT_INPUT_STORAGE',storage)
+    if storage=='v1':
+        monkeypatch.setenv('METIS_FORMATION_TASK_STORAGE','v1')
+    console, actor, _, sid, view, _ = source(production_console,tmp_path)
+    request=command(view,ranges=[anchor(view,'Controleer'),anchor(view,'Alleen',role='condition')])
+    first=annotation.save(console,actor_id=actor,**request)
+    second={**request,'command_id':str(uuid4()),'expected_revision':1,'expected_generation':1,
+        'selection':{**request['selection'],'pending_range':anchor(view,'Onderzoek',role='evidence',function='explains')}}
+    annotation.save(console,actor_id=actor,**second)
+    # A withdrawn entry is durable history too; physical archive row order is irrelevant.
+    latest=annotation.overview(console,actor_id=actor,snapshot_id=sid)
+    annotation.save(console,actor_id=actor,**command(latest,status='withdrawn'))
+    expected=annotation.overview(console,actor_id=actor,snapshot_id=sid)
+    adapter=PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(console.workflow_document_store.config))
+    state=adapter.export_state()
+    assert len(state['formation_recovery']['tables']['annotation_versions'])==3
+    reordered=deepcopy(state)
+    for rows in reordered['formation_recovery']['tables'].values():
+        rows.reverse()
+    with database(console.workflow_document_store.config.dsn) as target_config:
+        install_schema(target_config.dsn)
+        target=PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(target_config))
+        target.restore_state(reordered)
+        assert target.export_state()['formation_recovery']==state['formation_recovery']
+        restored=production_application(console.root,target_config,runtime=console.runtime,
+            source_store=console.source_store).state.operations_kernel
+        assert annotation.overview(restored,actor_id=actor,snapshot_id=sid)==expected
+        assert annotation.save(restored,actor_id=actor,**request)==first
+        with pytest.raises(ConsoleError,match='annotation_source_owned'):
+            restored.reserve_source_selection(actor_id=actor,snapshot_id=sid,command_id='restore-old-ai',
+                expected_revision=restored.objects_revision(sid))
+        third={**second,'command_id':str(uuid4()),'expected_revision':2,'expected_generation':3}
+        assert annotation.save(restored,actor_id=actor,**third)['revision']==3
+        assert annotation.overview(restart_production(restored),actor_id=actor,snapshot_id=sid)['generation']==4
+
+
+@pytest.mark.parametrize('corruption',['table','section','null_section','history','head','receipt','witness','source','payload_hash'])
+def test_annotation_backup_rejects_partial_or_changed_input_atomically(tmp_path, production_console, corruption):
+    from src.integrity_kernel import stable_hash
+    from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+    from src.publication.publication_chain_recovery_v1 import PublicationChainRecoveryError
+    from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter
+    from tests.postgres_support import database, install_schema
+    console, actor, _, sid, view, _ = source(production_console,tmp_path)
+    request=command(view,ranges=[anchor(view,'Controleer'),anchor(view,'Alleen',role='condition')])
+    annotation.save(console,actor_id=actor,**request)
+    annotation.save(console,actor_id=actor,**{**request,'command_id':str(uuid4()),'expected_revision':1,'expected_generation':1})
+    adapter=PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(console.workflow_document_store.config))
+    state=adapter.export_state()
+    tables=state['formation_recovery']['tables']
+    if corruption=='table': del tables['annotation_commands']
+    elif corruption=='section': del state['formation_recovery']
+    elif corruption=='null_section': state['formation_recovery']=None
+    elif corruption=='history': tables['annotation_versions'].pop(0)
+    elif corruption=='head': tables['annotation_heads'][0]['revision']=1
+    elif corruption=='receipt': tables['annotation_commands'].pop()
+    elif corruption=='witness':
+        # Even a self-consistent replacement payload hash cannot repair a
+        # false quote witness in an older, no-longer-current entry version.
+        row=tables['annotation_versions'][0]
+        row['payload']['ranges'][0]['quote_sha256']='0'*64
+        row['payload_hash']=stable_hash(row['payload'])
+    elif corruption=='source': tables['annotation_sets'][0]['source_identity']['version']='wrong'
+    elif corruption=='payload_hash': tables['annotation_versions'][0]['payload_hash']='0'*64
+    with database(console.workflow_document_store.config.dsn) as target_config:
+        install_schema(target_config.dsn)
+        target=PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(target_config))
+        with pytest.raises(PublicationChainRecoveryError):
+            target.restore_state(state)
+        target.assert_empty()
+
+
+@pytest.mark.parametrize('old_version,section_version',[(7,None),(8,1),(9,2),(9,None)])
+def test_pre_annotation_backup_upgrades_without_inventing_selections(tmp_path, production_console, old_version, section_version):
+    from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+    from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter, _upgrade_workflow_state
+    from src.workflows.formation_recovery_v1 import ANNOTATION_TABLES, NEW_TABLES
+    from tests.postgres_support import database, install_schema
+    console=production_console(root=tmp_path)
+    current=PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(console.workflow_document_store.config)).export_state()
+    legacy=deepcopy(current)
+    legacy['workflow_recovery_version']=old_version
+    legacy['formation_recovery']['version']=section_version
+    for name in ANNOTATION_TABLES:
+        del legacy['formation_recovery']['tables'][name]
+    if section_version==1:
+        for name in NEW_TABLES:
+            del legacy['formation_recovery']['tables'][name]
+    if section_version is None:
+        del legacy['formation_recovery']
+    original=deepcopy(legacy)
+    upgraded=_upgrade_workflow_state(legacy)
+    assert upgraded=={**current,'formation_recovery':None} if section_version is None else upgraded==current
+    assert legacy==original
+    with database(console.workflow_document_store.config.dsn) as target_config:
+        install_schema(target_config.dsn)
+        target=PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(target_config))
+        target.restore_state(legacy)
+        assert target.export_state()['formation_recovery']==current['formation_recovery']

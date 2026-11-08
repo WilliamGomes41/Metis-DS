@@ -17,6 +17,7 @@ TABLES = (
     'source_read_fragments', 'source_read_blocks', 'source_read_block_fragments',
     'processing_archives', 'formation_evidence_roots', 'formation_evidence_members',
     'processing_archive_inputs','processing_archive_input_members','document_inputs','document_processing_records',
+    'annotation_sets','annotation_versions','annotation_heads','annotation_commands',
 )
 FACT_TABLES = ('review_fact_state', 'review_object_facts')
 DOCUMENT_COLUMNS = ('snapshot_id', 'processing_storage_version', 'object_generation',
@@ -24,6 +25,7 @@ DOCUMENT_COLUMNS = ('snapshot_id', 'processing_storage_version', 'object_generat
 ROOTS = {'source_read_roots':'views_id', 'formation_evidence_roots':'proof_id','processing_archive_inputs':'archive_id'}
 OPERATIONAL_TABLES=('document_processing_records','document_inputs')
 NEW_TABLES=('processing_archive_inputs','processing_archive_input_members',*OPERATIONAL_TABLES)
+ANNOTATION_TABLES=('annotation_sets','annotation_versions','annotation_heads','annotation_commands')
 ORDER = {
     'processing_attempts':'attempt_id', 'processing_document_summaries':'snapshot_id',
     'processing_checkpoints':'checkpoint_id', 'prepared_extraction_versions':'record_hash',
@@ -40,6 +42,8 @@ ORDER = {
     'processing_archive_inputs':'archive_id','processing_archive_input_members':'archive_id,role,member_key',
     'document_inputs':'snapshot_id','document_processing_records':'snapshot_id,kind,ordinal',
     'review_fact_state':'snapshot_id', 'review_object_facts':'snapshot_id,object_id',
+    'annotation_sets':'snapshot_id', 'annotation_versions':'snapshot_id,annotation_id,revision',
+    'annotation_heads':'snapshot_id,position,annotation_id', 'annotation_commands':'snapshot_id,command_id',
 }
 
 
@@ -58,15 +62,22 @@ def upgrade_legacy(state):
     The disposable attempt index is rebuilt by its normal row trigger.
     """
     result=deepcopy(state)
+    result.setdefault('formation_recovery',None)
     section=result.get('formation_recovery')
     if section is not None and section.get('version')==1:
-        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(NEW_TABLES):
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(NEW_TABLES)-set(ANNOTATION_TABLES):
             fail('shape_invalid')
         section['version']=2
         for table in NEW_TABLES:
             section['tables'][table]=[]
         for document in section['documents']:
             document['document_storage_version']=0
+    if section is not None and section.get('version')==2:
+        if set(section.get('tables') or {}) != set(TABLES+FACT_TABLES)-set(ANNOTATION_TABLES):
+            fail('shape_invalid')
+        section['version']=3
+        for table in ANNOTATION_TABLES:
+            section['tables'][table]=[]
     return result
 
 
@@ -77,7 +88,7 @@ def validate(state):
                for d in (state.get('workflow_tables') or {}).get('documents', [])):
             fail('missing_reexport_required')
         return None
-    if (not isinstance(section, dict) or section.get('version') != 2
+    if (not isinstance(section, dict) or section.get('version') != 3
             or set(section.get('tables') or {}) != set(TABLES + FACT_TABLES)
             or not isinstance(section.get('documents'), list)):
         fail('shape_invalid')
@@ -96,7 +107,7 @@ def validate(state):
 def export(con):
     if not available(con):
         return None
-    return {'version':2,
+    return {'version':3,
             'documents':[_json_safe(dict(r)) for r in con.execute(
                 'SELECT '+','.join(DOCUMENT_COLUMNS)+' FROM workflow.documents ORDER BY snapshot_id').fetchall()],
             'tables':{table:[_json_safe(dict(r)) for r in con.execute(
@@ -109,6 +120,72 @@ def assert_empty(con):
     for table in TABLES + FACT_TABLES:
         if con.execute(f'SELECT 1 FROM workflow.{table} LIMIT 1').fetchone():
             fail('target_not_empty:' + table)
+
+
+def _validate_annotations(con):
+    """Reject partial imports, including history that is not the current head.
+
+    Runs inside the existing offline restore transaction with exclusive locks.
+    Command hashes are checked against their original immutable entry version;
+    no author, generation or idempotent outcome is manufactured during restore.
+    """
+    from uuid import UUID
+    from src.integrity_kernel import stable_hash
+    from src.vorming.human_annotation_v1 import NORMALIZATION, validate_stored_selection
+    from src.vorming.source_preparation_context_v1 import stored_extraction
+    for source in con.execute('SELECT s.*,e.payload AS extraction,d.source_id,d.document_id,'
+        'd.source_sha256,d.source_version,d.content_kind,d.working_revision_id AS current_working_revision '
+        'FROM workflow.annotation_sets s JOIN workflow.documents d USING(snapshot_id) '
+        'JOIN workflow.prepared_extraction_versions e ON e.record_hash=s.extraction_hash').fetchall():
+        sid = source['snapshot_id']
+        identity = {key:source[column] for key,column in (
+            ('snapshot_id','snapshot_id'),('source_id','source_id'),('document_id','document_id'),
+            ('sha256','source_sha256'),('version','source_version'),('content_kind','content_kind'))}
+        if (identity != source['source_identity'] or source['working_revision_id'] != source['current_working_revision']
+                or source['normalization'] != NORMALIZATION or source['extraction_hash'] != source['extraction']['record_hash']):
+            fail('annotation_source_mismatch')
+        fragments = stored_extraction({**identity,'prepared_source_extraction':source['extraction']})
+        if fragments is None:
+            fail('annotation_source_mismatch')
+        versions = con.execute('SELECT * FROM workflow.annotation_versions WHERE snapshot_id=%s '
+                              'ORDER BY annotation_id,revision',(sid,)).fetchall()
+        heads = con.execute('SELECT * FROM workflow.annotation_heads WHERE snapshot_id=%s',(sid,)).fetchall()
+        commands = con.execute('SELECT * FROM workflow.annotation_commands WHERE snapshot_id=%s',(sid,)).fetchall()
+        if len(versions) != source['generation'] or len(commands) != source['generation']:
+            fail('annotation_history_incomplete')
+        latest, history = {}, {}
+        for row in versions:
+            key = row['annotation_id']
+            if (str(UUID(key)) != key or row['revision'] != latest.get(key,0)+1
+                    or row['status'] != row['payload']['status'] or stable_hash(row['payload']) != row['payload_hash']):
+                fail('annotation_history_invalid')
+            validate_stored_selection(row['payload'],fragments=fragments)
+            latest[key] = row['revision']
+            history[key,row['revision']] = row
+        if len(heads) != len(latest) or {h['annotation_id']:h['revision'] for h in heads} != latest:
+            fail('annotation_heads_invalid')
+        generations, seen, first = set(), set(), {}
+        for row in commands:
+            result = row['result']
+            if set(result) != {'annotation_id','revision','generation','status'}:
+                fail('annotation_command_invalid')
+            key, revision, generation = result['annotation_id'],result['revision'],result['generation']
+            if type(revision) is not int or type(generation) is not int:
+                fail('annotation_command_invalid')
+            version = history.get((key,revision))
+            if (version is None or row['actor_id'] != version['author_id'] or result['status'] != version['status']
+                    or generation in generations or (key,revision) in seen):
+                fail('annotation_command_invalid')
+            expected = stable_hash({'actor_id':row['actor_id'],'annotation_id':key,'expected_revision':revision-1,
+                'expected_generation':generation-1,'extraction_hash':source['extraction_hash'],
+                'normalization':source['normalization'],'selection':version['payload']})
+            if row['request_hash'] != expected:
+                fail('annotation_command_invalid')
+            generations.add(generation)
+            seen.add((key,revision))
+            first[key] = min(first.get(key,generation),generation)
+        if generations != set(range(1,source['generation']+1)) or any(h['position'] != first[h['annotation_id']] for h in heads):
+            fail('annotation_history_invalid')
 
 
 def restore(con, state, store):
@@ -174,5 +251,8 @@ def restore(con, state, store):
         for root in section['tables']['formation_evidence_roots']:
             task_store.read_formation_evidence({'layout':1,'proof_id':root['proof_id']},
                 envelope=envelopes[root['snapshot_id']])
+        _validate_annotations(con)
     except WorkflowDocumentStoreError as error:
         raise PublicationChainRecoveryError('workflow_formation_backup_integrity_failed') from error
+    except (ValueError, KeyError, TypeError, IndexError) as error:
+        raise PublicationChainRecoveryError('workflow_formation_backup_annotation_integrity_failed') from error
