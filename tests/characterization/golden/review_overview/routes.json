@@ -37,6 +37,42 @@
       ]
     ],
     [
+      "/annotations",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/annotations/api",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/annotations/api",
+      [
+        "POST"
+      ]
+    ],
+    [
+      "/annotations/editor.js",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/annotations/original",
+      [
+        "GET"
+      ]
+    ],
+    [
+      "/annotations/source",
+      [
+        "POST"
+      ]
+    ],
+    [
       "/audit",
       [
         "GET"

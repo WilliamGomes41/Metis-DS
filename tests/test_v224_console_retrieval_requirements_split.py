@@ -68,6 +68,7 @@ ALLOWED_CONSOLE_PACKAGES = frozenset(
         "azure-storage-blob",
         "cryptography",
         "psycopg",
+        "regex",  # Unicode grapheme boundaries for exact researcher source anchors; no retrieval stack.
         # Explicit console-only telemetry from request_diagnostics_v1.
         "azure-monitor-opentelemetry-exporter",
         "opentelemetry-api",

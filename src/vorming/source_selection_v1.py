@@ -73,6 +73,9 @@ def reserve_selection(console, *, actor_id, snapshot_id, command_id, expected_re
     with console._reprocessing_transaction(snapshot_id):
         envelope = deepcopy(console._processing_command_envelope(snapshot_id,command_id=command_id))
         authorize(console, actor_id, envelope)
+        from src.vorming.human_annotation_v1 import owns_source
+        if owns_source(console, snapshot_id):
+            raise ConsoleError('annotation_source_owned')
         if console.snapshot_is_published(snapshot_id):
             raise ConsoleError("published_objects_must_not_be_rewritten")
         previous = next((a for a in envelope.get("processing_attempts", []) if a["command_id"] == command_id), None)
