@@ -74,7 +74,7 @@ live opslaglayout zijn vastgesteld met deze repository-inspectie.
 | `workflow_document_concurrency_v1.write_bundle` én override `workflow_documents_cutover_v1.write_bundle` | activatiecheck, objectmerge, revision frontier en commit | beide roepen dezelfde uitgebreide FormationTaskStore-activatiegrens; geen directe alternatieve objectwriter |
 | `workflow_documents_postgres_v1.create_document_bundle`, `object_delta_postgres_v1`, review-deltawrites en legacy import/startup | lagere schrijf-/compatibiliteitsgrenzen buiten producer-orchestratie | SQL ownership/proof-fence blijft gelden; import/recovery is geen vormingstoestemming; geen nieuw human bronwerk uit oude cache reconstrueren |
 | `workflow_transaction_v1`, `_reprocessing_transaction` | gedeelde SQL-transactie, autorisatie- en documentlocks | korte commit; bron-I/O, reconstrueren en bouwen buiten documentlock; hercontrole bij activatie |
-| `human_annotation_v1`, migratie 034 | gepinde set, immutable entryversies, heads/receipts, fail-closed legacy fences | huidige save behouden; seal/save delen hetzelfde document/setlock en CAS |
+| `human_annotation_v1`, migraties 034/035 | gepinde set, immutable entryversies, heads/receipts, v2-betekenisvelden/bronrolvoorstellen/relatieverplichtingen en fail-closed legacy fences | huidige save behouden; seal/save delen hetzelfde document/setlock en CAS |
 | `operational_document_inputs_v1`, migratie 030 | refs in `document_inputs`, attempts in rijgerichte tabellen; legacy envelope blijft ondersteund | echte human variant met eigen proofref; replay blijft afwezig, geen `semantic` zonder replay |
 | `formation_recovery_v1`, `workflow_chain_recovery_v1` | offline exports/imports misten annotatietabellen op c23933d2 | herstelgat repareren in bestaande back-uptransactie; zie herstelcontract, archief v10/formation v3 |
 | `deterministic_review_repair_v1`, review duty/policy/bindings/frontiers | revisies en exacte relevante oordelen | gerichte annotatiecorrectie via huidige reviewmutation; onveranderde peers behouden, afhankelijke bindings opnieuw verplicht |
@@ -151,9 +151,11 @@ en T10-/reviewclosure; verplichte bevestigingen worden niet overgeslagen doordat
 de researcher het overzicht afsloot. De oude pagina verdwijnt pas nadat die
 noodzakelijke handeling in de nieuwe werkplek beschikbaar en native bewezen is.
 
-De huidige HA-2a-payload ondersteunt deze bronrolvariant nog niet. Zij is een
-concrete prerequisite voor HA-2b-seal; het huidige overzicht bewijst dus nog
-geen volledige documentafhandeling. Een context-/bewijsrange kan brongebruik
+De [HA-2b-inputprerequisite](1015-human-annotation-meaning.md) voegt deze
+bronrolvariant en betekenisvelden/relatieverplichtingen toe als expliciete v2
+binnen dezelfde tabellen, met native revisie-/headfences in migratie 035.
+Seal/job/activatie blijven open; het huidige overzicht bewijst dus nog geen
+volledige documentafhandeling. Een context-/bewijsrange kan brongebruik
 realiseren, maar alleen bij een actuele geldige relatie naar de betreffende
 claim; een ongekoppeld bereik telt daarvoor niet.
 

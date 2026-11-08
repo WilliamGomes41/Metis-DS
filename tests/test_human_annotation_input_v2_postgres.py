@@ -86,6 +86,11 @@ def test_essential_relationship_cannot_disappear_and_can_be_reanchored_or_discha
     ready=next_command(removed,result);ready['selection']['status']='ready'
     with pytest.raises(ConsoleError,match='annotation_required_relationship_missing'):
         annotation.save(console,actor_id=actor,**ready)
+    pending=next_command(removed,result)
+    pending['selection']['pending_range']={**condition,'relationship_id':key}
+    result=annotation.save(console,actor_id=actor,**pending)
+    paused=annotation.overview(restart_production(console),actor_id=actor,snapshot_id=sid)['entries'][0]
+    assert paused['pending_range']['relationship_id']==paused['required_links'][0]['relationship_id']
     repaired=next_command(removed,result)
     repaired['selection']['ranges'].append({**condition,'start':len('Alleen '),'quote':'bij klachten.','relationship_id':key})
     repaired['selection']['required_links']=[];repaired['selection']['status']='ready'
@@ -101,7 +106,7 @@ def test_essential_relationship_cannot_disappear_and_can_be_reanchored_or_discha
     loaded=annotation.overview(restart_production(console),actor_id=actor,snapshot_id=sid)['entries'][0]
     assert loaded['required_links'][0]['withdrawal_reason']==downgrade['selection']['required_links'][0]['withdrawal_reason']
     with console.workflow_document_store._connect() as con:
-        assert con.execute('SELECT count(*) AS n FROM workflow.annotation_versions WHERE snapshot_id=%s',(sid,)).fetchone()['n']==4
+        assert con.execute('SELECT count(*) AS n FROM workflow.annotation_versions WHERE snapshot_id=%s',(sid,)).fetchone()['n']==5
 
 
 @pytest.mark.parametrize('role,reason,status',[('metadata','document_metadata','ready'),('structure','document_structure','ready'),('unresolved','uncertain_source_role','draft')])
@@ -235,3 +240,21 @@ def test_native_old_head_cannot_hide_new_input(tmp_path,production_console):
     loaded=annotation.overview(restart_production(console),actor_id=actor,snapshot_id=sid)
     assert loaded['entries'][0]['revision']==2
     assert loaded['entries'][0]['field_evidence']
+
+
+@pytest.mark.parametrize('capability',['role','relationship_id','pending_role'])
+def test_new_capability_always_pins_v2_without_other_optional_fields(tmp_path,production_console,capability):
+    console,actor,_,sid,view,_=source(production_console,tmp_path)
+    marked=anchor(view,'Alleen',role='actor' if capability in {'role','pending_role'} else 'condition')
+    request=command(view,ranges=[anchor(view,'Controleer')])
+    if capability=='relationship_id': marked['relationship_id']=annotation.relationship_id(request['annotation_id'],marked)
+    if capability=='pending_role': request['selection']['pending_range']=marked
+    else: request['selection']['ranges'].append(marked)
+    result=annotation.save(console,actor_id=actor,**request)
+    loaded=annotation.overview(restart_production(console),actor_id=actor,snapshot_id=sid)['entries'][0]
+    assert loaded['selection_version']=='human-annotation-input-v2'
+    stale=next_command(request,result)
+    stale['selection']['ranges']=[stale['selection']['ranges'][0]]
+    stale['selection'].pop('pending_range',None)
+    with pytest.raises(ConsoleError,match='annotation_client_contract_stale'):
+        annotation.save(console,actor_id=actor,**stale)

@@ -190,6 +190,8 @@ def _validate(selection, blocks):
         pending = _validate({'status':'draft','ranges':[pending]},blocks)['ranges'][0]
     payload={'status':status,'object_type':kind,'ranges':result,'pending_range':pending,
              'evidence_not_applicable':selection.get('evidence_not_applicable',False)}
+    if any(a['role'] in ROLES[7:] or 'relationship_id' in a for a in [*result,*([pending] if pending else [])]):
+        payload['selection_version']='human-annotation-input-v2'
     if 'required_links' in selection:
         links=selection['required_links']
         if not isinstance(links,list) or len(links)>256:
@@ -287,7 +289,11 @@ def _relationship_history(previous, payload, annotation_id):
     open_links={a['relationship_id']:a for a in links}
     if len(bound)!=len(ranges) or len(open_links)!=len(links):
         fail('annotation_relationship_duplicate')
-    for key,link in [*bound.items(),*open_links.items()]:
+    identities=[*bound.items(),*open_links.items()]
+    pending=payload.get('pending_range')
+    if pending and 'relationship_id' in pending:
+        identities.append((pending['relationship_id'],pending))
+    for key,link in identities:
         try:
             parts=json.loads(key.removeprefix('link-v1:'))
             if (not key.startswith('link-v1:') or not isinstance(parts,list) or len(parts)!=5

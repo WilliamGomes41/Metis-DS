@@ -71,6 +71,7 @@
     for(const a of entry.ranges) if(a.role!=='core') a.relationship_id=linkId(a);
     if(!entry.field_evidence) resetFields();
     selected = entry.pending_range ? clone(entry.pending_range) : null;
+    if(selected?.relationship_id && entry.required_links.some(l => l.relationship_id===selected.relationship_id && l.required_for_meaning)) repairingLink=selected.relationship_id;
     el('selection').textContent = selected ? 'Nog te koppelen: '+selected.quote : '';
     if (selected) {
       el('role').value=selected.role; el('essential').checked=selected.required_for_meaning;
@@ -97,7 +98,9 @@
       const repair=document.createElement('button');repair.type='button';repair.className='btn-secondary';repair.textContent='Dit verband opnieuw aanwijzen';
       repair.addEventListener('click',() => {
         repairingLink=link.relationship_id;el('role').value=link.role;el('essential').checked=true;
-        el('function').value=link.evidence_function || 'supported_by';renderFields();status('Wijs de brontekst voor dit essentiële verband aan.');
+        el('function').value=link.evidence_function || 'supported_by';
+        if(selected) captureSelection(selected);
+        renderFields();status(selected ? 'Voeg de aangewezen tekst toe aan dit essentiële verband.' : 'Wijs de brontekst voor dit essentiële verband aan.');
       });
       const label=document.createElement('label');label.textContent='Waarom is dit verband niet langer noodzakelijk?';
       const reason=document.createElement('input');reason.type='text';reason.maxLength=1000;label.append(reason);
@@ -181,7 +184,8 @@
     el('to-source').href='#'+value.block_id;
     el('to-controls').textContent='Aanwijzing koppelen';
     const role=el('role').value;
-    entry.pending_range={...selected,role,required_for_meaning:el('essential').checked,evidence_function:role==='evidence'?el('function').value:null};
+    entry.pending_range={...selected,role,required_for_meaning:el('essential').checked,evidence_function:role==='evidence'?el('function').value:null,
+      ...(repairingLink ? {relationship_id:repairingLink} : {})};
     el('selection').textContent='Aangewezen: '+selected.quote;
     change();
   }
