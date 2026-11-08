@@ -4,6 +4,7 @@ The workflow database owns every saved choice. Quotes are transient witnesses;
 this module never creates candidate text, identities, review or publication.
 """
 import hashlib
+from copy import deepcopy
 from uuid import UUID
 
 import regex
@@ -218,6 +219,28 @@ def save(console, *, actor_id, snapshot_id, command_id, annotation_id, expected_
         con.execute('INSERT INTO workflow.annotation_commands(snapshot_id,command_id,actor_id,request_hash,result) VALUES(%s,%s,%s,%s,%s::jsonb)',
             (snapshot_id,command_id,actor_id,request_hash,_json_text(result)))
     return result
+
+
+def validate_stored_selection(payload, *, fragments):
+    """Check imported immutable input with the same source/role rules as save.
+
+    Recovery has no live author decision to repeat. Rebuilding transient quote
+    witnesses only validates the retained exact anchor; it never reanchors it.
+    """
+    blocks = {b['block_id']:b for b in semantic_source_blocks(fragments)}
+    selection = deepcopy(payload)
+    for anchor in [*selection['ranges'], *([selection['pending_range']] if selection.get('pending_range') else [])]:
+        block = blocks.get(anchor['block_id'])
+        if block is None:
+            fail('annotation_representation_stale')
+        anchor['quote'] = block['text'][anchor['start']:anchor['end']]
+        anchor.pop('quote_sha256')
+    if _validate(selection, blocks) != payload:
+        fail('annotation_integrity_failed')
+    core = [{k:a[k] for k in ('block_id','start','end')} for a in payload['ranges'] if a['role']=='core']
+    if core:
+        from src.vorming.knowledge_materialisation_v1 import resolve_source_selection
+        resolve_source_selection(core, fragments=fragments)
 
 
 def overview(console, *, actor_id, snapshot_id):

@@ -26,9 +26,15 @@ of verdeel gelijkwaardige brondelen om leereffecten zichtbaar te houden.
 Laat de researcher uitspraak en rolbereiken aanwijzen, een onvolledig concept
 pauzeren, opnieuw inloggen en hervatten, het documentoverzicht corrigeren,
 afronden, de daadwerkelijk vereiste beoordeling doorlopen en bevoegd publiceren.
-Controleer daarna de publieke API en MCP, en laat een onafhankelijke beoordelaar
+Controleer daarna de publieke API en de geautoriseerde MCP-projectie, en laat een onafhankelijke beoordelaar
 het resultaat met de vooraf bevroren referentie vergelijken. Leg een verschil
 pas als fout vast na adjudicatie; bewaar de vindplaats en reden.
+
+Keuze A: noodzakelijke voorwaarden en uitzonderingen blijven brongebonden
+context bij dezelfde claim. De referentie moet ook context uit een andere alinea
+en hergebruik van onderbouwing met verschillende functies bevatten. Het huidige
+MCP biedt interne werkinspectie; toegang tot een concept is geen bewijs van
+publieke serving of inhoudelijke goedkeuring. Controleer die grenzen afzonderlijk.
 
 Registreer afzonderlijk:
 
