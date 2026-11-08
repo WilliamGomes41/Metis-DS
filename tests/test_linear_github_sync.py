@@ -41,7 +41,7 @@ class GitHub:
         return copy.deepcopy(self.prs)
 
     def issue_and_comments(self, number):
-        assert number == 729
+        assert number == self.issue["number"]
         return copy.deepcopy(self.issue), copy.deepcopy(self.comments)
 
 
@@ -56,7 +56,7 @@ class Linear:
         self.conflict = False
 
     def read(self, identifier):
-        assert identifier == "MET-36"
+        assert identifier == self.issue["identifier"]
         self.reads += 1
         result = copy.deepcopy(self.issue)
         if self.conflict and self.reads > 1:
@@ -64,7 +64,7 @@ class Linear:
         return result, copy.deepcopy(self.comments)
 
     def save_comment(self, issue_id, comment_id, body):
-        assert issue_id == "uuid36"
+        assert issue_id == self.issue["id"]
         self.writes.append((comment_id, body))
         if comment_id is None:
             self.comments.append({"id": "owned-comment", "body": body})
@@ -72,16 +72,29 @@ class Linear:
             next(c for c in self.comments if c["id"] == comment_id)["body"] = body
 
 
-def test_merge_and_closed_github_issue_never_close_linear_or_change_work_choice():
+@pytest.mark.parametrize(("github_issue", "linear_issue"), [
+    (729, "MET-36"), (1013, "MET-57"), (1014, "MET-58"),
+    (1015, "MET-59"), (1016, "MET-60"), (1017, "MET-61"),
+])
+def test_merge_and_closed_github_issue_never_close_linear_or_change_work_choice(
+    github_issue, linear_issue,
+):
     gh, linear = GitHub(), Linear()
+    gh.issue.update(number=github_issue, html_url=f"{sync.REPO_URL}/issues/{github_issue}")
+    gh.prs[0]["body"] = f"Part of {linear_issue}.\n" + handoff(linear_issue=linear_issue)
+    linear.issue.update(id=f"uuid-{linear_issue}", identifier=linear_issue)
+    binding = next(b for b in sync.load_bindings() if b.linear_issue == linear_issue)
     gh.issue["state"] = "closed"
     before = copy.deepcopy(linear.issue)
-    result = sync.reconcile([sync.Binding(729, "MET-36")], gh, linear, apply=True)
+    result = sync.reconcile([binding], gh, linear, apply=True)
     assert result == {"changed": 1, "unchanged": 0}
     assert linear.issue == before
     assert len(linear.writes) == 1
     assert "gemerged" in linear.comments[0]["body"]
     assert "geen volledige oplevering" in linear.comments[0]["body"]
+    assert f"GitHub #{github_issue}" in linear.comments[0]["body"]
+    assert sync.reconcile([binding], gh, linear, apply=True)["changed"] == 0
+    assert len(linear.writes) == 1
 
 
 def test_identical_run_does_not_write_and_changed_source_updates_same_comment():

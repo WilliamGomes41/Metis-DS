@@ -7,6 +7,7 @@
 from tests.ko_review_fixture_support import affirmative_assessment
 from contextlib import contextmanager
 from copy import deepcopy
+import gc
 import json
 from threading import local
 from time import monotonic
@@ -55,6 +56,9 @@ def test_source_command_cost_is_independent_of_retained_history_and_other_docume
     monkeypatch.setattr(state, '_open_original_reader', outside_original)
     timings = []
 
+    # Collect unreachable ASGI/console cycles from preceding fixtures before
+    # the actual HTTP flow; automatic GC and all command budgets stay active.
+    gc.collect()
     with TestClient(production_app(state)) as client:
         assert client.post('/login', data={'username': 'bert', 'password': 'bert-secret'},
                            follow_redirects=False).status_code == 303
