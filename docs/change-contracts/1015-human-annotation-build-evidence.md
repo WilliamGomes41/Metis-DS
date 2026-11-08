@@ -83,12 +83,34 @@ Gerichte eerdere ownerregressies:136 passed (FormationEvidence, operational
 inputs, chainrecovery, workerhandover, architecture);90 passed (build, annotation,
 preview, inputv2, migrations) vóór de laatste aanscherping. Deze tellingen zijn
 geen vervanging voor de komende volledige run op vastgelegde code.
-Volledige suite en normale repositorychecks: resultaat volgt na uitvoering.
+Productcode vastgelegd als a2b3c29ea48e52370d36ca0d04e53952cfebd937. De eerste
+full-run is na één failure netjes onderbroken: de karakterisatiegolden miste
+uitsluitend vier nieuwe /annotations bouw-/afsluitroutes. Alleen die routes
+zijn toegevoegd (9243534f4488d79b2fc4896f6229a20c02bb32e9); de afzonderlijke
+routetabelproef slaagt (1 passed,1.25s). De overige routetabel is exact gelijk.
+De volgende run vond een achtergebleven versieassertie in de bestaande D5-
+code-rollbackproef. De export gebruikt nu archief11/formation4. De asserties
+zijn expliciet bijgewerkt, inclusief lege seal/commandtabellen voor legacywerk;
+ook de topic-upgradeassertie gebruikt nu11. Afzonderlijke rollback/topicproeven:
+8 passed,29.09s. Productcode is hiervoor niet gewijzigd. De run op dfe0c418 vond nog vijf schema-observatiefixturefailures: de oude
+migration018-stub kende de vier nieuwe036-constraints niet. Alleen de stub is
+aangevuld met de expliciete constraintmetadata; de negatieve tests blijven
+weigeren bij een ontbrekende/verkeerde publication-refusalconstraint. Samen
+met de migratieproeven:19 passed,1.40s. De onvolledige runs zijn geen geslaagde
+full-suite. Productcode is sinds a2b3c29e ongewijzigd; volledige finale run volgt.
+
+Normale controles op gecommitteerde main-diff: repositorypreflight PASS2303 (lokale captures buiten repository),
+release-control PASS (alle vereiste categorieën hebben bewijs), compileall PASS,
+architecture boundaries PASS,6 architectuurinvarianttests passed, diffcheck PASS.
 
 Impeccable detector op UI/buildstatus en editor:[]; geen nieuwe detector na
 reviewfix. Finishreview oorspronkelijke onjuiste incomplete-copy resolved;
-mobiele navigatie-overlap opgelost door documentflow, finale verdict/documenter
-volgen. Geen nieuw DESIGN.md of redesign van de bestaande consolesurface.
+mobiele navigatie-overlap opgelost door documentflow. Finale reviewer disposition
+ship dekt uitsluitend die mobiele fix en bijbehorende desktopregressiecheck.
+De documenter inspecteerde de drie UI-artifacts, incumbent console.css en alle
+tien captures: palette/typografie/shell/native controls behouden. Ontbrekende
+PRODUCT.md/DESIGN.md en bestaande companionoverlay/fallbacktokens zijn als
+bestaande context gemeld en niet ongevraagd herschreven. Geen nieuw DESIGN.md of redesign van de bestaande consolesurface.
 
 ## Open grenzen
 
