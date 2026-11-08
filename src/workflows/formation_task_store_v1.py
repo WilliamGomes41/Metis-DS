@@ -260,8 +260,12 @@ class FormationTaskStore(ReviewSourceRecords, ProcessingArchiveInputs, Processin
         return True
 
     @staticmethod
-    def assert_activation(con, envelope, formation_activation_ref=None):
+    def assert_activation(con, envelope, formation_activation_ref=None, *, objects=None):
         from src.workflows.formation_evidence_v1 import available
+        if isinstance(formation_activation_ref, dict) and formation_activation_ref.get('layout') == 2:
+            from src.workflows.formation_evidence_v1 import assert_human_activation
+            assert_human_activation(con, envelope, formation_activation_ref, objects=objects)
+            return
         if formation_activation_ref is not None:
             latest = next(reversed(envelope.get('processing_attempts') or []), {})
             diagnostic = latest.get('diagnostic') or {}

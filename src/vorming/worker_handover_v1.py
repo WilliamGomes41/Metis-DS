@@ -98,7 +98,15 @@ def validate(console, con, document, row, active):
     if (active['source_hash'] != document['sha256'] or active['source_version'] != document['version']
             or row['object_generation'] != document['object_generation']):
         raise ConsoleError('processing_command_conflict')
-    if active.get('processing_configuration') != configuration(console):
+    if active.get('kind') == 'human_annotation_build':
+        from src.vorming.human_annotation_contract_v1 import MODE
+        from src.vorming.human_annotation_build_v1 import require_storage
+        require_storage(con)
+        if active.get('producer_contract') != MODE or not con.execute(
+                'SELECT workflow.annotation_seal_current(%s,%s) AS valid',
+                (document['snapshot_id'], active.get('annotation_seal_id'))).fetchone()['valid']:
+            raise ConsoleError('annotation_seal_stale')
+    elif active.get('processing_configuration') != configuration(console):
         raise ConsoleError('processing_configuration_changed')
     account = con.execute('SELECT account_id,roles,retirement FROM workflow.accounts WHERE account_id=%s FOR SHARE',
         (active['actor_id'],)).fetchone()

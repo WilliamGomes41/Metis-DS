@@ -41,10 +41,12 @@ MIGRATION_NAMES = (
     "033_statement_object_generation.sql",
     "034_human_annotations.sql",
     "035_annotation_meaning_input.sql",
+    "036_human_annotation_build.sql",
 )
 REQUIRED_TABLES = frozenset(
     {
         "annotation_sets", "annotation_versions", "annotation_heads", "annotation_commands",
+        "annotation_seals", "annotation_build_commands",
         "document_inputs", "document_processing_records", "processing_archive_inputs",
         "object_revision_frontiers",
         "processing_archive_input_members", "processing_attempt_inputs",
@@ -74,6 +76,10 @@ REFUSAL_COLUMNS = (
 # (table, name, contype, columns): ON CONFLICT (dedup_key) needs UNIQUE(dedup_key) on exactly this
 # table; a same-named constraint elsewhere, a non-unique one or other columns MAG NIET pass (4291505169).
 REQUIRED_CONSTRAINTS = frozenset({
+    ("document_objects", "require_human_annotation_binding", "t", ()),
+    ("annotation_build_commands", "guard_annotation_build_receipt", "t", ()),
+    ("processing_attempts", "require_annotation_build_receipt", "t", ()),
+    ("formation_evidence_roots", "formation_evidence_producer", "c", ("context_id", "header", "annotation_seal_id")),
     ("annotation_versions", "guard_annotation_input_transition", "t", ()),
     ("annotation_heads", "guard_annotation_head_transition", "t", ()),
     ("publication_refusals", "publication_refusals_dedup_key_uniq", "u", ("dedup_key",)),
@@ -82,6 +88,8 @@ REQUIRED_CONSTRAINTS = frozenset({
 })
 REQUIRED_COLUMNS = frozenset(
     {
+        ("annotation_sets", "current_seal_id"),
+        ("formation_evidence_roots", "annotation_seal_id"),
         ("documents", "document_storage_version"),
         ("document_objects", "review_dependency_keys"),
         ("object_revision_frontiers", "mutation_epoch"),
@@ -113,6 +121,8 @@ REQUIRED_COLUMNS = frozenset(
 # (#930). `GRANT ... ON ALL TABLES` misses later tables, so verify checks these explicitly.
 _S, _I, _U, _D = "SELECT", "INSERT", "UPDATE", "DELETE"
 RUNTIME_TABLE_PRIVILEGES = {
+    "annotation_seals": (_S, _I),
+    "annotation_build_commands": (_S, _I),
     "annotation_sets": (_S, _I, _U),
     "annotation_versions": (_S, _I),
     "annotation_heads": (_S, _I, _U),

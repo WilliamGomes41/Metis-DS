@@ -3670,9 +3670,9 @@ def create_console_app(
         return await call_next(request)
 
     from src.vorming.source_selection_ui_v1 import install as install_source_selection
-    install_source_selection(app, state, _require, _page, _nav, _esc)
+    source_dispatcher = install_source_selection(app, state, _require, _page, _nav, _esc)
     from src.vorming.human_annotation_ui_v1 import install as install_annotations
-    install_annotations(app, state, _require, _page, _nav, _esc)
+    install_annotations(app, state, _require, _page, _nav, _esc, dispatcher=source_dispatcher)
 
     from src.settings.metis_mcp_v1 import install_mcp
     install_mcp(app, state, entra, expected_origin, require_account=_require, render_page=_page, nav=_nav)

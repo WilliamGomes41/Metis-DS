@@ -787,7 +787,7 @@ class PostgresWorkflowDocumentRuntimeStore(OperationalDocumentInputs, PostgresWo
 
                     if objects is not None:
                         from src.workflows.formation_task_store_v1 import FormationTaskStore
-                        FormationTaskStore.assert_activation(con,envelope,formation_activation_ref)
+                        FormationTaskStore.assert_activation(con,envelope,formation_activation_ref, objects=objects)
                     self._write_envelope_locked(con, envelope,document_storage_admission=document_storage_admission)
                     from src.workflows.review_card_inputs_postgres_v1 import publish_preparation
                     publish_preparation(self, con, snapshot_id, review_card_preparation)

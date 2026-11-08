@@ -53,7 +53,7 @@ def admission_closed(environ=None) -> bool:
     return value not in {"", "open"}
 
 
-def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, clock: datetime, limits=None, kind="retry") -> tuple[dict, bool]:
+def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, clock: datetime, limits=None, kind="retry", annotation_seal_id=None) -> tuple[dict, bool]:
     if not command_id or len(command_id) > 128 or not re.fullmatch(r"[A-Za-z0-9_-]+", command_id):
         raise ConsoleError("processing_command_id_invalid")
     from src.vorming.bounded_model_call_v1 import ModelCallLimits
@@ -69,6 +69,9 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
         if attempt["command_id"] == command_id:
             if attempt["actor_id"] != actor_id or attempt["source_hash"] != envelope["sha256"] or attempt.get("source_version", envelope["version"]) != envelope["version"]:
                 raise ConsoleError("processing_command_conflict")
+            if kind == 'human_annotation_build' and (
+                    attempt.get('kind') != kind or attempt.get('annotation_seal_id') != annotation_seal_id):
+                raise ConsoleError('processing_command_conflict')
             return attempt, False
     # C3 (#639): METIS_PROCESSING_ADMISSION other than unset/empty/'open' MOET refuse new work (fail-closed).
     if admission_closed():
@@ -94,10 +97,18 @@ def reserve(envelope: dict, *, command_id: str, actor_id: str, revision: str, cl
                "phase": "source_and_validation"}
     # Read-only: the configuration in force for this reservation. Every attempt keeps
     # this value, including failed and interrupted ones; legacy attempts have none.
-    from src.vorming.pre_review_semantic_v1 import semantic_contract_version_for_mode
-    configuration = envelope.get("processing_configuration")
-    attempt["reserved_semantic_contract_version"] = semantic_contract_version_for_mode(
-        configuration.get("mode") if isinstance(configuration, dict) else None)
+    if kind == 'human_annotation_build':
+        if not isinstance(annotation_seal_id, str) or not re.fullmatch(r'[a-f0-9]{64}', annotation_seal_id):
+            raise ConsoleError('annotation_seal_invalid')
+        from src.vorming.human_annotation_contract_v1 import MODE
+        attempt.update(annotation_seal_id=annotation_seal_id, producer_contract=MODE)
+    else:
+        if annotation_seal_id is not None:
+            raise ConsoleError('annotation_seal_invalid')
+        from src.vorming.pre_review_semantic_v1 import semantic_contract_version_for_mode
+        configuration = envelope.get("processing_configuration")
+        attempt["reserved_semantic_contract_version"] = semantic_contract_version_for_mode(
+            configuration.get("mode") if isinstance(configuration, dict) else None)
     if recovery:
         grant["consumed_by"] = attempt["attempt_id"]
         grant["consumed_at"] = clock.isoformat()
@@ -193,7 +204,9 @@ def formation_budget_exhausted(envelope: dict) -> bool:
 def finish(envelope: dict, attempt_id: str, *, state: str, error: Exception | None = None,
            budget_aware: bool = False, formation_input=None) -> dict:
     attempt = next(a for a in envelope[KEY] if a["attempt_id"] == attempt_id)
-    evidence = stop_evidence(envelope if formation_input is None else formation_input, state)
+    evidence = ({'stop_reason': 'done' if state == 'succeeded' else 'error'}
+                if attempt.get('kind') == 'human_annotation_build'
+                else stop_evidence(envelope if formation_input is None else formation_input, state))
     # A3: a budget-exhausted attempt MOET NOOIT 'succeeded' zijn (budget-aware callers).
     if budget_aware and state == "succeeded" and formation_budget_exhausted(envelope if formation_input is None else formation_input):
         state = "incomplete_budget"

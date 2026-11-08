@@ -154,6 +154,14 @@ class _SchemaCon:
             return _Res(self.columns)
         if 'pg_constraint' in sql:
             return _Res(([self.constraint_row] if self.constraint else []) + [
+                {'conname': 'require_human_annotation_binding', 'table_name': 'document_objects',
+                 'contype': 't', 'columns': []},
+                {'conname': 'guard_annotation_build_receipt', 'table_name': 'annotation_build_commands',
+                 'contype': 't', 'columns': []},
+                {'conname': 'require_annotation_build_receipt', 'table_name': 'processing_attempts',
+                 'contype': 't', 'columns': []},
+                {'conname': 'formation_evidence_producer', 'table_name': 'formation_evidence_roots',
+                 'contype': 'c', 'columns': ['context_id', 'header', 'annotation_seal_id']},
                 {'conname': 'guard_annotation_input_transition', 'table_name': 'annotation_versions',
                  'contype': 't', 'columns': []},
                 {'conname': 'guard_annotation_head_transition', 'table_name': 'annotation_heads',

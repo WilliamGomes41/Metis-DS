@@ -47,6 +47,8 @@ SUPPORTED_RECOMMENDATION_SEMANTICS_EVIDENCE_VERSIONS = (
 STRENGTH_BINDING_VERSION = "recommendation-strength-binding-v6"
 V3_STRENGTH_VOCABULARY_VERSION = "v3-verbal-strength-and-lead-in-label-v1"
 SELECTION_ORIGIN_PROPOSAL = "proposal_selected"
+SELECTION_ORIGIN_HUMAN = 'human_annotation'
+CANDIDATE_SELECTION_ORIGINS = frozenset({SELECTION_ORIGIN_PROPOSAL,SELECTION_ORIGIN_HUMAN})
 SELECTION_ORIGIN_COVERAGE = "coverage_remainder"
 ALLOWED_PROPOSED_TYPES = frozenset(
     (set(CLOSED_OBJECT_TYPES) - {"heading"}) | {DEFAULT_OBJECT_TYPE}
@@ -171,21 +173,8 @@ def _coverage_remainders(
         text = str(public["text"])
         ranges = sorted(selected_ranges_by_block.get(block_id, []))
 
-        merged: list[tuple[int, int]] = []
-        for start, end in ranges:
-            if merged and start <= merged[-1][1]:
-                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
-            else:
-                merged.append((start, end))
-
-        cursor = 0
-        gaps: list[tuple[int, int]] = []
-        for start, end in merged:
-            if cursor < start:
-                gaps.append((cursor, start))
-            cursor = max(cursor, end)
-        if cursor < len(text):
-            gaps.append((cursor, len(text)))
+        from src.vorming.source_accountability_v1 import uncovered_ranges
+        gaps = uncovered_ranges(len(text), ranges)
 
         # Preserve every gap, split only at explicit source-role boundaries.
         classified = [r for r in (assessments or []) if r["span"]["block_id"] == block_id]

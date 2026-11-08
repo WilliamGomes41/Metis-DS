@@ -40,7 +40,12 @@ class FakeConnection:
         if "information_schema.columns" in query:
             return Rows([{"table_name": table, "column_name": column} for table, column in REQUIRED_COLUMNS])
         if query.startswith("SELECT c.conname"):  # #636: named constraints are part of verification
-            return Rows([{"conname": "guard_annotation_input_transition", "table_name": "annotation_versions",
+            return Rows([{"conname": "require_human_annotation_binding", "table_name": "document_objects", "contype": "t", "columns": []},
+                         {"conname": "guard_annotation_build_receipt", "table_name": "annotation_build_commands", "contype": "t", "columns": []},
+                         {"conname": "require_annotation_build_receipt", "table_name": "processing_attempts", "contype": "t", "columns": []},
+                         {"conname": "formation_evidence_producer", "table_name": "formation_evidence_roots",
+                          "contype": "c", "columns": ["context_id", "header", "annotation_seal_id"]},
+                         {"conname": "guard_annotation_input_transition", "table_name": "annotation_versions",
                           "contype": "t", "columns": []},
                          {"conname": "guard_annotation_head_transition", "table_name": "annotation_heads",
                           "contype": "t", "columns": []},
@@ -70,7 +75,7 @@ class Rows:
 def test_plan_digest_binds_exact_ordered_migration_bytes() -> None:
     paths = migration_paths(ROOT)
     assert tuple(path.name for path in paths) == MIGRATION_NAMES
-    assert MIGRATION_NAMES[-25:] == (
+    assert MIGRATION_NAMES[-26:] == (
         "008_workflow_lifecycle_identity.sql",
         "009_console_hotpath_indexes.sql",
         "011_workflow_audit_retention.sql",
@@ -96,6 +101,7 @@ def test_plan_digest_binds_exact_ordered_migration_bytes() -> None:
         "033_statement_object_generation.sql",
         "034_human_annotations.sql",
         "035_annotation_meaning_input.sql",
+        "036_human_annotation_build.sql",
     )
     digest = migration_digest(paths)
     assert len(digest) == 64

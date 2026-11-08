@@ -32,6 +32,7 @@ import pytest
     ('tests.browser_insight_owner_fixture', 'browser_insight_owner_check.cjs'),
     ('tests.browser_review_disposition_fixture', 'browser_review_disposition_check.cjs'),
     ('tests.browser_human_annotation_fixture', 'browser_human_annotation_check.cjs'),
+    ('tests.browser_human_build_fixture', 'browser_human_build_check.cjs'),
 ])
 def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_path, fixture, script):
     root = Path(__file__).resolve().parents[1]
@@ -58,7 +59,8 @@ def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_pat
                 pytest.fail((tmp_path/'server.log').read_text())
             subprocess.run([env.get('METIS_BROWSER_NODE', 'node'), str(root/'tests'/script)],
                            env=env, cwd=root, check=True, timeout=90)
-            expected_screenshots = 3 if script == 'browser_human_annotation_check.cjs' else 6
+            expected_screenshots = {'browser_human_annotation_check.cjs':3,
+                                    'browser_human_build_check.cjs':10}.get(script,6)
             assert len(list(tmp_path.glob('*.png'))) == expected_screenshots
         finally:
             server.terminate()

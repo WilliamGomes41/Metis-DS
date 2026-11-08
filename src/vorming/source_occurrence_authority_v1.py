@@ -71,7 +71,8 @@ def _proposal_rank(unit: dict[str, Any]) -> int:
     semantic = unit.get("semantic_passage")
     if not isinstance(semantic, dict):
         return 0
-    return 1 if semantic.get("selection_origin") == "proposal_selected" else 0
+    from src.vorming.semantic_passage_v1 import CANDIDATE_SELECTION_ORIGINS
+    return 1 if semantic.get("selection_origin") in CANDIDATE_SELECTION_ORIGINS else 0
 
 
 def _with_authority_metadata(

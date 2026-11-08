@@ -43,7 +43,7 @@ from src.publication.publication_chain_recovery_v1 import (
     check_chain_integrity,
 )
 
-WORKFLOW_RECOVERY_VERSION = 10  # 10: exact annotation history, heads and command receipts (#1015)
+WORKFLOW_RECOVERY_VERSION = 11  # 11: exact annotation seals and human producer evidence (#1015)
 API_ACCESS_TABLES = tuple(API_ACCESS_COLUMNS)
 _API_ACCESS_ORDER_BY = {
     table: ",".join(columns)
@@ -151,7 +151,9 @@ def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:
             raise PublicationChainRecoveryError('workflow_formation_backup_missing_reexport_required')
         validate(state)
         return deepcopy(dict(state))
-    if version in {7,8,9}:
+    if version == 10 and state.get('formation_recovery') is None:
+        raise PublicationChainRecoveryError('workflow_formation_backup_missing_reexport_required')
+    if version in {7,8,9,10}:
         from src.workflows.formation_recovery_v1 import upgrade_legacy
         upgraded = upgrade_legacy(dict(state))
         upgraded['workflow_recovery_version'] = WORKFLOW_RECOVERY_VERSION

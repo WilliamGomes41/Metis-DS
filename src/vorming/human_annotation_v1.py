@@ -21,16 +21,17 @@ from src.workflows.workflow_documents_postgres_v1 import _json_text
 from src.workflows.workflow_transaction_v1 import workflow_transaction
 
 NORMALIZATION = 'metis-visible-prose-codepoints-v1'
-ROLES = ('core', 'population', 'context', 'condition', 'exception', 'explanation', 'evidence',
-         'actor','scope','timing','list_introduction','row_header','column_header')
+from src.vorming.human_annotation_contract_v1 import CORE_FIELDS,TYPE_CORE_FIELDS,ROLE_MAP
+ROLES = ('core',*ROLE_MAP)
 EVIDENCE_FUNCTIONS = ('supported_by', 'explains')
 STATUSES = ('draft', 'ready', 'uncertain', 'withdrawn')
 
-# Source input names the designated core group, never inferred semantic fields.
-CORE_FIELDS = frozenset({'type_evidence_spans','recommendation_evidence_span','factual_claim_span',
-                         'support_span','condition_span','exception_span'})
-TYPE_CORE_FIELDS = {'recommendation':'recommendation_evidence_span','factual_finding':'factual_claim_span',
-                    'explanation':'support_span','condition':'condition_span','exception':'exception_span'}
+
+
+class AnnotationCoreConflict(ConsoleError):
+    def __init__(self, conflicting_annotation_id):
+        super().__init__('annotation_core_duplicate')
+        self.conflicting_annotation_id = conflicting_annotation_id
 
 
 def fail(code):
@@ -73,6 +74,9 @@ def _locked(console, con, actor_id, snapshot_id):
     envelope = console.workflow_document_store.get_envelope(snapshot_id)
     authorize(console, actor_id, envelope)
     console._require_mutable_working_revision(snapshot_id, current=True)
+    if envelope.get('successor_guard'):
+        from src.review.decision_successor_v1 import assert_parent_current
+        assert_parent_current(console, envelope)
     if any(value != envelope.get(key) for key,value in source.items()):
         fail('annotation_representation_stale')
     require_input_storage(con)
@@ -109,7 +113,8 @@ def prepare(console, *, actor_id, snapshot_id, expected_revision):
         if con.execute('SELECT 1 FROM workflow.annotation_sets WHERE snapshot_id=%s', (snapshot_id,)).fetchone():
             pass  # Another identical prepare won; use the authoritative pin.
         else:
-            if store.current_document_objects(snapshot_id):
+            if (store.current_document_objects(snapshot_id) or current.get('semantic_replay')
+                    or (current.get('_document_inputs') or {}).get('replay')):
                 fail('annotation_existing_work_requires_takeover')
             attempts = console._processing_history_envelope(snapshot_id).get('processing_attempts') or []
             if any(a.get('state') == 'running' for a in attempts):
@@ -363,13 +368,13 @@ def save(console, *, actor_id, snapshot_id, command_id, annotation_id, expected_
         active = con.execute('SELECT * FROM workflow.annotation_sets WHERE snapshot_id=%s FOR UPDATE', (snapshot_id,)).fetchone()
         if _identity(current) != active['source_identity'] or current['working_revision_id'] != active['working_revision_id']:
             fail('annotation_representation_stale')
-        if console.workflow_document_store.objects_revision(snapshot_id) != active['objects_revision']:
-            fail('annotation_objects_stale')
         receipt = con.execute('SELECT request_hash,result FROM workflow.annotation_commands WHERE snapshot_id=%s AND command_id=%s', (snapshot_id,command_id)).fetchone()
         if receipt:
             if receipt['request_hash'] != request_hash:
                 fail('annotation_command_conflict')
             return receipt['result']
+        if console.workflow_document_store.objects_revision(snapshot_id) != active['objects_revision']:
+            fail('annotation_objects_stale')
         head = con.execute('SELECT h.revision,h.position,v.payload FROM workflow.annotation_heads h JOIN workflow.annotation_versions v '
             'USING(snapshot_id,annotation_id,revision) WHERE h.snapshot_id=%s AND h.annotation_id=%s', (snapshot_id,annotation_id)).fetchone()
         if active['generation'] != expected_generation or (head['revision'] if head else 0) != expected_revision:
@@ -377,6 +382,17 @@ def save(console, *, actor_id, snapshot_id, command_id, annotation_id, expected_
         if head and head['payload'].get('selection_version') and payload.get('selection_version')!=head['payload']['selection_version']:
             fail('annotation_client_contract_stale')
         _relationship_history(head['payload'] if head else None,payload,annotation_id)
+        if core and payload['status'] != 'withdrawn' and payload.get('disposition') is None:
+            duplicate = con.execute("SELECT h.annotation_id FROM workflow.annotation_heads h "
+                "JOIN workflow.annotation_versions v USING(snapshot_id,annotation_id,revision) "
+                "WHERE h.snapshot_id=%s AND h.annotation_id<>%s AND v.status<>'withdrawn' "
+                "AND NOT (v.payload ? 'disposition') AND (SELECT jsonb_agg(jsonb_build_object("
+                "'block_id',a->'block_id','start',a->'start','end',a->'end') ORDER BY position) "
+                "FROM jsonb_array_elements(v.payload->'ranges') WITH ORDINALITY AS r(a,position) "
+                "WHERE a->>'role'='core')=%s::jsonb LIMIT 1",
+                (snapshot_id,annotation_id,_json_text(core))).fetchone()
+            if duplicate:
+                raise AnnotationCoreConflict(duplicate['annotation_id'])
         revision, generation = expected_revision+1, expected_generation+1
         con.execute('INSERT INTO workflow.annotation_versions(snapshot_id,annotation_id,revision,status,author_id,payload,payload_hash) '
             'VALUES(%s,%s,%s,%s,%s,%s::jsonb,%s)',
@@ -384,7 +400,8 @@ def save(console, *, actor_id, snapshot_id, command_id, annotation_id, expected_
         con.execute('INSERT INTO workflow.annotation_heads(snapshot_id,annotation_id,revision,position) VALUES(%s,%s,%s,%s) '
             'ON CONFLICT(snapshot_id,annotation_id) DO UPDATE SET revision=EXCLUDED.revision',
             (snapshot_id,annotation_id,revision,head['position'] if head else generation))
-        con.execute('UPDATE workflow.annotation_sets SET generation=%s WHERE snapshot_id=%s', (generation,snapshot_id))
+        has_seals=con.execute("SELECT to_regclass('workflow.annotation_seals') AS name").fetchone()['name'] is not None
+        con.execute('UPDATE workflow.annotation_sets SET generation=%s'+(',current_seal_id=NULL' if has_seals else '')+' WHERE snapshot_id=%s', (generation,snapshot_id))
         result = {'annotation_id':annotation_id,'revision':revision,'generation':generation,'status':payload['status']}
         con.execute('INSERT INTO workflow.annotation_commands(snapshot_id,command_id,actor_id,request_hash,result) VALUES(%s,%s,%s,%s,%s::jsonb)',
             (snapshot_id,command_id,actor_id,request_hash,_json_text(result)))

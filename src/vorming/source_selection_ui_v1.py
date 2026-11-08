@@ -771,3 +771,5 @@ def install(app, console, require, page, nav, esc):
         if attempt["state"] == "running":
             dispatcher.notify(sid, attempt)
         return RedirectResponse('/source-selection?' + urlencode({'document': sid}), status_code=303)
+
+    return dispatcher

@@ -24,7 +24,7 @@ SCALARS = {
     'processing_storage':'processing_storage_version',
 }
 HEAVY = {'semantic_replay','quality_processing_runs','processing_attempts','prepared_source_extraction'} | TREE_FIELDS
-EPHEMERAL = {'_document_inputs','_review_source_ref','_review_check_formation',
+EPHEMERAL = {'human_formation_ref','_document_inputs','_review_source_ref','_review_check_formation',
              '_review_formation_notice','_review_has_replay','_processing_counts','_prepared_document_write','_document_header_only','_metadata_header_unprepared','tree_source_route'}
 CAPTURE = '''SELECT revision,object_generation,source_sha256,source_version,review_source_ref,
     formation_evidence_id,document_storage_version,processing_storage_version,
@@ -152,6 +152,8 @@ class OperationalDocumentInputs:
                 'formation_variant':'semantic' if envelope.get('semantic_replay') else
                     'tree' if envelope.get('decision_graph') else 'absent',
                 'replay':None,'quality':None,'extraction_hash':None,'tree':None,'tree_route':False}
+        if envelope.get('human_formation_ref'):
+            refs.update(formation_variant='human', human=deepcopy(envelope['human_formation_ref']))
         records=[]
         replay=envelope.get('semantic_replay')
         if replay is not None and not isinstance(replay,dict):
@@ -243,6 +245,8 @@ class OperationalDocumentInputs:
             fail('formation_variant_inconsistent')
         if pins.get('formation_variant') == 'semantic':
             result['semantic_replay']=deepcopy(FormationTaskStore(self).formation_assessment_input(envelope).replay)
+        elif pins.get('formation_variant') == 'human':
+            result['human_formation_ref'] = deepcopy(pins['human'])
         elif pins.get('formation_variant') not in {'tree','absent'}:
             fail('formation_variant_unsupported')
         return result
@@ -314,6 +318,10 @@ class OperationalDocumentInputs:
         refs=deepcopy(before)
         refs.pop('proof_id',None)
         records=[]
+        if envelope.get('human_formation_ref'):
+            if envelope.get('semantic_replay') or refs.get('replay'):
+                fail('formation_variant_inconsistent')
+            refs.update(formation_variant='human', human=deepcopy(envelope['human_formation_ref']), replay=None)
         if envelope.get('semantic_replay'):
             replay=envelope['semantic_replay']
             if envelope.get('processing_storage')=='task-v1':
@@ -403,6 +411,8 @@ class OperationalDocumentInputs:
         from src.workflows.formation_task_store_v1 import FormationTaskStore
         tasks=FormationTaskStore(self)
         refs=envelope.pop('_document_inputs')
+        if refs.get('human'):
+            envelope['human_formation_ref'] = deepcopy(refs['human'])
         with self._connect() as con:
             records=con.execute('SELECT kind,reference FROM workflow.document_processing_records '
                 'WHERE snapshot_id=%s ORDER BY kind,ordinal',(snapshot_id,)).fetchall()

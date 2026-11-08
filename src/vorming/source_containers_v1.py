@@ -146,6 +146,14 @@ def bound_context_valid(obj, *, fragments=None):
         return True
     if not isinstance(raw, dict):
         return False
+    if raw.get('version')=='human-source-bound-context-v1':
+        try:
+            if fragments is not None:
+                from src.vorming.human_annotation_projection_v1 import validate_context
+                validate_context(obj,fragments,(obj.get('source') or {}).get('source_checksum'))
+            return context_matches_target(obj)
+        except (KeyError,TypeError,ValueError):
+            return False
     try:
         valid = context_matches_target(obj)
         entries = raw.get('entries')

@@ -92,6 +92,9 @@ def bind_fields(raw: object, *, selected: list[dict], candidate_text: str, propo
 
 def bound_values(record: object, *, text: str, proposed_type: str, context=()) -> dict:
     """Reject stale evidence on correction/type changes, without heuristic repair."""
+    if isinstance(record,dict) and record.get('version')=='human-source-bound-fields-v1':
+        from src.vorming.human_annotation_projection_v1 import bound_values as read_human
+        return read_human(record,text=text,proposed_type=proposed_type,context=context)
     if isinstance(record, dict) and record.get("version") == "source-bound-fields-v3":
         from src.vorming.source_bound_fields_v3 import bound_values as read_v3
         return read_v3(record, text=text, proposed_type=proposed_type, context=context)
@@ -176,25 +179,39 @@ def bind_context(raw: object, *, fragments: list[dict]) -> list[dict]:
         else:
             if not isinstance(span, dict) or set(span) != {'block_id', 'start', 'end'} or span['block_id'] not in blocks:
                 raise _bound_error('source_bound_context_unknown_block', field='context_evidence', context_index=context_index, evidence_ref=entry)
-            public, source = blocks[span['block_id']]
-            lo, hi = span['start'], span['end']
-            if type(lo) is not int or type(hi) is not int or not 0 <= lo < hi <= len(public['text']):
-                raise _bound_error('source_bound_context_bounds_invalid', field='context_evidence', context_index=context_index, evidence_ref=entry)
-            text = public['text'][lo:hi]
-            if not text.strip():
-                raise _bound_error('source_bound_context_empty', field='context_evidence', context_index=context_index, evidence_ref=entry)
-            mapping = mapped_raw_spans(source, start=lo, end=hi)
-            ids = {r['fragment_id'] for r in mapping if r.get('kind') != 'join_separator'}
-            source_refs = [{'fragment_id': f['fragment_id'], 'fragment_hash': f['fragment_hash'],
-                            'source_locator': deepcopy(f.get('source_locator'))}
-                           for f in fragments if f['fragment_id'] in ids]
+            literal = resolve_context_literal(span,fragments=fragments,blocks=blocks,context_index=context_index,evidence_ref=entry)
+            text,mapping,source_refs = (literal[key] for key in ('text','source_mapping','source_refs'))
         result.append({**deepcopy(entry), 'text': text, 'source_mapping': mapping, 'source_refs': source_refs})
     if len({stable_json_hash(r) for r in result}) != len(result):
         raise ValueError('source_bound_context_duplicate')
     return result
 
 
+def resolve_context_literal(span, *, fragments, blocks=None, context_index=0, evidence_ref=None):
+    """Resolve source geometry without assigning a context's clinical function."""
+    from src.vorming.knowledge_materialisation_v1 import _read_source_blocks
+    from src.vorming.source_layout_v1 import mapped_raw_spans
+    blocks=blocks if blocks is not None else _read_source_blocks(fragments,include_headings=True)
+    if not isinstance(span,dict) or set(span)!={'block_id','start','end'} or span['block_id'] not in blocks:
+        raise _bound_error('source_bound_context_unknown_block',field='context_evidence',context_index=context_index,evidence_ref=evidence_ref)
+    public,source=blocks[span['block_id']]
+    lo,hi=span['start'],span['end']
+    if type(lo) is not int or type(hi) is not int or not 0<=lo<hi<=len(public['text']):
+        raise _bound_error('source_bound_context_bounds_invalid',field='context_evidence',context_index=context_index,evidence_ref=evidence_ref)
+    text=public['text'][lo:hi]
+    if not text.strip():
+        raise _bound_error('source_bound_context_empty',field='context_evidence',context_index=context_index,evidence_ref=evidence_ref)
+    mapping=mapped_raw_spans(source,start=lo,end=hi)
+    ids={r['fragment_id'] for r in mapping if r.get('kind')!='join_separator'}
+    refs=[{'fragment_id':f['fragment_id'],'fragment_hash':f['fragment_hash'],'source_locator':deepcopy(f.get('source_locator'))}
+          for f in fragments if f['fragment_id'] in ids]
+    return {'text':text,'source_mapping':mapping,'source_refs':refs}
+
+
 def context_record(entries: list[dict], *, obj: dict) -> dict:
+    if (obj.get('metadata') or {}).get('semantic_passage',{}).get('selection_origin')=='human_annotation':
+        from src.vorming.human_annotation_projection_v1 import context_record as human_record
+        return human_record(entries,obj=obj)
     from src.review.source_context_review_v1 import literal_identity
     return {'version': CONTEXT_VERSION, 'target_object_id': obj['object_id'],
             'target_object_version_at_binding': obj['object_version'],
@@ -203,6 +220,9 @@ def context_record(entries: list[dict], *, obj: dict) -> dict:
 
 def validated_context(obj: dict, fragments: list[dict], source_hash: str) -> list[dict]:
     record = (obj.get('metadata') or {}).get(CONTEXT_KEY)
+    if isinstance(record,dict) and record.get('version')=='human-source-bound-context-v1':
+        from src.vorming.human_annotation_projection_v1 import validate_context
+        return validate_context(obj,fragments,source_hash)
     if record is None:
         return []
     if not isinstance(record, dict) or set(record) != {'version', 'target_object_id', 'target_object_version_at_binding',
@@ -219,6 +239,12 @@ def validated_context(obj: dict, fragments: list[dict], source_hash: str) -> lis
     if record != expected or not source_hash or record['source'].get('source_checksum') != source_hash:
         raise ValueError('source_bound_context_stale')
     return rebuilt
+
+
+def context_roles_for(record):
+    """Closed role reader per persisted context contract, including human input."""
+    from src.vorming.human_annotation_contract_v1 import CONTEXT_VERSION as HUMAN_VERSION, ROLE_MAP
+    return frozenset(ROLE_MAP.values()) if isinstance(record,dict) and record.get('version')==HUMAN_VERSION else frozenset(CONTEXT_ROLES)
 
 
 def context_matches_target(obj: dict) -> bool:

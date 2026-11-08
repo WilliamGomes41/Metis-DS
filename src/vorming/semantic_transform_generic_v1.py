@@ -49,7 +49,10 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
         raise ValueError("semantic_passage_metadata_invalid")
 
     origin = str(value.get("selection_origin") or "")
+    from src.vorming.human_annotation_projection_v1 import ORIGIN as HUMAN_ORIGIN, MODE as HUMAN_MODE
     expected_keys = (
+        _SEMANTIC_PASSAGE_BASE_KEYS | {'formation_mode','annotation_ref'}
+        if origin == HUMAN_ORIGIN else
         _SEMANTIC_PASSAGE_PROPOSAL_KEYS
         if origin == SELECTION_ORIGIN_PROPOSAL
         else _SEMANTIC_PASSAGE_BASE_KEYS
@@ -105,6 +108,10 @@ def _semantic_passage_metadata(item: dict[str, Any]) -> dict[str, Any] | None:
             if not valid:
                 raise ValueError("semantic_source_mapping_invalid")
         result["source_mapping"] = deepcopy(mapping)
+    if origin==HUMAN_ORIGIN:
+        if value.get('formation_mode')!=HUMAN_MODE or not isinstance(value.get('annotation_ref'),dict):
+            raise ValueError('semantic_passage_metadata_invalid')
+        result.update(formation_mode=HUMAN_MODE,annotation_ref=deepcopy(value['annotation_ref']))
     if origin == SELECTION_ORIGIN_PROPOSAL:
         if str(value.get("formation_mode") or "") not in {"semantic-source-bound-v1", "semantic-source-bound-v2", "semantic-source-bound-v3",
                                                            "decision-tree-source-bound-v1"}:
@@ -131,7 +138,7 @@ def _system_candidate_metadata(item: dict[str, Any]) -> dict[str, Any]:
     source = item.get("metadata")
     source = source if isinstance(source, dict) else {}
     out: dict[str, Any] = {}
-    for key in ("passage_formation", "source_occurrence_authority", "decision_unit_construction"):
+    for key in ("passage_formation", "source_occurrence_authority", "decision_unit_construction", "human_annotation"):
         value = source.get(key)
         if isinstance(value, dict):
             out[key] = deepcopy(value)
@@ -218,7 +225,7 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
     mapping_blocks = None
     for seq, item in enumerate(spec["objects"], 1):
         semantic_passage = _semantic_passage_metadata(item)
-        if semantic_passage and semantic_passage["selection_origin"] == SELECTION_ORIGIN_PROPOSAL:
+        if semantic_passage and semantic_passage["selection_origin"] in {SELECTION_ORIGIN_PROPOSAL,'human_annotation'}:
             from src.vorming.knowledge_materialisation_v1 import validate_materialised_candidate
             validate_materialised_candidate(item, fragments=raw_rows)
             from src.vorming.semantic_passage_v1 import validate_bound_recommendation_semantics
@@ -264,7 +271,8 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
                 raise ValueError("decision_unit_source_fidelity_failure")
         from src.vorming.source_bound_fields_v2 import KEY, bind_fields, MODE
         from src.vorming.source_bound_fields_v3 import MODE as V3_MODE, bind_fields as bind_v3
-        if semantic_passage and semantic_passage.get("formation_mode") in {MODE, V3_MODE}:
+        from src.vorming.human_annotation_projection_v1 import MODE as HUMAN_MODE, bind_fields as bind_human
+        if semantic_passage and semantic_passage.get("formation_mode") in {MODE, V3_MODE, HUMAN_MODE}:
             from src.vorming.semantic_passage_v1 import semantic_source_blocks
             from src.object_taxonomy_v1 import extract_object_type
             if evidence_blocks is None:
@@ -280,8 +288,8 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
                     raise ValueError("source_bound_field_bounds_invalid")
                 selected.append({**span, "text": block["text"][span["start"]:span["end"]]})
             record = item.get(KEY)
-            binding = bind_v3 if semantic_passage.get("formation_mode") == V3_MODE else bind_fields
-            context_args = {"context": item.get("source_bound_context") or []} if binding is bind_v3 else {}
+            binding = bind_human if semantic_passage.get('formation_mode')==HUMAN_MODE else bind_v3 if semantic_passage.get("formation_mode") == V3_MODE else bind_fields
+            context_args = {"context": item.get("source_bound_context") or []} if binding in {bind_v3,bind_human} else {}
             rebuilt = binding(record.get("evidence") if isinstance(record, dict) else None,
                                   selected=selected, candidate_text=item.get("clean_text", item["text"]),
                                   proposed_type=item.get("proposed_object_type", "unclassified"), **context_args)
@@ -392,13 +400,17 @@ def transform(spec: dict[str, Any], manifest: dict[str, Any], raw_rows: list[dic
         }
         from src.vorming.source_bound_fields_v2 import CONTEXT_KEY, bind_context, context_record
         if CONTEXT_KEY in item:
-            if not semantic_passage or semantic_passage.get("formation_mode") not in {MODE, V3_MODE}:
+            if not semantic_passage or semantic_passage.get("formation_mode") not in {MODE, V3_MODE,HUMAN_MODE}:
                 raise ValueError("source_bound_context_requires_v2")
             entries = item[CONTEXT_KEY]
             if not isinstance(entries, list):
                 raise ValueError("source_bound_context_invalid")
             raw_context = [{key: row[key] for key in ("role", "span", "unresolved_reason")} for row in entries]
-            rebuilt_context = bind_context(raw_context, fragments=raw_rows)
+            if semantic_passage.get('formation_mode')==HUMAN_MODE:
+                from src.vorming.human_annotation_projection_v1 import bind_context as bind_human_context
+                rebuilt_context=bind_human_context(system_metadata['human_annotation']['ranges'],fragments=raw_rows)
+            else:
+                rebuilt_context = bind_context(raw_context, fragments=raw_rows)
             if rebuilt_context != entries:
                 raise ValueError("source_bound_context_invalid")
             obj.setdefault("metadata", {})[CONTEXT_KEY] = context_record(rebuilt_context, obj=obj)

@@ -149,10 +149,18 @@ def test_unicode_duplicate_positions_stale_witness_and_roles(tmp_path, productio
     with pytest.raises(ConsoleError,match='reviewer_not_named_on_snapshot|researcher_role_required'):
         other = console.create_account(username='outsider',password='annotation-secret',roles=('reviewer',))
         annotation.save(console,actor_id=other['account_id'],**command(view))
-    # Both existing evidence functions are explicit choices, not auto-classified.
+    # Changing an evidence function revises the original annotation. Separate
+    # entries with the same exact core are now explicitly refused (choice 1).
+    evidence_request = None
     for function in annotation.EVIDENCE_FUNCTIONS:
         view = annotation.overview(console,actor_id=actor,snapshot_id=sid)
-        annotation.save(console,actor_id=actor,**command(view,ranges=[anchor(view,'Controleer'),anchor(view,'Onderzoek',role='evidence',function=function)],status='ready'))
+        if evidence_request is None:
+            evidence_request=command(view,ranges=[anchor(view,'Controleer'),anchor(view,'Onderzoek',role='evidence',function=function)],status='ready')
+        else:
+            evidence_request.update(command_id=str(uuid4()),expected_generation=view['generation'],expected_revision=1)
+            evidence_request['selection']['ranges'][-1]['evidence_function']=function
+        annotation.save(console,actor_id=actor,**evidence_request)
+
 
 
 def test_http_source_and_autosave_contract(tmp_path, production_console, production_app):
@@ -358,14 +366,14 @@ def test_annotation_backup_rejects_partial_or_changed_input_atomically(tmp_path,
 def test_pre_annotation_backup_upgrades_without_inventing_selections(tmp_path, production_console, old_version, section_version):
     from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
     from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter, _upgrade_workflow_state
-    from src.workflows.formation_recovery_v1 import ANNOTATION_TABLES, NEW_TABLES
+    from src.workflows.formation_recovery_v1 import ANNOTATION_TABLES, NEW_TABLES, BUILD_TABLES
     from tests.postgres_support import database, install_schema
     console=production_console(root=tmp_path)
     current=PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(console.workflow_document_store.config)).export_state()
     legacy=deepcopy(current)
     legacy['workflow_recovery_version']=old_version
     legacy['formation_recovery']['version']=section_version
-    for name in ANNOTATION_TABLES:
+    for name in (*ANNOTATION_TABLES, *BUILD_TABLES):
         del legacy['formation_recovery']['tables'][name]
     if section_version==1:
         for name in NEW_TABLES:
