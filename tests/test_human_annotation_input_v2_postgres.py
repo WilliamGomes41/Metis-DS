@@ -258,3 +258,57 @@ def test_new_capability_always_pins_v2_without_other_optional_fields(tmp_path,pr
     stale['selection'].pop('pending_range',None)
     with pytest.raises(ConsoleError,match='annotation_client_contract_stale'):
         annotation.save(console,actor_id=actor,**stale)
+
+
+@pytest.mark.parametrize('damage',['disabled','missing'])
+def test_new_input_refuses_missing_or_disabled_native_fences(tmp_path,production_console,damage):
+    from pathlib import Path
+    console,actor,_,sid,view,_=source(production_console,tmp_path)
+    request=command(view,ranges=[anchor(view,'Controleer')])
+    request['selection']['field_evidence']=field_input(view)
+    with console.workflow_document_store._connect() as con:
+        for table,name in [('annotation_versions','guard_annotation_input_transition'),('annotation_heads','guard_annotation_head_transition')]:
+            con.execute(f'ALTER TABLE workflow.{table} DISABLE TRIGGER {name}' if damage=='disabled' else f'DROP TRIGGER {name} ON workflow.{table}')
+        if damage=='missing':
+            from src.workflows.workflow_postgres_migration_v1 import observe_schema
+            observed=observe_schema(con)
+            assert observed['status']=='BLOCKED'
+            assert set(observed['missing_constraints'])=={'guard_annotation_input_transition','guard_annotation_head_transition'}
+    with pytest.raises(ConsoleError,match='annotation_input_storage_not_ready'):
+        annotation.save(console,actor_id=actor,**request)
+    with console.workflow_document_store._connect() as con:
+        assert con.execute('SELECT count(*) AS n FROM workflow.annotation_versions WHERE snapshot_id=%s',(sid,)).fetchone()['n']==0
+        con.execute((Path(__file__).resolve().parents[1]/'db/migrations/035_annotation_meaning_input.sql').read_text())
+    assert annotation.save(console,actor_id=actor,**request)['revision']==1
+
+
+def test_prepare_requires_native_input_fences_before_creating_ownership(tmp_path,production_console):
+    console,actor,reviewer,_,_,_=source(production_console,tmp_path)
+    sid=console.receive_source(actor_id=actor,filename='new.html',content_type='text/html',
+        data=b'<html><body><p>Nieuwe bron voor annotatie.</p></body></html>',ingest_kind='new',
+        title='Nog niet geannoteerd',version='1',date='2026-11-08',live_url='',class_='richtlijn',
+        family='test',named_reviewers=[reviewer['account_id']])['snapshot_id']
+    with console.workflow_document_store._connect() as con:
+        con.execute('ALTER TABLE workflow.annotation_versions DISABLE TRIGGER guard_annotation_input_transition')
+    with pytest.raises(ConsoleError,match='annotation_input_storage_not_ready'):
+        annotation.prepare(console,actor_id=actor,snapshot_id=sid,expected_revision=console.objects_revision(sid))
+    assert not annotation.owns_source(console,sid)
+
+
+def test_v2_restore_requires_native_fences_on_target(tmp_path,production_console):
+    from src.publication.canonical_publication_postgres_v1 import PostgresCanonicalPublicationStore
+    from src.publication.publication_chain_recovery_v1 import PublicationChainRecoveryError
+    from src.workflows.workflow_chain_recovery_v1 import PostgresWorkflowRecoveryAdapter
+    from tests.postgres_support import database,install_schema
+    console,actor,_,_,view,_=source(production_console,tmp_path)
+    request=command(view,ranges=[anchor(view,'Controleer')])
+    request['selection']['field_evidence']=field_input(view)
+    annotation.save(console,actor_id=actor,**request)
+    state=PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(console.workflow_document_store.config)).export_state()
+    with database(console.workflow_document_store.config.dsn) as target_config:
+        install_schema(target_config.dsn)
+        with __import__('psycopg').connect(target_config.dsn) as con:
+            con.execute('ALTER TABLE workflow.annotation_versions DISABLE TRIGGER guard_annotation_input_transition')
+        target=PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(target_config))
+        with pytest.raises(PublicationChainRecoveryError): target.restore_state(state)
+        target.assert_empty()

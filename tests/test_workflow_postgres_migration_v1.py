@@ -40,7 +40,11 @@ class FakeConnection:
         if "information_schema.columns" in query:
             return Rows([{"table_name": table, "column_name": column} for table, column in REQUIRED_COLUMNS])
         if query.startswith("SELECT c.conname"):  # #636: named constraints are part of verification
-            return Rows([{"conname": "publication_refusals_dedup_key_uniq", "table_name": "publication_refusals",
+            return Rows([{"conname": "guard_annotation_input_transition", "table_name": "annotation_versions",
+                          "contype": "t", "columns": []},
+                         {"conname": "guard_annotation_head_transition", "table_name": "annotation_heads",
+                          "contype": "t", "columns": []},
+                         {"conname": "publication_refusals_dedup_key_uniq", "table_name": "publication_refusals",
                          "contype": "u", "columns": ["dedup_key"]},
                          {"conname": "object_revision_frontiers_pkey", "table_name": "object_revision_frontiers",
                           "contype": "p", "columns": ["snapshot_id", "object_id"]},

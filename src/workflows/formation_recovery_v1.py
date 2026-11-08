@@ -131,7 +131,7 @@ def _validate_annotations(con):
     """
     from uuid import UUID
     from src.integrity_kernel import stable_hash
-    from src.vorming.human_annotation_v1 import NORMALIZATION, validate_stored_selection, _relationship_history
+    from src.vorming.human_annotation_v1 import NORMALIZATION, validate_stored_selection, _relationship_history, require_input_storage
     from src.vorming.source_preparation_context_v1 import stored_extraction
     for source in con.execute('SELECT s.*,e.payload AS extraction,d.source_id,d.document_id,'
         'd.source_sha256,d.source_version,d.content_kind,d.working_revision_id AS current_working_revision '
@@ -149,6 +149,8 @@ def _validate_annotations(con):
             fail('annotation_source_mismatch')
         versions = con.execute('SELECT * FROM workflow.annotation_versions WHERE snapshot_id=%s '
                               'ORDER BY annotation_id,revision',(sid,)).fetchall()
+        if any(row['payload'].get('selection_version') for row in versions):
+            require_input_storage(con)
         heads = con.execute('SELECT * FROM workflow.annotation_heads WHERE snapshot_id=%s',(sid,)).fetchall()
         commands = con.execute('SELECT * FROM workflow.annotation_commands WHERE snapshot_id=%s',(sid,)).fetchall()
         if len(versions) != source['generation'] or len(commands) != source['generation']:

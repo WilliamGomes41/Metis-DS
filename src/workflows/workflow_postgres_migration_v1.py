@@ -74,6 +74,8 @@ REFUSAL_COLUMNS = (
 # (table, name, contype, columns): ON CONFLICT (dedup_key) needs UNIQUE(dedup_key) on exactly this
 # table; a same-named constraint elsewhere, a non-unique one or other columns MAG NIET pass (4291505169).
 REQUIRED_CONSTRAINTS = frozenset({
+    ("annotation_versions", "guard_annotation_input_transition", "t", ()),
+    ("annotation_heads", "guard_annotation_head_transition", "t", ()),
     ("publication_refusals", "publication_refusals_dedup_key_uniq", "u", ("dedup_key",)),
     ("object_revision_frontiers", "object_revision_frontiers_pkey", "p", ("snapshot_id", "object_id")),
     ("document_objects", "workflow_object_revision_frontier_fk", "f", ("snapshot_id", "object_id")),

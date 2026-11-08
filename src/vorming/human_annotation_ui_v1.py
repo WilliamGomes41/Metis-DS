@@ -27,6 +27,7 @@ SOURCE_LABELS={'document_metadata':'Documentgegevens','page_furniture':'Kop- of 
     'navigation':'Navigatie','document_structure':'Documentstructuur',
     'unformed_meaning':'Nog niet tot een uitspraak gevormd','uncertain_source_role':'Bronfunctie nog onzeker'}
 ERRORS = {
+    'annotation_input_storage_not_ready':'Annotaties kunnen nog niet worden opgeslagen. De beheerder moet de annotatieopslag eerst bijwerken. Je aanwijzingen blijven hier zichtbaar.',
     'annotation_write_conflict':'Een andere wijziging is al opgeslagen. Open de opgeslagen versie opnieuw; je huidige aanwijzingen blijven hier zichtbaar.',
     'annotation_command_conflict':'Dit verzoek is al gebruikt met andere keuzes. Open de opgeslagen versie opnieuw.',
     'annotation_anchor_mismatch':'De geselecteerde tekst past niet bij deze bronpositie. Open de bron opnieuw en wijs het bereik opnieuw aan.',

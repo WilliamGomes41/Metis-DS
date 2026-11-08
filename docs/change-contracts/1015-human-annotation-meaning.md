@@ -21,7 +21,7 @@ Lifecycle transition: gepinde invoer -> nieuwe immutable annotatierevisie met ex
 Initial durable state: 034-set met bron-/extractiepin, heads/generatie en object-CAS; geen kandidaatset.
 Trigger: selecteren/koppelen, autosave, gereed melden, essentieel verband verwijderen/herstellen of expliciet met reden terugnemen.
 Authorization: bestaande actuele source-selection-autorisatie en mutable WorkingRevision, ook voor duplicate requests.
-Validation: exacte halfopen codepoint-/grapheme-/quoteankers, gesloten bestaande veld/bronrolcontracten; v2 mag niet door v1 worden overschreven; essentiële relatie blijft aangewezen of expliciet open/teruggenomen.
+Validation: werkelijk aanwezige en ingeschakelde 035-fences vóór writes en v2-restore; exacte halfopen codepoint-/grapheme-/quoteankers, gesloten bestaande veld/bronrolcontracten; v2 mag niet door v1 worden overschreven; essentiële relatie blijft aangewezen of expliciet open/teruggenomen.
 Mutable entities: bestaande setgeneratie en heads, in dezelfde workflowtransactie.
 Immutable entities: bron/extractie, annotatieversies, actor/commandreceipts en alle publicatie-/reviewhistorie.
 Workflow state before: processing.
@@ -74,12 +74,12 @@ terugnemen is een expliciete bestaande withdrawn-revisie, geen fysieke delete.
 
 Rewrite target: annotatie-inputcontract en behoud van essentiële betekenisrelaties.
 Why local patching is insufficient: een browser-only waarschuwing verliest verplichtingen bij reload, oudere client of direct SQL; server en herstel moeten dezelfde relatiecontinuïteit bewaken.
-Current authority/writer/reader map: human_annotation_v1.prepare/save/overview/validate_stored_selection; human_annotation_ui_v1 routes /annotations, /annotations/source, /annotations/api en editor.js; bestaande annotation_* tabellen/034-triggers; formation_recovery_v1._validate_annotations en workflow_chain_recovery_v1 export/restore; oudere binaries/direct SQL. Volledige overige routekaart staat in het uitvoeringscontract.
+Current authority/writer/reader map: human_annotation_v1.prepare/save/overview/validate_stored_selection; human_annotation_ui_v1 routes /annotations, /annotations/source, /annotations/api en editor.js; bestaande annotation_* tabellen/034-triggers en require_input_storage; migratieverificatie op beide named035-constraints; formation_recovery_v1._validate_annotations en workflow_chain_recovery_v1 export/restore; oudere binaries/direct SQL. Volledige overige routekaart staat in het uitvoeringscontract.
 Supported runtime topologies: workflow PostgreSQL, legacy en v1 document-input-layout, dezelfde productiecompositie met lokale of Azure immutable bronstore; geen annotatie-file-store.
 Persisted-state impact: optionele expliciete v2 payloadvariant in bestaande immutable versies; additieve 035 constrainttrigger, geen backfill/nieuwe store of tabel.
 Compatibility/migration plan: v1 input blijft leesbaar, v2 velden behouden canonieke shape; deferred native fence controleert v2->v1 en essentiële continuïteit ook bij omgekeerde restore-rijvolgorde. Archiveformat blijft v10/formation3 omdat de tabellen/kolommen gelijk blijven; oude archivevalidator weigert onbekende v2 payload in plaats van haar stil te verliezen.
 Rollback/recovery plan: oude binary kan v2 niet overschrijven; 034 kandidaat-/AI-fences blijven ongewijzigd actief. Restore naar lege doel via bestaande exclusieve transactie valideert alle historische revisies, brongetuigen en receipts. Geen destructieve productiemigratie.
-Cutover trigger: native CAS/duplicate/stale/relatieverlies/restore/SQL-rollback en echte browserproeven groen op exacte code; HA-2b afsluiten/activatie wordt hiermee nog niet ingeschakeld.
+Cutover trigger: migratie035 plan/digest/apply/verify volgens de bestaande releasevoorwaarden; prepare/save en v2-restore controleren de werkelijke enabled/deferred native fences; native CAS/duplicate/stale/relatieverlies/restore/SQL-rollback en echte browserproeven groen op exacte code; HA-2b afsluiten/activatie wordt hiermee nog niet ingeschakeld.
 Cleanup/decommission criteria: geen parallelle creator/job/reviewstore; v1 compatibiliteitslezen blijft voor historie. Oude prozacallers en broncontextpagina worden pas bij bewezen HA-4 globaal verwijderd.
 Failure blast radius: alleen betrokken ongepubliceerde annotation-ID/set; geen release/servingwijziging.
 Adversarial proof matrix: oudere client tegen v2, direct SQL v2-degradatie/relatieverlies, reanchor met ander ID, dubbele/stale commands, twee tabs, open verplichting ready, gewijzigde veldquote, beide documentlayouts, herstart en corrupte historische workflowrestore.
@@ -92,7 +92,7 @@ suite. Geen technische fixture als praktijkacceptatie presenteren.
 
 ### Uitgevoerde gerichte verificatie
 
-- 47 native PostgreSQL-gevallen groen: annotatie/v2-input/production-migratieplan.
+- De eerste gerichte bundel bevatte40 native annotatiegevallen en4 migratie-unitgevallen; na de versiereparatie43 native plus4 migratie-unitgevallen. Deze eerdere bundeltellingen zijn geen zuivere native aantallen.
   Dit omvat beide document-input-layouts, exacte duplicate/CAS, gelijktijdige
   veld- en essentiële-contextcorrectie, opnieuw aanwijzen, expliciete terugname,
   rechtstreekse SQL-v2-degradatie/veldverlies/relatieverlies en head-terugzetting,
@@ -168,6 +168,31 @@ en de browser-reload bewijzen dat dezelfde verplichting wordt hersteld.
 
 De eerste volledige run is daarom bewust onderbroken (exit2 na5528 passed,
 45 skipped,3 xfailed,29 subtests in874.19sec). Dit is geen geslaagde volledige
-suite. Na reparatie:47 native plus1 uitgebreide browserproef daadwerkelijk
+suite. Na reparatie:43 native annotatiegevallen,4 migratie-unitgevallen en1 uitgebreide browserproef daadwerkelijk
 PASS in46.33sec. De volledige suite wordt opnieuw op de vastgezette code
 uitgevoerd; definitieve resultaten volgen hieronder.
+
+
+De activeringscontrole vond daarna een afzonderlijk, gereproduceerd gat:
+zonder nieuwe tabellen kon035 ontbreken/uitgeschakeld zijn terwijl de code al
+v2 bewaarde (DID NOT RAISE vóór fix). De native fences zijn nu een expliciete
+write-preconditie via dezelfde annotatieowner: prepare/save controleren de twee
+werkelijke enabled/deferred triggers en hun functie, geen callerflag. V2-restore
+controleert hetzelfde binnen de bestaande lege-doeltransactie. De geregistreerde
+migratieverificatie verlangt beide named constrainttriggers. V1-historie blijft
+leesbaar; er is geen nieuwe store, status of configuratieautoriteit.
+
+De tweede volledige run is vóór deze laatste reparatie bewust afgebroken
+(exit2:2425 passed,33 skipped,21 subtests in423.51sec); ook die telt niet als
+volledige PASS. De definitieve gerichte bundel: **67 PASS in47.94sec**, waaronder
+47 native annotatie-/inputgevallen,19 bestaande migratieverificatiegevallen en
+1 echte browserketen (12 andere browsercases niet geselecteerd, niet als PASS
+geteld). De native_SQL-mutatie is opnieuw uitgevoerd ná een geldige API-save;
+beide triggers dan uitschakelen geeft daadwerkelijk DID NOT RAISE. Tijdelijke
+mutatiehook is niet onderdeel van de repository.
+
+Aparte adversariële pass door dezelfde agent: oudere clients, onbekende v2
+capabilities, verlies van essentiële relaties/velden, stale head, onderbroken
+herstelmarkering, ontbrekende/uitgeschakelde migratie, beide documentlayouts,
+self-consistente historische corruptie, reverse restore en oude AI-/objectwrites.
+De onafhankelijke tweede agent heeft uitsluitend UI/captures beoordeeld.

@@ -49,6 +49,20 @@ def _identity(envelope):
     return asdict(SourceIdentity.from_envelope(envelope))
 
 
+def require_input_storage(con):
+    """New input is safe only with its actual enabled native rollback fences."""
+    row=con.execute("SELECT count(*) AS n FROM pg_catalog.pg_trigger t "
+        "JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid "
+        "JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace "
+        "WHERE n.nspname='workflow' AND t.tgenabled IN ('O','A') "
+        "AND t.tgdeferrable AND t.tginitdeferred "
+        "AND t.tgfoid=to_regprocedure('workflow.guard_annotation_input_transition()') "
+        "AND ((c.relname='annotation_versions' AND t.tgname='guard_annotation_input_transition') "
+        "OR (c.relname='annotation_heads' AND t.tgname='guard_annotation_head_transition'))").fetchone()
+    if row['n']!=2:
+        fail('annotation_input_storage_not_ready')
+
+
 def _locked(console, con, actor_id, snapshot_id):
     # Same authorization-before-document lock order as publication/reprocessing.
     console.workflow_review_store._lock_authorizations(con)
@@ -61,6 +75,7 @@ def _locked(console, con, actor_id, snapshot_id):
     console._require_mutable_working_revision(snapshot_id, current=True)
     if any(value != envelope.get(key) for key,value in source.items()):
         fail('annotation_representation_stale')
+    require_input_storage(con)
     return envelope
 
 
