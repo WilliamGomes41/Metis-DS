@@ -21,8 +21,11 @@ CANONICAL_TABLES = ('source_snapshots', 'canonical_object_versions', 'canonical_
 DELETE_TABLES = tuple('public.' + name for name in CANONICAL_TABLES) + (
     'workflow.documents', 'workflow.publication_refusals', 'workflow.view_checks')
 DELETE_PRIVILEGES = {table: ('SELECT', 'DELETE') for table in DELETE_TABLES}
+SNAPSHOT_FENCE_LOCK = 2110039  # Shared with migration 039's FK-less operational-row guard.
 TRIGGERS = {('workflow.documents', 'refuse_deleted_test_document'),
             ('workflow.review_events', 'guard_test_deletion_ledger'),
+            ('workflow.view_checks', 'refuse_deleted_test_view_check'),
+            ('workflow.publication_refusals', 'refuse_deleted_test_publication_refusal'),
             ('source_snapshots', 'refuse_deleted_test_source')}
 
 
@@ -65,7 +68,7 @@ def _inventory(con, snapshot_id):
     logical = selected['logical_document_id']
     if not logical:
         raise ConsoleError('test_document_deletion_lineage_required')
-    documents = con.execute('SELECT snapshot_id,title,source_version,source_sha256 '
+    documents = con.execute('SELECT snapshot_id,title,source_version,source_sha256,working_revision_id,object_generation '
         'FROM workflow.documents WHERE logical_document_id=%s ORDER BY snapshot_id', (logical,)).fetchall()
     snapshots = {r['snapshot_id'] for r in documents}
     history = con.execute("SELECT entity_id,details FROM public.audit_events WHERE entity_type='release' "
@@ -112,7 +115,9 @@ def _inventory(con, snapshot_id):
         counts = con.execute('SELECT '
             '(SELECT count(*) FROM workflow.document_objects WHERE snapshot_id=%s) AS objects,'
             '(SELECT count(*) FROM workflow.annotation_heads WHERE snapshot_id=%s) AS annotations,'
-            '(SELECT count(*) FROM workflow.review_events WHERE snapshot_id=%s) AS reviews', (sid, sid, sid)).fetchone()
+            '(SELECT count(*) FROM workflow.review_events WHERE snapshot_id=%s) AS reviews,'
+            '(SELECT generation FROM workflow.annotation_sets WHERE snapshot_id=%s) AS annotation_generation',
+            (sid, sid, sid, sid)).fetchone()
         versions.append({**document, **counts})
     registry = con.execute('SELECT object_id,object_version,release_id,state FROM public.publication_registry '
                            'WHERE release_id=ANY(%s) ORDER BY object_id', (releases,)).fetchall()
@@ -182,10 +187,19 @@ def delete(console, *, actor_id, snapshot_id, command_id, expected_plan, confirm
             selected = con.execute('SELECT logical_document_id FROM workflow.documents WHERE snapshot_id=%s', (snapshot_id,)).fetchone()
             if selected is None:
                 raise ConsoleError('unknown_snapshot')
+            try:
+                con.execute('SELECT snapshot_id FROM workflow.documents WHERE logical_document_id=%s '
+                    'ORDER BY snapshot_id FOR UPDATE NOWAIT', (selected['logical_document_id'],)).fetchall()
+            except LockNotAvailable as exc:
+                raise ConsoleError('test_document_deletion_busy') from exc
             con.execute('SELECT pg_advisory_xact_lock(2110023,hashtext(%s))', (selected['logical_document_id'],))
             for table in CANONICAL_TABLES:
                 con.execute('LOCK TABLE public.'+table+' IN SHARE ROW EXCLUSIVE MODE')
             plan = _inventory(con, snapshot_id)
+            for sid in plan['snapshot_ids']:
+                if not con.execute('SELECT pg_try_advisory_xact_lock(%s,hashtext(%s)) AS locked',
+                                   (SNAPSHOT_FENCE_LOCK,sid)).fetchone()['locked']:
+                    raise ConsoleError('test_document_deletion_busy')
             if plan['fingerprint'] != expected_plan:
                 raise ConsoleError('test_document_deletion_plan_changed')
             if confirm_title != plan['title']:

@@ -76,8 +76,10 @@ Adversarial proof matrix: wrong/revoked role, mode off, missing confirmation, ch
 
 Lock order: existing local kernel store lock, publisher account row, workflow
 documents table write lock, operational processing-attempt table write lock
-with NOWAIT, canonical logical-publication advisory lock 2110023,
-then canonical tables in their normal publication write order. The workflow
+with NOWAIT, lineage document rows FOR UPDATE NOWAIT, canonical
+logical-publication advisory lock 2110023, canonical tables in their normal
+publication write order and snapshot
+operational-row advisory locks 2110039 via try-lock. The workflow
 table lock excludes concurrent lineage inserts; canonical locks serialize
 direct/legacy writers too. No heavy extraction or Blob I/O occurs inside this
 transaction. Receipt and deleted-snapshot fences commit with all row deletions.
@@ -150,6 +152,19 @@ history, canonical sharing, feature disable/rollback and backup import.
   deletion, deliberately retaining its stale startup map, immediately sees
   only the unrelated document and refuses the deleted snapshot. Both input
   layouts pass; no new process-shared invalidation mechanism is needed.
+- Document row reservations are now taken before inventory. An existing
+  document-row writer causes a clean busy refusal before any destructive SQL;
+  this also covers alternate writers outside the native annotation operation's
+  existing shared authorization lock. Annotation generation, working revision
+  and object generation are part of the confirmation fingerprint. A real edit
+  retaining the same annotation count invalidates an earlier confirmation.
+- View checks and publication refusals have no document FK. Their insert/update
+  triggers now share a snapshot advisory lock with deletion and consult the
+  durable deleted-snapshot fence under that lock. An actual in-flight view
+  registration is preserved by a refused deletion; after it commits, cleanup
+  succeeds. A late real registration and a refusal insert against the deleted
+  snapshot are rejected. The held-row, same-count edit and in-flight registration
+  scenarios were first reproduced red, then passed with the repair.
 
 Source files and the global hash chain are intentionally retained, as disclosed
 in the confirmation. Full suite/CI outcomes remain required before release.

@@ -223,7 +223,8 @@ def test_attempt_cannot_commit_running_after_deletion_inventory(production_conso
         assert pending[0].result(timeout=10)=='document_absent'
 
 
-def test_uncommitted_attempt_start_refuses_deletion_without_deadlock(production_console,tmp_path,monkeypatch):
+@pytest.mark.parametrize('writer',['attempt','document'])
+def test_uncommitted_writer_refuses_deletion_without_deadlock(production_console,tmp_path,monkeypatch,writer):
     from contextlib import contextmanager
     monkeypatch.setenv('CONSOLE_TEST_DOCUMENT_DELETION','on')
     console, accounts, sid, release, source = published(production_console,tmp_path)
@@ -237,17 +238,76 @@ def test_uncommitted_attempt_start_refuses_deletion_without_deadlock(production_
             yield con
     monkeypatch.setattr(deletion,'workflow_transaction',bounded_transaction)
     with console.workflow_document_store._connect() as worker:
-        worker.execute("INSERT INTO workflow.processing_attempts "
-            "(attempt_id,snapshot_id,command_id,started_at,object_generation,payload) "
-            "VALUES('starting',%s,'starting',now(),0,'{\"state\":\"running\",\"kind\":\"source_selection\"}')", (fresh,))
+        if writer=='document':
+            worker.execute('SELECT snapshot_id FROM workflow.documents WHERE snapshot_id=%s FOR UPDATE',(fresh,))
+        else:
+            worker.execute("INSERT INTO workflow.processing_attempts "
+                "(attempt_id,snapshot_id,command_id,started_at,object_generation,payload) "
+                "VALUES('starting',%s,'starting',now(),0,'{\"state\":\"running\",\"kind\":\"source_selection\"}')", (fresh,))
         with pytest.raises(ConsoleError,match='test_document_deletion_busy'):
             deletion.delete(console,**request)
         worker.commit()
     view = deletion.preview(console,actor_id=request['actor_id'],snapshot_id=sid)
-    assert view['running_snapshots']==[fresh]
+    assert view['running_snapshots']==([fresh] if writer=='attempt' else [])
     assert console.canonical_publication_store.active_publication_rows()
     with console.workflow_document_store._connect() as con:
         assert con.execute('SELECT count(*) AS n FROM workflow.test_document_deletions').fetchone()['n']==0
+
+
+def test_annotation_edit_with_same_head_count_invalidates_confirmation(production_console,tmp_path,monkeypatch):
+    from src.vorming import human_annotation_v1 as annotation
+    from tests.test_human_annotation_postgres import anchor, command as selection
+    monkeypatch.setenv('CONSOLE_TEST_DOCUMENT_DELETION','on')
+    console, accounts, sid, release, source = published(production_console,tmp_path)
+    fresh = receive(console,accounts,prior=sid)
+    actor = accounts['researcher']['account_id']
+    view = annotation.prepare(console,actor_id=actor,snapshot_id=fresh,expected_revision=console.objects_revision(fresh))
+    save = selection(view,ranges=[anchor(view,'Bespreek het onderwerp')])
+    result = annotation.save(console,actor_id=actor,**save)
+    request = command(console,accounts,sid)
+    save.update(command_id=uuid4().hex,expected_revision=result['revision'],expected_generation=result['generation'])
+    save['selection']['status']='uncertain'
+    annotation.save(console,actor_id=actor,**save)
+    with pytest.raises(ConsoleError,match='plan_changed'):
+        deletion.delete(console,**request)
+    assert annotation.overview(console,actor_id=actor,snapshot_id=fresh)['generation']==2
+
+
+def test_inflight_view_registration_precedes_cleanup_and_late_operational_rows_are_fenced(
+        production_console,tmp_path,monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from contextlib import contextmanager
+    from threading import Event
+    import psycopg
+    from src.settings.view_check_store import ViewCheckStore
+    monkeypatch.setenv('CONSOLE_TEST_DOCUMENT_DELETION','on')
+    console, accounts, sid, release, source = published(production_console,tmp_path)
+    request = command(console,accounts,sid)
+    inserted, finish = Event(), Event()
+    dsn = console.workflow_document_store.config.dsn
+    @contextmanager
+    def paused_commit():
+        with psycopg.connect(dsn) as con:
+            yield con
+            inserted.set()
+            assert finish.wait(10), 'registration commit was not released'
+    with ThreadPoolExecutor(1) as pool:
+        pending = pool.submit(ViewCheckStore(paused_commit).register,'publisher',sid,'before',{'revision':'fixture'})
+        try:
+            assert inserted.wait(10)
+            with pytest.raises(ConsoleError,match='test_document_deletion_busy'):
+                deletion.delete(console,**request)
+        finally:
+            finish.set()
+        assert pending.result(timeout=10)['state']=='queued'
+    assert deletion.delete(console,**request)['deleted']
+    with pytest.raises(psycopg.errors.RaiseException,match='test_document_snapshot_deleted'):
+        ViewCheckStore(lambda:psycopg.connect(dsn)).register('publisher',sid,'late',{'revision':'fixture'})
+    with psycopg.connect(dsn) as con:
+        assert con.execute('SELECT count(*) FROM workflow.view_checks WHERE snapshot_id=%s',(sid,)).fetchone()[0]==0
+        with pytest.raises(psycopg.errors.RaiseException,match='test_document_snapshot_deleted'):
+            con.execute("INSERT INTO workflow.publication_refusals(recorded_at,snapshot_id,object_version,actor,verdict,"
+                "reason_codes,dedup_key,schema_version) VALUES(now(),%s,'1','publisher','refused','[]','late','v1')",(sid,))
 
 
 def test_mixed_release_is_refused_without_removing_other_document(production_console,tmp_path,monkeypatch):

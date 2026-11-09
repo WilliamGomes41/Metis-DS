@@ -31,6 +31,11 @@ dezelfde opgeslagen uitkomst; afwijkende inhoud conflicteert.
 De korte SQL-transactie sluit ook gelijktijdige starts van operationele taken
 uit. Bij een al actieve schrijver weigert verwijderen direct; de bestaande
 verwerking behoudt haar gegevens en de publisher kan later opnieuw proberen.
+Ook documentrijen worden vóór het voorstel opnieuw wordt gecontroleerd
+vergrendeld. Een annotatiebewerking met hetzelfde aantal annotaties maakt een
+oude bevestiging ongeldig. Broncontroles en publicatieweigeringen gebruiken
+dezelfde snapshotvergrendeling als verwijderen; databasefences weigeren late
+registratie voor een reeds verwijderd document.
 
 De SQL-fences blijven actief na uitschakelen van de functie of terugrollen van
 applicatiecode. Workflowbackup 14 neemt de registraties op. Een oude archivevorm

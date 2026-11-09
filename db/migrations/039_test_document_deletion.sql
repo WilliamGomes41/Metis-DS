@@ -57,6 +57,26 @@ BEGIN
 END;
 $$;
 
+-- These operational tables deliberately have no document FK. Serialize their
+-- writers with deletion and then read the durable fence under that same lock;
+-- a request validated before deletion cannot register an orphan afterwards.
+CREATE OR REPLACE FUNCTION workflow.refuse_deleted_test_operational_row() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+BEGIN
+    PERFORM pg_advisory_xact_lock(2110039,hashtext(NEW.snapshot_id));
+    IF EXISTS(SELECT 1 FROM workflow.deleted_test_snapshots WHERE snapshot_id=NEW.snapshot_id) THEN
+        RAISE EXCEPTION 'test_document_snapshot_deleted';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS refuse_deleted_test_view_check ON workflow.view_checks;
+CREATE TRIGGER refuse_deleted_test_view_check BEFORE INSERT OR UPDATE ON workflow.view_checks
+    FOR EACH ROW EXECUTE FUNCTION workflow.refuse_deleted_test_operational_row();
+DROP TRIGGER IF EXISTS refuse_deleted_test_publication_refusal ON workflow.publication_refusals;
+CREATE TRIGGER refuse_deleted_test_publication_refusal BEFORE INSERT OR UPDATE ON workflow.publication_refusals
+    FOR EACH ROW EXECUTE FUNCTION workflow.refuse_deleted_test_operational_row();
+
 -- Older backup exporters still retain the global review ledger. Its deletion
 -- event must never be restored without the receipt and every snapshot fence.
 -- Deferred checking also supports the existing one-transaction empty-target
