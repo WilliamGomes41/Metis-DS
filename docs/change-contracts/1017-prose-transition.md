@@ -146,3 +146,22 @@ de aparte CI-proef verifieert daarnaast de echte PDF/SDK-keten.
 De gezamenlijke matrix slaagt met 85 tests, inclusief de bestaande
 scanpagina-/accountingproeven. Geen verwachtingen of extractieregels zijn
 versoepeld om de foutvolgorde te laten slagen.
+
+## Afhandeling PR-review
+
+Hersteld: legacy-detectie bekijkt uitsluitend
+`workflow_tables.documents[].envelope_payload.prose_transitions` en
+`formation_recovery.tables.document_inputs[].metadata.prose_transitions`.
+Gelijknamige sleutels in audit-/diagnosepayloads blokkeren een geldige
+legacy-upgrade niet. Native tests houden beide inputlayouts en echte
+stopreceipts met oud versielabel afgedekt.
+
+Hersteld: het gecontroleerde migratieregister bevat nu 037 en 038, in de
+bestaande volgorde. `observe_schema` vereist de drie stopguards op hun exacte
+workflowrelaties, ingeschakeld voor gewone writes. De native proef verwijdert
+de guards, past het volledige geregistreerde plan toe, verifieert het herstel
+en bewijst dat een uitgeschakelde guard de verificatie blokkeert. De plan-CLI
+is read-only gecontroleerd. Dit voert geen productiemigratie uit.
+
+Alle 102 tests voor migratie-/rechtenverificatie, beide herstelvormen,
+activatie en menselijke correctie slagen na deze reviewcorrecties.

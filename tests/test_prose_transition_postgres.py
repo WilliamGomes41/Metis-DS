@@ -178,6 +178,9 @@ def test_restore_retains_stop_and_requires_capable_storage(tmp_path, production_
     source = PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(console.workflow_document_store.config))
     legacy = source.export_state()
     legacy['workflow_recovery_version'] = 12
+    legacy['archived_diagnostic'] = {'prose_transitions': ['unrelated diagnostic key']}
+    legacy['workflow_tables']['documents'][0]['envelope_payload']['audit_payload'] = {
+        'prose_transitions': ['unrelated audit key']}
     assert _upgrade_workflow_state(legacy) == {**legacy, 'workflow_recovery_version': 13}
     receipt = transition.stop(console, **request(console, actor, sid, attempt))
     archive = source.export_state()

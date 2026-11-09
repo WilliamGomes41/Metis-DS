@@ -143,9 +143,23 @@ _CANONICAL_JSON_COLUMNS = {
 
 
 def _contains_prose_transition(value: Any) -> bool:
-    if isinstance(value, Mapping):
-        return bool(value.get('prose_transitions')) or any(_contains_prose_transition(v) for v in value.values())
-    return isinstance(value, list) and any(_contains_prose_transition(v) for v in value)
+    if not isinstance(value, Mapping):
+        return False
+    workflow = value.get('workflow_tables') or {}
+    formation = value.get('formation_recovery') or {}
+    tables = formation.get('tables', {}) if isinstance(formation, Mapping) else {}
+    locations = (
+        (workflow.get('documents') if isinstance(workflow, Mapping) else None, 'envelope_payload'),
+        (tables.get('document_inputs') if isinstance(tables, Mapping) else None, 'metadata'),
+    )
+    for rows, field in locations:
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            payload = row.get(field) if isinstance(row, Mapping) else None
+            if isinstance(payload, Mapping) and payload.get('prose_transitions'):
+                return True
+    return False
 
 
 def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:

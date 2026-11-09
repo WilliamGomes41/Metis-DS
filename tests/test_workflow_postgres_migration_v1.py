@@ -15,6 +15,7 @@ from src.workflows.workflow_postgres_migration_v1 import (
     MIGRATION_NAMES,
     REQUIRED_COLUMNS,
     REQUIRED_TABLES,
+    REQUIRED_TRIGGERS,
     WorkflowMigrationError,
     apply_migrations,
     migration_digest,
@@ -39,6 +40,8 @@ class FakeConnection:
             return Rows([{"table_name": name} for name in REQUIRED_TABLES])
         if "information_schema.columns" in query:
             return Rows([{"table_name": table, "column_name": column} for table, column in REQUIRED_COLUMNS])
+        if 'FROM pg_trigger t' in query:
+            return Rows([{'table_name': table, 'trigger_name': trigger} for table, trigger in REQUIRED_TRIGGERS])
         if query.startswith("SELECT c.conname"):  # #636: named constraints are part of verification
             return Rows([{"conname": "require_human_annotation_binding", "table_name": "document_objects", "contype": "t", "columns": []},
                          {"conname": "guard_annotation_build_receipt", "table_name": "annotation_build_commands", "contype": "t", "columns": []},
@@ -75,7 +78,7 @@ class Rows:
 def test_plan_digest_binds_exact_ordered_migration_bytes() -> None:
     paths = migration_paths(ROOT)
     assert tuple(path.name for path in paths) == MIGRATION_NAMES
-    assert MIGRATION_NAMES[-26:] == (
+    assert MIGRATION_NAMES[-28:] == (
         "008_workflow_lifecycle_identity.sql",
         "009_console_hotpath_indexes.sql",
         "011_workflow_audit_retention.sql",
@@ -102,6 +105,8 @@ def test_plan_digest_binds_exact_ordered_migration_bytes() -> None:
         "034_human_annotations.sql",
         "035_annotation_meaning_input.sql",
         "036_human_annotation_build.sql",
+        "037_human_annotation_revisions.sql",
+        "038_prose_transitions.sql",
     )
     digest = migration_digest(paths)
     assert len(digest) == 64
@@ -152,3 +157,25 @@ def test_apply_refuses_unconfirmed_or_changed_migration_bytes() -> None:
     paths = migration_paths(ROOT)
     with pytest.raises(WorkflowMigrationError, match="workflow_migration_digest_mismatch"):
         apply_migrations(FakeConnection(), paths=paths, expected_digest="0" * 64)
+
+
+def test_registered_plan_installs_stop_guards_and_verifies_their_enabled_relations(complete_postgres):
+    import psycopg
+    from psycopg.rows import dict_row
+    from src.workflows.workflow_postgres_migration_v1 import observe_schema
+    paths = migration_paths(ROOT)
+    with psycopg.connect(complete_postgres.dsn, row_factory=dict_row) as con:
+        for table, trigger in REQUIRED_TRIGGERS:
+            con.execute(f'DROP TRIGGER {trigger} ON workflow.{table}')
+        assert set(observe_schema(con)['missing_triggers']) == {
+            f'{table}.{trigger}' for table, trigger in REQUIRED_TRIGGERS}
+        con.commit()
+        result = apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))
+        assert result['status'] == 'PASS'
+        assert result['applied'][-2:] == ['037_human_annotation_revisions.sql', '038_prose_transitions.sql']
+        con.execute('ALTER TABLE workflow.processing_attempts DISABLE TRIGGER guard_prose_transition_attempt')
+        observed = observe_schema(con)
+        assert observed['status'] == 'BLOCKED'
+        assert observed['missing_triggers'] == ['processing_attempts.guard_prose_transition_attempt']
+        con.execute('ALTER TABLE workflow.processing_attempts ENABLE TRIGGER guard_prose_transition_attempt')
+        assert observe_schema(con)['status'] == 'PASS'

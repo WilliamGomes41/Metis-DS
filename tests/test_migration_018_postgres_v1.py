@@ -152,6 +152,9 @@ class _SchemaCon:
             return _Res(self.tables)
         if 'information_schema.columns' in sql:
             return _Res(self.columns)
+        if 'FROM pg_trigger t' in sql:
+            from src.workflows.workflow_postgres_migration_v1 import REQUIRED_TRIGGERS
+            return _Res([{'table_name': table, 'trigger_name': trigger} for table, trigger in REQUIRED_TRIGGERS])
         if 'pg_constraint' in sql:
             return _Res(([self.constraint_row] if self.constraint else []) + [
                 {'conname': 'require_human_annotation_binding', 'table_name': 'document_objects',
