@@ -411,7 +411,7 @@ def test_review_post_progresses_while_ingest_extract_is_heavy(tmp_path: Path, *,
         assert posted.status_code in {303, 200}
         assert elapsed < 0.6, f"review POST waited {elapsed:.3f}s during ingest extract"
         assert ingest_response.status_code == 303
-        assert ingest_response.headers["location"].startswith("/source-selection?document=")
+        assert ingest_response.headers["location"].startswith("/annotations?document=")
 
     asyncio.run(_run())
     live = next(

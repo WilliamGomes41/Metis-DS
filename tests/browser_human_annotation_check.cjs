@@ -16,9 +16,27 @@ const assert = require('node:assert/strict');
     await p.locator('[name=username]').fill(m.username);
     await p.locator('[name=password]').fill(m.password);
     await Promise.all([p.waitForURL(u => u.pathname!='/login'),p.locator('button[type=submit]').click()]);
-    await p.goto(base+'/annotations?document='+m.document);
+    if (m.document) await p.goto(base+'/annotations?document='+m.document);
   }
   await login(page);
+  const processingRequests = [];
+  page.on('request', r => {if (r.url().includes('/source-selection/start')) processingRequests.push(r.url());});
+  await page.goto(base+'/ingest');
+  await page.locator('[name=file]').setInputFiles({name:'annotation.html',mimeType:'text/html',buffer:Buffer.from(
+    '<html><body><h1>Advies</h1><p>Controleer 👩🏽‍⚕️ de huid bij café.</p><p>Alleen bij klachten.</p><p>Gelijke tekst. Gelijke tekst.</p><p>Herhaalde paragraaf.</p><p>Herhaalde paragraaf.</p><p>Onderzoek beschrijft de bevinding.</p></body></html>')});
+  await page.locator('[name=title]').fill('Annotatieproef');
+  await page.locator('[name=version]').fill('1.0');
+  await page.locator('[name=date]').fill('2026-11-09');
+  await page.locator('[name=class_]').selectOption('richtlijn');
+  await page.locator('[name=family]').fill('test');
+  await page.locator('[name=review_option][value=uploader_sole]').check();
+  await Promise.all([page.waitForURL(u => u.pathname==='/annotations'),page.locator('#ingest-submit').click()]);
+  m.document = new URL(page.url()).searchParams.get('document');
+  assert.ok(m.document);
+  await page.reload();
+  assert.equal(await page.locator('form[action="/source-selection/start"]').count(),0);
+  await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).click();
+  await page.locator('[data-source-block]').first().waitFor();
   const block = page.locator('[data-source-block]').filter({hasText:'Controleer'});
   const points = await block.evaluate(p => {
     const node=p.firstChild, end=node.textContent.indexOf(' de huid');
@@ -163,6 +181,7 @@ const assert = require('node:assert/strict');
   await page.waitForURL(u => u.searchParams.get('overview')==='true');
   assert.match(await page.locator('body').innerText(),/Brongebruik: Documentgegevens/);
   assert.deepEqual(errors,[]);
+  assert.deepEqual(processingRequests,[]);
   fs.writeFileSync(output+'/result.json',JSON.stringify({mouse:true,unicode:true,multipleRanges:true,meaningFields:true,recommendationWitness:true,essentialDuty:true,reanchor:true,explicitDischarge:true,sourceProposal:true,mobileSourceNavigation:true,serverFailure:true,pauseCommit:true,newSession:true,overview:true,keyboard:true,widths:[1440,390]},null,2));
   await browser.close();
 })().catch(e => {console.error(e);process.exit(1);});

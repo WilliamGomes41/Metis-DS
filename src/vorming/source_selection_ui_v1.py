@@ -601,6 +601,8 @@ def install(app, console, require, page, nav, esc):
                 action = ''  # The primary Naar Review action below owns continuation.
             elif result['state'] == UNCHECKED:
                 action = f'<a class="btn-secondary" href="/source-selection?document={esc(sid)}">Volledigheid controleren</a>'
+            elif envelope.get('received_source') and envelope.get('class') != 'beslisboom' and result['state'] == 'nog niet gestart':
+                action = '<a class="btn-primary" href="/annotations?' + esc(urlencode({'document':sid})) + '">Bron openen voor annotatie</a>'
             elif result['can_start']:
                 label = 'Starten' if result['state'] == 'nog niet gestart' else 'Hervatten'
                 from src.vorming.processing_document_budget_v1 import enabled as document_budget_enabled
@@ -614,8 +616,6 @@ def install(app, console, require, page, nav, esc):
             else:
                 action = '<p>Hervatten is nu niet beschikbaar. Bekijk de vormingsproblemen hieronder voor de vervolgstap.</p>'
             progress = ''
-            if envelope.get('received_source') and envelope.get('class') != 'beslisboom' and result['state'] == 'nog niet gestart':
-                action += '<p><a class="btn-secondary" href="/annotations?' + esc(urlencode({'document':sid})) + '">Bron aanwijzen en later hervatten</a></p>'
             if result['state'] == 'bezig':
                 elapsed = result['elapsed_seconds']
                 phase = {'source_and_validation': 'Bron lezen en controleren', 'reserved': 'Gereserveerd',

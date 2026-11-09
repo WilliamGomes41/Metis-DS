@@ -4918,7 +4918,8 @@ def create_console_app(
             command_id=command_id or None,
             replaces_snapshot_id=replaces_document.strip() or None,
         )
-        return RedirectResponse("/source-selection?" + urlencode({"document": receipt["snapshot_id"], "received": "yes"}), status_code=303)
+        target = "/source-selection" if class_ == "beslisboom" else "/annotations"
+        return RedirectResponse(target + "?" + urlencode({"document": receipt["snapshot_id"], "received": "yes"}), status_code=303)
 
     @app.get("/tree", response_class=HTMLResponse)
     def tree(request: Request, q: str = "", page: int = 1) -> str:
