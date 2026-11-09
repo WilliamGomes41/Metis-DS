@@ -131,3 +131,11 @@ waarin het nieuwe diagram niet bestaat. De vaste verwijzingsrevisie is nu
 `6c2e156048d526221d5c34a29d8ce665fc95fba1`; alle modelbronnen bestaan op die
 commit en de nieuwe diagramlink is ook via GitHub opgehaald. Dit is een
 repositoryreferentie, geen claim over de actieve productiedeployment.
+
+De volledige lokale suite vond een productregressie in de nieuwe broncontrole:
+een runtime zonder geconfigureerde strategie zocht vóór de bestaande
+configuratiefout naar een nog niet opgeslagen nieuwe snapshot. De grens
+weigert ontbrekende compositie nu vóór die lookup, met behoud van de bestaande
+human-ownershipcontrole en de stopfence vóór extractie/providerwerk. De bestaande
+fail-first test blijft ongewijzigd. Alle 45 configuratie-, stop- en begrensde
+verwerkingstests slagen na de correctie.
