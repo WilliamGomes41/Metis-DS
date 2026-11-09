@@ -348,18 +348,31 @@ def test_worker_task_allowance_cannot_outlive_lease(tmp_path, production_console
 
 
 def test_live_worker_renews_lease_during_long_preparation_without_extending_deadline(tmp_path, production_console, monkeypatch):
-    import time
     from datetime import datetime
+    from threading import Event
+    from src.vorming import worker_handover_v1 as handover
     console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
     monkeypatch.setattr('src.vorming.worker_handover_v1.HEARTBEAT_SECONDS', .05)
+    renewed = Event()
+    original_renew = handover.renew
+    def observed_renew(*args, **kwargs):
+        result = original_renew(*args, **kwargs)
+        if result:
+            renewed.set()
+        return result
+    monkeypatch.setattr(handover,'renew',observed_renew)
     original = console._fragments_and_spec
     def long_preparation(*args, **kwargs):
+        initial_lease = now()+timedelta(seconds=30)
         with console.workflow_document_store._connect() as con:
             con.execute("UPDATE workflow.processing_attempts SET payload=jsonb_set(payload,'{dispatch,lease_expires_at}',%s::jsonb) WHERE attempt_id=%s",
-                (json.dumps((now()+timedelta(seconds=.5)).isoformat()), attempt['attempt_id']))
-        time.sleep(.8)
+                (json.dumps(initial_lease.isoformat()), attempt['attempt_id']))
+        # Await a real committed heartbeat, rather than assuming CI can renew
+        # and read PostgreSQL inside an artificial half-second lease.
+        renewed.clear()
+        assert renewed.wait(10), 'worker did not commit a lease heartbeat during preparation'
         stored = console._envelope(sid)['processing_attempts'][0]
-        assert datetime.fromisoformat(stored['dispatch']['lease_expires_at']) > now()
+        assert datetime.fromisoformat(stored['dispatch']['lease_expires_at']) > initial_lease
         assert stored['dispatch']['heartbeat_at']
         assert stored['expires_at'] == attempt['expires_at']
         return original(*args, **kwargs)
