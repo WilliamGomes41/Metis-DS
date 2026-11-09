@@ -285,7 +285,7 @@ def test_new_worker_rechecks_authority_and_configuration(tmp_path, production_co
     assert console.snapshot_objects(sid) == []
 
 
-def test_http_one_start_displays_budget_and_reads_do_not_change_it(tmp_path, production_console, monkeypatch):
+def test_http_legacy_budget_remains_while_fresh_source_offers_annotation(tmp_path, production_console, monkeypatch):
     from fastapi.testclient import TestClient
     from tests.production_support import application_for
     console, actor, sid, attempt, calls, bind, elapsed = document(tmp_path,production_console,monkeypatch,reserve=False)
@@ -293,7 +293,9 @@ def test_http_one_start_displays_budget_and_reads_do_not_change_it(tmp_path, pro
         assert client.post('/login',data={'username':'researcher.d54','password':'d54-secret'},follow_redirects=False).status_code == 303
         before = deepcopy(console._envelope(sid))
         page = client.get('/source-selection',params={'document':sid})
-        assert page.status_code == 200 and 'binnen vier uur inclusief wachttijd' in page.text
+        assert page.status_code == 200 and 'Bron openen voor annotatie' in page.text
+        assert 'action="/source-selection/start"' not in page.text
+        assert 'binnen vier uur inclusief wachttijd' not in page.text
         assert console._envelope(sid) == before
         started = client.post('/source-selection/start',data={'document':sid,'command_id':'one-http-start',
             'expected_revision':console.objects_revision(sid)},follow_redirects=False)

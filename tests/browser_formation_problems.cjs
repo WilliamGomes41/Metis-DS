@@ -17,8 +17,14 @@ const fs = require('node:fs');
     }
     await login('author');
     await page.goto(base+'/source-selection?document='+sid);
-    await page.getByRole('button',{name:'Starten',exact:true}).click();
-    await page.waitForURL('**/source-selection?**');
+    await page.getByRole('link',{name:'Bron openen voor annotatie',exact:true}).waitFor();
+    // This scenario checks navigation during an explicitly requested legacy task.
+    // Starting it through the retained HTTP command does not restore an AI UI action.
+    await page.evaluate(async ({sid,revision}) => {
+      const response = await fetch('/source-selection/start',{method:'POST',
+        body:new URLSearchParams({document:sid,expected_revision:revision,command_id:'browser-problems-legacy-start'})});
+      if (!response.ok) throw Error('legacy start rejected: '+response.status);
+    },{sid,revision:process.env.METIS_PROBLEM_REVISION});
     await page.goto(base+'/formation-problems?document='+sid);
     await page.getByRole('heading',{name:'Vorming',exact:true}).waitFor();
     if (new URL(page.url()).pathname !== '/source-selection') throw Error('legacy bookmark did not open Vorming');
