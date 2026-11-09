@@ -132,10 +132,17 @@ waarin het nieuwe diagram niet bestaat. De vaste verwijzingsrevisie is nu
 commit en de nieuwe diagramlink is ook via GitHub opgehaald. Dit is een
 repositoryreferentie, geen claim over de actieve productiedeployment.
 
-De volledige lokale suite vond een productregressie in de nieuwe broncontrole:
-een runtime zonder geconfigureerde strategie zocht vóór de bestaande
-configuratiefout naar een nog niet opgeslagen nieuwe snapshot. De grens
-weigert ontbrekende compositie nu vóór die lookup, met behoud van de bestaande
-human-ownershipcontrole en de stopfence vóór extractie/providerwerk. De bestaande
-fail-first test blijft ongewijzigd. Alle 45 configuratie-, stop- en begrensde
-verwerkingstests slagen na de correctie.
+De volledige lokale suite vond dat de nieuwe broncontrole een nog niet
+opgeslagen nieuwe snapshot kon opvragen. De grens leest nu de bestaande
+snapshotview zonder een afwezige nieuwe bron als opgeslagen werk te behandelen.
+Voor opgeslagen bronnen blijft de stopfence vóór extractie/providerwerk staan.
+De oorspronkelijke volgorde van human-ownership, extractie/pagina-accounting en
+modelconfiguratie blijft behouden. Daarmee blijft zowel de ongewijzigde
+fail-first configuratietest als het vastleggen van onleesbare scanpagina's
+zonder modelconfiguratie geldig. De volledige Docling-contractsuite wordt
+samen met de configuratie-, stop- en begrensde verwerkingstests uitgevoerd;
+de aparte CI-proef verifieert daarnaast de echte PDF/SDK-keten.
+
+De gezamenlijke matrix slaagt met 85 tests, inclusief de bestaande
+scanpagina-/accountingproeven. Geen verwachtingen of extractieregels zijn
+versoepeld om de foutvolgorde te laten slagen.

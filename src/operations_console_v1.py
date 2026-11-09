@@ -2955,13 +2955,13 @@ class OperationsConsole:
         from src.vorming.human_annotation_v1 import owns_source
         if owns_source(self, context.get('snapshot_id')):
             raise ConsoleError('annotation_source_owned')
-        strategy = getattr(self, "_source_processing_strategy", None)
-        if strategy is None:
-            # A new source need not exist yet when composition is missing.
-            raise ConsoleError("source_processing_strategy_unconfigured")
         if context.get('snapshot_id'):
             from src.vorming.prose_transition_v1 import assert_execution
-            assert_execution(self._envelope(context['snapshot_id']))
+            # Synchronous ingest may prepare a new source before registration.
+            # Existing sources retain their authoritative execution fence.
+            envelope = review_envelopes_view(self).get(context['snapshot_id'])
+            if envelope is not None:
+                assert_execution(envelope)
         reuse = context.get("extraction_reuse_summary")
         diagnostic = context.get("diagnostic_checkpoint")
         if reuse is not None and diagnostic:
@@ -2983,6 +2983,9 @@ class OperationsConsole:
             checkpoint(fragments)
             context["retained_fragments"] = fragments
             command["formation_context"] = context
+        strategy = getattr(self, "_source_processing_strategy", None)
+        if strategy is None:
+            raise ConsoleError("source_processing_strategy_unconfigured")
         return strategy.prepare(kind, path, **command)
 
     def _diff_objects(self, previous: list[dict[str, Any]], current: list[dict[str, Any]]) -> dict[str, Any]:
