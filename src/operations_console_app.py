@@ -1396,6 +1396,10 @@ def _unpublished_delete_control(
     snap = str(row.get("snapshot_id") or "")
     if not snap:
         return ""
+    from src.documents.test_document_deletion_ui_v1 import control as test_delete_control
+    test_control = test_delete_control(account, snap, _esc)
+    if test_control:
+        return test_control
     if "uploader_account_id" not in row:
         try:
             row = {**row, "uploader_account_id": console._envelope(snap).get("uploader_account_id")}
@@ -3677,6 +3681,8 @@ def create_console_app(
     install_prose_transition(app, state, _require)
     from src.vorming.human_annotation_ui_v1 import install as install_annotations
     install_annotations(app, state, _require, _page, _nav, _esc, dispatcher=source_dispatcher)
+    from src.documents.test_document_deletion_ui_v1 import install as install_test_document_deletion
+    install_test_document_deletion(app, state, _require, _page, _nav, _esc)
 
     from src.settings.metis_mcp_v1 import install_mcp
     install_mcp(app, state, entra, expected_origin, require_account=_require, render_page=_page, nav=_nav)

@@ -134,6 +134,18 @@ If new work is required, the system MUST create either:
 - a new WorkingRevision from the same SourceSnapshot for an explicit new policy/review context; or
 - a new SourceSnapshot and WorkingRevision for a new source version.
 
+## 5A. Explicit test-data removal exception
+
+During the test/build phase only, `CONSOLE_TEST_DOCUMENT_DELETION=on` permits an
+authorized publisher to remove one explicitly confirmed complete test
+LogicalDocument under [the test deletion contract](../change-contracts/1037-publisher-test-document-deletion.md).
+This is an explicit exception requested by the projectlead on 2026-11-09.
+It does not allow ordinary correction, review, re-extraction or unpublished-delete
+commands to mutate a published release. The kernel owns the atomic workflow /
+canonical / serving removal, immutable deletion receipt and stale-snapshot
+fences. The global review hash chain remains intact. Turning the feature off
+stops new deletions; it never removes existing fences or restores deleted data.
+
 ## 6. Policy upgrade
 
 Given a published active release produced under policy A, installing policy B MUST NOT change that release or reopen its historical WorkingRevision.

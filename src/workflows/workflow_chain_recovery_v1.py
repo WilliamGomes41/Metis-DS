@@ -43,7 +43,7 @@ from src.publication.publication_chain_recovery_v1 import (
     check_chain_integrity,
 )
 
-WORKFLOW_RECOVERY_VERSION = 13  # 13: durable prose execution retirement must survive rollback/restore.
+WORKFLOW_RECOVERY_VERSION = 14  # Deleted test-snapshot fences must survive recovery.
 API_ACCESS_TABLES = tuple(API_ACCESS_COLUMNS)
 _API_ACCESS_ORDER_BY = {
     table: ",".join(columns)
@@ -53,6 +53,8 @@ _API_ACCESS_ORDER_BY = {
 LEGACY_WORKFLOW_RECOVERY_VERSION = 5
 WORKFLOW_TABLES = (
     "accounts",
+    "test_document_deletions",
+    "deleted_test_snapshots",
     "sessions",
     "topics",
     "documents",
@@ -67,6 +69,8 @@ WORKFLOW_TABLES = (
 REFUSALS_ADDED_RECOVERY_VERSION = 6  # last version without workflow.publication_refusals
 
 _WORKFLOW_COLUMNS: dict[str, tuple[str, ...]] = {
+    "test_document_deletions": ("command_id","actor_id","logical_document_id","request_hash","reason","result","recorded_at"),
+    "deleted_test_snapshots": ("snapshot_id","command_id","logical_document_id"),
     "accounts": (
         "account_id", "username", "display_name", "roles", "password_salt",
         "password_hash", "created_at", "retirement",
@@ -113,6 +117,8 @@ _WORKFLOW_COLUMNS: dict[str, tuple[str, ...]] = {
 }
 
 _WORKFLOW_ORDER_BY: dict[str, str] = {
+    "test_document_deletions": "command_id",
+    "deleted_test_snapshots": "snapshot_id",
     "accounts": "account_id",
     "sessions": "token_hash",
     "topics": "identity_key",
@@ -127,6 +133,7 @@ _WORKFLOW_ORDER_BY: dict[str, str] = {
 }
 
 _WORKFLOW_JSON_COLUMNS = {
+    "test_document_deletions": {"result"},
     "documents": {"object_diff", "envelope_payload"},
     "document_objects": {"payload"},
     "review_events": {"details", "event_payload"},
@@ -165,6 +172,23 @@ def _contains_prose_transition(value: Any) -> bool:
 def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:
     """Upgrade legacy workflow recovery state without inventing domain decisions."""
     version = int(state.get("workflow_recovery_version") or 0)
+    deletion_tables = ('test_document_deletions','deleted_test_snapshots')
+    if version != WORKFLOW_RECOVERY_VERSION:
+        tables = state.get('workflow_tables') or {}
+        events = tables.get('review_events') if isinstance(tables, Mapping) else None
+        deletion_event = isinstance(events, list) and any(
+            isinstance(row, Mapping) and (row.get('event_type') == 'test_document_deleted'
+                or isinstance(row.get('event_payload'), Mapping) and row['event_payload'].get('event_type') == 'test_document_deleted')
+            for row in events)
+        if isinstance(tables, Mapping) and (any(tables.get(name) for name in deletion_tables) or deletion_event):
+            raise PublicationChainRecoveryError('workflow_test_deletion_reexport_required')
+        state = deepcopy(dict(state))
+        if isinstance(state.get('workflow_tables'), dict):
+            for name in deletion_tables:
+                state['workflow_tables'].setdefault(name, [])
+        if version == 13:
+            state['workflow_recovery_version'] = WORKFLOW_RECOVERY_VERSION
+            return _upgrade_workflow_state(state)
     if version == WORKFLOW_RECOVERY_VERSION:
         # Current exports always include the complete formation capability.
         # A missing section must not silently discard annotation ownership.
@@ -285,6 +309,19 @@ def _validate_workflow_shape(state: Mapping[str, Any]) -> None:
         raise PublicationChainRecoveryError("workflow_backup_tables_missing:" + ",".join(missing))
     for table in WORKFLOW_TABLES:
         _rows(state, table)
+    for table in ('test_document_deletions','deleted_test_snapshots'):
+        if any(set(row) != set(_WORKFLOW_COLUMNS[table]) for row in _rows(state,table)):
+            raise PublicationChainRecoveryError('workflow_test_deletion_columns_invalid:'+table)
+        text_columns = set(_WORKFLOW_COLUMNS[table]) - {'result'}
+        for row in _rows(state,table):
+            if any(not isinstance(row[key],str) or not row[key] for key in text_columns):
+                raise PublicationChainRecoveryError('workflow_test_deletion_value_invalid:'+table)
+            if table == 'test_document_deletions':
+                result = row['result']
+                ids = result.get('snapshot_ids') if isinstance(result,dict) else None
+                if (not isinstance(ids,list) or not ids or any(not isinstance(sid,str) or not sid for sid in ids)
+                        or len(ids) != len(set(ids))):
+                    raise PublicationChainRecoveryError('workflow_test_deletion_receipt_invalid')
     from src.workflows.formation_recovery_v1 import validate
     validate(state)
     _audit_entries_from_state(state)
@@ -377,6 +414,25 @@ def check_workflow_integrity(state: Mapping[str, Any]) -> dict[str, Any]:
         return {"ok": False, "errors": [str(exc)]}
 
     accounts = {str(row.get("account_id") or "") for row in _rows(state, "accounts")}
+    deletions = {r['command_id']:r for r in _rows(state,'test_document_deletions')}
+    deleted = _rows(state,'deleted_test_snapshots')
+    present = {r['snapshot_id'] for r in _rows(state,'documents')}
+    source_ids = {r['snapshot_id'] for r in state.get('tables', {}).get('source_snapshots', [])}
+    if len(deletions) != len(_rows(state,'test_document_deletions')) or len({r['snapshot_id'] for r in deleted}) != len(deleted):
+        errors.append('workflow_test_deletion_duplicate')
+    for row in deleted:
+        owner = deletions.get(row['command_id'])
+        if owner is None or row['logical_document_id'] != owner['logical_document_id']:
+            errors.append('workflow_test_deletion_reference_invalid')
+        if row['snapshot_id'] in present or row['snapshot_id'] in source_ids:
+            errors.append('workflow_test_deleted_snapshot_present')
+    for key, row in deletions.items():
+        result = row['result']
+        if (row['actor_id'] not in accounts or not row['logical_document_id'] or not str(row['reason']).strip()
+                or not isinstance(result,dict) or result.get('deleted') is not True
+                or result.get('command_id') != key or result.get('logical_document_id') != row['logical_document_id']
+                or set(result.get('snapshot_ids') or []) != {r['snapshot_id'] for r in deleted if r['command_id']==key}):
+            errors.append('workflow_test_deletion_receipt_invalid')
     if "" in accounts:
         errors.append("workflow_account_id_missing")
     retired = set()
@@ -495,6 +551,10 @@ def check_workflow_integrity(state: Mapping[str, Any]) -> dict[str, Any]:
             errors.append(f"workflow_review_hash_invalid:{row.get('event_id')}")
         if payload.get("previous_event_hash") != previous or row.get("previous_event_hash") != previous:
             errors.append(f"workflow_review_chain_invalid:{row.get('event_id')}")
+        if payload.get('event_type') == 'test_document_deleted':
+            owner = deletions.get((payload.get('details') or {}).get('command_id'))
+            if owner is None or owner['logical_document_id'] != (payload.get('details') or {}).get('logical_document_id'):
+                errors.append('workflow_test_deletion_ledger_reference_missing')
         previous = event_hash
         actor_id = str(row.get("actor_account_id") or "")
         if actor_id and actor_id not in accounts:
@@ -746,6 +806,9 @@ class PostgresWorkflowRecoveryAdapter(PostgresPublicationBackupAdapter):
                             con, schema="workflow", table="entra_identities", rows=state["entra_identities"],
                             columns=("tenant_id", "object_id", "account_id", "blocked", "evidence"), json_columns={"evidence"},
                         )
+                    for table in ('test_document_deletions','deleted_test_snapshots'):
+                        _insert_rows(con,schema='workflow',table=table,rows=workflow_rows[table],
+                            columns=_WORKFLOW_COLUMNS[table],json_columns=_WORKFLOW_JSON_COLUMNS.get(table,set()))
                     # No Entra handshake/session markers restored: fresh sign-in required.
                     _insert_rows(
                         con, schema="workflow", table="sessions", rows=workflow_rows["sessions"],
