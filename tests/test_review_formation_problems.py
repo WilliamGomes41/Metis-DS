@@ -279,6 +279,7 @@ def test_real_browser_navigation_and_raad_read_only(tmp_path, production_console
         assert server.started
         marker = tmp_path / 'navigated'
         env = dict(os.environ, METIS_BROWSER_BASE=origin, METIS_PROBLEM_DOCUMENT=sid,
+            METIS_PROBLEM_REVISION=console.objects_revision(sid),
             METIS_PROBLEM_NAVIGATED=str(marker), METIS_PROBLEM_SCREENSHOT=str(tmp_path/'problems.png'))
         process = subprocess.Popen(['node', 'tests/browser_formation_problems.cjs'],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)

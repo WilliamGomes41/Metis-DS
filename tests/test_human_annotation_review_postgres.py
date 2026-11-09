@@ -570,6 +570,31 @@ def test_structural_dependency_does_not_revoke_an_unchanged_claim_review(product
     assert [b for b in console.object_review_bindings(sid) if b['object_id'] == first_id] == first_binding
 
 
+@pytest.mark.parametrize('klasse,target', [('beslisboom','/source-selection'), ('richtlijn','/annotations')])
+def test_upload_entry_follows_source_class(production_console, tmp_path, klasse, target):
+    import fitz
+    from starlette.testclient import TestClient
+    from tests.production_support import application_for
+    console = production_console(root=tmp_path)
+    console.create_account(username='tree-author', password='tree-author-secret', roles=('researcher','reviewer'))
+    with fitz.open() as pdf:
+        pdf.new_page().insert_text((72,72), 'Brontekst voor menselijke annotatie.')
+        data = pdf.tobytes()
+    with TestClient(application_for(console)) as client:
+        client.post('/login', data={'username':'tree-author', 'password':'tree-author-secret'})
+        response = client.post('/ingest', data={'ingest_kind':'new','title':'Bron',
+            'version':'1.0','date':'2026-11-09','class_':klasse,'family':'test',
+            'review_mode':'choice','review_option':'uploader_sole'},
+            files={'file':('source.pdf', data, 'application/pdf')},
+            follow_redirects=False)
+        assert response.status_code == 303, response.text
+        assert response.headers['location'].startswith(target+'?document=')
+        page = client.get(response.headers['location'])
+        assert page.status_code == 200
+        assert ('action="/source-selection/start"' in page.text) == (klasse == 'beslisboom')
+        assert ('Bron openen voor annotatie' in page.text) == (klasse != 'beslisboom')
+
+
 def test_full_http_upload_pause_correction_build_review_publish_api_mcp_chain(production_console, tmp_path):
     from time import monotonic, sleep
     from urllib.parse import urlsplit, parse_qs
@@ -591,7 +616,17 @@ def test_full_http_upload_pause_correction_build_review_publish_api_mcp_chain(pr
             'version':'1.0','date':'2026-11-08','class_':'richtlijn','family':'test','review_mode':'choice',
             'review_option':'uploader_sole','source_status':'established'}, files={'file':('human.html',html.encode(),'text/html')})
         assert uploaded.status_code == 200, uploaded.text
+        assert urlsplit(str(uploaded.url)).path == '/annotations'
+        assert 'Bron openen voor annotatie' in uploaded.text
         sid = parse_qs(urlsplit(str(uploaded.url)).query)['document'][0]
+        for response in (client.get(str(uploaded.url)), client.get('/source-selection', params={'document':sid})):
+            assert response.status_code == 200, response.text
+            assert 'Bron openen voor annotatie' in response.text
+            assert 'action="/source-selection/start"' not in response.text
+        with console.workflow_document_store._connect() as con:
+            assert con.execute('SELECT count(*) AS n FROM workflow.processing_attempts WHERE snapshot_id=%s', (sid,)).fetchone()['n'] == 0
+            assert con.execute('SELECT count(*) AS n FROM workflow.annotation_sets WHERE snapshot_id=%s', (sid,)).fetchone()['n'] == 0
+        assert console.snapshot_objects(sid, include_blocked=True) == []
         opened = client.post('/annotations/source', data={'document':sid,'expected_revision':console.objects_revision(sid)})
         assert opened.status_code == 200
         view = client.get('/annotations/api', params={'document':sid}).json()

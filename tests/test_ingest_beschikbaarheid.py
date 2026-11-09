@@ -165,7 +165,7 @@ def test_ingest_work_does_not_block_event_loop(tmp_path: Path, *, production_app
         assert ping.status_code == 200
         assert elapsed < 0.25, f"lightweight request waited {elapsed:.3f}s; event loop was blocked"
         assert ingest_response.status_code == 303
-        assert ingest_response.headers["location"].startswith("/source-selection?document=")
+        assert ingest_response.headers["location"].startswith("/annotations?document=")
 
     asyncio.run(_run())
 
@@ -262,6 +262,6 @@ def test_two_users_overlap_ingest_and_other_request(tmp_path: Path, *, productio
         assert "documentenhierarchie" not in other.text.lower()
         assert elapsed < 0.25, f"second user waited {elapsed:.3f}s during overlapping ingest"
         assert ingest_response.status_code == 303
-        assert ingest_response.headers["location"].startswith("/source-selection?document=")
+        assert ingest_response.headers["location"].startswith("/annotations?document=")
 
     asyncio.run(_run())

@@ -97,7 +97,9 @@ def install(app, console, require, page, nav, esc, *, dispatcher):
         if not domain.owns_source(console, document):
             hidden = '<input type="hidden" name="document" value="'+esc(document)+'">'
             hidden += '<input type="hidden" name="expected_revision" value="'+esc(console.objects_revision(document))+'">'
+            notice = '<div class="banner ok" role="status">Document veilig ontvangen. Open de bron om te annoteren.</div>' if request.query_params.get('received') == 'yes' else ''
             return HTMLResponse(page(nav(actor,'selection')+'<section class="room"><h1>Bron aanwijzen</h1><h2>'+esc(envelope['title'])+'</h2>'
+                +notice+
                 '<p>Open de vastgelegde bron om uitspraken, voorwaarden, uitzonderingen en onderbouwing aan te wijzen. Je kunt concepten opslaan en later hervatten.</p>'
                 '<p>Annoteren geeft geen goedkeuring. De bij ontvangst gekozen beoordeling blijft gelden.</p>'
                 '<form method="post" action="/annotations/source">'+hidden+'<button class="btn-primary" type="submit">Bron openen voor annotatie</button></form></section>',title='Bron aanwijzen'),headers={'Cache-Control':'no-store'})

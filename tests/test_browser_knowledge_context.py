@@ -60,7 +60,7 @@ def test_desktop_mobile_review_context_exact_revision_and_separate_paths(tmp_pat
                 pytest.fail((tmp_path/'server.log').read_text())
             subprocess.run([env.get('METIS_BROWSER_NODE', 'node'), str(root/'tests'/script)],
                            env=env, cwd=root, check=True, timeout=90)
-            expected_screenshots = {'browser_human_annotation_check.cjs':3,
+            expected_screenshots = {'browser_human_annotation_check.cjs':5,
                                     'browser_human_build_check.cjs':10}.get(script,6)
             assert len(list(tmp_path.glob('*.png'))) == expected_screenshots
         finally:

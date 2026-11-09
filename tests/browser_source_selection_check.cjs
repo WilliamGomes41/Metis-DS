@@ -25,12 +25,13 @@ const fs = require('fs');
   await page.locator('[name=family]').fill('fixture');
   await page.locator('[name=review_option][value=one_other]').check();
   await page.locator('[name=review_reviewers]').selectOption(manifest.reviewer);
-  await Promise.all([page.waitForURL('**/source-selection?**'), page.locator('#ingest-submit').click()]);
+  await Promise.all([page.waitForURL('**/annotations?**'), page.locator('#ingest-submit').click()]);
   const sid = new URL(page.url()).searchParams.get('document');
-  if (await page.locator('select[name=document]').inputValue()!==sid) throw Error('selected document');
-  await page.getByRole('button',{name:'Starten',exact:true}).waitFor();
-  if (!(await page.locator('[role=status]').allTextContents()).some(t=>t.includes('nog niet gestart'))) throw Error('receipt auto-started');
+  const revision = await page.locator('form[action="/annotations/source"] [name=expected_revision]').inputValue();
+  await page.getByRole('button',{name:'Bron openen voor annotatie',exact:true}).waitFor();
+  if (await page.locator('form[action="/source-selection/start"]').count()) throw Error('receipt offers AI start');
   await page.screenshot({path:output+'/received.png',fullPage:true});
+  await page.goto(base+'/source-selection?document='+sid);
   await page.getByRole('link',{name:'Bekijk diagnose in Inzicht',exact:true}).click();
   await page.getByRole('heading',{name:'Oordeel',exact:true}).waitFor();
   const diagnosisURL = new URL(page.url());
@@ -58,8 +59,14 @@ const fs = require('fs');
   await page.setViewportSize({width:1440,height:1000});
   await page.goto(base+'/source-selection?document='+sid);
   await page.reload();
-  await page.getByRole('button',{name:'Starten',exact:true}).click();
-  await page.waitForURL('**/source-selection?**');
+  await page.getByRole('link',{name:'Bron openen voor annotatie',exact:true}).waitFor();
+  // Exercise the retained legacy command explicitly; fresh-upload UI offers annotation.
+  await page.evaluate(async ({sid,revision}) => {
+    const response = await fetch('/source-selection/start',{method:'POST',
+      body:new URLSearchParams({document:sid,expected_revision:revision,command_id:'browser-legacy-start'})});
+    if (!response.ok) throw Error('legacy start rejected: '+response.status);
+  },{sid,revision});
+  await page.goto(base+'/source-selection?document='+sid);
   await page.getByRole('link',{name:'Naar Review',exact:true}).waitFor({timeout:15000});
   await page.screenshot({path:output+'/formed.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});
