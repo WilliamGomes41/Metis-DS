@@ -68,3 +68,32 @@ lees-, review- en servingroutes en de deploytopologie blijven gelijk.
   Systeminstallatie van PostgreSQL kon niet via sudo: sudo ontbreekt. De
   bestaande native/full-suite-CI blijft nodig vóór merge; er is geen
   productieomgeving aangepast.
+
+## CI-herstel: karakterisatie mag geen command-ID-generator achterlaten
+
+Na het bijwerken van de branch naar main wees de PR-overdracht nog naar de
+oude head. Die verwijzing wordt bij elke nieuwe head opnieuw bijgewerkt.
+De volledige suite bracht daarnaast een bestaand fixturelek aan het licht:
+de karakterisatie bevriest tijdelijk de gedeelde `uuid.uuid4`. Als de eerste
+appstart onder die freeze de annotatieroute importeert, bindt diens
+`from uuid import uuid4` de tijdelijke constante blijvend. Na fixtureteardown
+krijgen afsluitformulieren dan dezelfde command-ID. De bestaande idempotentie-
+controle weigert terecht een nieuwe afsluiting met andere input als HTTP 409.
+
+Reproductie: de volledige HTTP-ketentest slaagt alleen, maar faalt na
+`test_review_overview_golden[guideline_index]` in hetzelfde proces. Een nieuwe
+regressietest in een frisse interpreter toont dezelfde ontsnapte UUID-freeze.
+De fixture importeert de lazily geladen annotatieroute nu vóór de freeze;
+productcode, idempotentie, reviewregels en gouden uitvoer blijven ongewijzigd.
+Beide reproducties zijn na deze testisolatiefix groen. De gerichte reeks met
+de nieuwe regressie, helper, documentreferenties, releasecontrole en
+architectuurinvarianten geeft 48 passed en 21 subtests passed.
+
+Voor deze diagnose zijn officiële Ubuntu PostgreSQL 16.15- en ICU-pakketten
+alleen in de workspace uitgepakt. De bestaande teststarter draait daarmee
+een lokale wegwerpdatabase; er is geen systeem- of productiedatabase aangepast.
+Dat maakt de oorspronkelijke native HTTP-reproductie hier uitvoerbaar.
+De volledige karakterisatiereeks gevolgd door de native correctie- en
+bouwmodules slaagt nu in hetzelfde proces: **93 passed**, geen skips,
+131,49 seconden. Daarmee is ook de oorspronkelijke CI-volgorde daadwerkelijk
+getoetst; de complete repositorysuite blijft afzonderlijk GitHub-CI-bewijs.

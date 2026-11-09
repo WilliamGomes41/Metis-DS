@@ -40,6 +40,10 @@ def offline_clock(monkeypatch):
     import src.vorming.source_selection_v1 as selection
     import src.vorming.attempt_diagnostics_v1 as diagnostics
     import src.vorming.processing_trace_v1 as trace
+    # build_app loads this route lazily. Import before freezing the shared UUID
+    # module so its `from uuid import uuid4` binds the real generator rather
+    # than retaining this fixture's constant after monkeypatch restores uuid.
+    import src.vorming.human_annotation_ui_v1  # noqa: F401
 
     stamp = "2026-10-17T08:00:00+00:00"
     monkeypatch.setattr(op, "utc_now", lambda: stamp)
