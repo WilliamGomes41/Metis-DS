@@ -47,3 +47,32 @@ CREATE TRIGGER refuse_deleted_test_document BEFORE INSERT ON workflow.documents
 DROP TRIGGER IF EXISTS refuse_deleted_test_source ON public.source_snapshots;
 CREATE TRIGGER refuse_deleted_test_source BEFORE INSERT ON public.source_snapshots
     FOR EACH ROW EXECUTE FUNCTION workflow.refuse_deleted_test_snapshot();
+
+-- Older backup exporters still retain the global review ledger. Its deletion
+-- event must never be restored without the receipt and every snapshot fence.
+-- Deferred checking also supports the existing one-transaction empty-target
+-- restore; an older reader which omits these tables cannot commit its import.
+CREATE OR REPLACE FUNCTION workflow.guard_test_deletion_ledger() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+BEGIN
+    IF NEW.event_type='test_document_deleted' OR NEW.event_payload->>'event_type'='test_document_deleted' THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM workflow.test_document_deletions d
+            WHERE d.command_id=NEW.event_payload#>>'{details,command_id}'
+              AND d.logical_document_id=NEW.event_payload#>>'{details,logical_document_id}'
+              AND jsonb_typeof(d.result->'snapshot_ids')='array'
+              AND jsonb_array_length(d.result->'snapshot_ids')>0
+              AND NOT EXISTS (
+                  SELECT 1 FROM jsonb_array_elements_text(d.result->'snapshot_ids') AS ids(snapshot_id)
+                  LEFT JOIN workflow.deleted_test_snapshots s ON s.snapshot_id=ids.snapshot_id
+                  WHERE s.snapshot_id IS NULL OR s.command_id<>d.command_id
+                     OR s.logical_document_id<>d.logical_document_id
+              )
+        ) THEN RAISE EXCEPTION 'test_document_deletion_recovery_required'; END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS guard_test_deletion_ledger ON workflow.review_events;
+CREATE CONSTRAINT TRIGGER guard_test_deletion_ledger AFTER INSERT OR UPDATE ON workflow.review_events
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION workflow.guard_test_deletion_ledger();

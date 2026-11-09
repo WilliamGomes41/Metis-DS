@@ -175,7 +175,12 @@ def _upgrade_workflow_state(state: Mapping[str, Any]) -> dict[str, Any]:
     deletion_tables = ('test_document_deletions','deleted_test_snapshots')
     if version != WORKFLOW_RECOVERY_VERSION:
         tables = state.get('workflow_tables') or {}
-        if isinstance(tables, Mapping) and any(tables.get(name) for name in deletion_tables):
+        events = tables.get('review_events') if isinstance(tables, Mapping) else None
+        deletion_event = isinstance(events, list) and any(
+            isinstance(row, Mapping) and (row.get('event_type') == 'test_document_deleted'
+                or isinstance(row.get('event_payload'), Mapping) and row['event_payload'].get('event_type') == 'test_document_deleted')
+            for row in events)
+        if isinstance(tables, Mapping) and (any(tables.get(name) for name in deletion_tables) or deletion_event):
             raise PublicationChainRecoveryError('workflow_test_deletion_reexport_required')
         state = deepcopy(dict(state))
         if isinstance(state.get('workflow_tables'), dict):
@@ -307,6 +312,16 @@ def _validate_workflow_shape(state: Mapping[str, Any]) -> None:
     for table in ('test_document_deletions','deleted_test_snapshots'):
         if any(set(row) != set(_WORKFLOW_COLUMNS[table]) for row in _rows(state,table)):
             raise PublicationChainRecoveryError('workflow_test_deletion_columns_invalid:'+table)
+        text_columns = set(_WORKFLOW_COLUMNS[table]) - {'result'}
+        for row in _rows(state,table):
+            if any(not isinstance(row[key],str) or not row[key] for key in text_columns):
+                raise PublicationChainRecoveryError('workflow_test_deletion_value_invalid:'+table)
+            if table == 'test_document_deletions':
+                result = row['result']
+                ids = result.get('snapshot_ids') if isinstance(result,dict) else None
+                if (not isinstance(ids,list) or not ids or any(not isinstance(sid,str) or not sid for sid in ids)
+                        or len(ids) != len(set(ids))):
+                    raise PublicationChainRecoveryError('workflow_test_deletion_receipt_invalid')
     from src.workflows.formation_recovery_v1 import validate
     validate(state)
     _audit_entries_from_state(state)
@@ -536,6 +551,10 @@ def check_workflow_integrity(state: Mapping[str, Any]) -> dict[str, Any]:
             errors.append(f"workflow_review_hash_invalid:{row.get('event_id')}")
         if payload.get("previous_event_hash") != previous or row.get("previous_event_hash") != previous:
             errors.append(f"workflow_review_chain_invalid:{row.get('event_id')}")
+        if payload.get('event_type') == 'test_document_deleted':
+            owner = deletions.get((payload.get('details') or {}).get('command_id'))
+            if owner is None or owner['logical_document_id'] != (payload.get('details') or {}).get('logical_document_id'):
+                errors.append('workflow_test_deletion_ledger_reference_missing')
         previous = event_hash
         actor_id = str(row.get("actor_account_id") or "")
         if actor_id and actor_id not in accounts:

@@ -20,6 +20,7 @@ CANONICAL_TABLES = ('source_snapshots', 'canonical_object_versions', 'canonical_
 DELETE_TABLES = tuple('public.' + name for name in CANONICAL_TABLES) + (
     'workflow.documents', 'workflow.publication_refusals', 'workflow.view_checks')
 TRIGGERS = {('workflow.documents', 'refuse_deleted_test_document'),
+            ('workflow.review_events', 'guard_test_deletion_ledger'),
             ('source_snapshots', 'refuse_deleted_test_source')}
 
 

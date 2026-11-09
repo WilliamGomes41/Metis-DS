@@ -113,6 +113,10 @@ history, canonical sharing, feature disable/rollback and backup import.
 - Native pre-deletion backup restoration recovered the publication; post-delete
   backup restoration preserved absence and fences. Relabelling deletion-bearing
   state as an older recovery version is rejected by the current reader.
+- An older exporter can omit newly introduced tables. The existing global
+  deletion-ledger event now also identifies that missing capability. A deferred
+  SQL guard refuses an old restore which imports the event without its receipt
+  and every fence, even if that reader predates the current Python validator.
 - A deliberate test-mode bypass in an isolated disposable checkout caused the
   actual published-document deletion denial test to fail with DID NOT RAISE.
   The faulty copy was removed; no mutation entered the delivered branch.

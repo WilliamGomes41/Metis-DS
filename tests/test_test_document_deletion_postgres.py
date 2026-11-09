@@ -261,8 +261,15 @@ def test_current_backup_preserves_deleted_snapshot_fences_and_predelete_backup_r
     assert check_workflow_integrity(after_state)['ok']
     old = deepcopy(after_state);old['workflow_recovery_version'] = 13
     assert check_workflow_integrity(old)['errors'] == ['workflow_test_deletion_reexport_required']
+    for table in ('test_document_deletions','deleted_test_snapshots'):
+        old['workflow_tables'].pop(table)
+    # An old exporter omits the new tables, but still exports the ledger marker.
+    assert check_workflow_integrity(old)['errors'] == ['workflow_test_deletion_reexport_required']
     malformed = deepcopy(after_state);malformed['workflow_tables']['deleted_test_snapshots'] = []
     assert 'workflow_test_deletion_receipt_invalid' in check_workflow_integrity(malformed)['errors']
+    malformed = deepcopy(after_state)
+    malformed['workflow_tables']['test_document_deletions'][0]['result']['snapshot_ids'] = 1
+    assert check_workflow_integrity(malformed)['errors'] == ['workflow_test_deletion_receipt_invalid']
     after = tmp_path/'after-delete.zip'
     backup_workflow_chain(after,database=adapter,source_store=blobs)
     for archive in (after,before):
@@ -282,6 +289,19 @@ def test_current_backup_preserves_deleted_snapshot_fences_and_predelete_backup_r
                 assert target_store.active_publication_rows() == rows_before
                 assert restored['workflow_tables']['documents'][0]['snapshot_id'] == sid
                 assert restored['workflow_tables']['deleted_test_snapshots'] == []
+    # Even a reader older than the current validator cannot commit its SQL
+    # restore of that ledger event while silently omitting deletion authority.
+    import psycopg
+    from psycopg.types.json import Jsonb
+    event = next(r for r in after_state['workflow_tables']['review_events'] if r['event_type']=='test_document_deleted')
+    with database(console.workflow_document_store.config.dsn) as config:
+        install_schema(config.dsn)
+        with pytest.raises(psycopg.Error,match='test_document_deletion_recovery_required'):
+            with psycopg.connect(config.dsn) as con:
+                con.execute('INSERT INTO workflow.review_events(object_id,object_version,event_type,occurred_at,details,'
+                    'previous_event_hash,event_hash,actor_text,event_payload) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)',
+                    (event['object_id'],event['object_version'],event['event_type'],event['occurred_at'],
+                     Jsonb(event['details']),event['previous_event_hash'],event['event_hash'],event['actor_text'],Jsonb(event['event_payload'])))
 
 
 @pytest.mark.parametrize('guard,code', [('role','publisher_role_required'), ('mode','test_document_deletion_disabled'),

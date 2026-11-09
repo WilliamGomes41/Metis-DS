@@ -33,6 +33,9 @@ De SQL-fences blijven actief na uitschakelen van de functie of terugrollen van
 applicatiecode. Workflowbackup 14 neemt de registraties op. Een oude archivevorm
 met nieuwe verwijdergegevens wordt geweigerd; een expliciet oudere back-up mag
 alleen via de bestaande lege-doelprocedure worden hersteld.
+Ook een oudere exporter bewaart het globale verwijder-event. De huidige lezer
+herkent daarmee ontbrekende nieuwe tabellen; een uitgestelde databasecontrole
+weigert de import van dat event zonder bijbehorende receipt en snapshotfences.
 
 ## Installeren en later uitschakelen
 

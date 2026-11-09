@@ -47,6 +47,7 @@ MIGRATION_NAMES = (
     "039_test_document_deletion.sql",
 )
 REQUIRED_TRIGGERS = frozenset({
+    ("review_events", "guard_test_deletion_ledger"),
     ("public.source_snapshots", "refuse_deleted_test_source"),
     ("documents", "refuse_deleted_test_document"),
     ("test_document_deletions", "guard_test_deletion_history"),
