@@ -140,7 +140,9 @@ def test_code_rollback_rebuilds_copies_and_preserves_pg_and_product_api(complete
             # never interpret this legacy scenario as a rollback of proof-v3.
             state = outcome['state']
             if name == 'current':
-                assert state.pop('workflow_recovery_version') == 12
+                assert state.pop('workflow_recovery_version') == 13
+                assert all(not row['envelope_payload'].get('prose_transitions')
+                           for row in raw['state']['workflow_tables']['documents'])
                 # v12 now exports the complete existing decision payload. The
                 # pinned v7 binary cannot export this column. Validate it
                 # independently before comparing their common projection.

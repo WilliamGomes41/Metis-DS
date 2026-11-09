@@ -175,8 +175,11 @@ def test_restore_retains_stop_and_requires_capable_storage(tmp_path, production_
     from tests.production_support import production_application
     monkeypatch.setenv('METIS_DOCUMENT_INPUT_STORAGE', layout)
     console, actor, sid, attempt, calls, bind = setup_command(tmp_path, production_console, monkeypatch)
-    receipt = transition.stop(console, **request(console, actor, sid, attempt))
     source = PostgresWorkflowRecoveryAdapter(PostgresCanonicalPublicationStore(console.workflow_document_store.config))
+    legacy = source.export_state()
+    legacy['workflow_recovery_version'] = 12
+    assert _upgrade_workflow_state(legacy) == {**legacy, 'workflow_recovery_version': 13}
+    receipt = transition.stop(console, **request(console, actor, sid, attempt))
     archive = source.export_state()
     for version in (7, 11, 12):
         with pytest.raises(PublicationChainRecoveryError, match='workflow_prose_transition_reexport_required'):

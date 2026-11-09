@@ -113,3 +113,15 @@ Compositiediagram en uitleg bijgewerkt in
 `docs/architecture/prose-transition-1017.md` en de AI-uitleg van
 `src/settings/metis_explained_content.py`. De bestaande presentatie is behouden;
 er is geen nieuw formulier of automatische uitvoerhandeling toegevoegd.
+
+Aanvullend bewijs: 111 tests voor contractwissels en native databasecontroles
+slagen met lokaal `psql`; 12 tests voor code-rollback, legacy upgrades en
+herstelformaat slagen. De vaste verwachtingen voor het actuele herstelformaat
+zijn versie 13; historische inputversies blijven staan. Een versie-12-archief
+zonder stopbewijs wordt in beide layouts exact opgewaardeerd.
+
+Chromium: 13 tests (12 stop/herstel plus de bestaande browserproef gericht op
+de AI-modeluitleg) slagen. Acht screenshots op 1440/390 px, licht/donker,
+toetsenbordnavigatie en JavaScript-uitval zijn gecontroleerd; de AI-uitleg op
+beide breedtes is visueel bekeken. Geen overflow of nieuwe pagina-indeling.
+Screenshots zijn tijdelijke technische bewijsartefacten, geen productiebeeld.
