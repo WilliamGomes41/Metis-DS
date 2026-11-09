@@ -6,6 +6,13 @@ menselijke werklast. HA-2a is evenmin de volledige upload-tot-API/MCP-ketenproef
 Het [technische HA-3-bewijs](../change-contracts/1016-human-annotation-review-evidence.md)
 vervangt deze toets niet.
 
+HA-4 is op 9 november 2026 gestart met een
+[versiegebonden overgangsinventaris](../change-contracts/1017-human-annotation-transition.md)
+op main `c985eaf376f4c686851f198f526510ca32e98b9e` (HA-3 gemerged).
+De inventaris bevat de oude ingangen, behouden helpers en bewijslezers,
+overgangsvolgorde en ontbrekende praktijkinvoer. Er is nog geen cutover of
+praktijkmeting uitgevoerd; onderstaande voorbereiding blijft open.
+
 ## Vastleggen vóór deelname
 
 | Gegeven | Vereiste vastlegging | Huidige status |
