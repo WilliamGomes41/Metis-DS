@@ -75,7 +75,8 @@ Failure blast radius: one confirmed stored LogicalDocument; table locks are shor
 Adversarial proof matrix: wrong/revoked role, mode off, missing confirmation, changed version/release membership, running legacy/operational attempts, shared release/source ownership, rollback after partial SQL, exact duplicate/conflicting commands, concurrent publication/ingest, stale direct snapshot inserts, restart/reconciliation and current/legacy recovery exports.
 
 Lock order: existing local kernel store lock, publisher account row, workflow
-documents table write lock, canonical logical-publication advisory lock 2110023,
+documents table write lock, operational processing-attempt table write lock
+with NOWAIT, canonical logical-publication advisory lock 2110023,
 then canonical tables in their normal publication write order. The workflow
 table lock excludes concurrent lineage inserts; canonical locks serialize
 direct/legacy writers too. No heavy extraction or Blob I/O occurs inside this
@@ -132,6 +133,17 @@ history, canonical sharing, feature disable/rollback and backup import.
   blocked until migration 001 and the source fence are present. Rerunning 039
   installs the fence once lineage exists. The deferred ledger guard is queued
   only for deletion events, preserving the normal review write path.
+- Independent review exposed a processing-start race: a document table lock
+  does not block the attempt trigger's row lock. A real second SQL session
+  reproduced a committed running attempt after inventory. Deletion now locks
+  the operational attempt writer boundary before inventory; NOWAIT refuses an
+  already-active writer without reversing its row-lock order. The late writer
+  is blocked and cannot commit against the deleted document; an earlier writer
+  survives a refused deletion with publication and receipts unchanged.
+- The workflow-only proof now uses the actual apply/verify operation, not just
+  executing migration SQL. Normal verification conditionally requires the
+  source fence when its canonical table exists; deletion preflight always
+  requires all fences. Both review findings were first reproduced red.
 
 Source files and the global hash chain are intentionally retained, as disclosed
 in the confirmation. Full suite/CI outcomes remain required before release.

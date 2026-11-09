@@ -19,6 +19,7 @@ MESSAGES = {
     'delete_title_confirmation_required':'Typ de documenttitel exact over.',
     'test_document_deletion_plan_changed':'Het document is gewijzigd. Controleer de bijgewerkte versies en publicaties en bevestig opnieuw.',
     'test_document_deletion_processing_running':'Er loopt nog een verwerking. Stop die verwerking voordat je het testdocument verwijdert.',
+    'test_document_deletion_busy':'Er worden tegelijk verwerkingsgegevens opgeslagen. Probeer het verwijderen opnieuw zodra dat klaar is.',
     'test_document_deletion_shared_release':'Een publicatie verwijst ook naar andere gegevens. De beheerder moet dit eerst onderzoeken.',
     'test_document_deletion_cross_lineage_successor':'Een andere documentlijn verwijst naar deze versie. De beheerder moet dit eerst onderzoeken.',
     'test_document_deletion_lineage_required':'De documentlijn is niet vastgelegd. De beheerder moet dit eerst onderzoeken.',

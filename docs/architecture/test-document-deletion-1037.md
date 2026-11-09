@@ -10,7 +10,7 @@ flowchart TD
     UI[Documenten: publisher] --> PREVIEW[Alle versies en publicaties tonen]
     PREVIEW --> CONFIRM[Titel, reden en testgegevens bevestigen]
     CONFIRM --> KERNEL[Kernel: rol, testmodus en actuele scope toetsen]
-    KERNEL --> LOCK[Document- en publicatieautoriteiten vergrendelen]
+    KERNEL --> LOCK[Document-, taak- en publicatieautoriteiten vergrendelen]
     LOCK --> TX[Een PostgreSQL-transactie]
     TX --> RECEIPT[Append-only verwijderregistratie en snapshotfences]
     TX --> WORK[Documentlijn en bijbehorende workflowrijen verwijderen]
@@ -28,6 +28,9 @@ Een gemengde publicatie of een verwijzing vanuit een andere documentlijn wordt
 geweigerd. Lopende verwerking moet eerst gestopt zijn. Een gewijzigd voorstel
 vraagt opnieuw bevestiging. Eenzelfde command ID met dezelfde inhoud geeft
 dezelfde opgeslagen uitkomst; afwijkende inhoud conflicteert.
+De korte SQL-transactie sluit ook gelijktijdige starts van operationele taken
+uit. Bij een al actieve schrijver weigert verwijderen direct; de bestaande
+verwerking behoudt haar gegevens en de publisher kan later opnieuw proberen.
 
 De SQL-fences blijven actief na uitschakelen van de functie of terugrollen van
 applicatiecode. Workflowbackup 14 neemt de registraties op. Een oude archivevorm

@@ -263,8 +263,9 @@ def observe_schema(connection: Any) -> dict[str, Any]:
             "SELECT current_database() AS database, current_user AS user"
         ).fetchone()
         table_rows = connection.execute(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_schema='workflow' AND table_type='BASE TABLE'"
+            "SELECT CASE WHEN table_schema='public' THEN 'public.'||table_name ELSE table_name END AS table_name "
+            "FROM information_schema.tables WHERE table_type='BASE TABLE' AND "
+            "(table_schema='workflow' OR (table_schema='public' AND table_name='source_snapshots'))"
         ).fetchall()
         column_rows = connection.execute(
             "SELECT table_name,column_name FROM information_schema.columns "
@@ -301,7 +302,10 @@ def observe_schema(connection: Any) -> dict[str, Any]:
     }
     missing_constraints = sorted(spec[1] for spec in REQUIRED_CONSTRAINTS if spec not in present_constraints)
     present_triggers = {(str(row['table_name']), str(row['trigger_name'])) for row in trigger_rows}
-    missing_triggers = sorted(f'{table}.{trigger}' for table, trigger in REQUIRED_TRIGGERS - present_triggers)
+    required_triggers = REQUIRED_TRIGGERS
+    if 'public.source_snapshots' not in tables:
+        required_triggers = required_triggers - {('public.source_snapshots', 'refuse_deleted_test_source')}
+    missing_triggers = sorted(f'{table}.{trigger}' for table, trigger in required_triggers - present_triggers)
     return {
         "status": "PASS" if not missing_tables and not missing_columns and not missing_constraints and not missing_triggers else "BLOCKED",
         "missing_triggers": missing_triggers,

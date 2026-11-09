@@ -28,30 +28,25 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_test_reset_migration_keeps_workflow_only_installation_usable_and_fences_later_lineage(complete_postgres):
     import psycopg
+    from psycopg.rows import dict_row
     from tests.postgres_support import database
     from src.workflows.workflow_postgres_migration_v1 import observe_schema
+    paths = migration_paths(ROOT)
     with database(complete_postgres.dsn) as config:
-        with psycopg.connect(config.dsn, autocommit=True) as con:
+        with psycopg.connect(config.dsn, autocommit=True, row_factory=dict_row) as con:
             con.execute((ROOT / 'db/schema_v2.sql').read_text())
-            for path in migration_paths(ROOT):
-                con.execute(path.read_text())
-            assert con.execute("SELECT to_regclass('public.source_snapshots')").fetchone()[0] is None
-            assert con.execute("SELECT to_regclass('workflow.documents')").fetchone()[0] is not None
+            assert apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))['status'] == 'PASS'
+            assert con.execute("SELECT to_regclass('public.source_snapshots') AS name").fetchone()['name'] is None
+            from src.documents.test_document_deletion_v1 import _storage
+            from src.operations_console_v1 import ConsoleError
+            with pytest.raises(ConsoleError, match='storage_not_ready'):
+                _storage(con)
             con.execute((ROOT / 'db/migrations/001_canonical_source_lineage.sql').read_text())
-            assert not con.execute("SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE "
-                                   "tgname='refuse_deleted_test_source')").fetchone()[0]
-            con.execute((ROOT / 'db/migrations/039_test_document_deletion.sql').read_text())
-            assert con.execute("SELECT EXISTS(SELECT 1 FROM pg_trigger WHERE "
-                               "tgname='refuse_deleted_test_source' AND tgenabled='O')").fetchone()[0]
-            # Verification still refuses deletion capability when that fence is absent.
+            assert 'public.source_snapshots.refuse_deleted_test_source' in observe_schema(con)['missing_triggers']
+            assert apply_migrations(con, paths=paths, expected_digest=migration_digest(paths))['status'] == 'PASS'
+            # With canonical lineage present the source fence is mandatory.
             con.execute('DROP TRIGGER refuse_deleted_test_source ON public.source_snapshots')
-            from psycopg.rows import dict_row
-            with con.cursor(row_factory=dict_row) as cur:
-                class C:
-                    def execute(self, *args):
-                        cur.execute(*args)
-                        return cur
-                assert 'public.source_snapshots.refuse_deleted_test_source' in observe_schema(C())['missing_triggers']
+            assert 'public.source_snapshots.refuse_deleted_test_source' in observe_schema(con)['missing_triggers']
 
 
 class FakeConnection:

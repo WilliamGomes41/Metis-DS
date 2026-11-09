@@ -176,6 +176,75 @@ def test_concurrent_duplicate_from_independent_kernel_commits_once(production_co
     assert len([e for e in console.workflow_review_store.read_events() if e['event_type']=='test_document_deleted']) == 1
 
 
+def test_attempt_cannot_commit_running_after_deletion_inventory(production_console,tmp_path,monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from queue import Queue
+    from time import monotonic, sleep
+    import psycopg
+    monkeypatch.setenv('CONSOLE_TEST_DOCUMENT_DELETION','on')
+    console, accounts, sid, release, source = published(production_console,tmp_path)
+    fresh = receive(console,accounts,prior=sid)
+    request = command(console,accounts,sid)
+    original = deletion._inventory
+    pids = Queue()
+    def start_attempt():
+        with console.workflow_document_store._connect() as con:
+            pids.put(con.info.backend_pid)
+            try:
+                con.execute("SET LOCAL statement_timeout='8s'")
+                con.execute("INSERT INTO workflow.processing_attempts "
+                    "(attempt_id,snapshot_id,command_id,started_at,object_generation,payload) "
+                    "VALUES('late-start',%s,'late-start',now(),0,'{\"state\":\"running\",\"kind\":\"source_selection\"}')", (fresh,))
+                con.commit()
+                return 'committed'
+            except psycopg.errors.ForeignKeyViolation:
+                return 'document_absent'
+    with ThreadPoolExecutor(1) as pool:
+        pending = []
+        def inventory_with_late_start(con, selected):
+            plan = original(con,selected)
+            pending.append(pool.submit(start_attempt))
+            pid = pids.get(timeout=5)
+            deadline = monotonic()+5
+            with console.workflow_document_store._connect() as observer:
+                while not pending[0].done():
+                    row = observer.execute('SELECT wait_event_type FROM pg_stat_activity WHERE pid=%s',(pid,)).fetchone()
+                    if row and row['wait_event_type']=='Lock': break
+                    assert monotonic()<deadline, 'late writer neither committed nor reached the SQL lock boundary'
+                    sleep(.01)
+            return plan
+        monkeypatch.setattr(deletion,'_inventory',inventory_with_late_start)
+        assert deletion.delete(console,**request)['deleted']
+        assert pending[0].result(timeout=10)=='document_absent'
+
+
+def test_uncommitted_attempt_start_refuses_deletion_without_deadlock(production_console,tmp_path,monkeypatch):
+    from contextlib import contextmanager
+    monkeypatch.setenv('CONSOLE_TEST_DOCUMENT_DELETION','on')
+    console, accounts, sid, release, source = published(production_console,tmp_path)
+    fresh = receive(console,accounts,prior=sid)
+    request = command(console,accounts,sid)
+    original = deletion.workflow_transaction
+    @contextmanager
+    def bounded_transaction(store):
+        with original(store) as con:
+            con.execute("SET LOCAL lock_timeout='2s'")
+            yield con
+    monkeypatch.setattr(deletion,'workflow_transaction',bounded_transaction)
+    with console.workflow_document_store._connect() as worker:
+        worker.execute("INSERT INTO workflow.processing_attempts "
+            "(attempt_id,snapshot_id,command_id,started_at,object_generation,payload) "
+            "VALUES('starting',%s,'starting',now(),0,'{\"state\":\"running\",\"kind\":\"source_selection\"}')", (fresh,))
+        with pytest.raises(ConsoleError,match='test_document_deletion_busy'):
+            deletion.delete(console,**request)
+        worker.commit()
+    view = deletion.preview(console,actor_id=request['actor_id'],snapshot_id=sid)
+    assert view['running_snapshots']==[fresh]
+    assert console.canonical_publication_store.active_publication_rows()
+    with console.workflow_document_store._connect() as con:
+        assert con.execute('SELECT count(*) AS n FROM workflow.test_document_deletions').fetchone()['n']==0
+
+
 def test_mixed_release_is_refused_without_removing_other_document(production_console,tmp_path,monkeypatch):
     monkeypatch.setenv('CONSOLE_TEST_DOCUMENT_DELETION','on')
     console, accounts, sid, release, source = published(production_console,tmp_path)

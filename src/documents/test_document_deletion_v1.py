@@ -7,6 +7,7 @@ preserves the global review hash chain and fences stale snapshot resurrection.
 import os
 import re
 from datetime import datetime, timezone
+from psycopg.errors import LockNotAvailable
 
 from src.integrity_kernel import stable_hash
 from src.operations_console_v1 import ConsoleError
@@ -170,6 +171,14 @@ def delete(console, *, actor_id, snapshot_id, command_id, expected_plan, confirm
                 if previous['request_hash'] != request_hash:
                     raise ConsoleError('test_document_deletion_command_conflict')
                 return previous['result']
+            # The document table excludes inline attempt starts. Operational
+            # attempts have their own writer boundary; their document row lock
+            # alone is compatible with the table lock above. NOWAIT refuses an
+            # already-active writer instead of reversing its row-lock order.
+            try:
+                con.execute('LOCK TABLE workflow.processing_attempts IN SHARE ROW EXCLUSIVE MODE NOWAIT')
+            except LockNotAvailable as exc:
+                raise ConsoleError('test_document_deletion_busy') from exc
             selected = con.execute('SELECT logical_document_id FROM workflow.documents WHERE snapshot_id=%s', (snapshot_id,)).fetchone()
             if selected is None:
                 raise ConsoleError('unknown_snapshot')
